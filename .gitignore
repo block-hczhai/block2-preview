@@ -1,0 +1,13 @@
+build/
+docs/build/
+my_test/
+node0/
+MANIFEST
+.clang-format
+.vscode/
+
+__pycache__/
+*.py[cod]
+
+.ipynb_checkpoints/
+.coverage
