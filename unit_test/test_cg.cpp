@@ -4,11 +4,10 @@
 
 using namespace block2;
 
-size_t isize = 1E7;
-size_t dsize = 1E7;
-
 class TestCG : public ::testing::Test {
   protected:
+    size_t isize = 1E7;
+    size_t dsize = 1E7;
     static const int max_twoj = 300;
     static const int n_tests = 1000;
     CG cg;
@@ -277,9 +276,9 @@ TEST_F(TestCG, TestW9jJiZero) {
         int ta = Random::rand_int(0, 20);
         int tb = Random::rand_int(0, 20);
         int td = Random::rand_double() > 0.4 ? rand_triangle(ta, tb)
-                                            : Random::rand_int(0, 20);
+                                             : Random::rand_int(0, 20);
         int te = Random::rand_double() > 0.4 ? rand_triangle(ta, tb)
-                                            : Random::rand_int(0, 20);
+                                             : Random::rand_int(0, 20);
         int tf = rand_triangle(ta, tb);
         int tfp = cg.triangle(td, te, tf) ? tf : rand_triangle(td, te);
         int tg = rand_triangle(ta, td);
