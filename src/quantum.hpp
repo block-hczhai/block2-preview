@@ -211,7 +211,9 @@ struct MatrixRef {
     int m, n;
     double *data;
     MatrixRef(double *data, int m, int n) : data(data), m(m), n(n) {}
-    double &operator()(int i, int j) { return *(data + (size_t)i * n + j); }
+    double &operator()(int i, int j) const {
+        return *(data + (size_t)i * n + j);
+    }
 };
 
 struct TInt {
@@ -650,6 +652,13 @@ struct SpinLabel {
     SpinLabel operator[](int i) const noexcept {
         return SpinLabel(((data + (i << 17)) & (~0x00FF00U)) |
                          (((data + (i << 17)) & 0xFF0000U) >> 8));
+    }
+    int find(SpinLabel x) const noexcept {
+        if (((data ^ x.data) & 0xFF0000FFU) || ((x.data - data) & 0x100U) ||
+            x.twos() < twos_low() || x.twos() > twos())
+            return -1;
+        else
+            return ((x.data - data) & 0xFF00U) >> 9;
     }
     SpinLabel get_ket() const noexcept {
         return SpinLabel((data & 0xFF00FFFFU) | ((data & 0xFF00U) << 8));
@@ -1233,11 +1242,11 @@ struct StateInfo {
             ialloc->reallocate((uint32_t *)quanta, (n << 1) - (n >> 1),
                                (length << 1) - (length >> 1));
         if (ptr == (uint32_t *)quanta) {
-            memcpy(quanta + length, n_states, length * sizeof(uint32_t));
+            memmove(ptr + length, n_states, length * sizeof(uint16_t));
             n_states = (uint16_t *)(quanta + length);
         } else {
-            memcpy(ptr, quanta, length * sizeof(uint32_t));
-            memcpy(ptr + length, n_states, length * sizeof(uint16_t));
+            memmove(ptr, quanta, length * sizeof(uint32_t));
+            memmove(ptr + length, n_states, length * sizeof(uint16_t));
             quanta = (SpinLabel *)ptr;
             n_states = (uint16_t *)(quanta + length);
         }
@@ -1253,6 +1262,7 @@ struct StateInfo {
         StateInfo other;
         other.allocate(n);
         copy_data_to(other);
+        other.n_states_total = n_states_total;
         return other;
     }
     void copy_data_to(StateInfo &other) const {
@@ -1281,7 +1291,8 @@ struct StateInfo {
             if (n_states[i] == 0)
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
-                n_states[k] += n_states[i];
+                n_states[k] =
+                    (uint16_t)min((uint32_t)n_states[k] + n_states[i], 65535U);
             else {
                 k++;
                 quanta[k] = quanta[i];
@@ -1312,8 +1323,9 @@ struct StateInfo {
                 SpinLabel qc = a.quanta[i] + b.quanta[j];
                 for (int k = 0; k < qc.count(); k++) {
                     c.quanta[ic + k] = qc[k];
-                    int nprod = (int)a.n_states[i] * (int)b.n_states[j];
-                    c.n_states[ic + k] = (uint16_t)min(nprod, 65535);
+                    uint32_t nprod =
+                        (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j];
+                    c.n_states[ic + k] = (uint16_t)min(nprod, 65535U);
                 }
                 ic += qc.count();
             }
@@ -1358,16 +1370,18 @@ struct SparseMatrixInfo {
     uint32_t *n_states_total;
     SpinLabel delta_quantum;
     bool is_fermion;
+    bool is_wavefunction;
     int n;
     SparseMatrixInfo() : n(-1) {}
     void initialize(const StateInfo &bra, const StateInfo &ket, SpinLabel dq,
-                    bool is_fermion) {
+                    bool is_fermion, bool wfn = false) {
         this->is_fermion = is_fermion;
+        this->is_wavefunction = wfn;
         delta_quantum = dq;
         vector<SpinLabel> qs;
         qs.reserve(ket.n);
         for (int i = 0; i < ket.n; i++) {
-            SpinLabel q = ket.quanta[i];
+            SpinLabel q = wfn ? -ket.quanta[i] : ket.quanta[i];
             SpinLabel bs = dq + q;
             for (int k = 0; k < bs.count(); k++)
                 if (bra.find_state(bs[k]) != -1) {
@@ -1381,8 +1395,8 @@ struct SparseMatrixInfo {
             memcpy(quanta, &qs[0], n * sizeof(SpinLabel));
             sort(quanta, quanta + n);
             for (int i = 0; i < n; i++) {
-                n_states_ket[i] =
-                    ket.n_states[ket.find_state(quanta[i].get_ket())];
+                n_states_ket[i] = ket.n_states[ket.find_state(
+                    wfn ? -quanta[i].get_ket() : quanta[i].get_ket())];
                 n_states_bra[i] =
                     bra.n_states[bra.find_state(quanta[i].get_bra(dq))];
             }
@@ -1422,6 +1436,21 @@ struct SparseMatrixInfo {
         n_states_ket = nullptr;
         n_states_total = nullptr;
         n = -1;
+    }
+    void reallocate(int length) {
+        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n,
+                                           (length << 1) + length);
+        if (ptr == (uint32_t *)quanta)
+            memmove(ptr + length, n_states_bra,
+                    (length << 1) * sizeof(uint32_t));
+        else {
+            memmove(ptr, quanta, ((length << 1) + length) * sizeof(uint32_t));
+            quanta = (SpinLabel *)ptr;
+        }
+        n_states_bra = (uint16_t *)(ptr + length);
+        n_states_ket = (uint16_t *)(ptr + length) + length;
+        n_states_total = ptr + (length << 1);
+        n = length;
     }
     friend ostream &operator<<(ostream &os, const SparseMatrixInfo &c) {
         os << "DQ=" << c.delta_quantum << " N=" << c.n
@@ -1525,11 +1554,26 @@ struct MatrixFunctions {
         } else
             assert(false);
     }
+    static void tensor_product(const MatrixRef &a, bool conja,
+                               const MatrixRef &b, bool conjb,
+                               const MatrixRef &c, double scale,
+                               uint32_t stride) {
+        if (!conja and !conjb) {
+            for (int i = 0, inc = 1; i < a.m; i++)
+                for (int j = 0; j < a.n; j++) {
+                    double factor = scale * a(i, j);
+                    for (int k = 0; k < b.m; k++)
+                        daxpy(&b.n, &factor, &b(k, 0), &inc,
+                              &c(i * b.m + k, j * b.n + stride), &inc);
+                }
+        } else
+            assert(false);
+    }
 };
 
-struct OpFunctions {
+struct OperatorFunctions {
     shared_ptr<CG> cg;
-    OpFunctions(const shared_ptr<CG> &cg) : cg(cg) {}
+    OperatorFunctions(const shared_ptr<CG> &cg) : cg(cg) {}
     // a += b * scale
     void iadd(SparseMatrix &a, const SparseMatrix &b, double scale = 1.0) {
         assert(a.info->n == b.info->n && a.total_memory == b.total_memory);
@@ -1542,6 +1586,61 @@ struct OpFunctions {
             MatrixFunctions::iadd(MatrixRef(a.data, 1, a.total_memory),
                                   MatrixRef(b.data, 1, b.total_memory),
                                   scale * b.factor);
+    }
+    void tensor_product(const SparseMatrix &a, const SparseMatrix &b,
+                        SparseMatrix &c, double scale = 1.0) {
+        scale = scale * a.factor * b.factor;
+        assert(c.factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        SpinLabel adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
+                  cdq = c.info->delta_quantum;
+        assert(b.info->n <= 3);
+        int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos();
+        for (int ic = 0; ic < c.info->n; ic++) {
+            SpinLabel cq = c.info->quanta[ic].get_bra(cdq);
+            SpinLabel cqprime = c.info->quanta[ic].get_ket();
+            uint32_t row_stride = 0, col_stride = 0;
+            for (int ib = 0; ib < b.info->n; ib++) {
+                SpinLabel bq = b.info->quanta[ib].get_bra(bdq);
+                SpinLabel bqprime = b.info->quanta[ib].get_ket();
+                SpinLabel aqs = cq - bq;
+                SpinLabel aqps = cqprime - bqprime;
+                for (int k = 0; k < aqs.count(); k++) {
+                    SpinLabel aq = aqs[k];
+                    SpinLabel aqpds = aqs[k] - adq;
+                    uint32_t n_bra = 0;
+                    for (int l = 0; l < aqpds.count(); l++) {
+                        SpinLabel aqprime = aqpds[l];
+                        SpinLabel al = adq.combine(aq, aqprime);
+                        uint32_t n_ket = 0;
+                        if (aqps.find(aqprime) != -1 &&
+                            al != SpinLabel(0xFFFFFFFFU)) {
+                            int ia = a.info->find_state(al);
+                            if (ia != -1) {
+                                n_bra = a.info->n_states_bra[ia];
+                                n_ket = a.info->n_states_ket[ia];
+                                double factor = cg->wigner_9j(
+                                    aqprime.twos(), bqprime.twos(),
+                                    cqprime.twos(), adqs, bdqs, cdqs, aq.twos(),
+                                    bq.twos(), cq.twos());
+                                factor *=
+                                    (b.info->is_fermion && (aqprime.n() & 1))
+                                        ? -1
+                                        : 1;
+                                MatrixFunctions::tensor_product(
+                                    a[ia], a.conj, b[ib], b.conj, c[ic],
+                                    scale * factor,
+                                    row_stride * c.info->n_states_ket[ic] +
+                                        col_stride);
+                            }
+                        }
+                        col_stride += n_ket * b.info->n_states_ket[ib];
+                    }
+                    row_stride += n_bra * b.info->n_states_bra[ib];
+                }
+            }
+        }
     }
     // c = a * b * scale
     void product(const SparseMatrix &a, const SparseMatrix &b,
@@ -1590,6 +1689,28 @@ struct OperatorTensor {
     OperatorTensor() {}
 };
 
+struct TensorFunctions {
+    static void left_contract(const shared_ptr<OperatorTensor> &a,
+                              const shared_ptr<OperatorTensor> &b,
+                              shared_ptr<OperatorTensor> &c) {
+        assert(a->lmat != nullptr);
+        assert(a->lmat->get_type() == SymTypes::RVec);
+        assert(b->lmat != nullptr);
+        assert(b->lmat->get_type() == SymTypes::Mat);
+        assert(c->lmat != nullptr);
+        assert(c->lmat->get_type() == SymTypes::RVec);
+        assert(a->lmat->n == b->lmat->m && b->lmat->n == c->lmat->n);
+        shared_ptr<Symbolic> exprs = a->lmat * b->lmat;
+        assert(exprs->data.size() == c->lmat->data.size());
+        for (size_t i = 0; i < exprs->data.size(); i++) {
+            shared_ptr<OpElement> cop =
+                dynamic_pointer_cast<OpElement>(c->lmat->data[i]);
+            shared_ptr<OpExpr> op = abs_value(cop);
+            shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
+        }
+    }
+};
+
 struct MPO {
     vector<shared_ptr<OperatorTensor>> tensors;
     vector<shared_ptr<Symbolic>> left_operator_names;
@@ -1597,6 +1718,244 @@ struct MPO {
     vector<shared_ptr<Symbolic>> middle_operator_names;
     int n_sites;
     MPO(int n_sites) : n_sites(n_sites) {}
+    virtual void deallocate() = 0;
+};
+
+struct MPSInfo {
+    int n_sites;
+    SpinLabel vaccum;
+    SpinLabel target;
+    uint8_t *orbsym;
+    StateInfo *basis, *left_dims_fci, *right_dims_fci;
+    StateInfo *left_dims, *right_dims;
+    uint16_t bond_dim;
+    MPSInfo(int n_sites, SpinLabel vaccum, SpinLabel target, StateInfo *basis,
+            uint8_t *orbsym)
+        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
+          basis(basis), bond_dim(0) {
+        left_dims_fci = new StateInfo[n_sites + 1];
+        left_dims_fci[0] = StateInfo(vaccum);
+        for (int i = 0; i < n_sites; i++)
+            left_dims_fci[i + 1] = StateInfo::tensor_product(
+                left_dims_fci[i], basis[orbsym[i]], target);
+        right_dims_fci = new StateInfo[n_sites + 1];
+        right_dims_fci[n_sites] = StateInfo(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            right_dims_fci[i] = StateInfo::tensor_product(
+                basis[orbsym[i]], right_dims_fci[i + 1], target);
+        for (int i = 0; i <= n_sites; i++)
+            StateInfo::filter(left_dims_fci[i], right_dims_fci[i], target);
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i].collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i].collect();
+        left_dims = nullptr;
+        right_dims = nullptr;
+    }
+    void set_bond_dimension(uint16_t m) {
+        bond_dim = m;
+        left_dims = new StateInfo[n_sites + 1];
+        left_dims[0] = StateInfo(vaccum);
+        for (int i = 0; i < n_sites; i++)
+            left_dims[i + 1] = left_dims_fci[i + 1].deep_copy();
+        for (int i = 0; i < n_sites; i++) {
+            if (left_dims[i + 1].n_states_total > m) {
+                int new_total = 0;
+                for (int k = 0; k < left_dims[i + 1].n; k++) {
+                    uint32_t new_n_states =
+                        (uint32_t)(ceil((double)left_dims[i + 1].n_states[k] *
+                                        m / left_dims[i + 1].n_states_total) +
+                                   0.1);
+                    left_dims[i + 1].n_states[k] =
+                        (uint16_t)min(new_n_states, 65535U);
+                    new_total += left_dims[i + 1].n_states[k];
+                }
+                left_dims[i + 1].n_states_total = new_total;
+            }
+            if (i != n_sites - 1) {
+                StateInfo t = StateInfo::tensor_product(
+                    left_dims[i + 1], basis[orbsym[i + 1]], target);
+                int new_total = 0;
+                for (int k = 0; k < left_dims[i + 2].n; k++) {
+                    int tk = t.find_state(left_dims[i + 2].quanta[k]);
+                    if (tk == -1)
+                        left_dims[i + 2].n_states[k] = 0;
+                    else if (left_dims[i + 2].n_states[k] > t.n_states[tk])
+                        left_dims[i + 2].n_states[k] = t.n_states[tk];
+                    new_total += left_dims[i + 2].n_states[k];
+                }
+                left_dims[i + 2].n_states_total = new_total;
+                t.deallocate();
+            }
+        }
+        right_dims = new StateInfo[n_sites + 1];
+        right_dims[n_sites] = StateInfo(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            right_dims[i] = right_dims_fci[i].deep_copy();
+        for (int i = n_sites - 1; i >= 0; i--) {
+            if (right_dims[i].n_states_total > m) {
+                int new_total = 0;
+                for (int k = 0; k < right_dims[i].n; k++) {
+                    uint32_t new_n_states =
+                        (uint32_t)(ceil((double)right_dims[i].n_states[k] * m /
+                                        right_dims[i].n_states_total) +
+                                   0.1);
+                    right_dims[i].n_states[k] =
+                        (uint16_t)min(new_n_states, 65535U);
+                    new_total += right_dims[i].n_states[k];
+                }
+                right_dims[i].n_states_total = new_total;
+            }
+            if (i != 0) {
+                StateInfo t = StateInfo::tensor_product(basis[orbsym[i - 1]],
+                                                        right_dims[i], target);
+                int new_total = 0;
+                for (int k = 0; k < right_dims[i - 1].n; k++) {
+                    int tk = t.find_state(right_dims[i - 1].quanta[k]);
+                    if (tk == -1)
+                        right_dims[i - 1].n_states[k] = 0;
+                    else if (right_dims[i - 1].n_states[k] > t.n_states[tk])
+                        right_dims[i - 1].n_states[k] = t.n_states[tk];
+                    new_total += right_dims[i - 1].n_states[k];
+                }
+                right_dims[i - 1].n_states_total = new_total;
+                t.deallocate();
+            }
+        }
+    }
+    void deallocate() {
+        if (left_dims != nullptr) {
+            for (int i = 0; i <= n_sites; i++)
+                right_dims[i].deallocate();
+            for (int i = n_sites; i >= 0; i--)
+                left_dims[i].deallocate();
+        }
+        for (int i = 0; i <= n_sites; i++)
+            right_dims_fci[i].deallocate();
+        for (int i = n_sites; i >= 0; i--)
+            left_dims_fci[i].deallocate();
+    }
+    ~MPSInfo() {
+        if (left_dims != nullptr) {
+            delete[] left_dims;
+            delete[] right_dims;
+        }
+        delete[] left_dims_fci;
+        delete[] right_dims_fci;
+    }
+};
+
+struct MPS {
+    int n_sites, center, dot;
+    shared_ptr<MPSInfo> info;
+    vector<shared_ptr<SparseMatrixInfo>> mat_infos;
+    vector<shared_ptr<SparseMatrix>> tensors;
+    string canonical_form;
+    MPS(int n_sites, int center, int dot) : center(center), dot(dot) {
+        canonical_form.resize(n_sites);
+        for (int i = 0; i < center; i++)
+            canonical_form[i] = 'L';
+        for (int i = center; i < center + dot; i++)
+            canonical_form[i] = 'C';
+        for (int i = center + dot; i < n_sites; i++)
+            canonical_form[i] = 'R';
+    }
+    void initialize(const shared_ptr<MPSInfo> &info) {
+        this->info = info;
+        mat_infos.resize(n_sites);
+        tensors.resize(n_sites);
+        for (int i = 0; i < center; i++) {
+            StateInfo t = StateInfo::tensor_product(
+                info->left_dims[i], info->basis[info->orbsym[i]], info->target);
+            mat_infos[i] = make_shared<SparseMatrixInfo>();
+            mat_infos[i]->initialize(t, info->left_dims[i + 1], info->vaccum,
+                                     false);
+            t.reallocate(0);
+            mat_infos[i]->reallocate(mat_infos[i]->n);
+        }
+        mat_infos[center] = make_shared<SparseMatrixInfo>();
+        if (dot == 1) {
+            StateInfo t = StateInfo::tensor_product(
+                info->left_dims[center], info->basis[info->orbsym[center]],
+                info->target);
+            mat_infos[center]->initialize(t, info->right_dims[center + dot],
+                                          info->target, false, true);
+            t.reallocate(0);
+            mat_infos[center]->reallocate(mat_infos[center]->n);
+        } else {
+            StateInfo tl = StateInfo::tensor_product(
+                info->left_dims[center], info->basis[info->orbsym[center]],
+                info->target);
+            StateInfo tr = StateInfo::tensor_product(
+                info->basis[info->orbsym[center + 1]],
+                info->right_dims[center + dot], info->target);
+            mat_infos[center]->initialize(tl, tr, info->target, false, true);
+            tl.reallocate(0);
+            tr.reallocate(0);
+            mat_infos[center]->reallocate(mat_infos[center]->n);
+        }
+        for (int i = center + dot; i < n_sites; i++) {
+            StateInfo t = StateInfo::tensor_product(
+                info->basis[info->orbsym[i]], info->right_dims[i + 1],
+                info->target);
+            mat_infos[i] = make_shared<SparseMatrixInfo>();
+            mat_infos[i]->initialize(info->right_dims[i], t, info->vaccum,
+                                     false);
+            t.reallocate(0);
+            mat_infos[i]->reallocate(mat_infos[i]->n);
+        }
+        for (int i = 0; i < n_sites; i++)
+            if (mat_infos[i] != nullptr)
+                tensors[i]->allocate(mat_infos[i]);
+    }
+    void deallocate() {
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (tensors[i] != nullptr)
+                tensors[i]->deallocate();
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (mat_infos[i] != nullptr)
+                mat_infos[i]->deallocate();
+    }
+};
+
+struct Partition {
+    shared_ptr<OperatorTensor> left;
+    shared_ptr<OperatorTensor> right;
+    vector<shared_ptr<OperatorTensor>> middle;
+    Partition(const shared_ptr<OperatorTensor> &left,
+              const shared_ptr<OperatorTensor> &right,
+              const shared_ptr<OperatorTensor> &dot)
+        : left(left), right(right), middle{dot} {}
+    Partition(const shared_ptr<OperatorTensor> &left,
+              const shared_ptr<OperatorTensor> &right,
+              const shared_ptr<OperatorTensor> &ldot,
+              const shared_ptr<OperatorTensor> &rdot)
+        : left(left), right(right), middle{ldot, rdot} {}
+    Partition(const Partition &other)
+        : left(other.left), right(other.right), middle(other.middle) {}
+};
+
+struct MovingEnvironment {
+    int n_sites, center, dot;
+    shared_ptr<MPO> mpo;
+    vector<shared_ptr<Partition>> envs;
+    MovingEnvironment(int n_sites, int center, int dot,
+                      const shared_ptr<MPO> &mpo)
+        : n_sites(n_sites), center(center), dot(dot), mpo(mpo) {}
+    void init_environments() {
+        envs.clear();
+        envs.resize(n_sites);
+        envs[n_sites - 1] =
+            make_shared<Partition>(nullptr, nullptr, mpo->tensors[n_sites - 1]);
+        if (dot == 2)
+            envs[n_sites - 2] = make_shared<Partition>(
+                nullptr, nullptr, mpo->tensors[n_sites - 2],
+                mpo->tensors[n_sites - 1]);
+        for (int i = n_sites - dot - 1; i >= center; i--) {
+            envs[i] = make_shared<Partition>(*envs[i + 1]);
+            envs[i]->middle.insert(envs[i]->middle.begin(), mpo->tensors[i]);
+        }
+    }
 };
 
 struct Hamiltonian {
@@ -1608,7 +1967,7 @@ struct Hamiltonian {
     uint8_t n_sites, n_syms;
     bool su2;
     shared_ptr<FCIDUMP> fcidump;
-    shared_ptr<OpFunctions> opf;
+    shared_ptr<OperatorFunctions> opf;
     vector<uint8_t> orb_sym;
     Hamiltonian(SpinLabel vaccum, SpinLabel target, int norb, bool su2,
                 const shared_ptr<FCIDUMP> &fcidump,
@@ -1639,7 +1998,7 @@ struct Hamiltonian {
                     basis[i].n_states[2] = basis[i].n_states[3] = 1;
                 basis[i].sort_states();
             }
-        opf = make_shared<OpFunctions>(make_shared<CG>(100, 10));
+        opf = make_shared<OperatorFunctions>(make_shared<CG>(100, 10));
         opf->cg->initialize();
         init_site_ops();
     }
@@ -1806,13 +2165,14 @@ struct Hamiltonian {
                 p.second = make_shared<SparseMatrix>();
                 p.second->allocate(find_site_op_info(op.q_label, orb_sym[m]));
                 (*p.second)[SpinLabel(0, 0, 0, 0)](0, 0) = 0.0;
-                (*p.second)[SpinLabel(1, 1, 1, 0)](0, 0) = t(m, m);
+                (*p.second)[SpinLabel(1, 1, 1, orb_sym[m])](0, 0) = t(m, m);
                 (*p.second)[SpinLabel(2, 0, 0, 0)](0, 0) =
                     t(m, m) * 2 + v(m, m, m, m);
                 break;
             case OpNames::R:
                 i = op.site_index[0];
-                if (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY)
+                if (orb_sym[i] != orb_sym[m] ||
+                    (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY))
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix>();
@@ -1829,7 +2189,8 @@ struct Hamiltonian {
                 break;
             case OpNames::RD:
                 i = op.site_index[0];
-                if (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY)
+                if (orb_sym[i] != orb_sym[m] ||
+                    (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY))
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix>();
@@ -1914,11 +2275,11 @@ struct Hamiltonian {
             case OpTypes::Zero:
                 break;
             case OpTypes::Elem:
-                ops[x] = nullptr;
+                ops[abs_value(x)] = nullptr;
                 break;
             case OpTypes::Sum:
                 for (auto &r : dynamic_pointer_cast<OpSum>(x)->strings)
-                    ops[dynamic_pointer_cast<OpString>(x)->get_op()] = nullptr;
+                    ops[abs_value(r->get_op())] = nullptr;
                 break;
             default:
                 assert(false);
@@ -1928,18 +2289,20 @@ struct Hamiltonian {
         shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         bool all_zero;
         for (auto &x : pmat->data) {
+            shared_ptr<OpExpr> xx;
             switch (x->get_type()) {
             case OpTypes::Zero:
                 break;
             case OpTypes::Elem:
-                if (ops[x]->factor == 0.0 || ops[x]->info->n == 0)
+                xx = abs_value(x);
+                if (ops[xx]->factor == 0.0 || ops[xx]->info->n == 0)
                     x = zero;
                 break;
             case OpTypes::Sum:
                 all_zero = true;
                 for (auto &r : dynamic_pointer_cast<OpSum>(x)->strings) {
-                    shared_ptr<SparseMatrix> &mat =
-                        ops[dynamic_pointer_cast<OpString>(x)->get_op()];
+                    xx = abs_value(r->get_op());
+                    shared_ptr<SparseMatrix> &mat = ops[xx];
                     if (!(mat->factor == 0.0 || mat->info->n == 0)) {
                         all_zero = false;
                         break;
@@ -1966,7 +2329,12 @@ struct Hamiltonian {
             smat->data.resize(j);
             smat->indices.resize(j);
         }
-        for (auto it = ops.cbegin(); it != ops.cend(); );
+        for (auto it = ops.cbegin(); it != ops.cend();) {
+            if (it->second->factor == 0.0 || it->second->info->n == 0)
+                ops.erase(it++);
+            else
+                it++;
+        }
     }
     static bool
     cmp_site_op_info(const pair<SpinLabel, shared_ptr<SparseMatrixInfo>> &p,
@@ -2026,360 +2394,386 @@ struct Hamiltonian {
     double e() const { return fcidump->e; }
 };
 
-inline shared_ptr<MPO> quantum_chemistry_mpo(const Hamiltonian &hamil) {
-    MPO mpo(hamil.n_sites);
-    shared_ptr<OpElement> h_op =
-        make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
-    shared_ptr<OpElement> i_op =
-        make_shared<OpElement>(OpNames::I, vector<uint8_t>{}, hamil.vaccum);
-    shared_ptr<OpElement> c_op[hamil.n_sites], d_op[hamil.n_sites];
-    shared_ptr<OpElement> mc_op[hamil.n_sites], md_op[hamil.n_sites];
-    shared_ptr<OpElement> trd_op[hamil.n_sites], tr_op[hamil.n_sites];
-    shared_ptr<OpElement> a_op[hamil.n_sites][hamil.n_sites][2];
-    shared_ptr<OpElement> ad_op[hamil.n_sites][hamil.n_sites][2];
-    shared_ptr<OpElement> b_op[hamil.n_sites][hamil.n_sites][2];
-    shared_ptr<OpElement> p_op[hamil.n_sites][hamil.n_sites][2];
-    shared_ptr<OpElement> pd_op[hamil.n_sites][hamil.n_sites][2];
-    shared_ptr<OpElement> q_op[hamil.n_sites][hamil.n_sites][2];
-    for (uint8_t m = 0; m < hamil.n_sites; m++) {
-        c_op[m] = make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
-                                         SpinLabel(1, 1, hamil.orb_sym[m]));
-        d_op[m] = make_shared<OpElement>(OpNames::D, vector<uint8_t>{m},
-                                         SpinLabel(-1, 1, hamil.orb_sym[m]));
-        mc_op[m] =
-            make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
-                                   SpinLabel(1, 1, hamil.orb_sym[m]), -1.0);
-        md_op[m] =
-            make_shared<OpElement>(OpNames::D, vector<uint8_t>{m},
-                                   SpinLabel(-1, 1, hamil.orb_sym[m]), -1.0);
-        trd_op[m] =
-            make_shared<OpElement>(OpNames::RD, vector<uint8_t>{m},
-                                   SpinLabel(1, 1, hamil.orb_sym[m]), 2.0);
-        tr_op[m] =
-            make_shared<OpElement>(OpNames::R, vector<uint8_t>{m},
-                                   SpinLabel(-1, 1, hamil.orb_sym[m]), 2.0);
-    }
-    for (uint8_t i = 0; i < hamil.n_sites; i++)
-        for (uint8_t j = 0; j < hamil.n_sites; j++)
-            for (uint8_t s = 0; s < 2; s++) {
-                a_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::A, vector<uint8_t>{i, j, s},
-                    SpinLabel(2, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                ad_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::AD, vector<uint8_t>{i, j, s},
-                    SpinLabel(-2, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                b_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::B, vector<uint8_t>{i, j, s},
-                    SpinLabel(0, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                p_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::P, vector<uint8_t>{i, j, s},
-                    SpinLabel(-2, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                pd_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::PD, vector<uint8_t>{i, j, s},
-                    SpinLabel(2, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                q_op[i][j][s] = make_shared<OpElement>(
-                    OpNames::Q, vector<uint8_t>{i, j, s},
-                    SpinLabel(0, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-            }
-    int p;
-    for (uint8_t m = 0; m < hamil.n_sites; m++) {
-        shared_ptr<Symbolic> pmat;
-        int lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
-        int rshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
-        if (m == 0)
-            pmat = make_shared<SymbolicRowVector>(rshape);
-        else if (m == hamil.n_sites - 1)
-            pmat = make_shared<SymbolicColumnVector>(lshape);
-        else
-            pmat = make_shared<SymbolicMatrix>(lshape, rshape);
-        Symbolic &mat = *pmat;
-        if (m == 0) {
-            SymbolicRowVector mat(2 + 2 * hamil.n_sites +
-                                  6 * (m + 1) * (m + 1));
-            mat[{0, 0}] = h_op;
-            mat[{0, 1}] = i_op;
-            mat[{0, 2}] = c_op[m];
-            mat[{0, 3}] = d_op[m];
-            p = 4;
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                mat[{0, p + j - m - 1}] = trd_op[j];
-            p += hamil.n_sites - (m + 1);
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                mat[{0, p + j - m - 1}] = tr_op[j];
-            p += hamil.n_sites - (m + 1);
-            for (uint8_t s = 0; s < 2; s++)
-                mat[{0, p + s}] = a_op[m][m][s];
-            p += 2;
-            for (uint8_t s = 0; s < 2; s++)
-                mat[{0, p + s}] = ad_op[m][m][s];
-            p += 2;
-            for (uint8_t s = 0; s < 2; s++)
-                mat[{0, p + s}] = b_op[m][m][s];
-            p += 2;
-            assert(p == mat.n);
-        } else {
-            mat[{0, 0}] = i_op;
-            mat[{1, 0}] = h_op;
-            p = 2;
-            for (uint8_t j = 0; j < m; j++)
-                mat[{p + j, 0}] = tr_op[j];
-            p += m;
-            for (uint8_t j = 0; j < m; j++)
-                mat[{p + j, 0}] = trd_op[j];
-            p += m;
-            mat[{p, 0}] = d_op[m];
-            p += hamil.n_sites - m;
-            mat[{p, 0}] = c_op[m];
-            p += hamil.n_sites - m;
-            vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        mat[{p + k, 0}] = su2_factor[s] * p_op[j][k][s];
-                    p += m;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        mat[{p + k, 0}] = su2_factor[s] * pd_op[j][k][s];
-                    p += m;
-                }
-            su2_factor = {1.0, sqrt(3)};
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        mat[{p + k, 0}] = su2_factor[s] * q_op[j][k][s];
-                    p += m;
-                }
-            assert(p == mat.m);
+struct QCMPO : MPO {
+    QCMPO(const Hamiltonian &hamil) : MPO(hamil.n_sites) {
+        shared_ptr<OpElement> h_op =
+            make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
+        shared_ptr<OpElement> i_op =
+            make_shared<OpElement>(OpNames::I, vector<uint8_t>{}, hamil.vaccum);
+        shared_ptr<OpElement> c_op[hamil.n_sites], d_op[hamil.n_sites];
+        shared_ptr<OpElement> mc_op[hamil.n_sites], md_op[hamil.n_sites];
+        shared_ptr<OpElement> trd_op[hamil.n_sites], tr_op[hamil.n_sites];
+        shared_ptr<OpElement> a_op[hamil.n_sites][hamil.n_sites][2];
+        shared_ptr<OpElement> ad_op[hamil.n_sites][hamil.n_sites][2];
+        shared_ptr<OpElement> b_op[hamil.n_sites][hamil.n_sites][2];
+        shared_ptr<OpElement> p_op[hamil.n_sites][hamil.n_sites][2];
+        shared_ptr<OpElement> pd_op[hamil.n_sites][hamil.n_sites][2];
+        shared_ptr<OpElement> q_op[hamil.n_sites][hamil.n_sites][2];
+        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+            c_op[m] = make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
+                                             SpinLabel(1, 1, hamil.orb_sym[m]));
+            d_op[m] =
+                make_shared<OpElement>(OpNames::D, vector<uint8_t>{m},
+                                       SpinLabel(-1, 1, hamil.orb_sym[m]));
+            mc_op[m] =
+                make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
+                                       SpinLabel(1, 1, hamil.orb_sym[m]), -1.0);
+            md_op[m] = make_shared<OpElement>(
+                OpNames::D, vector<uint8_t>{m},
+                SpinLabel(-1, 1, hamil.orb_sym[m]), -1.0);
+            trd_op[m] =
+                make_shared<OpElement>(OpNames::RD, vector<uint8_t>{m},
+                                       SpinLabel(1, 1, hamil.orb_sym[m]), 2.0);
+            tr_op[m] =
+                make_shared<OpElement>(OpNames::R, vector<uint8_t>{m},
+                                       SpinLabel(-1, 1, hamil.orb_sym[m]), 2.0);
         }
-        if (m != 0 && m != hamil.n_sites - 1) {
-            mat[{1, 1}] = i_op;
-            p = 2;
-            // pointers
-            int pi = 1, pc = 2, pd = 2 + m;
-            int prd = 2 + m + m - m, pr = 2 + m + hamil.n_sites - m;
-            int pa0 = 2 + (hamil.n_sites << 1) + m * m * 0;
-            int pa1 = 2 + (hamil.n_sites << 1) + m * m * 1;
-            int pad0 = 2 + (hamil.n_sites << 1) + m * m * 2;
-            int pad1 = 2 + (hamil.n_sites << 1) + m * m * 3;
-            int pb0 = 2 + (hamil.n_sites << 1) + m * m * 4;
-            int pb1 = 2 + (hamil.n_sites << 1) + m * m * 5;
-            // C
-            for (uint8_t j = 0; j < m; j++)
-                mat[{pc + j, p + j}] = i_op;
-            mat[{pi, p + m}] = c_op[m];
-            p += m + 1;
-            // D
-            for (uint8_t j = 0; j < m; j++)
-                mat[{pd + j, p + j}] = i_op;
-            mat[{pi, p + m}] = d_op[m];
-            p += m + 1;
-            // RD
-            for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
-                mat[{prd + i, p + i - (m + 1)}] = i_op;
-                mat[{pi, p + i - (m + 1)}] = trd_op[i];
-                for (uint8_t k = 0; k < m; k++) {
-                    mat[{pd + k, p + i - (m + 1)}] =
-                        2.0 * ((-0.5) * pd_op[i][k][0] +
-                               (-0.5 * sqrt(3)) * pd_op[i][k][1]);
-                    mat[{pc + k, p + i - (m + 1)}] =
-                        2.0 * ((0.5) * q_op[k][i][0] +
-                               (-0.5 * sqrt(3)) * q_op[k][i][1]);
+        for (uint8_t i = 0; i < hamil.n_sites; i++)
+            for (uint8_t j = 0; j < hamil.n_sites; j++)
+                for (uint8_t s = 0; s < 2; s++) {
+                    a_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::A, vector<uint8_t>{i, j, s},
+                        SpinLabel(2, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    ad_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::AD, vector<uint8_t>{i, j, s},
+                        SpinLabel(-2, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    b_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::B, vector<uint8_t>{i, j, s},
+                        SpinLabel(0, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    p_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::P, vector<uint8_t>{i, j, s},
+                        SpinLabel(-2, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    pd_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::PD, vector<uint8_t>{i, j, s},
+                        SpinLabel(2, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    q_op[i][j][s] = make_shared<OpElement>(
+                        OpNames::Q, vector<uint8_t>{i, j, s},
+                        SpinLabel(0, s * 2,
+                                  hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
+        int p;
+        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+            shared_ptr<Symbolic> pmat;
+            int lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
+            int rshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
+            if (m == 0)
+                pmat = make_shared<SymbolicRowVector>(rshape);
+            else if (m == hamil.n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector>(lshape);
+            else
+                pmat = make_shared<SymbolicMatrix>(lshape, rshape);
+            Symbolic &mat = *pmat;
+            if (m == 0) {
+                mat[{0, 0}] = h_op;
+                mat[{0, 1}] = i_op;
+                mat[{0, 2}] = c_op[m];
+                mat[{0, 3}] = d_op[m];
+                p = 4;
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    mat[{0, p + j - m - 1}] = trd_op[j];
+                p += hamil.n_sites - (m + 1);
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    mat[{0, p + j - m - 1}] = tr_op[j];
+                p += hamil.n_sites - (m + 1);
+                for (uint8_t s = 0; s < 2; s++)
+                    mat[{0, p + s}] = a_op[m][m][s];
+                p += 2;
+                for (uint8_t s = 0; s < 2; s++)
+                    mat[{0, p + s}] = ad_op[m][m][s];
+                p += 2;
+                for (uint8_t s = 0; s < 2; s++)
+                    mat[{0, p + s}] = b_op[m][m][s];
+                p += 2;
+                assert(p == mat.n);
+            } else {
+                mat[{0, 0}] = i_op;
+                mat[{1, 0}] = h_op;
+                p = 2;
                 for (uint8_t j = 0; j < m; j++)
-                    for (uint8_t l = 0; l < m; l++) {
-                        double f0 = hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
-                        double f1 = hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
-                        mat[{pa0 + j * m + l, p + i - (m + 1)}] =
-                            f0 * (-0.5) * d_op[m];
-                        mat[{pa1 + j * m + l, p + i - (m + 1)}] =
-                            f1 * (0.5 * sqrt(3)) * d_op[m];
-                    }
-                for (uint8_t k = 0; k < m; k++)
-                    for (uint8_t l = 0; l < m; l++) {
-                        double f =
-                            2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
-                        mat[{pb0 + l * m + k, p + i - (m + 1)}] = f * c_op[m];
-                    }
+                    mat[{p + j, 0}] = tr_op[j];
+                p += m;
                 for (uint8_t j = 0; j < m; j++)
+                    mat[{p + j, 0}] = trd_op[j];
+                p += m;
+                mat[{p, 0}] = d_op[m];
+                p += hamil.n_sites - m;
+                mat[{p, 0}] = c_op[m];
+                p += hamil.n_sites - m;
+                vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = su2_factor[s] * p_op[j][k][s];
+                        p += m;
+                    }
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = su2_factor[s] * pd_op[j][k][s];
+                        p += m;
+                    }
+                su2_factor = {1.0, sqrt(3)};
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = su2_factor[s] * q_op[j][k][s];
+                        p += m;
+                    }
+                assert(p == mat.m);
+            }
+            if (m != 0 && m != hamil.n_sites - 1) {
+                mat[{1, 1}] = i_op;
+                p = 2;
+                // pointers
+                int pi = 1, pc = 2, pd = 2 + m;
+                int prd = 2 + m + m - m, pr = 2 + m + hamil.n_sites - m;
+                int pa0 = 2 + (hamil.n_sites << 1) + m * m * 0;
+                int pa1 = 2 + (hamil.n_sites << 1) + m * m * 1;
+                int pad0 = 2 + (hamil.n_sites << 1) + m * m * 2;
+                int pad1 = 2 + (hamil.n_sites << 1) + m * m * 3;
+                int pb0 = 2 + (hamil.n_sites << 1) + m * m * 4;
+                int pb1 = 2 + (hamil.n_sites << 1) + m * m * 5;
+                // C
+                for (uint8_t j = 0; j < m; j++)
+                    mat[{pc + j, p + j}] = i_op;
+                mat[{pi, p + m}] = c_op[m];
+                p += m + 1;
+                // D
+                for (uint8_t j = 0; j < m; j++)
+                    mat[{pd + j, p + j}] = i_op;
+                mat[{pi, p + m}] = d_op[m];
+                p += m + 1;
+                // RD
+                for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                    mat[{prd + i, p + i - (m + 1)}] = i_op;
+                    mat[{pi, p + i - (m + 1)}] = trd_op[i];
                     for (uint8_t k = 0; k < m; k++) {
-                        double f = hamil.v(i, j, k, m) * sqrt(3);
-                        mat[{pb1 + j * m + k, p + i - (m + 1)}] = f * c_op[m];
+                        mat[{pd + k, p + i - (m + 1)}] =
+                            2.0 * ((-0.5) * pd_op[i][k][0] +
+                                   (-0.5 * sqrt(3)) * pd_op[i][k][1]);
+                        mat[{pc + k, p + i - (m + 1)}] =
+                            2.0 * ((0.5) * q_op[k][i][0] +
+                                   (-0.5 * sqrt(3)) * q_op[k][i][1]);
                     }
-            }
-            p += hamil.n_sites - (m + 1);
-            // R
-            for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
-                mat[{pr + i, p + i - (m + 1)}] = i_op;
-                mat[{pi, p + i - (m + 1)}] = tr_op[i];
-                for (uint8_t k = 0; k < m; k++) {
-                    mat[{pc + k, p + i - (m + 1)}] =
-                        2.0 * ((-0.5) * p_op[i][k][0] +
-                               (0.5 * sqrt(3)) * p_op[i][k][1]);
-                    mat[{pd + k, p + i - (m + 1)}] =
-                        2.0 * ((0.5) * q_op[i][k][0] +
-                               (0.5 * sqrt(3)) * q_op[i][k][1]);
+                    for (uint8_t j = 0; j < m; j++)
+                        for (uint8_t l = 0; l < m; l++) {
+                            double f0 =
+                                hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                            double f1 =
+                                hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                            mat[{pa0 + j * m + l, p + i - (m + 1)}] =
+                                f0 * (-0.5) * d_op[m];
+                            mat[{pa1 + j * m + l, p + i - (m + 1)}] =
+                                f1 * (0.5 * sqrt(3)) * d_op[m];
+                        }
+                    for (uint8_t k = 0; k < m; k++)
+                        for (uint8_t l = 0; l < m; l++) {
+                            double f =
+                                2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
+                            mat[{pb0 + l * m + k, p + i - (m + 1)}] =
+                                f * c_op[m];
+                        }
+                    for (uint8_t j = 0; j < m; j++)
+                        for (uint8_t k = 0; k < m; k++) {
+                            double f = hamil.v(i, j, k, m) * sqrt(3);
+                            mat[{pb1 + j * m + k, p + i - (m + 1)}] =
+                                f * c_op[m];
+                        }
                 }
-                for (uint8_t j = 0; j < m; j++)
-                    for (uint8_t l = 0; l < m; l++) {
-                        double f0 = hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
-                        double f1 = hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
-                        mat[{pad0 + j * m + l, p + i - (m + 1)}] =
-                            f0 * (-0.5) * c_op[m];
-                        mat[{pad1 + j * m + l, p + i - (m + 1)}] =
-                            f1 * (-0.5 * sqrt(3)) * c_op[m];
-                    }
-                for (uint8_t k = 0; k < m; k++)
-                    for (uint8_t l = 0; l < m; l++) {
-                        double f =
-                            2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
-                        mat[{pb0 + k * m + l, p + i - (m + 1)}] = f * d_op[m];
-                    }
-                for (uint8_t j = 0; j < m; j++)
+                p += hamil.n_sites - (m + 1);
+                // R
+                for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                    mat[{pr + i, p + i - (m + 1)}] = i_op;
+                    mat[{pi, p + i - (m + 1)}] = tr_op[i];
                     for (uint8_t k = 0; k < m; k++) {
-                        double f = (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
-                        mat[{pb1 + k * m + j, p + i - (m + 1)}] = f * d_op[m];
+                        mat[{pc + k, p + i - (m + 1)}] =
+                            2.0 * ((-0.5) * p_op[i][k][0] +
+                                   (0.5 * sqrt(3)) * p_op[i][k][1]);
+                        mat[{pd + k, p + i - (m + 1)}] =
+                            2.0 * ((0.5) * q_op[i][k][0] +
+                                   (0.5 * sqrt(3)) * q_op[i][k][1]);
                     }
-            }
-            p += hamil.n_sites - (m + 1);
-            // A
-            for (uint8_t s = 0; s < 2; s++) {
-                int pa = s ? pa1 : pa0;
-                for (uint8_t i = 0; i < m; i++)
                     for (uint8_t j = 0; j < m; j++)
-                        mat[{pa + i * m + j, p + i * (m + 1) + j}] = i_op;
-                for (uint8_t i = 0; i < m; i++) {
-                    mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
-                    mat[{pc + i, p + m * (m + 1) + i}] = s ? mc_op[m] : c_op[m];
-                }
-                mat[{pi, p + m * (m + 1) + m}] = a_op[m][m][s];
-                p += (m + 1) * (m + 1);
-            }
-            // AD
-            for (uint8_t s = 0; s < 2; s++) {
-                int pad = s ? pad1 : pad0;
-                for (uint8_t i = 0; i < m; i++)
+                        for (uint8_t l = 0; l < m; l++) {
+                            double f0 =
+                                hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                            double f1 =
+                                hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                            mat[{pad0 + j * m + l, p + i - (m + 1)}] =
+                                f0 * (-0.5) * c_op[m];
+                            mat[{pad1 + j * m + l, p + i - (m + 1)}] =
+                                f1 * (-0.5 * sqrt(3)) * c_op[m];
+                        }
+                    for (uint8_t k = 0; k < m; k++)
+                        for (uint8_t l = 0; l < m; l++) {
+                            double f =
+                                2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
+                            mat[{pb0 + k * m + l, p + i - (m + 1)}] =
+                                f * d_op[m];
+                        }
                     for (uint8_t j = 0; j < m; j++)
-                        mat[{pad + i * m + j, p + i * (m + 1) + j}] = i_op;
-                for (uint8_t i = 0; i < m; i++) {
-                    mat[{pd + i, p + i * (m + 1) + m}] = s ? md_op[m] : d_op[m];
-                    mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
+                        for (uint8_t k = 0; k < m; k++) {
+                            double f = (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
+                            mat[{pb1 + k * m + j, p + i - (m + 1)}] =
+                                f * d_op[m];
+                        }
                 }
-                mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m][s];
-                p += (m + 1) * (m + 1);
+                p += hamil.n_sites - (m + 1);
+                // A
+                for (uint8_t s = 0; s < 2; s++) {
+                    int pa = s ? pa1 : pa0;
+                    for (uint8_t i = 0; i < m; i++)
+                        for (uint8_t j = 0; j < m; j++)
+                            mat[{pa + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint8_t i = 0; i < m; i++) {
+                        mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
+                        mat[{pc + i, p + m * (m + 1) + i}] =
+                            s ? mc_op[m] : c_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = a_op[m][m][s];
+                    p += (m + 1) * (m + 1);
+                }
+                // AD
+                for (uint8_t s = 0; s < 2; s++) {
+                    int pad = s ? pad1 : pad0;
+                    for (uint8_t i = 0; i < m; i++)
+                        for (uint8_t j = 0; j < m; j++)
+                            mat[{pad + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint8_t i = 0; i < m; i++) {
+                        mat[{pd + i, p + i * (m + 1) + m}] =
+                            s ? md_op[m] : d_op[m];
+                        mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m][s];
+                    p += (m + 1) * (m + 1);
+                }
+                // B
+                for (uint8_t s = 0; s < 2; s++) {
+                    int pb = s ? pb1 : pb0;
+                    for (uint8_t i = 0; i < m; i++)
+                        for (uint8_t j = 0; j < m; j++)
+                            mat[{pb + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint8_t i = 0; i < m; i++) {
+                        mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
+                        mat[{pd + i, p + m * (m + 1) + i}] =
+                            s ? mc_op[m] : c_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = b_op[m][m][s];
+                    p += (m + 1) * (m + 1);
+                }
+                assert(p == mat.n);
             }
-            // B
-            for (uint8_t s = 0; s < 2; s++) {
-                int pb = s ? pb1 : pb0;
-                for (uint8_t i = 0; i < m; i++)
-                    for (uint8_t j = 0; j < m; j++)
-                        mat[{pb + i * m + j, p + i * (m + 1) + j}] = i_op;
-                for (uint8_t i = 0; i < m; i++) {
-                    mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
-                    mat[{pd + i, p + m * (m + 1) + i}] = s ? mc_op[m] : c_op[m];
-                }
-                mat[{pi, p + m * (m + 1) + m}] = b_op[m][m][s];
-                p += (m + 1) * (m + 1);
+            shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector> plop;
+            shared_ptr<SymbolicColumnVector> prop;
+            if (m == hamil.n_sites - 1)
+                plop = make_shared<SymbolicRowVector>(1);
+            else
+                plop = make_shared<SymbolicRowVector>(rshape);
+            if (m == 0)
+                prop = make_shared<SymbolicColumnVector>(1);
+            else
+                prop = make_shared<SymbolicColumnVector>(lshape);
+            SymbolicRowVector &lop = *plop;
+            SymbolicColumnVector &rop = *prop;
+            lop[0] = h_op;
+            if (m != hamil.n_sites - 1) {
+                lop[1] = i_op;
+                p = 2;
+                for (uint8_t j = 0; j < m + 1; j++)
+                    lop[p + j] = c_op[j];
+                p += m + 1;
+                for (uint8_t j = 0; j < m + 1; j++)
+                    lop[p + j] = d_op[j];
+                p += m + 1;
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    lop[p + j - (m + 1)] = trd_op[j];
+                p += hamil.n_sites - (m + 1);
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    lop[p + j - (m + 1)] = tr_op[j];
+                p += hamil.n_sites - (m + 1);
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m + 1; j++) {
+                        for (uint8_t k = 0; k < m + 1; k++)
+                            lop[p + k] = a_op[j][k][s];
+                        p += m + 1;
+                    }
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m + 1; j++) {
+                        for (uint8_t k = 0; k < m + 1; k++)
+                            lop[p + k] = ad_op[j][k][s];
+                        p += m + 1;
+                    }
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m + 1; j++) {
+                        for (uint8_t k = 0; k < m + 1; k++)
+                            lop[p + k] = b_op[j][k][s];
+                        p += m + 1;
+                    }
+                assert(p == rshape);
             }
-            assert(p == mat.n);
+            rop[0] = i_op;
+            if (m != 0) {
+                rop[1] = h_op;
+                p = 2;
+                for (uint8_t j = 0; j < m; j++)
+                    rop[p + j] = tr_op[j];
+                p += m;
+                for (uint8_t j = 0; j < m; j++)
+                    rop[p + j] = trd_op[j];
+                p += m;
+                for (uint8_t j = m; j < hamil.n_sites; j++)
+                    rop[p + j - m] = d_op[j];
+                p += hamil.n_sites - m;
+                for (uint8_t j = m; j < hamil.n_sites; j++)
+                    rop[p + j - m] = c_op[j];
+                p += hamil.n_sites - m;
+                vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            rop[p + k] = su2_factor[s] * p_op[j][k][s];
+                        p += m;
+                    }
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            rop[p + k] = su2_factor[s] * pd_op[j][k][s];
+                        p += m;
+                    }
+                su2_factor = {1.0, sqrt(3)};
+                for (uint8_t s = 0; s < 2; s++)
+                    for (uint8_t j = 0; j < m; j++) {
+                        for (uint8_t k = 0; k < m; k++)
+                            rop[p + k] = su2_factor[s] * q_op[j][k][s];
+                        p += m;
+                    }
+                assert(p == lshape);
+            }
+            hamil.filter_site_ops(m, opt->lmat, opt->lop);
+            this->tensors.push_back(opt);
+            this->left_operator_names.push_back(plop);
+            this->right_operator_names.push_back(prop);
         }
-        shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
-        opt->lmat = opt->rmat = pmat;
-        // operator names
-        shared_ptr<SymbolicRowVector> plop;
-        shared_ptr<SymbolicColumnVector> prop;
-        if (m == hamil.n_sites - 1)
-            plop = make_shared<SymbolicRowVector>(1);
-        else
-            plop = make_shared<SymbolicRowVector>(rshape);
-        if (m == 0)
-            prop = make_shared<SymbolicColumnVector>(1);
-        else
-            prop = make_shared<SymbolicColumnVector>(lshape);
-        SymbolicRowVector &lop = *plop;
-        SymbolicColumnVector &rop = *prop;
-        lop[0] = h_op;
-        if (m != hamil.n_sites - 1) {
-            lop[1] = i_op;
-            p = 2;
-            for (uint8_t j = 0; j < m + 1; j++)
-                lop[p + j] = c_op[j];
-            p += m + 1;
-            for (uint8_t j = 0; j < m + 1; j++)
-                lop[p + j] = d_op[j];
-            p += m + 1;
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                lop[p + j - (m + 1)] = trd_op[j];
-            p += hamil.n_sites - (m + 1);
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                lop[p + j - (m + 1)] = tr_op[j];
-            p += hamil.n_sites - (m + 1);
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++)
-                        lop[p + k] = a_op[j][k][s];
-                    p += m + 1;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++)
-                        lop[p + k] = ad_op[j][k][s];
-                    p += m + 1;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++)
-                        lop[p + k] = b_op[j][k][s];
-                    p += m + 1;
-                }
-            assert(p == rshape);
-        }
-        rop[0] = i_op;
-        if (m != 0) {
-            rop[1] = h_op;
-            p = 2;
-            for (uint8_t j = 0; j < m; j++)
-                rop[p + j] = tr_op[j];
-            p += m;
-            for (uint8_t j = 0; j < m; j++)
-                rop[p + j] = trd_op[j];
-            p += m;
-            for (uint8_t j = m; j < hamil.n_sites; j++)
-                rop[p + j - m] = d_op[j];
-            p += hamil.n_sites - m;
-            for (uint8_t j = m; j < hamil.n_sites; j++)
-                rop[p + j - m] = c_op[j];
-            p += hamil.n_sites - m;
-            vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        rop[p + k] = su2_factor[s] * p_op[j][k][s];
-                    p += m;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        rop[p + k] = su2_factor[s] * pd_op[j][k][s];
-                    p += m;
-                }
-            su2_factor = {1.0, sqrt(3)};
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m; j++) {
-                    for (uint8_t k = 0; k < m; k++)
-                        rop[p + k] = su2_factor[s] * q_op[j][k][s];
-                    p += m;
-                }
-            assert(p == lshape);
-        }
-        hamil.filter_site_ops(m, opt->lmat, opt->lop);
-        mpo.tensors.push_back(opt);
-        mpo.left_operator_names.push_back(plop);
-        mpo.right_operator_names.push_back(prop);
     }
-    return make_shared<MPO>(mpo);
-}
+    void deallocate() override {
+        for (uint8_t m = n_sites - 1; m < n_sites; m--)
+            for (auto it = this->tensors[m]->lop.crbegin();
+                 it != this->tensors[m]->lop.crend(); ++it) {
+                OpElement &op = *dynamic_pointer_cast<OpElement>(it->first);
+                if (op.name == OpNames::R || op.name == OpNames::RD ||
+                    op.name == OpNames::H)
+                    it->second->deallocate();
+            }
+    }
+};
 
 } // namespace block2
 
