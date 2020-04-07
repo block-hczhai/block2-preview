@@ -142,13 +142,11 @@ struct Random {
         assert(b > a);
         return uniform_real_distribution<double>(a, b)(rng);
     }
-    template <typename T>
-    static void fill_rand_double(const T &t, double a = 0, double b = 1) {
+    static void fill_rand_double(double *data, size_t n, double a = 0,
+                                 double b = 1) {
         uniform_real_distribution<double> distr(a, b);
-        auto *ptr = t.data;
-        for (long i = 0, n = t.get_len(); i < n; i++)
-            ptr[i] =
-                (typename remove_reference<decltype(ptr[i])>::type)distr(rng);
+        for (size_t i = 0; i < n; i++)
+            data[i] = distr(rng);
     }
 };
 
@@ -213,6 +211,48 @@ struct MatrixRef {
     MatrixRef(double *data, int m, int n) : data(data), m(m), n(n) {}
     double &operator()(int i, int j) const {
         return *(data + (size_t)i * n + j);
+    }
+    size_t size() const { return (size_t)m * n; }
+    void deallocate() { dalloc->deallocate(data, size()); }
+    friend ostream &operator<<(ostream &os, const MatrixRef &mat) {
+        os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        for (int i = 0; i < mat.m; i++) {
+            os << "[ ";
+            for (int j = 0; j < mat.n; j++)
+                os << setw(20) << setprecision(14) << mat(i, j) << " ";
+            os << "]" << endl;
+        }
+        return os;
+    }
+};
+
+struct DiagonalMatrix : MatrixRef {
+    double zero = 0.0;
+    DiagonalMatrix(double *data, int n) : MatrixRef(data, n, n) {}
+    double &operator()(int i, int j) const {
+        return i == j ? *(data + i) : const_cast<double &>(zero);
+    }
+    void deallocate() { dalloc->deallocate(data, n); }
+    friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
+        os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        os << "[ ";
+        for (int j = 0; j < mat.n; j++)
+            os << setw(20) << setprecision(14) << mat(j, j) << " ";
+        os << "]" << endl;
+        return os;
+    }
+};
+
+struct IdentityMatrix : DiagonalMatrix {
+    double one = 1.0;
+    IdentityMatrix(int n) : DiagonalMatrix(nullptr, n) {}
+    double &operator()(int i, int j) const {
+        return i == j ? const_cast<double &>(one) : const_cast<double &>(zero);
+    }
+    void deallocate() {}
+    friend ostream &operator<<(ostream &os, const IdentityMatrix &mat) {
+        os << "IDENT MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        return os;
     }
 };
 
@@ -1463,6 +1503,138 @@ struct SparseMatrixInfo {
     }
 };
 
+extern "C" {
+
+// vector scale
+// vector [sx] = double [sa] * vector [sx]
+extern void dscal(const int *n, const double *sa, const double *sx,
+                  const int *incx);
+
+// vector addition
+// vector [sy] = vector [sy] + double [sa] * vector [sx]
+extern void daxpy(const int *n, const double *sa, const double *sx,
+                  const int *incx, double *sy, const int *incy);
+
+// vector dot product
+extern double ddot(const int *n, const double *dx, const int *incx,
+                   const double *dy, const int *incy);
+
+// matrix multiplication
+// mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
+extern void dgemm(const char *transa, const char *transb, const int *n,
+                  const int *m, const int *k, const double *alpha,
+                  const double *a, const int *lda, const double *b,
+                  const int *ldb, const double *beta, double *c,
+                  const int *ldc);
+
+// QR factorization
+extern void dgeqrf(const int *m, const int *n, double *a, const int *lda,
+                   double *tau, double *work, const int *lwork, int *info);
+extern void dorgqr(const int *m, const int *n, const int *k, double *a,
+                   const int *lda, const double *tau, double *work,
+                   const int *lwork, int *info);
+
+// LQ factorization
+extern void dgelqf(const int *m, const int *n, double *a, const int *lda,
+                   double *tau, double *work, const int *lwork, int *info);
+extern void dorglq(const int *m, const int *n, const int *k, double *a,
+                   const int *lda, const double *tau, double *work,
+                   const int *lwork, int *info);
+}
+
+struct MatrixFunctions {
+    static void iscale(const MatrixRef &a, double scale) {
+        int n = a.m * a.n, inc = 1;
+        dscal(&n, &scale, a.data, &inc);
+    }
+    static void iadd(const MatrixRef &a, const MatrixRef &b, double scale) {
+        assert(a.m == b.m && a.n == b.n);
+        int n = a.m * a.n, inc = 1;
+        daxpy(&n, &scale, b.data, &inc, a.data, &inc);
+    }
+    static double dot(const MatrixRef &a, const MatrixRef &b) {
+        assert(a.m == b.m && a.n == b.n);
+        int n = a.m * a.n, inc = 1;
+        return ddot(&n, a.data, &inc, b.data, &inc);
+    }
+    template <typename T1, typename T2>
+    static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
+                          double rtol = 1E-5) {
+        assert(a.m == b.m && a.n == b.n);
+        for (int i = 0; i < a.m; i++)
+            for (int j = 0; j < a.n; j++)
+                if (abs(a(i, j) - b(i, j)) > atol + rtol * abs(b(i, j)))
+                    return false;
+        return true;
+    }
+    static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
+                         bool conjb, const MatrixRef &c, double scale,
+                         double cfactor) {
+        if (!conja and !conjb) {
+            assert(a.n == b.m && c.m == a.m && c.n == b.n);
+            dgemm("n", "n", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+                  &a.n, &cfactor, c.data, &c.n);
+        } else if (!conja and conjb) {
+            assert(a.n == b.n && c.m == a.m && c.n == b.m);
+            dgemm("t", "n", &c.n, &c.m, &a.n, &scale, b.data, &b.n, a.data,
+                  &a.n, &cfactor, c.data, &c.n);
+        } else if (conja and !conjb) {
+            assert(a.m == b.m && c.m == a.n && c.n == b.n);
+            dgemm("n", "t", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+                  &a.n, &cfactor, c.data, &c.n);
+        } else {
+            assert(a.m == b.n && c.m == a.n && c.n == b.m);
+            dgemm("t", "t", &c.n, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+                  &a.n, &cfactor, c.data, &c.n);
+        }
+    }
+    static void tensor_product(const MatrixRef &a, bool conja,
+                               const MatrixRef &b, bool conjb,
+                               const MatrixRef &c, double scale,
+                               uint32_t stride) {
+        if (!conja and !conjb) {
+            for (int i = 0, inc = 1; i < a.m; i++)
+                for (int j = 0; j < a.n; j++) {
+                    double factor = scale * a(i, j);
+                    for (int k = 0; k < b.m; k++)
+                        daxpy(&b.n, &factor, &b(k, 0), &inc,
+                              &c(i * b.m + k, j * b.n + stride), &inc);
+                }
+        } else
+            assert(false);
+    }
+    static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {
+        int k = min(a.m, a.n), info, lwork = 34 * a.m;
+        double work[lwork], tau[k], t[a.m * a.n];
+        assert(a.m == l.m && a.n == q.n && l.n == k && q.m == k);
+        memcpy(t, a.data, sizeof(t));
+        dgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(l.data, 0, sizeof(double) * k * a.m);
+        for (int j = 0; j < a.m; j++)
+            memcpy(l.data + j * k, t + j * a.n, sizeof(double) * (j + 1));
+        dorgqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memcpy(q.data, t, sizeof(double) * k * a.n);
+    }
+    static void qr(const MatrixRef &a, const MatrixRef &q, const MatrixRef &r) {
+        int k = min(a.m, a.n), info, lwork = 34 * a.n;
+        double work[lwork], tau[k], t[a.m * a.n];
+        assert(a.m == q.m && a.n == r.n && q.n == k && r.m == k);
+        memcpy(t, a.data, sizeof(t));
+        dgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(r.data, 0, sizeof(double) * k * a.n);
+        for (int j = 0; j < k; j++)
+            memcpy(r.data + j * a.n + j, t + j * a.n + j,
+                   sizeof(double) * (a.n - j));
+        dorglq(&k, &a.m, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        for (int j = 0; j < a.m; j++)
+            memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
+    }
+};
+
 struct SparseMatrix {
     shared_ptr<SparseMatrixInfo> info;
     double *data;
@@ -1504,70 +1676,102 @@ struct SparseMatrix {
         return MatrixRef(data + info->n_states_total[idx],
                          info->n_states_bra[idx], info->n_states_ket[idx]);
     }
+    void left_canonicalize(const shared_ptr<SparseMatrix> &rmat) {
+        int nr = rmat->info->n, n = info->n;
+        uint32_t *tmp = ialloc->allocate(nr);
+        memset(tmp, 0, sizeof(uint32_t) * nr);
+        for (int i = 0; i < n; i++) {
+            int ir = rmat->info->find_state(info->quanta[i].get_ket());
+            assert(ir != -1);
+            tmp[ir] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+        }
+        size_t total_tmp_memory = 0;
+        for (int i = 0; i < nr; i++)
+            total_tmp_memory += (size_t)tmp[i];
+        double *dt = dalloc->allocate(total_tmp_memory);
+        uint32_t *it = ialloc->allocate(nr);
+        memset(it, 0, sizeof(uint32_t) * nr);
+        for (int i = 0; i < n; i++) {
+            int ir = rmat->info->find_state(info->quanta[i].get_ket());
+            uint32_t n_states =
+                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            memcpy(dt + (tmp[ir] + it[ir]), data + info->n_states_total[i],
+                   n_states * sizeof(double));
+            it[ir] += n_states;
+        }
+        for (int i = 0; i < nr; i++) {
+            uint32_t nr = rmat->info->n_states_ket[i], nl = tmp[i] / nr;
+            assert(tmp[i] % nr == 0 && nl >= nr);
+            MatrixFunctions::qr(MatrixRef(dt + tmp[i], nl, nr),
+                                MatrixRef(dt + tmp[i], nl, nr), (*rmat)[i]);
+        }
+        memset(it, 0, sizeof(uint32_t) * nr);
+        for (int i = 0; i < n; i++) {
+            int ir = rmat->info->find_state(info->quanta[i].get_ket());
+            uint32_t n_states =
+                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            memcpy(data + info->n_states_total[i], dt + (tmp[ir] + it[ir]),
+                   n_states * sizeof(double));
+            it[ir] += n_states;
+        }
+        ialloc->deallocate(it, nr);
+        dalloc->deallocate(dt, total_tmp_memory);
+        ialloc->deallocate(tmp, nr);
+    }
+    void right_canonicalize(const shared_ptr<SparseMatrix> &lmat) {
+        int nl = lmat->info->n, n = info->n;
+        uint32_t *tmp = ialloc->allocate(nl);
+        memset(tmp, 0, sizeof(uint32_t) * nl);
+        for (int i = 0; i < n; i++) {
+            int il = lmat->info->find_state(
+                info->quanta[i].get_bra(info->delta_quantum));
+            assert(il != -1);
+            tmp[il] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+        }
+        size_t total_tmp_memory = 0;
+        for (int i = 0; i < nl; i++)
+            total_tmp_memory += (size_t)tmp[i];
+        double *dt = dalloc->allocate(total_tmp_memory);
+        uint32_t *it = ialloc->allocate(nl);
+        memset(it, 0, sizeof(uint32_t) * nl);
+        for (int i = 0; i < n; i++) {
+            int il = lmat->info->find_state(
+                info->quanta[i].get_bra(info->delta_quantum));
+            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
+            uint32_t inr = info->n_states_ket[i];
+            for (uint32_t k = 0; k < nl; k++)
+                memcpy(dt + (tmp[il] + it[il] + k * nr),
+                       data + info->n_states_total[i] + k * inr,
+                       inr * sizeof(double));
+            it[il] += inr;
+        }
+        for (int i = 0; i < nl; i++) {
+            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
+            assert(tmp[i] % nl == 0 && nr >= nl);
+            MatrixFunctions::lq(MatrixRef(dt + tmp[i], nl, nr), (*lmat)[i],
+                                MatrixRef(dt + tmp[i], nl, nr));
+        }
+        memset(it, 0, sizeof(uint32_t) * nl);
+        for (int i = 0; i < n; i++) {
+            int il = lmat->info->find_state(
+                info->quanta[i].get_bra(info->delta_quantum));
+            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
+            uint32_t inr = info->n_states_ket[i];
+            for (uint32_t k = 0; k < nl; k++)
+                memcpy(data + info->n_states_total[i] + k * inr,
+                       dt + (tmp[il] + it[il] + k * nr), inr * sizeof(double));
+            it[il] += inr;
+        }
+        ialloc->deallocate(it, nl);
+        dalloc->deallocate(dt, total_tmp_memory);
+        ialloc->deallocate(tmp, nl);
+    }
     friend ostream &operator<<(ostream &os, const SparseMatrix &c) {
         os << "DATA = [ ";
         for (int i = 0; i < c.total_memory; i++)
             os << setw(20) << setprecision(14) << c.data[i] << " ";
         os << "]" << endl;
         return os;
-    }
-};
-
-extern "C" {
-
-// vector scale
-// vector [sx] = double [sa] * vector [sx]
-extern void dscal(const int *n, const double *sa, const double *sx,
-                  const int *incx);
-
-// vector addition
-// vector [sy] = vector [sy] + double [sa] * vector [sx]
-extern void daxpy(const int *n, const double *sa, const double *sx,
-                  const int *incx, double *sy, const int *incy);
-
-// matrix multiplication
-// mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
-extern void dgemm(const char *transa, const char *transb, const int *n,
-                  const int *m, const int *k, const double *alpha,
-                  const double *a, const int *lda, const double *b,
-                  const int *ldb, const double *beta, double *c,
-                  const int *ldc);
-}
-
-struct MatrixFunctions {
-    static void iscale(const MatrixRef &a, double scale) {
-        int n = a.m * a.n, inc = 1;
-        dscal(&n, &scale, a.data, &inc);
-    }
-    static void iadd(const MatrixRef &a, const MatrixRef &b, double scale) {
-        assert(a.m == b.m && a.n == b.n);
-        int n = a.m * a.n, inc = 1;
-        daxpy(&n, &scale, b.data, &inc, a.data, &inc);
-    }
-    static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
-                         bool conjb, const MatrixRef &c, double scale,
-                         double cfactor) {
-        if (!conja and !conjb) {
-            assert(a.n == b.m && c.m == a.m && c.n == b.n);
-            dgemm("n", "n", &b.n, &a.m, &b.m, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &b.n);
-        } else
-            assert(false);
-    }
-    static void tensor_product(const MatrixRef &a, bool conja,
-                               const MatrixRef &b, bool conjb,
-                               const MatrixRef &c, double scale,
-                               uint32_t stride) {
-        if (!conja and !conjb) {
-            for (int i = 0, inc = 1; i < a.m; i++)
-                for (int j = 0; j < a.n; j++) {
-                    double factor = scale * a(i, j);
-                    for (int k = 0; k < b.m; k++)
-                        daxpy(&b.n, &factor, &b(k, 0), &inc,
-                              &c(i * b.m + k, j * b.n + stride), &inc);
-                }
-        } else
-            assert(false);
     }
 };
 
@@ -1851,7 +2055,8 @@ struct MPS {
     vector<shared_ptr<SparseMatrixInfo>> mat_infos;
     vector<shared_ptr<SparseMatrix>> tensors;
     string canonical_form;
-    MPS(int n_sites, int center, int dot) : center(center), dot(dot) {
+    MPS(int n_sites, int center, int dot)
+        : n_sites(n_sites), center(center), dot(dot) {
         canonical_form.resize(n_sites);
         for (int i = 0; i < center; i++)
             canonical_form[i] = 'L';
@@ -1905,8 +2110,10 @@ struct MPS {
             mat_infos[i]->reallocate(mat_infos[i]->n);
         }
         for (int i = 0; i < n_sites; i++)
-            if (mat_infos[i] != nullptr)
+            if (mat_infos[i] != nullptr) {
+                tensors[i] = make_shared<SparseMatrix>();
                 tensors[i]->allocate(mat_infos[i]);
+            }
     }
     void deallocate() {
         for (int i = n_sites - 1; i >= 0; i--)

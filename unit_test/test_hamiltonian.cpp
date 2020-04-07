@@ -42,31 +42,37 @@ TEST_F(TestHamiltonian, Test) {
     // MPSInfo
     shared_ptr<MPSInfo> mps_info =
         make_shared<MPSInfo>(norb, vaccum, target, hamil.basis, &hamil.orb_sym[0]);
-    cout << "left min dims fci = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->left_dims_fci[i].n << " ";
-    cout << endl;
-    cout << "right min dims fci = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->right_dims_fci[i].n << " ";
-    cout << endl;
-    cout << "left max dims fci = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->left_dims_fci[i].n_states_total << " ";
-    cout << endl;
-    cout << "right max dims fci = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->right_dims_fci[i].n_states_total << " ";
-    cout << endl;
+    // cout << "left min dims fci = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->left_dims_fci[i].n << " ";
+    // cout << endl;
+    // cout << "right min dims fci = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->right_dims_fci[i].n << " ";
+    // cout << endl;
+    // cout << "left max dims fci = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->left_dims_fci[i].n_states_total << " ";
+    // cout << endl;
+    // cout << "right max dims fci = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->right_dims_fci[i].n_states_total << " ";
+    // cout << endl;
     mps_info->set_bond_dimension(500);
-    cout << "left dims = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->left_dims[i].n_states_total << " ";
-    cout << endl;
-    cout << "right dims = ";
-    for (int i = 0; i <= norb; i++)
-        cout << mps_info->right_dims[i].n_states_total << " ";
-    cout << endl;
+    // cout << "left dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->left_dims[i].n_states_total << " ";
+    // cout << endl;
+    // cout << "right dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->right_dims[i].n_states_total << " ";
+    // cout << endl;
+
+    // MPS
+    shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
+    cout << ialloc->used << " mpsi " << dalloc->used << endl;
+    mps->initialize(mps_info);
+    cout << ialloc->used << " mpsf " << dalloc->used << endl;
 
     // MPO
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
@@ -79,17 +85,18 @@ TEST_F(TestHamiltonian, Test) {
     smi->initialize(*si, *si, hamil.vaccum, false);
     shared_ptr<SparseMatrix> c = make_shared<SparseMatrix>();
     c->allocate(smi);
-    cout << "total = " << c->total_memory << endl;
+    // cout << "total = " << c->total_memory << endl;
     shared_ptr<OpExpr> op_h =
         make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
     shared_ptr<SparseMatrix> a = mpo->tensors[0]->lop[op_h];
     shared_ptr<SparseMatrix> b = mpo->tensors[1]->lop[op_h];
     hamil.opf->tensor_product(*a, *b, *c);
-    cout << "c = " << *c->info << *c << endl;
+    // cout << "c = " << *c->info << *c << endl;
     c->deallocate();
     smi->deallocate();
     si->deallocate();
     mpo->deallocate();
+    mps->deallocate();
     mps_info->deallocate();
     hamil.deallocate();
     fcidump->deallocate();
