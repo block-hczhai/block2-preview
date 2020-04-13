@@ -1966,14 +1966,15 @@ struct OperatorFunctions {
         if (abs(scale) < TINY)
             return;
         SpinLabel adq = a.info->delta_quantum, cdq = c.info->delta_quantum;
-        assert(adq == cdq && a.info->n == c.info->n);
-        for (int ic = 0; ic < c.info->n; ic++) {
-            assert(a.info->quanta[ic] == c.info->quanta[ic]);
+        assert(adq == cdq && a.info->n >= c.info->n);
+        for (int ic = 0, ia = 0; ic < c.info->n; ia++, ic++) {
+            while (a.info->quanta[ia] != c.info->quanta[ic])
+                ia++;
             SpinLabel cq = c.info->quanta[ic].get_bra(cdq);
             SpinLabel cqprime = c.info->quanta[ic].get_ket();
             int ibra = rot_bra.info->find_state(cq);
             int iket = rot_ket.info->find_state(cqprime);
-            MatrixFunctions::rotate(a[ic], c[ic], rot_bra[ibra], rot_ket[iket],
+            MatrixFunctions::rotate(a[ia], c[ic], rot_bra[ibra], rot_ket[iket],
                                     trans, scale);
         }
     }
@@ -2132,9 +2133,15 @@ struct TensorFunctions {
         assert(c->lmat->get_type() == SymTypes::RVec);
         assert(a->lmat->data.size() == c->lmat->data.size());
         for (size_t i = 0; i < a->lmat->data.size(); i++) {
-            assert(a->lmat->data[i] == c->lmat->data[i]);
-            c->lop[c->lmat->data[i]]->copy_data(*a->lop[a->lmat->data[i]]);
-            c->lop[c->lmat->data[i]]->factor = a->lop[a->lmat->data[i]]->factor;
+            if (a->lmat->data[i]->get_type() == OpTypes::Zero)
+                c->lmat->data[i] = a->lmat->data[i];
+            else {
+                assert(a->lmat->data[i] == c->lmat->data[i]);
+                auto pa = abs_value(a->lmat->data[i]),
+                     pc = abs_value(c->lmat->data[i]);
+                c->lop[pc]->copy_data(*a->lop[pa]);
+                c->lop[pc]->factor = a->lop[pa]->factor;
+            }
         }
     }
     static void right_assign(const shared_ptr<OperatorTensor> &a,
@@ -2145,9 +2152,15 @@ struct TensorFunctions {
         assert(c->rmat->get_type() == SymTypes::CVec);
         assert(a->rmat->data.size() == c->rmat->data.size());
         for (size_t i = 0; i < a->rmat->data.size(); i++) {
-            assert(a->rmat->data[i] == c->rmat->data[i]);
-            c->rop[c->rmat->data[i]]->copy_data(*a->rop[a->rmat->data[i]]);
-            c->rop[c->rmat->data[i]]->factor = a->rop[a->rmat->data[i]]->factor;
+            if (a->rmat->data[i]->get_type() == OpTypes::Zero)
+                c->rmat->data[i] = a->rmat->data[i];
+            else {
+                assert(a->rmat->data[i] == c->rmat->data[i]);
+                auto pa = abs_value(a->rmat->data[i]),
+                     pc = abs_value(c->rmat->data[i]);
+                c->lop[pc]->copy_data(*a->lop[pa]);
+                c->lop[pc]->factor = a->lop[pa]->factor;
+            }
         }
     }
     void expr_evaluation(const shared_ptr<OpExpr> &expr,
@@ -2183,18 +2196,22 @@ struct TensorFunctions {
                      const shared_ptr<SparseMatrix> &mpst_ket,
                      shared_ptr<OperatorTensor> &c) const {
         for (size_t i = 0; i < a->lmat->data.size(); i++)
-            opf->tensor_rotate(*a->lop.at(a->lmat->data[i]),
-                               *c->lop.at(a->lmat->data[i]), *mpst_bra,
-                               *mpst_ket, false);
+            if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
+                auto pa = abs_value(a->lmat->data[i]);
+                opf->tensor_rotate(*a->lop.at(pa), *c->lop.at(pa), *mpst_bra,
+                                   *mpst_ket, false);
+            }
     }
     void right_rotate(const shared_ptr<OperatorTensor> &a,
                       const shared_ptr<SparseMatrix> &mpst_bra,
                       const shared_ptr<SparseMatrix> &mpst_ket,
                       shared_ptr<OperatorTensor> &c) const {
         for (size_t i = 0; i < a->rmat->data.size(); i++)
-            opf->tensor_rotate(*a->lop.at(a->rmat->data[i]),
-                               *c->lop.at(a->rmat->data[i]), *mpst_bra,
-                               *mpst_ket, true);
+            if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
+                auto pa = abs_value(a->rmat->data[i]);
+                opf->tensor_rotate(*a->lop.at(pa), *c->lop.at(pa), *mpst_bra,
+                                   *mpst_ket, true);
+            }
     }
     void left_contract(const shared_ptr<OperatorTensor> &a,
                        const shared_ptr<OperatorTensor> &b,
@@ -2232,7 +2249,7 @@ struct TensorFunctions {
             assert(b->rmat->get_type() == SymTypes::Mat);
             assert(c->rmat != nullptr);
             assert(c->rmat->get_type() == SymTypes::CVec);
-            assert(a->rmat->n == b->rmat->m && b->rmat->n == c->rmat->n);
+            assert(a->rmat->m == b->rmat->n && b->rmat->m == c->rmat->m);
             shared_ptr<Symbolic> exprs = b->rmat * a->rmat;
             assert(exprs->data.size() == c->rmat->data.size());
             for (size_t i = 0; i < exprs->data.size(); i++) {
@@ -2293,7 +2310,7 @@ struct MPSInfo {
         left_dims[0] = StateInfo(vaccum);
         for (int i = 0; i < n_sites; i++)
             left_dims[i + 1] = left_dims_fci[i + 1].deep_copy();
-        for (int i = 0; i < n_sites; i++) {
+        for (int i = 0; i < n_sites; i++)
             if (left_dims[i + 1].n_states_total > m) {
                 int new_total = 0;
                 for (int k = 0; k < left_dims[i + 1].n; k++) {
@@ -2307,27 +2324,11 @@ struct MPSInfo {
                 }
                 left_dims[i + 1].n_states_total = new_total;
             }
-            if (i != n_sites - 1) {
-                StateInfo t = StateInfo::tensor_product(
-                    left_dims[i + 1], basis[orbsym[i + 1]], target);
-                int new_total = 0;
-                for (int k = 0; k < left_dims[i + 2].n; k++) {
-                    int tk = t.find_state(left_dims[i + 2].quanta[k]);
-                    if (tk == -1)
-                        left_dims[i + 2].n_states[k] = 0;
-                    else if (left_dims[i + 2].n_states[k] > t.n_states[tk])
-                        left_dims[i + 2].n_states[k] = t.n_states[tk];
-                    new_total += left_dims[i + 2].n_states[k];
-                }
-                left_dims[i + 2].n_states_total = new_total;
-                t.deallocate();
-            }
-        }
         right_dims = new StateInfo[n_sites + 1];
         right_dims[n_sites] = StateInfo(vaccum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims[i] = right_dims_fci[i].deep_copy();
-        for (int i = n_sites - 1; i >= 0; i--) {
+        for (int i = n_sites - 1; i >= 0; i--)
             if (right_dims[i].n_states_total > m) {
                 int new_total = 0;
                 for (int k = 0; k < right_dims[i].n; k++) {
@@ -2341,21 +2342,35 @@ struct MPSInfo {
                 }
                 right_dims[i].n_states_total = new_total;
             }
-            if (i != 0) {
-                StateInfo t = StateInfo::tensor_product(basis[orbsym[i - 1]],
-                                                        right_dims[i], target);
-                int new_total = 0;
-                for (int k = 0; k < right_dims[i - 1].n; k++) {
-                    int tk = t.find_state(right_dims[i - 1].quanta[k]);
-                    if (tk == -1)
-                        right_dims[i - 1].n_states[k] = 0;
-                    else if (right_dims[i - 1].n_states[k] > t.n_states[tk])
-                        right_dims[i - 1].n_states[k] = t.n_states[tk];
-                    new_total += right_dims[i - 1].n_states[k];
-                }
-                right_dims[i - 1].n_states_total = new_total;
-                t.deallocate();
+        for (int i = -1; i < n_sites - 1; i++) {
+            StateInfo t = StateInfo::tensor_product(
+                left_dims[i + 1], basis[orbsym[i + 1]], target);
+            int new_total = 0;
+            for (int k = 0; k < left_dims[i + 2].n; k++) {
+                int tk = t.find_state(left_dims[i + 2].quanta[k]);
+                if (tk == -1)
+                    left_dims[i + 2].n_states[k] = 0;
+                else if (left_dims[i + 2].n_states[k] > t.n_states[tk])
+                    left_dims[i + 2].n_states[k] = t.n_states[tk];
+                new_total += left_dims[i + 2].n_states[k];
             }
+            left_dims[i + 2].n_states_total = new_total;
+            t.deallocate();
+        }
+        for (int i = n_sites; i > 0; i--) {
+            StateInfo t = StateInfo::tensor_product(basis[orbsym[i - 1]],
+                                                    right_dims[i], target);
+            int new_total = 0;
+            for (int k = 0; k < right_dims[i - 1].n; k++) {
+                int tk = t.find_state(right_dims[i - 1].quanta[k]);
+                if (tk == -1)
+                    right_dims[i - 1].n_states[k] = 0;
+                else if (right_dims[i - 1].n_states[k] > t.n_states[tk])
+                    right_dims[i - 1].n_states[k] = t.n_states[tk];
+                new_total += right_dims[i - 1].n_states[k];
+            }
+            right_dims[i - 1].n_states_total = new_total;
+            t.deallocate();
         }
     }
     void deallocate() {
@@ -2517,12 +2532,13 @@ struct Partition {
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::RVec);
         opt->lmat = mat;
-        for (size_t i = 0; i < mat->data.size(); i++) {
-            shared_ptr<OpElement> cop =
-                dynamic_pointer_cast<OpElement>(mat->data[i]);
-            shared_ptr<OpExpr> op = abs_value(cop);
-            opt->lop[op] = make_shared<SparseMatrix>();
-        }
+        for (size_t i = 0; i < mat->data.size(); i++)
+            if (mat->data[i]->get_type() != OpTypes::Zero) {
+                shared_ptr<OpElement> cop =
+                    dynamic_pointer_cast<OpElement>(mat->data[i]);
+                shared_ptr<OpExpr> op = abs_value(cop);
+                opt->lop[op] = make_shared<SparseMatrix>();
+            }
         for (auto &p : opt->lop) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
             p.second->allocate(find_op_info(
@@ -2536,13 +2552,14 @@ struct Partition {
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::CVec);
         opt->rmat = mat;
-        for (size_t i = 0; i < mat->data.size(); i++) {
-            shared_ptr<OpElement> cop =
-                dynamic_pointer_cast<OpElement>(mat->data[i]);
-            shared_ptr<OpExpr> op = abs_value(cop);
-            opt->rop[op] = make_shared<SparseMatrix>();
-        }
-        for (auto &p : opt->rop) {
+        for (size_t i = 0; i < mat->data.size(); i++)
+            if (mat->data[i]->get_type() != OpTypes::Zero) {
+                shared_ptr<OpElement> cop =
+                    dynamic_pointer_cast<OpElement>(mat->data[i]);
+                shared_ptr<OpExpr> op = abs_value(cop);
+                opt->lop[op] = make_shared<SparseMatrix>();
+            }
+        for (auto &p : opt->lop) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
             p.second->allocate(
                 find_op_info(notrunc ? right_op_infos_notrunc : right_op_infos,
@@ -2673,10 +2690,8 @@ struct Partition {
                 lop_notrunc);
             lop_notrunc->cinfo = cinfo;
         }
-        ibra.reallocate(0);
         ibra_notrunc.reallocate(0);
         ibra_cinfo.reallocate(0);
-        iket.reallocate(0);
         iket_notrunc.reallocate(0);
         iket_cinfo.reallocate(0);
         for (size_t i = 0; i < sl.size(); i++) {
@@ -2732,10 +2747,8 @@ struct Partition {
                               rop_notrunc);
             rop_notrunc->cinfo = cinfo;
         }
-        ibra.reallocate(0);
         ibra_notrunc.reallocate(0);
         ibra_cinfo.reallocate(0);
-        iket.reallocate(0);
         iket_notrunc.reallocate(0);
         iket_cinfo.reallocate(0);
         for (size_t i = 0; i < sl.size(); i++) {
@@ -2782,6 +2795,7 @@ struct MovingEnvironment {
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
         for (int i = 1; i <= center; i++) {
+            cout << "iL = " << i << endl;
             vector<SpinLabel> sl =
                 Partition::get_uniq_labels(mpo->left_operator_names[i - 1]);
             shared_ptr<Symbolic> exprs =
@@ -2798,7 +2812,7 @@ struct MovingEnvironment {
                 envs[i]->left_op_infos_notrunc);
             shared_ptr<OperatorTensor> new_left =
                 envs[i]->build_left(mpo->left_operator_names[i - 1], true);
-            tf->left_contract(envs[i]->left, envs[i - 1]->middle.front(),
+            tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                               new_left);
             envs[i]->left =
                 envs[i]->build_left(mpo->left_operator_names[i - 1], false);
@@ -2808,6 +2822,7 @@ struct MovingEnvironment {
             envs[i]->left->reallocate(false);
         }
         for (int i = n_sites - dot - 1; i >= center; i--) {
+            cout << "iR = " << i << endl;
             vector<SpinLabel> sl =
                 Partition::get_uniq_labels(mpo->right_operator_names[i + dot]);
             shared_ptr<Symbolic> exprs =
@@ -2824,7 +2839,7 @@ struct MovingEnvironment {
                 envs[i]->right_op_infos, envs[i]->right_op_infos_notrunc);
             shared_ptr<OperatorTensor> new_right =
                 envs[i]->build_right(mpo->right_operator_names[i + dot], true);
-            tf->right_contract(envs[i]->right, envs[i + 1]->middle.back(),
+            tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                                new_right);
             envs[i]->right =
                 envs[i]->build_right(mpo->right_operator_names[i + dot], false);

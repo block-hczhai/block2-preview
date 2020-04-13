@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestHamiltonian : public ::testing::Test {
   protected:
-    size_t isize = 1E7;
-    size_t dsize = 1E7;
+    size_t isize = 1E9;
+    size_t dsize = 1E9;
     void SetUp() override {
         Random::rand_seed(0);
         ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
@@ -69,7 +69,7 @@ TEST_F(TestHamiltonian, Test) {
     cout << endl;
 
     // MPS
-    shared_ptr<MPS> mps = make_shared<MPS>(norb, 20, 2);
+    shared_ptr<MPS> mps = make_shared<MPS>(norb, 10, 2);
     cout << ialloc->used << " mpsi " << dalloc->used << endl;
     mps->initialize(mps_info);
     cout << ialloc->used << " mpsf " << dalloc->used << endl;
@@ -99,8 +99,8 @@ TEST_F(TestHamiltonian, Test) {
         make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
     shared_ptr<SparseMatrix> a = mpo->tensors[0]->lop[op_h];
     shared_ptr<SparseMatrix> b = mpo->tensors[1]->lop[op_h];
-    hamil.opf->tensor_product(*a, *b, *c);
-    // cout << "c = " << *c->info << *c << endl;
+    // hamil.opf->tensor_product(*a, *b, *c);
+    // // cout << "c = " << *c->info << *c << endl;
     c->deallocate();
     smi->deallocate();
     si->deallocate();
