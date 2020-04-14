@@ -41,7 +41,7 @@ TEST_F(TestHamiltonian, Test) {
     // }
     // MPSInfo
     shared_ptr<MPSInfo> mps_info =
-        make_shared<MPSInfo>(norb, vaccum, target, hamil.basis, &hamil.orb_sym[0]);
+        make_shared<MPSInfo>(norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
     // cout << "left min dims fci = ";
     // for (int i = 0; i <= norb; i++)
     //     cout << mps_info->left_dims_fci[i].n << " ";

@@ -19,6 +19,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <sys/stat.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <type_traits>
@@ -203,6 +204,10 @@ struct Parsing {
     }
     static int to_int(const string &x) { return atoi(x.c_str()); }
     static double to_double(const string &x) { return atof(x.c_str()); }
+    static bool file_exists(const string &name) {
+        struct stat buffer;
+        return stat(name.c_str(), &buffer) == 0;
+    }
 };
 
 struct MatrixRef {
@@ -326,6 +331,7 @@ struct FCIDUMP {
         vs.clear();
         vabs.clear();
         e = 0.0;
+        assert(Parsing::file_exists(filename));
         ifstream ifs(filename.c_str());
         vector<string> lines = Parsing::readlines(&ifs);
         ifs.close();
@@ -595,7 +601,6 @@ struct SZLabel {
     SZLabel(uint32_t data) : data(data) {}
     SZLabel(int n, int twos, int pg)
         : data((uint32_t)((n << 24) | (twos << 8) | pg)) {}
-    SZLabel(const SZLabel &other) : data(other.data) {}
     int n() const { return (int)(((int32_t)data) >> 24); }
     int twos() const { return (int)(int16_t)((data >> 8) & 0xFFU); }
     int pg() const { return (int)(data & 0xFFU); }
@@ -646,7 +651,6 @@ struct SpinLabel {
         : data((uint32_t)((n << 24) | (twos << 16) | (twos << 8) | pg)) {}
     SpinLabel(int n, int twos_low, int twos, int pg)
         : data((uint32_t)((n << 24) | (twos_low << 16) | (twos << 8) | pg)) {}
-    SpinLabel(const SpinLabel &other) : data(other.data) {}
     int n() const { return (int)(((int32_t)data) >> 24); }
     int twos() const { return (int)(int16_t)((data >> 8) & 0xFFU); }
     int twos_low() const { return (int)(int16_t)((data >> 16) & 0xFFU); }
@@ -2270,20 +2274,20 @@ struct MPO {
     vector<shared_ptr<Symbolic>> middle_operator_names;
     int n_sites;
     MPO(int n_sites) : n_sites(n_sites) {}
-    virtual void deallocate() = 0;
+    virtual void deallocate() {};
 };
 
 struct MPSInfo {
     int n_sites;
     SpinLabel vaccum;
     SpinLabel target;
-    uint8_t *orbsym;
+    uint8_t *orbsym, n_syms;
     StateInfo *basis, *left_dims_fci, *right_dims_fci;
     StateInfo *left_dims, *right_dims;
     uint16_t bond_dim;
     MPSInfo(int n_sites, SpinLabel vaccum, SpinLabel target, StateInfo *basis,
-            uint8_t *orbsym)
-        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
+            uint8_t *orbsym, uint8_t n_syms)
+        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym), n_syms(n_syms),
           basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo[n_sites + 1];
         left_dims_fci[0] = StateInfo(vaccum);
@@ -2868,8 +2872,8 @@ struct Hamiltonian {
         : vaccum(vaccum), target(target), n_sites((uint8_t)norb), su2(su2),
           fcidump(fcidump), orb_sym(orb_sym) {
         assert((int)n_sites == norb);
-        basis = new StateInfo[n_sites];
         n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;
+        basis = new StateInfo[n_syms];
         if (su2)
             for (int i = 0; i < n_syms; i++) {
                 basis[i].allocate(3);

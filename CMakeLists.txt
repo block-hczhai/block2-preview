@@ -90,7 +90,7 @@ ELSE()
 ENDIF()
 
 IF (${BUILD_LIB})
-    FILE(GLOB_RECURSE PYBIND_SRCS src/pybind/*.cpp src/rev/*.cpp)
+    FILE(GLOB_RECURSE PYBIND_SRCS src/pybind.cpp)
     SET(SRCS ${PYBIND_SRCS} ${SRCS})
     
     IF (NOT("${EXC_SRCS}" STREQUAL ""))
