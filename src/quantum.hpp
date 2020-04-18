@@ -219,7 +219,8 @@ struct MatrixRef {
     }
     size_t size() const { return (size_t)m * n; }
     void allocate() { data = dalloc->allocate(size()); }
-    void deallocate() { dalloc->deallocate(data, size()); }
+    void deallocate() { dalloc->deallocate(data, size()), data = nullptr; }
+    void clear() { memset(data, 0, size() * sizeof(double)); }
     friend ostream &operator<<(ostream &os, const MatrixRef &mat) {
         os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         for (int i = 0; i < mat.m; i++) {
@@ -238,7 +239,7 @@ struct DiagonalMatrix : MatrixRef {
     double &operator()(int i, int j) const {
         return i == j ? *(data + i) : const_cast<double &>(zero);
     }
-    void deallocate() { dalloc->deallocate(data, n); }
+    size_t size() const { return (size_t)m; }
     friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
@@ -1451,6 +1452,69 @@ struct SparseMatrixInfo {
         uint16_t *ia, *ib, *ic;
         int n, nc;
         CollectedInfo() : n(-1), nc(-1) {}
+        void initialize_wfn(
+            SpinLabel vdq, SpinLabel cdq, SpinLabel opdq, const vector<SpinLabel> &subdq,
+            const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
+            const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
+            const shared_ptr<SparseMatrixInfo> &cinfo,
+            const shared_ptr<SparseMatrixInfo> &vinfo) {
+            if (ainfos.size() == 0 || binfos.size() == 0) {
+                n = nc = 0;
+                return;
+            }
+            vector<uint32_t> vidx(subdq.size()), viv;
+            vector<uint16_t> via, vib, vic;
+            for (size_t k = 0; k < subdq.size(); k++) {
+                vidx[k] = viv.size();
+                SpinLabel adq = subdq[k].get_bra(opdq),
+                          bdq = -subdq[k].get_ket();
+                shared_ptr<SparseMatrixInfo> ainfo =
+                    lower_bound(ainfos.begin(), ainfos.end(), adq, cmp_op_info)
+                        ->second;
+                shared_ptr<SparseMatrixInfo> binfo =
+                    lower_bound(binfos.begin(), binfos.end(), bdq, cmp_op_info)
+                        ->second;
+                assert(ainfo->delta_quantum == adq);
+                assert(binfo->delta_quantum == bdq);
+                for (int iv = 0; iv < vinfo->n; iv++) {
+                    SpinLabel lq = vinfo->quanta[iv].get_bra(vdq);
+                    SpinLabel rq = -vinfo->quanta[iv].get_ket();
+                    SpinLabel rqprimes = rq - bdq;
+                    for (int r = 0; r < rqprimes.count(); r++) {
+                        SpinLabel rqprime = rqprimes[r];
+                        int ib = binfo->find_state(bdq.combine(rq, rqprime));
+                        if (ib != -1) {
+                            SpinLabel lqprimes = cdq - rqprime;
+                            for (int l = 0; l < lqprimes.count(); l++) {
+                                SpinLabel lqprime = lqprimes[l];
+                                int ia = ainfo->find_state(adq.combine(lq, lqprime));
+                                int ic = cinfo->find_state(cdq.combine(lqprime, -rqprime));
+                                if (ia != -1 && ic != -1) {
+                                    via.push_back(ia);
+                                    vib.push_back(ib);
+                                    vic.push_back(ic);
+                                    viv.push_back(iv);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            n = vidx.size();
+            nc = viv.size();
+            uint32_t *ptr = ialloc->allocate((n << 1));
+            uint32_t *cptr = ialloc->allocate((nc << 1) + nc - (nc >> 1));
+            quanta = (SpinLabel *)ptr;
+            idx = ptr + n;
+            stride = cptr;
+            ia = (uint16_t *)(cptr + nc), ib = ia + nc, ic = ib + nc;
+            memcpy(quanta, &subdq[0], n * sizeof(SpinLabel));
+            memcpy(idx, &vidx[0], n * sizeof(uint32_t));
+            memcpy(stride, &viv[0], nc * sizeof(uint32_t));
+            memcpy(ia, &via[0], nc * sizeof(uint16_t));
+            memcpy(ib, &vib[0], nc * sizeof(uint16_t));
+            memcpy(ic, &vic[0], nc * sizeof(uint16_t));
+        }
         void initialize(
             SpinLabel cdq, const vector<SpinLabel> &subdq, const StateInfo &bra,
             const StateInfo &ket, const StateInfo &bra_a,
@@ -1664,6 +1728,11 @@ extern "C" {
 extern void dscal(const int *n, const double *sa, const double *sx,
                   const int *incx);
 
+// vector copy
+// vector [dy] = [dx]
+extern void dcopy(const int *n, const double *dx, const int *incx, double *dy,
+                  const int *incy);
+
 // vector addition
 // vector [sy] = vector [sy] + double [sa] * vector [sx]
 extern void daxpy(const int *n, const double *sa, const double *sx,
@@ -1694,9 +1763,19 @@ extern void dgelqf(const int *m, const int *n, double *a, const int *lda,
 extern void dorglq(const int *m, const int *n, const int *k, double *a,
                    const int *lda, const double *tau, double *work,
                    const int *lwork, int *info);
+
+// eigenvalue problem
+extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
+                  const int *lda, double *w, double *work, const int *lwork,
+                  const int *info);
 }
 
 struct MatrixFunctions {
+    static void copy(const MatrixRef &a, const MatrixRef &b) {
+        assert(a.m == b.m && a.n == b.n);
+        int n = a.m * a.n, inc = 1;
+        dcopy(&n, b.data, &inc, a.data, &inc);
+    }
     static void iscale(const MatrixRef &a, double scale) {
         int n = a.m * a.n, inc = 1;
         dscal(&n, &scale, a.data, &inc);
@@ -1756,13 +1835,23 @@ struct MatrixFunctions {
                                const MatrixRef &c, double scale,
                                uint32_t stride) {
         if (!conja and !conjb) {
-            for (int i = 0, inc = 1; i < a.m; i++)
-                for (int j = 0; j < a.n; j++) {
-                    double factor = scale * a(i, j);
-                    for (int k = 0; k < b.m; k++)
-                        daxpy(&b.n, &factor, &b(k, 0), &inc,
-                              &c(i * b.m + k, j * b.n + stride), &inc);
-                }
+            if (a.m == a.n == 1) {
+                double factor = scale * a.data[0];
+                for (int k = 0; k < b.m; k++)
+                    daxpy(&b.n, &factor, &b(k, 0), &a.n, &c(k, stride), &a.n);
+            } else if (b.m == b.n == 1) {
+                double factor = scale * b.data[0];
+                for (int k = 0; k < a.m; k++)
+                    daxpy(&a.n, &factor, &a(k, 0), &b.n, &c(k, stride), &b.n);
+            } else {
+                for (int i = 0, inc = 1; i < a.m; i++)
+                    for (int j = 0; j < a.n; j++) {
+                        double factor = scale * a(i, j);
+                        for (int k = 0; k < b.m; k++)
+                            daxpy(&b.n, &factor, &b(k, 0), &inc,
+                                  &c(i * b.m + k, j * b.n + stride), &inc);
+                    }
+            }
         } else
             assert(false);
     }
@@ -1795,6 +1884,141 @@ struct MatrixFunctions {
         assert(info == 0);
         for (int j = 0; j < a.m; j++)
             memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
+    }
+    static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {
+        assert(a.m == a.n && w.n == a.n);
+        int lwork = 34 * a.n, info;
+        double work[lwork];
+        dsyev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
+        assert(info == 0);
+    }
+    static void olsen_precondition(const MatrixRef &q, const MatrixRef &c,
+                                   double ld, const DiagonalMatrix &aa) {
+        assert(aa.size() == c.size());
+        MatrixRef t(nullptr, c.m, c.n);
+        t.allocate();
+        copy(t, c);
+        for (int i = 0; i < aa.n; i++)
+            if (abs(ld - aa.data[i]) > 1E-12)
+                t.data[i] /= ld - aa.data[i];
+        iadd(q, c, -dot(t, q) / dot(c, t));
+        for (int i = 0; i < aa.n; i++)
+            if (abs(ld - aa.data[i]) > 1E-12)
+                q.data[i] /= ld - aa.data[i];
+        t.deallocate();
+    }
+    template <typename MatMul>
+    static vector<double> davidson(const MatrixRef &a, const DiagonalMatrix &aa,
+                                   vector<MatrixRef> &bs, MatMul op, int &ndav,
+                                   int max_iter = 500, double conv_thrd = 5E-6,
+                                   int deflation_min_size = 2,
+                                   int deflation_max_size = 30) {
+        int k = (int)bs.size();
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < i; j++)
+                iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
+            iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
+        }
+        vector<double> eigvals;
+        vector<MatrixRef> sigmas;
+        sigmas.reserve(k);
+        for (int i = 0; i < k; i++) {
+            sigmas.push_back(MatrixRef(nullptr, bs[i].m, bs[i].n));
+            sigmas[i].allocate();
+            sigmas[i].clear();
+        }
+        MatrixRef q(nullptr, bs[0].m, bs[0].n);
+        q.allocate();
+        q.clear();
+        int l = k, ck = 0, msig = 0, m = k, xiter = 0;
+        while (xiter < max_iter) {
+            xiter++;
+            for (int i = msig; i < m; i++, msig++)
+                op(a, bs[i], sigmas[i]);
+            DiagonalMatrix ld(nullptr, m, m);
+            MatrixRef alpha(nullptr, m, m);
+            ld.allocate();
+            alpha.allocate();
+            for (int i = 0; i < m; i++)
+                for (int j = 0; j <= i; j++)
+                    alpha(i, j) = dot(bs[i], sigmas[j]);
+            eigs(alpha, ld);
+            MatrixRef tmp[m];
+            for (int i = 0; i < m; i++) {
+                tmp[i] = MatrixRef(nullptr, bs[i].m, bs[i].n);
+                tmp[i].allocate();
+                copy(tmp[i], bs[i]);
+            }
+            for (int j = 0; j < m; j++)
+                iscale(bs[j], alpha(j, j));
+            for (int j = 0; j < m; j++)
+                for (int i = 0; i < m; i++)
+                    if (i != j)
+                        iadd(bs[j], tmp[i], alpha(i, j));
+            for (int j = 0; j < m; j++) {
+                copy(tmp[j], sigmas[j]);
+                iscale(sigmas[j], alpha(j, j));
+            }
+            for (int j = 0; j < m; j++)
+                for (int i = 0; i < m; i++)
+                    if (i != j)
+                        iadd(sigmas[j], tmp[i], alpha(i, j));
+            for (int i = m - 1; i >= 0; i--)
+                tmp[i].deallocate();
+            alpha.deallocate();
+            for (int i = 0; i < ck; i++) {
+                copy(q, sigmas[i]);
+                iadd(q, bs[i], -ld(i, i));
+                if (dot(q, q) >= conv_thrd) {
+                    ck = i;
+                    break;
+                }
+            }
+            copy(q, sigmas[ck]);
+            iadd(q, bs[ck], -ld(ck, ck));
+            double qq = dot(q, q);
+            cout << setw(6) << xiter << setw(6) << m << setw(6) << ck << fixed
+                 << setw(15) << setprecision(8) << ld.data[ck] << scientific
+                 << setw(9) << setprecision(2) << qq << endl;
+            olsen_precondition(q, bs[ck], ld.data[ck], aa);
+            eigvals.resize(ck);
+            if (ck != 0)
+                memcpy(&eigvals[0], ld.data, ck * sizeof(double));
+            ld.deallocate();
+            if (qq < conv_thrd) {
+                ck++;
+                if (ck == k)
+                    break;
+            } else {
+                if (m >= deflation_max_size)
+                    m = msig = deflation_min_size;
+                for (int j = 0; j < m; j++)
+                    iadd(q, bs[j], -dot(bs[j], q));
+                iscale(q, 1.0 / sqrt(dot(q, q)));
+                if (m >= (int)bs.size()) {
+                    bs.push_back(MatrixRef(nullptr, bs[0].m, bs[0].n));
+                    bs[m].allocate();
+                    sigmas.push_back(MatrixRef(nullptr, bs[0].m, bs[0].n));
+                    sigmas[m].allocate();
+                    sigmas[m].clear();
+                }
+                copy(bs[m], q);
+                m++;
+            }
+            if (xiter == max_iter) {
+                cout << "Error : only " << ck << " converged!" << endl;
+                assert(false);
+            }
+        }
+        for (int i = (int)bs.size() - 1; i >= k; i--)
+            sigmas[i].deallocate(), bs[i].deallocate();
+        q.deallocate();
+        for (int i = k - 1; i >= 0; i--)
+            sigmas[i].deallocate();
+        ndav = xiter;
+        return eigvals;
     }
 };
 
@@ -2060,7 +2284,7 @@ struct OperatorFunctions {
             }
         }
     }
-}; // namespace block2
+};
 
 struct OperatorTensor {
     shared_ptr<Symbolic> lmat, rmat;
@@ -2214,6 +2438,11 @@ struct TensorFunctions {
                 expr_evaluation(expr, b->lop, a->lop, c->lop.at(op));
             }
         }
+    }
+    void eigs(const shared_ptr<OperatorTensor> &h,
+              const shared_ptr<SparseMatrix> &a,
+              const shared_ptr<SparseMatrix> &b, double &energy, int &ndav) {
+        // TODO!!!
     }
 };
 
@@ -2740,6 +2969,55 @@ struct MovingEnvironment {
             envs[i]->deallocate_left_op_infos();
         }
     }
+    void left_contract(int i) {
+        vector<SpinLabel> sl =
+            Partition::get_uniq_labels(mpo->left_operator_names[i - 1]);
+        shared_ptr<Symbolic> exprs =
+            envs[i - 1]->left == nullptr
+                ? nullptr
+                : envs[i - 1]->left->lmat * envs[i - 1]->middle.front()->lmat;
+        vector<vector<SpinLabel>> subsl = Partition::get_uniq_sub_labels(
+            exprs, mpo->left_operator_names[i - 1], sl);
+        Partition::init_left_op_infos(
+            i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
+            site_op_infos[bra->info->orbsym[i - 1]], envs[i]->left_op_infos,
+            envs[i]->left_op_infos_notrunc);
+        shared_ptr<OperatorTensor> new_left =
+            envs[i]->build_left(mpo->left_operator_names[i - 1], true);
+        tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
+                          new_left);
+        envs[i]->left =
+            envs[i]->build_left(mpo->left_operator_names[i - 1], false);
+        tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
+                        envs[i]->left);
+        new_left->reallocate(true);
+        envs[i]->left->reallocate(false);
+    }
+    void right_contract(int i) {
+        vector<SpinLabel> sl =
+            Partition::get_uniq_labels(mpo->right_operator_names[i + dot]);
+        shared_ptr<Symbolic> exprs =
+            envs[i + 1]->right == nullptr
+                ? nullptr
+                : envs[i + 1]->middle.back()->rmat * envs[i + 1]->right->rmat;
+        vector<vector<SpinLabel>> subsl = Partition::get_uniq_sub_labels(
+            exprs, mpo->right_operator_names[i + dot], sl);
+        Partition::init_right_op_infos(
+            i + dot, bra->info, ket->info, sl, subsl,
+            envs[i + 1]->right_op_infos,
+            site_op_infos[bra->info->orbsym[i + dot]], envs[i]->right_op_infos,
+            envs[i]->right_op_infos_notrunc);
+        shared_ptr<OperatorTensor> new_right =
+            envs[i]->build_right(mpo->right_operator_names[i + dot], true);
+        tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
+                           new_right);
+        envs[i]->right =
+            envs[i]->build_right(mpo->right_operator_names[i + dot], false);
+        tf->right_rotate(new_right, bra->tensors[i + dot],
+                         ket->tensors[i + dot], envs[i]->right);
+        new_right->reallocate(true);
+        envs[i]->right->reallocate(false);
+    }
     void init_environments() {
         envs.clear();
         envs.resize(n_sites);
@@ -2750,58 +3028,139 @@ struct MovingEnvironment {
         }
         for (int i = 1; i <= center; i++) {
             cout << "iL = " << i << endl;
-            vector<SpinLabel> sl =
-                Partition::get_uniq_labels(mpo->left_operator_names[i - 1]);
-            shared_ptr<Symbolic> exprs =
-                envs[i - 1]->left == nullptr
-                    ? nullptr
-                    : envs[i - 1]->left->lmat *
-                          envs[i - 1]->middle.front()->lmat;
-            vector<vector<SpinLabel>> subsl = Partition::get_uniq_sub_labels(
-                exprs, mpo->left_operator_names[i - 1], sl);
-            Partition::init_left_op_infos(
-                i - 1, bra->info, ket->info, sl, subsl,
-                envs[i - 1]->left_op_infos,
-                site_op_infos[bra->info->orbsym[i - 1]], envs[i]->left_op_infos,
-                envs[i]->left_op_infos_notrunc);
-            shared_ptr<OperatorTensor> new_left =
-                envs[i]->build_left(mpo->left_operator_names[i - 1], true);
-            tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
-                              new_left);
-            envs[i]->left =
-                envs[i]->build_left(mpo->left_operator_names[i - 1], false);
-            tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
-                            envs[i]->left);
-            new_left->reallocate(true);
-            envs[i]->left->reallocate(false);
+            left_contract(i);
         }
         for (int i = n_sites - dot - 1; i >= center; i--) {
             cout << "iR = " << i << endl;
-            vector<SpinLabel> sl =
-                Partition::get_uniq_labels(mpo->right_operator_names[i + dot]);
-            shared_ptr<Symbolic> exprs =
-                envs[i + 1]->right == nullptr
-                    ? nullptr
-                    : envs[i + 1]->middle.back()->rmat *
-                          envs[i + 1]->right->rmat;
-            vector<vector<SpinLabel>> subsl = Partition::get_uniq_sub_labels(
-                exprs, mpo->right_operator_names[i + dot], sl);
-            Partition::init_right_op_infos(
-                i + dot, bra->info, ket->info, sl, subsl,
-                envs[i + 1]->right_op_infos,
-                site_op_infos[bra->info->orbsym[i + dot]],
-                envs[i]->right_op_infos, envs[i]->right_op_infos_notrunc);
-            shared_ptr<OperatorTensor> new_right =
-                envs[i]->build_right(mpo->right_operator_names[i + dot], true);
-            tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
-                               new_right);
-            envs[i]->right =
-                envs[i]->build_right(mpo->right_operator_names[i + dot], false);
-            tf->right_rotate(new_right, bra->tensors[i + dot],
-                             ket->tensors[i + dot], envs[i]->right);
-            new_right->reallocate(true);
-            envs[i]->right->reallocate(false);
+            right_contract(i);
         }
+    }
+    void prepare() {
+        for (int i = n_sites - 1; i > center; i--) {
+            envs[i]->left_op_infos.clear();
+            envs[i]->left_op_infos_notrunc.clear();
+            envs[i]->left = nullptr;
+        }
+        for (int i = 0; i < center; i++) {
+            envs[i]->right_op_infos.clear();
+            envs[i]->right_op_infos_notrunc.clear();
+            envs[i]->right = nullptr;
+        }
+    }
+    void move_to(int i) {
+        if (i > center) {
+            left_contract(center + 1);
+            center++;
+        } else if (i < center) {
+            right_contract(center - 1);
+            center--;
+        }
+    }
+    shared_ptr<OperatorTensor> eff_ham() {
+        // TODO!!!
+    }
+};
+
+struct DMRG {
+    shared_ptr<MovingEnvironment> me;
+    vector<uint16_t> bond_dims;
+    vector<double> noises;
+    vector<double> energies;
+    bool forward;
+    DMRG(const shared_ptr<MovingEnvironment> &me,
+         const vector<uint16_t> &bond_dims, const vector<double> &noises)
+        : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
+    struct Iteration {
+        double energy, error;
+        int ndav;
+        Iteration(double energy, double error, int ndav)
+            : energy(energy), error(error), ndav(ndav) {}
+        friend ostream &operator<<(ostream &os, const Iteration &r) {
+            os << fixed << setprecision(8);
+            os << "Ndav = " << setw(4) << r.ndav << " E = " << setw(15)
+               << r.energy << " Error = " << setw(15) << r.error;
+            return os;
+        }
+    };
+    Iteration update_two_dot(int i, bool forward, uint16_t bond_dim,
+                             double noise) {
+        if (me->ket->tensors[i] != nullptr &&
+            me->ket->tensors[i + 1] != nullptr) {
+            // TODO contract two tensors
+        }
+        shared_ptr<OperatorTensor> h_eff = me->eff_ham();
+        shared_ptr<SparseMatrix> gs_old = me->ket->tensors[i];
+        double energy = 0.0;
+        int ndav = 0;
+        shared_ptr<SparseMatrix> gs = make_shared<SparseMatrix>();
+        gs->allocate(gs_old->info);
+        me->tf->eigs(h_eff, gs_old, gs, energy, ndav);
+    }
+    Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
+        me->move_to(i);
+        if (me->dot == 2)
+            return update_two_dot(i, forward, bond_dim, noise);
+        else
+            assert(false);
+    }
+    double sweep(bool forward, uint16_t bond_dim, double noise) {
+        me->prepare();
+        vector<double> energies;
+        vector<int> sweep_range;
+        if (forward)
+            for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
+                sweep_range.push_back(it);
+        else
+            for (int it = me->center; it >= 0; it--)
+                sweep_range.push_back(it);
+
+        Timer t;
+        for (auto i : sweep_range) {
+            if (me->dot == 2)
+                cout << " " << (forward ? "-->" : "<--")
+                     << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
+                     << " .. ";
+            else
+                cout << " " << (forward ? "-->" : "<--")
+                     << " Site = " << setw(4) << i << " .. ";
+            cout.flush();
+            t.get_time();
+            Iteration r = blocking(i, forward, bond_dim, noise);
+            cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                 << t.get_time() << endl;
+            energies.push_back(r.energy);
+        }
+        return *min_element(energies.begin(), energies.end());
+    }
+    double solve(int n_sweeps, double tol = 1E-6, bool forward = true) {
+        if (bond_dims.size() < n_sweeps)
+            bond_dims.resize(n_sweeps, bond_dims.back());
+        if (noises.size() < n_sweeps)
+            noises.resize(n_sweeps, noises.back());
+        Timer start;
+        start.get_time();
+        energies.clear();
+        for (int iw = 0; iw < n_sweeps; iw++) {
+            cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
+                 << (forward ? "forward" : "backward")
+                 << " | Bond dimension = " << setw(4) << bond_dims[iw]
+                 << " | Noise = " << setw(9) << setprecision(2) << noises[iw]
+                 << endl;
+            double energy = sweep(forward, bond_dims[iw], noises[iw]);
+            energies.push_back(energy);
+            bool converged = energies.size() >= 2 && tol > 0 &&
+                             abs(energies[energies.size() - 1] -
+                                 energies[energies.size() - 2]) < tol &&
+                             noises[iw] == noises.back() &&
+                             bond_dims[iw] == bond_dims.back();
+            forward = !forward;
+            cout << "Time elapsed = " << setw(10) << setprecision(2)
+                 << start.get_time() << endl;
+            if (converged)
+                break;
+        }
+        this->forward = forward;
+        return energies.back();
     }
 };
 
