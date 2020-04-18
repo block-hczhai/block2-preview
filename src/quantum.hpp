@@ -19,8 +19,8 @@
 #include <random>
 #include <sstream>
 #include <string>
-#include <sys/stat.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <type_traits>
 #include <typeinfo>
@@ -1478,9 +1478,9 @@ struct SparseMatrixInfo {
                         ->second;
                 assert(ainfo->delta_quantum == adq);
                 assert(binfo->delta_quantum == bdq);
-                for (int ic = 0; ic < n; ic++) {
-                    int ib = bra.find_state(quanta[ic].get_bra(cdq));
-                    int ik = ket.find_state(quanta[ic].get_ket());
+                for (int ic = 0; ic < cinfo->n; ic++) {
+                    int ib = bra.find_state(cinfo->quanta[ic].get_bra(cdq));
+                    int ik = ket.find_state(cinfo->quanta[ic].get_ket());
                     int kbed = ib == bra.n - 1 ? bra_cinfo.n
                                                : bra_cinfo.n_states[ib + 1];
                     int kked = ik == ket.n - 1 ? ket_cinfo.n
@@ -1489,12 +1489,15 @@ struct SparseMatrixInfo {
                     for (int kb = bra_cinfo.n_states[ib]; kb < kbed; kb++) {
                         uint16_t jba = bra_cinfo.quanta[kb].data >> 16,
                                  jbb = bra_cinfo.quanta[kb].data & (0xFFFFU);
+                        ket_stride = 0;
                         for (int kk = ket_cinfo.n_states[ik]; kk < kked; kk++) {
                             uint16_t jka = ket_cinfo.quanta[kk].data >> 16,
                                      jkb =
                                          ket_cinfo.quanta[kk].data & (0xFFFFU);
-                            SpinLabel qa = adq.combine(jba, jka),
-                                      qb = bdq.combine(jbb, jkb);
+                            SpinLabel qa = adq.combine(bra_a.quanta[jba],
+                                                       ket_a.quanta[jka]),
+                                      qb = bdq.combine(bra_b.quanta[jbb],
+                                                       ket_b.quanta[jkb]);
                             if (qa != SpinLabel(0xFFFFFFFFU) &&
                                 qb != SpinLabel(0xFFFFFFFFU)) {
                                 int ia = ainfo->find_state(qa),
@@ -1504,8 +1507,8 @@ struct SparseMatrixInfo {
                                     vib.push_back(ib);
                                     vic.push_back(ic);
                                     vstride.push_back(
-                                        ket_stride * cinfo->n_states_ket[ic] +
-                                        bra_stride);
+                                        bra_stride * cinfo->n_states_ket[ic] +
+                                        ket_stride);
                                 }
                             }
                             ket_stride += (uint32_t)ket_a.n_states[jka] *
@@ -2008,67 +2011,14 @@ struct OperatorFunctions {
             SpinLabel bqprime = b.info->quanta[ib].get_ket();
             SpinLabel cq = c.info->quanta[ic].get_bra(cdq);
             SpinLabel cqprime = c.info->quanta[ic].get_ket();
-            double factor = cg->wigner_9j(aqprime.twos(), bqprime.twos(),
+            double factor = sqrt((cqprime.twos() + 1) * (cdqs + 1) *
+                                 (aq.twos() + 1) * (bq.twos() + 1)) *
+                            cg->wigner_9j(aqprime.twos(), bqprime.twos(),
                                           cqprime.twos(), adqs, bdqs, cdqs,
                                           aq.twos(), bq.twos(), cq.twos());
             factor *= (b.info->is_fermion && (aqprime.n() & 1)) ? -1 : 1;
             MatrixFunctions::tensor_product(a[ia], a.conj, b[ib], b.conj, c[ic],
                                             scale * factor, stride);
-        }
-    }
-    void tensor_product_old(const SparseMatrix &a, const SparseMatrix &b,
-                            SparseMatrix &c, double scale = 1.0) const {
-        scale = scale * a.factor * b.factor;
-        assert(c.factor == 1.0);
-        if (abs(scale) < TINY)
-            return;
-        SpinLabel adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
-                  cdq = c.info->delta_quantum;
-        assert(b.info->n <= 3);
-        int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos();
-        for (int ic = 0; ic < c.info->n; ic++) {
-            SpinLabel cq = c.info->quanta[ic].get_bra(cdq);
-            SpinLabel cqprime = c.info->quanta[ic].get_ket();
-            uint32_t row_stride = 0, col_stride = 0;
-            for (int ib = 0; ib < b.info->n; ib++) {
-                SpinLabel bq = b.info->quanta[ib].get_bra(bdq);
-                SpinLabel bqprime = b.info->quanta[ib].get_ket();
-                SpinLabel aqs = cq - bq;
-                SpinLabel aqps = cqprime - bqprime;
-                for (int k = 0; k < aqs.count(); k++) {
-                    SpinLabel aq = aqs[k];
-                    SpinLabel aqpds = aqs[k] - adq;
-                    uint32_t n_bra = 0;
-                    for (int l = 0; l < aqpds.count(); l++) {
-                        SpinLabel aqprime = aqpds[l];
-                        SpinLabel al = adq.combine(aq, aqprime);
-                        uint32_t n_ket = 0;
-                        if (aqps.find(aqprime) != -1 &&
-                            al != SpinLabel(0xFFFFFFFFU)) {
-                            int ia = a.info->find_state(al);
-                            if (ia != -1) {
-                                n_bra = a.info->n_states_bra[ia];
-                                n_ket = a.info->n_states_ket[ia];
-                                double factor = cg->wigner_9j(
-                                    aqprime.twos(), bqprime.twos(),
-                                    cqprime.twos(), adqs, bdqs, cdqs, aq.twos(),
-                                    bq.twos(), cq.twos());
-                                factor *=
-                                    (b.info->is_fermion && (aqprime.n() & 1))
-                                        ? -1
-                                        : 1;
-                                MatrixFunctions::tensor_product(
-                                    a[ia], a.conj, b[ib], b.conj, c[ic],
-                                    scale * factor,
-                                    row_stride * c.info->n_states_ket[ic] +
-                                        col_stride);
-                            }
-                        }
-                        col_stride += n_ket * b.info->n_states_ket[ib];
-                    }
-                    row_stride += n_bra * b.info->n_states_bra[ib];
-                }
-            }
         }
     }
     // c = a * b * scale
@@ -2274,7 +2224,7 @@ struct MPO {
     vector<shared_ptr<Symbolic>> middle_operator_names;
     int n_sites;
     MPO(int n_sites) : n_sites(n_sites) {}
-    virtual void deallocate() {};
+    virtual void deallocate(){};
 };
 
 struct MPSInfo {
@@ -2287,8 +2237,8 @@ struct MPSInfo {
     uint16_t bond_dim;
     MPSInfo(int n_sites, SpinLabel vaccum, SpinLabel target, StateInfo *basis,
             uint8_t *orbsym, uint8_t n_syms)
-        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym), n_syms(n_syms),
-          basis(basis), bond_dim(0) {
+        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
+          n_syms(n_syms), basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo[n_sites + 1];
         left_dims_fci[0] = StateInfo(vaccum);
         for (int i = 0; i < n_sites; i++)

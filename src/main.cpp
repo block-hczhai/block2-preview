@@ -60,9 +60,9 @@ int main(int argc, char *argv[]) {
         left_dims_fci[i + 1] = StateInfo::tensor_product(left_dims_fci[i], basis[i], target);
         cout << i << " " << left_dims_fci[i + 1].n_states_total << endl;
     }
-    
+
     cout << *ialloc << endl;
-    
+
     // right dims
     right_dims_fci[n_orb] = StateInfo(vaccum);
     cout << right_dims_fci[n_orb] << endl;

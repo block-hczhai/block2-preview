@@ -22,7 +22,9 @@ class TestHamiltonian : public ::testing::Test {
 
 TEST_F(TestHamiltonian, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    string filename = "data/CR2.SVP.FCIDUMP";
+    // string filename = "data/CR2.SVP.FCIDUMP";
+    // string filename = "data/N2.STO3G.FCIDUMP";
+    string filename = "data/HUBBARD-L8.FCIDUMP";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -69,7 +71,7 @@ TEST_F(TestHamiltonian, Test) {
     cout << endl;
 
     // MPS
-    shared_ptr<MPS> mps = make_shared<MPS>(norb, 10, 2);
+    shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     cout << ialloc->used << " mpsi " << dalloc->used << endl;
     mps->initialize(mps_info);
     cout << ialloc->used << " mpsf " << dalloc->used << endl;
@@ -87,7 +89,7 @@ TEST_F(TestHamiltonian, Test) {
 
     cout << ialloc->used << " " << dalloc->used << endl;
     shared_ptr<StateInfo> si = make_shared<StateInfo>(StateInfo::tensor_product(
-        hamil.basis[0], hamil.basis[1], hamil.target));
+        hamil.basis[0], hamil.basis[hamil.n_syms - 1], hamil.target));
     cout << ialloc->used << " " << dalloc->used << endl;
     cout << *si << endl;
     shared_ptr<SparseMatrixInfo> smi = make_shared<SparseMatrixInfo>();
