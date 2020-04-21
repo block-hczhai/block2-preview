@@ -9,6 +9,14 @@ class TestMatrix : public ::testing::Test {
     size_t isize = 1E7;
     size_t dsize = 1E7;
     static const int n_tests = 100;
+    struct MatMul {
+        MatMul() {}
+        void operator()(const MatrixRef &a, const MatrixRef &b,
+                        const MatrixRef &c) {
+            MatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
+        }
+    };
+    MatMul mop;
     void SetUp() override {
         Random::rand_seed(0);
         ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
@@ -20,6 +28,65 @@ class TestMatrix : public ::testing::Test {
         delete[] dalloc->data;
     }
 };
+
+TEST_F(TestMatrix, TestDavidson) {
+    for (int i = 0; i < n_tests; i++) {
+        int n = Random::rand_int(1, 200);
+        int k = min(n, Random::rand_int(1, 10));
+        int ndav = 0;
+        MatrixRef a(dalloc->allocate(n * n), n, n);
+        DiagonalMatrix aa(dalloc->allocate(n), n);
+        DiagonalMatrix ww(dalloc->allocate(n), n);
+        vector<MatrixRef> bs(k, MatrixRef(nullptr, n, 1));
+        Random::fill_rand_double(a.data, a.size());
+        for (int ki = 0; ki < n; ki++) {
+            for (int kj = 0; kj < ki; kj++)
+                a(kj, ki) = a(ki, kj);
+            aa(ki, ki) = a(ki, ki);
+        }
+        for (int i = 0; i < k; i++) {
+            bs[i].allocate();
+            bs[i].clear();
+            bs[i].data[i] = 1;
+        }
+        vector<double> vw =
+            MatrixFunctions::davidson(a, aa, bs, mop, ndav, false, 1E-8, n * k * 2, k, max(5, k + 10));
+        ASSERT_EQ((int)vw.size(), k);
+        DiagonalMatrix w(&vw[0], k);
+        MatrixFunctions::eigs(a, ww);
+        DiagonalMatrix w2(ww.data, k);
+        ASSERT_TRUE(MatrixFunctions::all_close(w, w2, 1E-6, 0.0));
+        for (int i = k - 1; i >= 0; i--)
+            bs[i].deallocate();
+        ww.deallocate();
+        aa.deallocate();
+        a.deallocate();
+    }
+}
+
+TEST_F(TestMatrix, TestEigs) {
+    for (int i = 0; i < n_tests; i++) {
+        int m = Random::rand_int(1, 200);
+        MatrixRef a(dalloc->allocate(m * m), m, m);
+        MatrixRef ap(dalloc->allocate(m * m), m, m);
+        MatrixRef ag(dalloc->allocate(m * m), m, m);
+        DiagonalMatrix w(dalloc->allocate(m), m);
+        Random::fill_rand_double(a.data, a.size());
+        for (int ki = 0; ki < m; ki++)
+            for (int kj = 0; kj <= ki; kj++)
+                ap(ki, kj) = ap(kj, ki) = a(ki, kj);
+        MatrixFunctions::eigs(a, w);
+        MatrixFunctions::multiply(a, false, ap, true, ag, 1.0, 0.0);
+        for (int k = 0; k < m; k++)
+            for (int j = 0; j < m; j++)
+                ag(k, j) /= w(k, k);
+        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-10, 0.0));
+        w.deallocate();
+        ag.deallocate();
+        ap.deallocate();
+        a.deallocate();
+    }
+}
 
 TEST_F(TestMatrix, TestQR) {
     for (int i = 0; i < n_tests; i++) {

@@ -240,6 +240,9 @@ struct DiagonalMatrix : MatrixRef {
         return i == j ? *(data + i) : const_cast<double &>(zero);
     }
     size_t size() const { return (size_t)m; }
+    void allocate() { data = dalloc->allocate(size()); }
+    void deallocate() { dalloc->deallocate(data, size()), data = nullptr; }
+    void clear() { memset(data, 0, size() * sizeof(double)); }
     friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
@@ -256,7 +259,9 @@ struct IdentityMatrix : DiagonalMatrix {
     double &operator()(int i, int j) const {
         return i == j ? const_cast<double &>(one) : const_cast<double &>(zero);
     }
+    void allocate() {}
     void deallocate() {}
+    void clear() {}
     friend ostream &operator<<(ostream &os, const IdentityMatrix &mat) {
         os << "IDENT MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         return os;
@@ -1453,7 +1458,8 @@ struct SparseMatrixInfo {
         int n, nc;
         CollectedInfo() : n(-1), nc(-1) {}
         void initialize_wfn(
-            SpinLabel vdq, SpinLabel cdq, SpinLabel opdq, const vector<SpinLabel> &subdq,
+            SpinLabel vdq, SpinLabel cdq, SpinLabel opdq,
+            const vector<SpinLabel> &subdq,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
             const shared_ptr<SparseMatrixInfo> &cinfo,
@@ -1487,8 +1493,10 @@ struct SparseMatrixInfo {
                             SpinLabel lqprimes = cdq - rqprime;
                             for (int l = 0; l < lqprimes.count(); l++) {
                                 SpinLabel lqprime = lqprimes[l];
-                                int ia = ainfo->find_state(adq.combine(lq, lqprime));
-                                int ic = cinfo->find_state(cdq.combine(lqprime, -rqprime));
+                                int ia =
+                                    ainfo->find_state(adq.combine(lq, lqprime));
+                                int ic = cinfo->find_state(
+                                    cdq.combine(lqprime, -rqprime));
                                 if (ia != -1 && ic != -1) {
                                     via.push_back(ia);
                                     vib.push_back(ib);
@@ -1821,6 +1829,7 @@ struct MatrixFunctions {
                   &a.n, &cfactor, c.data, &c.n);
         }
     }
+    // c = bra * a * ket.T
     static void rotate(const MatrixRef &a, const MatrixRef &c,
                        const MatrixRef &bra, const MatrixRef &ket, bool conj_bk,
                        double scale) {
@@ -1885,6 +1894,7 @@ struct MatrixFunctions {
         for (int j = 0; j < a.m; j++)
             memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
     }
+    // eigenvectors are row vectors
     static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {
         assert(a.m == a.n && w.n == a.n);
         int lwork = 34 * a.n, info;
@@ -1908,11 +1918,11 @@ struct MatrixFunctions {
         t.deallocate();
     }
     template <typename MatMul>
-    static vector<double> davidson(const MatrixRef &a, const DiagonalMatrix &aa,
-                                   vector<MatrixRef> &bs, MatMul op, int &ndav,
-                                   int max_iter = 500, double conv_thrd = 5E-6,
-                                   int deflation_min_size = 2,
-                                   int deflation_max_size = 30) {
+    static vector<double>
+    davidson(const MatrixRef &a, const DiagonalMatrix &aa,
+             vector<MatrixRef> &bs, MatMul op, int &ndav, bool iprint = false,
+             double conv_thrd = 5E-6, int max_iter = 500,
+             int deflation_min_size = 2, int deflation_max_size = 30) {
         int k = (int)bs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
@@ -1937,7 +1947,7 @@ struct MatrixFunctions {
             xiter++;
             for (int i = msig; i < m; i++, msig++)
                 op(a, bs[i], sigmas[i]);
-            DiagonalMatrix ld(nullptr, m, m);
+            DiagonalMatrix ld(nullptr, m);
             MatrixRef alpha(nullptr, m, m);
             ld.allocate();
             alpha.allocate();
@@ -1945,18 +1955,20 @@ struct MatrixFunctions {
                 for (int j = 0; j <= i; j++)
                     alpha(i, j) = dot(bs[i], sigmas[j]);
             eigs(alpha, ld);
-            MatrixRef tmp[m];
+            vector<MatrixRef> tmp(m, MatrixRef(nullptr, bs[0].m, bs[0].n));
             for (int i = 0; i < m; i++) {
-                tmp[i] = MatrixRef(nullptr, bs[i].m, bs[i].n);
                 tmp[i].allocate();
                 copy(tmp[i], bs[i]);
             }
+            // note alpha row/column is diff from python
+            // b[1:m] = np.dot(b[:], alpha[:, 1:m])
             for (int j = 0; j < m; j++)
                 iscale(bs[j], alpha(j, j));
             for (int j = 0; j < m; j++)
                 for (int i = 0; i < m; i++)
                     if (i != j)
-                        iadd(bs[j], tmp[i], alpha(i, j));
+                        iadd(bs[j], tmp[i], alpha(j, i));
+            // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
             for (int j = 0; j < m; j++) {
                 copy(tmp[j], sigmas[j]);
                 iscale(sigmas[j], alpha(j, j));
@@ -1964,7 +1976,7 @@ struct MatrixFunctions {
             for (int j = 0; j < m; j++)
                 for (int i = 0; i < m; i++)
                     if (i != j)
-                        iadd(sigmas[j], tmp[i], alpha(i, j));
+                        iadd(sigmas[j], tmp[i], alpha(j, i));
             for (int i = m - 1; i >= 0; i--)
                 tmp[i].deallocate();
             alpha.deallocate();
@@ -1979,13 +1991,14 @@ struct MatrixFunctions {
             copy(q, sigmas[ck]);
             iadd(q, bs[ck], -ld(ck, ck));
             double qq = dot(q, q);
-            cout << setw(6) << xiter << setw(6) << m << setw(6) << ck << fixed
-                 << setw(15) << setprecision(8) << ld.data[ck] << scientific
-                 << setw(9) << setprecision(2) << qq << endl;
+            if (iprint)
+                cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                     << fixed << setw(15) << setprecision(8) << ld.data[ck]
+                     << scientific << setw(9) << setprecision(2) << qq << endl;
             olsen_precondition(q, bs[ck], ld.data[ck], aa);
-            eigvals.resize(ck);
-            if (ck != 0)
-                memcpy(&eigvals[0], ld.data, ck * sizeof(double));
+            eigvals.resize(ck + 1);
+            if (ck + 1 != 0)
+                memcpy(&eigvals[0], ld.data, (ck + 1) * sizeof(double));
             ld.deallocate();
             if (qq < conv_thrd) {
                 ck++;
@@ -2209,6 +2222,42 @@ struct OperatorFunctions {
                                     trans, scale);
         }
     }
+    void tensor_product_multiply(const SparseMatrix &a, const SparseMatrix &b,
+                                 const SparseMatrix &c, const SparseMatrix &v,
+                                 SpinLabel opdq, double scale = 1.0) const {
+        scale = scale * a.factor * b.factor * c.factor;
+        assert(v.factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        SpinLabel adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
+                  cdq = c.info->delta_quantum, vdq = v.info->delta_quantum;
+        int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos(),
+            vdqs = vdq.twos(), opdqs = opdq.twos();
+        assert(v.info->cinfo != nullptr);
+        shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo = v.info->cinfo;
+        SpinLabel abdq = opdq.combine(adq, -bdq);
+        int ik = lower_bound(cinfo->quanta, cinfo->quanta + cinfo->n, abdq) -
+                 cinfo->quanta;
+        assert(ik < cinfo->n);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        for (int il = ixa; il < ixb; il++) {
+            int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
+                iv = cinfo->stride[il];
+            SpinLabel lq = a.info->quanta[ia].get_bra(adq);
+            SpinLabel lqprime = a.info->quanta[ia].get_ket();
+            SpinLabel rq = b.info->quanta[ib].get_bra(bdq);
+            SpinLabel rqprime = b.info->quanta[ib].get_ket();
+            double factor =
+                sqrt((cdqs + 1) * (opdqs + 1) * (lq.twos() + 1) *
+                     (rq.twos() + 1)) *
+                cg->wigner_9j(lqprime.twos(), rqprime.twos(), cdqs, adqs, bdqs,
+                              opdqs, lq.twos(), rq.twos(), vdqs);
+            factor *= (b.info->is_fermion && (lqprime.n() & 1)) ? -1 : 1;
+            MatrixFunctions::rotate(c[ic], v[iv], a[ia], b[ib], true,
+                                    scale * factor);
+        }
+    }
     void tensor_product(const SparseMatrix &a, const SparseMatrix &b,
                         SparseMatrix &c, double scale = 1.0) const {
         scale = scale * a.factor * b.factor;
@@ -2341,12 +2390,43 @@ struct TensorFunctions {
             }
         }
     }
-    void expr_evaluation(const shared_ptr<OpExpr> &expr,
-                         const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
-                                   op_expr_less> &lop,
-                         const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
-                                   op_expr_less> &rop,
-                         shared_ptr<SparseMatrix> &mat) const {
+    void tensor_product_multiply(
+        const shared_ptr<OpExpr> &expr,
+        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
+            &lop,
+        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
+            &rop,
+        const shared_ptr<SparseMatrix> &cmat,
+        const shared_ptr<SparseMatrix> &vmat, SpinLabel opdq) const {
+        switch (expr->get_type()) {
+        case OpTypes::Prod: {
+            shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
+            assert(op->ops.size() == 2);
+            if (lop.count(op->ops[0]) == 0 || rop.count(op->ops[1]) == 0)
+                return;
+            shared_ptr<SparseMatrix> lmat = lop.at(op->ops[0]);
+            shared_ptr<SparseMatrix> rmat = rop.at(op->ops[1]);
+            opf->tensor_product_multiply(*lmat, *rmat, *cmat, *vmat, opdq,
+                                         op->factor);
+        } break;
+        case OpTypes::Sum: {
+            shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
+            for (auto &x : op->strings)
+                tensor_product_multiply(x, lop, rop, cmat, vmat, opdq);
+        } break;
+        case OpTypes::Zero:
+            break;
+        default:
+            assert(false);
+            break;
+        }
+    }
+    void tensor_product(const shared_ptr<OpExpr> &expr,
+                        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
+                                  op_expr_less> &lop,
+                        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
+                                  op_expr_less> &rop,
+                        shared_ptr<SparseMatrix> &mat) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
@@ -2360,7 +2440,7 @@ struct TensorFunctions {
         case OpTypes::Sum: {
             shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
             for (auto &x : op->strings)
-                expr_evaluation(x, lop, rop, mat);
+                tensor_product(x, lop, rop, mat);
         } break;
         case OpTypes::Zero:
             break;
@@ -2411,7 +2491,7 @@ struct TensorFunctions {
                     dynamic_pointer_cast<OpElement>(c->lmat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
-                expr_evaluation(expr, a->lop, b->lop, c->lop.at(op));
+                tensor_product(expr, a->lop, b->lop, c->lop.at(op));
             }
         }
     }
@@ -2435,7 +2515,7 @@ struct TensorFunctions {
                     dynamic_pointer_cast<OpElement>(c->rmat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
-                expr_evaluation(expr, b->lop, a->lop, c->lop.at(op));
+                tensor_product(expr, b->lop, a->lop, c->lop.at(op));
             }
         }
     }
