@@ -381,8 +381,7 @@ PYBIND11_MODULE(block2, m) {
         .def(py::init<>())
         .def_readwrite("lmat", &OperatorTensor::lmat)
         .def_readwrite("rmat", &OperatorTensor::rmat)
-        .def_readwrite("lop", &OperatorTensor::lop)
-        .def_readwrite("rop", &OperatorTensor::rop)
+        .def_readwrite("ops", &OperatorTensor::ops)
         .def("reallocate", &OperatorTensor::reallocate, py::arg("clean"))
         .def("deallocate", &OperatorTensor::deallocate);
     

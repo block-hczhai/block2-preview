@@ -10,13 +10,13 @@ class TestMatrix : public ::testing::Test {
     size_t dsize = 1E7;
     static const int n_tests = 100;
     struct MatMul {
-        MatMul() {}
-        void operator()(const MatrixRef &a, const MatrixRef &b,
+        MatrixRef a;
+        MatMul(const MatrixRef &a) : a(a) {}
+        void operator()(const MatrixRef &b,
                         const MatrixRef &c) {
             MatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
-    MatMul mop;
     void SetUp() override {
         Random::rand_seed(0);
         ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
@@ -28,6 +28,59 @@ class TestMatrix : public ::testing::Test {
         delete[] dalloc->data;
     }
 };
+
+TEST_F(TestMatrix, TestTensorProductDiagonal) {
+    for (int i = 0; i < n_tests; i++) {
+        int ma = Random::rand_int(1, 200), na = ma;
+        int mb = Random::rand_int(1, 200), nb = mb;
+        MatrixRef a(dalloc->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc->allocate(mb * nb), mb, nb);
+        MatrixRef c(dalloc->allocate(ma * nb), ma, nb);
+        Random::fill_rand_double(a.data, a.size());
+        Random::fill_rand_double(b.data, b.size());
+        c.clear();
+        MatrixFunctions::tensor_product_diagonal(a, b, c, 2.0);
+        for (int ia = 0; ia < ma; ia++)
+            for (int ib = 0; ib < mb; ib++)
+                ASSERT_EQ(2.0 * a(ia, ia) * b(ib, ib), c(ia, ib));
+        c.deallocate();
+        b.deallocate();
+        a.deallocate();
+    }
+}
+
+TEST_F(TestMatrix, TestTensorProduct) {
+    for (int i = 0; i < n_tests; i++) {
+        int ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
+        int ma = Random::rand_int(1, 700), na = Random::rand_int(1, 700);
+        int mb = Random::rand_int(1, 700), nb = Random::rand_int(1, 700);
+        if (ii == 0)
+            ma = na = 1;
+        else if (ii == 1)
+            mb = nb = 1;
+        else {
+            ma = Random::rand_int(1, 30), na = Random::rand_int(1, 30);
+            mb = Random::rand_int(1, 30), nb = Random::rand_int(1, 30);
+        }
+        int mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
+        MatrixRef a(dalloc->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc->allocate(mb * nb), mb, nb);
+        MatrixRef c(dalloc->allocate(mc * nc), mc, nc);
+        Random::fill_rand_double(a.data, a.size());
+        Random::fill_rand_double(b.data, b.size());
+        c.clear();
+        MatrixFunctions::tensor_product(a, false, b, false, c, 2.0, 0);
+        for (int ia = 0; ia < ma; ia++)
+            for (int ja = 0; ja < na; ja++)
+                for (int ib = 0; ib < mb; ib++)
+                    for (int jb = 0; jb < nb; jb++)
+                        ASSERT_EQ(2.0 * a(ia, ja) * b(ib, jb),
+                                  c(ia * mb + ib, ja * nb + jb));
+        c.deallocate();
+        b.deallocate();
+        a.deallocate();
+    }
+}
 
 TEST_F(TestMatrix, TestDavidson) {
     for (int i = 0; i < n_tests; i++) {
@@ -49,8 +102,9 @@ TEST_F(TestMatrix, TestDavidson) {
             bs[i].clear();
             bs[i].data[i] = 1;
         }
-        vector<double> vw =
-            MatrixFunctions::davidson(a, aa, bs, mop, ndav, false, 1E-8, n * k * 2, k, max(5, k + 10));
+        MatMul mop(a);
+        vector<double> vw = MatrixFunctions::davidson(mop,
+            aa, bs, ndav, false, 1E-8, n * k * 2, k, max(5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         DiagonalMatrix w(&vw[0], k);
         MatrixFunctions::eigs(a, ww);
@@ -80,7 +134,7 @@ TEST_F(TestMatrix, TestEigs) {
         for (int k = 0; k < m; k++)
             for (int j = 0; j < m; j++)
                 ag(k, j) /= w(k, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-10, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 0.0));
         w.deallocate();
         ag.deallocate();
         ap.deallocate();

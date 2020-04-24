@@ -896,6 +896,7 @@ inline shared_ptr<OpExpr> abs_value(const shared_ptr<OpExpr> &x) {
         return make_shared<OpString>(dynamic_pointer_cast<OpString>(x)->abs());
     else if (x->get_type() == OpTypes::Sum)
         return make_shared<OpSum>(dynamic_pointer_cast<OpSum>(x)->abs());
+    assert(false);
 }
 
 inline string to_str(const shared_ptr<OpExpr> &x) {
@@ -1013,6 +1014,7 @@ inline const shared_ptr<OpExpr> operator+(const shared_ptr<OpExpr> &a,
             return make_shared<OpSum>(strs);
         }
     }
+    assert(false);
 }
 
 inline const shared_ptr<OpExpr> operator*(const shared_ptr<OpExpr> &x,
@@ -1027,6 +1029,7 @@ inline const shared_ptr<OpExpr> operator*(const shared_ptr<OpExpr> &x,
         return make_shared<OpString>(*dynamic_pointer_cast<OpString>(x) * d);
     else if (x->get_type() == OpTypes::Sum)
         return make_shared<OpSum>(*dynamic_pointer_cast<OpSum>(x) * d);
+    assert(false);
 }
 
 inline const shared_ptr<OpExpr> operator*(double d,
@@ -1101,6 +1104,7 @@ inline const shared_ptr<OpExpr> operator*(const shared_ptr<OpExpr> &a,
             return make_shared<OpSum>(strs);
         }
     }
+    assert(false);
 }
 
 inline const shared_ptr<OpExpr> sum(const vector<shared_ptr<OpExpr>> &xs) {
@@ -1269,6 +1273,7 @@ inline const shared_ptr<Symbolic> operator*(const shared_ptr<Symbolic> a,
         (*r)[0] = dot_product(a->data, b->data);
         return r;
     }
+    assert(false);
 }
 
 struct StateInfo {
@@ -1406,7 +1411,7 @@ struct StateInfo {
         ci.n_states_total = c.n;
         return ci;
     }
-    static StateInfo filter(StateInfo &a, StateInfo &b, SpinLabel target) {
+    static void filter(StateInfo &a, StateInfo &b, SpinLabel target) {
         a.n_states_total = 0;
         for (int i = 0; i < a.n; i++) {
             SpinLabel qb = target - a.quanta[i];
@@ -1457,6 +1462,55 @@ struct SparseMatrixInfo {
         uint16_t *ia, *ib, *ic;
         int n, nc;
         CollectedInfo() : n(-1), nc(-1) {}
+        void initialize_diag(
+            SpinLabel cdq, SpinLabel opdq, const vector<SpinLabel> &subdq,
+            const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
+            const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
+            const shared_ptr<SparseMatrixInfo> &cinfo) {
+            if (ainfos.size() == 0 || binfos.size() == 0) {
+                n = nc = 0;
+                return;
+            }
+            vector<uint32_t> vidx(subdq.size());
+            vector<uint16_t> via, vib, vic;
+            for (size_t k = 0; k < subdq.size(); k++) {
+                vidx[k] = vic.size();
+                SpinLabel adq = subdq[k].get_bra(opdq),
+                          bdq = -subdq[k].get_ket();
+                shared_ptr<SparseMatrixInfo> ainfo =
+                    lower_bound(ainfos.begin(), ainfos.end(), adq, cmp_op_info)
+                        ->second;
+                shared_ptr<SparseMatrixInfo> binfo =
+                    lower_bound(binfos.begin(), binfos.end(), bdq, cmp_op_info)
+                        ->second;
+                assert(ainfo->delta_quantum == adq);
+                assert(binfo->delta_quantum == bdq);
+                for (int ic = 0; ic < cinfo->n; ic++) {
+                    SpinLabel aq = cinfo->quanta[ic].get_bra(cdq);
+                    SpinLabel bq = -cinfo->quanta[ic].get_ket();
+                    int ia = ainfo->find_state(aq), ib = binfo->find_state(bq);
+                    if (ia != -1 && ib != -1) {
+                        via.push_back(ia);
+                        vib.push_back(ib);
+                        vic.push_back(ic);
+                    }
+                }
+            }
+            n = vidx.size();
+            nc = vic.size();
+            uint32_t *ptr = ialloc->allocate((n << 1));
+            uint32_t *cptr = ialloc->allocate((nc << 1) + nc - (nc >> 1));
+            quanta = (SpinLabel *)ptr;
+            idx = ptr + n;
+            stride = cptr;
+            ia = (uint16_t *)(cptr + nc), ib = ia + nc, ic = ib + nc;
+            memcpy(quanta, &subdq[0], n * sizeof(SpinLabel));
+            memcpy(idx, &vidx[0], n * sizeof(uint32_t));
+            memset(stride, 0, nc * sizeof(uint32_t));
+            memcpy(ia, &via[0], nc * sizeof(uint16_t));
+            memcpy(ib, &vib[0], nc * sizeof(uint16_t));
+            memcpy(ic, &vic[0], nc * sizeof(uint16_t));
+        }
         void initialize_wfn(
             SpinLabel vdq, SpinLabel cdq, SpinLabel opdq,
             const vector<SpinLabel> &subdq,
@@ -1639,6 +1693,98 @@ struct SparseMatrixInfo {
     };
     shared_ptr<CollectedInfo> cinfo;
     SparseMatrixInfo() : n(-1), cinfo(nullptr) {}
+    void initialize_contract(const shared_ptr<SparseMatrixInfo> &linfo,
+                             const shared_ptr<SparseMatrixInfo> &rinfo) {
+        assert(linfo->is_wavefunction ^ rinfo->is_wavefunction);
+        this->is_fermion = false;
+        this->is_wavefunction = true;
+        shared_ptr<SparseMatrixInfo> winfo =
+            linfo->is_wavefunction ? linfo : rinfo;
+        delta_quantum = winfo->delta_quantum;
+        vector<SpinLabel> qs;
+        qs.reserve(winfo->n);
+        if (rinfo->is_wavefunction)
+            for (int i = 0; i < rinfo->n; i++) {
+                SpinLabel bra = rinfo->quanta[i].get_bra(delta_quantum);
+                if (linfo->find_state(bra) != -1)
+                    qs.push_back(rinfo->quanta[i]);
+            }
+        else
+            for (int i = 0; i < linfo->n; i++) {
+                SpinLabel ket = -linfo->quanta[i].get_ket();
+                if (rinfo->find_state(ket) != -1)
+                    qs.push_back(linfo->quanta[i]);
+            }
+        n = qs.size();
+        allocate(n);
+        if (n != 0) {
+            memcpy(quanta, &qs[0], n * sizeof(SpinLabel));
+            if (rinfo->is_wavefunction)
+                for (int i = 0; i < n; i++) {
+                    SpinLabel bra = quanta[i].get_bra(delta_quantum);
+                    n_states_bra[i] =
+                        linfo->n_states_bra[linfo->find_state(bra)];
+                    n_states_ket[i] =
+                        rinfo->n_states_ket[rinfo->find_state(quanta[i])];
+                }
+            else
+                for (int i = 0; i < n; i++) {
+                    SpinLabel ket = -quanta[i].get_ket();
+                    n_states_bra[i] =
+                        linfo->n_states_bra[linfo->find_state(quanta[i])];
+                    n_states_ket[i] =
+                        rinfo->n_states_ket[rinfo->find_state(ket)];
+                }
+            n_states_total[0] = 0;
+            for (int i = 0; i < n - 1; i++)
+                n_states_total[i + 1] =
+                    n_states_total[i] +
+                    (uint32_t)n_states_bra[i] * n_states_ket[i];
+        }
+    }
+    void initialize_dm(const shared_ptr<SparseMatrixInfo> &wfn_info,
+                       SpinLabel dq, bool trace_right) {
+        this->is_fermion = false;
+        this->is_wavefunction = false;
+        assert(wfn_info->is_wavefunction);
+        delta_quantum = dq;
+        vector<SpinLabel> qs;
+        qs.reserve(wfn_info->n);
+        if (trace_right)
+            for (int i = 0; i < wfn_info->n; i++)
+                qs.push_back(
+                    wfn_info->quanta[i].get_bra(wfn_info->delta_quantum));
+        else
+            for (int i = 0; i < wfn_info->n; i++)
+                qs.push_back(-wfn_info->quanta[i].get_ket());
+        sort(qs.begin(), qs.end());
+        qs.resize(distance(qs.begin(), unique(qs.begin(), qs.end())));
+        n = qs.size();
+        allocate(n);
+        if (n != 0) {
+            memcpy(quanta, &qs[0], n * sizeof(SpinLabel));
+            if (trace_right)
+                for (int i = 0; i < wfn_info->n; i++) {
+                    SpinLabel q =
+                        wfn_info->quanta[i].get_bra(wfn_info->delta_quantum);
+                    int ii = find_state(q);
+                    n_states_bra[ii] = n_states_ket[ii] =
+                        wfn_info->n_states_bra[i];
+                }
+            else
+                for (int i = 0; i < wfn_info->n; i++) {
+                    SpinLabel q = wfn_info->quanta[i].get_ket();
+                    int ii = find_state(q);
+                    n_states_bra[ii] = n_states_ket[ii] =
+                        wfn_info->n_states_ket[i];
+                }
+            n_states_total[0] = 0;
+            for (int i = 0; i < n - 1; i++)
+                n_states_total[i + 1] =
+                    n_states_total[i] +
+                    (uint32_t)n_states_bra[i] * n_states_ket[i];
+        }
+    }
     void initialize(const StateInfo &bra, const StateInfo &ket, SpinLabel dq,
                     bool is_fermion, bool wfn = false) {
         this->is_fermion = is_fermion;
@@ -1672,6 +1818,17 @@ struct SparseMatrixInfo {
                     n_states_total[i] +
                     (uint32_t)n_states_bra[i] * n_states_ket[i];
         }
+    }
+    shared_ptr<StateInfo> extract_state_info(bool right) {
+        shared_ptr<StateInfo> info = make_shared<StateInfo>();
+        assert(delta_quantum.data == 0);
+        info->allocate(n);
+        memcpy(info->quanta, quanta, n * sizeof(SpinLabel));
+        memcpy(info->n_states, right ? n_states_ket : n_states_bra,
+               n * sizeof(uint16_t));
+        info->n_states_total =
+            accumulate(info->n_states, info->n_states + n, 0);
+        return info;
     }
     int find_state(SpinLabel q, int start = 0) const {
         auto p = lower_bound(quanta + start, quanta + n, q);
@@ -1779,10 +1936,11 @@ extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
 }
 
 struct MatrixFunctions {
-    static void copy(const MatrixRef &a, const MatrixRef &b) {
+    static void copy(const MatrixRef &a, const MatrixRef &b, const int inca = 1,
+                     const int incb = 1) {
         assert(a.m == b.m && a.n == b.n);
-        int n = a.m * a.n, inc = 1;
-        dcopy(&n, b.data, &inc, a.data, &inc);
+        const int n = a.m * a.n;
+        dcopy(&n, b.data, &incb, a.data, &inca);
     }
     static void iscale(const MatrixRef &a, double scale) {
         int n = a.m * a.n, inc = 1;
@@ -1839,23 +1997,45 @@ struct MatrixFunctions {
         multiply(bra, !conj_bk, work, false, c, scale, 1.0);
         work.deallocate();
     }
+    // only diagonal elements so no conj parameters
+    static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                        const MatrixRef &c, double scale) {
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        const double cfactor = 0.0;
+        const int k = 1, lda = a.n + 1, ldb = b.n + 1;
+        dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
+              &cfactor, c.data, &c.n);
+    }
     static void tensor_product(const MatrixRef &a, bool conja,
                                const MatrixRef &b, bool conjb,
                                const MatrixRef &c, double scale,
                                uint32_t stride) {
+        const double cfactor = 0.0;
         if (!conja and !conjb) {
-            if (a.m == a.n == 1) {
-                double factor = scale * a.data[0];
-                for (int k = 0; k < b.m; k++)
-                    daxpy(&b.n, &factor, &b(k, 0), &a.n, &c(k, stride), &a.n);
-            } else if (b.m == b.n == 1) {
-                double factor = scale * b.data[0];
-                for (int k = 0; k < a.m; k++)
-                    daxpy(&a.n, &factor, &a(k, 0), &b.n, &c(k, stride), &b.n);
+            if (a.m == 1 && a.n == 1) {
+                if (b.n == c.n) {
+                    const int n = b.m * b.n;
+                    dgemm("n", "n", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
+                          &a.n, &cfactor, &c(0, stride), &n);
+                } else
+                    for (int k = 0; k < b.m; k++)
+                        dgemm("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &c.n);
+            } else if (b.m == 1 && b.n == 1) {
+                if (a.n == c.n) {
+                    const int n = a.m * a.n;
+                    dgemm("n", "n", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
+                          &b.n, &cfactor, &c(0, stride), &n);
+                } else
+                    for (int k = 0; k < a.m; k++)
+                        dgemm("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &c.n);
             } else {
                 for (int i = 0, inc = 1; i < a.m; i++)
                     for (int j = 0; j < a.n; j++) {
-                        double factor = scale * a(i, j);
+                        const double factor = scale * a(i, j);
                         for (int k = 0; k < b.m; k++)
                             daxpy(&b.n, &factor, &b(k, 0), &inc,
                                   &c(i * b.m + k, j * b.n + stride), &inc);
@@ -1919,10 +2099,10 @@ struct MatrixFunctions {
     }
     template <typename MatMul>
     static vector<double>
-    davidson(const MatrixRef &a, const DiagonalMatrix &aa,
-             vector<MatrixRef> &bs, MatMul op, int &ndav, bool iprint = false,
-             double conv_thrd = 5E-6, int max_iter = 500,
-             int deflation_min_size = 2, int deflation_max_size = 30) {
+    davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &bs,
+             int &ndav, bool iprint = false, double conv_thrd = 5E-6,
+             int max_iter = 500, int deflation_min_size = 2,
+             int deflation_max_size = 30) {
         int k = (int)bs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
@@ -1946,7 +2126,7 @@ struct MatrixFunctions {
         while (xiter < max_iter) {
             xiter++;
             for (int i = msig; i < m; i++, msig++)
-                op(a, bs[i], sigmas[i]);
+                op(bs[i], sigmas[i]);
             DiagonalMatrix ld(nullptr, m);
             MatrixRef alpha(nullptr, m, m);
             ld.allocate();
@@ -2048,6 +2228,7 @@ struct SparseMatrix {
         assert(total_memory == other.total_memory);
         memcpy(data, other.data, sizeof(double) * total_memory);
     }
+    void clear() { memset(data, 0, sizeof(double) * total_memory); }
     void allocate(const shared_ptr<SparseMatrixInfo> &info, double *ptr = 0) {
         this->info = info;
         total_memory = info->get_total_memory();
@@ -2173,8 +2354,134 @@ struct SparseMatrix {
         dalloc->deallocate(dt, total_tmp_memory);
         ialloc->deallocate(tmp, nl);
     }
-    void randomize() const {
-        Random::fill_rand_double(data, total_memory, 0.0, 1.0);
+    void randomize(double a = 0.0, double b = 1.0) const {
+        Random::fill_rand_double(data, total_memory, a, b);
+    }
+    void contract(const shared_ptr<SparseMatrix> &lmat,
+                  const shared_ptr<SparseMatrix> &rmat) {
+        assert(info->is_wavefunction);
+        if (lmat->info->is_wavefunction)
+            for (int i = 0; i < info->n; i++)
+                MatrixFunctions::multiply((*lmat)[info->quanta[i]], lmat->conj,
+                                          (*rmat)[-info->quanta[i].get_ket()],
+                                          rmat->conj, (*this)[i],
+                                          lmat->factor * rmat->factor, 0.0);
+        else
+            for (int i = 0; i < info->n; i++)
+                MatrixFunctions::multiply(
+                    (*lmat)[info->quanta[i].get_bra(info->delta_quantum)],
+                    lmat->conj, (*rmat)[info->quanta[i]], rmat->conj,
+                    (*this)[i], lmat->factor * rmat->factor, 0.0);
+    }
+    void swap_to_fused_left(const shared_ptr<SparseMatrix> &mat,
+                            const StateInfo &l, const StateInfo &m,
+                            const StateInfo &r, const StateInfo &old_fused,
+                            const StateInfo &old_fused_cinfo,
+                            const StateInfo &new_fused,
+                            const StateInfo &new_fused_cinfo) const {
+        assert(mat->info->is_wavefunction);
+        map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
+        for (int i = 0; i < mat->info->n; i++) {
+            SpinLabel bra =
+                mat->info->quanta[i].get_bra(mat->info->delta_quantum);
+            SpinLabel ket = -mat->info->quanta[i].get_ket();
+            int ib = l.find_state(bra);
+            int ik = old_fused.find_state(ket);
+            int kked = ik == old_fused_cinfo.n - 1
+                           ? old_fused_cinfo.n
+                           : old_fused_cinfo.n_states[ik + 1];
+            uint32_t p = 0;
+            for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
+                uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
+                         ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
+                uint32_t lp = (uint32_t)l.n_states[ib] * m.n_states[ikka] *
+                              r.n_states[ikkb];
+                mp[(ib << 16) + ikka][ikkb] = make_pair(p, lp);
+                p += lp;
+            }
+            assert(p == (i != mat->info->n - 1
+                             ? mat->info->n_states_total[i + 1]
+                             : mat->total_memory));
+        }
+        for (int i = 0; i < info->n; i++) {
+            SpinLabel bra = info->quanta[i].get_bra(info->delta_quantum);
+            SpinLabel ket = -info->quanta[i].get_ket();
+            int ib = new_fused.find_state(bra);
+            int ik = r.find_state(ket);
+            int bbed = ib == new_fused_cinfo.n - 1
+                           ? new_fused_cinfo.n
+                           : new_fused_cinfo.n_states[ib + 1];
+            double *ptr = data + info->n_states_total[i];
+            for (int bb = new_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
+                uint16_t ibba = new_fused_cinfo.quanta[bb].data >> 16,
+                         ibbb = new_fused_cinfo.quanta[bb].data & (0xFFFFU);
+                if (mp.count(new_fused_cinfo.quanta[bb].data) &&
+                    mp[new_fused_cinfo.quanta[bb].data].count(ik)) {
+                    pair<uint32_t, uint32_t> &t =
+                        mp.at(new_fused_cinfo.quanta[bb].data).at(ik);
+                    memcpy(ptr, mat->data + t.first, t.second * sizeof(double));
+                }
+                ptr += (size_t)l.n_states[ibba] * m.n_states[ibbb] *
+                       r.n_states[ik];
+            }
+            assert(ptr - data == (i != info->n - 1 ? info->n_states_total[i + 1]
+                                                   : total_memory));
+        }
+    }
+    void swap_to_fused_right(const shared_ptr<SparseMatrix> &mat,
+                             const StateInfo &l, const StateInfo &m,
+                             const StateInfo &r, const StateInfo &old_fused,
+                             const StateInfo &old_fused_cinfo,
+                             const StateInfo &new_fused,
+                             const StateInfo &new_fused_cinfo) const {
+        assert(mat->info->is_wavefunction);
+        map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
+        for (int i = 0; i < mat->info->n; i++) {
+            SpinLabel bra =
+                mat->info->quanta[i].get_bra(mat->info->delta_quantum);
+            SpinLabel ket = -mat->info->quanta[i].get_ket();
+            int ib = old_fused.find_state(bra);
+            int ik = r.find_state(ket);
+            int bbed = ib == old_fused_cinfo.n - 1
+                           ? old_fused_cinfo.n
+                           : old_fused_cinfo.n_states[ib + 1];
+            uint32_t p = 0;
+            for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
+                uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
+                         ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
+                uint32_t lp = (uint32_t)l.n_states[ibba] * m.n_states[ibbb] *
+                              r.n_states[ik];
+                mp[(ibbb << 16) + ik][ibba] = make_pair(p, lp);
+                p += lp;
+            }
+            assert(p == (i != mat->info->n - 1
+                             ? mat->info->n_states_total[i + 1]
+                             : mat->total_memory));
+        }
+        for (int i = 0; i < info->n; i++) {
+            SpinLabel bra = info->quanta[i].get_bra(info->delta_quantum);
+            SpinLabel ket = -info->quanta[i].get_ket();
+            int ib = l.find_state(bra);
+            int ik = new_fused.find_state(ket);
+            int kked = ik == new_fused_cinfo.n - 1
+                           ? new_fused_cinfo.n
+                           : new_fused_cinfo.n_states[ik + 1];
+            double *ptr = data + info->n_states_total[i];
+            for (int kk = new_fused_cinfo.n_states[ik]; kk < kked; kk++) {
+                uint16_t ikka = new_fused_cinfo.quanta[kk].data >> 16,
+                         ikkb = new_fused_cinfo.quanta[kk].data & (0xFFFFU);
+                if (mp.count(new_fused_cinfo.quanta[kk].data) &&
+                    mp[new_fused_cinfo.quanta[kk].data].count(ib)) {
+                    pair<uint32_t, uint32_t> &t =
+                        mp.at(new_fused_cinfo.quanta[kk].data).at(ib);
+                    memcpy(ptr, mat->data + t.first, t.second * sizeof(double));
+                }
+                ptr += (size_t)l.n_states[ib] * m.n_states[ikka] *
+                       r.n_states[ikkb];
+            }
+            assert(ptr - data == (i != info->n - 1 ? info->n_states_total[i + 1]
+                                                   : total_memory));
+        }
     }
     friend ostream &operator<<(ostream &os, const SparseMatrix &c) {
         os << "DATA = [ ";
@@ -2222,6 +2529,39 @@ struct OperatorFunctions {
                                     trans, scale);
         }
     }
+    void tensor_product_diagonal(const SparseMatrix &a, const SparseMatrix &b,
+                                 const SparseMatrix &c, SpinLabel opdq,
+                                 double scale = 1.0) const {
+        scale = scale * a.factor * b.factor;
+        assert(c.factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        SpinLabel adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
+                  cdq = c.info->delta_quantum;
+        int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos();
+        assert(c.info->cinfo != nullptr);
+        shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo = c.info->cinfo;
+        SpinLabel abdq = opdq.combine(adq, -bdq);
+        int ik = lower_bound(cinfo->quanta, cinfo->quanta + cinfo->n, abdq) -
+                 cinfo->quanta;
+        assert(ik < cinfo->n);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        for (int il = ixa; il < ixb; il++) {
+            int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
+            SpinLabel aq = a.info->quanta[ia];
+            SpinLabel bq = b.info->quanta[ib];
+            SpinLabel cq = c.info->quanta[ic];
+            double factor =
+                sqrt((cq.twos() + 1) * (cdqs + 1) * (aq.twos() + 1) *
+                     (bq.twos() + 1)) *
+                cg->wigner_9j(aq.twos(), bq.twos(), cq.twos(), adqs, bdqs, cdqs,
+                              aq.twos(), bq.twos(), cq.twos());
+            factor *= (b.info->is_fermion && (aq.n() & 1)) ? -1 : 1;
+            MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
+                                                     scale * factor);
+        }
+    }
     void tensor_product_multiply(const SparseMatrix &a, const SparseMatrix &b,
                                  const SparseMatrix &c, const SparseMatrix &v,
                                  SpinLabel opdq, double scale = 1.0) const {
@@ -2233,8 +2573,8 @@ struct OperatorFunctions {
                   cdq = c.info->delta_quantum, vdq = v.info->delta_quantum;
         int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos(),
             vdqs = vdq.twos(), opdqs = opdq.twos();
-        assert(v.info->cinfo != nullptr);
-        shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo = v.info->cinfo;
+        assert(c.info->cinfo != nullptr);
+        shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo = c.info->cinfo;
         SpinLabel abdq = opdq.combine(adq, -bdq);
         int ik = lower_bound(cinfo->quanta, cinfo->quanta + cinfo->n, abdq) -
                  cinfo->quanta;
@@ -2333,18 +2673,74 @@ struct OperatorFunctions {
             }
         }
     }
+    void trans_product(const SparseMatrix &a, const SparseMatrix &b,
+                       bool trace_right, double noise = 0.0) const {
+        double scale = a.factor * a.factor;
+        assert(b.factor == 1.0);
+        if (abs(scale) < TINY && noise == 0.0)
+            return;
+        SparseMatrix tmp;
+        if (noise != 0.0) {
+            tmp.allocate(a.info);
+            tmp.randomize(-1.0, 1.0);
+            MatrixFunctions::iscale(MatrixRef(tmp.data, tmp.total_memory, 1),
+                                    noise);
+        }
+        if (trace_right)
+            for (int ia = 0; ia < a.info->n; ia++) {
+                SpinLabel qb =
+                    a.info->quanta[ia].get_bra(a.info->delta_quantum);
+                int ib = b.info->find_state(qb);
+                MatrixFunctions::multiply(a[ia], false, a[ia], true, b[ib],
+                                          scale, 1.0);
+                if (noise != 0.0)
+                    MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
+                                              b[ib], scale, 1.0);
+            }
+        else
+            for (int ia = 0; ia < a.info->n; ia++) {
+                SpinLabel qb = a.info->quanta[ia].get_ket();
+                int ib = b.info->find_state(qb);
+                MatrixFunctions::multiply(a[ia], true, a[ia], false, b[ib],
+                                          scale, 1.0);
+                if (noise != 0.0)
+                    MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
+                                              b[ib], scale, 1.0);
+            }
+        if (noise != 0.0)
+            tmp.deallocate();
+    }
 };
 
 struct OperatorTensor {
     shared_ptr<Symbolic> lmat, rmat;
-    map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less> lop, rop;
+    map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less> ops;
     OperatorTensor() {}
     void reallocate(bool clean) {
-        for (auto &p : lop)
+        for (auto &p : ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() {
-        for (auto it = lop.crbegin(); it != lop.crend(); it++)
+        for (auto it = ops.crbegin(); it != ops.crend(); it++)
+            it->second->deallocate();
+    }
+};
+
+struct DelayedOperatorTensor {
+    vector<shared_ptr<OpExpr>> ops;
+    shared_ptr<Symbolic> mat;
+    map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less> lops, rops;
+    DelayedOperatorTensor() {}
+    void reallocate(bool clean) {
+        for (auto &p : lops)
+            p.second->reallocate(clean ? 0 : p.second->total_memory);
+        for (auto &p : rops)
+            p.second->reallocate(clean ? 0 : p.second->total_memory);
+    }
+    void deallocate() {
+        for (auto it = rops.crbegin(); it != rops.crend(); it++)
+            it->second->deallocate();
+        for (auto it = lops.crbegin(); it != lops.crend(); it++)
             it->second->deallocate();
     }
 };
@@ -2366,8 +2762,8 @@ struct TensorFunctions {
                 assert(a->lmat->data[i] == c->lmat->data[i]);
                 auto pa = abs_value(a->lmat->data[i]),
                      pc = abs_value(c->lmat->data[i]);
-                c->lop[pc]->copy_data(*a->lop[pa]);
-                c->lop[pc]->factor = a->lop[pa]->factor;
+                c->ops[pc]->copy_data(*a->ops[pa]);
+                c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
     }
@@ -2385,8 +2781,8 @@ struct TensorFunctions {
                 assert(a->rmat->data[i] == c->rmat->data[i]);
                 auto pa = abs_value(a->rmat->data[i]),
                      pc = abs_value(c->rmat->data[i]);
-                c->lop[pc]->copy_data(*a->lop[pa]);
-                c->lop[pc]->factor = a->lop[pa]->factor;
+                c->ops[pc]->copy_data(*a->ops[pa]);
+                c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
     }
@@ -2413,6 +2809,35 @@ struct TensorFunctions {
             shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
             for (auto &x : op->strings)
                 tensor_product_multiply(x, lop, rop, cmat, vmat, opdq);
+        } break;
+        case OpTypes::Zero:
+            break;
+        default:
+            assert(false);
+            break;
+        }
+    }
+    void tensor_product_diagonal(
+        const shared_ptr<OpExpr> &expr,
+        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
+            &lop,
+        const map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
+            &rop,
+        shared_ptr<SparseMatrix> &mat, SpinLabel opdq) const {
+        switch (expr->get_type()) {
+        case OpTypes::Prod: {
+            shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
+            assert(op->ops.size() == 2);
+            if (lop.count(op->ops[0]) == 0 || rop.count(op->ops[1]) == 0)
+                return;
+            shared_ptr<SparseMatrix> lmat = lop.at(op->ops[0]);
+            shared_ptr<SparseMatrix> rmat = rop.at(op->ops[1]);
+            opf->tensor_product_diagonal(*lmat, *rmat, *mat, opdq, op->factor);
+        } break;
+        case OpTypes::Sum: {
+            shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
+            for (auto &x : op->strings)
+                tensor_product_diagonal(x, lop, rop, mat, opdq);
         } break;
         case OpTypes::Zero:
             break;
@@ -2456,7 +2881,7 @@ struct TensorFunctions {
         for (size_t i = 0; i < a->lmat->data.size(); i++)
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
-                opf->tensor_rotate(*a->lop.at(pa), *c->lop.at(pa), *mpst_bra,
+                opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, false);
             }
     }
@@ -2467,9 +2892,23 @@ struct TensorFunctions {
         for (size_t i = 0; i < a->rmat->data.size(); i++)
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
-                opf->tensor_rotate(*a->lop.at(pa), *c->lop.at(pa), *mpst_bra,
+                opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, true);
             }
+    }
+    static shared_ptr<DelayedOperatorTensor>
+    delayed_contract(const shared_ptr<OperatorTensor> &a,
+                     const shared_ptr<OperatorTensor> &b,
+                     const shared_ptr<OpExpr> &op) {
+        shared_ptr<DelayedOperatorTensor> dopt =
+            make_shared<DelayedOperatorTensor>();
+        dopt->lops = a->ops;
+        dopt->rops = b->ops;
+        dopt->ops.push_back(op);
+        shared_ptr<Symbolic> exprs = a->lmat * b->rmat;
+        assert(exprs->data.size() == 1);
+        dopt->mat = exprs;
+        return dopt;
     }
     void left_contract(const shared_ptr<OperatorTensor> &a,
                        const shared_ptr<OperatorTensor> &b,
@@ -2491,7 +2930,7 @@ struct TensorFunctions {
                     dynamic_pointer_cast<OpElement>(c->lmat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
-                tensor_product(expr, a->lop, b->lop, c->lop.at(op));
+                tensor_product(expr, a->ops, b->ops, c->ops.at(op));
             }
         }
     }
@@ -2515,14 +2954,9 @@ struct TensorFunctions {
                     dynamic_pointer_cast<OpElement>(c->rmat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
-                tensor_product(expr, b->lop, a->lop, c->lop.at(op));
+                tensor_product(expr, b->ops, a->ops, c->ops.at(op));
             }
         }
-    }
-    void eigs(const shared_ptr<OperatorTensor> &h,
-              const shared_ptr<SparseMatrix> &a,
-              const shared_ptr<SparseMatrix> &b, double &energy, int &ndav) {
-        // TODO!!!
     }
 };
 
@@ -2779,9 +3213,9 @@ struct Partition {
         : left(left), right(right), middle{ldot, rdot} {}
     Partition(const Partition &other)
         : left(other.left), right(other.right), middle(other.middle) {}
-    shared_ptr<SparseMatrixInfo> find_op_info(
+    static shared_ptr<SparseMatrixInfo> find_op_info(
         const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &op_infos,
-        SpinLabel q) const {
+        SpinLabel q) {
         auto p = lower_bound(op_infos.begin(), op_infos.end(), q,
                              SparseMatrixInfo::cmp_op_info);
         if (p == op_infos.end() || p->first != q)
@@ -2789,8 +3223,10 @@ struct Partition {
         else
             return p->second;
     }
-    shared_ptr<OperatorTensor> build_left(const shared_ptr<Symbolic> &mat,
-                                          bool notrunc) const {
+    static shared_ptr<OperatorTensor>
+    build_left(const shared_ptr<Symbolic> &mat,
+               const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+                   &left_op_infos) {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::RVec);
@@ -2800,17 +3236,18 @@ struct Partition {
                 shared_ptr<OpElement> cop =
                     dynamic_pointer_cast<OpElement>(mat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
-                opt->lop[op] = make_shared<SparseMatrix>();
+                opt->ops[op] = make_shared<SparseMatrix>();
             }
-        for (auto &p : opt->lop) {
+        for (auto &p : opt->ops) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
-            p.second->allocate(find_op_info(
-                notrunc ? left_op_infos_notrunc : left_op_infos, op->q_label));
+            p.second->allocate(find_op_info(left_op_infos, op->q_label));
         }
         return opt;
     }
-    shared_ptr<OperatorTensor> build_right(const shared_ptr<Symbolic> &mat,
-                                           bool notrunc) const {
+    static shared_ptr<OperatorTensor>
+    build_right(const shared_ptr<Symbolic> &mat,
+                const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+                    &right_op_infos) {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::CVec);
@@ -2820,13 +3257,11 @@ struct Partition {
                 shared_ptr<OpElement> cop =
                     dynamic_pointer_cast<OpElement>(mat->data[i]);
                 shared_ptr<OpExpr> op = abs_value(cop);
-                opt->lop[op] = make_shared<SparseMatrix>();
+                opt->ops[op] = make_shared<SparseMatrix>();
             }
-        for (auto &p : opt->lop) {
+        for (auto &p : opt->ops) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
-            p.second->allocate(
-                find_op_info(notrunc ? right_op_infos_notrunc : right_op_infos,
-                             op->q_label));
+            p.second->allocate(find_op_info(right_op_infos, op->q_label));
         }
         return opt;
     }
@@ -2918,7 +3353,8 @@ struct Partition {
             &site_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &left_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &left_op_infos_notrunc) {
+            &left_op_infos_notrunc,
+        bool notrunc_only = false) {
         StateInfo ibra = bra_info->left_dims[m + 1];
         StateInfo ibra_notrunc = StateInfo::tensor_product(
             bra_info->left_dims[m], bra_info->basis[bra_info->orbsym[m]],
@@ -2937,10 +3373,12 @@ struct Partition {
             shared_ptr<SparseMatrixInfo> lop = make_shared<SparseMatrixInfo>();
             shared_ptr<SparseMatrixInfo> lop_notrunc =
                 make_shared<SparseMatrixInfo>();
-            left_op_infos.push_back(make_pair(sl[i], lop));
-            left_op_infos_notrunc.push_back(make_pair(sl[i], lop_notrunc));
             // only works for fermions!
-            lop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            if (!notrunc_only) {
+                left_op_infos.push_back(make_pair(sl[i], lop));
+                lop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            }
+            left_op_infos_notrunc.push_back(make_pair(sl[i], lop_notrunc));
             lop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
                                     sl[i].twos() & 1);
             shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo =
@@ -2958,7 +3396,8 @@ struct Partition {
         iket_notrunc.reallocate(0);
         iket_cinfo.reallocate(0);
         for (size_t i = 0; i < sl.size(); i++) {
-            left_op_infos[i].second->reallocate(left_op_infos[i].second->n);
+            if (!left_op_infos.empty())
+                left_op_infos[i].second->reallocate(left_op_infos[i].second->n);
             left_op_infos_notrunc[i].second->reallocate(
                 left_op_infos_notrunc[i].second->n);
             left_op_infos_notrunc[i].second->cinfo->reallocate(false);
@@ -2974,7 +3413,8 @@ struct Partition {
             &site_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &right_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &right_op_infos_notrunc) {
+            &right_op_infos_notrunc,
+        bool notrunc_only = false) {
         StateInfo ibra = bra_info->right_dims[m];
         StateInfo ibra_notrunc = StateInfo::tensor_product(
             bra_info->basis[bra_info->orbsym[m]], bra_info->right_dims[m + 1],
@@ -2993,10 +3433,12 @@ struct Partition {
             shared_ptr<SparseMatrixInfo> rop = make_shared<SparseMatrixInfo>();
             shared_ptr<SparseMatrixInfo> rop_notrunc =
                 make_shared<SparseMatrixInfo>();
-            right_op_infos.push_back(make_pair(sl[i], rop));
-            right_op_infos_notrunc.push_back(make_pair(sl[i], rop_notrunc));
             // only works for fermions!
-            rop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            if (!notrunc_only) {
+                right_op_infos.push_back(make_pair(sl[i], rop));
+                rop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            }
+            right_op_infos_notrunc.push_back(make_pair(sl[i], rop_notrunc));
             rop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
                                     sl[i].twos() & 1);
             shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo =
@@ -3015,10 +3457,90 @@ struct Partition {
         iket_notrunc.reallocate(0);
         iket_cinfo.reallocate(0);
         for (size_t i = 0; i < sl.size(); i++) {
-            right_op_infos[i].second->reallocate(right_op_infos[i].second->n);
+            if (!right_op_infos.empty())
+                right_op_infos[i].second->reallocate(
+                    right_op_infos[i].second->n);
             right_op_infos_notrunc[i].second->reallocate(
                 right_op_infos_notrunc[i].second->n);
             right_op_infos_notrunc[i].second->cinfo->reallocate(false);
+        }
+    }
+};
+
+struct EffectiveHamiltonian {
+    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos_notrunc,
+        right_op_infos_notrunc;
+    shared_ptr<DelayedOperatorTensor> op;
+    shared_ptr<SparseMatrix> psi, diag, cmat, vmat;
+    shared_ptr<TensorFunctions> tf;
+    SpinLabel opdq;
+    EffectiveHamiltonian(
+        const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            &left_op_infos_notrunc,
+        const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            &right_op_infos_notrunc,
+        const shared_ptr<DelayedOperatorTensor> &op,
+        const shared_ptr<SparseMatrix> &psi, const shared_ptr<OpElement> &hop,
+        const shared_ptr<SymbolicColumnVector> &hop_mat,
+        const shared_ptr<TensorFunctions> &tf)
+        : left_op_infos_notrunc(left_op_infos_notrunc),
+          right_op_infos_notrunc(right_op_infos_notrunc), op(op), psi(psi),
+          tf(tf) {
+        // wavefunction
+        diag = make_shared<SparseMatrix>();
+        diag->allocate(psi->info);
+        // unique sub labels
+        SpinLabel cdq = psi->info->delta_quantum;
+        opdq = hop->q_label;
+        vector<SpinLabel> msl = vector<SpinLabel>{hop->q_label};
+        vector<vector<SpinLabel>> msubsl =
+            Partition::get_uniq_sub_labels(op->mat, hop_mat, msl);
+        // tensor prodcut diagonal
+        shared_ptr<SparseMatrixInfo::CollectedInfo> diag_info =
+            make_shared<SparseMatrixInfo::CollectedInfo>();
+        diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos_notrunc,
+                                   right_op_infos_notrunc, diag->info);
+        diag->info->cinfo = diag_info;
+        tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops, diag,
+                                    opdq);
+        diag_info->deallocate();
+        // temp wavefunction
+        cmat = vmat = psi;
+        // temp wavefunction info
+        shared_ptr<SparseMatrixInfo::CollectedInfo> wfn_info =
+            make_shared<SparseMatrixInfo::CollectedInfo>();
+        wfn_info->initialize_wfn(cdq, cdq, opdq, msubsl[0],
+                                 left_op_infos_notrunc, right_op_infos_notrunc,
+                                 psi->info, psi->info);
+        cmat->info->cinfo = wfn_info;
+    }
+    void operator()(const MatrixRef &b, const MatrixRef &c) {
+        assert(b.m * b.n == cmat->total_memory);
+        assert(c.m * c.n == vmat->total_memory);
+        cmat->data = b.data;
+        vmat->data = c.data;
+        tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops, cmat,
+                                    vmat, opdq);
+    }
+    pair<double, int> eigs() {
+        int ndav = 0;
+        DiagonalMatrix aa(diag->data, diag->total_memory);
+        vector<MatrixRef> bs =
+            vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
+        vector<double> eners = MatrixFunctions::davidson(*this, aa, bs, ndav);
+        return make_pair(eners[0], ndav);
+    }
+    void deallocate() {
+        cmat->info->cinfo->deallocate();
+        diag->deallocate();
+        op->deallocate();
+        for (int i = right_op_infos_notrunc.size() - 1; i >= 0; i--) {
+            right_op_infos_notrunc[i].second->cinfo->deallocate();
+            right_op_infos_notrunc[i].second->deallocate();
+        }
+        for (int i = left_op_infos_notrunc.size() - 1; i >= 0; i--) {
+            left_op_infos_notrunc[i].second->cinfo->deallocate();
+            left_op_infos_notrunc[i].second->deallocate();
         }
     }
 };
@@ -3030,6 +3552,8 @@ struct MovingEnvironment {
     vector<shared_ptr<Partition>> envs;
     shared_ptr<TensorFunctions> tf;
     vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> *site_op_infos;
+    shared_ptr<OpElement> hop;
+    shared_ptr<SymbolicColumnVector> hop_mat;
     MovingEnvironment(
         const shared_ptr<MPO> &mpo, const shared_ptr<MPS> &bra,
         const shared_ptr<MPS> &ket, const shared_ptr<TensorFunctions> &tf,
@@ -3038,18 +3562,12 @@ struct MovingEnvironment {
           bra(bra), ket(ket), tf(tf), site_op_infos(site_op_infos) {
         assert(bra->n_sites == ket->n_sites && mpo->n_sites == ket->n_sites);
         assert(bra->center == ket->center && bra->dot == ket->dot);
+        hop = make_shared<OpElement>(OpNames::H, vector<uint8_t>{},
+                                     ket->info->vaccum);
+        hop_mat = make_shared<SymbolicColumnVector>(1);
+        (*hop_mat)[0] = hop;
     }
-    void deallocate() {
-        for (int i = center; i < n_sites - dot; i++) {
-            envs[i]->right->deallocate();
-            envs[i]->deallocate_right_op_infos();
-        }
-        for (int i = center; i > 0; i--) {
-            envs[i]->left->deallocate();
-            envs[i]->deallocate_left_op_infos();
-        }
-    }
-    void left_contract(int i) {
+    void init_left_op_infos(int i) {
         vector<SpinLabel> sl =
             Partition::get_uniq_labels(mpo->left_operator_names[i - 1]);
         shared_ptr<Symbolic> exprs =
@@ -3062,18 +3580,8 @@ struct MovingEnvironment {
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
             site_op_infos[bra->info->orbsym[i - 1]], envs[i]->left_op_infos,
             envs[i]->left_op_infos_notrunc);
-        shared_ptr<OperatorTensor> new_left =
-            envs[i]->build_left(mpo->left_operator_names[i - 1], true);
-        tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
-                          new_left);
-        envs[i]->left =
-            envs[i]->build_left(mpo->left_operator_names[i - 1], false);
-        tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
-                        envs[i]->left);
-        new_left->reallocate(true);
-        envs[i]->left->reallocate(false);
     }
-    void right_contract(int i) {
+    void init_right_op_infos(int i) {
         vector<SpinLabel> sl =
             Partition::get_uniq_labels(mpo->right_operator_names[i + dot]);
         shared_ptr<Symbolic> exprs =
@@ -3087,12 +3595,27 @@ struct MovingEnvironment {
             envs[i + 1]->right_op_infos,
             site_op_infos[bra->info->orbsym[i + dot]], envs[i]->right_op_infos,
             envs[i]->right_op_infos_notrunc);
+    }
+    void left_contract_rotate(int i) {
+        shared_ptr<OperatorTensor> new_left = Partition::build_left(
+            mpo->left_operator_names[i - 1], envs[i]->left_op_infos_notrunc);
+        tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
+                          new_left);
+        envs[i]->left = Partition::build_left(mpo->left_operator_names[i - 1],
+                                              envs[i]->left_op_infos);
+        tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
+                        envs[i]->left);
+        new_left->reallocate(true);
+        envs[i]->left->reallocate(false);
+    }
+    void right_contract_rotate(int i) {
         shared_ptr<OperatorTensor> new_right =
-            envs[i]->build_right(mpo->right_operator_names[i + dot], true);
+            Partition::build_right(mpo->right_operator_names[i + dot],
+                                   envs[i]->right_op_infos_notrunc);
         tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                            new_right);
-        envs[i]->right =
-            envs[i]->build_right(mpo->right_operator_names[i + dot], false);
+        envs[i]->right = Partition::build_right(
+            mpo->right_operator_names[i + dot], envs[i]->right_op_infos);
         tf->right_rotate(new_right, bra->tensors[i + dot],
                          ket->tensors[i + dot], envs[i]->right);
         new_right->reallocate(true);
@@ -3108,11 +3631,13 @@ struct MovingEnvironment {
         }
         for (int i = 1; i <= center; i++) {
             cout << "iL = " << i << endl;
-            left_contract(i);
+            init_left_op_infos(i);
+            left_contract_rotate(i);
         }
         for (int i = n_sites - dot - 1; i >= center; i--) {
             cout << "iR = " << i << endl;
-            right_contract(i);
+            init_right_op_infos(i);
+            right_contract_rotate(i);
         }
     }
     void prepare() {
@@ -3129,17 +3654,226 @@ struct MovingEnvironment {
     }
     void move_to(int i) {
         if (i > center) {
-            left_contract(center + 1);
+            init_left_op_infos(center + 1);
+            left_contract_rotate(center + 1);
             center++;
         } else if (i < center) {
-            right_contract(center - 1);
+            init_right_op_infos(center - 1);
+            right_contract_rotate(center - 1);
             center--;
         }
     }
-    shared_ptr<OperatorTensor> eff_ham() {
-        // TODO!!!
+    shared_ptr<EffectiveHamiltonian> eff_ham() {
+        if (dot == 2) {
+            // left contract infos
+            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+                left_op_infos_notrunc;
+            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> ph;
+            vector<SpinLabel> lsl =
+                Partition::get_uniq_labels(mpo->left_operator_names[center]);
+            shared_ptr<Symbolic> lexprs =
+                envs[center]->left == nullptr
+                    ? nullptr
+                    : envs[center]->left->lmat *
+                          envs[center]->middle.front()->lmat;
+            vector<vector<SpinLabel>> lsubsl = Partition::get_uniq_sub_labels(
+                lexprs, mpo->left_operator_names[center], lsl);
+            Partition::init_left_op_infos(
+                center, bra->info, ket->info, lsl, lsubsl,
+                envs[center]->left_op_infos,
+                site_op_infos[bra->info->orbsym[center]], ph,
+                left_op_infos_notrunc, true);
+            assert(ph.size() == 0);
+            // right contract infos
+            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+                right_op_infos_notrunc;
+            vector<SpinLabel> rsl = Partition::get_uniq_labels(
+                mpo->right_operator_names[center + 1]);
+            shared_ptr<Symbolic> rexprs =
+                envs[center]->right == nullptr
+                    ? nullptr
+                    : envs[center]->middle.back()->rmat *
+                          envs[center]->right->rmat;
+            vector<vector<SpinLabel>> rsubsl = Partition::get_uniq_sub_labels(
+                rexprs, mpo->right_operator_names[center + 1], rsl);
+            Partition::init_right_op_infos(
+                center, bra->info, ket->info, rsl, rsubsl,
+                envs[center]->right_op_infos,
+                site_op_infos[bra->info->orbsym[center + 1]], ph,
+                right_op_infos_notrunc, true);
+            assert(ph.size() == 0);
+            // left contract
+            shared_ptr<OperatorTensor> new_left = Partition::build_left(
+                mpo->left_operator_names[center], left_op_infos_notrunc);
+            tf->left_contract(envs[center]->left, envs[center]->middle.front(),
+                              new_left);
+            // right contract
+            shared_ptr<OperatorTensor> new_right = Partition::build_right(
+                mpo->right_operator_names[center + 1], right_op_infos_notrunc);
+            tf->right_contract(envs[center]->right, envs[center]->middle.back(),
+                               new_right);
+            // delayed left-right contract
+            shared_ptr<DelayedOperatorTensor> op =
+                TensorFunctions::delayed_contract(new_left, new_right, hop);
+            shared_ptr<EffectiveHamiltonian> efh =
+                make_shared<EffectiveHamiltonian>(
+                    left_op_infos_notrunc, right_op_infos_notrunc, op,
+                    ket->tensors[center], hop, hop_mat, tf);
+            return efh;
+        } else
+            return nullptr;
     }
-};
+    shared_ptr<SparseMatrix>
+    density_matrix(const shared_ptr<EffectiveHamiltonian> &h_eff,
+                   bool trace_right, double noise) {
+        shared_ptr<SparseMatrixInfo> dm_info = make_shared<SparseMatrixInfo>();
+        dm_info->initialize_dm(h_eff->psi->info, h_eff->opdq, trace_right);
+        shared_ptr<SparseMatrix> dm = make_shared<SparseMatrix>();
+        dm->allocate(dm_info);
+        tf->opf->trans_product(*h_eff->psi, *dm, trace_right, noise);
+        return dm;
+    }
+    double split_density_matrix(const shared_ptr<SparseMatrix> &dm,
+                                const shared_ptr<SparseMatrix> &wfn, int k,
+                                bool trace_right,
+                                shared_ptr<SparseMatrix> &left,
+                                shared_ptr<SparseMatrix> &right) {
+        vector<DiagonalMatrix> eigen_values;
+        vector<MatrixRef> eigen_values_reduced;
+        int k_total = 0;
+        for (int i = 0; i < dm->info->n; i++) {
+            DiagonalMatrix w(nullptr, dm->info->n_states_bra[i]);
+            w.allocate();
+            MatrixFunctions::eigs((*dm)[i], w);
+            MatrixRef wr(nullptr, w.n, 1);
+            wr.allocate();
+            MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
+            MatrixFunctions::iscale(wr, 1.0 / (dm->info->quanta[i].twos() + 1));
+            eigen_values.push_back(w);
+            eigen_values_reduced.push_back(wr);
+            k_total += w.n;
+        }
+        shared_ptr<SparseMatrixInfo> linfo = make_shared<SparseMatrixInfo>();
+        shared_ptr<SparseMatrixInfo> rinfo = make_shared<SparseMatrixInfo>();
+        double error = 0.0;
+        vector<pair<int, int>> ss;
+        ss.reserve(k_total);
+        for (int i = 0; i < (int)eigen_values.size(); i++)
+            for (int j = 0; j < eigen_values[i].n; j++)
+                ss.push_back(make_pair(i, j));
+        if (k != -1 && k_total > k) {
+            sort(ss.begin(), ss.end(),
+                 [&eigen_values_reduced](const pair<int, int> &a,
+                                         const pair<int, int> &b) {
+                     return eigen_values_reduced[a.first].data[a.second] >
+                            eigen_values_reduced[b.first].data[b.second];
+                 });
+            for (int i = k; i < k_total; i++)
+                error += eigen_values[ss[i].first].data[ss[i].second];
+            ss.resize(k);
+            sort(ss.begin(), ss.end(),
+                 [](const pair<int, int> &a, const pair<int, int> &b) {
+                     return a.first != b.first ? a.first < b.first
+                                               : a.second < b.second;
+                 });
+        }
+        for (int i = dm->info->n - 1; i >= 0; i--) {
+            eigen_values_reduced[i].deallocate();
+            eigen_values[i].deallocate();
+        }
+        vector<uint16_t> ilr, im;
+        ilr.reserve(ss.size());
+        if (k != 0)
+            ilr.push_back(ss[0].first), im.push_back(1);
+        for (int i = 1; i < (int)ss.size(); i++)
+            if (ss[i].first != ilr.back())
+                ilr.push_back(ss[i].first), im.push_back(1);
+            else
+                ++im.back();
+        int kk = ilr.size();
+        linfo->is_fermion = rinfo->is_fermion = false;
+        linfo->is_wavefunction = !trace_right;
+        rinfo->is_wavefunction = trace_right;
+        linfo->delta_quantum =
+            trace_right ? dm->info->delta_quantum : wfn->info->delta_quantum;
+        rinfo->delta_quantum =
+            trace_right ? wfn->info->delta_quantum : dm->info->delta_quantum;
+        linfo->allocate(kk);
+        rinfo->allocate(kk);
+        if (trace_right)
+            for (int i = 0; i < kk; i++) {
+                linfo->quanta[i] = dm->info->quanta[ilr[i]];
+                rinfo->quanta[i] = wfn->info->quanta[ilr[i]];
+                linfo->n_states_bra[i] = dm->info->n_states_bra[ilr[i]];
+                linfo->n_states_ket[i] = im[i];
+                rinfo->n_states_bra[i] = im[i];
+                rinfo->n_states_ket[i] = wfn->info->n_states_ket[ilr[i]];
+            }
+        else
+            for (int i = 0; i < kk; i++) {
+                linfo->quanta[i] = wfn->info->quanta[ilr[i]];
+                rinfo->quanta[i] = dm->info->quanta[ilr[i]];
+                linfo->n_states_bra[i] = wfn->info->n_states_bra[ilr[i]];
+                linfo->n_states_ket[i] = im[i];
+                rinfo->n_states_bra[i] = im[i];
+                rinfo->n_states_ket[i] = dm->info->n_states_ket[ilr[i]];
+            }
+        linfo->n_states_total[0] = 0;
+        for (int i = 0; i < kk; i++)
+            linfo->n_states_total[i + 1] =
+                linfo->n_states_total[i] +
+                (uint32_t)linfo->n_states_bra[i] * linfo->n_states_ket[i];
+        rinfo->n_states_total[0] = 0;
+        for (int i = 0; i < kk; i++)
+            rinfo->n_states_total[i + 1] =
+                rinfo->n_states_total[i] +
+                (uint32_t)rinfo->n_states_bra[i] * rinfo->n_states_ket[i];
+        left = make_shared<SparseMatrix>();
+        right = make_shared<SparseMatrix>();
+        left->allocate(linfo);
+        right->allocate(rinfo);
+        int iss = 0;
+        if (trace_right)
+            for (int i = 0; i < kk; i++) {
+                for (int j = 0; j < im[i]; j++) {
+                    MatrixFunctions::copy(
+                        MatrixRef(left->data + linfo->n_states_total[i] + j,
+                                  linfo->n_states_bra[i], 1),
+                        MatrixRef(
+                            &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
+                            linfo->n_states_bra[i], 1),
+                        linfo->n_states_ket[i], 1);
+                }
+                MatrixFunctions::multiply((*left)[i], true,
+                                          (*wfn)[ss[iss].first], false,
+                                          (*right)[i], 1.0, 0.0);
+                iss += im[i];
+            }
+        else
+            for (int i = 0; i < kk; i++) {
+                MatrixFunctions::copy(
+                    (*right)[i],
+                    MatrixRef(&(*dm)[ss[iss].first](ss[iss].second, 0),
+                              (*right)[i].m, (*right)[i].n));
+                MatrixFunctions::multiply((*wfn)[ss[iss].first], false,
+                                          (*right)[i], false, (*left)[i], 1.0,
+                                          0.0);
+                iss += im[i];
+            }
+        assert(iss == ss.size());
+        return error;
+    }
+    void deallocate() {
+        for (int i = center; i < n_sites - dot; i++) {
+            envs[i]->right->deallocate();
+            envs[i]->deallocate_right_op_infos();
+        }
+        for (int i = center; i > 0; i--) {
+            envs[i]->left->deallocate();
+            envs[i]->deallocate_left_op_infos();
+        }
+    }
+}; // namespace block2
 
 struct DMRG {
     shared_ptr<MovingEnvironment> me;
@@ -3166,15 +3900,70 @@ struct DMRG {
                              double noise) {
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr) {
-            // TODO contract two tensors
+            shared_ptr<SparseMatrix> old_wfn = make_shared<SparseMatrix>();
+            shared_ptr<SparseMatrixInfo> old_wfn_info =
+                make_shared<SparseMatrixInfo>();
+            old_wfn_info->initialize_contract(me->ket->tensors[i]->info,
+                                              me->ket->tensors[i + 1]->info);
+            old_wfn->contract(me->ket->tensors[i], me->ket->tensors[i + 1]);
+            me->ket->tensors[i] = old_wfn;
+            me->ket->tensors[i + 1] = nullptr;
         }
-        shared_ptr<OperatorTensor> h_eff = me->eff_ham();
-        shared_ptr<SparseMatrix> gs_old = me->ket->tensors[i];
-        double energy = 0.0;
-        int ndav = 0;
-        shared_ptr<SparseMatrix> gs = make_shared<SparseMatrix>();
-        gs->allocate(gs_old->info);
-        me->tf->eigs(h_eff, gs_old, gs, energy, ndav);
+        shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham();
+        auto pdi = h_eff->eigs();
+        h_eff->deallocate();
+        shared_ptr<SparseMatrix> dm = me->density_matrix(h_eff, forward, noise);
+        double error = me->split_density_matrix(dm, h_eff->psi, (int)bond_dim,
+                                                forward, me->ket->tensors[i],
+                                                me->ket->tensors[i + 1]);
+        shared_ptr<StateInfo> info = nullptr;
+        shared_ptr<MPSInfo> ket_info = me->ket->info;
+        StateInfo lm, lmc, mr, mrc;
+        shared_ptr<SparseMatrixInfo> wfn_info = make_shared<SparseMatrixInfo>();
+        shared_ptr<SparseMatrix> wfn = make_shared<SparseMatrix>();
+        if (forward) {
+            info = me->ket->tensors[i]->info->extract_state_info(forward);
+            ket_info->left_dims[i + 1] = *info;
+            StateInfo l = ket_info->left_dims[i + 1],
+                      m = ket_info->basis[ket_info->orbsym[i + 1]],
+                      r = ket_info->right_dims[i + 2];
+            lm = StateInfo::tensor_product(l, m, ket_info->target);
+            lmc = StateInfo::get_collected_info(l, m, lm);
+            mr = StateInfo::tensor_product(m, r, ket_info->target);
+            mrc = StateInfo::get_collected_info(m, r, mr);
+            shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i + 1]->info;
+            wfn_info->initialize(lm, r, owinfo->delta_quantum,
+                                 owinfo->is_fermion, owinfo->is_wavefunction);
+            wfn->allocate(wfn_info);
+            wfn->swap_to_fused_left(me->ket->tensors[i + 1], l, m, r, mr, mrc,
+                                    lm, lmc);
+            me->ket->tensors[i + 1] = wfn;
+        } else {
+            info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            ket_info->right_dims[i + 1] = *info;
+            StateInfo l = ket_info->left_dims[i],
+                      m = ket_info->basis[ket_info->orbsym[i]],
+                      r = ket_info->right_dims[i + 1];
+            lm = StateInfo::tensor_product(l, m, ket_info->target);
+            lmc = StateInfo::get_collected_info(l, m, lm);
+            mr = StateInfo::tensor_product(m, r, ket_info->target);
+            mrc = StateInfo::get_collected_info(m, r, mr);
+            shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i]->info;
+            wfn_info->initialize(l, mr, owinfo->delta_quantum,
+                                 owinfo->is_fermion, owinfo->is_wavefunction);
+            wfn->allocate(wfn_info);
+            wfn->swap_to_fused_right(me->ket->tensors[i], l, m, r, lm, lmc, mr,
+                                     mrc);
+            me->ket->tensors[i] = wfn;
+        }
+        lm.reallocate(0);
+        lmc.reallocate(0);
+        mr.reallocate(0);
+        mrc.reallocate(0);
+        wfn_info->reallocate(wfn_info->n);
+        wfn->reallocate(wfn->total_memory);
+        assert(ialloc->shift == 0);
+        return Iteration(pdi.first, error, pdi.second);
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
         me->move_to(i);
@@ -4039,7 +4828,7 @@ struct QCMPO : MPO {
                     }
                 assert(p == lshape);
             }
-            hamil.filter_site_ops(m, opt->lmat, opt->lop);
+            hamil.filter_site_ops(m, opt->lmat, opt->ops);
             this->tensors.push_back(opt);
             this->left_operator_names.push_back(plop);
             this->right_operator_names.push_back(prop);
@@ -4047,8 +4836,8 @@ struct QCMPO : MPO {
     }
     void deallocate() override {
         for (uint8_t m = n_sites - 1; m < n_sites; m--)
-            for (auto it = this->tensors[m]->lop.crbegin();
-                 it != this->tensors[m]->lop.crend(); ++it) {
+            for (auto it = this->tensors[m]->ops.crbegin();
+                 it != this->tensors[m]->ops.crend(); ++it) {
                 OpElement &op = *dynamic_pointer_cast<OpElement>(it->first);
                 if (op.name == OpNames::R || op.name == OpNames::RD ||
                     op.name == OpNames::H)

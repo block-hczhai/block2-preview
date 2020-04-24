@@ -22,9 +22,9 @@ class TestHamiltonian : public ::testing::Test {
 
 TEST_F(TestHamiltonian, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    // string filename = "data/CR2.SVP.FCIDUMP";
+    string filename = "data/CR2.SVP.FCIDUMP";
     // string filename = "data/N2.STO3G.FCIDUMP";
-    string filename = "data/HUBBARD-L8.FCIDUMP";
+    // string filename = "data/HUBBARD-L8.FCIDUMP";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -79,7 +79,9 @@ TEST_F(TestHamiltonian, Test) {
     cout << ialloc->used << " mpsff " << dalloc->used << endl;
 
     // MPO
+    cout << "MPO start" << endl;
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
+    cout << "MPO end" << endl;
 
     // ME
     shared_ptr<TensorFunctions> tf = make_shared<TensorFunctions>(hamil.opf);
