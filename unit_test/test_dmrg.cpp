@@ -4,7 +4,7 @@
 
 using namespace block2;
 
-class TestHamiltonian : public ::testing::Test {
+class TestDMRG : public ::testing::Test {
   protected:
     size_t isize = 1E9;
     size_t dsize = 1E9;
@@ -20,7 +20,7 @@ class TestHamiltonian : public ::testing::Test {
     }
 };
 
-TEST_F(TestHamiltonian, Test) {
+TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     // string filename = "data/CR2.SVP.FCIDUMP";
     // string filename = "data/N2.STO3G.FCIDUMP";
@@ -88,27 +88,9 @@ TEST_F(TestHamiltonian, Test) {
     shared_ptr<MovingEnvironment> me =
         make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
     me->init_environments();
-    me->deallocate();
 
-    cout << ialloc->used << " " << dalloc->used << endl;
-    shared_ptr<StateInfo> si = make_shared<StateInfo>(StateInfo::tensor_product(
-        hamil.basis[0], hamil.basis[hamil.n_syms - 1], hamil.target));
-    cout << ialloc->used << " " << dalloc->used << endl;
-    cout << *si << endl;
-    shared_ptr<SparseMatrixInfo> smi = make_shared<SparseMatrixInfo>();
-    smi->initialize(*si, *si, hamil.vaccum, false);
-    shared_ptr<SparseMatrix> c = make_shared<SparseMatrix>();
-    c->allocate(smi);
-    // cout << "total = " << c->total_memory << endl;
-    shared_ptr<OpExpr> op_h =
-        make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
-    shared_ptr<SparseMatrix> a = mpo->tensors[0]->lop[op_h];
-    shared_ptr<SparseMatrix> b = mpo->tensors[1]->lop[op_h];
-    // hamil.opf->tensor_product(*a, *b, *c);
-    // // cout << "c = " << *c->info << *c << endl;
-    c->deallocate();
-    smi->deallocate();
-    si->deallocate();
+    // Deallocation
+    me->deallocate();
     mpo->deallocate();
     mps->deallocate();
     mps_info->deallocate();
