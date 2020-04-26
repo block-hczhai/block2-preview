@@ -89,6 +89,11 @@ TEST_F(TestDMRG, Test) {
         make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
     me->init_environments();
 
+    // DMRG
+    shared_ptr<DMRG> dmrg =
+        make_shared<DMRG>(me, vector<uint16_t>{500}, vector<double>{0.0});
+    dmrg->solve(1);
+
     // Deallocation
     me->deallocate();
     mpo->deallocate();

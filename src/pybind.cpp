@@ -9,6 +9,9 @@ using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix>>);
@@ -16,7 +19,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition>>);
-PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>);
 
 template <typename T> struct Array {
     T *data;
@@ -142,8 +146,17 @@ PYBIND11_MODULE(block2, m) {
                     [](py::object, py::array_t<double> &data, double a = 0,
                        double b = 1) {
                         return Random::fill_rand_double(data.mutable_data(),
-                                                       data.size(), a, b);
+                                                        data.size(), a, b);
                     });
+
+    py::class_<MatrixRef, shared_ptr<MatrixRef>>(m, "Matrix",
+                                                 py::buffer_protocol())
+        .def_buffer([](MatrixRef *self) -> py::buffer_info {
+            return py::buffer_info(self->data, sizeof(double),
+                                   py::format_descriptor<double>::format(), 2,
+                                   {self->m, self->n},
+                                   {sizeof(double) * self->n, sizeof(double)});
+        });
 
     py::class_<FCIDUMP, shared_ptr<FCIDUMP>>(m, "FCIDUMP")
         .def(py::init<>())
@@ -204,7 +217,8 @@ PYBIND11_MODULE(block2, m) {
     py::class_<OpExpr, shared_ptr<OpExpr>>(m, "OpExpr")
         .def(py::init<>())
         .def("get_type", &OpExpr::get_type)
-        .def(py::self == py::self);
+        .def(py::self == py::self)
+        .def("__repr__", &to_str);
 
     py::class_<OpElement, shared_ptr<OpElement>, OpExpr>(m, "OpElement")
         .def(py::init<OpNames, const vector<uint8_t> &, SpinLabel>())
@@ -217,17 +231,34 @@ PYBIND11_MODULE(block2, m) {
         .def("__mul__", &OpElement::operator*)
         .def(py::self == py::self)
         .def(py::self < py::self)
-        .def("__hash__", &OpElement::hash)
-        .def("__repr__", [](OpElement *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
+        .def("__hash__", &OpElement::hash);
+
+    py::class_<OpString, shared_ptr<OpString>, OpExpr>(m, "OpString")
+        .def(py::init<const vector<shared_ptr<OpElement>> &, double>())
+        .def_readwrite("factor", &OpString::factor)
+        .def_readwrite("ops", &OpString::ops);
+
+    py::class_<OpSum, shared_ptr<OpSum>, OpExpr>(m, "OpSum")
+        .def(py::init<const vector<shared_ptr<OpString>> &>())
+        .def_readwrite("strings", &OpSum::strings);
+
+    py::bind_vector<vector<shared_ptr<OpExpr>>>(m, "VectorOpExpr");
+    py::bind_vector<vector<shared_ptr<OpElement>>>(m, "VectorOpElement");
+    py::bind_vector<vector<shared_ptr<OpString>>>(m, "VectorOpString");
 
     py::enum_<SymTypes>(m, "SymTypes", py::arithmetic())
         .value("RVec", SymTypes::RVec)
         .value("CVec", SymTypes::CVec)
         .value("Mat", SymTypes::Mat);
+
+    py::class_<Symbolic, shared_ptr<Symbolic>>(m, "Symbolic")
+        .def_readwrite("m", &Symbolic::m)
+        .def_readwrite("n", &Symbolic::n)
+        .def_readwrite("data", &Symbolic::data)
+        .def("get_type", [](Symbolic *self) { return self->get_type(); })
+        .def("__matmul__",
+             [](const shared_ptr<Symbolic> &self,
+                const shared_ptr<Symbolic> &other) { return self * other; });
 
     py::class_<StateInfo, shared_ptr<StateInfo>>(m, "StateInfo")
         .def_readwrite("n", &StateInfo::n)
@@ -241,6 +272,17 @@ PYBIND11_MODULE(block2, m) {
             return Array<uint16_t>(self->n_states, self->n);
         });
 
+    py::class_<SparseMatrixInfo::CollectedInfo,
+               shared_ptr<SparseMatrixInfo::CollectedInfo>>(m, "CollectedInfo")
+        .def(py::init<>())
+        .def_readwrite("n", &SparseMatrixInfo::CollectedInfo::n)
+        .def_readwrite("nc", &SparseMatrixInfo::CollectedInfo::nc)
+        .def("__repr__", [](SparseMatrixInfo::CollectedInfo *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
     py::class_<SparseMatrixInfo, shared_ptr<SparseMatrixInfo>>(
         m, "SparseMatrixInfo")
         .def(py::init<>())
@@ -248,6 +290,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("is_fermion", &SparseMatrixInfo::is_fermion)
         .def_readwrite("is_wavefunction", &SparseMatrixInfo::is_wavefunction)
         .def_readwrite("n", &SparseMatrixInfo::n)
+        .def_readwrite("cinfo", &SparseMatrixInfo::cinfo)
         .def_property_readonly("quanta",
                                [](SparseMatrixInfo *self) {
                                    return Array<SpinLabel>(self->quanta,
@@ -384,7 +427,17 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("ops", &OperatorTensor::ops)
         .def("reallocate", &OperatorTensor::reallocate, py::arg("clean"))
         .def("deallocate", &OperatorTensor::deallocate);
-    
+
+    py::class_<DelayedOperatorTensor, shared_ptr<DelayedOperatorTensor>>(
+        m, "DelayedOperatorTensor")
+        .def(py::init<>())
+        .def_readwrite("ops", &DelayedOperatorTensor::ops)
+        .def_readwrite("mat", &DelayedOperatorTensor::mat)
+        .def_readwrite("lops", &DelayedOperatorTensor::lops)
+        .def_readwrite("rops", &DelayedOperatorTensor::rops)
+        .def("reallocate", &DelayedOperatorTensor::reallocate, py::arg("clean"))
+        .def("deallocate", &DelayedOperatorTensor::deallocate);
+
     py::bind_vector<vector<shared_ptr<OperatorTensor>>>(m, "VectorOpTensor");
 
     py::class_<TensorFunctions, shared_ptr<TensorFunctions>>(m,
@@ -419,8 +472,30 @@ PYBIND11_MODULE(block2, m) {
         .def("deallocate_left_op_infos", &Partition::deallocate_left_op_infos)
         .def("deallocate_right_op_infos",
              &Partition::deallocate_right_op_infos);
-    
+
     py::bind_vector<vector<shared_ptr<Partition>>>(m, "VectorPartition");
+
+    py::class_<EffectiveHamiltonian, shared_ptr<EffectiveHamiltonian>>(
+        m, "EffectiveHamiltonian")
+        .def(py::init<
+             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
+             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
+             const shared_ptr<DelayedOperatorTensor> &,
+             const shared_ptr<SparseMatrix> &, const shared_ptr<OpElement> &,
+             const shared_ptr<SymbolicColumnVector> &,
+             const shared_ptr<TensorFunctions> &>())
+        .def_readwrite("left_op_infos_notrunc",
+                       &EffectiveHamiltonian::left_op_infos_notrunc)
+        .def_readwrite("right_op_infos_notrunc",
+                       &EffectiveHamiltonian::right_op_infos_notrunc)
+        .def_readwrite("op", &EffectiveHamiltonian::op)
+        .def_readwrite("psi", &EffectiveHamiltonian::psi)
+        .def_readwrite("diag", &EffectiveHamiltonian::diag)
+        .def_readwrite("cmat", &EffectiveHamiltonian::cmat)
+        .def_readwrite("vmat", &EffectiveHamiltonian::vmat)
+        .def_readwrite("tf", &EffectiveHamiltonian::tf)
+        .def_readwrite("opdq", &EffectiveHamiltonian::opdq)
+        .def("deallocate", &EffectiveHamiltonian::deallocate);
 
     py::class_<MovingEnvironment, shared_ptr<MovingEnvironment>>(
         m, "MovingEnvironment")
@@ -449,6 +524,9 @@ PYBIND11_MODULE(block2, m) {
                     self->site_op_infos, self->ket->info->n_syms);
             })
         .def("init_environments", &MovingEnvironment::init_environments)
+        .def("prepare", &MovingEnvironment::prepare)
+        .def("move_to", &MovingEnvironment::move_to)
+        .def("eff_ham", &MovingEnvironment::eff_ham)
         .def("deallocate", &MovingEnvironment::deallocate);
 
     py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")

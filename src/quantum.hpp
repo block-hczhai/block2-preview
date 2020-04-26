@@ -231,6 +231,13 @@ struct MatrixRef {
         }
         return os;
     }
+    double trace() const {
+        assert(m == n);
+        double r = 0;
+        for (int i = 0; i < m; i++)
+            r += this->operator()(i, i);
+        return r;
+    }
 };
 
 struct DiagonalMatrix : MatrixRef {
@@ -874,9 +881,11 @@ struct OpSum : OpExpr {
         return true;
     }
     friend ostream &operator<<(ostream &os, const OpSum &c) {
-        for (size_t i = 0; i < c.strings.size() - 1; i++)
-            os << *c.strings[i] << " + ";
-        os << *c.strings.back();
+        if (c.strings.size() != 0) {
+            for (size_t i = 0; i < c.strings.size() - 1; i++)
+                os << *c.strings[i] << " + ";
+            os << *c.strings.back();
+        }
         return os;
     }
 };
@@ -1392,7 +1401,7 @@ struct StateInfo {
     static StateInfo get_collected_info(const StateInfo &a, const StateInfo &b,
                                         const StateInfo &c) {
         map<SpinLabel, vector<uint32_t>> mp;
-        int nc = 0;
+        int nc = 0, iab = 0;
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {
                 SpinLabel qc = a.quanta[i] + b.quanta[j];
@@ -1402,12 +1411,13 @@ struct StateInfo {
             }
         StateInfo ci;
         ci.allocate(nc);
-        for (int ic = 0, iab = 0; ic < c.n; ic++) {
+        for (int ic = 0; ic < c.n; ic++) {
             vector<uint32_t> &v = mp.at(c.quanta[ic]);
             ci.n_states[ic] = iab;
             memcpy(ci.quanta + iab, &v[0], v.size() * sizeof(uint32_t));
             iab += v.size();
         }
+        ci.reallocate(iab);
         ci.n_states_total = c.n;
         return ci;
     }
@@ -1689,6 +1699,18 @@ struct SparseMatrixInfo {
             stride = nullptr;
             ia = ib = ic = nullptr;
             n = nc = -1;
+        }
+        friend ostream &operator<<(ostream &os, const CollectedInfo &ci) {
+            os << "CI N=" << ci.n << " NC=" << ci.nc << endl;
+            for (int i = 0; i < ci.n; i++)
+                os << "(BRA) " << ci.quanta[i].get_bra(SpinLabel(0)) << " KET "
+                   << -ci.quanta[i].get_ket() << " [ " << (int)ci.idx[i] << "~"
+                   << (int)(i != ci.n - 1 ? ci.idx[i + 1] : ci.nc) << " ]"
+                   << endl;
+            for (int i = 0; i < ci.nc; i++)
+                os << setw(4) << i << " IA=" << ci.ia[i] << " IB=" << ci.ib[i]
+                   << " IC=" << ci.ic[i] << " STR=" << ci.stride[i] << endl;
+            return os;
         }
     };
     shared_ptr<CollectedInfo> cinfo;
@@ -2001,7 +2023,7 @@ struct MatrixFunctions {
     static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
                                         const MatrixRef &c, double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
-        const double cfactor = 0.0;
+        const double cfactor = 1.0;
         const int k = 1, lda = a.n + 1, ldb = b.n + 1;
         dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
               &cfactor, c.data, &c.n);
@@ -2010,7 +2032,7 @@ struct MatrixFunctions {
                                const MatrixRef &b, bool conjb,
                                const MatrixRef &c, double scale,
                                uint32_t stride) {
-        const double cfactor = 0.0;
+        const double cfactor = 1.0;
         if (!conja and !conjb) {
             if (a.m == 1 && a.n == 1) {
                 if (b.n == c.n) {
@@ -2123,6 +2145,8 @@ struct MatrixFunctions {
         q.allocate();
         q.clear();
         int l = k, ck = 0, msig = 0, m = k, xiter = 0;
+        if (iprint)
+            cout << endl;
         while (xiter < max_iter) {
             xiter++;
             for (int i = msig; i < m; i++, msig++)
@@ -2264,19 +2288,24 @@ struct SparseMatrix {
         return MatrixRef(data + info->n_states_total[idx],
                          info->n_states_bra[idx], info->n_states_ket[idx]);
     }
+    double trace() const {
+        double r = 0;
+        for (int i = 0; i < info->n; i++)
+            r += this->operator[](i).trace();
+        return r;
+    }
     void left_canonicalize(const shared_ptr<SparseMatrix> &rmat) {
         int nr = rmat->info->n, n = info->n;
-        uint32_t *tmp = ialloc->allocate(nr);
-        memset(tmp, 0, sizeof(uint32_t) * nr);
+        uint32_t *tmp = ialloc->allocate(nr + 1);
+        memset(tmp, 0, sizeof(uint32_t) * (nr + 1));
         for (int i = 0; i < n; i++) {
             int ir = rmat->info->find_state(info->quanta[i].get_ket());
             assert(ir != -1);
-            tmp[ir] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            tmp[ir + 1] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
         }
-        size_t total_tmp_memory = 0;
-        for (int i = 0; i < nr; i++)
-            total_tmp_memory += (size_t)tmp[i];
-        double *dt = dalloc->allocate(total_tmp_memory);
+        for (int ir = 0; ir < nr; ir++)
+            tmp[ir + 1] += tmp[ir];
+        double *dt = dalloc->allocate(tmp[nr]);
         uint32_t *it = ialloc->allocate(nr);
         memset(it, 0, sizeof(uint32_t) * nr);
         for (int i = 0; i < n; i++) {
@@ -2287,11 +2316,13 @@ struct SparseMatrix {
                    n_states * sizeof(double));
             it[ir] += n_states;
         }
-        for (int i = 0; i < nr; i++) {
-            uint32_t nr = rmat->info->n_states_ket[i], nl = tmp[i] / nr;
-            assert(tmp[i] % nr == 0 && nl >= nr);
-            MatrixFunctions::qr(MatrixRef(dt + tmp[i], nl, nr),
-                                MatrixRef(dt + tmp[i], nl, nr), (*rmat)[i]);
+        for (int ir = 0; ir < nr; ir++)
+            assert(it[ir] == tmp[ir + 1] - tmp[ir]);
+        for (int ir = 0; ir < nr; ir++) {
+            uint32_t nxr = rmat->info->n_states_ket[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
+            assert((tmp[ir + 1] - tmp[ir]) % nxr == 0 && nxl >= nxr);
+            MatrixFunctions::qr(MatrixRef(dt + tmp[ir], nxl, nxr),
+                                MatrixRef(dt + tmp[ir], nxl, nxr), (*rmat)[ir]);
         }
         memset(it, 0, sizeof(uint32_t) * nr);
         for (int i = 0; i < n; i++) {
@@ -2303,56 +2334,57 @@ struct SparseMatrix {
             it[ir] += n_states;
         }
         ialloc->deallocate(it, nr);
-        dalloc->deallocate(dt, total_tmp_memory);
-        ialloc->deallocate(tmp, nr);
+        dalloc->deallocate(dt, tmp[nr]);
+        ialloc->deallocate(tmp, nr + 1);
     }
     void right_canonicalize(const shared_ptr<SparseMatrix> &lmat) {
         int nl = lmat->info->n, n = info->n;
-        uint32_t *tmp = ialloc->allocate(nl);
-        memset(tmp, 0, sizeof(uint32_t) * nl);
+        uint32_t *tmp = ialloc->allocate(nl + 1);
+        memset(tmp, 0, sizeof(uint32_t) * (nl + 1));
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
             assert(il != -1);
-            tmp[il] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            tmp[il + 1] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
         }
-        size_t total_tmp_memory = 0;
-        for (int i = 0; i < nl; i++)
-            total_tmp_memory += (size_t)tmp[i];
-        double *dt = dalloc->allocate(total_tmp_memory);
+        for (int il = 0; il < nl; il++)
+            tmp[il + 1] += tmp[il];
+        double *dt = dalloc->allocate(tmp[nl]);
         uint32_t *it = ialloc->allocate(nl);
         memset(it, 0, sizeof(uint32_t) * nl);
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
-            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
+            uint32_t nxl = info->n_states_bra[i], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             uint32_t inr = info->n_states_ket[i];
-            for (uint32_t k = 0; k < nl; k++)
-                memcpy(dt + (tmp[il] + it[il] + k * nr),
+            for (uint32_t k = 0; k < nxl; k++)
+                memcpy(dt + (tmp[il] + it[il] + k * nxr),
                        data + info->n_states_total[i] + k * inr,
                        inr * sizeof(double));
-            it[il] += inr;
+            it[il] += inr * nxl;
         }
-        for (int i = 0; i < nl; i++) {
-            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
-            assert(tmp[i] % nl == 0 && nr >= nl);
-            MatrixFunctions::lq(MatrixRef(dt + tmp[i], nl, nr), (*lmat)[i],
-                                MatrixRef(dt + tmp[i], nl, nr));
+        for (int il = 0; il < nl; il++)
+            assert(it[il] == tmp[il + 1] - tmp[il]);
+        for (int il = 0; il < nl; il++) {
+            uint32_t nxl = lmat->info->n_states_bra[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
+            assert((tmp[il + 1] - tmp[il]) % nxl == 0 && nxr >= nxl);
+            MatrixFunctions::lq(MatrixRef(dt + tmp[il], nxl, nxr), (*lmat)[il],
+                                MatrixRef(dt + tmp[il], nxl, nxr));
         }
         memset(it, 0, sizeof(uint32_t) * nl);
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
-            uint32_t nl = lmat->info->n_states_bra[i], nr = tmp[i] / nl;
+            uint32_t nxl = info->n_states_bra[i], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             uint32_t inr = info->n_states_ket[i];
-            for (uint32_t k = 0; k < nl; k++)
+            for (uint32_t k = 0; k < nxl; k++)
                 memcpy(data + info->n_states_total[i] + k * inr,
-                       dt + (tmp[il] + it[il] + k * nr), inr * sizeof(double));
-            it[il] += inr;
+                       dt + (tmp[il] + it[il] + k * nxr), inr * sizeof(double));
+            it[il] += inr * nxl;
         }
         ialloc->deallocate(it, nl);
-        dalloc->deallocate(dt, total_tmp_memory);
-        ialloc->deallocate(tmp, nl);
+        dalloc->deallocate(dt, tmp[nl]);
+        ialloc->deallocate(tmp, nl + 1);
     }
     void randomize(double a = 0.0, double b = 1.0) const {
         Random::fill_rand_double(data, total_memory, a, b);
@@ -2501,7 +2533,7 @@ struct OperatorFunctions {
         assert(a.info->n == b.info->n && a.total_memory == b.total_memory);
         if (a.factor != 1.0) {
             MatrixFunctions::iscale(MatrixRef(a.data, 1, a.total_memory),
-                                    1.0 / a.factor);
+                                    a.factor);
             a.factor = 1.0;
         }
         if (scale != 0.0)
@@ -2538,7 +2570,7 @@ struct OperatorFunctions {
             return;
         SpinLabel adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
                   cdq = c.info->delta_quantum;
-        int adqs = adq.twos(), bdqs = bdq.twos(), cdqs = cdq.twos();
+        int adqs = adq.twos(), bdqs = bdq.twos(), opdqs = opdq.twos();
         assert(c.info->cinfo != nullptr);
         shared_ptr<SparseMatrixInfo::CollectedInfo> cinfo = c.info->cinfo;
         SpinLabel abdq = opdq.combine(adq, -bdq);
@@ -2551,12 +2583,12 @@ struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             SpinLabel aq = a.info->quanta[ia];
             SpinLabel bq = b.info->quanta[ib];
-            SpinLabel cq = c.info->quanta[ic];
+            SpinLabel cq = cdq;
             double factor =
-                sqrt((cq.twos() + 1) * (cdqs + 1) * (aq.twos() + 1) *
+                sqrt((cq.twos() + 1) * (opdqs + 1) * (aq.twos() + 1) *
                      (bq.twos() + 1)) *
-                cg->wigner_9j(aq.twos(), bq.twos(), cq.twos(), adqs, bdqs, cdqs,
-                              aq.twos(), bq.twos(), cq.twos());
+                cg->wigner_9j(aq.twos(), bq.twos(), cq.twos(), adqs, bdqs,
+                              opdqs, aq.twos(), bq.twos(), cq.twos());
             factor *= (b.info->is_fermion && (aq.n() & 1)) ? -1 : 1;
             MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
                                                      scale * factor);
@@ -2630,6 +2662,7 @@ struct OperatorFunctions {
                                           cqprime.twos(), adqs, bdqs, cdqs,
                                           aq.twos(), bq.twos(), cq.twos());
             factor *= (b.info->is_fermion && (aqprime.n() & 1)) ? -1 : 1;
+            assert(a[ia].n <= c[ic].n && b[ib].n <= c[ic].n);
             MatrixFunctions::tensor_product(a[ia], a.conj, b[ib], b.conj, c[ic],
                                             scale * factor, stride);
         }
@@ -3505,7 +3538,10 @@ struct EffectiveHamiltonian {
                                     opdq);
         diag_info->deallocate();
         // temp wavefunction
-        cmat = vmat = psi;
+        cmat = make_shared<SparseMatrix>();
+        vmat = make_shared<SparseMatrix>();
+        *cmat = *psi;
+        *vmat = *psi;
         // temp wavefunction info
         shared_ptr<SparseMatrixInfo::CollectedInfo> wfn_info =
             make_shared<SparseMatrixInfo::CollectedInfo>();
@@ -3527,7 +3563,8 @@ struct EffectiveHamiltonian {
         DiagonalMatrix aa(diag->data, diag->total_memory);
         vector<MatrixRef> bs =
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
-        vector<double> eners = MatrixFunctions::davidson(*this, aa, bs, ndav);
+        vector<double> eners =
+            MatrixFunctions::davidson(*this, aa, bs, ndav, true);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
@@ -3697,7 +3734,7 @@ struct MovingEnvironment {
             vector<vector<SpinLabel>> rsubsl = Partition::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[center + 1], rsl);
             Partition::init_right_op_infos(
-                center, bra->info, ket->info, rsl, rsubsl,
+                center + 1, bra->info, ket->info, rsl, rsubsl,
                 envs[center]->right_op_infos,
                 site_op_infos[bra->info->orbsym[center + 1]], ph,
                 right_op_infos_notrunc, true);
@@ -3911,6 +3948,9 @@ struct DMRG {
         }
         shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham();
         auto pdi = h_eff->eigs();
+        cout << pdi.first << " " << pdi.second << endl;
+        cout << ialloc->used << " " << dalloc->used << endl;
+        abort();
         h_eff->deallocate();
         shared_ptr<SparseMatrix> dm = me->density_matrix(h_eff, forward, noise);
         double error = me->split_density_matrix(dm, h_eff->psi, (int)bond_dim,
