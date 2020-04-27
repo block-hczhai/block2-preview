@@ -12,8 +12,7 @@ class TestMatrix : public ::testing::Test {
     struct MatMul {
         MatrixRef a;
         MatMul(const MatrixRef &a) : a(a) {}
-        void operator()(const MatrixRef &b,
-                        const MatrixRef &c) {
+        void operator()(const MatrixRef &b, const MatrixRef &c) {
             MatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
@@ -103,13 +102,20 @@ TEST_F(TestMatrix, TestDavidson) {
             bs[i].data[i] = 1;
         }
         MatMul mop(a);
-        vector<double> vw = MatrixFunctions::davidson(mop,
-            aa, bs, ndav, false, 1E-8, n * k * 2, k, max(5, k + 10));
+        vector<double> vw = MatrixFunctions::davidson(
+            mop, aa, bs, ndav, false, 1E-8, n * k * 2, k * 2, max(5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         DiagonalMatrix w(&vw[0], k);
         MatrixFunctions::eigs(a, ww);
         DiagonalMatrix w2(ww.data, k);
         ASSERT_TRUE(MatrixFunctions::all_close(w, w2, 1E-6, 0.0));
+        for (int i = 0; i < k; i++)
+            ASSERT_TRUE(
+                MatrixFunctions::all_close(
+                    bs[i], MatrixRef(a.data + a.n * i, a.n, 1), 1E-3, 0.0) ||
+                MatrixFunctions::all_close(bs[i],
+                                           MatrixRef(a.data + a.n * i, a.n, 1),
+                                           1E-3, 0.0, -1.0));
         for (int i = k - 1; i >= 0; i--)
             bs[i].deallocate();
         ww.deallocate();
