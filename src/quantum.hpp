@@ -3582,7 +3582,7 @@ struct EffectiveHamiltonian {
         vector<MatrixRef> bs =
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         vector<double> eners =
-            MatrixFunctions::davidson(*this, aa, bs, ndav, false);
+            MatrixFunctions::davidson(*this, aa, bs, ndav, true);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
@@ -4349,7 +4349,7 @@ struct Hamiltonian {
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(find_site_op_info(op.q_label, orb_sym[m]));
                     tmp->copy_data(*op_prims[0].at(OpNames::R));
-                    tmp->factor *= v(i, m, m, m);
+                    tmp->factor = v(i, m, m, m);
                     opf->iadd(*p.second, *tmp);
                     tmp->deallocate();
                 }
@@ -4367,7 +4367,7 @@ struct Hamiltonian {
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(find_site_op_info(op.q_label, orb_sym[m]));
                     tmp->copy_data(*op_prims[0].at(OpNames::RD));
-                    tmp->factor *= v(i, m, m, m);
+                    tmp->factor = v(i, m, m, m);
                     opf->iadd(*p.second, *tmp);
                     tmp->deallocate();
                 }

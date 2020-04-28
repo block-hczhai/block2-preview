@@ -23,8 +23,8 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     // string filename = "data/CR2.SVP.FCIDUMP";
-    // string filename = "data/N2.STO3G.FCIDUMP";
-    string filename = "data/HUBBARD-L8.FCIDUMP";
+    string filename = "data/N2.STO3G.FCIDUMP";
+    // string filename = "data/HUBBARD-L8.FCIDUMP";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -71,7 +71,7 @@ TEST_F(TestDMRG, Test) {
     cout << endl;
 
     // MPS
-    Random::rand_seed(1969);
+    // Random::rand_seed(1969);
     shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     cout << ialloc->used << " mpsi " << dalloc->used << endl;
     mps->initialize(mps_info);

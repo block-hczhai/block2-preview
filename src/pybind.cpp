@@ -344,9 +344,12 @@ PYBIND11_MODULE(block2, m) {
                                    return py::array_t<double>(
                                        self->total_memory, self->data);
                                })
+        .def("clear", &SparseMatrix::clear)
         .def("copy_data", &SparseMatrix::copy_data)
-        .def("allocate", &SparseMatrix::allocate, py::arg("info"),
-             py::arg("ptr") = nullptr)
+        .def("allocate",
+             [](SparseMatrix *self, const shared_ptr<SparseMatrixInfo> &info) {
+                 self->allocate(info);
+             })
         .def("deallocate", &SparseMatrix::deallocate)
         .def("reallocate", &SparseMatrix::reallocate, py::arg("length"))
         .def("__getitem__",
@@ -423,7 +426,8 @@ PYBIND11_MODULE(block2, m) {
 
     py::class_<OperatorFunctions, shared_ptr<OperatorFunctions>>(
         m, "OperatorFunctions")
-        .def(py::init<const shared_ptr<CG> &>());
+        .def(py::init<const shared_ptr<CG> &>())
+        .def("tensor_product", &OperatorFunctions::tensor_product);
 
     py::class_<OperatorTensor, shared_ptr<OperatorTensor>>(m, "OperatorTensor")
         .def(py::init<>())
@@ -448,6 +452,7 @@ PYBIND11_MODULE(block2, m) {
     py::class_<TensorFunctions, shared_ptr<TensorFunctions>>(m,
                                                              "TensorFunctions")
         .def(py::init<const shared_ptr<OperatorFunctions> &>())
+        .def_readwrite("opf", &TensorFunctions::opf)
         .def_static("left_assign", &TensorFunctions::left_assign, py::arg("a"),
                     py::arg("c"))
         .def_static("right_assign", &TensorFunctions::right_assign,
@@ -565,6 +570,9 @@ PYBIND11_MODULE(block2, m) {
                                    return make_pair(self->op_prims[0],
                                                     self->op_prims[1]);
                                })
+        .def("v", &Hamiltonian::v)
+        .def("t", &Hamiltonian::t)
+        .def("e", &Hamiltonian::e)
         .def_property_readonly(
             "site_op_infos",
             [](Hamiltonian *self) {
