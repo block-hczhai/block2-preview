@@ -1,5 +1,6 @@
 
 #include "quantum.hpp"
+#include <tuple>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
@@ -9,6 +10,8 @@ using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
+PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
+PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement>>);
@@ -73,6 +76,8 @@ PYBIND11_MODULE(block2, m) {
     m.doc() = "python interface for block 2.0.";
 
     py::bind_vector<vector<int>>(m, "VectorInt");
+    py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
+    py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
         .def_property_readonly(
             "ptr",
@@ -495,6 +500,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("vmat", &EffectiveHamiltonian::vmat)
         .def_readwrite("tf", &EffectiveHamiltonian::tf)
         .def_readwrite("opdq", &EffectiveHamiltonian::opdq)
+        .def("eigs", &EffectiveHamiltonian::eigs)
         .def("deallocate", &EffectiveHamiltonian::deallocate);
 
     py::class_<MovingEnvironment, shared_ptr<MovingEnvironment>>(
@@ -527,6 +533,15 @@ PYBIND11_MODULE(block2, m) {
         .def("prepare", &MovingEnvironment::prepare)
         .def("move_to", &MovingEnvironment::move_to)
         .def("eff_ham", &MovingEnvironment::eff_ham)
+        .def("density_matrix", &MovingEnvironment::density_matrix)
+        .def("split_density_matrix",
+             [](MovingEnvironment *self, const shared_ptr<SparseMatrix> &dm,
+                const shared_ptr<SparseMatrix> &wfn, int k, bool trace_right) {
+                 shared_ptr<SparseMatrix> left = nullptr, right = nullptr;
+                 double error = self->split_density_matrix(
+                     dm, wfn, k, trace_right, left, right);
+                 return make_tuple(error, left, right);
+             })
         .def("deallocate", &MovingEnvironment::deallocate);
 
     py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")
@@ -558,6 +573,32 @@ PYBIND11_MODULE(block2, m) {
                     self->site_op_infos, self->n_syms);
             })
         .def("deallocate", &Hamiltonian::deallocate);
+    
+    py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "Iteration")
+        .def(py::init<double, double, int>())
+        .def_readwrite("energy", &DMRG::Iteration::energy)
+        .def_readwrite("error", &DMRG::Iteration::error)
+        .def_readwrite("ndav", &DMRG::Iteration::ndav)
+        .def("__repr__", [](DMRG::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<DMRG, shared_ptr<DMRG>>(m, "DMRG")
+        .def(py::init<const shared_ptr<MovingEnvironment> &,
+                      const vector<uint16_t> &, const vector<double> &>())
+        .def_readwrite("me", &DMRG::me)
+        .def_readwrite("bond_dims", &DMRG::bond_dims)
+        .def_readwrite("noises", &DMRG::noises)
+        .def_readwrite("energies", &DMRG::energies)
+        .def_readwrite("forward", &DMRG::forward)
+        .def("contract_two_dot", &DMRG::contract_two_dot)
+        .def("update_two_dot", &DMRG::update_two_dot)
+        .def("blocking", &DMRG::blocking)
+        .def("sweep", &DMRG::sweep)
+        .def("solve", &DMRG::solve, py::arg("n_sweeps"), py::arg("tol") = 1E-6,
+             py::arg("forward") = true);
 
     py::class_<MPO, shared_ptr<MPO>>(m, "MPO")
         .def(py::init<int>())

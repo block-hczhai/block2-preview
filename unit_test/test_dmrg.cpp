@@ -71,6 +71,7 @@ TEST_F(TestDMRG, Test) {
     cout << endl;
 
     // MPS
+    Random::rand_seed(1969);
     shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     cout << ialloc->used << " mpsi " << dalloc->used << endl;
     mps->initialize(mps_info);
@@ -91,8 +92,14 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     shared_ptr<DMRG> dmrg =
-        make_shared<DMRG>(me, vector<uint16_t>{500}, vector<double>{0.0});
-    dmrg->solve(1);
+        make_shared<DMRG>(me, vector<uint16_t>{500}, vector<double>{0});
+    // dmrg->update_two_dot(0, true, 500, 0.0);
+    // dmrg->me->move_to(1);
+    // dmrg->contract_two_dot(1);
+    // dmrg->update_two_dot(1, true, 500, 0.0);
+    // cout << *me->ket->tensors[2]->info << endl;
+    // cout << *me->ket->tensors[2] << endl;
+    dmrg->solve(10, true);
 
     // Deallocation
     me->deallocate();

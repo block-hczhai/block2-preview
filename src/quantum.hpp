@@ -797,8 +797,8 @@ struct OpElement : OpExpr {
     size_t hash() const noexcept {
         size_t h = (size_t)name;
         for (auto r : site_index)
-            h ^= (size_t)r + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<double>{}(factor) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= (size_t)r + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= std::hash<double>{}(factor) + 0x9E3779B9 + (h << 6) + (h >> 2);
         return h;
     }
     friend ostream &operator<<(ostream &os, const OpElement &c) {
@@ -1797,7 +1797,7 @@ struct SparseMatrixInfo {
                 }
             else
                 for (int i = 0; i < wfn_info->n; i++) {
-                    SpinLabel q = wfn_info->quanta[i].get_ket();
+                    SpinLabel q = -wfn_info->quanta[i].get_ket();
                     int ii = find_state(q);
                     n_states_bra[ii] = n_states_ket[ii] =
                         wfn_info->n_states_ket[i];
@@ -1872,12 +1872,12 @@ struct SparseMatrixInfo {
             idx[i] = i;
         sort(idx, idx + n, [&q](int i, int j) { return q[i] < q[j]; });
         for (int i = 0; i < n; i++)
-            quanta[i] = q[idx[i]], n_states_bra[i] = nqb[idx[i]], n_states_ket[i] = nqk[idx[i]];
+            quanta[i] = q[idx[i]], n_states_bra[i] = nqb[idx[i]],
+            n_states_ket[i] = nqk[idx[i]];
         n_states_total[0] = 0;
         for (int i = 0; i < n - 1; i++)
             n_states_total[i + 1] =
-                n_states_total[i] +
-                (uint32_t)n_states_bra[i] * n_states_ket[i];
+                n_states_total[i] + (uint32_t)n_states_bra[i] * n_states_ket[i];
     }
     uint32_t get_total_memory() const {
         return n == 0 ? 0
@@ -2218,7 +2218,7 @@ struct MatrixFunctions {
             if (iprint)
                 cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
                      << fixed << setw(15) << setprecision(8) << ld.data[ck]
-                     << scientific << setw(9) << setprecision(2) << qq << endl;
+                     << scientific << setw(13) << setprecision(2) << qq << endl;
             olsen_precondition(q, bs[ck], ld.data[ck], aa);
             eigvals.resize(ck + 1);
             if (ck + 1 != 0)
@@ -2447,18 +2447,14 @@ struct SparseMatrix {
             int ik = old_fused.find_state(ket);
             int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ik + 1];
-            uint32_t p = 0;
+            uint32_t p = mat->info->n_states_total[i];
             for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
-                uint32_t lp = (uint32_t)l.n_states[ib] * m.n_states[ikka] *
-                              r.n_states[ikkb];
-                mp[(ib << 16) + ikka][ikkb] = make_pair(p, lp);
+                uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
+                mp[(ib << 16) + ikka][ikkb] = make_pair(p, old_fused.n_states[ik]);
                 p += lp;
             }
-            assert(p + mat->info->n_states_total[i] ==
-                   (i != mat->info->n - 1 ? mat->info->n_states_total[i + 1]
-                                          : mat->total_memory));
         }
         for (int i = 0; i < info->n; i++) {
             SpinLabel bra = info->quanta[i].get_bra(info->delta_quantum);
@@ -2471,14 +2467,15 @@ struct SparseMatrix {
             for (int bb = new_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
                 uint16_t ibba = new_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = new_fused_cinfo.quanta[bb].data & (0xFFFFU);
+                uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
                 if (mp.count(new_fused_cinfo.quanta[bb].data) &&
                     mp[new_fused_cinfo.quanta[bb].data].count(ik)) {
                     pair<uint32_t, uint32_t> &t =
                         mp.at(new_fused_cinfo.quanta[bb].data).at(ik);
-                    memcpy(ptr, mat->data + t.first, t.second * sizeof(double));
+                    for (int j = 0; j < l.n_states[ibba]; j++)
+                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second, lp * sizeof(double));
                 }
-                ptr += (size_t)l.n_states[ibba] * m.n_states[ibbb] *
-                       r.n_states[ik];
+                ptr += (size_t)l.n_states[ibba] * lp;
             }
             assert(ptr - data == (i != info->n - 1 ? info->n_states_total[i + 1]
                                                    : total_memory));
@@ -2500,18 +2497,17 @@ struct SparseMatrix {
             int ik = r.find_state(ket);
             int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ib + 1];
-            uint32_t p = 0;
+            uint32_t p = mat->info->n_states_total[i];
             for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
                 uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
-                uint32_t lp = (uint32_t)l.n_states[ibba] * m.n_states[ibbb] *
-                              r.n_states[ik];
+                uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
                 mp[(ibbb << 16) + ik][ibba] = make_pair(p, lp);
-                p += lp;
+                p += l.n_states[ibba] * lp;
             }
-            assert(p + mat->info->n_states_total[i] ==
-                   (i != mat->info->n - 1 ? mat->info->n_states_total[i + 1]
-                                          : mat->total_memory));
+            assert(p == (i != mat->info->n - 1
+                             ? mat->info->n_states_total[i + 1]
+                             : mat->total_memory));
         }
         for (int i = 0; i < info->n; i++) {
             SpinLabel bra = info->quanta[i].get_bra(info->delta_quantum);
@@ -2521,6 +2517,7 @@ struct SparseMatrix {
             int kked = ik == new_fused.n - 1 ? new_fused_cinfo.n
                                              : new_fused_cinfo.n_states[ik + 1];
             double *ptr = data + info->n_states_total[i];
+            uint32_t lp = new_fused.n_states[ik];
             for (int kk = new_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = new_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = new_fused_cinfo.quanta[kk].data & (0xFFFFU);
@@ -2528,13 +2525,11 @@ struct SparseMatrix {
                     mp[new_fused_cinfo.quanta[kk].data].count(ib)) {
                     pair<uint32_t, uint32_t> &t =
                         mp.at(new_fused_cinfo.quanta[kk].data).at(ib);
-                    memcpy(ptr, mat->data + t.first, t.second * sizeof(double));
+                    for (int j = 0; j < l.n_states[ib]; j++)
+                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second, t.second * sizeof(double));
                 }
-                ptr += (size_t)l.n_states[ib] * m.n_states[ikka] *
-                       r.n_states[ikkb];
+                ptr += (size_t)m.n_states[ikka] * r.n_states[ikkb];
             }
-            assert(ptr - data == (i != info->n - 1 ? info->n_states_total[i + 1]
-                                                   : total_memory));
         }
     }
     friend ostream &operator<<(ostream &os, const SparseMatrix &c) {
@@ -2738,8 +2733,6 @@ struct OperatorFunctions {
         if (noise != 0.0) {
             tmp.allocate(a.info);
             tmp.randomize(-1.0, 1.0);
-            MatrixFunctions::iscale(MatrixRef(tmp.data, tmp.total_memory, 1),
-                                    noise);
         }
         if (trace_right)
             for (int ia = 0; ia < a.info->n; ia++) {
@@ -2750,17 +2743,17 @@ struct OperatorFunctions {
                                           scale, 1.0);
                 if (noise != 0.0)
                     MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
-                                              b[ib], scale, 1.0);
+                                              b[ib], noise, 1.0);
             }
         else
             for (int ia = 0; ia < a.info->n; ia++) {
-                SpinLabel qb = a.info->quanta[ia].get_ket();
+                SpinLabel qb = -a.info->quanta[ia].get_ket();
                 int ib = b.info->find_state(qb);
                 MatrixFunctions::multiply(a[ia], true, a[ia], false, b[ib],
                                           scale, 1.0);
                 if (noise != 0.0)
                     MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
-                                              b[ib], scale, 1.0);
+                                              b[ib], noise, 1.0);
             }
         if (noise != 0.0)
             tmp.deallocate();
@@ -3021,8 +3014,9 @@ struct MPO {
     vector<shared_ptr<Symbolic>> right_operator_names;
     vector<shared_ptr<Symbolic>> middle_operator_names;
     int n_sites;
-    MPO(int n_sites) : n_sites(n_sites) {}
-    virtual void deallocate(){};
+    double const_e;
+    MPO(int n_sites) : n_sites(n_sites), const_e(0.0) {}
+    virtual void deallocate() {};
 };
 
 struct MPSInfo {
@@ -3285,7 +3279,8 @@ struct Partition {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::RVec);
-        opt->lmat = make_shared<SymbolicRowVector>(*dynamic_pointer_cast<SymbolicRowVector>(mat));
+        opt->lmat = make_shared<SymbolicRowVector>(
+            *dynamic_pointer_cast<SymbolicRowVector>(mat));
         for (size_t i = 0; i < mat->data.size(); i++)
             if (mat->data[i]->get_type() != OpTypes::Zero) {
                 shared_ptr<OpElement> cop =
@@ -3306,7 +3301,8 @@ struct Partition {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
         assert(mat != nullptr);
         assert(mat->get_type() == SymTypes::CVec);
-        opt->rmat = make_shared<SymbolicColumnVector>(*dynamic_pointer_cast<SymbolicColumnVector>(mat));
+        opt->rmat = make_shared<SymbolicColumnVector>(
+            *dynamic_pointer_cast<SymbolicColumnVector>(mat));
         for (size_t i = 0; i < mat->data.size(); i++)
             if (mat->data[i]->get_type() != OpTypes::Zero) {
                 shared_ptr<OpElement> cop =
@@ -3586,7 +3582,7 @@ struct EffectiveHamiltonian {
         vector<MatrixRef> bs =
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         vector<double> eners =
-            MatrixFunctions::davidson(*this, aa, bs, ndav, true);
+            MatrixFunctions::davidson(*this, aa, bs, ndav, false);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
@@ -3863,7 +3859,8 @@ struct MovingEnvironment {
         uint16_t idx_dm_to_wfn[dm->info->n];
         if (trace_right) {
             for (int i = 0; i < wfn->info->n; i++) {
-                SpinLabel pb = wfn->info->quanta[i].get_bra(wfn->info->delta_quantum);
+                SpinLabel pb =
+                    wfn->info->quanta[i].get_bra(wfn->info->delta_quantum);
                 idx_dm_to_wfn[dm->info->find_state(pb)] = i;
             }
             for (int i = 0; i < kk; i++) {
@@ -3872,7 +3869,8 @@ struct MovingEnvironment {
                 linfo->n_states_bra[i] = dm->info->n_states_bra[ilr[i]];
                 linfo->n_states_ket[i] = im[i];
                 rinfo->n_states_bra[i] = im[i];
-                rinfo->n_states_ket[i] = wfn->info->n_states_ket[idx_dm_to_wfn[ilr[i]]];
+                rinfo->n_states_ket[i] =
+                    wfn->info->n_states_ket[idx_dm_to_wfn[ilr[i]]];
             }
             linfo->n_states_total[0] = 0;
             for (int i = 0; i < kk - 1; i++)
@@ -3888,7 +3886,8 @@ struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 linfo->quanta[i] = wfn->info->quanta[idx_dm_to_wfn[ilr[i]]];
                 rinfo->quanta[i] = dm->info->quanta[ilr[i]];
-                linfo->n_states_bra[i] = wfn->info->n_states_bra[idx_dm_to_wfn[ilr[i]]];
+                linfo->n_states_bra[i] =
+                    wfn->info->n_states_bra[idx_dm_to_wfn[ilr[i]]];
                 linfo->n_states_ket[i] = im[i];
                 rinfo->n_states_bra[i] = im[i];
                 rinfo->n_states_ket[i] = dm->info->n_states_ket[ilr[i]];
@@ -3907,7 +3906,7 @@ struct MovingEnvironment {
         int iss = 0;
         if (trace_right)
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++) {
+                for (int j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(left->data + linfo->n_states_total[i] + j,
                                   linfo->n_states_bra[i], 1),
@@ -3915,11 +3914,10 @@ struct MovingEnvironment {
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
                             linfo->n_states_bra[i], 1),
                         linfo->n_states_ket[i], 1);
-                }
                 int iw = idx_dm_to_wfn[ss[iss].first];
                 int ir = right->info->find_state(wfn->info->quanta[iw]);
-                MatrixFunctions::multiply((*left)[i], true,
-                                          (*wfn)[iw], false,
+                assert(ir != -1);
+                MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw], false,
                                           (*right)[ir], 1.0, 0.0);
                 iss += im[i];
             }
@@ -3931,9 +3929,9 @@ struct MovingEnvironment {
                               (*right)[i].m, (*right)[i].n));
                 int iw = idx_dm_to_wfn[ss[iss].first];
                 int il = left->info->find_state(wfn->info->quanta[iw]);
-                MatrixFunctions::multiply((*wfn)[iw], false,
-                                          (*right)[i], false, (*left)[il], 1.0,
-                                          0.0);
+                assert(il != -1);
+                MatrixFunctions::multiply((*wfn)[iw], false, (*right)[i], true,
+                                          (*left)[il], 1.0, 0.0);
                 iss += im[i];
             }
         assert(iss == ss.size());
@@ -3949,7 +3947,7 @@ struct MovingEnvironment {
             envs[i]->deallocate_left_op_infos();
         }
     }
-}; // namespace block2
+};
 
 struct DMRG {
     shared_ptr<MovingEnvironment> me;
@@ -3972,20 +3970,24 @@ struct DMRG {
             return os;
         }
     };
+    void contract_two_dot(int i) {
+        shared_ptr<SparseMatrix> old_wfn = make_shared<SparseMatrix>();
+        shared_ptr<SparseMatrixInfo> old_wfn_info =
+            make_shared<SparseMatrixInfo>();
+        old_wfn_info->initialize_contract(me->ket->tensors[i]->info,
+                                          me->ket->tensors[i + 1]->info);
+        old_wfn->allocate(old_wfn_info);
+        old_wfn->contract(me->ket->tensors[i], me->ket->tensors[i + 1]);
+        me->bra->tensors[i] = old_wfn;
+        me->bra->tensors[i + 1] = nullptr;
+        me->ket->tensors[i] = old_wfn;
+        me->ket->tensors[i + 1] = nullptr;
+    }
     Iteration update_two_dot(int i, bool forward, uint16_t bond_dim,
                              double noise) {
         if (me->ket->tensors[i] != nullptr &&
-            me->ket->tensors[i + 1] != nullptr) {
-            shared_ptr<SparseMatrix> old_wfn = make_shared<SparseMatrix>();
-            shared_ptr<SparseMatrixInfo> old_wfn_info =
-                make_shared<SparseMatrixInfo>();
-            old_wfn_info->initialize_contract(me->ket->tensors[i]->info,
-                                              me->ket->tensors[i + 1]->info);
-            old_wfn->allocate(old_wfn_info);
-            old_wfn->contract(me->ket->tensors[i], me->ket->tensors[i + 1]);
-            me->ket->tensors[i] = old_wfn;
-            me->ket->tensors[i + 1] = nullptr;
-        }
+            me->ket->tensors[i + 1] != nullptr)
+            contract_two_dot(i);
         shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham();
         auto pdi = h_eff->eigs();
         h_eff->deallocate();
@@ -3994,53 +3996,65 @@ struct DMRG {
                                                 forward, me->ket->tensors[i],
                                                 me->ket->tensors[i + 1]);
         shared_ptr<StateInfo> info = nullptr;
+        shared_ptr<MPSInfo> bra_info = me->bra->info;
         shared_ptr<MPSInfo> ket_info = me->ket->info;
         StateInfo lm, lmc, mr, mrc;
         shared_ptr<SparseMatrixInfo> wfn_info = make_shared<SparseMatrixInfo>();
         shared_ptr<SparseMatrix> wfn = make_shared<SparseMatrix>();
+        bool swapped = false;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
+            bra_info->left_dims[i + 1] = *info;
             ket_info->left_dims[i + 1] = *info;
-            StateInfo l = ket_info->left_dims[i + 1],
-                      m = ket_info->basis[ket_info->orbsym[i + 1]],
-                      r = ket_info->right_dims[i + 2];
-            lm = StateInfo::tensor_product(l, m, ket_info->target);
-            lmc = StateInfo::get_collected_info(l, m, lm);
-            mr = StateInfo::tensor_product(m, r, ket_info->target);
-            mrc = StateInfo::get_collected_info(m, r, mr);
-            shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i + 1]->info;
-            wfn_info->initialize(lm, r, owinfo->delta_quantum,
-                                 owinfo->is_fermion, owinfo->is_wavefunction);
-            wfn->allocate(wfn_info);
-            wfn->swap_to_fused_left(me->ket->tensors[i + 1], l, m, r, mr, mrc,
-                                    lm, lmc);
-            me->ket->tensors[i + 1] = wfn;
+            if ((swapped = i + 1 != me->n_sites - 1)) {
+                StateInfo l = ket_info->left_dims[i + 1],
+                        m = ket_info->basis[ket_info->orbsym[i + 1]],
+                        r = ket_info->right_dims[i + 2];
+                lm = StateInfo::tensor_product(l, m, ket_info->target);
+                lmc = StateInfo::get_collected_info(l, m, lm);
+                mr = StateInfo::tensor_product(m, r, ket_info->target);
+                mrc = StateInfo::get_collected_info(m, r, mr);
+                shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i + 1]->info;
+                wfn_info->initialize(lm, r, owinfo->delta_quantum,
+                                    owinfo->is_fermion, owinfo->is_wavefunction);
+                wfn->allocate(wfn_info);
+                wfn->swap_to_fused_left(me->ket->tensors[i + 1], l, m, r, mr, mrc,
+                                        lm, lmc);
+                me->bra->tensors[i + 1] = wfn;
+                me->ket->tensors[i + 1] = wfn;
+            }
         } else {
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            bra_info->right_dims[i + 1] = *info;
             ket_info->right_dims[i + 1] = *info;
-            StateInfo l = ket_info->left_dims[i],
-                      m = ket_info->basis[ket_info->orbsym[i]],
-                      r = ket_info->right_dims[i + 1];
-            lm = StateInfo::tensor_product(l, m, ket_info->target);
-            lmc = StateInfo::get_collected_info(l, m, lm);
-            mr = StateInfo::tensor_product(m, r, ket_info->target);
-            mrc = StateInfo::get_collected_info(m, r, mr);
-            shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i]->info;
-            wfn_info->initialize(l, mr, owinfo->delta_quantum,
-                                 owinfo->is_fermion, owinfo->is_wavefunction);
-            wfn->allocate(wfn_info);
-            wfn->swap_to_fused_right(me->ket->tensors[i], l, m, r, lm, lmc, mr,
-                                     mrc);
-            me->ket->tensors[i] = wfn;
+            if ((swapped = i != 0)) {
+                StateInfo l = ket_info->left_dims[i],
+                        m = ket_info->basis[ket_info->orbsym[i]],
+                        r = ket_info->right_dims[i + 1];
+                lm = StateInfo::tensor_product(l, m, ket_info->target);
+                lmc = StateInfo::get_collected_info(l, m, lm);
+                mr = StateInfo::tensor_product(m, r, ket_info->target);
+                mrc = StateInfo::get_collected_info(m, r, mr);
+                shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i]->info;
+                wfn_info->initialize(l, mr, owinfo->delta_quantum,
+                                    owinfo->is_fermion, owinfo->is_wavefunction);
+                wfn->allocate(wfn_info);
+                wfn->swap_to_fused_right(me->ket->tensors[i], l, m, r, lm, lmc,
+                                         mr, mrc);
+                me->bra->tensors[i] = wfn;
+                me->ket->tensors[i] = wfn;
+            }
         }
-        lm.reallocate(0);
-        lmc.reallocate(0);
-        mr.reallocate(0);
-        mrc.reallocate(0);
-        wfn_info->reallocate(wfn_info->n);
-        wfn->reallocate(wfn->total_memory);
-        assert(ialloc->shift == 0);
-        return Iteration(pdi.first, error, pdi.second);
+        if (swapped) {
+            lm.reallocate(0);
+            lmc.reallocate(0);
+            mr.reallocate(0);
+            mrc.reallocate(0);
+            wfn_info->reallocate(wfn_info->n);
+            wfn->reallocate(wfn->total_memory);
+            assert(ialloc->shift == 0);
+        }
+        return Iteration(pdi.first + me->mpo->const_e, error, pdi.second);
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
         me->move_to(i);
@@ -4078,12 +4092,12 @@ struct DMRG {
         }
         return *min_element(energies.begin(), energies.end());
     }
-    double solve(int n_sweeps, double tol = 1E-6, bool forward = true) {
+    double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
             noises.resize(n_sweeps, noises.back());
-        Timer start;
+        Timer start, current;
         start.get_time();
         energies.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
@@ -4100,8 +4114,9 @@ struct DMRG {
                              noises[iw] == noises.back() &&
                              bond_dims[iw] == bond_dims.back();
             forward = !forward;
+            current.get_time();
             cout << "Time elapsed = " << setw(10) << setprecision(2)
-                 << start.get_time() << endl;
+                 << current.current - start.current << endl;
             if (converged)
                 break;
         }
@@ -4544,6 +4559,7 @@ struct Hamiltonian {
 
 struct QCMPO : MPO {
     QCMPO(const Hamiltonian &hamil) : MPO(hamil.n_sites) {
+        const_e = hamil.e();
         shared_ptr<OpElement> h_op =
             make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
         shared_ptr<OpElement> i_op =
