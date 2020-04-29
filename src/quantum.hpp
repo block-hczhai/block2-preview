@@ -1487,7 +1487,7 @@ struct SparseMatrixInfo {
                 vidx[k] = vic.size();
                 SpinLabel adq = subdq[k].get_bra(opdq),
                           bdq = -subdq[k].get_ket();
-                if (adq.data != 0 || bdq.data != 0)
+                if ((adq + bdq)[0].data != 0)
                     continue;
                 shared_ptr<SparseMatrixInfo> ainfo =
                     lower_bound(ainfos.begin(), ainfos.end(), adq, cmp_op_info)
@@ -1501,7 +1501,7 @@ struct SparseMatrixInfo {
                     SpinLabel aq = cinfo->quanta[ic].get_bra(cdq);
                     SpinLabel bq = -cinfo->quanta[ic].get_ket();
                     int ia = ainfo->find_state(aq), ib = binfo->find_state(bq);
-                    if (ia != -1 && ib != -1) {
+                    if (ia != -1 && ib != -1 && aq == aq.get_bra(adq) && bq == bq.get_bra(bdq)) {
                         via.push_back(ia);
                         vib.push_back(ib);
                         vic.push_back(ic);
@@ -2159,7 +2159,6 @@ struct MatrixFunctions {
         for (int i = 0; i < k; i++) {
             sigmas.push_back(MatrixRef(nullptr, bs[i].m, bs[i].n));
             sigmas[i].allocate();
-            sigmas[i].clear();
         }
         MatrixRef q(nullptr, bs[0].m, bs[0].n);
         q.allocate();
@@ -2169,8 +2168,10 @@ struct MatrixFunctions {
             cout << endl;
         while (xiter < max_iter) {
             xiter++;
-            for (int i = msig; i < m; i++, msig++)
+            for (int i = msig; i < m; i++, msig++) {
+                sigmas[i].clear();
                 op(bs[i], sigmas[i]);
+            }
             DiagonalMatrix ld(nullptr, m);
             MatrixRef alpha(nullptr, m, m);
             ld.allocate();
@@ -3582,7 +3583,7 @@ struct EffectiveHamiltonian {
         vector<MatrixRef> bs =
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         vector<double> eners =
-            MatrixFunctions::davidson(*this, aa, bs, ndav, true);
+            MatrixFunctions::davidson(*this, aa, bs, ndav, false);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
@@ -3685,12 +3686,10 @@ struct MovingEnvironment {
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
         for (int i = 1; i <= center; i++) {
-            cout << "iL = " << i << endl;
             init_left_op_infos(i);
             left_contract_rotate(i);
         }
         for (int i = n_sites - dot - 1; i >= center; i--) {
-            cout << "iR = " << i << endl;
             init_right_op_infos(i);
             right_contract_rotate(i);
         }

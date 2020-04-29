@@ -352,6 +352,7 @@ PYBIND11_MODULE(block2, m) {
              })
         .def("deallocate", &SparseMatrix::deallocate)
         .def("reallocate", &SparseMatrix::reallocate, py::arg("length"))
+        .def("trace", &SparseMatrix::trace)
         .def("__getitem__",
              [](SparseMatrix *self, int idx) { return (*self)[idx]; })
         .def("left_canonicalize", &SparseMatrix::left_canonicalize,
@@ -460,7 +461,8 @@ PYBIND11_MODULE(block2, m) {
         .def("left_contract", &TensorFunctions::left_contract, py::arg("a"),
              py::arg("b"), py::arg("c"))
         .def("right_contract", &TensorFunctions::right_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"));
+             py::arg("b"), py::arg("c"))
+        .def("tensor_product_diagonal", &TensorFunctions::tensor_product_diagonal);
 
     py::class_<Partition, shared_ptr<Partition>>(m, "Partition")
         .def(py::init<const shared_ptr<OperatorTensor> &,
