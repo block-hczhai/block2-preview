@@ -548,8 +548,7 @@ PYBIND11_MODULE(block2, m) {
                  double error = self->split_density_matrix(
                      dm, wfn, k, trace_right, left, right);
                  return make_tuple(error, left, right);
-             })
-        .def("deallocate", &MovingEnvironment::deallocate);
+             });
 
     py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")
         .def(py::init<SpinLabel, SpinLabel, int, bool,
