@@ -55,7 +55,8 @@ template <typename T> struct StackAllocator {
     T *allocate(size_t n) {
         assert(shift == 0);
         if (used + n >= size) {
-            cout << "exceeding allowed memory" << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
+            cout << "exceeding allowed memory"
+                 << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
             print_trace(11);
             return 0;
         } else
@@ -178,7 +179,8 @@ struct Parsing {
     static int to_int(const string &x) { return atoi(x.c_str()); }
     static double to_double(const string &x) { return atof(x.c_str()); }
     static string to_string(int i) {
-        stringstream ss; ss << i;
+        stringstream ss;
+        ss << i;
         return ss.str();
     }
     static bool file_exists(const string &name) {
@@ -189,11 +191,8 @@ struct Parsing {
         struct stat buffer;
         return stat(name.c_str(), &buffer) == 0 && (buffer.st_mode & S_IFDIR);
     }
-    static void mkdir(const string &name) {
-        ::mkdir(name.c_str(), 0755);
-    }
+    static void mkdir(const string &name) { ::mkdir(name.c_str(), 0755); }
 };
-
 
 struct DataFrame {
     string save_dir = "node0", prefix = "F0";
@@ -201,7 +200,8 @@ struct DataFrame {
     uint16_t n_frames, i_frame;
     vector<StackAllocator<uint32_t>> iallocs;
     vector<StackAllocator<double>> dallocs;
-    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30, double main_ratio = 0.7, uint16_t n_frames = 2)
+    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
+              double main_ratio = 0.7, uint16_t n_frames = 2)
         : n_frames(n_frames) {
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
@@ -233,18 +233,18 @@ struct DataFrame {
     }
     void load_data(uint16_t i, const string &filename) const {
         ifstream ifs(filename.c_str(), ios::binary);
-        ifs.read((char*)&dallocs[i].used, sizeof(dallocs[i].used));
-        ifs.read((char*)dallocs[i].data, sizeof(double) * dallocs[i].used);
-        ifs.read((char*)&iallocs[i].used, sizeof(iallocs[i].used));
-        ifs.read((char*)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+        ifs.read((char *)&dallocs[i].used, sizeof(dallocs[i].used));
+        ifs.read((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
+        ifs.read((char *)&iallocs[i].used, sizeof(iallocs[i].used));
+        ifs.read((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
         ifs.close();
     }
     void save_data(uint16_t i, const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
-        ofs.write((char*)&dallocs[i].used, sizeof(dallocs[i].used));
-        ofs.write((char*)dallocs[i].data, sizeof(double) * dallocs[i].used);
-        ofs.write((char*)&iallocs[i].used, sizeof(iallocs[i].used));
-        ofs.write((char*)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+        ofs.write((char *)&dallocs[i].used, sizeof(dallocs[i].used));
+        ofs.write((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
+        ofs.write((char *)&iallocs[i].used, sizeof(iallocs[i].used));
+        ofs.write((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
         ofs.close();
     }
     void deallocate() {
@@ -254,10 +254,14 @@ struct DataFrame {
         dallocs.clear();
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
-        os << "persistent memory used :: I = " << df.iallocs[0].used << "(" << (df.iallocs[0].used * 100 / df.iallocs[0].size) << "%)"
-            << " D = " << df.dallocs[0].used << "(" << (df.dallocs[0].used * 100 / df.dallocs[0].size) << "%)" << endl;
-        os << "exclusive  memory used :: I = " << df.iallocs[1].used << "(" << (df.iallocs[1].used * 100 / df.iallocs[1].size) << "%)"
-            << " D = " << df.dallocs[1].used << "(" << (df.dallocs[1].used * 100 / df.dallocs[1].size) << "%)" << endl;
+        os << "persistent memory used :: I = " << df.iallocs[0].used << "("
+           << (df.iallocs[0].used * 100 / df.iallocs[0].size) << "%)"
+           << " D = " << df.dallocs[0].used << "("
+           << (df.dallocs[0].used * 100 / df.dallocs[0].size) << "%)" << endl;
+        os << "exclusive  memory used :: I = " << df.iallocs[1].used << "("
+           << (df.iallocs[1].used * 100 / df.iallocs[1].size) << "%)"
+           << " D = " << df.dallocs[1].used << "("
+           << (df.dallocs[1].used * 100 / df.dallocs[1].size) << "%)" << endl;
         return os;
     }
 };
@@ -718,10 +722,12 @@ struct SpinLabel {
         : data((uint32_t)((n << 24) | (twos << 16) | (twos << 8) | pg)) {}
     SpinLabel(int n, int twos_low, int twos, int pg)
         : data((uint32_t)((n << 24) | (twos_low << 16) | (twos << 8) | pg)) {}
-    int n() const { return (int)(((int32_t)data) >> 24); }
-    int twos() const { return (int)(int16_t)((data >> 8) & 0xFFU); }
-    int twos_low() const { return (int)(int16_t)((data >> 16) & 0xFFU); }
-    int pg() const { return (int)(data & 0xFFU); }
+    int n() const noexcept { return (int)(((int32_t)data) >> 24); }
+    int twos() const noexcept { return (int)(int16_t)((data >> 8) & 0xFFU); }
+    int twos_low() const noexcept {
+        return (int)(int16_t)((data >> 16) & 0xFFU);
+    }
+    int pg() const noexcept { return (int)(data & 0xFFU); }
     void set_n(int n) { data = (data & 0xFFFFFFU) | ((uint32_t)(n << 24)); }
     void set_twos(int twos) {
         data = (data & (~0xFFFF00U)) | ((uint32_t)((twos & 0xFFU) << 16)) |
@@ -813,7 +819,6 @@ struct SpinLabel {
     }
 };
 
-
 enum struct OpNames : uint8_t {
     H,
     I,
@@ -841,20 +846,71 @@ inline ostream &operator<<(ostream &os, const OpNames c) {
     return os;
 }
 
-enum struct OpTypes { Zero, Elem, Prod, Sum };
+enum struct OpTypes : uint8_t { Zero, Elem, Prod, Sum, ElemRef };
 
 struct OpExpr {
     virtual const OpTypes get_type() const { return OpTypes::Zero; }
     bool operator==(const OpExpr &other) const { return true; }
 };
 
+struct SiteIndex {
+    uint32_t data;
+    SiteIndex() : data(0) {}
+    SiteIndex(uint8_t i) : data(1U | (i << 8)) {}
+    SiteIndex(uint8_t i, uint8_t j, uint8_t s)
+        : data(2U | 4U | (i << 8) | (j << 16) | (s << 4)) {}
+    uint8_t size() const noexcept { return (uint8_t)(data & 3); }
+    uint8_t spin_size() const noexcept { return (uint8_t)((data >> 2) & 3); }
+    uint8_t s(uint8_t i = 0) const noexcept {
+        return !!(data & (1U << (4 + i)));
+    }
+    uint8_t operator[](uint8_t i) const noexcept {
+        return (data >> (1U << (3 + i))) & 0xFFU;
+    }
+    bool operator==(SiteIndex other) const noexcept {
+        return data == other.data;
+    }
+    bool operator!=(SiteIndex other) const noexcept {
+        return data != other.data;
+    }
+    bool operator<(SiteIndex other) const noexcept { return data < other.data; }
+    SiteIndex flip_spatial() const noexcept {
+        return SiteIndex((data & (0xFF0000FFU)) | ((*this)[0] << 16) |
+                         ((*this)[1] << 8));
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    vector<uint8_t> to_array() const {
+        vector<uint8_t> r;
+        r.reserve(size() + spin_size());
+        for (uint8_t i = 0; i < size(); i++)
+            r.push_back((*this)[i]);
+        for (uint8_t i = 0; i < spin_size(); i++)
+            r.push_back(s(i));
+        return r;
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "[ ";
+        for (uint8_t i = 0; i < size(); i++)
+            ss << (int)(*this)[i] << " ";
+        for (uint8_t i = 0; i < spin_size(); i++)
+            ss << (int)s(i) << " ";
+        ss << "]";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SiteIndex c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
 struct OpElement : OpExpr {
-    OpNames name;
-    vector<uint8_t> site_index;
-    double factor;
     SpinLabel q_label;
-    OpElement(OpNames name, const vector<uint8_t> &site_index,
-              SpinLabel q_label, double factor = 1.0)
+    SiteIndex site_index;
+    double factor;
+    OpNames name;
+    OpElement(OpNames name, SiteIndex site_index, SpinLabel q_label,
+              double factor = 1.0)
         : name(name), site_index(site_index), factor(factor), q_label(q_label) {
     }
     const OpTypes get_type() const override { return OpTypes::Elem; }
@@ -878,59 +934,67 @@ struct OpElement : OpExpr {
     }
     size_t hash() const noexcept {
         size_t h = (size_t)name;
-        for (auto r : site_index)
-            h ^= (size_t)r + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= site_index.hash() + 0x9E3779B9 + (h << 6) + (h >> 2);
         h ^= std::hash<double>{}(factor) + 0x9E3779B9 + (h << 6) + (h >> 2);
         return h;
     }
     friend ostream &operator<<(ostream &os, const OpElement &c) {
         if (c.factor != 1.0)
             os << "(" << c.factor << " " << c.abs() << ")";
-        else if (c.site_index.size() == 0)
+        else if (c.site_index.data == 0)
             os << c.name;
-        else if (c.site_index.size() == 1)
+        else if (c.site_index.size() == 1 && c.site_index.spin_size() == 0)
             os << c.name << (int)c.site_index[0];
-        else {
-            os << c.name << "[ ";
-            for (auto r : c.site_index)
-                os << (int)r << " ";
-            os << "]";
-        }
+        else
+            os << c.name << c.site_index;
         return os;
     }
 };
 
+struct OpElementRef : OpExpr {
+    shared_ptr<OpElement> op;
+    int8_t factor;
+    int8_t trans;
+    OpElementRef(const shared_ptr<OpElement> &op, int8_t trans, int8_t factor)
+        : op(op), trans(trans), factor(factor) {}
+    const OpTypes get_type() const override { return OpTypes::ElemRef; }
+};
+
 struct OpString : OpExpr {
+    shared_ptr<OpElement> a, b;
     double factor;
-    vector<shared_ptr<OpElement>> ops;
-    OpString(const vector<shared_ptr<OpElement>> &ops, double factor)
-        : factor(factor), ops() {
-        for (auto &elem : ops) {
-            this->factor *= elem->factor;
-            this->ops.push_back(make_shared<OpElement>(elem->abs()));
-        }
-    }
+    uint8_t conj;
+    OpString(const shared_ptr<OpElement> &op, double factor, uint8_t conj = 0)
+        : factor(factor * op->factor), a(make_shared<OpElement>(op->abs())),
+          b(nullptr), conj(conj) {}
+    OpString(const shared_ptr<OpElement> &a, const shared_ptr<OpElement> &b,
+             double factor, uint8_t conj = 0)
+        : factor(factor * a->factor * (b == nullptr ? 1.0 : b->factor)),
+          a(make_shared<OpElement>(a->abs())),
+          b(b == nullptr ? nullptr : make_shared<OpElement>(b->abs())),
+          conj(conj) {}
     const OpTypes get_type() const override { return OpTypes::Prod; }
-    OpString abs() const { return OpString(ops, 1.0); }
+    OpString abs() const { return OpString(a, b, 1.0, conj); }
     shared_ptr<OpElement> get_op() const {
-        assert(ops.size() == 1);
-        return ops[0];
+        assert(b == nullptr && conj == 0);
+        return a;
     }
-    OpString operator*(double d) const { return OpString(ops, factor * d); }
+    OpString operator*(double d) const {
+        return OpString(a, b, factor * d, conj);
+    }
     bool operator==(const OpString &other) const {
-        if (ops.size() != other.ops.size() || factor != other.factor)
-            return false;
-        for (size_t i = 0; i < ops.size(); i++)
-            if (!(*ops[i] == *other.ops[i]))
-                return false;
-        return true;
+        return *a == *other.a &&
+               ((b == nullptr && other.b == nullptr) ||
+                (b != nullptr && other.b != nullptr && *b == *other.b)) &&
+               factor == other.factor && conj == other.conj;
     }
     friend ostream &operator<<(ostream &os, const OpString &c) {
         if (c.factor != 1.0)
             os << "(" << c.factor << " " << c.abs() << ")";
         else {
-            for (auto r : c.ops)
-                os << *r << " ";
+            os << *c.a << (c.conj & 1 ? "^T " : " ");
+            if (c.b != nullptr)
+                os << *c.b << (c.conj & 2 ? "^T " : " ");
         }
         return os;
     }
@@ -1041,24 +1105,19 @@ inline const shared_ptr<OpExpr> operator+(const shared_ptr<OpExpr> &a,
     else if (a->get_type() == OpTypes::Elem) {
         if (b->get_type() == OpTypes::Elem) {
             vector<shared_ptr<OpString>> strs;
-            strs.push_back(make_shared<OpString>(
-                vector<shared_ptr<OpElement>>(
-                    1, dynamic_pointer_cast<OpElement>(a)),
-                1.0));
-            strs.push_back(make_shared<OpString>(
-                vector<shared_ptr<OpElement>>(
-                    1, dynamic_pointer_cast<OpElement>(b)),
-                1.0));
+            strs.push_back(
+                make_shared<OpString>(dynamic_pointer_cast<OpElement>(a), 1.0));
+            strs.push_back(
+                make_shared<OpString>(dynamic_pointer_cast<OpElement>(b), 1.0));
             return make_shared<OpSum>(strs);
         } else if (b->get_type() == OpTypes::Sum) {
             vector<shared_ptr<OpString>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum>(b)->strings.size() + 1);
-            strs.push_back(make_shared<OpString>(
-                vector<shared_ptr<OpElement>>(
-                    1, dynamic_pointer_cast<OpElement>(a)),
-                1.0));
-            for (auto &r : dynamic_pointer_cast<OpSum>(b)->strings)
-                strs.push_back(r);
+            strs.push_back(
+                make_shared<OpString>(dynamic_pointer_cast<OpElement>(a), 1.0));
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.end());
             return make_shared<OpSum>(strs);
         }
     } else if (a->get_type() == OpTypes::Prod) {
@@ -1066,8 +1125,9 @@ inline const shared_ptr<OpExpr> operator+(const shared_ptr<OpExpr> &a,
             vector<shared_ptr<OpString>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum>(b)->strings.size() + 1);
             strs.push_back(dynamic_pointer_cast<OpString>(a));
-            for (auto &r : dynamic_pointer_cast<OpSum>(b)->strings)
-                strs.push_back(r);
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.end());
             return make_shared<OpSum>(strs);
         } else if (b->get_type() == OpTypes::Prod) {
             vector<shared_ptr<OpString>> strs;
@@ -1080,28 +1140,30 @@ inline const shared_ptr<OpExpr> operator+(const shared_ptr<OpExpr> &a,
         if (b->get_type() == OpTypes::Elem) {
             vector<shared_ptr<OpString>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum>(a)->strings.size() + 1);
-            for (auto &r : dynamic_pointer_cast<OpSum>(a)->strings)
-                strs.push_back(r);
-            strs.push_back(make_shared<OpString>(
-                vector<shared_ptr<OpElement>>(
-                    1, dynamic_pointer_cast<OpElement>(b)),
-                1.0));
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.end());
+            strs.push_back(
+                make_shared<OpString>(dynamic_pointer_cast<OpElement>(b), 1.0));
             return make_shared<OpSum>(strs);
         } else if (b->get_type() == OpTypes::Prod) {
             vector<shared_ptr<OpString>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum>(a)->strings.size() + 1);
-            for (auto &r : dynamic_pointer_cast<OpSum>(a)->strings)
-                strs.push_back(r);
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.end());
             strs.push_back(dynamic_pointer_cast<OpString>(b));
             return make_shared<OpSum>(strs);
         } else if (b->get_type() == OpTypes::Sum) {
             vector<shared_ptr<OpString>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum>(a)->strings.size() +
                          dynamic_pointer_cast<OpSum>(b)->strings.size());
-            for (auto &r : dynamic_pointer_cast<OpSum>(a)->strings)
-                strs.push_back(r);
-            for (auto &r : dynamic_pointer_cast<OpSum>(b)->strings)
-                strs.push_back(r);
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(a)->strings.end());
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum>(b)->strings.end());
             return make_shared<OpSum>(strs);
         }
     }
@@ -1137,60 +1199,48 @@ inline const shared_ptr<OpExpr> operator*(const shared_ptr<OpExpr> &a,
     else if (a->get_type() == OpTypes::Elem) {
         if (b->get_type() == OpTypes::Sum) {
             vector<shared_ptr<OpString>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum>(b)->strings.size());
             for (auto &r : dynamic_pointer_cast<OpSum>(b)->strings) {
-                vector<shared_ptr<OpElement>> ops;
-                ops.reserve(r->ops.size() + 1);
-                ops.push_back(dynamic_pointer_cast<OpElement>(a));
-                for (auto &rr : r->ops)
-                    ops.push_back(rr);
-                strs.push_back(make_shared<OpString>(ops, r->factor));
+                assert(r->b == nullptr);
+                strs.push_back(make_shared<OpString>(
+                    dynamic_pointer_cast<OpElement>(a), r->a, r->factor));
             }
             return make_shared<OpSum>(strs);
-        } else if (b->get_type() == OpTypes::Elem) {
-            vector<shared_ptr<OpElement>> ops;
-            ops.push_back(dynamic_pointer_cast<OpElement>(a));
-            ops.push_back(dynamic_pointer_cast<OpElement>(b));
-            return make_shared<OpString>(ops, 1.0);
-        } else if (b->get_type() == OpTypes::Prod) {
-            vector<shared_ptr<OpElement>> ops;
-            ops.reserve(dynamic_pointer_cast<OpString>(b)->ops.size() + 1);
-            ops.push_back(dynamic_pointer_cast<OpElement>(a));
-            for (auto &r : dynamic_pointer_cast<OpString>(b)->ops)
-                ops.push_back(r);
+        } else if (b->get_type() == OpTypes::Elem)
+            return make_shared<OpString>(dynamic_pointer_cast<OpElement>(a),
+                                         dynamic_pointer_cast<OpElement>(b),
+                                         1.0);
+        else if (b->get_type() == OpTypes::Prod) {
+            assert(dynamic_pointer_cast<OpString>(b)->b == nullptr);
             return make_shared<OpString>(
-                ops, dynamic_pointer_cast<OpString>(b)->factor);
+                dynamic_pointer_cast<OpElement>(a),
+                dynamic_pointer_cast<OpString>(b)->a,
+                dynamic_pointer_cast<OpString>(b)->factor);
         }
     } else if (a->get_type() == OpTypes::Prod) {
         if (b->get_type() == OpTypes::Elem) {
-            vector<shared_ptr<OpElement>> ops;
-            ops.reserve(dynamic_pointer_cast<OpString>(a)->ops.size() + 1);
-            for (auto &r : dynamic_pointer_cast<OpString>(a)->ops)
-                ops.push_back(r);
-            ops.push_back(dynamic_pointer_cast<OpElement>(b));
+            assert(dynamic_pointer_cast<OpString>(a)->b == nullptr);
             return make_shared<OpString>(
-                ops, dynamic_pointer_cast<OpString>(a)->factor);
+                dynamic_pointer_cast<OpString>(a)->a,
+                dynamic_pointer_cast<OpElement>(b),
+                dynamic_pointer_cast<OpString>(a)->factor);
         } else if (b->get_type() == OpTypes::Prod) {
-            vector<shared_ptr<OpElement>> ops;
-            ops.reserve(dynamic_pointer_cast<OpString>(a)->ops.size() +
-                        dynamic_pointer_cast<OpString>(b)->ops.size());
-            for (auto &r : dynamic_pointer_cast<OpString>(a)->ops)
-                ops.push_back(r);
-            for (auto &r : dynamic_pointer_cast<OpString>(b)->ops)
-                ops.push_back(r);
+            assert(dynamic_pointer_cast<OpString>(a)->b == nullptr);
+            assert(dynamic_pointer_cast<OpString>(b)->b == nullptr);
             return make_shared<OpString>(
-                ops, dynamic_pointer_cast<OpString>(a)->factor *
-                         dynamic_pointer_cast<OpString>(b)->factor);
+                dynamic_pointer_cast<OpString>(a)->a,
+                dynamic_pointer_cast<OpString>(b)->a,
+                dynamic_pointer_cast<OpString>(a)->factor *
+                    dynamic_pointer_cast<OpString>(b)->factor);
         }
     } else if (a->get_type() == OpTypes::Sum) {
         if (b->get_type() == OpTypes::Elem) {
             vector<shared_ptr<OpString>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum>(a)->strings.size());
             for (auto &r : dynamic_pointer_cast<OpSum>(a)->strings) {
-                vector<shared_ptr<OpElement>> ops;
-                ops.reserve(r->ops.size() + 1);
-                for (auto &rr : r->ops)
-                    ops.push_back(rr);
-                ops.push_back(dynamic_pointer_cast<OpElement>(b));
-                strs.push_back(make_shared<OpString>(ops, r->factor));
+                assert(r->b == nullptr);
+                strs.push_back(make_shared<OpString>(
+                    r->a, dynamic_pointer_cast<OpElement>(b), r->factor));
             }
             return make_shared<OpSum>(strs);
         }
@@ -1199,22 +1249,21 @@ inline const shared_ptr<OpExpr> operator*(const shared_ptr<OpExpr> &a,
 }
 
 inline const shared_ptr<OpExpr> sum(const vector<shared_ptr<OpExpr>> &xs) {
+    const static shared_ptr<OpExpr> zero = make_shared<OpExpr>();
     vector<shared_ptr<OpString>> strs;
     for (auto &r : xs)
         if (r->get_type() == OpTypes::Prod)
             strs.push_back(dynamic_pointer_cast<OpString>(r));
         else if (r->get_type() == OpTypes::Elem)
-            strs.push_back(make_shared<OpString>(
-                vector<shared_ptr<OpElement>>(
-                    1, dynamic_pointer_cast<OpElement>(r)),
-                1.0));
+            strs.push_back(
+                make_shared<OpString>(dynamic_pointer_cast<OpElement>(r), 1.0));
         else if (r->get_type() == OpTypes::Sum) {
             strs.reserve(dynamic_pointer_cast<OpSum>(r)->strings.size() +
                          strs.size());
             for (auto &rr : dynamic_pointer_cast<OpSum>(r)->strings)
                 strs.push_back(rr);
         }
-    return make_shared<OpSum>(strs);
+    return strs.size() != 0 ? make_shared<OpSum>(strs) : zero;
 }
 
 inline const shared_ptr<OpExpr>
@@ -1280,7 +1329,7 @@ template <> struct hash<block2::OpElement> {
 
 namespace block2 {
 
-enum struct SymTypes { RVec, CVec, Mat };
+enum struct SymTypes : uint8_t { RVec, CVec, Mat };
 
 struct Symbolic {
     int m, n;
@@ -1327,6 +1376,34 @@ struct SymbolicMatrix : Symbolic {
         return data.back();
     }
 };
+
+inline ostream &operator<<(ostream &os, const shared_ptr<Symbolic> sym) {
+    switch (sym->get_type()) {
+    case SymTypes::RVec:
+        os << "SymRVector [SIZE= " << sym->n << " ]" << endl;
+        for (size_t i = 0; i < sym->data.size(); i++)
+            os << "[ " << i << " ] = " << sym->data[i] << endl;
+        break;
+    case SymTypes::CVec:
+        os << "SymCVector [SIZE= " << sym->m << " ]" << endl;
+        for (size_t i = 0; i < sym->data.size(); i++)
+            os << "[ " << i << " ] = " << sym->data[i] << endl;
+        break;
+    case SymTypes::Mat: {
+        vector<pair<int, int>> &indices =
+            dynamic_pointer_cast<SymbolicMatrix>(sym)->indices;
+        os << "SymMatrix [SIZE= " << sym->m << "x" << sym->n << " ]" << endl;
+        for (size_t i = 0; i < sym->data.size(); i++)
+            os << "[ " << indices[i].first << "," << indices[i].second
+               << " ] = " << sym->data[i] << endl;
+        break;
+    }
+    default:
+        assert(false);
+        break;
+    }
+    return os;
+}
 
 inline const shared_ptr<Symbolic> operator*(const shared_ptr<Symbolic> a,
                                             const shared_ptr<Symbolic> b) {
@@ -1378,19 +1455,19 @@ struct StateInfo {
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
-        ifs.read((char*)&n_states_total, sizeof(n_states_total));
-        ifs.read((char*)&n, sizeof(n));
+        ifs.read((char *)&n_states_total, sizeof(n_states_total));
+        ifs.read((char *)&n, sizeof(n));
         uint32_t *ptr = ialloc->allocate((n << 1) - (n >> 1));
-        ifs.read((char*)ptr, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
         ifs.close();
         quanta = (SpinLabel *)ptr;
         n_states = (uint16_t *)(ptr + n);
     }
     void save_data(const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
-        ofs.write((char*)&n_states_total, sizeof(n_states_total));
-        ofs.write((char*)&n, sizeof(n));
-        ofs.write((char*)quanta, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        ofs.write((char *)&n_states_total, sizeof(n_states_total));
+        ofs.write((char *)&n, sizeof(n));
+        ofs.write((char *)quanta, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
         ofs.close();
     }
     // need length * 2
@@ -1487,8 +1564,8 @@ struct StateInfo {
                     int ic = c.find_state(qc[k]);
                     if (ic != -1) {
                         uint32_t nprod =
-                            (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j]
-                            + (uint32_t)c.n_states[ic];
+                            (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j] +
+                            (uint32_t)c.n_states[ic];
                         c.n_states[ic] = (uint16_t)min(nprod, 65535U);
                     }
                 }
@@ -1520,7 +1597,7 @@ struct StateInfo {
         return c;
     }
     static StateInfo get_connection_info(const StateInfo &a, const StateInfo &b,
-                                        const StateInfo &c) {
+                                         const StateInfo &c) {
         map<SpinLabel, vector<uint32_t>> mp;
         int nc = 0, iab = 0;
         for (int i = 0; i < a.n; i++)
@@ -1598,7 +1675,8 @@ struct SparseMatrixInfo {
             SpinLabel cdq, SpinLabel opdq, const vector<SpinLabel> &subdq,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
-            const shared_ptr<SparseMatrixInfo> &cinfo, const shared_ptr<CG> &cg) {
+            const shared_ptr<SparseMatrixInfo> &cinfo,
+            const shared_ptr<CG> &cg) {
             if (ainfos.size() == 0 || binfos.size() == 0) {
                 n = nc = 0;
                 return;
@@ -1624,12 +1702,14 @@ struct SparseMatrixInfo {
                     SpinLabel aq = cinfo->quanta[ic].get_bra(cdq);
                     SpinLabel bq = -cinfo->quanta[ic].get_ket();
                     int ia = ainfo->find_state(aq), ib = binfo->find_state(bq);
-                    if (ia != -1 && ib != -1 && aq == aq.get_bra(adq) && bq == bq.get_bra(bdq)) {
+                    if (ia != -1 && ib != -1 && aq == aq.get_bra(adq) &&
+                        bq == bq.get_bra(bdq)) {
                         double factor =
-                            sqrt((cdq.twos() + 1) * (opdq.twos() + 1) * (aq.twos() + 1) *
-                                (bq.twos() + 1)) *
-                            cg->wigner_9j(aq.twos(), bq.twos(), cdq.twos(), adq.twos(), bdq.twos(),
-                                        opdq.twos(), aq.twos(), bq.twos(), cdq.twos());
+                            sqrt((cdq.twos() + 1) * (opdq.twos() + 1) *
+                                 (aq.twos() + 1) * (bq.twos() + 1)) *
+                            cg->wigner_9j(aq.twos(), bq.twos(), cdq.twos(),
+                                          adq.twos(), bdq.twos(), opdq.twos(),
+                                          aq.twos(), bq.twos(), cdq.twos());
                         factor *= (binfo->is_fermion && (aq.n() & 1)) ? -1 : 1;
                         if (abs(factor) >= TINY) {
                             via.push_back(ia);
@@ -1663,7 +1743,8 @@ struct SparseMatrixInfo {
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
             const shared_ptr<SparseMatrixInfo> &cinfo,
-            const shared_ptr<SparseMatrixInfo> &vinfo, const shared_ptr<CG> &cg) {
+            const shared_ptr<SparseMatrixInfo> &vinfo,
+            const shared_ptr<CG> &cg) {
             if (ainfos.size() == 0 || binfos.size() == 0) {
                 n = nc = 0;
                 return;
@@ -1700,11 +1781,19 @@ struct SparseMatrixInfo {
                                     cdq.combine(lqprime, -rqprime));
                                 if (ia != -1 && ic != -1) {
                                     double factor =
-                                        sqrt((cdq.twos() + 1) * (opdq.twos() + 1) * (lq.twos() + 1) *
-                                            (rq.twos() + 1)) *
-                                        cg->wigner_9j(lqprime.twos(), rqprime.twos(), cdq.twos(), adq.twos(), bdq.twos(),
-                                                    opdq.twos(), lq.twos(), rq.twos(), vdq.twos());
-                                    factor *= (binfo->is_fermion && (lqprime.n() & 1)) ? -1 : 1;
+                                        sqrt((cdq.twos() + 1) *
+                                             (opdq.twos() + 1) *
+                                             (lq.twos() + 1) *
+                                             (rq.twos() + 1)) *
+                                        cg->wigner_9j(
+                                            lqprime.twos(), rqprime.twos(),
+                                            cdq.twos(), adq.twos(), bdq.twos(),
+                                            opdq.twos(), lq.twos(), rq.twos(),
+                                            vdq.twos());
+                                    factor *=
+                                        (binfo->is_fermion && (lqprime.n() & 1))
+                                            ? -1
+                                            : 1;
                                     if (abs(factor) >= TINY) {
                                         via.push_back(ia);
                                         vib.push_back(ib);
@@ -1743,7 +1832,8 @@ struct SparseMatrixInfo {
             const StateInfo &ket_cinfo,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &ainfos,
             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &binfos,
-            const shared_ptr<SparseMatrixInfo> &cinfo, const shared_ptr<CG> &cg) {
+            const shared_ptr<SparseMatrixInfo> &cinfo,
+            const shared_ptr<CG> &cg) {
             if (ainfos.size() == 0 || binfos.size() == 0) {
                 n = nc = 0;
                 return;
@@ -1792,20 +1882,31 @@ struct SparseMatrixInfo {
                                     SpinLabel aqprime = ket_a.quanta[jka];
                                     SpinLabel bq = bra_b.quanta[jbb];
                                     SpinLabel bqprime = ket_b.quanta[jkb];
-                                    SpinLabel cq = cinfo->quanta[ic].get_bra(cdq);
-                                    SpinLabel cqprime = cinfo->quanta[ic].get_ket();
-                                    double factor = sqrt((cqprime.twos() + 1) * (cdq.twos() + 1) *
-                                                        (aq.twos() + 1) * (bq.twos() + 1)) *
-                                                    cg->wigner_9j(aqprime.twos(), bqprime.twos(),
-                                                                cqprime.twos(), adq.twos(), bdq.twos(), cdq.twos(),
-                                                                aq.twos(), bq.twos(), cq.twos());
-                                    factor *= (binfo->is_fermion && (aqprime.n() & 1)) ? -1 : 1;
+                                    SpinLabel cq =
+                                        cinfo->quanta[ic].get_bra(cdq);
+                                    SpinLabel cqprime =
+                                        cinfo->quanta[ic].get_ket();
+                                    double factor =
+                                        sqrt((cqprime.twos() + 1) *
+                                             (cdq.twos() + 1) *
+                                             (aq.twos() + 1) *
+                                             (bq.twos() + 1)) *
+                                        cg->wigner_9j(
+                                            aqprime.twos(), bqprime.twos(),
+                                            cqprime.twos(), adq.twos(),
+                                            bdq.twos(), cdq.twos(), aq.twos(),
+                                            bq.twos(), cq.twos());
+                                    factor *=
+                                        (binfo->is_fermion && (aqprime.n() & 1))
+                                            ? -1
+                                            : 1;
                                     if (abs(factor) >= TINY) {
                                         via.push_back(ia);
                                         vib.push_back(ib);
                                         vic.push_back(ic);
                                         vstride.push_back(
-                                            bra_stride * cinfo->n_states_ket[ic] +
+                                            bra_stride *
+                                                cinfo->n_states_ket[ic] +
                                             ket_stride);
                                         vf.push_back(factor);
                                     }
@@ -1846,7 +1947,8 @@ struct SparseMatrixInfo {
                 idx = ptr + n;
                 stride = ptr + (n << 1);
                 factor = (double *)(ptr + (n << 1) + nc);
-                ia = (uint16_t *)(stride + nc + nc + nc), ib = ia + nc, ic = ib + nc;
+                ia = (uint16_t *)(stride + nc + nc + nc), ib = ia + nc,
+                ic = ib + nc;
             }
             if (clean) {
                 quanta = nullptr;
@@ -1878,7 +1980,8 @@ struct SparseMatrixInfo {
                    << endl;
             for (int i = 0; i < ci.nc; i++)
                 os << setw(4) << i << " IA=" << ci.ia[i] << " IB=" << ci.ib[i]
-                   << " IC=" << ci.ic[i] << " STR=" << ci.stride[i] << " factor=" << ci.factor[i] << endl;
+                   << " IC=" << ci.ic[i] << " STR=" << ci.stride[i]
+                   << " factor=" << ci.factor[i] << endl;
             return os;
         }
     };
@@ -1890,12 +1993,12 @@ struct SparseMatrixInfo {
         ifs.close();
     }
     void load_data(ifstream &ifs) {
-        ifs.read((char*)&delta_quantum, sizeof(delta_quantum));
-        ifs.read((char*)&n, sizeof(n));
+        ifs.read((char *)&delta_quantum, sizeof(delta_quantum));
+        ifs.read((char *)&n, sizeof(n));
         uint32_t *ptr = ialloc->allocate((n << 1) + n);
-        ifs.read((char*)ptr, sizeof(uint32_t) * ((n << 1) + n));
-        ifs.read((char*)&is_fermion, sizeof(is_fermion));
-        ifs.read((char*)&is_wavefunction, sizeof(is_wavefunction));
+        ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) + n));
+        ifs.read((char *)&is_fermion, sizeof(is_fermion));
+        ifs.read((char *)&is_wavefunction, sizeof(is_wavefunction));
         quanta = (SpinLabel *)ptr;
         n_states_bra = (uint16_t *)(ptr + n);
         n_states_ket = (uint16_t *)(ptr + n) + n;
@@ -1908,11 +2011,11 @@ struct SparseMatrixInfo {
         ofs.close();
     }
     void save_data(ofstream &ofs) const {
-        ofs.write((char*)&delta_quantum, sizeof(delta_quantum));
-        ofs.write((char*)&n, sizeof(n));
-        ofs.write((char*)quanta, sizeof(uint32_t) * ((n << 1) + n));
-        ofs.write((char*)&is_fermion, sizeof(is_fermion));
-        ofs.write((char*)&is_wavefunction, sizeof(is_wavefunction));
+        ofs.write((char *)&delta_quantum, sizeof(delta_quantum));
+        ofs.write((char *)&n, sizeof(n));
+        ofs.write((char *)quanta, sizeof(uint32_t) * ((n << 1) + n));
+        ofs.write((char *)&is_fermion, sizeof(is_fermion));
+        ofs.write((char *)&is_wavefunction, sizeof(is_wavefunction));
     }
     void initialize_contract(const shared_ptr<SparseMatrixInfo> &linfo,
                              const shared_ptr<SparseMatrixInfo> &rinfo) {
@@ -2473,11 +2576,11 @@ struct SparseMatrix {
             info->load_data(ifs);
         } else
             info = nullptr;
-        ifs.read((char*)&factor, sizeof(factor));
-        ifs.read((char*)&total_memory, sizeof(total_memory));
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&total_memory, sizeof(total_memory));
         data = dalloc->allocate(total_memory);
-        ifs.read((char*)data, sizeof(double) * total_memory);
-        ifs.read((char*)&conj, sizeof(conj));
+        ifs.read((char *)data, sizeof(double) * total_memory);
+        ifs.read((char *)&conj, sizeof(conj));
         ifs.close();
     }
     void save_data(const string &filename, bool save_info = false) const {
@@ -2485,9 +2588,9 @@ struct SparseMatrix {
         if (save_info)
             info->save_data(ofs);
         ofs.write((char *)&factor, sizeof(factor));
-        ofs.write((char*)&total_memory, sizeof(total_memory));
-        ofs.write((char*)data, sizeof(double) * total_memory);
-        ofs.write((char*)&conj, sizeof(conj));
+        ofs.write((char *)&total_memory, sizeof(total_memory));
+        ofs.write((char *)data, sizeof(double) * total_memory);
+        ofs.write((char *)&conj, sizeof(conj));
         ofs.close();
     }
     void copy_data(const SparseMatrix &other) {
@@ -2674,7 +2777,8 @@ struct SparseMatrix {
                 uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
                 uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
-                mp[(ib << 16) + ikka][ikkb] = make_pair(p, old_fused.n_states[ik]);
+                mp[(ib << 16) + ikka][ikkb] =
+                    make_pair(p, old_fused.n_states[ik]);
                 p += lp;
             }
         }
@@ -2695,7 +2799,8 @@ struct SparseMatrix {
                     pair<uint32_t, uint32_t> &t =
                         mp.at(new_fused_cinfo.quanta[bb].data).at(ik);
                     for (int j = 0; j < l.n_states[ibba]; j++)
-                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second, lp * sizeof(double));
+                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second,
+                               lp * sizeof(double));
                 }
                 ptr += (size_t)l.n_states[ibba] * lp;
             }
@@ -2748,7 +2853,8 @@ struct SparseMatrix {
                     pair<uint32_t, uint32_t> &t =
                         mp.at(new_fused_cinfo.quanta[kk].data).at(ib);
                     for (int j = 0; j < l.n_states[ib]; j++)
-                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second, t.second * sizeof(double));
+                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second,
+                               t.second * sizeof(double));
                 }
                 ptr += (size_t)m.n_states[ikka] * r.n_states[ikkb];
             }
@@ -3033,11 +3139,11 @@ struct TensorFunctions {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
-            assert(op->ops.size() == 2);
-            if (lop.count(op->ops[0]) == 0 || rop.count(op->ops[1]) == 0)
+            assert(op->b != nullptr);
+            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
                 return;
-            shared_ptr<SparseMatrix> lmat = lop.at(op->ops[0]);
-            shared_ptr<SparseMatrix> rmat = rop.at(op->ops[1]);
+            shared_ptr<SparseMatrix> lmat = lop.at(op->a);
+            shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product_multiply(*lmat, *rmat, *cmat, *vmat, opdq,
                                          op->factor);
         } break;
@@ -3063,11 +3169,11 @@ struct TensorFunctions {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
-            assert(op->ops.size() == 2);
-            if (lop.count(op->ops[0]) == 0 || rop.count(op->ops[1]) == 0)
+            assert(op->b != nullptr);
+            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
                 return;
-            shared_ptr<SparseMatrix> lmat = lop.at(op->ops[0]);
-            shared_ptr<SparseMatrix> rmat = rop.at(op->ops[1]);
+            shared_ptr<SparseMatrix> lmat = lop.at(op->a);
+            shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product_diagonal(*lmat, *rmat, *mat, opdq, op->factor);
         } break;
         case OpTypes::Sum: {
@@ -3091,11 +3197,11 @@ struct TensorFunctions {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
-            assert(op->ops.size() == 2);
-            if (lop.count(op->ops[0]) == 0 || rop.count(op->ops[1]) == 0)
+            assert(op->b != nullptr);
+            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
                 return;
-            shared_ptr<SparseMatrix> lmat = lop.at(op->ops[0]);
-            shared_ptr<SparseMatrix> rmat = rop.at(op->ops[1]);
+            shared_ptr<SparseMatrix> lmat = lop.at(op->a);
+            shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product(*lmat, *rmat, *mat, op->factor);
         } break;
         case OpTypes::Sum: {
@@ -3201,10 +3307,260 @@ struct MPO {
     vector<shared_ptr<Symbolic>> left_operator_names;
     vector<shared_ptr<Symbolic>> right_operator_names;
     vector<shared_ptr<Symbolic>> middle_operator_names;
+    vector<shared_ptr<Symbolic>> left_operator_exprs;
+    vector<shared_ptr<Symbolic>> right_operator_exprs;
+    vector<shared_ptr<Symbolic>> middle_operator_exprs;
+    shared_ptr<OpElement> op;
     int n_sites;
     double const_e;
-    MPO(int n_sites) : n_sites(n_sites), const_e(0.0) {}
-    virtual void deallocate() {};
+    MPO(int n_sites) : n_sites(n_sites), const_e(0.0), op(nullptr) {}
+    virtual void deallocate() {}
+};
+
+struct Rule {
+    Rule() {}
+    virtual shared_ptr<OpElementRef>
+    operator()(const shared_ptr<OpElement> &op) const {}
+};
+
+struct SimplifiedMPO : MPO {
+    shared_ptr<Rule> rule;
+    SimplifiedMPO(const shared_ptr<MPO> &mpo, const shared_ptr<Rule> &rule)
+        : rule(rule), MPO(mpo->n_sites) {
+        const_e = mpo->const_e;
+        tensors = mpo->tensors;
+        left_operator_names = mpo->left_operator_names;
+        right_operator_names = mpo->right_operator_names;
+        left_operator_exprs.resize(n_sites);
+        right_operator_exprs.resize(n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            // cout << "TENS" << i << " = " << tensors[i]->lmat << endl;
+            left_operator_exprs[i] =
+                i == 0 ? tensors[i]->lmat
+                       : left_operator_names[i - 1] * tensors[i]->lmat;
+            for (size_t j = 0; j < left_operator_exprs[i]->data.size(); j++)
+                if (left_operator_exprs[i]->data[j]->get_type() ==
+                    OpTypes::Zero)
+                    left_operator_names[i]->data[j] =
+                        left_operator_exprs[i]->data[j];
+            // cout << "LNAME" << i << " = " << left_operator_names[i] << endl;
+            // cout << "LEXPR" << i << " = " << left_operator_exprs[i] << endl;
+        }
+        // abort();
+        right_operator_exprs[n_sites - 1] = tensors[n_sites - 1]->rmat;
+        for (int i = n_sites - 1; i >= 0; i--) {
+            right_operator_exprs[i] =
+                i == n_sites - 1
+                    ? tensors[i]->rmat
+                    : tensors[i]->rmat * right_operator_names[i + 1];
+            for (size_t j = 0; j < right_operator_exprs[i]->data.size(); j++)
+                if (right_operator_exprs[i]->data[j]->get_type() ==
+                    OpTypes::Zero)
+                    right_operator_names[i]->data[j] =
+                        right_operator_exprs[i]->data[j];
+        }
+        if (mpo->middle_operator_exprs.size() != 0) {
+            middle_operator_names = mpo->middle_operator_names;
+            middle_operator_exprs = mpo->middle_operator_exprs;
+        } else {
+            middle_operator_names.resize(n_sites - 1);
+            middle_operator_exprs.resize(n_sites - 1);
+            shared_ptr<SymbolicColumnVector> mpo_op =
+                make_shared<SymbolicColumnVector>(1);
+            (*mpo_op)[0] = mpo->op;
+            for (int i = 0; i < n_sites - 1; i++) {
+                middle_operator_names[i] = mpo_op;
+                middle_operator_exprs[i] =
+                    left_operator_names[i] * right_operator_names[i + 1];
+            }
+            vector<uint8_t> px[2];
+            for (int i = n_sites - 1; i >= 0; i--) {
+                if (i != n_sites - 1) {
+                    for (size_t j = 0; j < left_operator_names[i]->data.size();
+                         j++)
+                        if (right_operator_names[i + 1]->data[j]->get_type() ==
+                                OpTypes::Zero &&
+                            !px[i & 1][j])
+                            left_operator_names[i]->data[j] =
+                                right_operator_names[i + 1]->data[j];
+                        else if (left_operator_names[i]->data[j]->get_type() !=
+                                 OpTypes::Zero)
+                            px[i & 1][j] = 1;
+                }
+                if (i != 0) {
+                    px[!(i & 1)].resize(
+                        left_operator_names[i - 1]->data.size());
+                    memset(&px[!(i & 1)][0], 0,
+                           sizeof(uint8_t) * px[!(i & 1)].size());
+                    if (tensors[i]->lmat->get_type() == SymTypes::Mat) {
+                        shared_ptr<SymbolicMatrix> mat =
+                            dynamic_pointer_cast<SymbolicMatrix>(
+                                tensors[i]->lmat);
+                        for (size_t j = 0; j < mat->data.size(); j++)
+                            if (px[i & 1][mat->indices[j].second])
+                                px[!(i & 1)][mat->indices[j].first] = 1;
+                    }
+                }
+            }
+            for (int i = 0; i < n_sites; i++) {
+                if (i != 0) {
+                    for (size_t j = 0; j < right_operator_names[i]->data.size();
+                         j++)
+                        if (left_operator_names[i - 1]->data[j]->get_type() ==
+                                OpTypes::Zero &&
+                            !px[i & 1][j])
+                            right_operator_names[i]->data[j] =
+                                left_operator_names[i - 1]->data[j];
+                        else if (right_operator_names[i]->data[j]->get_type() !=
+                                 OpTypes::Zero)
+                            px[i & 1][j] = 1;
+                }
+                if (i != n_sites - 1) {
+                    px[!(i & 1)].resize(
+                        right_operator_names[i + 1]->data.size());
+                    memset(&px[!(i & 1)][0], 0,
+                           sizeof(uint8_t) * px[!(i & 1)].size());
+                    if (tensors[i]->rmat->get_type() == SymTypes::Mat) {
+                        shared_ptr<SymbolicMatrix> mat =
+                            dynamic_pointer_cast<SymbolicMatrix>(
+                                tensors[i]->rmat);
+                        for (size_t j = 0; j < mat->data.size(); j++)
+                            if (px[i & 1][mat->indices[j].first])
+                                px[!(i & 1)][mat->indices[j].second] = 1;
+                    }
+                }
+            }
+        }
+        // for (int i = 0; i < n_sites; i++) {
+        //     cout << "LNAME" << i << " = " << left_operator_names[i] << endl;
+        //     cout << "LEXPR" << i << " = " << left_operator_exprs[i] << endl;
+        // }
+        // for (int i = 0; i < n_sites; i++) {
+        //     cout << "RNAME" << i << " = " << right_operator_names[i] << endl;
+        //     cout << "REXPR" << i << " = " << right_operator_exprs[i] << endl;
+        // }
+        simplify();
+    }
+    shared_ptr<OpExpr> simplify_expr(const shared_ptr<OpExpr> &expr) {
+        switch (expr->get_type()) {
+        case OpTypes::Prod: {
+            shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
+            assert(op->b != nullptr);
+            assert(rule->operator()(op->a) == nullptr);
+            assert(rule->operator()(op->b) == nullptr);
+            return expr;
+        } break;
+        case OpTypes::Sum: {
+            shared_ptr<OpSum> ops = dynamic_pointer_cast<OpSum>(expr);
+            map<shared_ptr<OpExpr>, vector<shared_ptr<OpString>>, op_expr_less>
+                mp;
+            for (auto &x : ops->strings) {
+                assert(x->b != nullptr);
+                shared_ptr<OpElementRef> opl = rule->operator()(x->a);
+                shared_ptr<OpElementRef> opr = rule->operator()(x->b);
+                shared_ptr<OpElement> a = opl == nullptr ? x->a : opl->op;
+                shared_ptr<OpElement> b = opr == nullptr ? x->b : opr->op;
+                uint8_t conj = (opl != nullptr && opl->trans) |
+                               ((opr != nullptr && opr->trans) << 1);
+                double factor = (opl != nullptr ? opl->factor : 1.0) *
+                                (opr != nullptr ? opr->factor : 1.0) *
+                                x->factor;
+                if (!mp.count(a))
+                    mp[a] = vector<shared_ptr<OpString>>();
+                vector<shared_ptr<OpString>> &px = mp.at(a);
+                int g = -1;
+                for (size_t k = 0; k < px.size(); k++)
+                    if (px[k]->b == b && px[k]->conj == conj) {
+                        g = k;
+                        break;
+                    }
+                if (g == -1)
+                    px.push_back(make_shared<OpString>(a, b, factor, conj));
+                else {
+                    px[g]->factor += factor;
+                    if (abs(px[g]->factor) < TINY)
+                        px.erase(px.begin() + g);
+                }
+            }
+            vector<shared_ptr<OpString>> terms;
+            terms.reserve(mp.size());
+            for (auto &r : mp)
+                terms.insert(terms.end(), r.second.begin(), r.second.end());
+            return make_shared<OpSum>(terms);
+        } break;
+        case OpTypes::Zero:
+        case OpTypes::Elem:
+            return expr;
+        default:
+            assert(false);
+            break;
+        }
+        return expr;
+    }
+    void simplify() {
+        for (int i = 0; i < n_sites; i++) {
+            shared_ptr<Symbolic> lname = left_operator_names[i];
+            shared_ptr<Symbolic> lexpr = left_operator_exprs[i];
+            assert(lname->data.size() == lexpr->data.size());
+            size_t k = 0;
+            for (size_t j = 0; j < lname->data.size(); j++) {
+                if (lexpr->data[j]->get_type() == OpTypes::Zero ||
+                    lname->data[j]->get_type() == OpTypes::Zero)
+                    continue;
+                shared_ptr<OpElement> op =
+                    dynamic_pointer_cast<OpElement>(lname->data[j]);
+                if (rule->operator()(op) != nullptr)
+                    continue;
+                lname->data[k] = lname->data[j];
+                lexpr->data[k] = simplify_expr(lexpr->data[j]);
+                k++;
+            }
+            lname->data.resize(k);
+            lexpr->data.resize(k);
+            lname->n = lexpr->n = (int)lname->data.size();
+        }
+        // for (int i = 0; i < n_sites; i++) {
+        //     cout << "LNAME" << i << " = " << left_operator_names[i] << endl;
+        //     cout << "LEXPR" << i << " = " << left_operator_exprs[i] << endl;
+        // }
+        for (int i = 0; i < n_sites; i++) {
+            shared_ptr<Symbolic> rname = right_operator_names[i];
+            shared_ptr<Symbolic> rexpr = right_operator_exprs[i];
+            assert(rname->data.size() == rexpr->data.size());
+            size_t k = 0;
+            for (size_t j = 0; j < rname->data.size(); j++) {
+                if (rexpr->data[j]->get_type() == OpTypes::Zero ||
+                    rname->data[j]->get_type() == OpTypes::Zero)
+                    continue;
+                shared_ptr<OpElement> op =
+                    dynamic_pointer_cast<OpElement>(rname->data[j]);
+                if (rule->operator()(op) != nullptr)
+                    continue;
+                rname->data[k] = rname->data[j];
+                rexpr->data[k] = simplify_expr(rexpr->data[j]);
+                k++;
+            }
+            rname->data.resize(k);
+            rexpr->data.resize(k);
+            rname->m = rexpr->m = (int)rname->data.size();
+        }
+        // for (int i = 0; i < n_sites; i++) {
+        //     cout << "RNAME" << i << " = " << right_operator_names[i] << endl;
+        //     cout << "REXPR" << i << " = " << right_operator_exprs[i] << endl;
+        // }
+        for (int i = 0; i < n_sites - 1; i++) {
+            shared_ptr<Symbolic> mexpr = middle_operator_exprs[i];
+            for (size_t j = 0; j < mexpr->data.size(); j++)
+                mexpr->data[j] = simplify_expr(mexpr->data[j]);
+        }
+        // for (int i = 0; i < n_sites - 1; i++) {
+        //     assert(left_operator_names[i]->data.size() ==
+        //            right_operator_names[i + 1]->data.size());
+        //     cout << "MNAME" << i << " = " << middle_operator_names[i] <<
+        //     endl; cout << "MEXPR" << i << " = " << middle_operator_exprs[i]
+        //     << endl;
+        // }
+    }
 };
 
 struct MPSInfo {
@@ -3376,7 +3732,8 @@ struct MPS {
         tensors.resize(n_sites);
         for (int i = 0; i < center; i++) {
             StateInfo t = StateInfo::tensor_product(
-                info->left_dims[i], info->basis[info->orbsym[i]], info->left_dims_fci[i + 1]);
+                info->left_dims[i], info->basis[info->orbsym[i]],
+                info->left_dims_fci[i + 1]);
             mat_infos[i] = make_shared<SparseMatrixInfo>();
             mat_infos[i]->initialize(t, info->left_dims[i + 1], info->vaccum,
                                      false);
@@ -3396,9 +3753,10 @@ struct MPS {
             StateInfo tl = StateInfo::tensor_product(
                 info->left_dims[center], info->basis[info->orbsym[center]],
                 info->left_dims_fci[center + 1]);
-            StateInfo tr = StateInfo::tensor_product(
-                info->basis[info->orbsym[center + 1]],
-                info->right_dims[center + dot], info->right_dims_fci[center + 1]);
+            StateInfo tr =
+                StateInfo::tensor_product(info->basis[info->orbsym[center + 1]],
+                                          info->right_dims[center + dot],
+                                          info->right_dims_fci[center + 1]);
             mat_infos[center]->initialize(tl, tr, info->target, false, true);
             tl.reallocate(0);
             tr.reallocate(0);
@@ -3448,8 +3806,8 @@ struct MPS {
     }
     string get_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag << "."
-           << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag
+           << "." << Parsing::to_string(i);
         return ss.str();
     }
     void save_mutable() const {
@@ -3588,8 +3946,8 @@ struct Partition {
             case OpTypes::Prod: {
                 shared_ptr<OpString> op =
                     dynamic_pointer_cast<OpString>(exprs->data[i]);
-                assert(op->ops.size() == 2);
-                SpinLabel bra = op->ops[0]->q_label, ket = op->ops[1]->q_label;
+                assert(op->b != nullptr);
+                SpinLabel bra = op->a->q_label, ket = op->b->q_label;
                 SpinLabel p = l.combine(bra, -ket);
                 assert(p != SpinLabel(0xFFFFFFFFU));
                 subsl[idx].push_back(p);
@@ -3598,9 +3956,8 @@ struct Partition {
                 shared_ptr<OpSum> sop =
                     dynamic_pointer_cast<OpSum>(exprs->data[i]);
                 for (auto &op : sop->strings) {
-                    assert(op->ops.size() == 2);
-                    SpinLabel bra = op->ops[0]->q_label,
-                              ket = op->ops[1]->q_label;
+                    assert(op->b != nullptr);
+                    SpinLabel bra = op->a->q_label, ket = op->b->q_label;
                     SpinLabel p = l.combine(bra, -ket);
                     assert(p != SpinLabel(0xFFFFFFFFU));
                     subsl[idx].push_back(p);
@@ -3661,18 +4018,19 @@ struct Partition {
         const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
             &site_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &left_op_infos_notrunc, const shared_ptr<CG> &cg) {
+            &left_op_infos_notrunc,
+        const shared_ptr<CG> &cg) {
         frame->activate(1);
         bra_info->load_left_dims(m);
         StateInfo ibra_prev = bra_info->left_dims[m], iket_prev = ibra_prev;
-        StateInfo ibra_notrunc =
-            StateInfo::tensor_product(
-                ibra_prev, bra_info->basis[bra_info->orbsym[m]],
-                bra_info->left_dims_fci[m + 1]), iket_notrunc = ibra_notrunc;
-        StateInfo ibra_cinfo =
-            StateInfo::get_connection_info(
-                ibra_prev, bra_info->basis[bra_info->orbsym[m]],
-                ibra_notrunc), iket_cinfo = ibra_cinfo;
+        StateInfo ibra_notrunc = StateInfo::tensor_product(
+                      ibra_prev, bra_info->basis[bra_info->orbsym[m]],
+                      bra_info->left_dims_fci[m + 1]),
+                  iket_notrunc = ibra_notrunc;
+        StateInfo ibra_cinfo = StateInfo::get_connection_info(
+                      ibra_prev, bra_info->basis[bra_info->orbsym[m]],
+                      ibra_notrunc),
+                  iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m);
             iket_prev = ket_info->left_dims[m];
@@ -3694,11 +4052,10 @@ struct Partition {
             shared_ptr<SparseMatrixInfo::ConnectionInfo> cinfo =
                 make_shared<SparseMatrixInfo::ConnectionInfo>();
             cinfo->initialize_tp(
-                sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                ibra_prev, bra_info->basis[bra_info->orbsym[m]],
-                iket_prev, ket_info->basis[ket_info->orbsym[m]],
-                ibra_cinfo, iket_cinfo, prev_left_op_infos, site_op_infos,
-                lop_notrunc, cg);
+                sl[i], subsl[i], ibra_notrunc, iket_notrunc, ibra_prev,
+                bra_info->basis[bra_info->orbsym[m]], iket_prev,
+                ket_info->basis[ket_info->orbsym[m]], ibra_cinfo, iket_cinfo,
+                prev_left_op_infos, site_op_infos, lop_notrunc, cg);
             lop_notrunc->cinfo = cinfo;
         }
         frame->activate(1);
@@ -3742,16 +4099,20 @@ struct Partition {
         const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
             &site_op_infos,
         vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &right_op_infos_notrunc, const shared_ptr<CG> &cg) {
+            &right_op_infos_notrunc,
+        const shared_ptr<CG> &cg) {
         frame->activate(1);
         bra_info->load_right_dims(m + 1);
-        StateInfo ibra_prev = bra_info->right_dims[m + 1], iket_prev = ibra_prev;
+        StateInfo ibra_prev = bra_info->right_dims[m + 1],
+                  iket_prev = ibra_prev;
         StateInfo ibra_notrunc = StateInfo::tensor_product(
-            bra_info->basis[bra_info->orbsym[m]], ibra_prev,
-            bra_info->right_dims_fci[m]), iket_notrunc = ibra_notrunc;
+                      bra_info->basis[bra_info->orbsym[m]], ibra_prev,
+                      bra_info->right_dims_fci[m]),
+                  iket_notrunc = ibra_notrunc;
         StateInfo ibra_cinfo = StateInfo::get_connection_info(
-            bra_info->basis[bra_info->orbsym[m]], ibra_prev,
-            ibra_notrunc), iket_cinfo = ibra_cinfo;
+                      bra_info->basis[bra_info->orbsym[m]], ibra_prev,
+                      ibra_notrunc),
+                  iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m + 1);
             iket_prev = ket_info->right_dims[m + 1];
@@ -3759,8 +4120,7 @@ struct Partition {
                 ket_info->basis[ket_info->orbsym[m]], iket_prev,
                 ket_info->right_dims_fci[m]);
             iket_cinfo = StateInfo::get_connection_info(
-                ket_info->basis[ket_info->orbsym[m]], iket_prev,
-                iket_notrunc);
+                ket_info->basis[ket_info->orbsym[m]], iket_prev, iket_notrunc);
         }
         frame->activate(0);
         for (size_t i = 0; i < sl.size(); i++) {
@@ -3772,13 +4132,12 @@ struct Partition {
                                     sl[i].twos() & 1);
             shared_ptr<SparseMatrixInfo::ConnectionInfo> cinfo =
                 make_shared<SparseMatrixInfo::ConnectionInfo>();
-            cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                              bra_info->basis[bra_info->orbsym[m]],
-                              ibra_prev,
-                              ket_info->basis[ket_info->orbsym[m]],
-                              iket_prev, ibra_cinfo,
-                              iket_cinfo, site_op_infos, prev_right_op_infos,
-                              rop_notrunc, cg);
+            cinfo->initialize_tp(
+                sl[i], subsl[i], ibra_notrunc, iket_notrunc,
+                bra_info->basis[bra_info->orbsym[m]], ibra_prev,
+                ket_info->basis[ket_info->orbsym[m]], iket_prev, ibra_cinfo,
+                iket_cinfo, site_op_infos, prev_right_op_infos, rop_notrunc,
+                cg);
             rop_notrunc->cinfo = cinfo;
         }
         frame->activate(1);
@@ -3825,7 +4184,8 @@ struct EffectiveHamiltonian {
         shared_ptr<SparseMatrixInfo::ConnectionInfo> diag_info =
             make_shared<SparseMatrixInfo::ConnectionInfo>();
         diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos_notrunc,
-                                   right_op_infos_notrunc, diag->info, tf->opf->cg);
+                                   right_op_infos_notrunc, diag->info,
+                                   tf->opf->cg);
         diag->info->cinfo = diag_info;
         tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops, diag,
                                     opdq);
@@ -3884,7 +4244,6 @@ struct MovingEnvironment {
     vector<shared_ptr<Partition>> envs;
     shared_ptr<TensorFunctions> tf;
     vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> *site_op_infos;
-    shared_ptr<OpElement> hop;
     shared_ptr<SymbolicColumnVector> hop_mat;
     string tag = "DMRG";
     MovingEnvironment(
@@ -3895,10 +4254,8 @@ struct MovingEnvironment {
           bra(bra), ket(ket), tf(tf), site_op_infos(site_op_infos) {
         assert(bra->n_sites == ket->n_sites && mpo->n_sites == ket->n_sites);
         assert(bra->center == ket->center && bra->dot == ket->dot);
-        hop = make_shared<OpElement>(OpNames::H, vector<uint8_t>{},
-                                     ket->info->vaccum);
         hop_mat = make_shared<SymbolicColumnVector>(1);
-        (*hop_mat)[0] = hop;
+        (*hop_mat)[0] = mpo->op;
     }
     void left_contract_rotate(int i) {
         vector<SpinLabel> sl =
@@ -3922,9 +4279,8 @@ struct MovingEnvironment {
         if (bra != ket)
             ket->load_tensor(i - 1);
         frame->reset(1);
-        Partition::init_left_op_infos(
-            i - 1, bra->info, ket->info, sl,
-            envs[i]->left_op_infos);
+        Partition::init_left_op_infos(i - 1, bra->info, ket->info, sl,
+                                      envs[i]->left_op_infos);
         frame->activate(1);
         envs[i]->left = Partition::build_left(mpo->left_operator_names[i - 1],
                                               envs[i]->left_op_infos);
@@ -3962,9 +4318,8 @@ struct MovingEnvironment {
         if (bra != ket)
             ket->load_tensor(i + dot);
         frame->reset(1);
-        Partition::init_right_op_infos(
-            i + dot, bra->info, ket->info, sl,
-            envs[i]->right_op_infos);
+        Partition::init_right_op_infos(i + dot, bra->info, ket->info, sl,
+                                       envs[i]->right_op_infos);
         frame->activate(1);
         envs[i]->right = Partition::build_right(
             mpo->right_operator_names[i + dot], envs[i]->right_op_infos);
@@ -3980,14 +4335,14 @@ struct MovingEnvironment {
     }
     string get_left_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART.LEFT." << tag << "."
-           << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix << ".PART.LEFT." << tag
+           << "." << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART.RIGHT." << tag << "."
-           << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix << ".PART.RIGHT." << tag
+           << "." << Parsing::to_string(i);
         return ss.str();
     }
     void init_environments() {
@@ -4048,8 +4403,8 @@ struct MovingEnvironment {
             Partition::init_left_op_infos_notrunc(
                 center, bra->info, ket->info, lsl, lsubsl,
                 envs[center]->left_op_infos,
-                site_op_infos[bra->info->orbsym[center]], 
-                left_op_infos_notrunc, tf->opf->cg);
+                site_op_infos[bra->info->orbsym[center]], left_op_infos_notrunc,
+                tf->opf->cg);
             // left contract
             frame->activate(0);
             shared_ptr<OperatorTensor> new_left = Partition::build_left(
@@ -4083,13 +4438,13 @@ struct MovingEnvironment {
                                new_right);
             // delayed left-right contract
             shared_ptr<DelayedOperatorTensor> op =
-                TensorFunctions::delayed_contract(new_left, new_right, hop);
+                TensorFunctions::delayed_contract(new_left, new_right, mpo->op);
             frame->activate(0);
             frame->reset(1);
             shared_ptr<EffectiveHamiltonian> efh =
                 make_shared<EffectiveHamiltonian>(
                     left_op_infos_notrunc, right_op_infos_notrunc, op,
-                    ket->tensors[center], hop, hop_mat, tf);
+                    ket->tensors[center], mpo->op, hop_mat, tf);
             return efh;
         } else
             return nullptr;
@@ -4272,7 +4627,8 @@ struct DMRG {
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Ndav = " << setw(4) << r.ndav << " E = " << setw(15)
-               << r.energy << " Error = " << setw(15) << setprecision(12) << r.error;
+               << r.energy << " Error = " << setw(15) << setprecision(12)
+               << r.error;
             return os;
         }
     };
@@ -4305,7 +4661,8 @@ struct DMRG {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i], unswapped_wfn = nullptr;
+        shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i],
+                                 unswapped_wfn = nullptr;
         shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham();
         auto pdi = h_eff->eigs(false);
         h_eff->deallocate();
@@ -4326,18 +4683,22 @@ struct DMRG {
             if ((swapped = i + 1 != me->n_sites - 1)) {
                 ket_info->load_right_dims(i + 2);
                 StateInfo l = ket_info->left_dims[i + 1],
-                        m = ket_info->basis[ket_info->orbsym[i + 1]],
-                        r = p = ket_info->right_dims[i + 2];
-                lm = StateInfo::tensor_product(l, m, ket_info->left_dims_fci[i + 2]);
+                          m = ket_info->basis[ket_info->orbsym[i + 1]],
+                          r = p = ket_info->right_dims[i + 2];
+                lm = StateInfo::tensor_product(l, m,
+                                               ket_info->left_dims_fci[i + 2]);
                 lmc = StateInfo::get_connection_info(l, m, lm);
-                mr = StateInfo::tensor_product(m, r, ket_info->right_dims_fci[i + 1]);
+                mr = StateInfo::tensor_product(m, r,
+                                               ket_info->right_dims_fci[i + 1]);
                 mrc = StateInfo::get_connection_info(m, r, mr);
-                shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i + 1]->info;
+                shared_ptr<SparseMatrixInfo> owinfo =
+                    me->ket->tensors[i + 1]->info;
                 wfn_info->initialize(lm, r, owinfo->delta_quantum,
-                                    owinfo->is_fermion, owinfo->is_wavefunction);
+                                     owinfo->is_fermion,
+                                     owinfo->is_wavefunction);
                 wfn->allocate(wfn_info);
-                wfn->swap_to_fused_left(me->ket->tensors[i + 1], l, m, r, mr, mrc,
-                                        lm, lmc);
+                wfn->swap_to_fused_left(me->ket->tensors[i + 1], l, m, r, mr,
+                                        mrc, lm, lmc);
                 unswapped_wfn = me->ket->tensors[i + 1];
                 me->ket->tensors[i + 1] = wfn;
             }
@@ -4348,15 +4709,18 @@ struct DMRG {
             if ((swapped = i != 0)) {
                 ket_info->load_left_dims(i);
                 StateInfo l = p = ket_info->left_dims[i],
-                        m = ket_info->basis[ket_info->orbsym[i]],
-                        r = ket_info->right_dims[i + 1];
-                lm = StateInfo::tensor_product(l, m, ket_info->left_dims_fci[i + 1]);
+                          m = ket_info->basis[ket_info->orbsym[i]],
+                          r = ket_info->right_dims[i + 1];
+                lm = StateInfo::tensor_product(l, m,
+                                               ket_info->left_dims_fci[i + 1]);
                 lmc = StateInfo::get_connection_info(l, m, lm);
-                mr = StateInfo::tensor_product(m, r, ket_info->right_dims_fci[i]);
+                mr = StateInfo::tensor_product(m, r,
+                                               ket_info->right_dims_fci[i]);
                 mrc = StateInfo::get_connection_info(m, r, mr);
                 shared_ptr<SparseMatrixInfo> owinfo = me->ket->tensors[i]->info;
                 wfn_info->initialize(l, mr, owinfo->delta_quantum,
-                                    owinfo->is_fermion, owinfo->is_wavefunction);
+                                     owinfo->is_fermion,
+                                     owinfo->is_wavefunction);
                 wfn->allocate(wfn_info);
                 wfn->swap_to_fused_right(me->ket->tensors[i], l, m, r, lm, lmc,
                                          mr, mrc);
@@ -4582,30 +4946,30 @@ struct Hamiltonian {
         map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
             ops[n_syms];
         for (uint8_t i = 0; i < n_syms; i++) {
-            ops[i][make_shared<OpElement>(OpNames::I, vector<uint8_t>{},
-                                          vaccum)] = nullptr;
-            ops[i][make_shared<OpElement>(OpNames::N, vector<uint8_t>{},
-                                          vaccum)] = nullptr;
-            ops[i][make_shared<OpElement>(OpNames::NN, vector<uint8_t>{},
-                                          vaccum)] = nullptr;
+            ops[i][make_shared<OpElement>(OpNames::I, SiteIndex(), vaccum)] =
+                nullptr;
+            ops[i][make_shared<OpElement>(OpNames::N, SiteIndex(), vaccum)] =
+                nullptr;
+            ops[i][make_shared<OpElement>(OpNames::NN, SiteIndex(), vaccum)] =
+                nullptr;
         }
         for (uint8_t m = 0; m < n_sites; m++) {
             ops[orb_sym[m]][make_shared<OpElement>(
-                OpNames::C, vector<uint8_t>{m}, SpinLabel(1, 1, orb_sym[m]))] =
+                OpNames::C, SiteIndex(m), SpinLabel(1, 1, orb_sym[m]))] =
                 nullptr;
             ops[orb_sym[m]][make_shared<OpElement>(
-                OpNames::D, vector<uint8_t>{m}, SpinLabel(-1, 1, orb_sym[m]))] =
+                OpNames::D, SiteIndex(m), SpinLabel(-1, 1, orb_sym[m]))] =
                 nullptr;
             for (uint8_t s = 0; s < 2; s++) {
-                ops[orb_sym[m]]
-                   [make_shared<OpElement>(OpNames::A, vector<uint8_t>{m, m, s},
-                                           SpinLabel(2, s * 2, 0))] = nullptr;
                 ops[orb_sym[m]][make_shared<OpElement>(
-                    OpNames::AD, vector<uint8_t>{m, m, s},
-                    SpinLabel(-2, s * 2, 0))] = nullptr;
-                ops[orb_sym[m]]
-                   [make_shared<OpElement>(OpNames::B, vector<uint8_t>{m, m, s},
-                                           SpinLabel(0, s * 2, 0))] = nullptr;
+                    OpNames::A, SiteIndex(m, m, s), SpinLabel(2, s * 2, 0))] =
+                    nullptr;
+                ops[orb_sym[m]][make_shared<OpElement>(
+                    OpNames::AD, SiteIndex(m, m, s), SpinLabel(-2, s * 2, 0))] =
+                    nullptr;
+                ops[orb_sym[m]][make_shared<OpElement>(
+                    OpNames::B, SiteIndex(m, m, s), SpinLabel(0, s * 2, 0))] =
+                    nullptr;
             }
         }
         for (uint8_t i = 0; i < n_syms; i++) {
@@ -4629,7 +4993,7 @@ struct Hamiltonian {
                 case OpNames::B:
                     p.second->allocate(
                         find_site_op_info(op.q_label, i),
-                        op_prims[op.site_index.back()][op.name]->data);
+                        op_prims[op.site_index.s()][op.name]->data);
                     break;
                 default:
                     assert(false);
@@ -4704,37 +5068,37 @@ struct Hamiltonian {
             case OpNames::P:
                 i = op.site_index[0];
                 k = op.site_index[1];
-                s = op.site_index[2];
+                s = op.site_index.s();
                 if (abs(v(i, m, k, m)) < TINY)
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix>();
                     p.second->allocate(
                         find_site_op_info(op.q_label, orb_sym[m]),
-                        op_prims[op.site_index.back()].at(OpNames::AD)->data);
+                        op_prims[s].at(OpNames::AD)->data);
                     p.second->factor *= v(i, m, k, m);
                 }
                 break;
             case OpNames::PD:
                 i = op.site_index[0];
                 k = op.site_index[1];
-                s = op.site_index[2];
+                s = op.site_index.s();
                 if (abs(v(i, m, k, m)) < TINY)
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix>();
                     p.second->allocate(
                         find_site_op_info(op.q_label, orb_sym[m]),
-                        op_prims[op.site_index.back()].at(OpNames::A)->data);
+                        op_prims[s].at(OpNames::A)->data);
                     p.second->factor *= v(i, m, k, m);
                 }
                 break;
             case OpNames::Q:
                 i = op.site_index[0];
                 j = op.site_index[1];
-                s = op.site_index[2];
+                s = op.site_index.s();
                 switch (s) {
-                case 0:
+                case 0U:
                     if (abs(2 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
                         p.second = zero;
                     else {
@@ -4745,7 +5109,7 @@ struct Hamiltonian {
                         p.second->factor *= 2 * v(i, j, m, m) - v(i, m, m, j);
                     }
                     break;
-                case 1:
+                case 1U:
                     if (abs(v(i, m, m, j)) < TINY)
                         p.second = zero;
                     else {
@@ -4888,11 +5252,10 @@ struct Hamiltonian {
 
 struct QCMPO : MPO {
     QCMPO(const Hamiltonian &hamil) : MPO(hamil.n_sites) {
-        const_e = hamil.e();
         shared_ptr<OpElement> h_op =
-            make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
+            make_shared<OpElement>(OpNames::H, SiteIndex(), hamil.vaccum);
         shared_ptr<OpElement> i_op =
-            make_shared<OpElement>(OpNames::I, vector<uint8_t>{}, hamil.vaccum);
+            make_shared<OpElement>(OpNames::I, SiteIndex(), hamil.vaccum);
         shared_ptr<OpElement> c_op[hamil.n_sites], d_op[hamil.n_sites];
         shared_ptr<OpElement> mc_op[hamil.n_sites], md_op[hamil.n_sites];
         shared_ptr<OpElement> trd_op[hamil.n_sites], tr_op[hamil.n_sites];
@@ -4902,50 +5265,51 @@ struct QCMPO : MPO {
         shared_ptr<OpElement> p_op[hamil.n_sites][hamil.n_sites][2];
         shared_ptr<OpElement> pd_op[hamil.n_sites][hamil.n_sites][2];
         shared_ptr<OpElement> q_op[hamil.n_sites][hamil.n_sites][2];
+        op = h_op;
+        const_e = hamil.e();
         for (uint8_t m = 0; m < hamil.n_sites; m++) {
-            c_op[m] = make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
+            c_op[m] = make_shared<OpElement>(OpNames::C, SiteIndex(m),
                                              SpinLabel(1, 1, hamil.orb_sym[m]));
-            d_op[m] =
-                make_shared<OpElement>(OpNames::D, vector<uint8_t>{m},
-                                       SpinLabel(-1, 1, hamil.orb_sym[m]));
+            d_op[m] = make_shared<OpElement>(
+                OpNames::D, SiteIndex(m), SpinLabel(-1, 1, hamil.orb_sym[m]));
             mc_op[m] =
-                make_shared<OpElement>(OpNames::C, vector<uint8_t>{m},
+                make_shared<OpElement>(OpNames::C, SiteIndex(m),
                                        SpinLabel(1, 1, hamil.orb_sym[m]), -1.0);
             md_op[m] = make_shared<OpElement>(
-                OpNames::D, vector<uint8_t>{m},
-                SpinLabel(-1, 1, hamil.orb_sym[m]), -1.0);
+                OpNames::D, SiteIndex(m), SpinLabel(-1, 1, hamil.orb_sym[m]),
+                -1.0);
             trd_op[m] =
-                make_shared<OpElement>(OpNames::RD, vector<uint8_t>{m},
+                make_shared<OpElement>(OpNames::RD, SiteIndex(m),
                                        SpinLabel(1, 1, hamil.orb_sym[m]), 2.0);
             tr_op[m] =
-                make_shared<OpElement>(OpNames::R, vector<uint8_t>{m},
+                make_shared<OpElement>(OpNames::R, SiteIndex(m),
                                        SpinLabel(-1, 1, hamil.orb_sym[m]), 2.0);
         }
         for (uint8_t i = 0; i < hamil.n_sites; i++)
             for (uint8_t j = 0; j < hamil.n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     a_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::A, vector<uint8_t>{i, j, s},
+                        OpNames::A, SiteIndex(i, j, s),
                         SpinLabel(2, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                     ad_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::AD, vector<uint8_t>{i, j, s},
+                        OpNames::AD, SiteIndex(i, j, s),
                         SpinLabel(-2, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                     b_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::B, vector<uint8_t>{i, j, s},
+                        OpNames::B, SiteIndex(i, j, s),
                         SpinLabel(0, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                     p_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::P, vector<uint8_t>{i, j, s},
+                        OpNames::P, SiteIndex(i, j, s),
                         SpinLabel(-2, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                     pd_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::PD, vector<uint8_t>{i, j, s},
+                        OpNames::PD, SiteIndex(i, j, s),
                         SpinLabel(2, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                     q_op[i][j][s] = make_shared<OpElement>(
-                        OpNames::Q, vector<uint8_t>{i, j, s},
+                        OpNames::Q, SiteIndex(i, j, s),
                         SpinLabel(0, s * 2,
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
@@ -5265,6 +5629,98 @@ struct QCMPO : MPO {
                     op.name == OpNames::H)
                     it->second->deallocate();
             }
+    }
+};
+
+struct RuleQCSU2 : Rule {
+    uint8_t mask;
+    const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
+    RuleQCSU2(bool d = true, bool r = true, bool a = true, bool p = true,
+              bool b = true, bool q = true)
+        : mask((d << D) | (r << R) | (a << A) | (p << P) | (b << B) |
+               (q << Q)) {}
+    shared_ptr<OpElementRef>
+    operator()(const shared_ptr<OpElement> &op) const override {
+        switch (op->name) {
+        case OpNames::D:
+            return (mask & (1 << D))
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(OpNames::C, op->site_index,
+                                                    -op->q_label, op->factor),
+                             true, 1)
+                       : nullptr;
+        case OpNames::RD:
+            return (mask & (1 << R))
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(OpNames::R, op->site_index,
+                                                    -op->q_label, op->factor),
+                             true, -1)
+                       : nullptr;
+        case OpNames::A:
+            return (mask & (1 << A)) && op->site_index[0] < op->site_index[1]
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(
+                                 OpNames::A, op->site_index.flip_spatial(),
+                                 op->q_label, op->factor),
+                             false, op->site_index.s() ? -1 : 1)
+                       : nullptr;
+        case OpNames::AD:
+            return (mask & (1 << A))
+                       ? (op->site_index[0] >= op->site_index[1]
+                              ? make_shared<OpElementRef>(
+                                    make_shared<OpElement>(
+                                        OpNames::A, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, op->site_index.s() ? 1 : -1)
+                              : make_shared<OpElementRef>(
+                                    make_shared<OpElement>(
+                                        OpNames::A,
+                                        op->site_index.flip_spatial(),
+                                        -op->q_label, op->factor),
+                                    true, -1))
+                       : nullptr;
+        case OpNames::P:
+            return (mask & (1 << P)) && op->site_index[0] < op->site_index[1]
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(
+                                 OpNames::P, op->site_index.flip_spatial(),
+                                 op->q_label, op->factor),
+                             false, op->site_index.s() ? -1 : 1)
+                       : nullptr;
+        case OpNames::PD:
+            return (mask & (1 << P))
+                       ? (op->site_index[0] >= op->site_index[1]
+                              ? make_shared<OpElementRef>(
+                                    make_shared<OpElement>(
+                                        OpNames::P, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, op->site_index.s() ? 1 : -1)
+                              : make_shared<OpElementRef>(
+                                    make_shared<OpElement>(
+                                        OpNames::P,
+                                        op->site_index.flip_spatial(),
+                                        -op->q_label, op->factor),
+                                    true, -1))
+                       : nullptr;
+        case OpNames::B:
+            return (mask & (1 << B)) && op->site_index[0] < op->site_index[1]
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(
+                                 OpNames::B, op->site_index.flip_spatial(),
+                                 -op->q_label, op->factor),
+                             true, op->site_index.s() ? -1 : 1)
+                       : nullptr;
+        case OpNames::Q:
+            return (mask & (1 << Q)) && op->site_index[0] < op->site_index[1]
+                       ? make_shared<OpElementRef>(
+                             make_shared<OpElement>(
+                                 OpNames::Q, op->site_index.flip_spatial(),
+                                 -op->q_label, op->factor),
+                             true, op->site_index.s() ? -1 : 1)
+                       : nullptr;
+        default:
+            return nullptr;
+        }
     }
 };
 

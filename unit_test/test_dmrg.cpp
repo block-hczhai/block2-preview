@@ -21,10 +21,10 @@ class TestDMRG : public ::testing::Test {
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -41,7 +41,7 @@ TEST_F(TestDMRG, Test) {
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
     cout << "MPO end" << endl;
 
-    uint16_t bond_dim = 500;
+    uint16_t bond_dim = 200;
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
