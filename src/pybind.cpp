@@ -277,12 +277,12 @@ PYBIND11_MODULE(block2, m) {
             return Array<uint16_t>(self->n_states, self->n);
         });
 
-    py::class_<SparseMatrixInfo::CollectedInfo,
-               shared_ptr<SparseMatrixInfo::CollectedInfo>>(m, "CollectedInfo")
+    py::class_<SparseMatrixInfo::ConnectionInfo,
+               shared_ptr<SparseMatrixInfo::ConnectionInfo>>(m, "ConnectionInfo")
         .def(py::init<>())
-        .def_readwrite("n", &SparseMatrixInfo::CollectedInfo::n)
-        .def_readwrite("nc", &SparseMatrixInfo::CollectedInfo::nc)
-        .def("__repr__", [](SparseMatrixInfo::CollectedInfo *self) {
+        .def_readwrite("n", &SparseMatrixInfo::ConnectionInfo::n)
+        .def_readwrite("nc", &SparseMatrixInfo::ConnectionInfo::nc)
+        .def("__repr__", [](SparseMatrixInfo::ConnectionInfo *self) {
             stringstream ss;
             ss << *self;
             return ss.str();

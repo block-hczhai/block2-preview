@@ -21,9 +21,10 @@ class TestDMRG : public ::testing::Test {
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    string filename = "data/CR2.SVP.FCIDUMP";
-    // string filename = "data/N2.STO3G.FCIDUMP";
-    // string filename = "data/HUBBARD-L8.FCIDUMP";
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
+    // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -40,10 +41,12 @@ TEST_F(TestDMRG, Test) {
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
     cout << "MPO end" << endl;
 
+    uint16_t bond_dim = 500;
+
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
         norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
-    mps_info->set_bond_dimension(500);
+    mps_info->set_bond_dimension(bond_dim);
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
         cout << mps_info->left_dims[i].n_states_total << " ";
@@ -54,7 +57,7 @@ TEST_F(TestDMRG, Test) {
     cout << endl;
 
     // MPS
-    // Random::rand_seed(1969);
+    Random::rand_seed(1969);
     shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
@@ -82,7 +85,7 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     shared_ptr<DMRG> dmrg =
-        make_shared<DMRG>(me, vector<uint16_t>{500}, vector<double>{0});
+        make_shared<DMRG>(me, vector<uint16_t>{bond_dim}, vector<double>{0.0});
     // dmrg->update_two_dot(0, true, 500, 0.0);
     // dmrg->me->move_to(1);
     // dmrg->contract_two_dot(1);
