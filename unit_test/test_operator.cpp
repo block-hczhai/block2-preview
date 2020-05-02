@@ -29,7 +29,22 @@ class TestOperator : public ::testing::Test {
     }
 };
 
-TEST_F(TestOperator, Test) {
+TEST_F(TestOperator, TestSiteIndex) {
+    EXPECT_EQ(SiteIndex().size(), 0);
+    EXPECT_EQ(SiteIndex().spin_size(), 0);
+    EXPECT_EQ(SiteIndex()[0], 0);
+    EXPECT_EQ(SiteIndex(3).size(), 1);
+    EXPECT_EQ(SiteIndex(3).spin_size(), 0);
+    EXPECT_EQ(SiteIndex(3)[0], 3);
+    EXPECT_EQ(SiteIndex(3, 4, 1).size(), 2);
+    EXPECT_EQ(SiteIndex(3, 4, 1).spin_size(), 1);
+    EXPECT_EQ(SiteIndex(3, 4, 1)[0], 3);
+    EXPECT_EQ(SiteIndex(3, 4, 1)[1], 4);
+    EXPECT_EQ(SiteIndex(3, 4, 1).s(), 1);
+    EXPECT_EQ(SiteIndex(3, 4, 0).s(), 0);
+}
+
+TEST_F(TestOperator, TestExpr) {
     for (size_t i = 0; i < ops.size(); i++) {
         EXPECT_EQ(to_str(ops[i]), reprs[i]);
         EXPECT_TRUE(ops[i] * (-5.0) == (-5.0) * ops[i]);

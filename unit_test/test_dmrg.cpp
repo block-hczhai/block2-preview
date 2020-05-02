@@ -21,10 +21,10 @@ class TestDMRG : public ::testing::Test {
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -36,12 +36,20 @@ TEST_F(TestDMRG, Test) {
     bool su2 = !fcidump->uhf;
     Hamiltonian hamil(vaccum, target, norb, su2, fcidump, orbsym);
 
+    Timer t;
+    t.get_time();
     // MPO
     cout << "MPO start" << endl;
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
-    cout << "MPO end" << endl;
+    cout << "MPO end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 200;
+    // MPO simplification
+    cout << "MPO simplification start" << endl;
+    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
+    cout << "MPO simplification end .. T = " << t.get_time() << endl;
+    // cout << mpo->get_blocking_formulas() << endl;
+
+    uint16_t bond_dim = 500;
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(

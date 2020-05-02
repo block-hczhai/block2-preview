@@ -68,13 +68,32 @@ TEST_F(TestMatrix, TestTensorProduct) {
         Random::fill_rand_double(a.data, a.size());
         Random::fill_rand_double(b.data, b.size());
         c.clear();
-        MatrixFunctions::tensor_product(a, false, b, false, c, 2.0, 0);
+        bool conja = Random::rand_int(0, 2);
+        bool conjb = Random::rand_int(0, 2);
+        MatrixRef ta = a, tb = b;
+        if (conja) {
+            ta = MatrixRef(dalloc->allocate(ma * na), na, ma);
+            for (int ia = 0; ia < ma; ia++)
+                for (int ja = 0; ja < na; ja++)
+                    ta(ja, ia) = a(ia, ja);
+        }
+        if (conjb) {
+            tb = MatrixRef(dalloc->allocate(mb * nb), nb, mb);
+            for (int ib = 0; ib < mb; ib++)
+                    for (int jb = 0; jb < nb; jb++)
+                        tb(jb, ib) = b(ib, jb);
+        }
+        MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
         for (int ia = 0; ia < ma; ia++)
             for (int ja = 0; ja < na; ja++)
                 for (int ib = 0; ib < mb; ib++)
                     for (int jb = 0; jb < nb; jb++)
                         ASSERT_EQ(2.0 * a(ia, ja) * b(ib, jb),
                                   c(ia * mb + ib, ja * nb + jb));
+        if (conjb)
+            tb.deallocate();
+        if (conja)
+            ta.deallocate();
         c.deallocate();
         b.deallocate();
         a.deallocate();

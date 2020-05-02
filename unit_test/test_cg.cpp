@@ -36,6 +36,25 @@ class TestCG : public ::testing::Test {
     }
 };
 
+TEST_F(TestCG, TestCGTranspose) {
+    for (int i = 0; i < n_tests; i++) {
+        int d = Random::rand_int(0, 20);
+        int l = Random::rand_int(0, 20);
+        int r = rand_triangle(d, l);
+        double actual = cg.transpose_cg(d, l, r);
+        double expected = -1;
+        for (int lz = -l; lz <= l && expected == -1; lz += 2)
+            for (int rz = -r; rz <= r; rz += 2) {
+                long double factor = cg.cg(l, d, r, lz, -d, rz);
+                if (abs(factor) > TINY) {
+                    expected = ((d & 1) ? -1 : 1) * factor / cg.cg(r, d, l, rz, d, lz);
+                    break;
+                }
+            }
+        EXPECT_LT(abs(actual - expected), 1E-15);
+    }
+}
+
 // <j1 m1 j2 m2 |0 0> = \delta_{j1,j2} \delta_{m1,-m2} (-1)^{j1-m1}/\sqrt{2j1+1}
 TEST_F(TestCG, TestCGJ0) {
     for (int i = 0; i < n_tests; i++) {

@@ -37,18 +37,6 @@ TEST_F(TestMPO, Test) {
     Hamiltonian hamil(vaccum, target, norb, su2, fcidump, orbsym);
 
     // MPO
-    assert(SiteIndex().size() == 0);
-    assert(SiteIndex().spin_size() == 0);
-    assert(SiteIndex()[0] == 0);
-    assert(SiteIndex(3).size() == 1);
-    assert(SiteIndex(3).spin_size() == 0);
-    assert(SiteIndex(3)[0] == 3);
-    assert(SiteIndex(3, 4, 1).size() == 2);
-    assert(SiteIndex(3, 4, 1).spin_size() == 1);
-    assert(SiteIndex(3, 4, 1)[0] == 3);
-    assert(SiteIndex(3, 4, 1)[1] == 4);
-    assert(SiteIndex(3, 4, 1).s() == 1);
-    assert(SiteIndex(3, 4, 0).s() == 0);
     Timer t;
     t.get_time();
     cout << "MPO start" << endl;
