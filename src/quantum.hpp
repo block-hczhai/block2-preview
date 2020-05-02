@@ -16,6 +16,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mkl.h>
 #include <random>
 #include <sstream>
 #include <string>
@@ -2297,8 +2298,7 @@ extern "C" {
 
 // vector scale
 // vector [sx] = double [sa] * vector [sx]
-extern void dscal(const int *n, const double *sa, const double *sx,
-                  const int *incx);
+extern void dscal(const int *n, const double *sa, double *sx, const int *incx);
 
 // vector copy
 // vector [dy] = [dx]
@@ -2339,7 +2339,7 @@ extern void dorglq(const int *m, const int *n, const int *k, double *a,
 // eigenvalue problem
 extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
                   const int *lda, double *w, double *work, const int *lwork,
-                  const int *info);
+                  int *info);
 }
 
 struct MatrixFunctions {
@@ -2376,15 +2376,15 @@ struct MatrixFunctions {
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
-        if (!conja and !conjb) {
+        if (!conja && !conjb) {
             assert(a.n == b.m && c.m == a.m && c.n == b.n);
             dgemm("n", "n", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (!conja and conjb) {
+        } else if (!conja && conjb) {
             assert(a.n == b.n && c.m == a.m && c.n == b.m);
             dgemm("t", "n", &c.n, &c.m, &a.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (conja and !conjb) {
+        } else if (conja && !conjb) {
             assert(a.m == b.m && c.m == a.n && c.n == b.n);
             dgemm("n", "t", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
@@ -3006,8 +3006,110 @@ struct SparseMatrix {
     }
 };
 
+struct BatchGEMM {
+    const CBLAS_LAYOUT layout = CblasRowMajor;
+    vector<CBLAS_TRANSPOSE> ta, tb;
+    vector<int> n, m, k, gp, lda, ldb, ldc;
+    vector<double> alpha, beta;
+    vector<const double *> a, b;
+    vector<double *> c;
+    size_t work;
+    BatchGEMM() : work(0) {}
+    void dgemm(bool conja, bool conjb, int m, int n, int k, double alpha,
+               const double *a, int lda, const double *b, int ldb, double beta,
+               double *c, int ldc) {
+        ta.push_back(conja ? CblasTrans : CblasNoTrans);
+        tb.push_back(conjb ? CblasTrans : CblasNoTrans);
+        this->m.push_back(m), this->n.push_back(n), this->k.push_back(k);
+        this->alpha.push_back(alpha), this->beta.push_back(beta);
+        this->a.push_back(a), this->b.push_back(b), this->c.push_back(c);
+        this->lda.push_back(lda), this->ldb.push_back(ldb),
+            this->ldc.push_back(ldc);
+        this->gp.push_back(1);
+    }
+    void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
+                  bool conjb, const MatrixRef &c, double scale,
+                  double cfactor) {
+        this->dgemm(conja, conjb, c.m, c.n, conjb ? b.n : b.m, scale, a.data,
+                    a.n, b.data, b.n, cfactor, c.data, c.n);
+    }
+    void perform() {
+        cblas_dgemm_batch(layout, &ta[0], &tb[0], &m[0], &n[0], &k[0],
+                          &alpha[0], &a[0], &lda[0], &b[0], &ldb[0], &beta[0],
+                          &c[0], &ldc[0], (int)gp.size(), &gp[0]);
+    }
+    void clear() {
+        ta.clear(), tb.clear();
+        n.clear(), m.clear(), k.clear(), gp.clear();
+        lda.clear(), ldb.clear(), ldc.clear();
+        alpha.clear(), beta.clear();
+        a.clear(), b.clear(), c.clear();
+        work = 0;
+    }
+};
+
+struct BatchGEMMSeq {
+    vector<shared_ptr<BatchGEMM>> batch;
+    BatchGEMMSeq() {
+        batch.push_back(make_shared<BatchGEMM>());
+        batch.push_back(make_shared<BatchGEMM>());
+    }
+    double *work;
+    void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
+                bool conj_bra, const MatrixRef &ket, bool conj_ket,
+                double scale) {
+        MatrixRef work((double *)0 + batch[0]->work, a.m,
+                       conj_ket ? ket.m : ket.n);
+        batch[0]->multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
+        batch[1]->multiply(bra, conj_bra, work, false, c, scale, 1.0);
+        batch[0]->work += work.size();
+        batch[1]->work += work.size();
+    }
+    void allocate() {
+        frame->activate(0);
+        work = dalloc->allocate(batch[0]->work);
+    }
+    void deallocate() {
+        frame->activate(0);
+        dalloc->deallocate(work, batch[0]->work);
+    }
+    void update_rotate_work() {
+        size_t shift = work - (double *)0;
+        for (size_t i = 0; i < batch[0]->c.size(); i++)
+            batch[0]->c[i] += shift;
+        for (size_t i = 0; i < batch[1]->b.size(); i++)
+            batch[1]->b[i] += shift;
+    }
+    void operator()(const MatrixRef &c, const MatrixRef &v) {
+        size_t cshift = c.data - (double *)0;
+        size_t vshift = v.data - (double *)0;
+        for (size_t i = 0; i < batch[0]->a.size(); i++)
+            batch[0]->a[i] += cshift;
+        for (size_t i = 0; i < batch[1]->c.size(); i++)
+            batch[1]->c[i] += vshift;
+        for (auto b : batch)
+            b->perform();
+        for (size_t i = 0; i < batch[0]->a.size(); i++)
+            batch[0]->a[i] -= cshift;
+        for (size_t i = 0; i < batch[1]->c.size(); i++)
+            batch[1]->c[i] -= vshift;
+    }
+    void clear() {
+        for (auto b : batch)
+            b->clear();
+    }
+    friend ostream &operator<<(ostream &os, const BatchGEMMSeq &c) {
+        os << endl;
+        os << "[0] SIZE = " << c.batch[0]->gp.size()
+           << " WORK = " << c.batch[0]->work << endl;
+        os << "[1] SIZE = " << c.batch[1]->gp.size() << " WORK = " << c.batch[1]->work << endl;
+        return os;
+    }
+};
+
 struct OperatorFunctions {
     shared_ptr<CG> cg;
+    shared_ptr<BatchGEMMSeq> seq = nullptr;
     OperatorFunctions(const shared_ptr<CG> &cg) : cg(cg) {}
     // a += b * scale
     void iadd(SparseMatrix &a, const SparseMatrix &b,
@@ -3091,8 +3193,12 @@ struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
                 iv = cinfo->stride[il];
             double factor = cinfo->factor[il];
-            MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
-                                    !(conj & 2), scale * factor);
+            if (seq != nullptr)
+                seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
+                            scale * factor);
+            else
+                MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
+                                        !(conj & 2), scale * factor);
         }
     }
     void tensor_product(uint8_t conj, const SparseMatrix &a,
@@ -3694,7 +3800,8 @@ struct SimplifiedMPO : MPO {
                 if (rule->operator()(op) != nullptr)
                     continue;
                 lname->data[k] = abs_value(lname->data[j]);
-                lexpr->data[k] = simplify_expr(lexpr->data[j]) * (1 / op->factor);
+                lexpr->data[k] =
+                    simplify_expr(lexpr->data[j]) * (1 / op->factor);
                 k++;
             }
             lname->data.resize(k);
@@ -3715,7 +3822,8 @@ struct SimplifiedMPO : MPO {
                 if (rule->operator()(op) != nullptr)
                     continue;
                 rname->data[k] = abs_value(rname->data[j]);
-                rexpr->data[k] = simplify_expr(rexpr->data[j]) * (1 / op->factor);
+                rexpr->data[k] =
+                    simplify_expr(rexpr->data[j]) * (1 / op->factor);
                 k++;
             }
             rname->data.resize(k);
@@ -4376,6 +4484,17 @@ struct EffectiveHamiltonian {
                                  left_op_infos_notrunc, right_op_infos_notrunc,
                                  psi->info, psi->info, tf->opf->cg);
         cmat->info->cinfo = wfn_info;
+        // prepare batch gemm
+        if (tf->opf->seq != nullptr) {
+            cmat->data = (double *)0;
+            vmat->data = (double *)0;
+            tf->opf->seq->clear();
+            tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops,
+                                        cmat, vmat, opdq);
+            tf->opf->seq->allocate();
+            tf->opf->seq->update_rotate_work();
+            cout << *tf->opf->seq << endl;
+        }
     }
     void operator()(const MatrixRef &b, const MatrixRef &c) {
         assert(b.m * b.n == cmat->total_memory);
@@ -4392,11 +4511,16 @@ struct EffectiveHamiltonian {
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         frame->activate(0);
         vector<double> eners =
-            MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
+            tf->opf->seq == nullptr
+                ? MatrixFunctions::davidson(*this, aa, bs, ndav, iprint)
+                : MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav,
+                                            iprint);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
         frame->activate(0);
+        if (tf->opf->seq != nullptr)
+            tf->opf->seq->deallocate();
         cmat->info->cinfo->deallocate();
         diag->deallocate();
         op->deallocate();
