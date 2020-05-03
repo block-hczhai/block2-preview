@@ -6,7 +6,7 @@ using namespace block2;
 
 class TestDMRG : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
+    size_t isize = 1L << 30;
     size_t dsize = 1L << 36;
     void SetUp() override {
         Random::rand_seed(0);
@@ -49,7 +49,7 @@ TEST_F(TestDMRG, Test) {
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
 
-    uint16_t bond_dim = 200;
+    uint16_t bond_dim = 500;
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
@@ -84,7 +84,7 @@ TEST_F(TestDMRG, Test) {
          << " D = " << dalloc->used << endl;
     // ME
     shared_ptr<TensorFunctions> tf = make_shared<TensorFunctions>(hamil.opf);
-    hamil.opf->seq = make_shared<BatchGEMMSeq>();
+    hamil.opf->seq = make_shared<BatchGEMMSeq>(0);
     shared_ptr<MovingEnvironment> me =
         make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
     me->init_environments();

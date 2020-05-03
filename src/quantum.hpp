@@ -23,6 +23,7 @@
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <tuple>
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
@@ -280,6 +281,8 @@ struct MatrixRef {
     void allocate() { data = dalloc->allocate(size()); }
     void deallocate() { dalloc->deallocate(data, size()), data = nullptr; }
     void clear() { memset(data, 0, size() * sizeof(double)); }
+    MatrixRef flip_dims() const { return MatrixRef(data, n, m); }
+    MatrixRef shift_ptr(size_t l) const { return MatrixRef(data + l, m, n); }
     friend ostream &operator<<(ostream &os, const MatrixRef &mat) {
         os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         for (int i = 0; i < mat.m; i++) {
@@ -3015,17 +3018,64 @@ struct BatchGEMM {
     vector<double *> c;
     size_t work;
     BatchGEMM() : work(0) {}
-    void dgemm(bool conja, bool conjb, int m, int n, int k, double alpha,
-               const double *a, int lda, const double *b, int ldb, double beta,
-               double *c, int ldc) {
+    void dgemm_group(bool conja, bool conjb, int m, int n, int k, double alpha,
+                     int lda, int ldb, double beta, int ldc, int gc) {
         ta.push_back(conja ? CblasTrans : CblasNoTrans);
         tb.push_back(conjb ? CblasTrans : CblasNoTrans);
         this->m.push_back(m), this->n.push_back(n), this->k.push_back(k);
         this->alpha.push_back(alpha), this->beta.push_back(beta);
-        this->a.push_back(a), this->b.push_back(b), this->c.push_back(c);
         this->lda.push_back(lda), this->ldb.push_back(ldb),
             this->ldc.push_back(ldc);
-        this->gp.push_back(1);
+        this->gp.push_back(gc);
+    }
+    void dgemm_array(const double *a, const double *b, double *c) {
+        this->a.push_back(a), this->b.push_back(b), this->c.push_back(c);
+    }
+    void dgemm(bool conja, bool conjb, int m, int n, int k, double alpha,
+               const double *a, int lda, const double *b, int ldb, double beta,
+               double *c, int ldc) {
+        dgemm_group(conja, conjb, m, n, k, alpha, lda, ldb, beta, ldc, 1);
+        dgemm_array(a, b, c);
+    }
+    void iadd(double *a, const double *b, int n) {
+        static double x = 1.0;
+        this->dgemm(false, false, n, 1, 1, 1.0, b, 1, &x, 1, 1.0, a, 1);
+    }
+    void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
+                        bool conjb, const MatrixRef &c, double scale,
+                        uint32_t stride) {
+        assert((a.m == 1 && a.n == 1) || (b.m == 1 && b.n == 1));
+        if (a.m == 1 && a.n == 1) {
+            if (!conjb && b.n == c.n)
+                this->dgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
+                            a.data, 1, 1.0, &c(0, stride), 1);
+            else if (!conjb) {
+                this->dgemm_group(false, false, b.n, 1, 1, scale, 1, 1, 1.0, 1,
+                                  b.m);
+                for (int k = 0; k < b.m; k++)
+                    this->dgemm_array(&b(k, 0), a.data, &c(k, stride));
+            } else {
+                this->dgemm_group(false, false, b.m, 1, 1, scale, b.n, 1, 1.0,
+                                  1, b.n);
+                for (int k = 0; k < b.n; k++)
+                    this->dgemm_array(&b(0, k), a.data, &c(k, stride));
+            }
+        } else {
+            if (!conja && a.n == c.n)
+                this->dgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
+                            b.data, 1, 1.0, &c(0, stride), 1);
+            else if (!conja) {
+                this->dgemm_group(false, false, a.n, 1, 1, scale, 1, 1, 1.0, 1,
+                                  a.m);
+                for (int k = 0; k < a.m; k++)
+                    this->dgemm_array(&a(k, 0), b.data, &c(k, stride));
+            } else {
+                this->dgemm_group(false, false, a.m, 1, 1, scale, a.n, 1, 1.0,
+                                  1, a.n);
+                for (int k = 0; k < a.n; k++)
+                    this->dgemm_array(&a(0, k), b.data, &c(k, stride));
+            }
+        }
     }
     void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                   bool conjb, const MatrixRef &c, double scale,
@@ -3033,10 +3083,17 @@ struct BatchGEMM {
         this->dgemm(conja, conjb, c.m, c.n, conjb ? b.n : b.m, scale, a.data,
                     a.n, b.data, b.n, cfactor, c.data, c.n);
     }
-    void perform() {
-        cblas_dgemm_batch(layout, &ta[0], &tb[0], &m[0], &n[0], &k[0],
-                          &alpha[0], &a[0], &lda[0], &b[0], &ldb[0], &beta[0],
-                          &c[0], &ldc[0], (int)gp.size(), &gp[0]);
+    void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                 const MatrixRef &c, double scale) {
+        this->dgemm(false, true, a.n, b.n, 1, scale, a.data, a.n + 1, b.data,
+                    b.n + 1, 1.0, c.data, c.n);
+    }
+    void perform(int ii = 0, int kk = 0, int nn = 0) {
+        if (nn != 0 || gp.size() != 0)
+            cblas_dgemm_batch(layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
+                              &alpha[ii], &a[kk], &lda[ii], &b[kk], &ldb[ii],
+                              &beta[ii], &c[kk], &ldc[ii],
+                              nn == 0 ? (int)gp.size() : nn, &gp[ii]);
     }
     void clear() {
         ta.clear(), tb.clear();
@@ -3046,15 +3103,50 @@ struct BatchGEMM {
         a.clear(), b.clear(), c.clear();
         work = 0;
     }
+    friend ostream &operator<<(ostream &os, const BatchGEMM &c) {
+        for (size_t i = 0, k = 0; i < c.gp.size(); k += c.gp[i], i++) {
+            os << "[" << setw(3) << i << "] :: GC=" << c.gp[i]
+               << " TA=" << (c.ta[i] == CblasTrans ? "T" : "N")
+               << " TB=" << (c.tb[i] == CblasTrans ? "T" : "N")
+               << " M=" << c.m[i] << " N=" << c.n[i] << " K=" << c.k[i]
+               << " ALPHA=" << c.alpha[i] << " BETA=" << c.beta[i]
+               << " LDA=" << c.lda[i] << " LDB=" << c.ldb[i]
+               << " LDC=" << c.ldc[i] << endl;
+            for (size_t j = 0; j < c.gp[i]; j++)
+                os << setw(9) << ">" << setw(3) << j << hex
+                   << " :: A=" << c.a[k + j] << " B=" << c.b[k + j]
+                   << " C=" << c.c[k + j] << dec << endl;
+        }
+        return os;
+    }
+};
+
+struct BatchGEMMRef {
+    shared_ptr<BatchGEMM> batch;
+    int i, k, n, nk;
+    size_t flops, work, rwork = 0;
+    int ipost = 0;
+    BatchGEMMRef(const shared_ptr<BatchGEMM> &batch, size_t flops, size_t work,
+                 int i, int k, int n, int nk)
+        : batch(batch), flops(flops), work(work), i(i), k(k), n(n), nk(nk) {}
+    void perform() {
+        if (n != 0)
+            batch->perform(i, k, n);
+    }
 };
 
 struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> batch;
-    BatchGEMMSeq() {
+    vector<shared_ptr<BatchGEMM>> post_batch;
+    vector<BatchGEMMRef> refs;
+    size_t max_batch_flops = 1LU << 30;
+    size_t max_work, max_rwork;
+    double *work, *rwork;
+    BatchGEMMSeq(size_t max_batch_flops = 1LU << 30)
+        : max_batch_flops(max_batch_flops) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
     }
-    double *work;
     void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
                 bool conj_bra, const MatrixRef &ket, bool conj_ket,
                 double scale) {
@@ -3065,44 +3157,276 @@ struct BatchGEMMSeq {
         batch[0]->work += work.size();
         batch[1]->work += work.size();
     }
+    void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                 const MatrixRef &c, double scale) {
+        batch[1]->tensor_product_diagonal(a, b, c, scale);
+    }
+    void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
+                        bool conjb, const MatrixRef &c, double scale,
+                        uint32_t stride) {
+        batch[1]->tensor_product(a, conja, b, conjb, c, scale, stride);
+    }
+    void divide_batch() {
+        size_t cur = 0, cwork = 0, pwork = 0;
+        int ip = 0, kp = 0;
+        for (int i = 0, k = 0; i < batch[1]->gp.size();
+             k += batch[1]->gp[i++]) {
+            cur += (size_t)batch[1]->m[i] * batch[1]->n[i] * batch[1]->k[i] *
+                   batch[1]->gp[i];
+            if (batch[0]->gp.size() != 0)
+                cwork += (size_t)batch[0]->m[i] * batch[0]->n[i];
+            if (max_batch_flops != 0 && cur >= max_batch_flops) {
+                if (batch[0]->gp.size() != 0)
+                    refs.push_back(BatchGEMMRef(batch[0], cur, cwork - pwork,
+                                                ip, kp, i + 1 - ip,
+                                                k + batch[0]->gp[i] - kp));
+                refs.push_back(BatchGEMMRef(batch[1], cur, cwork - pwork, ip,
+                                            kp, i + 1 - ip,
+                                            k + batch[1]->gp[i] - kp));
+                if (pwork != 0) {
+                    for (size_t kk = kp; kk < k + batch[1]->gp[i]; kk++)
+                        batch[0]->c[kk] -= pwork;
+                    for (size_t kk = kp; kk < k + batch[1]->gp[i]; kk++)
+                        batch[1]->b[kk] -= pwork;
+                }
+                cur = 0, ip = i + 1, kp = k + batch[1]->gp[i];
+                pwork = cwork;
+            }
+        }
+        if (cur != 0) {
+            if (batch[0]->gp.size() != 0)
+                refs.push_back(BatchGEMMRef(batch[0], cur, cwork - pwork, ip,
+                                            kp, batch[1]->gp.size() - ip,
+                                            batch[0]->c.size() - kp));
+            refs.push_back(BatchGEMMRef(batch[1], cur, cwork - pwork, ip, kp,
+                                        batch[1]->gp.size() - ip,
+                                        batch[1]->b.size() - kp));
+            if (pwork != 0) {
+                for (size_t kk = kp; kk < batch[0]->c.size(); kk++)
+                    batch[0]->c[kk] -= pwork;
+                for (size_t kk = kp; kk < batch[1]->b.size(); kk++)
+                    batch[1]->b[kk] -= pwork;
+            }
+        }
+    }
+    void prepare() {
+        divide_batch();
+        for (int ib = !!batch[0]->gp.size(), db = batch[0]->gp.size() == 0 ? 1 : 2;
+             ib < refs.size(); ib += db) {
+            shared_ptr<BatchGEMM> b = refs[ib].batch;
+            double **ptr = (double **)dalloc->allocate(refs[ib].nk);
+            uint32_t *len = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            uint32_t *pos = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            uint32_t *idx = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            int xi = refs[ib].i, xk = refs[ib].k;
+            for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
+                for (int kk = k; kk < k + b->gp[xi + i]; kk++)
+                    ptr[kk] = b->c[xk + kk],
+                    len[kk] = b->m[xi + i] * b->n[xi + i], pos[kk] = xk + kk;
+            }
+            for (int kk = 0; kk < refs[ib].nk; kk++)
+                idx[kk] = kk;
+            sort(idx, idx + refs[ib].nk,
+                 [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
+            vector<double *> ptrs;
+            vector<uint32_t> lens;
+            vector<map<pair<uint32_t, uint32_t>, vector<int>>> shifts;
+            for (int kk = 0; kk < refs[ib].nk; kk++) {
+                if (ptrs.size() == 0) {
+                    ptrs.push_back(ptr[idx[kk]]);
+                    lens.push_back(len[idx[kk]]);
+                    shifts.push_back(
+                        map<pair<uint32_t, uint32_t>, vector<int>>());
+                    shifts.back()[make_pair(0, len[idx[kk]])].push_back(
+                        pos[idx[kk]]);
+                } else if (ptr[idx[kk]] >= ptrs.back() &&
+                           ptr[idx[kk]] <
+                               ptrs.back() + lens.back()) {
+                    shifts
+                        .back()[make_pair(ptr[idx[kk]] - ptrs.back(),
+                                          len[idx[kk]])]
+                        .push_back(pos[idx[kk]]);
+                    if (ptr[idx[kk]] + len[idx[kk]] > ptrs.back() + lens.back())
+                        lens.back() = ptr[idx[kk]] + len[idx[kk]] - ptrs.back();
+                } else if (ptr[idx[kk]] == ptrs.back() + lens.back()) {
+                    lens.back() += len[idx[kk]];
+                    shifts
+                        .back()[make_pair(ptr[idx[kk]] - ptrs.back(),
+                                          len[idx[kk]])]
+                        .push_back(pos[idx[kk]]);
+                } else {
+                    ptrs.push_back(ptr[idx[kk]]);
+                    lens.push_back(len[idx[kk]]);
+                    shifts.push_back(
+                        map<pair<uint32_t, uint32_t>, vector<int>>());
+                    shifts.back()[make_pair(0, len[idx[kk]])].push_back(
+                        pos[idx[kk]]);
+                }
+            }
+            ialloc->deallocate(idx, refs[ib].nk);
+            ialloc->deallocate(pos, refs[ib].nk);
+            ialloc->deallocate(len, refs[ib].nk);
+            dalloc->deallocate((double *)ptr, refs[ib].nk);
+            vector<size_t> pwork;
+            pwork.reserve(ptrs.size());
+            vector<vector<pair<uint32_t, vector<int>>>> rshifts;
+            for (size_t p = 0; p < ptrs.size(); p++) {
+                pwork.push_back(0);
+                rshifts.push_back(vector<pair<uint32_t, vector<int>>>());
+                uint32_t sh = 0, le = 0;
+                for (auto &r : shifts[p]) {
+                    if (r.first.first > sh || le == 0)
+                        sh = r.first.first, le = r.first.second;
+                    if (r.first.first == sh && r.first.second == le)
+                        rshifts.back().push_back(make_pair(sh, r.second));
+                }
+                size_t q = 0;
+                for (auto &r : shifts[p]) {
+                    if (r.first.first != rshifts.back()[q].first) {
+                        assert(r.first.first == rshifts.back()[q - 1].first);
+                        rshifts.back()[q - 1].second.insert(
+                            rshifts.back()[q - 1].second.end(),
+                            r.second.begin(), r.second.end());
+                        for (size_t qq = q; qq < rshifts.back().size(); qq++)
+                            if (rshifts.back()[qq].first > r.first.first && rshifts.back()[qq].first < r.first.first + r.first.second)
+                                for (size_t u = 0; u < r.second.size(); u++)
+                                    rshifts.back()[qq].second.push_back(-1);
+                    } else
+                        q++;
+                }
+                for (auto &r : rshifts[p])
+                    if (r.second.size() > pwork.back())
+                        pwork.back() = r.second.size();
+            }
+            refs[ib].rwork = 0;
+            for (size_t p = 0; p < ptrs.size(); p++)
+                refs[ib].rwork += pwork[p] * lens[p];
+            double *rr = 0;
+            for (size_t p = 0; p < ptrs.size(); p++) {
+                for (auto &r : rshifts[p]) {
+                    for (size_t q = 0; q < r.second.size(); q++)
+                        if (r.second[q] != -1)
+                            b->c[r.second[q]] = rr + q * lens[p] + r.first;
+                }
+                rr += pwork[p] * lens[p];
+            }
+            size_t max_pwork = *max_element(pwork.begin(), pwork.end());
+            size_t ppost = post_batch.size(), ipost = 0;
+            while (max_pwork > (1 << ipost))
+                ipost++;
+            refs[ib].ipost = ipost + 1;
+            for (size_t ip = 0; ip < ipost + 1; ip++)
+                post_batch.push_back(make_shared<BatchGEMM>());
+            rr = 0;
+            for (size_t p = 0; p < ptrs.size(); p++) {
+                for (size_t ip = 0, ipx = 1, ipy = 2; ip < ipost;
+                     ip++, ipx <<= 1, ipy <<= 1)
+                    for (size_t q = 0; q + ipx < pwork[p]; q += ipy)
+                        post_batch[ppost + ip]->iadd(rr + q * lens[p],
+                                                     rr + (q + ipx) * lens[p],
+                                                     lens[p]);
+                post_batch[ppost + ipost]->iadd(ptrs[p], rr, lens[p]);
+                rr += pwork[p] * lens[p];
+            }
+        }
+    }
     void allocate() {
-        frame->activate(0);
-        work = dalloc->allocate(batch[0]->work);
+        max_work = max_rwork = 0;
+        for (int ib = 0; ib < refs.size(); ib++) {
+            max_work = max(max_work, refs[ib].work);
+            max_rwork = max(max_rwork, refs[ib].rwork);
+        }
+        if (max_work != 0) {
+            work = dalloc->allocate(max_work);
+            size_t shift = work - (double *)0;
+            for (size_t i = 0; i < batch[0]->c.size(); i++)
+                batch[0]->c[i] += shift;
+            for (size_t i = 0; i < batch[1]->b.size(); i++)
+                batch[1]->b[i] += shift;
+        }
+        if (max_rwork != 0) {
+            rwork = dalloc->allocate(max_rwork);
+            size_t shift = rwork - (double *)0;
+            size_t ipost = 0;
+            for (size_t i = 0; i < batch[1]->c.size(); i++)
+                batch[1]->c[i] += shift;
+            for (int ib = !!batch[0]->gp.size(), db = batch[0]->gp.size() == 0 ? 1 : 2;
+                 ib < refs.size(); ib += db) {
+                for (size_t k = ipost; k < ipost + refs[ib].ipost - 1; k++)
+                    for (size_t i = 0; i < post_batch[k]->a.size(); i++) {
+                        post_batch[k]->a[i] += shift;
+                        post_batch[k]->c[i] += shift;
+                    }
+                for (size_t i = 0, p = ipost + refs[ib].ipost - 1;
+                     i < post_batch[p]->a.size(); i++)
+                    post_batch[p]->a[i] += shift;
+                ipost += refs[ib].ipost;
+            }
+        }
     }
     void deallocate() {
-        frame->activate(0);
-        dalloc->deallocate(work, batch[0]->work);
+        if (max_rwork != 0)
+            dalloc->deallocate(rwork, max_rwork);
+        if (max_work != 0)
+            dalloc->deallocate(work, max_work);
     }
-    void update_rotate_work() {
-        size_t shift = work - (double *)0;
-        for (size_t i = 0; i < batch[0]->c.size(); i++)
-            batch[0]->c[i] += shift;
-        for (size_t i = 0; i < batch[1]->b.size(); i++)
-            batch[1]->b[i] += shift;
+    void auto_perform() {
+        prepare();
+        allocate();
+        perform();
+        deallocate();
+        clear();
+    }
+    void perform() {
+        size_t ipost = 0;
+        for (auto b : refs) {
+            if (b.rwork != 0)
+                memset(rwork, 0, sizeof(double) * b.rwork);
+            b.perform();
+            for (size_t ib = ipost; ib < ipost + b.ipost; ib++)
+                post_batch[ib]->perform();
+            ipost += b.ipost;
+        }
+        assert(ipost == post_batch.size());
     }
     void operator()(const MatrixRef &c, const MatrixRef &v) {
         size_t cshift = c.data - (double *)0;
         size_t vshift = v.data - (double *)0;
         for (size_t i = 0; i < batch[0]->a.size(); i++)
             batch[0]->a[i] += cshift;
-        for (size_t i = 0; i < batch[1]->c.size(); i++)
-            batch[1]->c[i] += vshift;
-        for (auto b : batch)
-            b->perform();
+        size_t ipost = 0;
+        for (auto b : refs) {
+            if (b.ipost != 0)
+                for (size_t i = 0; i < post_batch[ipost + b.ipost - 1]->c.size();
+                    i++)
+                    post_batch[ipost + b.ipost - 1]->c[i] += vshift;
+            ipost += b.ipost;
+        }
+        perform();
         for (size_t i = 0; i < batch[0]->a.size(); i++)
             batch[0]->a[i] -= cshift;
-        for (size_t i = 0; i < batch[1]->c.size(); i++)
-            batch[1]->c[i] -= vshift;
+        ipost = 0;
+        for (auto b : refs) {
+            if (b.ipost != 0)
+                for (size_t i = 0; i < post_batch[ipost + b.ipost - 1]->c.size();
+                    i++)
+                    post_batch[ipost + b.ipost - 1]->c[i] -= vshift;
+            ipost += b.ipost;
+        }
     }
     void clear() {
         for (auto b : batch)
             b->clear();
+        post_batch.clear();
+        refs.clear();
+        max_rwork = max_work = 0;
     }
     friend ostream &operator<<(ostream &os, const BatchGEMMSeq &c) {
         os << endl;
         os << "[0] SIZE = " << c.batch[0]->gp.size()
            << " WORK = " << c.batch[0]->work << endl;
-        os << "[1] SIZE = " << c.batch[1]->gp.size() << " WORK = " << c.batch[1]->work << endl;
+        os << "[1] SIZE = " << c.batch[1]->gp.size()
+           << " WORK = " << c.batch[1]->work << endl;
         return os;
     }
 };
@@ -3141,8 +3465,12 @@ struct OperatorFunctions {
             SpinLabel cqprime = c.info->quanta[ic].get_ket();
             int ibra = rot_bra.info->find_state(cq);
             int iket = rot_ket.info->find_state(cqprime);
-            MatrixFunctions::rotate(a[ia], c[ic], rot_bra[ibra], !trans,
-                                    rot_ket[iket], trans, scale);
+            if (seq != nullptr)
+                seq->rotate(a[ia], c[ic], rot_bra[ibra], !trans, rot_ket[iket],
+                            trans, scale);
+            else
+                MatrixFunctions::rotate(a[ia], c[ic], rot_bra[ibra], !trans,
+                                        rot_ket[iket], trans, scale);
         }
     }
     void tensor_product_diagonal(uint8_t conj, const SparseMatrix &a,
@@ -3166,8 +3494,12 @@ struct OperatorFunctions {
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             double factor = cinfo->factor[il];
-            MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
-                                                     scale * factor);
+            if (seq != nullptr)
+                seq->tensor_product_diagonal(a[ia], b[ib], c[ic],
+                                             scale * factor);
+            else
+                MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
+                                                         scale * factor);
         }
     }
     void tensor_product_multiply(uint8_t conj, const SparseMatrix &a,
@@ -3224,9 +3556,13 @@ struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             uint32_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
-            MatrixFunctions::tensor_product(a[ia], conj & 1, b[ib],
-                                            (conj & 2) >> 1, c[ic],
-                                            scale * factor, stride);
+            if (seq != nullptr)
+                seq->tensor_product(a[ia], conj & 1, b[ib], (conj & 2) >> 1,
+                                    c[ic], scale * factor, stride);
+            else
+                MatrixFunctions::tensor_product(a[ia], conj & 1, b[ib],
+                                                (conj & 2) >> 1, c[ic],
+                                                scale * factor, stride);
         }
     }
     // c = a * b * scale
@@ -3478,6 +3814,8 @@ struct TensorFunctions {
                 opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, false);
             }
+        if (opf->seq != nullptr)
+            opf->seq->auto_perform();
     }
     void right_rotate(const shared_ptr<OperatorTensor> &a,
                       const shared_ptr<SparseMatrix> &mpst_bra,
@@ -3489,6 +3827,8 @@ struct TensorFunctions {
                 opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, true);
             }
+        if (opf->seq != nullptr)
+            opf->seq->auto_perform();
     }
     static shared_ptr<DelayedOperatorTensor>
     delayed_contract(const shared_ptr<OperatorTensor> &a,
@@ -3535,6 +3875,8 @@ struct TensorFunctions {
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
                 tensor_product(expr, a->ops, b->ops, c->ops.at(op));
             }
+            if (opf->seq != nullptr)
+                opf->seq->auto_perform();
         }
     }
     void right_contract(const shared_ptr<OperatorTensor> &a,
@@ -3554,6 +3896,8 @@ struct TensorFunctions {
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
                 tensor_product(expr, b->ops, a->ops, c->ops.at(op));
             }
+            if (opf->seq != nullptr)
+                opf->seq->auto_perform();
         }
     }
 };
@@ -4471,6 +4815,8 @@ struct EffectiveHamiltonian {
         diag->info->cinfo = diag_info;
         tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops, diag,
                                     opdq);
+        if (tf->opf->seq != nullptr)
+            tf->opf->seq->auto_perform();
         diag_info->deallocate();
         // temp wavefunction
         cmat = make_shared<SparseMatrix>();
@@ -4486,14 +4832,11 @@ struct EffectiveHamiltonian {
         cmat->info->cinfo = wfn_info;
         // prepare batch gemm
         if (tf->opf->seq != nullptr) {
-            cmat->data = (double *)0;
-            vmat->data = (double *)0;
-            tf->opf->seq->clear();
+            cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops,
                                         cmat, vmat, opdq);
+            tf->opf->seq->prepare();
             tf->opf->seq->allocate();
-            tf->opf->seq->update_rotate_work();
-            cout << *tf->opf->seq << endl;
         }
     }
     void operator()(const MatrixRef &b, const MatrixRef &c) {
@@ -4519,8 +4862,10 @@ struct EffectiveHamiltonian {
     }
     void deallocate() {
         frame->activate(0);
-        if (tf->opf->seq != nullptr)
+        if (tf->opf->seq != nullptr) {
             tf->opf->seq->deallocate();
+            tf->opf->seq->clear();
+        }
         cmat->info->cinfo->deallocate();
         diag->deallocate();
         op->deallocate();

@@ -49,6 +49,7 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
 }
 
 TEST_F(TestMatrix, TestTensorProduct) {
+    shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
     for (int i = 0; i < n_tests; i++) {
         int ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
         int ma = Random::rand_int(1, 700), na = Random::rand_int(1, 700);
@@ -83,7 +84,13 @@ TEST_F(TestMatrix, TestTensorProduct) {
                     for (int jb = 0; jb < nb; jb++)
                         tb(jb, ib) = b(ib, jb);
         }
-        MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
+        if (Random::rand_int(0, 2) || ii == 2)
+            MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
+        else {
+            batch->tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
+            batch->perform();
+            batch->clear();
+        }
         for (int ia = 0; ia < ma; ia++)
             for (int ja = 0; ja < na; ja++)
                 for (int ib = 0; ib < mb; ib++)
