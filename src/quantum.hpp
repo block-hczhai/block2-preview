@@ -3135,6 +3135,8 @@ struct BatchGEMMRef {
     }
 };
 
+enum SeqTypes : uint8_t { None, Simple, Auto };
+
 struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> batch;
     vector<shared_ptr<BatchGEMM>> post_batch;
@@ -3142,8 +3144,9 @@ struct BatchGEMMSeq {
     size_t max_batch_flops = 1LU << 30;
     size_t max_work, max_rwork;
     double *work, *rwork;
-    BatchGEMMSeq(size_t max_batch_flops = 1LU << 30)
-        : max_batch_flops(max_batch_flops) {
+    SeqTypes mode;
+    BatchGEMMSeq(size_t max_batch_flops = 1LU << 30, SeqTypes mode = SeqTypes::None)
+        : max_batch_flops(max_batch_flops), mode(mode) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
     }
@@ -3370,6 +3373,13 @@ struct BatchGEMMSeq {
         if (max_work != 0)
             dalloc->deallocate(work, max_work);
     }
+    void simple_perform() {
+        divide_batch();
+        allocate();
+        perform();
+        deallocate();
+        clear();
+    }
     void auto_perform() {
         prepare();
         allocate();
@@ -3434,7 +3444,9 @@ struct BatchGEMMSeq {
 struct OperatorFunctions {
     shared_ptr<CG> cg;
     shared_ptr<BatchGEMMSeq> seq = nullptr;
-    OperatorFunctions(const shared_ptr<CG> &cg) : cg(cg) {}
+    OperatorFunctions(const shared_ptr<CG> &cg) : cg(cg) {
+        seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
+    }
     // a += b * scale
     void iadd(SparseMatrix &a, const SparseMatrix &b,
               double scale = 1.0) const {
@@ -3465,13 +3477,15 @@ struct OperatorFunctions {
             SpinLabel cqprime = c.info->quanta[ic].get_ket();
             int ibra = rot_bra.info->find_state(cq);
             int iket = rot_ket.info->find_state(cqprime);
-            if (seq != nullptr)
+            if (seq->mode != SeqTypes::None)
                 seq->rotate(a[ia], c[ic], rot_bra[ibra], !trans, rot_ket[iket],
                             trans, scale);
             else
                 MatrixFunctions::rotate(a[ia], c[ic], rot_bra[ibra], !trans,
                                         rot_ket[iket], trans, scale);
         }
+        if (seq->mode == SeqTypes::Simple)
+            seq->simple_perform();
     }
     void tensor_product_diagonal(uint8_t conj, const SparseMatrix &a,
                                  const SparseMatrix &b, const SparseMatrix &c,
@@ -3494,13 +3508,15 @@ struct OperatorFunctions {
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             double factor = cinfo->factor[il];
-            if (seq != nullptr)
+            if (seq->mode != SeqTypes::None)
                 seq->tensor_product_diagonal(a[ia], b[ib], c[ic],
                                              scale * factor);
             else
                 MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
                                                          scale * factor);
         }
+        if (seq->mode == SeqTypes::Simple)
+            seq->simple_perform();
     }
     void tensor_product_multiply(uint8_t conj, const SparseMatrix &a,
                                  const SparseMatrix &b, const SparseMatrix &c,
@@ -3525,13 +3541,15 @@ struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
                 iv = cinfo->stride[il];
             double factor = cinfo->factor[il];
-            if (seq != nullptr)
+            if (seq->mode != SeqTypes::None)
                 seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
                             scale * factor);
             else
                 MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
                                         !(conj & 2), scale * factor);
         }
+        if (seq->mode == SeqTypes::Simple)
+            seq->simple_perform();
     }
     void tensor_product(uint8_t conj, const SparseMatrix &a,
                         const SparseMatrix &b, SparseMatrix &c,
@@ -3556,7 +3574,7 @@ struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             uint32_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
-            if (seq != nullptr)
+            if (seq->mode != SeqTypes::None)
                 seq->tensor_product(a[ia], conj & 1, b[ib], (conj & 2) >> 1,
                                     c[ic], scale * factor, stride);
             else
@@ -3564,6 +3582,8 @@ struct OperatorFunctions {
                                                 (conj & 2) >> 1, c[ic],
                                                 scale * factor, stride);
         }
+        if (seq->mode == SeqTypes::Simple)
+            seq->simple_perform();
     }
     // c = a * b * scale
     void product(const SparseMatrix &a, const SparseMatrix &b,
@@ -3814,7 +3834,7 @@ struct TensorFunctions {
                 opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, false);
             }
-        if (opf->seq != nullptr)
+        if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
     void right_rotate(const shared_ptr<OperatorTensor> &a,
@@ -3827,7 +3847,7 @@ struct TensorFunctions {
                 opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, true);
             }
-        if (opf->seq != nullptr)
+        if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
     static shared_ptr<DelayedOperatorTensor>
@@ -3875,7 +3895,7 @@ struct TensorFunctions {
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
                 tensor_product(expr, a->ops, b->ops, c->ops.at(op));
             }
-            if (opf->seq != nullptr)
+            if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
         }
     }
@@ -3896,7 +3916,7 @@ struct TensorFunctions {
                 shared_ptr<OpExpr> expr = exprs->data[i] * (1 / cop->factor);
                 tensor_product(expr, b->ops, a->ops, c->ops.at(op));
             }
-            if (opf->seq != nullptr)
+            if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
         }
     }
@@ -4815,7 +4835,7 @@ struct EffectiveHamiltonian {
         diag->info->cinfo = diag_info;
         tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops, diag,
                                     opdq);
-        if (tf->opf->seq != nullptr)
+        if (tf->opf->seq->mode == SeqTypes::Auto)
             tf->opf->seq->auto_perform();
         diag_info->deallocate();
         // temp wavefunction
@@ -4831,7 +4851,7 @@ struct EffectiveHamiltonian {
                                  psi->info, psi->info, tf->opf->cg);
         cmat->info->cinfo = wfn_info;
         // prepare batch gemm
-        if (tf->opf->seq != nullptr) {
+        if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops,
                                         cmat, vmat, opdq);
@@ -4854,15 +4874,14 @@ struct EffectiveHamiltonian {
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         frame->activate(0);
         vector<double> eners =
-            tf->opf->seq == nullptr
-                ? MatrixFunctions::davidson(*this, aa, bs, ndav, iprint)
-                : MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav,
-                                            iprint);
+            tf->opf->seq->mode == SeqTypes::Auto
+                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav,
+                                            iprint): MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
         frame->activate(0);
-        if (tf->opf->seq != nullptr) {
+        if (tf->opf->seq->mode == SeqTypes::Auto) {
             tf->opf->seq->deallocate();
             tf->opf->seq->clear();
         }
