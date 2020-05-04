@@ -3037,9 +3037,14 @@ struct BatchGEMM {
         dgemm_group(conja, conjb, m, n, k, alpha, lda, ldb, beta, ldc, 1);
         dgemm_array(a, b, c);
     }
-    void iadd(double *a, const double *b, int n) {
+    void iadd(double *a, const double *b, int n, double scale = 1.0,
+              double cfactor = 1.0) {
         static double x = 1.0;
-        this->dgemm(false, false, n, 1, 1, 1.0, b, 1, &x, 1, 1.0, a, 1);
+        this->dgemm(false, false, n, 1, 1, scale, b, 1, &x, 1, cfactor, a, 1);
+    }
+    void iscale(double *a, int n, double scale = 1.0) {
+        static double x = 1.0;
+        this->dgemm(false, false, n, 1, 1, 0.0, a, 1, &x, 1, scale, a, 1);
     }
     void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
                         bool conjb, const MatrixRef &c, double scale,
@@ -3150,6 +3155,11 @@ struct BatchGEMMSeq {
         : max_batch_flops(max_batch_flops), mode(mode) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
+    }
+    void iadd(const MatrixRef &a, const MatrixRef &b, double scale = 1.0,
+              double cfactor = 1.0) {
+        assert(a.m == b.m && a.n == b.n);
+        batch[1]->iadd(a.data, b.data, a.m * a.n, scale, cfactor);
     }
     void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
                 bool conj_bra, const MatrixRef &ket, bool conj_ket,
@@ -3454,16 +3464,44 @@ struct OperatorFunctions {
     // a += b * scale
     void iadd(SparseMatrix &a, const SparseMatrix &b,
               double scale = 1.0) const {
-        assert(a.info->n == b.info->n && a.total_memory == b.total_memory);
-        if (a.factor != 1.0) {
-            MatrixFunctions::iscale(MatrixRef(a.data, 1, a.total_memory),
-                                    a.factor);
-            a.factor = 1.0;
+        if (a.info == b.info) {
+            if (seq->mode != SeqTypes::None)
+                seq->iadd(MatrixRef(a.data, 1, a.total_memory),
+                          MatrixRef(b.data, 1, b.total_memory),
+                          scale * b.factor, a.factor);
+            else {
+                if (a.factor != 1.0) {
+                    MatrixFunctions::iscale(
+                        MatrixRef(a.data, 1, a.total_memory), a.factor);
+                    a.factor = 1.0;
+                }
+                if (scale != 0.0)
+                    MatrixFunctions::iadd(MatrixRef(a.data, 1, a.total_memory),
+                                          MatrixRef(b.data, 1, b.total_memory),
+                                          scale * b.factor);
+            }
+        } else {
+            for (int ia = 0, ib; ia < a.info->n; ia++) {
+                SpinLabel bra =
+                    a.info->quanta[ia].get_bra(a.info->delta_quantum);
+                SpinLabel ket = a.info->quanta[ia].get_ket();
+                SpinLabel bq = b.info->delta_quantum.combine(bra, ket);
+                if (bq != SpinLabel(0xFFFFFFFF) &&
+                    ((ib = b.info->find_state(bq)) != -1)) {
+                    if (seq->mode != SeqTypes::None)
+                        seq->iadd(a[ia], b[ib], scale * b.factor, a.factor);
+                    else {
+                        if (a.factor != 1.0) {
+                            MatrixFunctions::iscale(a[ia], a.factor);
+                            a.factor = 1;
+                        }
+                        if (scale != 0.0)
+                            MatrixFunctions::iadd(a[ia], b[ib],
+                                                  scale * b.factor);
+                    }
+                }
+            }
         }
-        if (scale != 0.0)
-            MatrixFunctions::iadd(MatrixRef(a.data, 1, a.total_memory),
-                                  MatrixRef(b.data, 1, b.total_memory),
-                                  scale * b.factor);
     }
     void tensor_rotate(const SparseMatrix &a, const SparseMatrix &c,
                        const SparseMatrix &rot_bra, const SparseMatrix &rot_ket,
@@ -3668,7 +3706,7 @@ struct OperatorFunctions {
 struct OperatorTensor {
     shared_ptr<Symbolic> lmat, rmat;
     map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less> ops;
-    OperatorTensor() {}
+    OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
     void reallocate(bool clean) {
         for (auto &p : ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
@@ -3751,8 +3789,7 @@ struct TensorFunctions {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
             assert(op->b != nullptr);
-            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
-                return;
+            assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product_multiply(op->conj, *lmat, *rmat, *cmat, *vmat,
@@ -3781,8 +3818,7 @@ struct TensorFunctions {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
             assert(op->b != nullptr);
-            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
-                return;
+            assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product_diagonal(op->conj, *lmat, *rmat, *mat, opdq,
@@ -3850,6 +3886,47 @@ struct TensorFunctions {
                 opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
                                    *mpst_ket, true);
             }
+        if (opf->seq->mode == SeqTypes::Auto)
+            opf->seq->auto_perform();
+    }
+    void numerical_transform(const shared_ptr<OperatorTensor> &a,
+                             const shared_ptr<Symbolic> &names,
+                             const shared_ptr<Symbolic> &exprs) const {
+        assert(names->data.size() == exprs->data.size());
+        assert((a->lmat == nullptr) ^ (a->rmat == nullptr));
+        if (a->lmat == nullptr)
+            a->rmat = names;
+        else
+            a->lmat = names;
+        for (size_t i = 0; i < a->ops.size(); i++) {
+            bool found = false;
+            for (size_t k = 0; k < names->data.size(); k++) {
+                shared_ptr<OpExpr> nop = names->data[k];
+                shared_ptr<OpExpr> expr = exprs->data[k];
+                assert(a->ops.count(nop) != 0);
+                switch (expr->get_type()) {
+                case OpTypes::Sum: {
+                    shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
+                    found |= i < op->strings.size();
+                    if (i < op->strings.size()) {
+                        shared_ptr<OpElement> nexpr = op->strings[i]->get_op();
+                        assert(a->ops.count(nexpr) != 0);
+                        opf->iadd(*a->ops.at(nop), *a->ops.at(nexpr),
+                                  nexpr->factor);
+                    }
+                } break;
+                case OpTypes::Zero:
+                    break;
+                default:
+                    assert(false);
+                    break;
+                }
+            }
+            if (!found)
+                break;
+            else if (opf->seq->mode == SeqTypes::Simple)
+                opf->seq->simple_perform();
+        }
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
@@ -3925,6 +4002,17 @@ struct TensorFunctions {
     }
 };
 
+struct MPOSchemer {
+    uint8_t left_trans_site, right_trans_site;
+    shared_ptr<SymbolicRowVector> left_new_operator_names;
+    shared_ptr<SymbolicColumnVector> right_new_operator_names;
+    shared_ptr<SymbolicRowVector> left_new_operator_exprs;
+    shared_ptr<SymbolicColumnVector> right_new_operator_exprs;
+    MPOSchemer(uint8_t left_trans_site, uint8_t right_trans_site)
+        : left_trans_site(left_trans_site), right_trans_site(right_trans_site) {
+    }
+};
+
 struct MPO {
     vector<shared_ptr<OperatorTensor>> tensors;
     vector<shared_ptr<Symbolic>> left_operator_names;
@@ -3934,9 +4022,11 @@ struct MPO {
     vector<shared_ptr<Symbolic>> right_operator_exprs;
     vector<shared_ptr<Symbolic>> middle_operator_exprs;
     shared_ptr<OpElement> op;
+    shared_ptr<MPOSchemer> schemer;
     int n_sites;
     double const_e;
-    MPO(int n_sites) : n_sites(n_sites), const_e(0.0), op(nullptr) {}
+    MPO(int n_sites)
+        : n_sites(n_sites), const_e(0.0), op(nullptr), schemer(nullptr) {}
     virtual void deallocate() {}
     string get_blocking_formulas() const {
         stringstream ss;
@@ -4511,21 +4601,23 @@ struct Partition {
             return p->second;
     }
     static shared_ptr<OperatorTensor>
-    build_left(const shared_ptr<Symbolic> &mat,
+    build_left(const vector<shared_ptr<Symbolic>> &mats,
                const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
                    &left_op_infos) {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
-        assert(mat != nullptr);
-        assert(mat->get_type() == SymTypes::RVec);
+        assert(mats[0] != nullptr);
+        assert(mats[0]->get_type() == SymTypes::RVec);
         opt->lmat = make_shared<SymbolicRowVector>(
-            *dynamic_pointer_cast<SymbolicRowVector>(mat));
-        for (size_t i = 0; i < mat->data.size(); i++)
-            if (mat->data[i]->get_type() != OpTypes::Zero) {
-                shared_ptr<OpElement> cop =
-                    dynamic_pointer_cast<OpElement>(mat->data[i]);
-                shared_ptr<OpExpr> op = abs_value(cop);
-                opt->ops[op] = make_shared<SparseMatrix>();
-            }
+            *dynamic_pointer_cast<SymbolicRowVector>(mats[0]));
+        for (auto &mat : mats) {
+            for (size_t i = 0; i < mat->data.size(); i++)
+                if (mat->data[i]->get_type() != OpTypes::Zero) {
+                    shared_ptr<OpElement> cop =
+                        dynamic_pointer_cast<OpElement>(mat->data[i]);
+                    shared_ptr<OpExpr> op = abs_value(cop);
+                    opt->ops[op] = make_shared<SparseMatrix>();
+                }
+        }
         for (auto &p : opt->ops) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
             p.second->allocate(find_op_info(left_op_infos, op->q_label));
@@ -4533,37 +4625,42 @@ struct Partition {
         return opt;
     }
     static shared_ptr<OperatorTensor>
-    build_right(const shared_ptr<Symbolic> &mat,
+    build_right(const vector<shared_ptr<Symbolic>> &mats,
                 const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
                     &right_op_infos) {
         shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
-        assert(mat != nullptr);
-        assert(mat->get_type() == SymTypes::CVec);
+        assert(mats[0] != nullptr);
+        assert(mats[0]->get_type() == SymTypes::CVec);
         opt->rmat = make_shared<SymbolicColumnVector>(
-            *dynamic_pointer_cast<SymbolicColumnVector>(mat));
-        for (size_t i = 0; i < mat->data.size(); i++)
-            if (mat->data[i]->get_type() != OpTypes::Zero) {
-                shared_ptr<OpElement> cop =
-                    dynamic_pointer_cast<OpElement>(mat->data[i]);
-                shared_ptr<OpExpr> op = abs_value(cop);
-                opt->ops[op] = make_shared<SparseMatrix>();
-            }
+            *dynamic_pointer_cast<SymbolicColumnVector>(mats[0]));
+        for (auto &mat : mats) {
+            for (size_t i = 0; i < mat->data.size(); i++)
+                if (mat->data[i]->get_type() != OpTypes::Zero) {
+                    shared_ptr<OpElement> cop =
+                        dynamic_pointer_cast<OpElement>(mat->data[i]);
+                    shared_ptr<OpExpr> op = abs_value(cop);
+                    opt->ops[op] = make_shared<SparseMatrix>();
+                }
+        }
         for (auto &p : opt->ops) {
             shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(p.first);
             p.second->allocate(find_op_info(right_op_infos, op->q_label));
         }
         return opt;
     }
-    static vector<SpinLabel> get_uniq_labels(const shared_ptr<Symbolic> &mat) {
+    static vector<SpinLabel>
+    get_uniq_labels(const vector<shared_ptr<Symbolic>> &mats) {
         vector<SpinLabel> sl;
-        assert(mat != nullptr);
-        assert(mat->get_type() == SymTypes::RVec ||
-               mat->get_type() == SymTypes::CVec);
-        sl.reserve(mat->data.size());
-        for (size_t i = 0; i < mat->data.size(); i++) {
-            shared_ptr<OpElement> op =
-                dynamic_pointer_cast<OpElement>(mat->data[i]);
-            sl.push_back(op->q_label);
+        for (auto &mat : mats) {
+            assert(mat != nullptr);
+            assert(mat->get_type() == SymTypes::RVec ||
+                   mat->get_type() == SymTypes::CVec);
+            sl.reserve(sl.size() + mat->data.size());
+            for (size_t i = 0; i < mat->data.size(); i++) {
+                shared_ptr<OpElement> op =
+                    dynamic_pointer_cast<OpElement>(mat->data[i]);
+                sl.push_back(op->q_label);
+            }
         }
         sort(sl.begin(), sl.end());
         sl.resize(distance(sl.begin(), unique(sl.begin(), sl.end())));
@@ -4923,8 +5020,10 @@ struct MovingEnvironment {
         (*hop_mat)[0] = mpo->op;
     }
     void left_contract_rotate(int i) {
-        vector<SpinLabel> sl =
-            Partition::get_uniq_labels(mpo->left_operator_names[i - 1]);
+        vector<shared_ptr<Symbolic>> mats = {mpo->left_operator_names[i - 1]};
+        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
+            mats.push_back(mpo->schemer->left_new_operator_names);
+        vector<SpinLabel> sl = Partition::get_uniq_labels(mats);
         shared_ptr<Symbolic> exprs =
             envs[i - 1]->left == nullptr
                 ? nullptr
@@ -4941,7 +5040,7 @@ struct MovingEnvironment {
             envs[i]->left_op_infos_notrunc, tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor> new_left = Partition::build_left(
-            mpo->left_operator_names[i - 1], envs[i]->left_op_infos_notrunc);
+            {mpo->left_operator_names[i - 1]}, envs[i]->left_op_infos_notrunc);
         tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                           new_left,
                           mpo->left_operator_exprs.size() != 0
@@ -4954,10 +5053,12 @@ struct MovingEnvironment {
         Partition::init_left_op_infos(i - 1, bra->info, ket->info, sl,
                                       envs[i]->left_op_infos);
         frame->activate(1);
-        envs[i]->left = Partition::build_left(mpo->left_operator_names[i - 1],
-                                              envs[i]->left_op_infos);
+        envs[i]->left = Partition::build_left(mats, envs[i]->left_op_infos);
         tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                         envs[i]->left);
+        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
+            tf->numerical_transform(envs[i]->left, mats[1],
+                                    mpo->schemer->left_new_operator_exprs);
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i - 1);
@@ -4967,8 +5068,12 @@ struct MovingEnvironment {
         frame->save_data(1, get_left_partition_filename(i));
     }
     void right_contract_rotate(int i) {
-        vector<SpinLabel> sl =
-            Partition::get_uniq_labels(mpo->right_operator_names[i + dot]);
+        vector<shared_ptr<Symbolic>> mats = {
+            mpo->right_operator_names[i + dot]};
+        if (mpo->schemer != nullptr &&
+            i + dot == mpo->schemer->right_trans_site)
+            mats.push_back(mpo->schemer->right_new_operator_names);
+        vector<SpinLabel> sl = Partition::get_uniq_labels(mats);
         shared_ptr<Symbolic> exprs =
             envs[i + 1]->right == nullptr
                 ? nullptr
@@ -4986,7 +5091,7 @@ struct MovingEnvironment {
             envs[i]->right_op_infos_notrunc, tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor> new_right =
-            Partition::build_right(mpo->right_operator_names[i + dot],
+            Partition::build_right({mpo->right_operator_names[i + dot]},
                                    envs[i]->right_op_infos_notrunc);
         tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                            new_right,
@@ -5000,10 +5105,13 @@ struct MovingEnvironment {
         Partition::init_right_op_infos(i + dot, bra->info, ket->info, sl,
                                        envs[i]->right_op_infos);
         frame->activate(1);
-        envs[i]->right = Partition::build_right(
-            mpo->right_operator_names[i + dot], envs[i]->right_op_infos);
+        envs[i]->right = Partition::build_right(mats, envs[i]->right_op_infos);
         tf->right_rotate(new_right, bra->tensors[i + dot],
                          ket->tensors[i + dot], envs[i]->right);
+        if (mpo->schemer != nullptr &&
+            i + dot == mpo->schemer->right_trans_site)
+            tf->numerical_transform(envs[i]->right, mats[1],
+                                    mpo->schemer->right_new_operator_exprs);
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i + dot);
@@ -5068,8 +5176,12 @@ struct MovingEnvironment {
             // left contract infos
             vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
                 left_op_infos_notrunc;
-            vector<SpinLabel> lsl =
-                Partition::get_uniq_labels(mpo->left_operator_names[center]);
+            vector<shared_ptr<Symbolic>> lmats = {
+                mpo->left_operator_names[center]};
+            if (mpo->schemer != nullptr &&
+                center == mpo->schemer->left_trans_site)
+                lmats.push_back(mpo->schemer->left_new_operator_names);
+            vector<SpinLabel> lsl = Partition::get_uniq_labels(lmats);
             shared_ptr<Symbolic> lexprs =
                 envs[center]->left == nullptr
                     ? nullptr
@@ -5089,18 +5201,26 @@ struct MovingEnvironment {
                 tf->opf->cg);
             // left contract
             frame->activate(0);
-            shared_ptr<OperatorTensor> new_left = Partition::build_left(
-                mpo->left_operator_names[center], left_op_infos_notrunc);
+            shared_ptr<OperatorTensor> new_left =
+                Partition::build_left(lmats, left_op_infos_notrunc);
             tf->left_contract(envs[center]->left, envs[center]->middle.front(),
                               new_left,
                               mpo->left_operator_exprs.size() != 0
                                   ? mpo->left_operator_exprs[center]
                                   : nullptr);
+            if (mpo->schemer != nullptr &&
+                center == mpo->schemer->left_trans_site)
+                tf->numerical_transform(new_left, lmats[1],
+                                        mpo->schemer->left_new_operator_exprs);
             // right contract infos
             vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
                 right_op_infos_notrunc;
-            vector<SpinLabel> rsl = Partition::get_uniq_labels(
-                mpo->right_operator_names[center + 1]);
+            vector<shared_ptr<Symbolic>> rmats = {
+                mpo->right_operator_names[center + 1]};
+            if (mpo->schemer != nullptr &&
+                center + 1 == mpo->schemer->right_trans_site)
+                rmats.push_back(mpo->schemer->right_new_operator_names);
+            vector<SpinLabel> rsl = Partition::get_uniq_labels(rmats);
             shared_ptr<Symbolic> rexprs =
                 envs[center]->right == nullptr
                     ? nullptr
@@ -5120,13 +5240,17 @@ struct MovingEnvironment {
                 right_op_infos_notrunc, tf->opf->cg);
             // right contract
             frame->activate(0);
-            shared_ptr<OperatorTensor> new_right = Partition::build_right(
-                mpo->right_operator_names[center + 1], right_op_infos_notrunc);
+            shared_ptr<OperatorTensor> new_right =
+                Partition::build_right(rmats, right_op_infos_notrunc);
             tf->right_contract(envs[center]->right, envs[center]->middle.back(),
                                new_right,
                                mpo->right_operator_exprs.size() != 0
                                    ? mpo->right_operator_exprs[center + 1]
                                    : nullptr);
+            if (mpo->schemer != nullptr &&
+                center + 1 == mpo->schemer->right_trans_site)
+                tf->numerical_transform(new_right, rmats[1],
+                                        mpo->schemer->right_new_operator_exprs);
             // delayed left-right contract
             shared_ptr<DelayedOperatorTensor> op =
                 mpo->middle_operator_exprs.size() != 0
@@ -5823,6 +5947,8 @@ struct Hamiltonian {
                 assert(false);
             }
         }
+        if (opf->seq->mode != SeqTypes::None)
+            opf->seq->simple_perform();
     }
     void filter_site_ops(uint8_t m, shared_ptr<Symbolic> &pmat,
                          map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
@@ -5857,12 +5983,15 @@ struct Hamiltonian {
                 break;
             case OpTypes::Sum:
                 kk = 0;
-                for (size_t i = 0; i < dynamic_pointer_cast<OpSum>(x)->strings.size(); i++) {
-                    xx = abs_value(dynamic_pointer_cast<OpSum>(x)->strings[i]->get_op());
+                for (size_t i = 0;
+                     i < dynamic_pointer_cast<OpSum>(x)->strings.size(); i++) {
+                    xx = abs_value(
+                        dynamic_pointer_cast<OpSum>(x)->strings[i]->get_op());
                     shared_ptr<SparseMatrix> &mat = ops[xx];
                     if (!(mat->factor == 0.0 || mat->info->n == 0)) {
                         if (i != kk)
-                            dynamic_pointer_cast<OpSum>(x)->strings[kk] = dynamic_pointer_cast<OpSum>(x)->strings[i];
+                            dynamic_pointer_cast<OpSum>(x)->strings[kk] =
+                                dynamic_pointer_cast<OpSum>(x)->strings[i];
                         kk++;
                     }
                 }
@@ -5954,8 +6083,7 @@ enum QCTypes : uint8_t { NC = 1, CN = 2 };
 
 struct QCMPO : MPO {
     QCTypes mode;
-    QCMPO(const Hamiltonian &hamil,
-          QCTypes mode = QCTypes::NC)
+    QCMPO(const Hamiltonian &hamil, QCTypes mode = QCTypes::NC)
         : MPO(hamil.n_sites), mode(mode) {
         shared_ptr<OpElement> h_op =
             make_shared<OpElement>(OpNames::H, SiteIndex(), hamil.vaccum);
@@ -6027,10 +6155,10 @@ struct QCMPO : MPO {
                 ((mode & QCTypes::NC) && m < (hamil.n_sites >> 1)))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
-                     ((mode & QCTypes::CN) && m > (hamil.n_sites >> 1)))
+                     ((mode & QCTypes::CN) && m >= (hamil.n_sites >> 1)))
                 effective_mode = QCTypes::CN;
             else
-                effective_mode = QCTypes(QCTypes::NC | QCTypes::CN);
+                assert(false);
             switch (effective_mode) {
             case QCTypes::NC:
                 lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
@@ -6039,11 +6167,6 @@ struct QCMPO : MPO {
             case QCTypes::CN:
                 lshape = 2 + 2 * hamil.n_sites +
                          6 * (hamil.n_sites - m) * (hamil.n_sites - m);
-                rshape = 2 + 2 * hamil.n_sites +
-                         6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
-                break;
-            case QCTypes::NC | QCTypes::CN:
-                lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
                 rshape = 2 + 2 * hamil.n_sites +
                          6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
                 break;
@@ -6561,20 +6684,23 @@ struct QCMPO : MPO {
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                             for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] = su2_factor[s] * p_op[j][k][s];
+                                lop[p + k - m - 1] =
+                                    su2_factor[s] * p_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                             for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] = su2_factor[s] * pd_op[j][k][s];
+                                lop[p + k - m - 1] =
+                                    su2_factor[s] * pd_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     su2_factor = {1.0, sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                             for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] = su2_factor[s] * q_op[j][k][s];
+                                lop[p + k - m - 1] =
+                                    su2_factor[s] * q_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     break;
@@ -6666,6 +6792,144 @@ struct QCMPO : MPO {
             this->tensors.push_back(opt);
             this->left_operator_names.push_back(plop);
             this->right_operator_names.push_back(prop);
+        }
+        if (mode == QCTypes(QCTypes::NC | QCTypes::CN)) {
+            uint8_t m = hamil.n_sites >> 1;
+            schemer = make_shared<MPOSchemer>(m, m + 1);
+            int new_rshape =
+                6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+            int new_lshape = 6 * (m + 1) * (m + 1);
+            schemer->left_new_operator_names =
+                make_shared<SymbolicRowVector>(new_rshape);
+            schemer->right_new_operator_names =
+                make_shared<SymbolicColumnVector>(new_lshape);
+            schemer->left_new_operator_exprs =
+                make_shared<SymbolicRowVector>(new_rshape);
+            schemer->right_new_operator_exprs =
+                make_shared<SymbolicColumnVector>(new_lshape);
+            SymbolicRowVector &lop = *schemer->left_new_operator_names;
+            SymbolicColumnVector &rop = *schemer->right_new_operator_names;
+            SymbolicRowVector &lexpr = *schemer->left_new_operator_exprs;
+            SymbolicColumnVector &rexpr = *schemer->right_new_operator_exprs;
+            p = 0;
+            vector<shared_ptr<OpExpr>> exprs;
+            for (uint8_t s = 0; s < 2; s++)
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        lop[p + k - m - 1] = p_op[j][k][s];
+                        exprs.clear();
+                        for (uint8_t g = 0; g < m + 1; g++)
+                            for (uint8_t h = 0; h < m + 1; h++)
+                                if (abs(hamil.v(j, g, k, h)) > TINY)
+                                    exprs.push_back(hamil.v(j, g, k, h) *
+                                                    ad_op[g][h][s]);
+                        lexpr[p + k - m - 1] = sum(exprs);
+                    }
+                    p += hamil.n_sites - m - 1;
+                }
+            for (uint8_t s = 0; s < 2; s++)
+                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        lop[p + k - m - 1] = pd_op[j][k][s];
+                        exprs.clear();
+                        for (uint8_t g = 0; g < m + 1; g++)
+                            for (uint8_t h = 0; h < m + 1; h++)
+                                if (abs(hamil.v(j, g, k, h)) > TINY)
+                                    exprs.push_back(hamil.v(j, g, k, h) *
+                                                    a_op[g][h][s]);
+                        lexpr[p + k - m - 1] = sum(exprs);
+                    }
+                    p += hamil.n_sites - m - 1;
+                }
+            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                    lop[p + k - m - 1] = q_op[j][k][0];
+                    exprs.clear();
+                    for (uint8_t g = 0; g < m + 1; g++)
+                        for (uint8_t h = 0; h < m + 1; h++)
+                            if (abs(2 * hamil.v(j, k, g, h) -
+                                    hamil.v(j, h, g, k)) > TINY)
+                                exprs.push_back((2 * hamil.v(j, k, g, h) -
+                                                 hamil.v(j, h, g, k)) *
+                                                b_op[g][h][0]);
+                    lexpr[p + k - m - 1] = sum(exprs);
+                }
+                p += hamil.n_sites - m - 1;
+            }
+            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                    lop[p + k - m - 1] = q_op[j][k][1];
+                    exprs.clear();
+                    for (uint8_t g = 0; g < m + 1; g++)
+                        for (uint8_t h = 0; h < m + 1; h++)
+                            if (abs(hamil.v(j, h, g, k)) > TINY)
+                                exprs.push_back(hamil.v(j, h, g, k) *
+                                                b_op[g][h][1]);
+                    lexpr[p + k - m - 1] = sum(exprs);
+                }
+                p += hamil.n_sites - m - 1;
+            }
+            assert(p == new_rshape);
+            p = 0;
+            for (uint8_t s = 0; s < 2; s++)
+                for (uint8_t j = 0; j < m + 1; j++) {
+                    for (uint8_t k = 0; k < m + 1; k++) {
+                        rop[p + k] = p_op[j][k][s];
+                        exprs.clear();
+                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                                if (abs(hamil.v(j, g, k, h)) > TINY)
+                                    exprs.push_back(hamil.v(j, g, k, h) *
+                                                    a_op[g][h][s]);
+                        rexpr[p + k] = sum(exprs);
+                    }
+                    p += m + 1;
+                }
+            for (uint8_t s = 0; s < 2; s++)
+                for (uint8_t j = 0; j < m + 1; j++) {
+                    for (uint8_t k = 0; k < m + 1; k++) {
+                        rop[p + k] = pd_op[j][k][s];
+                        exprs.clear();
+                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                                if (abs(2 * hamil.v(j, k, g, h) -
+                                        hamil.v(j, h, g, k)) > TINY)
+                                    exprs.push_back((2 * hamil.v(j, k, g, h) -
+                                                     hamil.v(j, h, g, k)) *
+                                                    b_op[g][h][0]);
+                        rexpr[p + k] = sum(exprs);
+                    }
+                    p += m + 1;
+                }
+            for (uint8_t j = 0; j < m + 1; j++) {
+                for (uint8_t k = 0; k < m + 1; k++) {
+                    rop[p + k] = q_op[j][k][0];
+                    exprs.clear();
+                    for (uint8_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(2 * hamil.v(j, k, g, h) -
+                                    hamil.v(j, h, g, k)) > TINY)
+                                exprs.push_back((2 * hamil.v(j, k, g, h) -
+                                                 hamil.v(j, h, g, k)) *
+                                                b_op[g][h][0]);
+                    rexpr[p + k] = sum(exprs);
+                }
+                p += m + 1;
+            }
+            for (uint8_t j = 0; j < m + 1; j++) {
+                for (uint8_t k = 0; k < m + 1; k++) {
+                    rop[p + k] = q_op[j][k][1];
+                    exprs.clear();
+                    for (uint8_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(hamil.v(j, h, g, k)) > TINY)
+                                exprs.push_back(hamil.v(j, h, g, k) *
+                                                b_op[g][h][1]);
+                    rexpr[p + k] = sum(exprs);
+                }
+                p += m + 1;
+            }
+            assert(p == new_lshape);
         }
     }
     void deallocate() override {

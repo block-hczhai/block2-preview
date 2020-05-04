@@ -40,17 +40,20 @@ TEST_F(TestMPO, Test) {
     Timer t;
     t.get_time();
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::NC);
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC | QCTypes::CN));
     cout << "MPO end" << endl;
     cout << "T = " << t.get_time() << endl;
 
+    for (int i = 0; i < mpo->n_sites; i++)
+        cout << mpo->tensors[i]->lmat->m << " " << mpo->tensors[i]->lmat->n << endl;
+
     // MPO simplification
-    cout << "MPO simplification start" << endl;
-    shared_ptr<Rule> rule = make_shared<RuleQCSU2>();
-    mpo = make_shared<SimplifiedMPO>(mpo, rule);
-    cout << "MPO simplification end" << endl;
-    cout << "T = " << t.get_time() << endl;
-    cout << mpo->get_blocking_formulas() << endl;
+    // cout << "MPO simplification start" << endl;
+    // shared_ptr<Rule> rule = make_shared<RuleQCSU2>();
+    // mpo = make_shared<SimplifiedMPO>(mpo, rule);
+    // cout << "MPO simplification end" << endl;
+    // cout << "T = " << t.get_time() << endl;
+    // cout << mpo->get_blocking_formulas() << endl;
 
     mpo->deallocate();
     hamil.deallocate();
