@@ -40,14 +40,15 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::CN);
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC | QCTypes::CN));
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
+    // mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
+    // abort();
 
     uint16_t bond_dim = 200;
 

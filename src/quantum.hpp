@@ -3901,8 +3901,10 @@ struct TensorFunctions {
         for (size_t i = 0; i < a->ops.size(); i++) {
             bool found = false;
             for (size_t k = 0; k < names->data.size(); k++) {
-                shared_ptr<OpExpr> nop = names->data[k];
-                shared_ptr<OpExpr> expr = exprs->data[k];
+                if (exprs->data[k]->get_type() == OpTypes::Zero)
+                    continue;
+                shared_ptr<OpExpr> nop = abs_value(names->data[k]);
+                shared_ptr<OpExpr> expr = exprs->data[k] * (1 / dynamic_pointer_cast<OpElement>(names->data[k])->factor);
                 assert(a->ops.count(nop) != 0);
                 switch (expr->get_type()) {
                 case OpTypes::Sum: {
@@ -3912,7 +3914,7 @@ struct TensorFunctions {
                         shared_ptr<OpElement> nexpr = op->strings[i]->get_op();
                         assert(a->ops.count(nexpr) != 0);
                         opf->iadd(*a->ops.at(nop), *a->ops.at(nexpr),
-                                  nexpr->factor);
+                                  nexpr->factor * op->strings[i]->factor);
                     }
                 } break;
                 case OpTypes::Zero:
@@ -4011,6 +4013,32 @@ struct MPOSchemer {
     MPOSchemer(uint8_t left_trans_site, uint8_t right_trans_site)
         : left_trans_site(left_trans_site), right_trans_site(right_trans_site) {
     }
+    string get_transform_formulas() const {
+        stringstream ss;
+        ss << "LEFT  TRANSFORM :: SITE = " << (int) left_trans_site << endl;
+        for (int j = 0; j < left_new_operator_names->data.size(); j++) {
+            if (left_new_operator_names->data[j]->get_type() != OpTypes::Zero)
+                ss << "[" << setw(4) << j << "] " << setw(15)
+                    << left_new_operator_names->data[j]
+                    << " := " << left_new_operator_exprs->data[j] << endl;
+            else
+                ss << "[" << setw(4) << j << "] "
+                    << left_new_operator_names->data[j] << endl;
+        }
+        ss << endl;
+        ss << "RIGHT TRANSFORM :: SITE = " << (int) right_trans_site << endl;
+        for (int j = 0; j < right_new_operator_names->data.size(); j++) {
+            if (right_new_operator_names->data[j]->get_type() != OpTypes::Zero)
+                ss << "[" << setw(4) << j << "] " << setw(15)
+                    << right_new_operator_names->data[j]
+                    << " := " << right_new_operator_exprs->data[j] << endl;
+            else
+                ss << "[" << setw(4) << j << "] "
+                    << right_new_operator_names->data[j] << endl;
+        }
+        ss << endl;
+        return ss.str();
+    }
 };
 
 struct MPO {
@@ -4066,6 +4094,8 @@ struct MPO {
                 ss << endl;
             }
         }
+        if (schemer != nullptr)
+            ss << schemer->get_transform_formulas() << endl;
         return ss.str();
     }
 };
@@ -5217,9 +5247,6 @@ struct MovingEnvironment {
                 right_op_infos_notrunc;
             vector<shared_ptr<Symbolic>> rmats = {
                 mpo->right_operator_names[center + 1]};
-            if (mpo->schemer != nullptr &&
-                center + 1 == mpo->schemer->right_trans_site)
-                rmats.push_back(mpo->schemer->right_new_operator_names);
             vector<SpinLabel> rsl = Partition::get_uniq_labels(rmats);
             shared_ptr<Symbolic> rexprs =
                 envs[center]->right == nullptr
@@ -5247,10 +5274,6 @@ struct MovingEnvironment {
                                mpo->right_operator_exprs.size() != 0
                                    ? mpo->right_operator_exprs[center + 1]
                                    : nullptr);
-            if (mpo->schemer != nullptr &&
-                center + 1 == mpo->schemer->right_trans_site)
-                tf->numerical_transform(new_right, rmats[1],
-                                        mpo->schemer->right_new_operator_exprs);
             // delayed left-right contract
             shared_ptr<DelayedOperatorTensor> op =
                 mpo->middle_operator_exprs.size() != 0
@@ -6100,6 +6123,7 @@ struct QCMPO : MPO {
         shared_ptr<OpElement> q_op[hamil.n_sites][hamil.n_sites][2];
         op = h_op;
         const_e = hamil.e();
+        uint8_t trans_m = (hamil.n_sites >> 1) - 1;
         for (uint8_t m = 0; m < hamil.n_sites; m++) {
             c_op[m] = make_shared<OpElement>(OpNames::C, SiteIndex(m),
                                              SpinLabel(1, 1, hamil.orb_sym[m]));
@@ -6152,10 +6176,10 @@ struct QCMPO : MPO {
             int lshape, rshape;
             QCTypes effective_mode;
             if (mode == QCTypes::NC ||
-                ((mode & QCTypes::NC) && m < (hamil.n_sites >> 1)))
+                ((mode & QCTypes::NC) && m <= trans_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
-                     ((mode & QCTypes::CN) && m >= (hamil.n_sites >> 1)))
+                     ((mode & QCTypes::CN) && m > trans_m))
                 effective_mode = QCTypes::CN;
             else
                 assert(false);
@@ -6794,11 +6818,11 @@ struct QCMPO : MPO {
             this->right_operator_names.push_back(prop);
         }
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN)) {
-            uint8_t m = hamil.n_sites >> 1;
+            uint8_t m = trans_m;
             schemer = make_shared<MPOSchemer>(m, m + 1);
-            int new_rshape =
+            int new_rshape = 2 + 2 * hamil.n_sites +
                 6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
-            int new_lshape = 6 * (m + 1) * (m + 1);
+            int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
             schemer->left_new_operator_names =
                 make_shared<SymbolicRowVector>(new_rshape);
             schemer->right_new_operator_names =
@@ -6811,17 +6835,23 @@ struct QCMPO : MPO {
             SymbolicColumnVector &rop = *schemer->right_new_operator_names;
             SymbolicRowVector &lexpr = *schemer->left_new_operator_exprs;
             SymbolicColumnVector &rexpr = *schemer->right_new_operator_exprs;
-            p = 0;
+            for (int i = 0; i < 2 + 2 * hamil.n_sites; i++) {
+                lop[i] = this->left_operator_names[m]->data[i];
+                rop[i] = this->right_operator_names[m + 1]->data[i];
+            }
+            p = 2 + 2 * hamil.n_sites;
             vector<shared_ptr<OpExpr>> exprs;
+            vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
+            vector<double> su2_factor_q = {1.0, sqrt(3)};
             for (uint8_t s = 0; s < 2; s++)
                 for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                     for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = p_op[j][k][s];
+                        lop[p + k - m - 1] = su2_factor_p[s] * p_op[j][k][s];
                         exprs.clear();
                         for (uint8_t g = 0; g < m + 1; g++)
                             for (uint8_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(hamil.v(j, g, k, h) *
+                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
                                                     ad_op[g][h][s]);
                         lexpr[p + k - m - 1] = sum(exprs);
                     }
@@ -6830,12 +6860,12 @@ struct QCMPO : MPO {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                     for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = pd_op[j][k][s];
+                        lop[p + k - m - 1] = su2_factor_p[s] * pd_op[j][k][s];
                         exprs.clear();
                         for (uint8_t g = 0; g < m + 1; g++)
                             for (uint8_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(hamil.v(j, g, k, h) *
+                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
                                                     a_op[g][h][s]);
                         lexpr[p + k - m - 1] = sum(exprs);
                     }
@@ -6843,14 +6873,14 @@ struct QCMPO : MPO {
                 }
             for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                 for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
-                    lop[p + k - m - 1] = q_op[j][k][0];
+                    lop[p + k - m - 1] = su2_factor_q[0] * q_op[j][k][0];
                     exprs.clear();
                     for (uint8_t g = 0; g < m + 1; g++)
                         for (uint8_t h = 0; h < m + 1; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((2 * hamil.v(j, k, g, h) -
-                                                 hamil.v(j, h, g, k)) *
+                                exprs.push_back((su2_factor_q[0] * (2 * hamil.v(j, k, g, h) -
+                                                 hamil.v(j, h, g, k))) *
                                                 b_op[g][h][0]);
                     lexpr[p + k - m - 1] = sum(exprs);
                 }
@@ -6858,29 +6888,29 @@ struct QCMPO : MPO {
             }
             for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
                 for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
-                    lop[p + k - m - 1] = q_op[j][k][1];
+                    lop[p + k - m - 1] = su2_factor_q[1] * q_op[j][k][1];
                     exprs.clear();
                     for (uint8_t g = 0; g < m + 1; g++)
                         for (uint8_t h = 0; h < m + 1; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back(hamil.v(j, h, g, k) *
+                                exprs.push_back((su2_factor_q[1] * hamil.v(j, h, g, k)) *
                                                 b_op[g][h][1]);
                     lexpr[p + k - m - 1] = sum(exprs);
                 }
                 p += hamil.n_sites - m - 1;
             }
             assert(p == new_rshape);
-            p = 0;
+            p = 2 + 2 * hamil.n_sites;
             for (uint8_t s = 0; s < 2; s++)
                 for (uint8_t j = 0; j < m + 1; j++) {
                     for (uint8_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = p_op[j][k][s];
+                        rop[p + k] = su2_factor_p[s] * p_op[j][k][s];
                         exprs.clear();
                         for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(hamil.v(j, g, k, h) *
-                                                    a_op[g][h][s]);
+                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
+                                                    ad_op[g][h][s]);
                         rexpr[p + k] = sum(exprs);
                     }
                     p += m + 1;
@@ -6888,29 +6918,27 @@ struct QCMPO : MPO {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint8_t j = 0; j < m + 1; j++) {
                     for (uint8_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = pd_op[j][k][s];
+                        rop[p + k] = su2_factor_p[s] * pd_op[j][k][s];
                         exprs.clear();
                         for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint8_t h = m + 1; h < hamil.n_sites; h++)
-                                if (abs(2 * hamil.v(j, k, g, h) -
-                                        hamil.v(j, h, g, k)) > TINY)
-                                    exprs.push_back((2 * hamil.v(j, k, g, h) -
-                                                     hamil.v(j, h, g, k)) *
-                                                    b_op[g][h][0]);
+                                if (abs(hamil.v(j, g, k, h)) > TINY)
+                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
+                                                    a_op[g][h][s]);
                         rexpr[p + k] = sum(exprs);
                     }
                     p += m + 1;
                 }
             for (uint8_t j = 0; j < m + 1; j++) {
                 for (uint8_t k = 0; k < m + 1; k++) {
-                    rop[p + k] = q_op[j][k][0];
+                    rop[p + k] = su2_factor_q[0] * q_op[j][k][0];
                     exprs.clear();
                     for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                         for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((2 * hamil.v(j, k, g, h) -
-                                                 hamil.v(j, h, g, k)) *
+                                exprs.push_back((su2_factor_q[0] * (2 * hamil.v(j, k, g, h) -
+                                                 hamil.v(j, h, g, k))) *
                                                 b_op[g][h][0]);
                     rexpr[p + k] = sum(exprs);
                 }
@@ -6918,12 +6946,12 @@ struct QCMPO : MPO {
             }
             for (uint8_t j = 0; j < m + 1; j++) {
                 for (uint8_t k = 0; k < m + 1; k++) {
-                    rop[p + k] = q_op[j][k][1];
+                    rop[p + k] = su2_factor_q[1] * q_op[j][k][1];
                     exprs.clear();
                     for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                         for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back(hamil.v(j, h, g, k) *
+                                exprs.push_back((su2_factor_q[1] * hamil.v(j, h, g, k)) *
                                                 b_op[g][h][1]);
                     rexpr[p + k] = sum(exprs);
                 }
