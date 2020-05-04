@@ -21,8 +21,8 @@ class TestMPO : public ::testing::Test {
 
 TEST_F(TestMPO, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
@@ -40,16 +40,17 @@ TEST_F(TestMPO, Test) {
     Timer t;
     t.get_time();
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::NC);
     cout << "MPO end" << endl;
     cout << "T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
     shared_ptr<Rule> rule = make_shared<RuleQCSU2>();
-    shared_ptr<SimplifiedMPO> smpo = make_shared<SimplifiedMPO>(mpo, rule);
+    mpo = make_shared<SimplifiedMPO>(mpo, rule);
     cout << "MPO simplification end" << endl;
     cout << "T = " << t.get_time() << endl;
+    cout << mpo->get_blocking_formulas() << endl;
 
     mpo->deallocate();
     hamil.deallocate();

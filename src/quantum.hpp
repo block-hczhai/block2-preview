@@ -3145,7 +3145,8 @@ struct BatchGEMMSeq {
     size_t max_work, max_rwork;
     double *work, *rwork;
     SeqTypes mode;
-    BatchGEMMSeq(size_t max_batch_flops = 1LU << 30, SeqTypes mode = SeqTypes::None)
+    BatchGEMMSeq(size_t max_batch_flops = 1LU << 30,
+                 SeqTypes mode = SeqTypes::None)
         : max_batch_flops(max_batch_flops), mode(mode) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
@@ -3214,7 +3215,8 @@ struct BatchGEMMSeq {
     }
     void prepare() {
         divide_batch();
-        for (int ib = !!batch[0]->gp.size(), db = batch[0]->gp.size() == 0 ? 1 : 2;
+        for (int ib = !!batch[0]->gp.size(),
+                 db = batch[0]->gp.size() == 0 ? 1 : 2;
              ib < refs.size(); ib += db) {
             shared_ptr<BatchGEMM> b = refs[ib].batch;
             double **ptr = (double **)dalloc->allocate(refs[ib].nk);
@@ -3243,8 +3245,7 @@ struct BatchGEMMSeq {
                     shifts.back()[make_pair(0, len[idx[kk]])].push_back(
                         pos[idx[kk]]);
                 } else if (ptr[idx[kk]] >= ptrs.back() &&
-                           ptr[idx[kk]] <
-                               ptrs.back() + lens.back()) {
+                           ptr[idx[kk]] < ptrs.back() + lens.back()) {
                     shifts
                         .back()[make_pair(ptr[idx[kk]] - ptrs.back(),
                                           len[idx[kk]])]
@@ -3291,7 +3292,9 @@ struct BatchGEMMSeq {
                             rshifts.back()[q - 1].second.end(),
                             r.second.begin(), r.second.end());
                         for (size_t qq = q; qq < rshifts.back().size(); qq++)
-                            if (rshifts.back()[qq].first > r.first.first && rshifts.back()[qq].first < r.first.first + r.first.second)
+                            if (rshifts.back()[qq].first > r.first.first &&
+                                rshifts.back()[qq].first <
+                                    r.first.first + r.first.second)
                                 for (size_t u = 0; u < r.second.size(); u++)
                                     rshifts.back()[qq].second.push_back(-1);
                     } else
@@ -3353,7 +3356,8 @@ struct BatchGEMMSeq {
             size_t ipost = 0;
             for (size_t i = 0; i < batch[1]->c.size(); i++)
                 batch[1]->c[i] += shift;
-            for (int ib = !!batch[0]->gp.size(), db = batch[0]->gp.size() == 0 ? 1 : 2;
+            for (int ib = !!batch[0]->gp.size(),
+                     db = batch[0]->gp.size() == 0 ? 1 : 2;
                  ib < refs.size(); ib += db) {
                 for (size_t k = ipost; k < ipost + refs[ib].ipost - 1; k++)
                     for (size_t i = 0; i < post_batch[k]->a.size(); i++) {
@@ -3407,8 +3411,8 @@ struct BatchGEMMSeq {
         size_t ipost = 0;
         for (auto b : refs) {
             if (b.ipost != 0)
-                for (size_t i = 0; i < post_batch[ipost + b.ipost - 1]->c.size();
-                    i++)
+                for (size_t i = 0;
+                     i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
                     post_batch[ipost + b.ipost - 1]->c[i] += vshift;
             ipost += b.ipost;
         }
@@ -3418,8 +3422,8 @@ struct BatchGEMMSeq {
         ipost = 0;
         for (auto b : refs) {
             if (b.ipost != 0)
-                for (size_t i = 0; i < post_batch[ipost + b.ipost - 1]->c.size();
-                    i++)
+                for (size_t i = 0;
+                     i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
                     post_batch[ipost + b.ipost - 1]->c[i] -= vshift;
             ipost += b.ipost;
         }
@@ -3806,8 +3810,7 @@ struct TensorFunctions {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
             assert(op->b != nullptr);
-            if (lop.count(op->a) == 0 || rop.count(op->b) == 0)
-                return;
+            assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product(op->conj, *lmat, *rmat, *mat, op->factor);
@@ -4875,8 +4878,8 @@ struct EffectiveHamiltonian {
         frame->activate(0);
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
-                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav,
-                                            iprint): MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
+                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint)
+                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
         return make_pair(eners[0], ndav);
     }
     void deallocate() {
@@ -5841,7 +5844,7 @@ struct Hamiltonian {
         }
         get_site_ops(m, ops);
         shared_ptr<OpExpr> zero = make_shared<OpExpr>();
-        bool all_zero;
+        size_t kk;
         for (auto &x : pmat->data) {
             shared_ptr<OpExpr> xx;
             switch (x->get_type()) {
@@ -5853,17 +5856,20 @@ struct Hamiltonian {
                     x = zero;
                 break;
             case OpTypes::Sum:
-                all_zero = true;
-                for (auto &r : dynamic_pointer_cast<OpSum>(x)->strings) {
-                    xx = abs_value(r->get_op());
+                kk = 0;
+                for (size_t i = 0; i < dynamic_pointer_cast<OpSum>(x)->strings.size(); i++) {
+                    xx = abs_value(dynamic_pointer_cast<OpSum>(x)->strings[i]->get_op());
                     shared_ptr<SparseMatrix> &mat = ops[xx];
                     if (!(mat->factor == 0.0 || mat->info->n == 0)) {
-                        all_zero = false;
-                        break;
+                        if (i != kk)
+                            dynamic_pointer_cast<OpSum>(x)->strings[kk] = dynamic_pointer_cast<OpSum>(x)->strings[i];
+                        kk++;
                     }
                 }
-                if (all_zero)
+                if (kk == 0)
                     x = zero;
+                else if (kk != dynamic_pointer_cast<OpSum>(x)->strings.size())
+                    dynamic_pointer_cast<OpSum>(x)->strings.resize(kk);
                 break;
             default:
                 assert(false);
@@ -5944,8 +5950,13 @@ struct Hamiltonian {
     double e() const { return fcidump->e; }
 };
 
+enum QCTypes : uint8_t { NC = 1, CN = 2 };
+
 struct QCMPO : MPO {
-    QCMPO(const Hamiltonian &hamil) : MPO(hamil.n_sites) {
+    QCTypes mode;
+    QCMPO(const Hamiltonian &hamil,
+          QCTypes mode = QCTypes::NC)
+        : MPO(hamil.n_sites), mode(mode) {
         shared_ptr<OpElement> h_op =
             make_shared<OpElement>(OpNames::H, SiteIndex(), hamil.vaccum);
         shared_ptr<OpElement> i_op =
@@ -6010,8 +6021,33 @@ struct QCMPO : MPO {
         int p;
         for (uint8_t m = 0; m < hamil.n_sites; m++) {
             shared_ptr<Symbolic> pmat;
-            int lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
-            int rshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
+            int lshape, rshape;
+            QCTypes effective_mode;
+            if (mode == QCTypes::NC ||
+                ((mode & QCTypes::NC) && m < (hamil.n_sites >> 1)))
+                effective_mode = QCTypes::NC;
+            else if (mode == QCTypes::CN ||
+                     ((mode & QCTypes::CN) && m > (hamil.n_sites >> 1)))
+                effective_mode = QCTypes::CN;
+            else
+                effective_mode = QCTypes(QCTypes::NC | QCTypes::CN);
+            switch (effective_mode) {
+            case QCTypes::NC:
+                lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
+                rshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
+                break;
+            case QCTypes::CN:
+                lshape = 2 + 2 * hamil.n_sites +
+                         6 * (hamil.n_sites - m) * (hamil.n_sites - m);
+                rshape = 2 + 2 * hamil.n_sites +
+                         6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                break;
+            case QCTypes::NC | QCTypes::CN:
+                lshape = 2 + 2 * hamil.n_sites + 6 * m * m;
+                rshape = 2 + 2 * hamil.n_sites +
+                         6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                break;
+            }
             if (m == 0)
                 pmat = make_shared<SymbolicRowVector>(rshape);
             else if (m == hamil.n_sites - 1)
@@ -6031,17 +6067,7 @@ struct QCMPO : MPO {
                 for (uint8_t j = m + 1; j < hamil.n_sites; j++)
                     mat[{0, p + j - m - 1}] = tr_op[j];
                 p += hamil.n_sites - (m + 1);
-                for (uint8_t s = 0; s < 2; s++)
-                    mat[{0, p + s}] = a_op[m][m][s];
-                p += 2;
-                for (uint8_t s = 0; s < 2; s++)
-                    mat[{0, p + s}] = ad_op[m][m][s];
-                p += 2;
-                for (uint8_t s = 0; s < 2; s++)
-                    mat[{0, p + s}] = b_op[m][m][s];
-                p += 2;
-                assert(p == mat.n);
-            } else {
+            } else if (m == hamil.n_sites - 1) {
                 mat[{0, 0}] = i_op;
                 mat[{1, 0}] = h_op;
                 p = 2;
@@ -6055,169 +6081,415 @@ struct QCMPO : MPO {
                 p += hamil.n_sites - m;
                 mat[{p, 0}] = c_op[m];
                 p += hamil.n_sites - m;
-                vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            mat[{p + k, 0}] = su2_factor[s] * p_op[j][k][s];
-                        p += m;
-                    }
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            mat[{p + k, 0}] = su2_factor[s] * pd_op[j][k][s];
-                        p += m;
-                    }
-                su2_factor = {1.0, sqrt(3)};
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            mat[{p + k, 0}] = su2_factor[s] * q_op[j][k][s];
-                        p += m;
-                    }
-                assert(p == mat.m);
             }
-            if (m != 0 && m != hamil.n_sites - 1) {
-                mat[{1, 1}] = i_op;
-                p = 2;
-                // pointers
-                int pi = 1, pc = 2, pd = 2 + m;
-                int prd = 2 + m + m - m, pr = 2 + m + hamil.n_sites - m;
-                int pa0 = 2 + (hamil.n_sites << 1) + m * m * 0;
-                int pa1 = 2 + (hamil.n_sites << 1) + m * m * 1;
-                int pad0 = 2 + (hamil.n_sites << 1) + m * m * 2;
-                int pad1 = 2 + (hamil.n_sites << 1) + m * m * 3;
-                int pb0 = 2 + (hamil.n_sites << 1) + m * m * 4;
-                int pb1 = 2 + (hamil.n_sites << 1) + m * m * 5;
-                // C
-                for (uint8_t j = 0; j < m; j++)
-                    mat[{pc + j, p + j}] = i_op;
-                mat[{pi, p + m}] = c_op[m];
-                p += m + 1;
-                // D
-                for (uint8_t j = 0; j < m; j++)
-                    mat[{pd + j, p + j}] = i_op;
-                mat[{pi, p + m}] = d_op[m];
-                p += m + 1;
-                // RD
-                for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
-                    mat[{prd + i, p + i - (m + 1)}] = i_op;
-                    mat[{pi, p + i - (m + 1)}] = trd_op[i];
-                    for (uint8_t k = 0; k < m; k++) {
-                        mat[{pd + k, p + i - (m + 1)}] =
-                            2.0 * ((-0.5) * pd_op[i][k][0] +
-                                   (-0.5 * sqrt(3)) * pd_op[i][k][1]);
-                        mat[{pc + k, p + i - (m + 1)}] =
-                            2.0 * ((0.5) * q_op[k][i][0] +
-                                   (-0.5 * sqrt(3)) * q_op[k][i][1]);
+            switch (effective_mode) {
+            case QCTypes::NC:
+                if (m == 0) {
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{0, p + s}] = a_op[m][m][s];
+                    p += 2;
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{0, p + s}] = ad_op[m][m][s];
+                    p += 2;
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{0, p + s}] = b_op[m][m][s];
+                    p += 2;
+                    assert(p == mat.n);
+                } else {
+                    if (m != hamil.n_sites - 1) {
+                        mat[{0, 0}] = i_op;
+                        mat[{1, 0}] = h_op;
+                        p = 2;
+                        for (uint8_t j = 0; j < m; j++)
+                            mat[{p + j, 0}] = tr_op[j];
+                        p += m;
+                        for (uint8_t j = 0; j < m; j++)
+                            mat[{p + j, 0}] = trd_op[j];
+                        p += m;
+                        mat[{p, 0}] = d_op[m];
+                        p += hamil.n_sites - m;
+                        mat[{p, 0}] = c_op[m];
+                        p += hamil.n_sites - m;
                     }
-                    for (uint8_t j = 0; j < m; j++)
-                        for (uint8_t l = 0; l < m; l++) {
-                            double f0 =
-                                hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
-                            double f1 =
-                                hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
-                            mat[{pa0 + j * m + l, p + i - (m + 1)}] =
-                                f0 * (-0.5) * d_op[m];
-                            mat[{pa1 + j * m + l, p + i - (m + 1)}] =
-                                f1 * (0.5 * sqrt(3)) * d_op[m];
+                    vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                mat[{p + k, 0}] = su2_factor[s] * p_op[j][k][s];
+                            p += m;
                         }
-                    for (uint8_t k = 0; k < m; k++)
-                        for (uint8_t l = 0; l < m; l++) {
-                            double f =
-                                2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
-                            mat[{pb0 + l * m + k, p + i - (m + 1)}] =
-                                f * c_op[m];
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                mat[{p + k, 0}] =
+                                    su2_factor[s] * pd_op[j][k][s];
+                            p += m;
                         }
+                    su2_factor = {1.0, sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                mat[{p + k, 0}] = su2_factor[s] * q_op[j][k][s];
+                            p += m;
+                        }
+                    assert(p == mat.m);
+                }
+                if (m != 0 && m != hamil.n_sites - 1) {
+                    mat[{1, 1}] = i_op;
+                    p = 2;
+                    // pointers
+                    int pi = 1, pc = 2, pd = 2 + m;
+                    int prd = 2 + m + m - m, pr = 2 + m + hamil.n_sites - m;
+                    int pa0 = 2 + (hamil.n_sites << 1) + m * m * 0;
+                    int pa1 = 2 + (hamil.n_sites << 1) + m * m * 1;
+                    int pad0 = 2 + (hamil.n_sites << 1) + m * m * 2;
+                    int pad1 = 2 + (hamil.n_sites << 1) + m * m * 3;
+                    int pb0 = 2 + (hamil.n_sites << 1) + m * m * 4;
+                    int pb1 = 2 + (hamil.n_sites << 1) + m * m * 5;
+                    // C
                     for (uint8_t j = 0; j < m; j++)
+                        mat[{pc + j, p + j}] = i_op;
+                    mat[{pi, p + m}] = c_op[m];
+                    p += m + 1;
+                    // D
+                    for (uint8_t j = 0; j < m; j++)
+                        mat[{pd + j, p + j}] = i_op;
+                    mat[{pi, p + m}] = d_op[m];
+                    p += m + 1;
+                    // RD
+                    for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        mat[{prd + i, p + i - (m + 1)}] = i_op;
+                        mat[{pi, p + i - (m + 1)}] = trd_op[i];
                         for (uint8_t k = 0; k < m; k++) {
-                            double f = hamil.v(i, j, k, m) * sqrt(3);
-                            mat[{pb1 + j * m + k, p + i - (m + 1)}] =
-                                f * c_op[m];
+                            mat[{pd + k, p + i - (m + 1)}] =
+                                2.0 * ((-0.5) * pd_op[i][k][0] +
+                                       (-0.5 * sqrt(3)) * pd_op[i][k][1]);
+                            mat[{pc + k, p + i - (m + 1)}] =
+                                2.0 * ((0.5) * q_op[k][i][0] +
+                                       (-0.5 * sqrt(3)) * q_op[k][i][1]);
                         }
-                }
-                p += hamil.n_sites - (m + 1);
-                // R
-                for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
-                    mat[{pr + i, p + i - (m + 1)}] = i_op;
-                    mat[{pi, p + i - (m + 1)}] = tr_op[i];
-                    for (uint8_t k = 0; k < m; k++) {
-                        mat[{pc + k, p + i - (m + 1)}] =
-                            2.0 * ((-0.5) * p_op[i][k][0] +
-                                   (0.5 * sqrt(3)) * p_op[i][k][1]);
-                        mat[{pd + k, p + i - (m + 1)}] =
-                            2.0 * ((0.5) * q_op[i][k][0] +
-                                   (0.5 * sqrt(3)) * q_op[i][k][1]);
+                        for (uint8_t j = 0; j < m; j++)
+                            for (uint8_t l = 0; l < m; l++) {
+                                double f0 =
+                                    hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                                double f1 =
+                                    hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                                mat[{pa0 + j * m + l, p + i - (m + 1)}] =
+                                    f0 * (-0.5) * d_op[m];
+                                mat[{pa1 + j * m + l, p + i - (m + 1)}] =
+                                    f1 * (0.5 * sqrt(3)) * d_op[m];
+                            }
+                        for (uint8_t k = 0; k < m; k++)
+                            for (uint8_t l = 0; l < m; l++) {
+                                double f = 2.0 * hamil.v(i, m, k, l) -
+                                           hamil.v(i, l, k, m);
+                                mat[{pb0 + l * m + k, p + i - (m + 1)}] =
+                                    f * c_op[m];
+                            }
+                        for (uint8_t j = 0; j < m; j++)
+                            for (uint8_t k = 0; k < m; k++) {
+                                double f = hamil.v(i, j, k, m) * sqrt(3);
+                                mat[{pb1 + j * m + k, p + i - (m + 1)}] =
+                                    f * c_op[m];
+                            }
                     }
-                    for (uint8_t j = 0; j < m; j++)
-                        for (uint8_t l = 0; l < m; l++) {
-                            double f0 =
-                                hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
-                            double f1 =
-                                hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
-                            mat[{pad0 + j * m + l, p + i - (m + 1)}] =
-                                f0 * (-0.5) * c_op[m];
-                            mat[{pad1 + j * m + l, p + i - (m + 1)}] =
-                                f1 * (-0.5 * sqrt(3)) * c_op[m];
-                        }
-                    for (uint8_t k = 0; k < m; k++)
-                        for (uint8_t l = 0; l < m; l++) {
-                            double f =
-                                2.0 * hamil.v(i, m, k, l) - hamil.v(i, l, k, m);
-                            mat[{pb0 + k * m + l, p + i - (m + 1)}] =
-                                f * d_op[m];
-                        }
-                    for (uint8_t j = 0; j < m; j++)
+                    p += hamil.n_sites - (m + 1);
+                    // R
+                    for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        mat[{pr + i, p + i - (m + 1)}] = i_op;
+                        mat[{pi, p + i - (m + 1)}] = tr_op[i];
                         for (uint8_t k = 0; k < m; k++) {
-                            double f = (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
-                            mat[{pb1 + k * m + j, p + i - (m + 1)}] =
-                                f * d_op[m];
+                            mat[{pc + k, p + i - (m + 1)}] =
+                                2.0 * ((-0.5) * p_op[i][k][0] +
+                                       (0.5 * sqrt(3)) * p_op[i][k][1]);
+                            mat[{pd + k, p + i - (m + 1)}] =
+                                2.0 * ((0.5) * q_op[i][k][0] +
+                                       (0.5 * sqrt(3)) * q_op[i][k][1]);
                         }
-                }
-                p += hamil.n_sites - (m + 1);
-                // A
-                for (uint8_t s = 0; s < 2; s++) {
-                    int pa = s ? pa1 : pa0;
-                    for (uint8_t i = 0; i < m; i++)
                         for (uint8_t j = 0; j < m; j++)
-                            mat[{pa + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint8_t i = 0; i < m; i++) {
-                        mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
-                        mat[{pc + i, p + m * (m + 1) + i}] =
-                            s ? mc_op[m] : c_op[m];
-                    }
-                    mat[{pi, p + m * (m + 1) + m}] = a_op[m][m][s];
-                    p += (m + 1) * (m + 1);
-                }
-                // AD
-                for (uint8_t s = 0; s < 2; s++) {
-                    int pad = s ? pad1 : pad0;
-                    for (uint8_t i = 0; i < m; i++)
+                            for (uint8_t l = 0; l < m; l++) {
+                                double f0 =
+                                    hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                                double f1 =
+                                    hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                                mat[{pad0 + j * m + l, p + i - (m + 1)}] =
+                                    f0 * (-0.5) * c_op[m];
+                                mat[{pad1 + j * m + l, p + i - (m + 1)}] =
+                                    f1 * (-0.5 * sqrt(3)) * c_op[m];
+                            }
+                        for (uint8_t k = 0; k < m; k++)
+                            for (uint8_t l = 0; l < m; l++) {
+                                double f = 2.0 * hamil.v(i, m, k, l) -
+                                           hamil.v(i, l, k, m);
+                                mat[{pb0 + k * m + l, p + i - (m + 1)}] =
+                                    f * d_op[m];
+                            }
                         for (uint8_t j = 0; j < m; j++)
-                            mat[{pad + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint8_t i = 0; i < m; i++) {
-                        mat[{pd + i, p + i * (m + 1) + m}] =
-                            s ? md_op[m] : d_op[m];
-                        mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
+                            for (uint8_t k = 0; k < m; k++) {
+                                double f =
+                                    (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
+                                mat[{pb1 + k * m + j, p + i - (m + 1)}] =
+                                    f * d_op[m];
+                            }
                     }
-                    mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m][s];
-                    p += (m + 1) * (m + 1);
-                }
-                // B
-                for (uint8_t s = 0; s < 2; s++) {
-                    int pb = s ? pb1 : pb0;
-                    for (uint8_t i = 0; i < m; i++)
-                        for (uint8_t j = 0; j < m; j++)
-                            mat[{pb + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint8_t i = 0; i < m; i++) {
-                        mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
-                        mat[{pd + i, p + m * (m + 1) + i}] =
-                            s ? mc_op[m] : c_op[m];
+                    p += hamil.n_sites - (m + 1);
+                    // A
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pa = s ? pa1 : pa0;
+                        for (uint8_t i = 0; i < m; i++)
+                            for (uint8_t j = 0; j < m; j++)
+                                mat[{pa + i * m + j, p + i * (m + 1) + j}] =
+                                    i_op;
+                        for (uint8_t i = 0; i < m; i++) {
+                            mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
+                            mat[{pc + i, p + m * (m + 1) + i}] =
+                                s ? mc_op[m] : c_op[m];
+                        }
+                        mat[{pi, p + m * (m + 1) + m}] = a_op[m][m][s];
+                        p += (m + 1) * (m + 1);
                     }
-                    mat[{pi, p + m * (m + 1) + m}] = b_op[m][m][s];
-                    p += (m + 1) * (m + 1);
+                    // AD
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pad = s ? pad1 : pad0;
+                        for (uint8_t i = 0; i < m; i++)
+                            for (uint8_t j = 0; j < m; j++)
+                                mat[{pad + i * m + j, p + i * (m + 1) + j}] =
+                                    i_op;
+                        for (uint8_t i = 0; i < m; i++) {
+                            mat[{pd + i, p + i * (m + 1) + m}] =
+                                s ? md_op[m] : d_op[m];
+                            mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
+                        }
+                        mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m][s];
+                        p += (m + 1) * (m + 1);
+                    }
+                    // B
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pb = s ? pb1 : pb0;
+                        for (uint8_t i = 0; i < m; i++)
+                            for (uint8_t j = 0; j < m; j++)
+                                mat[{pb + i * m + j, p + i * (m + 1) + j}] =
+                                    i_op;
+                        for (uint8_t i = 0; i < m; i++) {
+                            mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
+                            mat[{pd + i, p + m * (m + 1) + i}] =
+                                s ? mc_op[m] : c_op[m];
+                        }
+                        mat[{pi, p + m * (m + 1) + m}] = b_op[m][m][s];
+                        p += (m + 1) * (m + 1);
+                    }
+                    assert(p == mat.n);
                 }
-                assert(p == mat.n);
+                break;
+            case QCTypes::CN:
+                if (m == hamil.n_sites - 1) {
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{p + s, 0}] = a_op[m][m][s];
+                    p += 2;
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{p + s, 0}] = ad_op[m][m][s];
+                    p += 2;
+                    for (uint8_t s = 0; s < 2; s++)
+                        mat[{p + s, 0}] = b_op[m][m][s];
+                    p += 2;
+                    assert(p == mat.m);
+                } else {
+                    if (m != 0) {
+                        mat[{1, 0}] = h_op;
+                        mat[{1, 1}] = i_op;
+                        p = 2;
+                        mat[{1, p + m}] = c_op[m];
+                        p += m + 1;
+                        mat[{1, p + m}] = d_op[m];
+                        p += m + 1;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            mat[{1, p + j - m - 1}] = trd_op[j];
+                        p += hamil.n_sites - m - 1;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            mat[{1, p + j - m - 1}] = tr_op[j];
+                        p += hamil.n_sites - m - 1;
+                    }
+                    vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                mat[{!!m, p + k - m - 1}] =
+                                    su2_factor[s] * p_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                mat[{!!m, p + k - m - 1}] =
+                                    su2_factor[s] * pd_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    su2_factor = {1.0, sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                mat[{!!m, p + k - m - 1}] =
+                                    su2_factor[s] * q_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    assert(p == mat.n);
+                }
+                if (m != 0 && m != hamil.n_sites - 1) {
+                    mat[{0, 0}] = i_op;
+                    p = 2;
+                    // pointers
+                    int mm = hamil.n_sites - m - 1;
+                    int pm = hamil.n_sites - m;
+                    int pi = 0, pr = 2, prd = 2 + m + 1;
+                    int pd = 2 + m + m + 2 - m - 1,
+                        pc = 2 + m + 1 + hamil.n_sites - m - 1;
+                    int pa0 = 2 + (hamil.n_sites << 1) + mm * mm * 0;
+                    int pa1 = 2 + (hamil.n_sites << 1) + mm * mm * 1;
+                    int pad0 = 2 + (hamil.n_sites << 1) + mm * mm * 2;
+                    int pad1 = 2 + (hamil.n_sites << 1) + mm * mm * 3;
+                    int pb0 = 2 + (hamil.n_sites << 1) + mm * mm * 4;
+                    int pb1 = 2 + (hamil.n_sites << 1) + mm * mm * 5;
+                    // R
+                    for (uint8_t i = 0; i < m; i++) {
+                        mat[{p + i, pi}] = tr_op[i];
+                        mat[{p + i, pr + i}] = i_op;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                                double f0 =
+                                    hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                                double f1 =
+                                    hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                                mat[{p + i, pad0 + (j - m - 1) * mm + l - m -
+                                                1}] = f0 * (-0.5) * c_op[m];
+                                mat[{p + i,
+                                     pad1 + (j - m - 1) * mm + l - m - 1}] =
+                                    f1 * (0.5 * sqrt(3)) * c_op[m];
+                            }
+                        for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                                double f = 2.0 * hamil.v(i, m, k, l) -
+                                           hamil.v(i, l, k, m);
+                                mat[{p + i, pb0 + (k - m - 1) * mm + l - m -
+                                                1}] = f * d_op[m];
+                            }
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                                double f = hamil.v(i, j, k, m) * sqrt(3);
+                                mat[{p + i, pb1 + (k - m - 1) * mm + j - m -
+                                                1}] = f * d_op[m];
+                            }
+                        for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                            mat[{p + i, pc + k}] =
+                                2.0 * ((-0.5) * p_op[k][i][0] +
+                                       (0.5 * sqrt(3)) * p_op[k][i][1]);
+                            mat[{p + i, pd + k}] =
+                                2.0 * ((0.5) * q_op[i][k][0] +
+                                       (-0.5 * sqrt(3)) * q_op[i][k][1]);
+                        }
+                    }
+                    p += m;
+                    // RD
+                    for (uint8_t i = 0; i < m; i++) {
+                        mat[{p + i, pi}] = trd_op[i];
+                        mat[{p + i, prd + i}] = i_op;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                                double f0 =
+                                    hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
+                                double f1 =
+                                    hamil.v(i, j, m, l) - hamil.v(i, l, m, j);
+                                mat[{p + i, pa0 + (j - m - 1) * mm + l - m -
+                                                1}] = f0 * (-0.5) * d_op[m];
+                                mat[{p + i,
+                                     pa1 + (j - m - 1) * mm + l - m - 1}] =
+                                    f1 * (-0.5 * sqrt(3)) * d_op[m];
+                            }
+                        for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                                double f = 2.0 * hamil.v(i, m, k, l) -
+                                           hamil.v(i, l, k, m);
+                                mat[{p + i, pb0 + (l - m - 1) * mm + k - m -
+                                                1}] = f * c_op[m];
+                            }
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                                double f =
+                                    (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
+                                mat[{p + i, pb1 + (j - m - 1) * mm + k - m -
+                                                1}] = f * c_op[m];
+                            }
+                        for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                            mat[{p + i, pd + k}] =
+                                2.0 * ((-0.5) * pd_op[k][i][0] +
+                                       (-0.5 * sqrt(3)) * pd_op[k][i][1]);
+                            mat[{p + i, pc + k}] =
+                                2.0 * ((0.5) * q_op[k][i][0] +
+                                       (0.5 * sqrt(3)) * q_op[k][i][1]);
+                        }
+                    }
+                    p += m;
+                    // D
+                    mat[{p + m - m, pi}] = d_op[m];
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        mat[{p + j - m, pd + j}] = i_op;
+                    p += hamil.n_sites - m;
+                    // C
+                    mat[{p + m - m, pi}] = c_op[m];
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        mat[{p + j - m, pc + j}] = i_op;
+                    p += hamil.n_sites - m;
+                    // A
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pa = s ? pa1 : pa0;
+                        mat[{p + (m - m) * pm + m - m, pi}] = a_op[m][m][s];
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                            mat[{p + (m - m) * pm + i - m, pc + i}] = c_op[m];
+                            mat[{p + (i - m) * pm + m - m, pc + i}] =
+                                s ? mc_op[m] : c_op[m];
+                        }
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                                mat[{p + (i - m) * pm + j - m,
+                                     pa + (i - m - 1) * mm + j - m - 1}] = i_op;
+                        p += pm * pm;
+                    }
+                    // AD
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pad = s ? pad1 : pad0;
+                        mat[{p + (m - m) * pm + m - m, pi}] = ad_op[m][m][s];
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                            mat[{p + (m - m) * pm + i - m, pd + i}] =
+                                s ? md_op[m] : d_op[m];
+                            mat[{p + (i - m) * pm + m - m, pd + i}] = d_op[m];
+                        }
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                                mat[{p + (i - m) * pm + j - m,
+                                     pad + (i - m - 1) * mm + j - m - 1}] =
+                                    i_op;
+                        p += pm * pm;
+                    }
+                    // B
+                    for (uint8_t s = 0; s < 2; s++) {
+                        int pb = s ? pb1 : pb0;
+                        mat[{p + (m - m) * pm + m - m, pi}] = b_op[m][m][s];
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                            mat[{p + (m - m) * pm + i - m, pd + i}] = c_op[m];
+                            mat[{p + (i - m) * pm + m - m, pc + i}] =
+                                s ? md_op[m] : d_op[m];
+                        }
+                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                                mat[{p + (i - m) * pm + j - m,
+                                     pb + (i - m - 1) * mm + j - m - 1}] = i_op;
+                        p += pm * pm;
+                    }
+                    assert(p == mat.m);
+                }
+                break;
+            case QCTypes::NC | QCTypes::CN:
+                assert(false);
+                break;
             }
             shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
             opt->lmat = opt->rmat = pmat;
@@ -6238,74 +6510,156 @@ struct QCMPO : MPO {
             if (m != hamil.n_sites - 1) {
                 lop[1] = i_op;
                 p = 2;
-                for (uint8_t j = 0; j < m + 1; j++)
-                    lop[p + j] = c_op[j];
-                p += m + 1;
-                for (uint8_t j = 0; j < m + 1; j++)
-                    lop[p + j] = d_op[j];
-                p += m + 1;
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                    lop[p + j - (m + 1)] = trd_op[j];
-                p += hamil.n_sites - (m + 1);
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                    lop[p + j - (m + 1)] = tr_op[j];
-                p += hamil.n_sites - (m + 1);
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m + 1; j++) {
-                        for (uint8_t k = 0; k < m + 1; k++)
-                            lop[p + k] = a_op[j][k][s];
-                        p += m + 1;
-                    }
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m + 1; j++) {
-                        for (uint8_t k = 0; k < m + 1; k++)
-                            lop[p + k] = ad_op[j][k][s];
-                        p += m + 1;
-                    }
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m + 1; j++) {
-                        for (uint8_t k = 0; k < m + 1; k++)
-                            lop[p + k] = b_op[j][k][s];
-                        p += m + 1;
-                    }
+                vector<double> su2_factor;
+                switch (effective_mode) {
+                case QCTypes::NC:
+                    for (uint8_t j = 0; j < m + 1; j++)
+                        lop[p + j] = c_op[j];
+                    p += m + 1;
+                    for (uint8_t j = 0; j < m + 1; j++)
+                        lop[p + j] = d_op[j];
+                    p += m + 1;
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        lop[p + j - (m + 1)] = trd_op[j];
+                    p += hamil.n_sites - (m + 1);
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        lop[p + j - (m + 1)] = tr_op[j];
+                    p += hamil.n_sites - (m + 1);
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m + 1; j++) {
+                            for (uint8_t k = 0; k < m + 1; k++)
+                                lop[p + k] = a_op[j][k][s];
+                            p += m + 1;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m + 1; j++) {
+                            for (uint8_t k = 0; k < m + 1; k++)
+                                lop[p + k] = ad_op[j][k][s];
+                            p += m + 1;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m + 1; j++) {
+                            for (uint8_t k = 0; k < m + 1; k++)
+                                lop[p + k] = b_op[j][k][s];
+                            p += m + 1;
+                        }
+                    break;
+                case QCTypes::CN:
+                    for (uint8_t j = 0; j < m + 1; j++)
+                        lop[p + j] = c_op[j];
+                    p += m + 1;
+                    for (uint8_t j = 0; j < m + 1; j++)
+                        lop[p + j] = d_op[j];
+                    p += m + 1;
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        lop[p + j - m - 1] = trd_op[j];
+                    p += hamil.n_sites - m - 1;
+                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        lop[p + j - m - 1] = tr_op[j];
+                    p += hamil.n_sites - m - 1;
+                    su2_factor = {-0.5, -0.5 * sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                lop[p + k - m - 1] = su2_factor[s] * p_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                lop[p + k - m - 1] = su2_factor[s] * pd_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    su2_factor = {1.0, sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                lop[p + k - m - 1] = su2_factor[s] * q_op[j][k][s];
+                            p += hamil.n_sites - m - 1;
+                        }
+                    break;
+                case QCTypes::NC | QCTypes::CN:
+                    assert(false);
+                    break;
+                }
                 assert(p == rshape);
             }
             rop[0] = i_op;
             if (m != 0) {
                 rop[1] = h_op;
                 p = 2;
-                for (uint8_t j = 0; j < m; j++)
-                    rop[p + j] = tr_op[j];
-                p += m;
-                for (uint8_t j = 0; j < m; j++)
-                    rop[p + j] = trd_op[j];
-                p += m;
-                for (uint8_t j = m; j < hamil.n_sites; j++)
-                    rop[p + j - m] = d_op[j];
-                p += hamil.n_sites - m;
-                for (uint8_t j = m; j < hamil.n_sites; j++)
-                    rop[p + j - m] = c_op[j];
-                p += hamil.n_sites - m;
-                vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            rop[p + k] = su2_factor[s] * p_op[j][k][s];
-                        p += m;
-                    }
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            rop[p + k] = su2_factor[s] * pd_op[j][k][s];
-                        p += m;
-                    }
-                su2_factor = {1.0, sqrt(3)};
-                for (uint8_t s = 0; s < 2; s++)
-                    for (uint8_t j = 0; j < m; j++) {
-                        for (uint8_t k = 0; k < m; k++)
-                            rop[p + k] = su2_factor[s] * q_op[j][k][s];
-                        p += m;
-                    }
+                vector<double> su2_factor;
+                switch (effective_mode) {
+                case QCTypes::NC:
+                    for (uint8_t j = 0; j < m; j++)
+                        rop[p + j] = tr_op[j];
+                    p += m;
+                    for (uint8_t j = 0; j < m; j++)
+                        rop[p + j] = trd_op[j];
+                    p += m;
+                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                        rop[p + j - m] = d_op[j];
+                    p += hamil.n_sites - m;
+                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                        rop[p + j - m] = c_op[j];
+                    p += hamil.n_sites - m;
+                    su2_factor = {-0.5, -0.5 * sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                rop[p + k] = su2_factor[s] * p_op[j][k][s];
+                            p += m;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                rop[p + k] = su2_factor[s] * pd_op[j][k][s];
+                            p += m;
+                        }
+                    su2_factor = {1.0, sqrt(3)};
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = 0; j < m; j++) {
+                            for (uint8_t k = 0; k < m; k++)
+                                rop[p + k] = su2_factor[s] * q_op[j][k][s];
+                            p += m;
+                        }
+                    break;
+                case QCTypes::CN:
+                    for (uint8_t j = 0; j < m; j++)
+                        rop[p + j] = tr_op[j];
+                    p += m;
+                    for (uint8_t j = 0; j < m; j++)
+                        rop[p + j] = trd_op[j];
+                    p += m;
+                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                        rop[p + j - m] = d_op[j];
+                    p += hamil.n_sites - m;
+                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                        rop[p + j - m] = c_op[j];
+                    p += hamil.n_sites - m;
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m; k < hamil.n_sites; k++)
+                                rop[p + k - m] = a_op[j][k][s];
+                            p += hamil.n_sites - m;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m; k < hamil.n_sites; k++)
+                                rop[p + k - m] = ad_op[j][k][s];
+                            p += hamil.n_sites - m;
+                        }
+                    for (uint8_t s = 0; s < 2; s++)
+                        for (uint8_t j = m; j < hamil.n_sites; j++) {
+                            for (uint8_t k = m; k < hamil.n_sites; k++)
+                                rop[p + k - m] = b_op[j][k][s];
+                            p += hamil.n_sites - m;
+                        }
+                    break;
+                case QCTypes::NC | QCTypes::CN:
+                    assert(false);
+                    break;
+                }
                 assert(p == lshape);
             }
             hamil.filter_site_ops(m, opt->lmat, opt->ops);

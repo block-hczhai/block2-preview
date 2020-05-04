@@ -40,7 +40,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil);
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::CN);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -49,7 +49,7 @@ TEST_F(TestDMRG, Test) {
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
 
-    uint16_t bond_dim = 250;
+    uint16_t bond_dim = 200;
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
@@ -95,12 +95,6 @@ TEST_F(TestDMRG, Test) {
     // DMRG
     shared_ptr<DMRG> dmrg =
         make_shared<DMRG>(me, vector<uint16_t>{bond_dim}, vector<double>{0.0});
-    // dmrg->update_two_dot(0, true, 500, 0.0);
-    // dmrg->me->move_to(1);
-    // dmrg->contract_two_dot(1);
-    // dmrg->update_two_dot(1, true, 500, 0.0);
-    // // cout << *me->ket->tensors[2]->info << endl;
-    // // cout << *me->ket->tensors[2] << endl;
     dmrg->solve(10, true);
 
     // deallocate persistent stack memory
