@@ -21,6 +21,8 @@ class TestDMRG : public ::testing::Test {
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    string occ_filename = "data/CR2.SVP.OCC";
+    vector<double> occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
@@ -40,7 +42,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC));
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC| QCTypes::CN));
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -50,12 +52,14 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    uint16_t bond_dim = 200;
+    uint16_t bond_dim = 250;
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
         norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
-    mps_info->set_bond_dimension(bond_dim);
+    // mps_info->set_bond_dimension(bond_dim);
+    assert(occs.size() == norb);
+    mps_info->set_bond_dimension_using_occ(bond_dim, occs);
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
         cout << mps_info->left_dims[i].n_states_total << " ";
@@ -64,6 +68,7 @@ TEST_F(TestDMRG, Test) {
     for (int i = 0; i <= norb; i++)
         cout << mps_info->right_dims[i].n_states_total << " ";
     cout << endl;
+    // abort();
 
     // MPS
     Random::rand_seed(1969);
@@ -94,9 +99,11 @@ TEST_F(TestDMRG, Test) {
     frame->activate(0);
 
     // DMRG
-    shared_ptr<DMRG> dmrg =
-        make_shared<DMRG>(me, vector<uint16_t>{bond_dim}, vector<double>{0.0});
-    dmrg->solve(10, true);
+    vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+                              500, 500, 750, 750, 750, 750, 750};
+    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
+    shared_ptr<DMRG> dmrg = make_shared<DMRG>(me, bdims, noises);
+    dmrg->solve(20, true);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

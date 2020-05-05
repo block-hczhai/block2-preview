@@ -390,6 +390,17 @@ struct V4Int {
     }
 };
 
+inline vector<double> read_occ(const string &filename) {
+    assert(Parsing::file_exists(filename));
+    ifstream ifs(filename.c_str());
+    vector<string> lines = Parsing::readlines(&ifs);
+    assert(lines.size() >= 1);
+    vector<string> vals = Parsing::split(lines[0], " ", true);
+    vector<double> r;
+    transform(vals.begin(), vals.end(), back_inserter(r), Parsing::to_double);
+    return r;
+}
+
 struct FCIDUMP {
     map<string, string> params;
     vector<TInt> ts;
@@ -1653,6 +1664,84 @@ struct StateInfo {
     }
 };
 
+struct StateProbability {
+    SpinLabel *quanta;
+    double *probs;
+    int n;
+    StateProbability() : quanta(0), probs(0), n(0) {}
+    StateProbability(SpinLabel q) {
+        allocate(1);
+        quanta[0] = q, probs[0] = 1;
+    }
+    void allocate(int length, uint32_t *ptr = 0) {
+        if (ptr == 0)
+            ptr = ialloc->allocate((length << 1) + length);
+        n = length;
+        quanta = (SpinLabel *)ptr;
+        probs = (double *)(ptr + length);
+    }
+    void reallocate(int length) {
+        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n,
+                                           (length << 1) + length);
+        if (ptr == (uint32_t *)quanta) {
+            memmove(ptr + length, probs, length * sizeof(double));
+            probs = (double *)(quanta + length);
+        } else {
+            memmove(ptr, quanta, length * sizeof(uint32_t));
+            memmove(ptr + length, probs, length * sizeof(double));
+            quanta = (SpinLabel *)ptr;
+            probs = (double *)(quanta + length);
+        }
+        n = length;
+    }
+    void deallocate() {
+        assert(n != 0);
+        ialloc->deallocate((uint32_t *)quanta, (n << 1) + n);
+        quanta = 0;
+        probs = 0;
+    }
+    void collect(SpinLabel target = 0x7FFFFFFF) {
+        int k = -1;
+        int nn = upper_bound(quanta, quanta + n, target) - quanta;
+        for (int i = 0; i < nn; i++)
+            if (probs[i] == 0.0)
+                continue;
+            else if (k != -1 && quanta[i] == quanta[k])
+                probs[k] = probs[k] + probs[i];
+            else {
+                k++;
+                quanta[k] = quanta[i];
+                probs[k] = probs[i];
+            }
+        reallocate(k + 1);
+    }
+    int find_state(SpinLabel q) const {
+        auto p = lower_bound(quanta, quanta + n, q);
+        if (p == quanta + n || *p != q)
+            return -1;
+        else
+            return p - quanta;
+    }
+    static StateProbability tensor_product_no_collect(const StateProbability &a,
+                                                      const StateProbability &b,
+                                                      const StateInfo &cref) {
+        StateProbability c;
+        c.allocate(cref.n);
+        memcpy(c.quanta, cref.quanta, c.n * sizeof(uint32_t));
+        memset(c.probs, 0, c.n * sizeof(double));
+        for (int i = 0; i < a.n; i++)
+            for (int j = 0; j < b.n; j++) {
+                SpinLabel qc = a.quanta[i] + b.quanta[j];
+                for (int k = 0; k < qc.count(); k++) {
+                    int ic = c.find_state(qc[k]);
+                    if (ic != -1)
+                        c.probs[ic] += a.probs[i] * b.probs[j];
+                }
+            }
+        return c;
+    }
+};
+
 struct SparseMatrixInfo {
     SpinLabel *quanta;
     uint16_t *n_states_bra, *n_states_ket;
@@ -2590,8 +2679,8 @@ struct MatrixFunctions {
     static vector<double>
     davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &bs,
              int &ndav, bool iprint = false, double conv_thrd = 5E-6,
-             int max_iter = 500, int deflation_min_size = 2,
-             int deflation_max_size = 30) {
+             int max_iter = 5000, int deflation_min_size = 2,
+             int deflation_max_size = 50) {
         int k = (int)bs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
@@ -3136,11 +3225,11 @@ struct BatchGEMM {
 struct BatchGEMMRef {
     shared_ptr<BatchGEMM> batch;
     int i, k, n, nk;
-    size_t flops, work, rwork = 0;
+    size_t nflop, work, rwork = 0;
     int ipost = 0;
-    BatchGEMMRef(const shared_ptr<BatchGEMM> &batch, size_t flops, size_t work,
+    BatchGEMMRef(const shared_ptr<BatchGEMM> &batch, size_t nflop, size_t work,
                  int i, int k, int n, int nk)
-        : batch(batch), flops(flops), work(work), i(i), k(k), n(n), nk(nk) {}
+        : batch(batch), nflop(nflop), work(work), i(i), k(k), n(n), nk(nk) {}
     void perform() {
         if (n != 0)
             batch->perform(i, k, n);
@@ -3153,6 +3242,7 @@ struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> batch;
     vector<shared_ptr<BatchGEMM>> post_batch;
     vector<BatchGEMMRef> refs;
+    size_t cumulative_nflop = 0;
     size_t max_batch_flops = 1LU << 30;
     size_t max_work, max_rwork;
     double *work, *rwork;
@@ -3192,17 +3282,20 @@ struct BatchGEMMSeq {
         batch[1]->tensor_product(a, conja, b, conjb, c, scale, stride);
     }
     void divide_batch() {
-        size_t cur = 0, cwork = 0, pwork = 0;
+        size_t cur = 0, cur0 = 0, cwork = 0, pwork = 0;
         int ip = 0, kp = 0;
         for (int i = 0, k = 0; i < batch[1]->gp.size();
              k += batch[1]->gp[i++]) {
             cur += (size_t)batch[1]->m[i] * batch[1]->n[i] * batch[1]->k[i] *
                    batch[1]->gp[i];
-            if (batch[0]->gp.size() != 0)
+            if (batch[0]->gp.size() != 0) {
+                cur0 += (size_t)batch[0]->m[i] * batch[0]->n[i] * batch[0]->k[0] *
+                   batch[0]->gp[i];
                 cwork += (size_t)batch[0]->m[i] * batch[0]->n[i];
+            }
             if (max_batch_flops != 0 && cur >= max_batch_flops) {
                 if (batch[0]->gp.size() != 0)
-                    refs.push_back(BatchGEMMRef(batch[0], cur, cwork - pwork,
+                    refs.push_back(BatchGEMMRef(batch[0], cur0, cwork - pwork,
                                                 ip, kp, i + 1 - ip,
                                                 k + batch[0]->gp[i] - kp));
                 refs.push_back(BatchGEMMRef(batch[1], cur, cwork - pwork, ip,
@@ -3214,13 +3307,13 @@ struct BatchGEMMSeq {
                     for (size_t kk = kp; kk < k + batch[1]->gp[i]; kk++)
                         batch[1]->b[kk] -= pwork;
                 }
-                cur = 0, ip = i + 1, kp = k + batch[1]->gp[i];
+                cur = 0, cur0 = 0, ip = i + 1, kp = k + batch[1]->gp[i];
                 pwork = cwork;
             }
         }
         if (cur != 0) {
             if (batch[0]->gp.size() != 0)
-                refs.push_back(BatchGEMMRef(batch[0], cur, cwork - pwork, ip,
+                refs.push_back(BatchGEMMRef(batch[0], cur0, cwork - pwork, ip,
                                             kp, batch[1]->gp.size() - ip,
                                             batch[0]->c.size() - kp));
             refs.push_back(BatchGEMMRef(batch[1], cur, cwork - pwork, ip, kp,
@@ -3417,6 +3510,7 @@ struct BatchGEMMSeq {
         for (auto b : refs) {
             if (b.rwork != 0)
                 memset(rwork, 0, sizeof(double) * b.rwork);
+            cumulative_nflop += b.nflop;
             b.perform();
             for (size_t ib = ipost; ib < ipost + b.ipost; ib++)
                 post_batch[ib]->perform();
@@ -3702,7 +3796,7 @@ struct OperatorFunctions {
                                           scale, 1.0);
                 if (noise != 0.0)
                     MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
-                                              b[ib], noise, 1.0);
+                                              b[ib], noise * noise, 1.0);
             }
         else
             for (int ia = 0; ia < a.info->n; ia++) {
@@ -4570,6 +4664,124 @@ struct MPSInfo {
         left_dims = nullptr;
         right_dims = nullptr;
     }
+    void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
+                                      double bias = 1.0) {
+        bond_dim = m;
+        StateProbability *site_probs = new StateProbability[n_sites];
+        for (int i = 0; i < n_sites; i++) {
+            double alpha_occ = occ[i];
+            if (bias != 1.0)
+                if (alpha_occ > 1)
+                    alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                else if (alpha_occ < 1)
+                    alpha_occ = 1 - pow(1 - alpha_occ, bias);
+            alpha_occ /= 2;
+            assert(0 <= alpha_occ && alpha_occ <= 1);
+            vector<double> probs = {(1 - alpha_occ) * (1 - alpha_occ),
+                                    (1 - alpha_occ) * alpha_occ,
+                                    alpha_occ * alpha_occ};
+            site_probs[i].allocate(basis[orbsym[i]].n);
+            for (int j = 0; j < basis[orbsym[i]].n; j++) {
+                site_probs[i].quanta[j] = basis[orbsym[i]].quanta[j];
+                site_probs[i].probs[j] = probs[basis[orbsym[i]].quanta[j].n()];
+            }
+        }
+        StateProbability *left_probs = new StateProbability[n_sites + 1];
+        StateProbability *right_probs = new StateProbability[n_sites + 1];
+        left_probs[0] = StateProbability(vaccum);
+        for (int i = 0; i < n_sites; i++)
+            left_probs[i + 1] = StateProbability::tensor_product_no_collect(
+                left_probs[i], site_probs[i], left_dims_fci[i + 1]);
+        right_probs[n_sites] = StateProbability(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            right_probs[i] = StateProbability::tensor_product_no_collect(
+                site_probs[i], right_probs[i + 1], right_dims_fci[i]);
+        StateInfo *left_dims_fci_t = new StateInfo[n_sites + 1];
+        StateInfo *right_dims_fci_t = new StateInfo[n_sites + 1];
+        for (int i = 0; i < n_sites + 1; i++) {
+            left_dims_fci_t[i] = left_dims_fci[i].deep_copy();
+            right_dims_fci_t[i] = right_dims_fci[i].deep_copy();
+        }
+        left_dims = new StateInfo[n_sites + 1];
+        right_dims = new StateInfo[n_sites + 1];
+        left_dims[0] = StateInfo(vaccum);
+        for (int i = 1; i <= n_sites; i++) {
+            left_dims[i].allocate(left_probs[i].n);
+            memcpy(left_dims[i].quanta, left_probs[i].quanta,
+                   sizeof(SpinLabel) * left_probs[i].n);
+            double prob_sum =
+                accumulate(left_probs[i].probs,
+                           left_probs[i].probs + left_probs[i].n, 0.0);
+            for (int j = 0; j < left_probs[i].n; j++)
+                left_dims[i].n_states[j] =
+                    min((uint16_t)round(left_probs[i].probs[j] / prob_sum * m),
+                        left_dims_fci_t[i].n_states[j]);
+            left_dims[i].collect();
+            if (i != n_sites) {
+                StateInfo tmp = StateInfo::tensor_product(
+                    left_dims[i], basis[orbsym[i]], left_dims_fci_t[i + 1]);
+                for (int j = 0, k; j < left_dims_fci_t[i + 1].n; j++)
+                    if ((k = tmp.find_state(
+                             left_dims_fci_t[i + 1].quanta[j])) != -1)
+                        left_dims_fci_t[i + 1].n_states[j] =
+                            min(tmp.n_states[k],
+                                left_dims_fci_t[i + 1].n_states[j]);
+                for (int j = 0; j < left_probs[i + 1].n; j++)
+                    if (tmp.find_state(left_probs[i + 1].quanta[j]) == -1)
+                        left_probs[i + 1].probs[j] = 0;
+                tmp.deallocate();
+            }
+        }
+        right_dims[n_sites] = StateInfo(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--) {
+            right_dims[i].allocate(right_probs[i].n);
+            memcpy(right_dims[i].quanta, right_probs[i].quanta,
+                   sizeof(SpinLabel) * right_probs[i].n);
+            double prob_sum =
+                accumulate(right_probs[i].probs,
+                           right_probs[i].probs + right_probs[i].n, 0.0);
+            for (int j = 0; j < right_probs[i].n; j++)
+                right_dims[i].n_states[j] =
+                    min((uint16_t)round(right_probs[i].probs[j] / prob_sum * m),
+                        right_dims_fci_t[i].n_states[j]);
+            right_dims[i].collect();
+            if (i != 0) {
+                StateInfo tmp = StateInfo::tensor_product(
+                    basis[orbsym[i - 1]], right_dims[i],
+                    right_dims_fci_t[i - 1]);
+                for (int j = 0, k; j < right_dims_fci_t[i - 1].n; j++)
+                    if ((k = tmp.find_state(
+                             right_dims_fci_t[i - 1].quanta[j])) != -1)
+                        right_dims_fci_t[i - 1].n_states[j] =
+                            min(tmp.n_states[k],
+                                right_dims_fci_t[i - 1].n_states[j]);
+                for (int j = 0; j < right_probs[i - 1].n; j++)
+                    if (tmp.find_state(right_probs[i - 1].quanta[j]) == -1)
+                        right_probs[i - 1].probs[j] = 0;
+                tmp.deallocate();
+            }
+        }
+        for (int i = 0; i < n_sites; i++)
+            site_probs[i].reallocate(0);
+        for (int i = 0; i <= n_sites; i++)
+            left_probs[i].reallocate(0);
+        for (int i = n_sites; i >= 0; i--)
+            right_probs[i].reallocate(0);
+        for (int i = 0; i < n_sites + 1; i++) {
+            left_dims_fci_t[i].reallocate(0);
+            right_dims_fci_t[i].reallocate(0);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i].reallocate(left_dims[i].n);
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i].reallocate(right_dims[i].n);
+        assert(ialloc->shift == 0);
+        delete[] right_dims_fci_t;
+        delete[] left_dims_fci_t;
+        delete[] right_probs;
+        delete[] left_probs;
+        delete[] site_probs;
+    }
     void set_bond_dimension(uint16_t m) {
         bond_dim = m;
         left_dims = new StateInfo[n_sites + 1];
@@ -5209,17 +5421,21 @@ struct EffectiveHamiltonian {
         tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops, cmat,
                                     vmat, opdq);
     }
-    pair<double, int> eigs(bool iprint = false) {
+    tuple<double, int, size_t, double> eigs(bool iprint = false) {
         int ndav = 0;
         DiagonalMatrix aa(diag->data, diag->total_memory);
         vector<MatrixRef> bs =
             vector<MatrixRef>{MatrixRef(psi->data, psi->total_memory, 1)};
         frame->activate(0);
+        Timer t;
+        t.get_time();
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
                 ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint)
                 : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
-        return make_pair(eners[0], ndav);
+        size_t nflop = tf->opf->seq->cumulative_nflop;
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(eners[0], ndav, nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);
@@ -5678,13 +5894,17 @@ struct DMRG {
     struct Iteration {
         double energy, error;
         int ndav;
-        Iteration(double energy, double error, int ndav)
-            : energy(energy), error(error), ndav(ndav) {}
+        double tdav;
+        size_t nflop;
+        Iteration(double energy, double error, int ndav, size_t nflop = 0, double tdav = 1.0)
+            : energy(energy), error(error), ndav(ndav), nflop(nflop), tdav(tdav) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Ndav = " << setw(4) << r.ndav << " E = " << setw(15)
                << r.energy << " Error = " << setw(15) << setprecision(12)
-               << r.error;
+               << r.error << " FLOPS = " << scientific << setw(8)
+               << setprecision(2) << (double)r.nflop / r.tdav
+               << " Tdav = " << fixed << setprecision(2) << r.tdav;
             return os;
         }
     };
@@ -5803,7 +6023,7 @@ struct DMRG {
         dm->deallocate();
         old_wfn->info->deallocate();
         old_wfn->deallocate();
-        return Iteration(pdi.first + me->mpo->const_e, error, pdi.second);
+        return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
         me->move_to(i);
@@ -5853,7 +6073,7 @@ struct DMRG {
             cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
                  << (forward ? "forward" : "backward")
                  << " | Bond dimension = " << setw(4) << bond_dims[iw]
-                 << " | Noise = " << setw(9) << setprecision(2) << noises[iw]
+                 << " | Noise = " << scientific << setw(9) << setprecision(2) << noises[iw]
                  << endl;
             double energy = sweep(forward, bond_dims[iw], noises[iw]);
             energies.push_back(energy);
