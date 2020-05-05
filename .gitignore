@@ -2,6 +2,7 @@ build/
 docs/build/
 my_test/
 node0/
+nodex/
 MANIFEST
 .clang-format
 .vscode/

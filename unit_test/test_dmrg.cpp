@@ -10,7 +10,7 @@ class TestDMRG : public ::testing::Test {
     size_t dsize = 1L << 36;
     void SetUp() override {
         Random::rand_seed(0);
-        frame = new DataFrame(isize, dsize);
+        frame = new DataFrame(isize, dsize, "nodex");
     }
     void TearDown() override {
         frame->activate(0);
@@ -42,7 +42,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC| QCTypes::CN));
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC | QCTypes::CN));
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -102,8 +102,10 @@ TEST_F(TestDMRG, Test) {
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
+    // vector<uint16_t> bdims = {200};
+    // vector<double> noises = {0};
     shared_ptr<DMRG> dmrg = make_shared<DMRG>(me, bdims, noises);
-    dmrg->solve(20, true);
+    dmrg->solve(30, true);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

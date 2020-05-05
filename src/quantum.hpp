@@ -197,14 +197,14 @@ struct Parsing {
 };
 
 struct DataFrame {
-    string save_dir = "node0", prefix = "F0";
+    string save_dir, prefix = "F0";
     size_t isize, dsize;
     uint16_t n_frames, i_frame;
     vector<StackAllocator<uint32_t>> iallocs;
     vector<StackAllocator<double>> dallocs;
-    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
+    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30, const string &save_dir = "node0",
               double main_ratio = 0.7, uint16_t n_frames = 2)
-        : n_frames(n_frames) {
+        : n_frames(n_frames), save_dir(save_dir) {
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
         size_t imain = (size_t)(main_ratio * this->isize);
@@ -1867,6 +1867,8 @@ struct SparseMatrixInfo {
                     n[subdq[k].first] = k;
                 bool cja = subdq[k].first & 1, cjb = (subdq[k].first & 2) >> 1;
                 vidx[k] = viv.size();
+                vector<vector<tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>> pv;
+                size_t ip = 0;
                 SpinLabel adq = cja ? -subdq[k].second.get_bra(opdq)
                                     : subdq[k].second.get_bra(opdq),
                           bdq = cjb ? subdq[k].second.get_ket()
@@ -1880,6 +1882,7 @@ struct SparseMatrixInfo {
                 assert(ainfo->delta_quantum == adq);
                 assert(binfo->delta_quantum == bdq);
                 for (int iv = 0; iv < vinfo->n; iv++) {
+                    ip = 0;
                     SpinLabel lq = vinfo->quanta[iv].get_bra(vdq);
                     SpinLabel rq = -vinfo->quanta[iv].get_ket();
                     SpinLabel rqprimes = cjb ? rq + bdq : rq - bdq;
@@ -1921,15 +1924,32 @@ struct SparseMatrixInfo {
                                             bdq.twos(), rq.twos(),
                                             rqprime.twos());
                                     if (abs(factor) >= TINY) {
-                                        via.push_back(ia);
-                                        vib.push_back(ib);
-                                        vic.push_back(ic);
-                                        viv.push_back(iv);
-                                        vf.push_back(factor);
+                                        if (pv.size() <= ip)
+                                            pv.push_back(vector<tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>());
+                                        pv[ip].push_back(
+                                            make_tuple(factor, iv, ia, ib, ic));
+                                        ip++;
                                     }
                                 }
                             }
                         }
+                    }
+                }
+                size_t np = 0;
+                for (auto &r : pv)
+                    np += r.size();
+                vf.reserve(vf.size() + np);
+                viv.reserve(viv.size() + np);
+                via.reserve(via.size() + np);
+                vib.reserve(vib.size() + np);
+                vic.reserve(vic.size() + np);
+                for (ip = 0; ip < pv.size(); ip++) {
+                    for (auto &r : pv[ip]) {
+                        vf.push_back(get<0>(r));
+                        viv.push_back(get<1>(r));
+                        via.push_back(get<2>(r));
+                        vib.push_back(get<3>(r));
+                        vic.push_back(get<4>(r));
                     }
                 }
             }
@@ -3327,6 +3347,35 @@ struct BatchGEMMSeq {
             }
         }
     }
+    bool check() {
+        for (int ib = !!batch[0]->gp.size(),
+                 db = batch[0]->gp.size() == 0 ? 1 : 2;
+             ib < refs.size(); ib += db) {
+            shared_ptr<BatchGEMM> b = refs[ib].batch;
+            if (refs[ib].nk == 0)
+                continue;
+            double **ptr = (double **)dalloc->allocate(refs[ib].nk);
+            uint32_t *len = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            uint32_t *idx = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            int xi = refs[ib].i, xk = refs[ib].k;
+            for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
+                for (int kk = k; kk < k + b->gp[xi + i]; kk++)
+                    ptr[kk] = b->c[xk + kk],
+                    len[kk] = b->m[xi + i] * b->n[xi + i];
+            }
+            for (int kk = 0; kk < refs[ib].nk; kk++)
+                idx[kk] = kk;
+            sort(idx, idx + refs[ib].nk,
+                 [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
+            for (int kk = 1; kk < refs[ib].nk; kk++)
+                if (!(ptr[idx[kk]] >= ptr[idx[kk - 1]] + len[idx[kk - 1]]))
+                    return false;
+            ialloc->deallocate(idx, refs[ib].nk);
+            ialloc->deallocate(len, refs[ib].nk);
+            dalloc->deallocate((double *)ptr, refs[ib].nk);
+        }
+        return true;
+    }
     void prepare() {
         divide_batch();
         for (int ib = !!batch[0]->gp.size(),
@@ -3493,6 +3542,7 @@ struct BatchGEMMSeq {
     }
     void simple_perform() {
         divide_batch();
+        assert(check());
         allocate();
         perform();
         deallocate();
@@ -3692,6 +3742,8 @@ struct OperatorFunctions {
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
                 iv = cinfo->stride[il];
+            if (seq->mode == SeqTypes::Simple && il != ixa && iv <= cinfo->stride[il - 1])
+                seq->simple_perform();
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
                 seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
@@ -3806,7 +3858,7 @@ struct OperatorFunctions {
                                           scale, 1.0);
                 if (noise != 0.0)
                     MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
-                                              b[ib], noise, 1.0);
+                                              b[ib], noise * noise, 1.0);
             }
         if (noise != 0.0)
             tmp.deallocate();
