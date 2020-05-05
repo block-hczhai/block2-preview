@@ -984,7 +984,7 @@ struct OpString : OpExpr {
     const OpTypes get_type() const override { return OpTypes::Prod; }
     OpString abs() const { return OpString(a, b, 1.0, conj); }
     shared_ptr<OpElement> get_op() const {
-        assert(b == nullptr && conj == 0);
+        assert(b == nullptr);
         return a;
     }
     OpString operator*(double d) const {
@@ -2356,10 +2356,17 @@ struct MatrixFunctions {
         int n = a.m * a.n, inc = 1;
         dscal(&n, &scale, a.data, &inc);
     }
-    static void iadd(const MatrixRef &a, const MatrixRef &b, double scale) {
-        assert(a.m == b.m && a.n == b.n);
-        int n = a.m * a.n, inc = 1;
-        daxpy(&n, &scale, b.data, &inc, a.data, &inc);
+    static void iadd(const MatrixRef &a, const MatrixRef &b, double scale,
+                     bool conj = false) {
+        if (!conj) {
+            assert(a.m == b.m && a.n == b.n);
+            int n = a.m * a.n, inc = 1;
+            daxpy(&n, &scale, b.data, &inc, a.data, &inc);
+        } else {
+            assert(a.m == b.n && a.n == b.m);
+            for (int i = 0, inc = 1; i < a.m; i++)
+                daxpy(&a.n, &scale, b.data + i, &a.m, a.data, &inc);
+        }
     }
     static double dot(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == b.m && a.n == b.n);
@@ -3048,35 +3055,35 @@ struct BatchGEMM {
     }
     void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
                         bool conjb, const MatrixRef &c, double scale,
-                        uint32_t stride) {
+                        uint32_t stride, double cfactor = 1.0) {
         assert((a.m == 1 && a.n == 1) || (b.m == 1 && b.n == 1));
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
                 this->dgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
-                            a.data, 1, 1.0, &c(0, stride), 1);
+                            a.data, 1, cfactor, &c(0, stride), 1);
             else if (!conjb) {
-                this->dgemm_group(false, false, b.n, 1, 1, scale, 1, 1, 1.0, 1,
-                                  b.m);
+                this->dgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
+                                  1, b.m);
                 for (int k = 0; k < b.m; k++)
                     this->dgemm_array(&b(k, 0), a.data, &c(k, stride));
             } else {
-                this->dgemm_group(false, false, b.m, 1, 1, scale, b.n, 1, 1.0,
-                                  1, b.n);
+                this->dgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                  cfactor, 1, b.n);
                 for (int k = 0; k < b.n; k++)
                     this->dgemm_array(&b(0, k), a.data, &c(k, stride));
             }
         } else {
             if (!conja && a.n == c.n)
                 this->dgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
-                            b.data, 1, 1.0, &c(0, stride), 1);
+                            b.data, 1, cfactor, &c(0, stride), 1);
             else if (!conja) {
-                this->dgemm_group(false, false, a.n, 1, 1, scale, 1, 1, 1.0, 1,
-                                  a.m);
+                this->dgemm_group(false, false, a.n, 1, 1, scale, 1, 1, cfactor,
+                                  1, a.m);
                 for (int k = 0; k < a.m; k++)
                     this->dgemm_array(&a(k, 0), b.data, &c(k, stride));
             } else {
-                this->dgemm_group(false, false, a.m, 1, 1, scale, a.n, 1, 1.0,
-                                  1, a.n);
+                this->dgemm_group(false, false, a.m, 1, 1, scale, a.n, 1,
+                                  cfactor, 1, a.n);
                 for (int k = 0; k < a.n; k++)
                     this->dgemm_array(&a(0, k), b.data, &c(k, stride));
             }
@@ -3157,9 +3164,13 @@ struct BatchGEMMSeq {
         batch.push_back(make_shared<BatchGEMM>());
     }
     void iadd(const MatrixRef &a, const MatrixRef &b, double scale = 1.0,
-              double cfactor = 1.0) {
-        assert(a.m == b.m && a.n == b.n);
-        batch[1]->iadd(a.data, b.data, a.m * a.n, scale, cfactor);
+              double cfactor = 1.0, bool conj = false) {
+        static double x = 1;
+        if (!conj)
+            batch[1]->iadd(a.data, b.data, a.m * a.n, scale, cfactor);
+        else
+            batch[1]->tensor_product(b, conj, MatrixRef(&x, 1, 1), false, a,
+                                     scale, 0, cfactor);
     }
     void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
                 bool conj_bra, const MatrixRef &ket, bool conj_ket,
@@ -3462,9 +3473,9 @@ struct OperatorFunctions {
         seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
     }
     // a += b * scale
-    void iadd(SparseMatrix &a, const SparseMatrix &b,
-              double scale = 1.0) const {
-        if (a.info == b.info) {
+    void iadd(SparseMatrix &a, const SparseMatrix &b, double scale = 1.0,
+              bool conj = false) const {
+        if (a.info == b.info && !conj) {
             if (seq->mode != SeqTypes::None)
                 seq->iadd(MatrixRef(a.data, 1, a.total_memory),
                           MatrixRef(b.data, 1, b.total_memory),
@@ -3481,23 +3492,28 @@ struct OperatorFunctions {
                                           scale * b.factor);
             }
         } else {
+            SpinLabel bdq = b.info->delta_quantum;
             for (int ia = 0, ib; ia < a.info->n; ia++) {
                 SpinLabel bra =
                     a.info->quanta[ia].get_bra(a.info->delta_quantum);
                 SpinLabel ket = a.info->quanta[ia].get_ket();
-                SpinLabel bq = b.info->delta_quantum.combine(bra, ket);
+                SpinLabel bq =
+                    conj ? bdq.combine(ket, bra) : bdq.combine(bra, ket);
                 if (bq != SpinLabel(0xFFFFFFFF) &&
                     ((ib = b.info->find_state(bq)) != -1)) {
+                    double factor = scale * b.factor;
+                    if (conj)
+                        factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
+                                                   ket.twos());
                     if (seq->mode != SeqTypes::None)
-                        seq->iadd(a[ia], b[ib], scale * b.factor, a.factor);
+                        seq->iadd(a[ia], b[ib], factor, a.factor, conj);
                     else {
                         if (a.factor != 1.0) {
                             MatrixFunctions::iscale(a[ia], a.factor);
                             a.factor = 1;
                         }
                         if (scale != 0.0)
-                            MatrixFunctions::iadd(a[ia], b[ib],
-                                                  scale * b.factor);
+                            MatrixFunctions::iadd(a[ia], b[ib], factor, conj);
                     }
                 }
             }
@@ -3904,7 +3920,10 @@ struct TensorFunctions {
                 if (exprs->data[k]->get_type() == OpTypes::Zero)
                     continue;
                 shared_ptr<OpExpr> nop = abs_value(names->data[k]);
-                shared_ptr<OpExpr> expr = exprs->data[k] * (1 / dynamic_pointer_cast<OpElement>(names->data[k])->factor);
+                shared_ptr<OpExpr> expr =
+                    exprs->data[k] *
+                    (1 /
+                     dynamic_pointer_cast<OpElement>(names->data[k])->factor);
                 assert(a->ops.count(nop) != 0);
                 switch (expr->get_type()) {
                 case OpTypes::Sum: {
@@ -3914,7 +3933,8 @@ struct TensorFunctions {
                         shared_ptr<OpElement> nexpr = op->strings[i]->get_op();
                         assert(a->ops.count(nexpr) != 0);
                         opf->iadd(*a->ops.at(nop), *a->ops.at(nexpr),
-                                  nexpr->factor * op->strings[i]->factor);
+                                  nexpr->factor * op->strings[i]->factor,
+                                  op->strings[i]->conj != 0);
                     }
                 } break;
                 case OpTypes::Zero:
@@ -4015,26 +4035,26 @@ struct MPOSchemer {
     }
     string get_transform_formulas() const {
         stringstream ss;
-        ss << "LEFT  TRANSFORM :: SITE = " << (int) left_trans_site << endl;
+        ss << "LEFT  TRANSFORM :: SITE = " << (int)left_trans_site << endl;
         for (int j = 0; j < left_new_operator_names->data.size(); j++) {
             if (left_new_operator_names->data[j]->get_type() != OpTypes::Zero)
                 ss << "[" << setw(4) << j << "] " << setw(15)
-                    << left_new_operator_names->data[j]
-                    << " := " << left_new_operator_exprs->data[j] << endl;
+                   << left_new_operator_names->data[j]
+                   << " := " << left_new_operator_exprs->data[j] << endl;
             else
                 ss << "[" << setw(4) << j << "] "
-                    << left_new_operator_names->data[j] << endl;
+                   << left_new_operator_names->data[j] << endl;
         }
         ss << endl;
-        ss << "RIGHT TRANSFORM :: SITE = " << (int) right_trans_site << endl;
+        ss << "RIGHT TRANSFORM :: SITE = " << (int)right_trans_site << endl;
         for (int j = 0; j < right_new_operator_names->data.size(); j++) {
             if (right_new_operator_names->data[j]->get_type() != OpTypes::Zero)
                 ss << "[" << setw(4) << j << "] " << setw(15)
-                    << right_new_operator_names->data[j]
-                    << " := " << right_new_operator_exprs->data[j] << endl;
+                   << right_new_operator_names->data[j]
+                   << " := " << right_new_operator_exprs->data[j] << endl;
             else
                 ss << "[" << setw(4) << j << "] "
-                    << right_new_operator_names->data[j] << endl;
+                   << right_new_operator_names->data[j] << endl;
         }
         ss << endl;
         return ss.str();
@@ -4113,66 +4133,186 @@ struct SimplifiedMPO : MPO {
     shared_ptr<Rule> rule;
     SimplifiedMPO(const shared_ptr<MPO> &mpo, const shared_ptr<Rule> &rule)
         : prim_mpo(mpo), rule(rule), MPO(mpo->n_sites) {
+        static shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         const_e = mpo->const_e;
         tensors = mpo->tensors;
         op = mpo->op;
+        schemer = mpo->schemer;
         left_operator_names = mpo->left_operator_names;
         right_operator_names = mpo->right_operator_names;
         left_operator_exprs.resize(n_sites);
         right_operator_exprs.resize(n_sites);
+        if (schemer != nullptr) {
+            int i = schemer->left_trans_site;
+            for (size_t j = 0;
+                 j < schemer->left_new_operator_names->data.size(); j++) {
+                if (j < left_operator_names[i]->data.size() &&
+                    left_operator_names[i]->data[j] ==
+                        schemer->left_new_operator_names->data[j])
+                    continue;
+                else if (schemer->left_new_operator_exprs->data[j]
+                             ->get_type() == OpTypes::Zero)
+                    schemer->left_new_operator_names->data[j] =
+                        schemer->left_new_operator_exprs->data[j];
+            }
+            i = schemer->right_trans_site;
+            for (size_t j = 0;
+                 j < schemer->right_new_operator_names->data.size(); j++) {
+                if (j < right_operator_names[i]->data.size() &&
+                    right_operator_names[i]->data[j] ==
+                        schemer->right_new_operator_names->data[j])
+                    continue;
+                else if (schemer->right_new_operator_exprs->data[j]
+                             ->get_type() == OpTypes::Zero)
+                    schemer->right_new_operator_names->data[j] =
+                        schemer->right_new_operator_exprs->data[j];
+            }
+        }
         for (int i = 0; i < n_sites; i++) {
-            left_operator_exprs[i] =
-                i == 0 ? tensors[i]->lmat
-                       : left_operator_names[i - 1] * tensors[i]->lmat;
-            for (size_t j = 0; j < left_operator_exprs[i]->data.size(); j++)
-                if (left_operator_exprs[i]->data[j]->get_type() ==
-                    OpTypes::Zero)
-                    left_operator_names[i]->data[j] =
-                        left_operator_exprs[i]->data[j];
+            if (i == 0)
+                left_operator_exprs[i] = tensors[i]->lmat;
+            else if (schemer == nullptr || i - 1 != schemer->left_trans_site)
+                left_operator_exprs[i] =
+                    left_operator_names[i - 1] * tensors[i]->lmat;
+            else
+                left_operator_exprs[i] =
+                    schemer->left_new_operator_names * tensors[i]->lmat;
+            if (schemer != nullptr && i == schemer->left_trans_site) {
+                for (size_t j = 0; j < left_operator_exprs[i]->data.size(); j++)
+                    if (left_operator_exprs[i]->data[j]->get_type() ==
+                        OpTypes::Zero) {
+                        if (j < schemer->left_new_operator_names->data.size() &&
+                            left_operator_names[i]->data[j] ==
+                                schemer->left_new_operator_names->data[j])
+                            schemer->left_new_operator_names->data[j] =
+                                left_operator_exprs[i]->data[j];
+                        left_operator_names[i]->data[j] =
+                            left_operator_exprs[i]->data[j];
+                    }
+            } else {
+                for (size_t j = 0; j < left_operator_exprs[i]->data.size(); j++)
+                    if (left_operator_exprs[i]->data[j]->get_type() ==
+                        OpTypes::Zero)
+                        left_operator_names[i]->data[j] =
+                            left_operator_exprs[i]->data[j];
+            }
         }
         right_operator_exprs[n_sites - 1] = tensors[n_sites - 1]->rmat;
         for (int i = n_sites - 1; i >= 0; i--) {
-            right_operator_exprs[i] =
-                i == n_sites - 1
-                    ? tensors[i]->rmat
-                    : tensors[i]->rmat * right_operator_names[i + 1];
-            for (size_t j = 0; j < right_operator_exprs[i]->data.size(); j++)
-                if (right_operator_exprs[i]->data[j]->get_type() ==
-                    OpTypes::Zero)
-                    right_operator_names[i]->data[j] =
-                        right_operator_exprs[i]->data[j];
+            if (i == n_sites - 1)
+                right_operator_exprs[i] = tensors[i]->rmat;
+            else if (schemer == nullptr || i + 1 != schemer->right_trans_site)
+                right_operator_exprs[i] =
+                    tensors[i]->rmat * right_operator_names[i + 1];
+            else
+                right_operator_exprs[i] =
+                    tensors[i]->rmat * schemer->right_new_operator_names;
+            if (schemer != nullptr && i == schemer->right_trans_site) {
+                for (size_t j = 0; j < right_operator_exprs[i]->data.size();
+                     j++)
+                    if (right_operator_exprs[i]->data[j]->get_type() ==
+                        OpTypes::Zero) {
+                        if (j < schemer->right_new_operator_names->data
+                                    .size() &&
+                            right_operator_names[i]->data[j] ==
+                                schemer->right_new_operator_names->data[j])
+                            schemer->right_new_operator_names->data[j] =
+                                right_operator_exprs[i]->data[j];
+                        right_operator_names[i]->data[j] =
+                            right_operator_exprs[i]->data[j];
+                    }
+            } else {
+                for (size_t j = 0; j < right_operator_exprs[i]->data.size();
+                     j++)
+                    if (right_operator_exprs[i]->data[j]->get_type() ==
+                        OpTypes::Zero)
+                        right_operator_names[i]->data[j] =
+                            right_operator_exprs[i]->data[j];
+            }
         }
         if (mpo->middle_operator_exprs.size() != 0) {
             middle_operator_names = mpo->middle_operator_names;
             middle_operator_exprs = mpo->middle_operator_exprs;
         } else {
-            middle_operator_names.resize(n_sites - 1);
-            middle_operator_exprs.resize(n_sites - 1);
-            shared_ptr<SymbolicColumnVector> mpo_op =
-                make_shared<SymbolicColumnVector>(1);
-            (*mpo_op)[0] = mpo->op;
-            for (int i = 0; i < n_sites - 1; i++) {
-                middle_operator_names[i] = mpo_op;
-                middle_operator_exprs[i] =
-                    left_operator_names[i] * right_operator_names[i + 1];
-            }
             vector<uint8_t> px[2];
             for (int i = n_sites - 1; i >= 0; i--) {
                 if (i != n_sites - 1) {
-                    for (size_t j = 0; j < left_operator_names[i]->data.size();
-                         j++)
-                        if (right_operator_names[i + 1]->data[j]->get_type() ==
-                                OpTypes::Zero &&
-                            !px[i & 1][j])
-                            left_operator_names[i]->data[j] =
-                                right_operator_names[i + 1]->data[j];
-                        else if (left_operator_names[i]->data[j]->get_type() !=
-                                 OpTypes::Zero)
-                            px[i & 1][j] = 1;
+                    if (schemer == nullptr || i != schemer->left_trans_site) {
+                        for (size_t j = 0;
+                             j < left_operator_names[i]->data.size(); j++)
+                            if (right_operator_names[i + 1]
+                                        ->data[j]
+                                        ->get_type() == OpTypes::Zero &&
+                                !px[i & 1][j])
+                                left_operator_names[i]->data[j] =
+                                    right_operator_names[i + 1]->data[j];
+                            else if (left_operator_names[i]
+                                         ->data[j]
+                                         ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
+                    } else {
+                        for (size_t j = 0;
+                             j < schemer->left_new_operator_names->data.size();
+                             j++)
+                            if (right_operator_names[i + 1]
+                                        ->data[j]
+                                        ->get_type() == OpTypes::Zero &&
+                                !px[i & 1][j])
+                                schemer->left_new_operator_names->data[j] =
+                                    right_operator_names[i + 1]->data[j];
+                            else if (schemer->left_new_operator_names->data[j]
+                                         ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
+                        px[!(i & 1)].resize(px[i & 1].size());
+                        memcpy(&px[!(i & 1)][0], &px[i & 1][0],
+                               sizeof(uint8_t) * px[!(i & 1)].size());
+                        px[i & 1].resize(left_operator_names[i]->data.size());
+                        memset(&px[i & 1][0], 0,
+                               sizeof(uint8_t) * px[i & 1].size());
+                        map<shared_ptr<OpExpr>, int, op_expr_less> mp;
+                        for (size_t j = 0;
+                             j < left_operator_names[i]->data.size(); j++)
+                            if (left_operator_names[i]->data[j]->get_type() !=
+                                OpTypes::Zero)
+                                mp[abs_value(left_operator_names[i]->data[j])] =
+                                    j;
+                        shared_ptr<SymbolicRowVector> &exprs =
+                            schemer->left_new_operator_exprs;
+                        for (size_t j = 0; j < exprs->data.size(); j++) {
+                            if (px[!(i & 1)][j] &&
+                                j < left_operator_names[i]->data.size() &&
+                                left_operator_names[i]->data[j] ==
+                                    schemer->left_new_operator_names->data[j])
+                                px[i & 1][j] = 1;
+                            else if (px[!(i & 1)][j] &&
+                                     exprs->data[j]->get_type() !=
+                                         OpTypes::Zero) {
+                                shared_ptr<OpSum> op =
+                                    dynamic_pointer_cast<OpSum>(exprs->data[j]);
+                                for (size_t k = 0; k < op->strings.size();
+                                     k++) {
+                                    shared_ptr<OpExpr> expr =
+                                        abs_value(op->strings[k]->get_op());
+                                    if (mp.count(expr) == 0)
+                                        op->strings[k]->factor = 0;
+                                    else
+                                        px[i & 1][mp[expr]] = 1;
+                                }
+                            }
+                        }
+                        for (size_t j = 0;
+                             j < left_operator_names[i]->data.size(); j++)
+                            if (!px[i & 1][j])
+                                left_operator_names[i]->data[j] = zero;
+                    }
                 }
                 if (i != 0) {
-                    px[!(i & 1)].resize(
-                        left_operator_names[i - 1]->data.size());
+                    if (schemer == nullptr || i - 1 != schemer->left_trans_site)
+                        px[!(i & 1)].resize(
+                            left_operator_names[i - 1]->data.size());
+                    else
+                        px[!(i & 1)].resize(
+                            schemer->left_new_operator_names->data.size());
                     memset(&px[!(i & 1)][0], 0,
                            sizeof(uint8_t) * px[!(i & 1)].size());
                     if (tensors[i]->lmat->get_type() == SymTypes::Mat) {
@@ -4187,20 +4327,82 @@ struct SimplifiedMPO : MPO {
             }
             for (int i = 0; i < n_sites; i++) {
                 if (i != 0) {
-                    for (size_t j = 0; j < right_operator_names[i]->data.size();
-                         j++)
-                        if (left_operator_names[i - 1]->data[j]->get_type() ==
-                                OpTypes::Zero &&
-                            !px[i & 1][j])
-                            right_operator_names[i]->data[j] =
-                                left_operator_names[i - 1]->data[j];
-                        else if (right_operator_names[i]->data[j]->get_type() !=
-                                 OpTypes::Zero)
-                            px[i & 1][j] = 1;
+                    if (schemer == nullptr || i != schemer->right_trans_site) {
+                        for (size_t j = 0;
+                             j < right_operator_names[i]->data.size(); j++)
+                            if (left_operator_names[i - 1]
+                                        ->data[j]
+                                        ->get_type() == OpTypes::Zero &&
+                                !px[i & 1][j])
+                                right_operator_names[i]->data[j] =
+                                    left_operator_names[i - 1]->data[j];
+                            else if (right_operator_names[i]
+                                         ->data[j]
+                                         ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
+                    } else {
+                        for (size_t j = 0;
+                             j < schemer->right_new_operator_names->data.size();
+                             j++)
+                            if (left_operator_names[i - 1]
+                                        ->data[j]
+                                        ->get_type() == OpTypes::Zero &&
+                                !px[i & 1][j])
+                                schemer->right_new_operator_names->data[j] =
+                                    left_operator_names[i - 1]->data[j];
+                            else if (schemer->right_new_operator_names->data[j]
+                                         ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
+                        px[!(i & 1)].resize(px[i & 1].size());
+                        memcpy(&px[!(i & 1)][0], &px[i & 1][0],
+                               sizeof(uint8_t) * px[!(i & 1)].size());
+                        px[i & 1].resize(right_operator_names[i]->data.size());
+                        memset(&px[i & 1][0], 0,
+                               sizeof(uint8_t) * px[i & 1].size());
+                        map<shared_ptr<OpExpr>, int, op_expr_less> mp;
+                        for (size_t j = 0;
+                             j < right_operator_names[i]->data.size(); j++)
+                            if (right_operator_names[i]->data[j]->get_type() !=
+                                OpTypes::Zero)
+                                mp[abs_value(
+                                    right_operator_names[i]->data[j])] = j;
+                        shared_ptr<SymbolicColumnVector> &exprs =
+                            schemer->right_new_operator_exprs;
+                        for (size_t j = 0; j < exprs->data.size(); j++) {
+                            if (px[!(i & 1)][j] &&
+                                j < right_operator_names[i]->data.size() &&
+                                right_operator_names[i]->data[j] ==
+                                    schemer->right_new_operator_names->data[j])
+                                px[i & 1][j] = 1;
+                            else if (px[!(i & 1)][j] &&
+                                     exprs->data[j]->get_type() !=
+                                         OpTypes::Zero) {
+                                shared_ptr<OpSum> op =
+                                    dynamic_pointer_cast<OpSum>(exprs->data[j]);
+                                for (size_t k = 0; k < op->strings.size();
+                                     k++) {
+                                    shared_ptr<OpExpr> expr =
+                                        abs_value(op->strings[k]->get_op());
+                                    if (mp.count(expr) == 0)
+                                        op->strings[k]->factor = 0;
+                                    else
+                                        px[i & 1][mp[expr]] = 1;
+                                }
+                            }
+                        }
+                        for (size_t j = 0;
+                             j < right_operator_names[i]->data.size(); j++)
+                            if (!px[i & 1][j])
+                                right_operator_names[i]->data[j] = zero;
+                    }
                 }
                 if (i != n_sites - 1) {
-                    px[!(i & 1)].resize(
-                        right_operator_names[i + 1]->data.size());
+                    if (schemer == nullptr || i + 1 != schemer->left_trans_site)
+                        px[!(i & 1)].resize(
+                            right_operator_names[i + 1]->data.size());
+                    else
+                        px[!(i & 1)].resize(
+                            schemer->right_new_operator_names->data.size());
                     memset(&px[!(i & 1)][0], 0,
                            sizeof(uint8_t) * px[!(i & 1)].size());
                     if (tensors[i]->rmat->get_type() == SymTypes::Mat) {
@@ -4213,10 +4415,26 @@ struct SimplifiedMPO : MPO {
                     }
                 }
             }
+            middle_operator_names.resize(n_sites - 1);
+            middle_operator_exprs.resize(n_sites - 1);
+            shared_ptr<SymbolicColumnVector> mpo_op =
+                make_shared<SymbolicColumnVector>(1);
+            (*mpo_op)[0] = mpo->op;
+            for (int i = 0; i < n_sites - 1; i++) {
+                middle_operator_names[i] = mpo_op;
+                if (schemer == nullptr || i != schemer->left_trans_site)
+                    middle_operator_exprs[i] =
+                        left_operator_names[i] * right_operator_names[i + 1];
+                else
+                    middle_operator_exprs[i] =
+                        schemer->left_new_operator_names *
+                        right_operator_names[i + 1];
+            }
         }
         simplify();
     }
     shared_ptr<OpExpr> simplify_expr(const shared_ptr<OpExpr> &expr) {
+        static shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString> op = dynamic_pointer_cast<OpString>(expr);
@@ -4230,9 +4448,11 @@ struct SimplifiedMPO : MPO {
             map<shared_ptr<OpExpr>, vector<shared_ptr<OpString>>, op_expr_less>
                 mp;
             for (auto &x : ops->strings) {
-                assert(x->b != nullptr);
+                if (x->factor == 0)
+                    continue;
                 shared_ptr<OpElementRef> opl = rule->operator()(x->a);
-                shared_ptr<OpElementRef> opr = rule->operator()(x->b);
+                shared_ptr<OpElementRef> opr =
+                    x->b == nullptr ? nullptr : rule->operator()(x->b);
                 shared_ptr<OpElement> a = opl == nullptr ? x->a : opl->op;
                 shared_ptr<OpElement> b = opr == nullptr ? x->b : opr->op;
                 uint8_t conj = (opl != nullptr && opl->trans) |
@@ -4261,7 +4481,7 @@ struct SimplifiedMPO : MPO {
             terms.reserve(mp.size());
             for (auto &r : mp)
                 terms.insert(terms.end(), r.second.begin(), r.second.end());
-            return make_shared<OpSum>(terms);
+            return terms.size() == 0 ? zero : make_shared<OpSum>(terms);
         } break;
         case OpTypes::Zero:
         case OpTypes::Elem:
@@ -4272,51 +4492,43 @@ struct SimplifiedMPO : MPO {
         }
         return expr;
     }
+    void simplify_symbolic(const shared_ptr<Symbolic> &name,
+                           const shared_ptr<Symbolic> &expr,
+                           const shared_ptr<Symbolic> &ref = nullptr) {
+        assert(name->data.size() == expr->data.size());
+        size_t k = 0;
+        for (size_t j = 0; j < name->data.size(); j++) {
+            if (name->data[j]->get_type() == OpTypes::Zero)
+                continue;
+            else if (expr->data[j]->get_type() == OpTypes::Zero &&
+                     (ref == nullptr || j >= ref->data.size() ||
+                      ref->data[j] != name->data[j]))
+                continue;
+            shared_ptr<OpElement> op =
+                dynamic_pointer_cast<OpElement>(name->data[j]);
+            if (rule->operator()(op) != nullptr)
+                continue;
+            name->data[k] = abs_value(name->data[j]);
+            expr->data[k] = simplify_expr(expr->data[j]) * (1 / op->factor);
+            k++;
+        }
+        name->data.resize(k);
+        expr->data.resize(k);
+        name->n = expr->n = (int)name->data.size();
+    }
     void simplify() {
-        for (int i = 0; i < n_sites; i++) {
-            shared_ptr<Symbolic> lname = left_operator_names[i];
-            shared_ptr<Symbolic> lexpr = left_operator_exprs[i];
-            assert(lname->data.size() == lexpr->data.size());
-            size_t k = 0;
-            for (size_t j = 0; j < lname->data.size(); j++) {
-                if (lexpr->data[j]->get_type() == OpTypes::Zero ||
-                    lname->data[j]->get_type() == OpTypes::Zero)
-                    continue;
-                shared_ptr<OpElement> op =
-                    dynamic_pointer_cast<OpElement>(lname->data[j]);
-                if (rule->operator()(op) != nullptr)
-                    continue;
-                lname->data[k] = abs_value(lname->data[j]);
-                lexpr->data[k] =
-                    simplify_expr(lexpr->data[j]) * (1 / op->factor);
-                k++;
-            }
-            lname->data.resize(k);
-            lexpr->data.resize(k);
-            lname->n = lexpr->n = (int)lname->data.size();
+        if (schemer != nullptr) {
+            simplify_symbolic(schemer->left_new_operator_names,
+                              schemer->left_new_operator_exprs,
+                              left_operator_names[schemer->left_trans_site]);
+            simplify_symbolic(schemer->right_new_operator_names,
+                              schemer->right_new_operator_exprs,
+                              right_operator_names[schemer->right_trans_site]);
         }
-        for (int i = 0; i < n_sites; i++) {
-            shared_ptr<Symbolic> rname = right_operator_names[i];
-            shared_ptr<Symbolic> rexpr = right_operator_exprs[i];
-            assert(rname->data.size() == rexpr->data.size());
-            size_t k = 0;
-            for (size_t j = 0; j < rname->data.size(); j++) {
-                if (rexpr->data[j]->get_type() == OpTypes::Zero ||
-                    rname->data[j]->get_type() == OpTypes::Zero)
-                    continue;
-                shared_ptr<OpElement> op =
-                    dynamic_pointer_cast<OpElement>(rname->data[j]);
-                if (rule->operator()(op) != nullptr)
-                    continue;
-                rname->data[k] = abs_value(rname->data[j]);
-                rexpr->data[k] =
-                    simplify_expr(rexpr->data[j]) * (1 / op->factor);
-                k++;
-            }
-            rname->data.resize(k);
-            rexpr->data.resize(k);
-            rname->m = rexpr->m = (int)rname->data.size();
-        }
+        for (int i = 0; i < n_sites; i++)
+            simplify_symbolic(left_operator_names[i], left_operator_exprs[i]);
+        for (int i = 0; i < n_sites; i++)
+            simplify_symbolic(right_operator_names[i], right_operator_exprs[i]);
         for (int i = 0; i < n_sites - 1; i++) {
             shared_ptr<Symbolic> mexpr = middle_operator_exprs[i];
             for (size_t j = 0; j < mexpr->data.size(); j++)
@@ -6175,8 +6387,7 @@ struct QCMPO : MPO {
             shared_ptr<Symbolic> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
-            if (mode == QCTypes::NC ||
-                ((mode & QCTypes::NC) && m <= trans_m))
+            if (mode == QCTypes::NC || ((mode & QCTypes::NC) && m <= trans_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
                      ((mode & QCTypes::CN) && m > trans_m))
@@ -6820,7 +7031,8 @@ struct QCMPO : MPO {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN)) {
             uint8_t m = trans_m;
             schemer = make_shared<MPOSchemer>(m, m + 1);
-            int new_rshape = 2 + 2 * hamil.n_sites +
+            int new_rshape =
+                2 + 2 * hamil.n_sites +
                 6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
             int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
             schemer->left_new_operator_names =
@@ -6851,8 +7063,10 @@ struct QCMPO : MPO {
                         for (uint8_t g = 0; g < m + 1; g++)
                             for (uint8_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
-                                                    ad_op[g][h][s]);
+                                    exprs.push_back(
+                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                         (s ? -1 : 1)) *
+                                        ad_op[g][h][s]);
                         lexpr[p + k - m - 1] = sum(exprs);
                     }
                     p += hamil.n_sites - m - 1;
@@ -6865,8 +7079,10 @@ struct QCMPO : MPO {
                         for (uint8_t g = 0; g < m + 1; g++)
                             for (uint8_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
-                                                    a_op[g][h][s]);
+                                    exprs.push_back(
+                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                         (s ? -1 : 1)) *
+                                        a_op[g][h][s]);
                         lexpr[p + k - m - 1] = sum(exprs);
                     }
                     p += hamil.n_sites - m - 1;
@@ -6879,8 +7095,9 @@ struct QCMPO : MPO {
                         for (uint8_t h = 0; h < m + 1; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[0] * (2 * hamil.v(j, k, g, h) -
-                                                 hamil.v(j, h, g, k))) *
+                                exprs.push_back((su2_factor_q[0] *
+                                                 (2 * hamil.v(j, k, g, h) -
+                                                  hamil.v(j, h, g, k))) *
                                                 b_op[g][h][0]);
                     lexpr[p + k - m - 1] = sum(exprs);
                 }
@@ -6893,8 +7110,9 @@ struct QCMPO : MPO {
                     for (uint8_t g = 0; g < m + 1; g++)
                         for (uint8_t h = 0; h < m + 1; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[1] * hamil.v(j, h, g, k)) *
-                                                b_op[g][h][1]);
+                                exprs.push_back(
+                                    (su2_factor_q[1] * hamil.v(j, h, g, k)) *
+                                    b_op[g][h][1]);
                     lexpr[p + k - m - 1] = sum(exprs);
                 }
                 p += hamil.n_sites - m - 1;
@@ -6909,8 +7127,10 @@ struct QCMPO : MPO {
                         for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
-                                                    ad_op[g][h][s]);
+                                    exprs.push_back(
+                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                         (s ? -1 : 1)) *
+                                        ad_op[g][h][s]);
                         rexpr[p + k] = sum(exprs);
                     }
                     p += m + 1;
@@ -6923,8 +7143,10 @@ struct QCMPO : MPO {
                         for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back((su2_factor_p[s] * hamil.v(j, g, k, h) * (s ? -1 : 1)) *
-                                                    a_op[g][h][s]);
+                                    exprs.push_back(
+                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                         (s ? -1 : 1)) *
+                                        a_op[g][h][s]);
                         rexpr[p + k] = sum(exprs);
                     }
                     p += m + 1;
@@ -6937,8 +7159,9 @@ struct QCMPO : MPO {
                         for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[0] * (2 * hamil.v(j, k, g, h) -
-                                                 hamil.v(j, h, g, k))) *
+                                exprs.push_back((su2_factor_q[0] *
+                                                 (2 * hamil.v(j, k, g, h) -
+                                                  hamil.v(j, h, g, k))) *
                                                 b_op[g][h][0]);
                     rexpr[p + k] = sum(exprs);
                 }
@@ -6951,8 +7174,9 @@ struct QCMPO : MPO {
                     for (uint8_t g = m + 1; g < hamil.n_sites; g++)
                         for (uint8_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[1] * hamil.v(j, h, g, k)) *
-                                                b_op[g][h][1]);
+                                exprs.push_back(
+                                    (su2_factor_q[1] * hamil.v(j, h, g, k)) *
+                                    b_op[g][h][1]);
                     rexpr[p + k] = sum(exprs);
                 }
                 p += m + 1;
