@@ -1740,6 +1740,11 @@ struct StateProbability {
             }
         return c;
     }
+    friend ostream &operator<<(ostream &os, const StateProbability &c) {
+        for (int i = 0; i < c.n; i++)
+            os << c.quanta[i].to_str() << " : " << c.probs[i] << endl;
+        return os;
+    }
 };
 
 struct SparseMatrixInfo {
@@ -3748,9 +3753,12 @@ struct OperatorFunctions {
             if (seq->mode != SeqTypes::None)
                 seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
                             scale * factor);
-            else
+            else {
+                seq->cumulative_nflop += (size_t)c[ic].m * c[ic].n * ((conj & 2) ? b[ib].n : b[ib].n) +
+                                         (size_t)a[ia].m * a[ia].n * ((conj & 2) ? b[ib].n : b[ib].n);
                 MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
                                         !(conj & 2), scale * factor);
+            }
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -3837,7 +3845,7 @@ struct OperatorFunctions {
         SparseMatrix tmp;
         if (noise != 0.0) {
             tmp.allocate(a.info);
-            tmp.randomize(-1.0, 1.0);
+            tmp.randomize(-0.5, 0.5);
         }
         if (trace_right)
             for (int ia = 0; ia < a.info->n; ia++) {
@@ -4719,6 +4727,7 @@ struct MPSInfo {
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
                                       double bias = 1.0) {
         bond_dim = m;
+        // site state probabilities
         StateProbability *site_probs = new StateProbability[n_sites];
         for (int i = 0; i < n_sites; i++) {
             double alpha_occ = occ[i];
@@ -4738,6 +4747,7 @@ struct MPSInfo {
                 site_probs[i].probs[j] = probs[basis[orbsym[i]].quanta[j].n()];
             }
         }
+        // left and right block probabilities
         StateProbability *left_probs = new StateProbability[n_sites + 1];
         StateProbability *right_probs = new StateProbability[n_sites + 1];
         left_probs[0] = StateProbability(vaccum);
@@ -4748,12 +4758,47 @@ struct MPSInfo {
         for (int i = n_sites - 1; i >= 0; i--)
             right_probs[i] = StateProbability::tensor_product_no_collect(
                 site_probs[i], right_probs[i + 1], right_dims_fci[i]);
+        // conditional probabilities
+        for (int i = 0; i <= n_sites; i++) {
+            double *lprobs = dalloc->allocate(left_probs[i].n);
+            double *rprobs = dalloc->allocate(right_probs[i].n);
+            for (int j = 0; j < left_probs[i].n; j++)
+                lprobs[j] = left_probs[i].probs[j] *
+                            (left_probs[i].quanta[j].twos() + 1);
+            for (int j = 0; j < right_probs[i].n; j++)
+                rprobs[j] = right_probs[i].probs[j] *
+                            (right_probs[i].quanta[j].twos() + 1);
+            for (int j = 0; i > 0 && j < left_probs[i].n; j++) {
+                if (left_probs[i].probs[j] == 0)
+                    continue;
+                double x = 0;
+                SpinLabel rks = target - left_probs[i].quanta[j];
+                for (int k = 0, ik; k < rks.count(); k++)
+                    if ((ik = right_probs[i].find_state(rks[k])) != -1)
+                        x += rprobs[ik];
+                left_probs[i].probs[j] *= x;
+            }
+            for (int j = 0; i < n_sites && j < right_probs[i].n; j++) {
+                if (right_probs[i].probs[j] == 0)
+                    continue;
+                double x = 0;
+                SpinLabel lks = target - right_probs[i].quanta[j];
+                for (int k = 0, ik; k < lks.count(); k++)
+                    if ((ik = left_probs[i].find_state(lks[k])) != -1)
+                        x += lprobs[ik];
+                right_probs[i].probs[j] *= x;
+            }
+            dalloc->deallocate(rprobs, right_probs[i].n);
+            dalloc->deallocate(lprobs, left_probs[i].n);
+        }
+        // adjusted temparary fci dims
         StateInfo *left_dims_fci_t = new StateInfo[n_sites + 1];
         StateInfo *right_dims_fci_t = new StateInfo[n_sites + 1];
         for (int i = 0; i < n_sites + 1; i++) {
             left_dims_fci_t[i] = left_dims_fci[i].deep_copy();
             right_dims_fci_t[i] = right_dims_fci[i].deep_copy();
         }
+        // left and right block dims
         left_dims = new StateInfo[n_sites + 1];
         right_dims = new StateInfo[n_sites + 1];
         left_dims[0] = StateInfo(vaccum);

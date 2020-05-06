@@ -40,7 +40,7 @@ TEST_F(TestDMRG, Test) {
 
     Timer t;
     t.get_time();
-    // MPO
+    // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes(QCTypes::NC | QCTypes::CN));
     cout << "MPO end .. T = " << t.get_time() << endl;
@@ -59,7 +59,25 @@ TEST_F(TestDMRG, Test) {
         norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
     // mps_info->set_bond_dimension(bond_dim);
     assert(occs.size() == norb);
+    for (size_t i = 0; i < occs.size(); i++)
+        cout << occs[i] << " ";
     mps_info->set_bond_dimension_using_occ(bond_dim, occs);
+    // cout << "left min dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->left_dims_fci[i].n << " ";
+    // cout << endl;
+    // cout << "right min dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->right_dims_fci[i].n << " ";
+    // cout << endl;
+    // cout << "left q dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->left_dims[i].n << " ";
+    // cout << endl;
+    // cout << "right q dims = ";
+    // for (int i = 0; i <= norb; i++)
+    //     cout << mps_info->right_dims[i].n << " ";
+    // cout << endl;
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
         cout << mps_info->left_dims[i].n_states_total << " ";
@@ -68,10 +86,9 @@ TEST_F(TestDMRG, Test) {
     for (int i = 0; i <= norb; i++)
         cout << mps_info->right_dims[i].n_states_total << " ";
     cout << endl;
-    // abort();
 
     // MPS
-    Random::rand_seed(1969);
+    Random::rand_seed(0);
     shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
