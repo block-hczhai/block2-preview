@@ -4416,6 +4416,15 @@ struct SimplifiedMPO : MPO {
                                          ->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                    } else if (schemer->right_trans_site -
+                                   schemer->left_trans_site >
+                               1) {
+                        for (size_t j = 0;
+                             j < schemer->left_new_operator_names->data.size();
+                             j++)
+                            if (schemer->left_new_operator_names->data[j]
+                                    ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
                     } else {
                         for (size_t j = 0;
                              j < schemer->left_new_operator_names->data.size();
@@ -4429,6 +4438,8 @@ struct SimplifiedMPO : MPO {
                             else if (schemer->left_new_operator_names->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                    }
+                    if (schemer != nullptr && i == schemer->left_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
                         memcpy(&px[!(i & 1)][0], &px[i & 1][0],
                                sizeof(uint8_t) * px[!(i & 1)].size());
@@ -4506,6 +4517,15 @@ struct SimplifiedMPO : MPO {
                                          ->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                    } else if (schemer->right_trans_site -
+                                   schemer->left_trans_site >
+                               1) {
+                        for (size_t j = 0;
+                             j < schemer->right_new_operator_names->data.size();
+                             j++)
+                            if (schemer->right_new_operator_names->data[j]
+                                    ->get_type() != OpTypes::Zero)
+                                px[i & 1][j] = 1;
                     } else {
                         for (size_t j = 0;
                              j < schemer->right_new_operator_names->data.size();
@@ -4519,6 +4539,8 @@ struct SimplifiedMPO : MPO {
                             else if (schemer->right_new_operator_names->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                    }
+                    if (schemer != nullptr && i == schemer->right_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
                         memcpy(&px[!(i & 1)][0], &px[i & 1][0],
                                sizeof(uint8_t) * px[!(i & 1)].size());
@@ -4588,7 +4610,8 @@ struct SimplifiedMPO : MPO {
             (*mpo_op)[0] = mpo->op;
             for (int i = 0; i < n_sites - 1; i++) {
                 middle_operator_names[i] = mpo_op;
-                if (schemer == nullptr || i != schemer->left_trans_site)
+                if (schemer == nullptr || i != schemer->left_trans_site ||
+                    schemer->right_trans_site - schemer->left_trans_site > 1)
                     middle_operator_exprs[i] =
                         left_operator_names[i] * right_operator_names[i + 1];
                 else
@@ -5745,7 +5768,10 @@ struct MovingEnvironment {
             vector<shared_ptr<Symbolic>> lmats = {
                 mpo->left_operator_names[center]};
             if (mpo->schemer != nullptr &&
-                center == mpo->schemer->left_trans_site)
+                center == mpo->schemer->left_trans_site &&
+                mpo->schemer->right_trans_site -
+                        mpo->schemer->left_trans_site <=
+                    1)
                 lmats.push_back(mpo->schemer->left_new_operator_names);
             vector<SpinLabel> lsl = Partition::get_uniq_labels(lmats);
             shared_ptr<Symbolic> lexprs =
@@ -5775,7 +5801,10 @@ struct MovingEnvironment {
                                   ? mpo->left_operator_exprs[center]
                                   : nullptr);
             if (mpo->schemer != nullptr &&
-                center == mpo->schemer->left_trans_site)
+                center == mpo->schemer->left_trans_site &&
+                mpo->schemer->right_trans_site -
+                        mpo->schemer->left_trans_site <=
+                    1)
                 tf->numerical_transform(new_left, lmats[1],
                                         mpo->schemer->left_new_operator_exprs);
             // right contract infos
@@ -6529,74 +6558,83 @@ struct Hamiltonian {
         if (opf->seq->mode != SeqTypes::None)
             opf->seq->simple_perform();
     }
-    void filter_site_ops(uint8_t m, shared_ptr<Symbolic> &pmat,
+    void filter_site_ops(uint8_t m, const vector<shared_ptr<Symbolic>> &mats,
                          map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>,
                              op_expr_less> &ops) const {
-        for (auto &x : pmat->data) {
-            switch (x->get_type()) {
-            case OpTypes::Zero:
-                break;
-            case OpTypes::Elem:
-                ops[abs_value(x)] = nullptr;
-                break;
-            case OpTypes::Sum:
-                for (auto &r : dynamic_pointer_cast<OpSum>(x)->strings)
-                    ops[abs_value(r->get_op())] = nullptr;
-                break;
-            default:
-                assert(false);
+        vector<shared_ptr<Symbolic>> pmats = mats;
+        if (pmats.size() == 2 && pmats[0] == pmats[1])
+            pmats.resize(1);
+        for (auto pmat : pmats)
+            for (auto &x : pmat->data) {
+                switch (x->get_type()) {
+                case OpTypes::Zero:
+                    break;
+                case OpTypes::Elem:
+                    ops[abs_value(x)] = nullptr;
+                    break;
+                case OpTypes::Sum:
+                    for (auto &r : dynamic_pointer_cast<OpSum>(x)->strings)
+                        ops[abs_value(r->get_op())] = nullptr;
+                    break;
+                default:
+                    assert(false);
+                }
             }
-        }
         get_site_ops(m, ops);
         shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         size_t kk;
-        for (auto &x : pmat->data) {
-            shared_ptr<OpExpr> xx;
-            switch (x->get_type()) {
-            case OpTypes::Zero:
-                break;
-            case OpTypes::Elem:
-                xx = abs_value(x);
-                if (ops[xx]->factor == 0.0 || ops[xx]->info->n == 0)
-                    x = zero;
-                break;
-            case OpTypes::Sum:
-                kk = 0;
-                for (size_t i = 0;
-                     i < dynamic_pointer_cast<OpSum>(x)->strings.size(); i++) {
-                    xx = abs_value(
-                        dynamic_pointer_cast<OpSum>(x)->strings[i]->get_op());
-                    shared_ptr<SparseMatrix> &mat = ops[xx];
-                    if (!(mat->factor == 0.0 || mat->info->n == 0)) {
-                        if (i != kk)
-                            dynamic_pointer_cast<OpSum>(x)->strings[kk] =
-                                dynamic_pointer_cast<OpSum>(x)->strings[i];
-                        kk++;
+        for (auto pmat : pmats)
+            for (auto &x : pmat->data) {
+                shared_ptr<OpExpr> xx;
+                switch (x->get_type()) {
+                case OpTypes::Zero:
+                    break;
+                case OpTypes::Elem:
+                    xx = abs_value(x);
+                    if (ops[xx]->factor == 0.0 || ops[xx]->info->n == 0)
+                        x = zero;
+                    break;
+                case OpTypes::Sum:
+                    kk = 0;
+                    for (size_t i = 0;
+                         i < dynamic_pointer_cast<OpSum>(x)->strings.size();
+                         i++) {
+                        xx = abs_value(dynamic_pointer_cast<OpSum>(x)
+                                           ->strings[i]
+                                           ->get_op());
+                        shared_ptr<SparseMatrix> &mat = ops[xx];
+                        if (!(mat->factor == 0.0 || mat->info->n == 0)) {
+                            if (i != kk)
+                                dynamic_pointer_cast<OpSum>(x)->strings[kk] =
+                                    dynamic_pointer_cast<OpSum>(x)->strings[i];
+                            kk++;
+                        }
                     }
+                    if (kk == 0)
+                        x = zero;
+                    else if (kk !=
+                             dynamic_pointer_cast<OpSum>(x)->strings.size())
+                        dynamic_pointer_cast<OpSum>(x)->strings.resize(kk);
+                    break;
+                default:
+                    assert(false);
                 }
-                if (kk == 0)
-                    x = zero;
-                else if (kk != dynamic_pointer_cast<OpSum>(x)->strings.size())
-                    dynamic_pointer_cast<OpSum>(x)->strings.resize(kk);
-                break;
-            default:
-                assert(false);
             }
-        }
-        if (pmat->get_type() == SymTypes::Mat) {
-            shared_ptr<SymbolicMatrix> smat =
-                dynamic_pointer_cast<SymbolicMatrix>(pmat);
-            size_t j = 0;
-            for (size_t i = 0; i < smat->indices.size(); i++)
-                if (smat->data[i]->get_type() != OpTypes::Zero) {
-                    if (i != j)
-                        smat->data[j] = smat->data[i],
-                        smat->indices[j] = smat->indices[i];
-                    j++;
-                }
-            smat->data.resize(j);
-            smat->indices.resize(j);
-        }
+        for (auto pmat : pmats)
+            if (pmat->get_type() == SymTypes::Mat) {
+                shared_ptr<SymbolicMatrix> smat =
+                    dynamic_pointer_cast<SymbolicMatrix>(pmat);
+                size_t j = 0;
+                for (size_t i = 0; i < smat->indices.size(); i++)
+                    if (smat->data[i]->get_type() != OpTypes::Zero) {
+                        if (i != j)
+                            smat->data[j] = smat->data[i],
+                            smat->indices[j] = smat->indices[i];
+                        j++;
+                    }
+                smat->data.resize(j);
+                smat->indices.resize(j);
+            }
         for (auto it = ops.cbegin(); it != ops.cend();) {
             if (it->second->factor == 0.0 || it->second->info->n == 0)
                 ops.erase(it++);
@@ -6658,7 +6696,7 @@ struct Hamiltonian {
     double e() const { return fcidump->e; }
 };
 
-enum QCTypes : uint8_t { NC = 1, CN = 2 };
+enum QCTypes : uint8_t { NC = 1, CN = 2, Conventional = 4 };
 
 struct QCMPO : MPO {
     QCTypes mode;
@@ -6679,7 +6717,12 @@ struct QCMPO : MPO {
         shared_ptr<OpElement> q_op[hamil.n_sites][hamil.n_sites][2];
         op = h_op;
         const_e = hamil.e();
-        uint8_t trans_m = (hamil.n_sites >> 1) - 1;
+        uint8_t trans_l = -1, trans_r = hamil.n_sites;
+        if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
+            trans_l = (hamil.n_sites >> 1) - 1, trans_r = (hamil.n_sites >> 1);
+        else if (mode == QCTypes::Conventional)
+            trans_l = (hamil.n_sites >> 1) - 1,
+            trans_r = (hamil.n_sites >> 1) + 1;
         for (uint8_t m = 0; m < hamil.n_sites; m++) {
             c_op[m] = make_shared<OpElement>(OpNames::C, SiteIndex(m),
                                              SpinLabel(1, 1, hamil.orb_sym[m]));
@@ -6727,14 +6770,18 @@ struct QCMPO : MPO {
                                   hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
         int p;
+        bool repeat_m = false;
         for (uint8_t m = 0; m < hamil.n_sites; m++) {
             shared_ptr<Symbolic> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
-            if (mode == QCTypes::NC || ((mode & QCTypes::NC) && m <= trans_m))
+            if (mode == QCTypes::NC || ((mode & QCTypes::NC) && m <= trans_l) ||
+                (mode == QCTypes::Conventional && m <= trans_l + 1 &&
+                 !repeat_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
-                     ((mode & QCTypes::CN) && m > trans_m))
+                     ((mode & QCTypes::CN) && m >= trans_r) ||
+                     (mode == QCTypes::Conventional && m >= trans_r - 1))
                 effective_mode = QCTypes::CN;
             else
                 assert(false);
@@ -7193,208 +7240,224 @@ struct QCMPO : MPO {
                 assert(false);
                 break;
             }
-            shared_ptr<OperatorTensor> opt = make_shared<OperatorTensor>();
-            opt->lmat = opt->rmat = pmat;
+            shared_ptr<OperatorTensor> opt = nullptr;
+            if (mode != QCTypes::Conventional ||
+                !(m == trans_l + 1 && m == trans_r - 1)) {
+                opt = make_shared<OperatorTensor>();
+                opt->lmat = opt->rmat = pmat;
+            } else if (!repeat_m) {
+                opt = make_shared<OperatorTensor>();
+                opt->rmat = pmat;
+            } else {
+                opt = this->tensors.back();
+                this->tensors.pop_back();
+                opt->lmat = pmat;
+            }
             // operator names
-            shared_ptr<SymbolicRowVector> plop;
-            shared_ptr<SymbolicColumnVector> prop;
-            if (m == hamil.n_sites - 1)
-                plop = make_shared<SymbolicRowVector>(1);
-            else
-                plop = make_shared<SymbolicRowVector>(rshape);
-            if (m == 0)
-                prop = make_shared<SymbolicColumnVector>(1);
-            else
-                prop = make_shared<SymbolicColumnVector>(lshape);
-            SymbolicRowVector &lop = *plop;
-            SymbolicColumnVector &rop = *prop;
-            lop[0] = h_op;
-            if (m != hamil.n_sites - 1) {
-                lop[1] = i_op;
-                p = 2;
-                vector<double> su2_factor;
-                switch (effective_mode) {
-                case QCTypes::NC:
-                    for (uint8_t j = 0; j < m + 1; j++)
-                        lop[p + j] = c_op[j];
-                    p += m + 1;
-                    for (uint8_t j = 0; j < m + 1; j++)
-                        lop[p + j] = d_op[j];
-                    p += m + 1;
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                        lop[p + j - (m + 1)] = trd_op[j];
-                    p += hamil.n_sites - (m + 1);
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                        lop[p + j - (m + 1)] = tr_op[j];
-                    p += hamil.n_sites - (m + 1);
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m + 1; j++) {
-                            for (uint8_t k = 0; k < m + 1; k++)
-                                lop[p + k] = a_op[j][k][s];
-                            p += m + 1;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m + 1; j++) {
-                            for (uint8_t k = 0; k < m + 1; k++)
-                                lop[p + k] = ad_op[j][k][s];
-                            p += m + 1;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m + 1; j++) {
-                            for (uint8_t k = 0; k < m + 1; k++)
-                                lop[p + k] = b_op[j][k][s];
-                            p += m + 1;
-                        }
-                    break;
-                case QCTypes::CN:
-                    for (uint8_t j = 0; j < m + 1; j++)
-                        lop[p + j] = c_op[j];
-                    p += m + 1;
-                    for (uint8_t j = 0; j < m + 1; j++)
-                        lop[p + j] = d_op[j];
-                    p += m + 1;
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                        lop[p + j - m - 1] = trd_op[j];
-                    p += hamil.n_sites - m - 1;
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                        lop[p + j - m - 1] = tr_op[j];
-                    p += hamil.n_sites - m - 1;
-                    su2_factor = {-0.5, -0.5 * sqrt(3)};
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] =
-                                    su2_factor[s] * p_op[j][k][s];
-                            p += hamil.n_sites - m - 1;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] =
-                                    su2_factor[s] * pd_op[j][k][s];
-                            p += hamil.n_sites - m - 1;
-                        }
-                    su2_factor = {1.0, sqrt(3)};
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                lop[p + k - m - 1] =
-                                    su2_factor[s] * q_op[j][k][s];
-                            p += hamil.n_sites - m - 1;
-                        }
-                    break;
-                case QCTypes::NC | QCTypes::CN:
-                    assert(false);
-                    break;
+            if (opt->lmat == pmat) {
+                shared_ptr<SymbolicRowVector> plop;
+                if (m == hamil.n_sites - 1)
+                    plop = make_shared<SymbolicRowVector>(1);
+                else
+                    plop = make_shared<SymbolicRowVector>(rshape);
+                SymbolicRowVector &lop = *plop;
+                lop[0] = h_op;
+                if (m != hamil.n_sites - 1) {
+                    lop[1] = i_op;
+                    p = 2;
+                    vector<double> su2_factor;
+                    switch (effective_mode) {
+                    case QCTypes::NC:
+                        for (uint8_t j = 0; j < m + 1; j++)
+                            lop[p + j] = c_op[j];
+                        p += m + 1;
+                        for (uint8_t j = 0; j < m + 1; j++)
+                            lop[p + j] = d_op[j];
+                        p += m + 1;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            lop[p + j - (m + 1)] = trd_op[j];
+                        p += hamil.n_sites - (m + 1);
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            lop[p + j - (m + 1)] = tr_op[j];
+                        p += hamil.n_sites - (m + 1);
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m + 1; j++) {
+                                for (uint8_t k = 0; k < m + 1; k++)
+                                    lop[p + k] = a_op[j][k][s];
+                                p += m + 1;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m + 1; j++) {
+                                for (uint8_t k = 0; k < m + 1; k++)
+                                    lop[p + k] = ad_op[j][k][s];
+                                p += m + 1;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m + 1; j++) {
+                                for (uint8_t k = 0; k < m + 1; k++)
+                                    lop[p + k] = b_op[j][k][s];
+                                p += m + 1;
+                            }
+                        break;
+                    case QCTypes::CN:
+                        for (uint8_t j = 0; j < m + 1; j++)
+                            lop[p + j] = c_op[j];
+                        p += m + 1;
+                        for (uint8_t j = 0; j < m + 1; j++)
+                            lop[p + j] = d_op[j];
+                        p += m + 1;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            lop[p + j - m - 1] = trd_op[j];
+                        p += hamil.n_sites - m - 1;
+                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            lop[p + j - m - 1] = tr_op[j];
+                        p += hamil.n_sites - m - 1;
+                        su2_factor = {-0.5, -0.5 * sqrt(3)};
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                    lop[p + k - m - 1] =
+                                        su2_factor[s] * p_op[j][k][s];
+                                p += hamil.n_sites - m - 1;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                    lop[p + k - m - 1] =
+                                        su2_factor[s] * pd_op[j][k][s];
+                                p += hamil.n_sites - m - 1;
+                            }
+                        su2_factor = {1.0, sqrt(3)};
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                                    lop[p + k - m - 1] =
+                                        su2_factor[s] * q_op[j][k][s];
+                                p += hamil.n_sites - m - 1;
+                            }
+                        break;
+                    case QCTypes::NC | QCTypes::CN:
+                        assert(false);
+                        break;
+                    }
+                    assert(p == rshape);
                 }
-                assert(p == rshape);
+                this->left_operator_names.push_back(plop);
             }
-            rop[0] = i_op;
-            if (m != 0) {
-                rop[1] = h_op;
-                p = 2;
-                vector<double> su2_factor;
-                switch (effective_mode) {
-                case QCTypes::NC:
-                    for (uint8_t j = 0; j < m; j++)
-                        rop[p + j] = tr_op[j];
-                    p += m;
-                    for (uint8_t j = 0; j < m; j++)
-                        rop[p + j] = trd_op[j];
-                    p += m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
-                        rop[p + j - m] = d_op[j];
-                    p += hamil.n_sites - m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
-                        rop[p + j - m] = c_op[j];
-                    p += hamil.n_sites - m;
-                    su2_factor = {-0.5, -0.5 * sqrt(3)};
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
-                                rop[p + k] = su2_factor[s] * p_op[j][k][s];
-                            p += m;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
-                                rop[p + k] = su2_factor[s] * pd_op[j][k][s];
-                            p += m;
-                        }
-                    su2_factor = {1.0, sqrt(3)};
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
-                                rop[p + k] = su2_factor[s] * q_op[j][k][s];
-                            p += m;
-                        }
-                    break;
-                case QCTypes::CN:
-                    for (uint8_t j = 0; j < m; j++)
-                        rop[p + j] = tr_op[j];
-                    p += m;
-                    for (uint8_t j = 0; j < m; j++)
-                        rop[p + j] = trd_op[j];
-                    p += m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
-                        rop[p + j - m] = d_op[j];
-                    p += hamil.n_sites - m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
-                        rop[p + j - m] = c_op[j];
-                    p += hamil.n_sites - m;
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m; k < hamil.n_sites; k++)
-                                rop[p + k - m] = a_op[j][k][s];
-                            p += hamil.n_sites - m;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m; k < hamil.n_sites; k++)
-                                rop[p + k - m] = ad_op[j][k][s];
-                            p += hamil.n_sites - m;
-                        }
-                    for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m; k < hamil.n_sites; k++)
-                                rop[p + k - m] = b_op[j][k][s];
-                            p += hamil.n_sites - m;
-                        }
-                    break;
-                case QCTypes::NC | QCTypes::CN:
-                    assert(false);
-                    break;
+            if (opt->rmat == pmat) {
+                shared_ptr<SymbolicColumnVector> prop;
+                if (m == 0)
+                    prop = make_shared<SymbolicColumnVector>(1);
+                else
+                    prop = make_shared<SymbolicColumnVector>(lshape);
+                SymbolicColumnVector &rop = *prop;
+                rop[0] = i_op;
+                if (m != 0) {
+                    rop[1] = h_op;
+                    p = 2;
+                    vector<double> su2_factor;
+                    switch (effective_mode) {
+                    case QCTypes::NC:
+                        for (uint8_t j = 0; j < m; j++)
+                            rop[p + j] = tr_op[j];
+                        p += m;
+                        for (uint8_t j = 0; j < m; j++)
+                            rop[p + j] = trd_op[j];
+                        p += m;
+                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                            rop[p + j - m] = d_op[j];
+                        p += hamil.n_sites - m;
+                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                            rop[p + j - m] = c_op[j];
+                        p += hamil.n_sites - m;
+                        su2_factor = {-0.5, -0.5 * sqrt(3)};
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m; j++) {
+                                for (uint8_t k = 0; k < m; k++)
+                                    rop[p + k] = su2_factor[s] * p_op[j][k][s];
+                                p += m;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m; j++) {
+                                for (uint8_t k = 0; k < m; k++)
+                                    rop[p + k] = su2_factor[s] * pd_op[j][k][s];
+                                p += m;
+                            }
+                        su2_factor = {1.0, sqrt(3)};
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = 0; j < m; j++) {
+                                for (uint8_t k = 0; k < m; k++)
+                                    rop[p + k] = su2_factor[s] * q_op[j][k][s];
+                                p += m;
+                            }
+                        break;
+                    case QCTypes::CN:
+                        for (uint8_t j = 0; j < m; j++)
+                            rop[p + j] = tr_op[j];
+                        p += m;
+                        for (uint8_t j = 0; j < m; j++)
+                            rop[p + j] = trd_op[j];
+                        p += m;
+                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                            rop[p + j - m] = d_op[j];
+                        p += hamil.n_sites - m;
+                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                            rop[p + j - m] = c_op[j];
+                        p += hamil.n_sites - m;
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                                    rop[p + k - m] = a_op[j][k][s];
+                                p += hamil.n_sites - m;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                                    rop[p + k - m] = ad_op[j][k][s];
+                                p += hamil.n_sites - m;
+                            }
+                        for (uint8_t s = 0; s < 2; s++)
+                            for (uint8_t j = m; j < hamil.n_sites; j++) {
+                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                                    rop[p + k - m] = b_op[j][k][s];
+                                p += hamil.n_sites - m;
+                            }
+                        break;
+                    case QCTypes::NC | QCTypes::CN:
+                        assert(false);
+                        break;
+                    }
+                    assert(p == lshape);
                 }
-                assert(p == lshape);
+                this->right_operator_names.push_back(prop);
             }
-            hamil.filter_site_ops(m, opt->lmat, opt->ops);
+            if (mode == QCTypes::Conventional && m == trans_l + 1 &&
+                m == trans_r - 1 && !repeat_m) {
+                repeat_m = true;
+                m--;
+                this->tensors.push_back(opt);
+                continue;
+            }
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
-            this->left_operator_names.push_back(plop);
-            this->right_operator_names.push_back(prop);
         }
-        if (mode == QCTypes(QCTypes::NC | QCTypes::CN)) {
-            uint8_t m = trans_m;
-            schemer = make_shared<MPOSchemer>(m, m + 1);
+        if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
+            mode == QCTypes::Conventional) {
+            uint8_t m;
+            schemer = make_shared<MPOSchemer>(trans_l, trans_r);
+            // left transform
+            m = trans_l;
             int new_rshape =
                 2 + 2 * hamil.n_sites +
                 6 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
-            int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
             schemer->left_new_operator_names =
                 make_shared<SymbolicRowVector>(new_rshape);
-            schemer->right_new_operator_names =
-                make_shared<SymbolicColumnVector>(new_lshape);
             schemer->left_new_operator_exprs =
                 make_shared<SymbolicRowVector>(new_rshape);
-            schemer->right_new_operator_exprs =
-                make_shared<SymbolicColumnVector>(new_lshape);
             SymbolicRowVector &lop = *schemer->left_new_operator_names;
-            SymbolicColumnVector &rop = *schemer->right_new_operator_names;
             SymbolicRowVector &lexpr = *schemer->left_new_operator_exprs;
-            SymbolicColumnVector &rexpr = *schemer->right_new_operator_exprs;
-            for (int i = 0; i < 2 + 2 * hamil.n_sites; i++) {
+            for (int i = 0; i < 2 + 2 * hamil.n_sites; i++)
                 lop[i] = this->left_operator_names[m]->data[i];
-                rop[i] = this->right_operator_names[m + 1]->data[i];
-            }
             p = 2 + 2 * hamil.n_sites;
             vector<shared_ptr<OpExpr>> exprs;
             vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
@@ -7462,6 +7525,17 @@ struct QCMPO : MPO {
                 p += hamil.n_sites - m - 1;
             }
             assert(p == new_rshape);
+            // right transform
+            m = trans_r - 1;
+            int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
+            schemer->right_new_operator_names =
+                make_shared<SymbolicColumnVector>(new_lshape);
+            schemer->right_new_operator_exprs =
+                make_shared<SymbolicColumnVector>(new_lshape);
+            SymbolicColumnVector &rop = *schemer->right_new_operator_names;
+            SymbolicColumnVector &rexpr = *schemer->right_new_operator_exprs;
+            for (int i = 0; i < 2 + 2 * hamil.n_sites; i++)
+                rop[i] = this->right_operator_names[m + 1]->data[i];
             p = 2 + 2 * hamil.n_sites;
             for (uint8_t s = 0; s < 2; s++)
                 for (uint8_t j = 0; j < m + 1; j++) {
