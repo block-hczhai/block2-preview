@@ -202,8 +202,9 @@ struct DataFrame {
     uint16_t n_frames, i_frame;
     vector<StackAllocator<uint32_t>> iallocs;
     vector<StackAllocator<double>> dallocs;
-    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30, const string &save_dir = "node0",
-              double main_ratio = 0.7, uint16_t n_frames = 2)
+    DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
+              const string &save_dir = "node0", double main_ratio = 0.7,
+              uint16_t n_frames = 2)
         : n_frames(n_frames), save_dir(save_dir) {
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
@@ -1872,7 +1873,9 @@ struct SparseMatrixInfo {
                     n[subdq[k].first] = k;
                 bool cja = subdq[k].first & 1, cjb = (subdq[k].first & 2) >> 1;
                 vidx[k] = viv.size();
-                vector<vector<tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>> pv;
+                vector<vector<
+                    tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>>
+                    pv;
                 size_t ip = 0;
                 SpinLabel adq = cja ? -subdq[k].second.get_bra(opdq)
                                     : subdq[k].second.get_bra(opdq),
@@ -1930,7 +1933,10 @@ struct SparseMatrixInfo {
                                             rqprime.twos());
                                     if (abs(factor) >= TINY) {
                                         if (pv.size() <= ip)
-                                            pv.push_back(vector<tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>());
+                                            pv.push_back(
+                                                vector<tuple<double, uint32_t,
+                                                             uint16_t, uint16_t,
+                                                             uint16_t>>());
                                         pv[ip].push_back(
                                             make_tuple(factor, iv, ia, ib, ic));
                                         ip++;
@@ -2826,10 +2832,8 @@ struct SparseMatrix {
     double *data;
     double factor;
     size_t total_memory;
-    bool conj;
     SparseMatrix()
-        : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
-          conj(false) {}
+        : info(nullptr), data(nullptr), factor(1.0), total_memory(0) {}
     void load_data(const string &filename, bool load_info = false) {
         ifstream ifs(filename.c_str(), ios::binary);
         if (load_info) {
@@ -2841,7 +2845,6 @@ struct SparseMatrix {
         ifs.read((char *)&total_memory, sizeof(total_memory));
         data = dalloc->allocate(total_memory);
         ifs.read((char *)data, sizeof(double) * total_memory);
-        ifs.read((char *)&conj, sizeof(conj));
         ifs.close();
     }
     void save_data(const string &filename, bool save_info = false) const {
@@ -2851,7 +2854,6 @@ struct SparseMatrix {
         ofs.write((char *)&factor, sizeof(factor));
         ofs.write((char *)&total_memory, sizeof(total_memory));
         ofs.write((char *)data, sizeof(double) * total_memory);
-        ofs.write((char *)&conj, sizeof(conj));
         ofs.close();
     }
     void copy_data(const SparseMatrix &other) {
@@ -3005,17 +3007,24 @@ struct SparseMatrix {
                   const shared_ptr<SparseMatrix> &rmat) {
         assert(info->is_wavefunction);
         if (lmat->info->is_wavefunction)
-            for (int i = 0; i < info->n; i++)
-                MatrixFunctions::multiply((*lmat)[info->quanta[i]], lmat->conj,
-                                          (*rmat)[-info->quanta[i].get_ket()],
-                                          rmat->conj, (*this)[i],
-                                          lmat->factor * rmat->factor, 0.0);
+            for (int i = 0; i < info->n; i++) {
+                int il = lmat->info->find_state(info->quanta[i]);
+                int ir = rmat->info->find_state(-info->quanta[i].get_ket());
+                if (il != -1 && ir != -1)
+                    MatrixFunctions::multiply((*lmat)[il], false, (*rmat)[ir],
+                                              false, (*this)[i],
+                                              lmat->factor * rmat->factor, 0.0);
+            }
         else
-            for (int i = 0; i < info->n; i++)
-                MatrixFunctions::multiply(
-                    (*lmat)[info->quanta[i].get_bra(info->delta_quantum)],
-                    lmat->conj, (*rmat)[info->quanta[i]], rmat->conj,
-                    (*this)[i], lmat->factor * rmat->factor, 0.0);
+            for (int i = 0; i < info->n; i++) {
+                int il = lmat->info->find_state(
+                    info->quanta[i].get_bra(info->delta_quantum));
+                int ir = rmat->info->find_state(info->quanta[i]);
+                if (il != -1 && ir != -1)
+                    MatrixFunctions::multiply((*lmat)[il], false, (*rmat)[ir],
+                                              false, (*this)[i],
+                                              lmat->factor * rmat->factor, 0.0);
+            }
     }
     void swap_to_fused_left(const shared_ptr<SparseMatrix> &mat,
                             const StateInfo &l, const StateInfo &m,
@@ -3314,8 +3323,8 @@ struct BatchGEMMSeq {
             cur += (size_t)batch[1]->m[i] * batch[1]->n[i] * batch[1]->k[i] *
                    batch[1]->gp[i];
             if (batch[0]->gp.size() != 0) {
-                cur0 += (size_t)batch[0]->m[i] * batch[0]->n[i] * batch[0]->k[0] *
-                   batch[0]->gp[i];
+                cur0 += (size_t)batch[0]->m[i] * batch[0]->n[i] *
+                        batch[0]->k[0] * batch[0]->gp[i];
                 cwork += (size_t)batch[0]->m[i] * batch[0]->n[i];
             }
             if (max_batch_flops != 0 && cur >= max_batch_flops) {
@@ -3747,15 +3756,18 @@ struct OperatorFunctions {
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
                 iv = cinfo->stride[il];
-            if (seq->mode == SeqTypes::Simple && il != ixa && iv <= cinfo->stride[il - 1])
+            if (seq->mode == SeqTypes::Simple && il != ixa &&
+                iv <= cinfo->stride[il - 1])
                 seq->simple_perform();
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
                 seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
                             scale * factor);
             else {
-                seq->cumulative_nflop += (size_t)c[ic].m * c[ic].n * ((conj & 2) ? b[ib].n : b[ib].n) +
-                                         (size_t)a[ia].m * a[ia].n * ((conj & 2) ? b[ib].n : b[ib].n);
+                seq->cumulative_nflop += (size_t)c[ic].m * c[ic].n *
+                                             ((conj & 2) ? b[ib].n : b[ib].n) +
+                                         (size_t)a[ia].m * a[ia].n *
+                                             ((conj & 2) ? b[ib].n : b[ib].n);
                 MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
                                         !(conj & 2), scale * factor);
             }
@@ -3827,8 +3839,8 @@ struct OperatorFunctions {
                                 cg->racah(cqpj, bdq, cqj, adq, aqpj, cdq);
                             factor *= sqrt((cdq + 1) * (aqpj + 1)) *
                                       (((adq + bdq - cdq) & 2) ? -1 : 1);
-                            MatrixFunctions::multiply(a[ia], a.conj, b[ib],
-                                                      b.conj, c[ic],
+                            MatrixFunctions::multiply(a[ia], false, b[ib],
+                                                      false, c[ic],
                                                       scale * factor, 1.0);
                         }
                     }
@@ -5126,10 +5138,8 @@ struct Partition {
     shared_ptr<OperatorTensor> left;
     shared_ptr<OperatorTensor> right;
     vector<shared_ptr<OperatorTensor>> middle;
-    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos,
-        left_op_infos_notrunc;
-    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> right_op_infos,
-        right_op_infos_notrunc;
+    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos;
+    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> right_op_infos;
     Partition(const shared_ptr<OperatorTensor> &left,
               const shared_ptr<OperatorTensor> &right,
               const shared_ptr<OperatorTensor> &dot)
@@ -5271,16 +5281,12 @@ struct Partition {
         }
         return subsl;
     }
-    void deallocate_left_op_infos_notrunc() {
-        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
-            left_op_infos_notrunc[i].second->cinfo->deallocate();
-            left_op_infos_notrunc[i].second->deallocate();
-        }
-    }
-    void deallocate_right_op_infos_notrunc() {
-        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
-            right_op_infos_notrunc[i].second->cinfo->deallocate();
-            right_op_infos_notrunc[i].second->deallocate();
+    static void deallocate_op_infos_notrunc(
+        const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            &op_infos_notrunc) {
+        for (int i = op_infos_notrunc.size() - 1; i >= 0; i--) {
+            op_infos_notrunc[i].second->cinfo->deallocate();
+            op_infos_notrunc[i].second->deallocate();
         }
     }
     static void init_left_op_infos(
@@ -5295,6 +5301,7 @@ struct Partition {
             iket = ket_info->left_dims[m + 1];
         }
         frame->activate(1);
+        assert(left_op_infos.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> lop = make_shared<SparseMatrixInfo>();
             // only works for fermions!
@@ -5339,6 +5346,7 @@ struct Partition {
                 iket_notrunc);
         }
         frame->activate(0);
+        assert(left_op_infos_notrunc.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> lop_notrunc =
                 make_shared<SparseMatrixInfo>();
@@ -5377,6 +5385,7 @@ struct Partition {
             iket = ket_info->right_dims[m];
         }
         frame->activate(1);
+        assert(right_op_infos.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> rop = make_shared<SparseMatrixInfo>();
             right_op_infos.push_back(make_pair(sl[i], rop));
@@ -5420,6 +5429,7 @@ struct Partition {
                 ket_info->basis[ket_info->orbsym[m]], iket_prev, iket_notrunc);
         }
         frame->activate(0);
+        assert(right_op_infos_notrunc.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> rop_notrunc =
                 make_shared<SparseMatrixInfo>();
@@ -5575,6 +5585,8 @@ struct MovingEnvironment {
         (*hop_mat)[0] = mpo->op;
     }
     void left_contract_rotate(int i) {
+        vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            left_op_infos_notrunc;
         vector<shared_ptr<Symbolic>> mats = {mpo->left_operator_names[i - 1]};
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
             mats.push_back(mpo->schemer->left_new_operator_names);
@@ -5591,11 +5603,11 @@ struct MovingEnvironment {
                                            mpo->left_operator_names[i - 1], sl);
         Partition::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
-            site_op_infos[bra->info->orbsym[i - 1]],
-            envs[i]->left_op_infos_notrunc, tf->opf->cg);
+            site_op_infos[bra->info->orbsym[i - 1]], left_op_infos_notrunc,
+            tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor> new_left = Partition::build_left(
-            {mpo->left_operator_names[i - 1]}, envs[i]->left_op_infos_notrunc);
+            {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc);
         tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                           new_left,
                           mpo->left_operator_exprs.size() != 0
@@ -5619,10 +5631,12 @@ struct MovingEnvironment {
             ket->unload_tensor(i - 1);
         bra->unload_tensor(i - 1);
         new_left->deallocate();
-        envs[i]->deallocate_left_op_infos_notrunc();
+        Partition::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         frame->save_data(1, get_left_partition_filename(i));
     }
     void right_contract_rotate(int i) {
+        vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            right_op_infos_notrunc;
         vector<shared_ptr<Symbolic>> mats = {
             mpo->right_operator_names[i + dot]};
         if (mpo->schemer != nullptr &&
@@ -5642,12 +5656,11 @@ struct MovingEnvironment {
         Partition::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos,
-            site_op_infos[bra->info->orbsym[i + dot]],
-            envs[i]->right_op_infos_notrunc, tf->opf->cg);
+            site_op_infos[bra->info->orbsym[i + dot]], right_op_infos_notrunc,
+            tf->opf->cg);
         frame->activate(0);
-        shared_ptr<OperatorTensor> new_right =
-            Partition::build_right({mpo->right_operator_names[i + dot]},
-                                   envs[i]->right_op_infos_notrunc);
+        shared_ptr<OperatorTensor> new_right = Partition::build_right(
+            {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc);
         tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                            new_right,
                            mpo->right_operator_exprs.size() != 0
@@ -5672,7 +5685,7 @@ struct MovingEnvironment {
             ket->unload_tensor(i + dot);
         bra->unload_tensor(i + dot);
         new_right->deallocate();
-        envs[i]->deallocate_right_op_infos_notrunc();
+        Partition::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
     }
     string get_left_partition_filename(int i) const {
@@ -5708,12 +5721,10 @@ struct MovingEnvironment {
     void prepare() {
         for (int i = n_sites - 1; i > center; i--) {
             envs[i]->left_op_infos.clear();
-            envs[i]->left_op_infos_notrunc.clear();
             envs[i]->left = nullptr;
         }
         for (int i = 0; i < center; i++) {
             envs[i]->right_op_infos.clear();
-            envs[i]->right_op_infos_notrunc.clear();
             envs[i]->right = nullptr;
         }
     }
@@ -5993,8 +6004,10 @@ struct DMRG {
         int ndav;
         double tdav;
         size_t nflop;
-        Iteration(double energy, double error, int ndav, size_t nflop = 0, double tdav = 1.0)
-            : energy(energy), error(error), ndav(ndav), nflop(nflop), tdav(tdav) {}
+        Iteration(double energy, double error, int ndav, size_t nflop = 0,
+                  double tdav = 1.0)
+            : energy(energy), error(error), ndav(ndav), nflop(nflop),
+              tdav(tdav) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Ndav = " << setw(4) << r.ndav << " E = " << setw(15)
@@ -6012,12 +6025,25 @@ struct DMRG {
         frame->activate(1);
         me->ket->load_tensor(i);
         me->ket->load_tensor(i + 1);
+        me->ket->info->load_left_dims(i);
+        me->ket->info->load_right_dims(i + 2);
+        StateInfo l = me->ket->info->left_dims[i],
+                  ml = me->ket->info->basis[me->ket->info->orbsym[i]],
+                  mr = me->ket->info->basis[me->ket->info->orbsym[i + 1]],
+                  r = me->ket->info->right_dims[i + 2];
+        StateInfo ll = StateInfo::tensor_product(
+            l, ml, me->ket->info->left_dims_fci[i + 1]);
+        StateInfo rr = StateInfo::tensor_product(
+            mr, r, me->ket->info->right_dims_fci[i + 1]);
         frame->activate(0);
-        old_wfn_info->initialize_contract(me->ket->tensors[i]->info,
-                                          me->ket->tensors[i + 1]->info);
+        old_wfn_info->initialize(ll, rr, me->ket->info->target, false, true);
         old_wfn->allocate(old_wfn_info);
         old_wfn->contract(me->ket->tensors[i], me->ket->tensors[i + 1]);
         frame->activate(1);
+        rr.deallocate();
+        ll.deallocate();
+        r.deallocate();
+        l.deallocate();
         me->ket->unload_tensor(i + 1);
         me->ket->unload_tensor(i);
         frame->activate(0);
@@ -6120,7 +6146,8 @@ struct DMRG {
         dm->deallocate();
         old_wfn->info->deallocate();
         old_wfn->deallocate();
-        return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+        return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
+                         get<2>(pdi), get<3>(pdi));
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
         me->move_to(i);
@@ -6170,8 +6197,8 @@ struct DMRG {
             cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
                  << (forward ? "forward" : "backward")
                  << " | Bond dimension = " << setw(4) << bond_dims[iw]
-                 << " | Noise = " << scientific << setw(9) << setprecision(2) << noises[iw]
-                 << endl;
+                 << " | Noise = " << scientific << setw(9) << setprecision(2)
+                 << noises[iw] << endl;
             double energy = sweep(forward, bond_dims[iw], noises[iw]);
             energies.push_back(energy);
             bool converged = energies.size() >= 2 && tol > 0 &&

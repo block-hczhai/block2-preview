@@ -1,9 +1,9 @@
 
 #include "quantum.hpp"
-#include <tuple>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
+#include <tuple>
 
 namespace py = pybind11;
 using namespace block2;
@@ -93,16 +93,16 @@ PYBIND11_MODULE(block2, m) {
 
     m.def(
         "init_memory",
-        [](size_t isize, size_t dsize) {
-            ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
-            dalloc = new StackAllocator<double>(new double[dsize], dsize);
+        [](size_t isize, size_t dsize, const string &save_dir) {
+            frame = new DataFrame(isize, dsize, save_dir);
         },
-        py::arg("isize") = size_t(1E7), py::arg("dsize") = size_t(5E8));
+        py::arg("isize") = size_t(1L << 28),
+        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex");
 
     m.def("release_memory", []() {
+        frame->activate(0);
         assert(ialloc->used == 0 && dalloc->used == 0);
-        delete[] ialloc->data;
-        delete[] dalloc->data;
+        delete frame;
     });
 
     py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
@@ -119,13 +119,33 @@ PYBIND11_MODULE(block2, m) {
 
     struct Global {};
 
+    py::class_<DataFrame, shared_ptr<DataFrame>>(m, "DataFrame")
+        .def(py::init<>())
+        .def(py::init<size_t, size_t>())
+        .def(py::init<size_t, size_t, const string &>())
+        .def_readwrite("save_dir", &DataFrame::save_dir)
+        .def_readwrite("prefix", &DataFrame::prefix)
+        .def_readwrite("isize", &DataFrame::isize)
+        .def_readwrite("dsize", &DataFrame::dsize)
+        .def_readwrite("n_frames", &DataFrame::n_frames)
+        .def_readwrite("i_frame", &DataFrame::i_frame)
+        .def_readwrite("iallocs", &DataFrame::iallocs)
+        .def_readwrite("dallocs", &DataFrame::dallocs)
+        .def("activate", &DataFrame::activate)
+        .def("load_data", &DataFrame::load_data)
+        .def("save_data", &DataFrame::save_data)
+        .def("reset", &DataFrame::reset);
+
     py::class_<Global>(m, "Global")
         .def_property_static(
             "ialloc", [](py::object) { return ialloc; },
             [](py::object, StackAllocator<uint32_t> *ia) { ialloc = ia; })
         .def_property_static(
             "dalloc", [](py::object) { return dalloc; },
-            [](py::object, StackAllocator<double> *da) { dalloc = da; });
+            [](py::object, StackAllocator<double> *da) { dalloc = da; })
+        .def_property_static(
+            "frame", [](py::object) { return frame; },
+            [](py::object, DataFrame *fr) { frame = fr; });
 
     bind_array<uint8_t>(m, "ArrayUInt8")
         .def("__str__", [](Array<uint8_t> *self) {
@@ -142,7 +162,7 @@ PYBIND11_MODULE(block2, m) {
     bind_array<vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
         m, "ArrayVectorPLMatInfo");
 
-    py::class_<Random>(m, "Random")
+    py::class_<Random, shared_ptr<Random>>(m, "Random")
         .def_static("rand_seed", &Random::rand_seed, py::arg("i") = 0U)
         .def_static("rand_int", &Random::rand_int, py::arg("a"), py::arg("b"))
         .def_static("rand_double", &Random::rand_double, py::arg("a") = 0,
@@ -161,6 +181,21 @@ PYBIND11_MODULE(block2, m) {
                                    py::format_descriptor<double>::format(), 2,
                                    {self->m, self->n},
                                    {sizeof(double) * self->n, sizeof(double)});
+        });
+
+    py::class_<MatrixFunctions>(m, "MatrixFunctions")
+        .def_static(
+            "eigs", [](int n, py::array_t<double> &a, py::array_t<double> &w) {
+                MatrixFunctions::eigs(MatrixRef(a.mutable_data(), n, n),
+                                      DiagonalMatrix(w.mutable_data(), n));
+            });
+
+    py::class_<DiagonalMatrix, shared_ptr<DiagonalMatrix>>(
+        m, "DiagonalMatrix", py::buffer_protocol())
+        .def_buffer([](DiagonalMatrix *self) -> py::buffer_info {
+            return py::buffer_info(self->data, sizeof(double),
+                                   py::format_descriptor<double>::format(), 1,
+                                   {self->n}, {sizeof(double)});
         });
 
     py::class_<FCIDUMP, shared_ptr<FCIDUMP>>(m, "FCIDUMP")
@@ -225,9 +260,25 @@ PYBIND11_MODULE(block2, m) {
         .def(py::self == py::self)
         .def("__repr__", &to_str);
 
+    py::class_<SiteIndex>(m, "SiteIndex")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<uint8_t>())
+        .def(py::init<uint8_t, uint8_t, uint8_t>())
+        .def("size", &SiteIndex::size)
+        .def("spin_size", &SiteIndex::spin_size)
+        .def("s", &SiteIndex::s, py::arg("i") = 0)
+        .def("__getitem__",
+             [](SiteIndex *self, uint8_t i) { return self->operator[](i); })
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def("__hash__", &SiteIndex::hash)
+        .def("__repr__", &SiteIndex::to_str);
+
     py::class_<OpElement, shared_ptr<OpElement>, OpExpr>(m, "OpElement")
-        .def(py::init<OpNames, const vector<uint8_t> &, SpinLabel>())
-        .def(py::init<OpNames, const vector<uint8_t> &, SpinLabel, double>())
+        .def(py::init<OpNames, SiteIndex, SpinLabel>())
+        .def(py::init<OpNames, SiteIndex, SpinLabel, double>())
         .def_readwrite("name", &OpElement::name)
         .def_readwrite("site_index", &OpElement::site_index)
         .def_readwrite("factor", &OpElement::factor)
@@ -239,9 +290,16 @@ PYBIND11_MODULE(block2, m) {
         .def("__hash__", &OpElement::hash);
 
     py::class_<OpString, shared_ptr<OpString>, OpExpr>(m, "OpString")
-        .def(py::init<const vector<shared_ptr<OpElement>> &, double>())
+        .def(py::init<const shared_ptr<OpElement> &, double>())
+        .def(py::init<const shared_ptr<OpElement> &, double, uint8_t>())
+        .def(py::init<const shared_ptr<OpElement> &,
+                      const shared_ptr<OpElement> &, double>())
+        .def(py::init<const shared_ptr<OpElement> &,
+                      const shared_ptr<OpElement> &, double, uint8_t>())
         .def_readwrite("factor", &OpString::factor)
-        .def_readwrite("ops", &OpString::ops);
+        .def_readwrite("conj", &OpString::conj)
+        .def_readwrite("a", &OpString::a)
+        .def_readwrite("b", &OpString::b);
 
     py::class_<OpSum, shared_ptr<OpSum>, OpExpr>(m, "OpSum")
         .def(py::init<const vector<shared_ptr<OpString>> &>())
@@ -273,15 +331,27 @@ PYBIND11_MODULE(block2, m) {
                                    return Array<SpinLabel>(self->quanta,
                                                            self->n);
                                })
-        .def_property_readonly("n_states", [](StateInfo *self) {
-            return Array<uint16_t>(self->n_states, self->n);
+        .def_property_readonly("n_states",
+                               [](StateInfo *self) {
+                                   return Array<uint16_t>(self->n_states,
+                                                          self->n);
+                               })
+        .def("deallocate", &StateInfo::deallocate)
+        .def("__repr__", [](StateInfo *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
         });
 
     py::class_<SparseMatrixInfo::ConnectionInfo,
-               shared_ptr<SparseMatrixInfo::ConnectionInfo>>(m, "ConnectionInfo")
+               shared_ptr<SparseMatrixInfo::ConnectionInfo>>(m,
+                                                             "ConnectionInfo")
         .def(py::init<>())
-        .def_readwrite("n", &SparseMatrixInfo::ConnectionInfo::n)
+        .def_property_readonly(
+            "n",
+            [](SparseMatrixInfo::ConnectionInfo *self) { return self->n[4]; })
         .def_readwrite("nc", &SparseMatrixInfo::ConnectionInfo::nc)
+        .def("deallocate", &SparseMatrixInfo::ConnectionInfo::deallocate)
         .def("__repr__", [](SparseMatrixInfo::ConnectionInfo *self) {
             stringstream ss;
             ss << *self;
@@ -337,7 +407,6 @@ PYBIND11_MODULE(block2, m) {
         .def(py::init<>())
         .def_readwrite("info", &SparseMatrix::info)
         .def_readwrite("factor", &SparseMatrix::factor)
-        .def_readwrite("conj", &SparseMatrix::conj)
         .def_readwrite("total_memory", &SparseMatrix::total_memory)
         .def_property_readonly("data",
                                [](SparseMatrix *self) {
@@ -408,6 +477,12 @@ PYBIND11_MODULE(block2, m) {
                                                            self->n_sites + 1);
                                })
         .def("set_bond_dimension", &MPSInfo::set_bond_dimension)
+        .def("save_mutable", &MPSInfo::save_mutable)
+        .def("deallocate_mutable", &MPSInfo::deallocate_mutable)
+        .def("save_left_dims", &MPSInfo::save_left_dims)
+        .def("save_right_dims", &MPSInfo::save_right_dims)
+        .def("load_left_dims", &MPSInfo::load_left_dims)
+        .def("load_right_dims", &MPSInfo::load_right_dims)
         .def("deallocate", &MPSInfo::deallocate);
 
     py::class_<MPS, shared_ptr<MPS>>(m, "MPS")
@@ -416,11 +491,14 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("center", &MPS::center)
         .def_readwrite("dot", &MPS::dot)
         .def_readwrite("info", &MPS::info)
-        .def_readwrite("mat_infos", &MPS::mat_infos)
         .def_readwrite("tensors", &MPS::tensors)
         .def_readwrite("canonical_form", &MPS::canonical_form)
         .def("initialize", &MPS::initialize)
         .def("random_canonicalize", &MPS::random_canonicalize)
+        .def("save_mutable", &MPS::save_mutable)
+        .def("save_tensor", &MPS::save_tensor)
+        .def("load_tensor", &MPS::load_tensor)
+        .def("unload_tensor", &MPS::unload_tensor)
         .def("deallocate", &MPS::deallocate);
 
     py::class_<CG, shared_ptr<CG>>(m, "CG").def(py::init<>());
@@ -459,10 +537,11 @@ PYBIND11_MODULE(block2, m) {
         .def_static("right_assign", &TensorFunctions::right_assign,
                     py::arg("a"), py::arg("c"))
         .def("left_contract", &TensorFunctions::left_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"))
+             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
         .def("right_contract", &TensorFunctions::right_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"))
-        .def("tensor_product_diagonal", &TensorFunctions::tensor_product_diagonal);
+             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
+        .def("tensor_product_diagonal",
+             &TensorFunctions::tensor_product_diagonal);
 
     py::class_<Partition, shared_ptr<Partition>>(m, "Partition")
         .def(py::init<const shared_ptr<OperatorTensor> &,
@@ -476,14 +555,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("right", &Partition::right)
         .def_readwrite("middle", &Partition::middle)
         .def_readwrite("left_op_infos", &Partition::left_op_infos)
-        .def_readwrite("left_op_infos_notrunc",
-                       &Partition::left_op_infos_notrunc)
-        .def_readwrite("right_op_infos", &Partition::right_op_infos)
-        .def_readwrite("right_op_infos_notrunc",
-                       &Partition::right_op_infos_notrunc)
-        .def("deallocate_left_op_infos", &Partition::deallocate_left_op_infos)
-        .def("deallocate_right_op_infos",
-             &Partition::deallocate_right_op_infos);
+        .def_readwrite("right_op_infos", &Partition::right_op_infos);
 
     py::bind_vector<vector<shared_ptr<Partition>>>(m, "VectorPartition");
 
@@ -540,6 +612,10 @@ PYBIND11_MODULE(block2, m) {
         .def("prepare", &MovingEnvironment::prepare)
         .def("move_to", &MovingEnvironment::move_to)
         .def("eff_ham", &MovingEnvironment::eff_ham)
+        .def("get_left_partition_filename",
+             &MovingEnvironment::get_left_partition_filename)
+        .def("get_right_partition_filename",
+             &MovingEnvironment::get_right_partition_filename)
         .def("density_matrix", &MovingEnvironment::density_matrix)
         .def("split_density_matrix",
              [](MovingEnvironment *self, const shared_ptr<SparseMatrix> &dm,
@@ -582,7 +658,7 @@ PYBIND11_MODULE(block2, m) {
                     self->site_op_infos, self->n_syms);
             })
         .def("deallocate", &Hamiltonian::deallocate);
-    
+
     py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "Iteration")
         .def(py::init<double, double, int>())
         .def_readwrite("energy", &DMRG::Iteration::energy)
@@ -609,16 +685,47 @@ PYBIND11_MODULE(block2, m) {
         .def("solve", &DMRG::solve, py::arg("n_sweeps"), py::arg("tol") = 1E-6,
              py::arg("forward") = true);
 
+    py::class_<MPOSchemer, shared_ptr<MPOSchemer>>(m, "MPOSchemer")
+        .def_readwrite("left_trans_site", &MPOSchemer::left_trans_site)
+        .def_readwrite("right_trans_site", &MPOSchemer::right_trans_site)
+        .def_readwrite("left_new_operator_names",
+                       &MPOSchemer::left_new_operator_names)
+        .def_readwrite("right_new_operator_names",
+                       &MPOSchemer::right_new_operator_names)
+        .def_readwrite("left_new_operator_exprs",
+                       &MPOSchemer::left_new_operator_exprs)
+        .def_readwrite("right_new_operator_exprs",
+                       &MPOSchemer::right_new_operator_exprs)
+        .def(py::init<uint8_t, uint8_t>())
+        .def("get_transform_formulas", &MPOSchemer::get_transform_formulas);
+
     py::class_<MPO, shared_ptr<MPO>>(m, "MPO")
         .def(py::init<int>())
         .def_readwrite("n_sites", &MPO::n_sites)
+        .def_readwrite("const_e", &MPO::const_e)
         .def_readwrite("tensors", &MPO::tensors)
         .def_readwrite("left_operator_names", &MPO::left_operator_names)
         .def_readwrite("right_operator_names", &MPO::right_operator_names)
         .def_readwrite("middle_operator_names", &MPO::middle_operator_names)
+        .def_readwrite("left_operator_exprs", &MPO::left_operator_exprs)
+        .def_readwrite("right_operator_exprs", &MPO::right_operator_exprs)
+        .def_readwrite("middle_operator_exprs", &MPO::middle_operator_exprs)
+        .def_readwrite("op", &MPO::op)
+        .def_readwrite("schemer", &MPO::schemer)
+        .def("get_blocking_formulas", &MPO::get_blocking_formulas)
         .def("deallocate", &MPO::deallocate);
+
+    py::class_<Rule, shared_ptr<Rule>>(m, "Rule").def(py::init<>());
+
+    py::class_<SimplifiedMPO, shared_ptr<SimplifiedMPO>, MPO>(m,
+                                                              "SimplifiedMPO")
+        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &>());
 
     py::class_<QCMPO, shared_ptr<QCMPO>, MPO>(m, "QCMPO")
         .def(py::init<const Hamiltonian &>())
         .def("deallocate", &QCMPO::deallocate);
+
+    py::class_<RuleQCSU2, shared_ptr<RuleQCSU2>, Rule>(m, "RuleQCSU2")
+        .def(py::init<>())
+        .def(py::init<bool, bool, bool, bool, bool, bool>());
 }
