@@ -47,7 +47,7 @@ TEST_F(TestDMRG, Test) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
+    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();

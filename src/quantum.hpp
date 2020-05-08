@@ -865,7 +865,7 @@ inline ostream &operator<<(ostream &os, const OpNames c) {
     return os;
 }
 
-enum struct OpTypes : uint8_t { Zero, Elem, Prod, Sum, ElemRef };
+enum struct OpTypes : uint8_t { Zero, Elem, Prod, Sum, ElemRef, SumProd };
 
 struct OpExpr {
     virtual const OpTypes get_type() const { return OpTypes::Zero; }
@@ -989,8 +989,9 @@ struct OpString : OpExpr {
           b(nullptr), conj(conj) {}
     OpString(const shared_ptr<OpElement> &a, const shared_ptr<OpElement> &b,
              double factor, uint8_t conj = 0)
-        : factor(factor * a->factor * (b == nullptr ? 1.0 : b->factor)),
-          a(make_shared<OpElement>(a->abs())),
+        : factor(factor * (a == nullptr ? 1.0 : a->factor) *
+                 (b == nullptr ? 1.0 : b->factor)),
+          a(a == nullptr ? nullptr : make_shared<OpElement>(a->abs())),
           b(b == nullptr ? nullptr : make_shared<OpElement>(b->abs())),
           conj(conj) {}
     const OpTypes get_type() const override { return OpTypes::Prod; }
@@ -1020,6 +1021,63 @@ struct OpString : OpExpr {
     }
 };
 
+struct OpSumProd : OpString {
+    vector<shared_ptr<OpElement>> ops;
+    vector<bool> conjs;
+    OpSumProd(const shared_ptr<OpElement> &lop,
+              const vector<shared_ptr<OpElement>> &ops,
+              const vector<bool> &conjs, double factor, uint8_t conj = 0)
+        : ops(ops), conjs(conjs), OpString(lop, nullptr, factor, conj) {}
+    OpSumProd(const vector<shared_ptr<OpElement>> &ops,
+              const shared_ptr<OpElement> &rop, const vector<bool> &conjs,
+              double factor, uint8_t conj = 0)
+        : ops(ops), conjs(conjs), OpString(nullptr, rop, factor, conj) {}
+    const OpTypes get_type() const override { return OpTypes::SumProd; }
+    OpSumProd operator*(double d) const {
+        if (a == nullptr)
+            return OpSumProd(ops, b, conjs, factor * d, conj);
+        else if (b == nullptr)
+            return OpSumProd(a, ops, conjs, factor * d, conj);
+        else
+            assert(false);
+    }
+    bool operator==(const OpSumProd &other) const {
+        if (ops.size() != other.ops.size() ||
+            (a == nullptr) != (other.a == nullptr) ||
+            (b == nullptr) != (other.b == nullptr))
+            return false;
+        else if (a == nullptr && !(*b == *other.b))
+            return false;
+        else if (b == nullptr && !(*a == *other.a))
+            return false;
+        else if (conjs != other.conjs)
+            return false;
+        else
+            for (size_t i = 0; i < ops.size(); i++)
+                if (!(*ops[i] == *other.ops[i]))
+                    return false;
+        return true;
+    }
+    friend ostream &operator<<(ostream &os, const OpSumProd &c) {
+        if (c.ops.size() != 0) {
+            if (c.factor != 1.0)
+                os << "(" << c.factor << " ";
+            if (c.a != nullptr)
+                os << *c.a << (c.conj & 1 ? "^T " : " ");
+            os << "{ ";
+            for (size_t i = 0; i < c.ops.size() - 1; i++)
+                os << *c.ops[i] << (c.conjs[i] ? "^T " : " ") << " + ";
+            os << *c.ops.back();
+            os << " }" << (c.conj & ((c.a != nullptr) + 1) ? "^T" : "");
+            if (c.b != nullptr)
+                os << " " << *c.b << (c.conj & 2 ? "^T " : " ");
+            if (c.factor != 1.0)
+                os << " )";
+        }
+        return os;
+    }
+};
+
 struct OpSum : OpExpr {
     vector<shared_ptr<OpString>> strings;
     OpSum(const vector<shared_ptr<OpString>> &strings) : strings(strings) {}
@@ -1028,7 +1086,11 @@ struct OpSum : OpExpr {
         vector<shared_ptr<OpString>> strs;
         strs.reserve(strings.size());
         for (auto &r : strings)
-            strs.push_back(make_shared<OpString>(*r * d));
+            if (r->get_type() == OpTypes::Prod)
+                strs.push_back(make_shared<OpString>(*r * d));
+            else
+                strs.push_back(make_shared<OpSumProd>(
+                    *dynamic_pointer_cast<OpSumProd>(r) * d));
         return OpSum(strs);
     }
     bool operator==(const OpSum &other) const {
@@ -1042,8 +1104,15 @@ struct OpSum : OpExpr {
     friend ostream &operator<<(ostream &os, const OpSum &c) {
         if (c.strings.size() != 0) {
             for (size_t i = 0; i < c.strings.size() - 1; i++)
-                os << *c.strings[i] << " + ";
-            os << *c.strings.back();
+                if (c.strings[i]->get_type() == OpTypes::Prod)
+                    os << *c.strings[i] << " + ";
+                else if (c.strings[i]->get_type() == OpTypes::SumProd)
+                    os << *dynamic_pointer_cast<OpSumProd>(c.strings[i])
+                       << " + ";
+            if (c.strings.back()->get_type() == OpTypes::Prod)
+                os << *c.strings.back();
+            else if (c.strings.back()->get_type() == OpTypes::SumProd)
+                os << *dynamic_pointer_cast<OpSumProd>(c.strings.back());
         }
         return os;
     }
@@ -1077,6 +1146,8 @@ inline string to_str(const shared_ptr<OpExpr> &x) {
         ss << *dynamic_pointer_cast<OpString>(x);
     else if (x->get_type() == OpTypes::Sum)
         ss << *dynamic_pointer_cast<OpSum>(x);
+    else if (x->get_type() == OpTypes::SumProd)
+        ss << *dynamic_pointer_cast<OpSumProd>(x);
     return ss.str();
 }
 
@@ -1084,19 +1155,24 @@ inline bool operator==(const shared_ptr<OpExpr> &a,
                        const shared_ptr<OpExpr> &b) {
     if (a->get_type() != b->get_type())
         return false;
-    else if (a->get_type() == OpTypes::Zero)
+    switch (a->get_type()) {
+    case OpTypes::Zero:
         return *a == *b;
-    else if (a->get_type() == OpTypes::Elem)
+    case OpTypes::Elem:
         return *dynamic_pointer_cast<OpElement>(a) ==
                *dynamic_pointer_cast<OpElement>(b);
-    else if (a->get_type() == OpTypes::Prod)
+    case OpTypes::Prod:
         return *dynamic_pointer_cast<OpString>(a) ==
                *dynamic_pointer_cast<OpString>(b);
-    else if (a->get_type() == OpTypes::Sum)
+    case OpTypes::Sum:
         return *dynamic_pointer_cast<OpSum>(a) ==
                *dynamic_pointer_cast<OpSum>(b);
-    else
+    case OpTypes::SumProd:
+        return *dynamic_pointer_cast<OpSumProd>(a) ==
+               *dynamic_pointer_cast<OpSumProd>(b);
+    default:
         return false;
+    }
 }
 
 struct op_expr_less {
@@ -1269,6 +1345,8 @@ inline const shared_ptr<OpExpr> sum(const vector<shared_ptr<OpExpr>> &xs) {
     for (auto &r : xs)
         if (r->get_type() == OpTypes::Prod)
             strs.push_back(dynamic_pointer_cast<OpString>(r));
+        else if (r->get_type() == OpTypes::SumProd)
+            strs.push_back(dynamic_pointer_cast<OpSumProd>(r));
         else if (r->get_type() == OpTypes::Elem)
             strs.push_back(
                 make_shared<OpString>(dynamic_pointer_cast<OpElement>(r), 1.0));
@@ -4033,6 +4111,38 @@ struct TensorFunctions {
             shared_ptr<SparseMatrix> rmat = rop.at(op->b);
             opf->tensor_product(op->conj, *lmat, *rmat, *mat, op->factor);
         } break;
+        case OpTypes::SumProd: {
+            shared_ptr<OpSumProd> op = dynamic_pointer_cast<OpSumProd>(expr);
+            assert((op->a == nullptr) ^ (op->b == nullptr));
+            assert(op->ops.size() != 0);
+            shared_ptr<SparseMatrix> tmp = make_shared<SparseMatrix>();
+            if (op->b == nullptr) {
+                shared_ptr<OpExpr> opb = abs_value(op->ops[0]);
+                assert(lop.count(op->a) != 0 && rop.count(opb) != 0);
+                tmp->allocate(rop.at(opb)->info);
+                for (size_t i = 0; i < op->ops.size(); i++) {
+                    opf->iadd(*tmp, *rop.at(abs_value(op->ops[i])),
+                              op->factor * op->ops[i]->factor, op->conjs[i]);
+                    if (opf->seq->mode == SeqTypes::Simple)
+                        opf->seq->simple_perform();
+                }
+            } else {
+                shared_ptr<OpExpr> opa = abs_value(op->ops[0]);
+                assert(lop.count(opa) != 0 && rop.count(op->b) != 0);
+                tmp->allocate(lop.at(opa)->info);
+                for (size_t i = 0; i < op->ops.size(); i++) {
+                    opf->iadd(*tmp, *lop.at(abs_value(op->ops[i])),
+                              op->factor * op->ops[i]->factor, op->conjs[i]);
+                    if (opf->seq->mode == SeqTypes::Simple)
+                        opf->seq->simple_perform();
+                }
+            }
+            if (op->b == nullptr)
+                opf->tensor_product(op->conj, *lop.at(op->a), *tmp, *mat, 1.0);
+            else
+                opf->tensor_product(op->conj, *tmp, *rop.at(op->b), *mat, 1.0);
+            tmp->deallocate();
+        } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum> op = dynamic_pointer_cast<OpSum>(expr);
             for (auto &x : op->strings)
@@ -4297,8 +4407,11 @@ struct Rule {
 struct SimplifiedMPO : MPO {
     shared_ptr<MPO> prim_mpo;
     shared_ptr<Rule> rule;
-    SimplifiedMPO(const shared_ptr<MPO> &mpo, const shared_ptr<Rule> &rule)
-        : prim_mpo(mpo), rule(rule), MPO(mpo->n_sites) {
+    bool collect_terms;
+    SimplifiedMPO(const shared_ptr<MPO> &mpo, const shared_ptr<Rule> &rule,
+                  bool collect_terms = true)
+        : prim_mpo(mpo), rule(rule), MPO(mpo->n_sites),
+          collect_terms(collect_terms) {
         static shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         const_e = mpo->const_e;
         tensors = mpo->tensors;
@@ -4622,7 +4735,8 @@ struct SimplifiedMPO : MPO {
         }
         simplify();
     }
-    shared_ptr<OpExpr> simplify_expr(const shared_ptr<OpExpr> &expr) {
+    shared_ptr<OpExpr> simplify_expr(const shared_ptr<OpExpr> &expr,
+                                     SpinLabel op = SpinLabel(0xFFFFFFFFU)) {
         static shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         switch (expr->get_type()) {
         case OpTypes::Prod: {
@@ -4670,7 +4784,111 @@ struct SimplifiedMPO : MPO {
             terms.reserve(mp.size());
             for (auto &r : mp)
                 terms.insert(terms.end(), r.second.begin(), r.second.end());
-            return terms.size() == 0 ? zero : make_shared<OpSum>(terms);
+            if (terms.size() == 0)
+                return zero;
+            else if (terms[0]->b == nullptr || terms.size() <= 2)
+                return make_shared<OpSum>(terms);
+            else if (collect_terms && op != SpinLabel(0xFFFFFFFFU)) {
+                map<shared_ptr<OpExpr>, map<int, vector<shared_ptr<OpString>>>,
+                    op_expr_less>
+                    mpa[2], mpb[2];
+                for (auto &x : terms) {
+                    assert(x->a != nullptr && x->b != nullptr);
+                    if (x->conj & 1)
+                        mpa[1][x->a][x->b->q_label.twos()].push_back(x);
+                    else
+                        mpa[0][x->a][x->b->q_label.twos()].push_back(x);
+                    if (x->conj & 2)
+                        mpb[1][x->b][x->a->q_label.twos()].push_back(x);
+                    else
+                        mpb[0][x->b][x->a->q_label.twos()].push_back(x);
+                }
+                terms.clear();
+                if (mpa[0].size() + mpa[1].size() <=
+                    mpb[0].size() + mpb[1].size()) {
+                    for (int i = 0; i < 2; i++)
+                        for (auto &r : mpa[i]) {
+                            int pg = dynamic_pointer_cast<OpElement>(r.first)
+                                         ->q_label.pg() ^
+                                     op.pg();
+                            for (auto &rr : r.second) {
+                                if (rr.second.size() == 1)
+                                    terms.push_back(rr.second[0]);
+                                else {
+                                    vector<bool> conjs;
+                                    vector<shared_ptr<OpElement>> ops;
+                                    conjs.reserve(rr.second.size());
+                                    ops.reserve(rr.second.size());
+                                    for (auto &s : rr.second) {
+                                        if (s->b->q_label.pg() != pg)
+                                            continue;
+                                        conjs.push_back((s->conj & 2) != 0);
+                                        ops.push_back(
+                                            dynamic_pointer_cast<OpElement>(
+                                                s->b * s->factor));
+                                    }
+                                    uint8_t cjx = i;
+                                    if (conjs[0])
+                                        conjs.flip(), cjx |= 1 << 1;
+                                    if (ops.size() != 0)
+                                        terms.push_back(make_shared<OpSumProd>(
+                                            dynamic_pointer_cast<OpElement>(
+                                                r.first),
+                                            ops, conjs, 1.0, cjx));
+                                }
+                            }
+                        }
+                } else {
+                    for (int i = 0; i < 2; i++)
+                        for (auto &r : mpb[i]) {
+                            int pg = dynamic_pointer_cast<OpElement>(r.first)
+                                         ->q_label.pg() ^
+                                     op.pg();
+                            for (auto &rr : r.second) {
+                                if (rr.second.size() == 1)
+                                    terms.push_back(rr.second[0]);
+                                else {
+                                    vector<bool> conjs;
+                                    vector<shared_ptr<OpElement>> ops;
+                                    conjs.reserve(rr.second.size());
+                                    ops.reserve(rr.second.size());
+                                    for (auto &s : rr.second) {
+                                        if (s->a->q_label.pg() != pg)
+                                            continue;
+                                        bool cj = (s->conj & 1) != 0,
+                                             found = false;
+                                        OpElement op = s->a->abs();
+                                        for (size_t j = 0; j < ops.size(); j++)
+                                            if (conjs[j] == cj &&
+                                                op == ops[j]->abs()) {
+                                                found = true;
+                                                ops[j]->factor +=
+                                                    s->a->factor * s->factor;
+                                                break;
+                                            }
+                                        if (!found) {
+                                            conjs.push_back((s->conj & 1) != 0);
+                                            ops.push_back(
+                                                dynamic_pointer_cast<OpElement>(
+                                                    s->a * s->factor));
+                                        }
+                                    }
+                                    uint8_t cjx = i << 1;
+                                    if (conjs[0])
+                                        conjs.flip(), cjx |= 1;
+                                    if (ops.size() != 0)
+                                        terms.push_back(make_shared<OpSumProd>(
+                                            ops,
+                                            dynamic_pointer_cast<OpElement>(
+                                                r.first),
+                                            conjs, 1.0, cjx));
+                                }
+                            }
+                        }
+                }
+                return make_shared<OpSum>(terms);
+            } else
+                return make_shared<OpSum>(terms);
         } break;
         case OpTypes::Zero:
         case OpTypes::Elem:
@@ -4698,7 +4916,8 @@ struct SimplifiedMPO : MPO {
             if (rule->operator()(op) != nullptr)
                 continue;
             name->data[k] = abs_value(name->data[j]);
-            expr->data[k] = simplify_expr(expr->data[j]) * (1 / op->factor);
+            expr->data[k] =
+                simplify_expr(expr->data[j], op->q_label) * (1 / op->factor);
             k++;
         }
         name->data.resize(k);
@@ -5283,11 +5502,29 @@ struct Partition {
                 shared_ptr<OpSum> sop =
                     dynamic_pointer_cast<OpSum>(exprs->data[i]);
                 for (auto &op : sop->strings) {
-                    assert(op->b != nullptr);
-                    SpinLabel bra =
-                        (op->conj & 1) ? -op->a->q_label : op->a->q_label;
-                    SpinLabel ket =
-                        (op->conj & 2) ? op->b->q_label : -op->b->q_label;
+                    SpinLabel bra, ket;
+                    if (op->get_type() == OpTypes::Prod) {
+                        assert(op->b != nullptr);
+                        bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
+                        ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
+                    } else {
+                        assert(op->get_type() == OpTypes::SumProd);
+                        shared_ptr<OpSumProd> spop =
+                            dynamic_pointer_cast<OpSumProd>(op);
+                        assert(spop->ops.size() != 0);
+                        if (spop->a != nullptr) {
+                            bra = (op->conj & 1) ? -op->a->q_label
+                                                 : op->a->q_label;
+                            ket = (op->conj & 2) ? spop->ops[0]->q_label
+                                                 : -spop->ops[0]->q_label;
+                        } else if (spop->b != nullptr) {
+                            bra = (op->conj & 1) ? -spop->ops[0]->q_label
+                                                 : spop->ops[0]->q_label;
+                            ket = (op->conj & 2) ? op->b->q_label
+                                                 : -op->b->q_label;
+                        } else
+                            assert(false);
+                    }
                     SpinLabel p = l.combine(bra, ket);
                     assert(p != SpinLabel(0xFFFFFFFFU));
                     subsl[idx].push_back(make_pair(op->conj, p));
