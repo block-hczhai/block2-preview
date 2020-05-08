@@ -107,6 +107,44 @@ TEST_F(TestMatrix, TestTensorProduct) {
     }
 }
 
+TEST_F(TestMatrix, TestExponential) {
+    for (int i = 0; i < n_tests; i++) {
+        int n = Random::rand_int(1, 300);
+        double t = Random::rand_double(-0.1, 0.1);
+        double consta = Random::rand_double(-2.0, 2.0);
+        MatrixRef a(dalloc->allocate(n * n), n, n);
+        MatrixRef aa(dalloc->allocate(n), n, 1);
+        MatrixRef v(dalloc->allocate(n), n, 1);
+        MatrixRef u(dalloc->allocate(n), n, 1);
+        MatrixRef w(dalloc->allocate(n), n, 1);
+        Random::fill_rand_double(a.data, a.size());
+        Random::fill_rand_double(v.data, v.size());
+        for (int ki = 0; ki < n; ki++) {
+            for (int kj = 0; kj < ki; kj++)
+                a(kj, ki) = a(ki, kj);
+            w(ki, 0) = v(ki, 0);
+            aa(ki, 0) = a(ki, ki);
+        }
+        double anorm = MatrixFunctions::norm(aa);
+        MatMul mop(a);
+        int nmult = MatrixFunctions::expo_apply(
+            mop, t, anorm, w, consta, false, 1E-8);
+        DiagonalMatrix ww(dalloc->allocate(n), n);
+        MatrixFunctions::eigs(a, ww);
+        MatrixFunctions::multiply(a, false, v, false, u, 1.0, 0.0);
+        for (int i = 0; i < n; i++)
+            v(i, 0) = exp(t * (ww(i, i) + consta)) * u(i, 0);
+        MatrixFunctions::multiply(a, true, v, false, u, 1.0, 0.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(u, w, 1E-6, 0.0));
+        ww.deallocate();
+        w.deallocate();
+        u.deallocate();
+        v.deallocate();
+        aa.deallocate();
+        a.deallocate();
+    }
+}
+
 TEST_F(TestMatrix, TestDavidson) {
     for (int i = 0; i < n_tests; i++) {
         int n = Random::rand_int(1, 200);
