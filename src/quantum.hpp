@@ -746,6 +746,8 @@ struct SpinLabel {
     int twos_low() const noexcept {
         return (int)(int16_t)((data >> 16) & 0xFFU);
     }
+    int multiplicity() const noexcept { return twos() + 1; }
+    bool is_fermion() const noexcept { return twos() & 1; }
     int pg() const noexcept { return (int)(data & 0xFFU); }
     void set_n(int n) { data = (data & 0xFFFFFFU) | ((uint32_t)(n << 24)); }
     void set_twos(int twos) {
@@ -1430,6 +1432,7 @@ struct Symbolic {
     Symbolic(int m, int n) : m(m), n(n), data(){};
     virtual const SymTypes get_type() const = 0;
     virtual shared_ptr<OpExpr> &operator[](const initializer_list<int> ix) = 0;
+    virtual shared_ptr<Symbolic> copy() const = 0;
 };
 
 struct SymbolicRowVector : Symbolic {
@@ -1442,6 +1445,11 @@ struct SymbolicRowVector : Symbolic {
         auto i = ix.begin();
         return (*this)[*(++i)];
     }
+    virtual shared_ptr<Symbolic> copy() const {
+        shared_ptr<Symbolic> r = make_shared<SymbolicRowVector>(n);
+        r->data = data;
+        return r;
+    }
 };
 
 struct SymbolicColumnVector : Symbolic {
@@ -1452,6 +1460,11 @@ struct SymbolicColumnVector : Symbolic {
     shared_ptr<OpExpr> &operator[](int i) { return data[i]; }
     shared_ptr<OpExpr> &operator[](const initializer_list<int> ix) override {
         return (*this)[*ix.begin()];
+    }
+    virtual shared_ptr<Symbolic> copy() const {
+        shared_ptr<Symbolic> r = make_shared<SymbolicColumnVector>(m);
+        r->data = data;
+        return r;
     }
 };
 
@@ -1467,6 +1480,12 @@ struct SymbolicMatrix : Symbolic {
         auto j = ix.begin(), i = j++;
         add(*i, *j, make_shared<OpExpr>());
         return data.back();
+    }
+    shared_ptr<Symbolic> copy() const override {
+        shared_ptr<SymbolicMatrix> r = make_shared<SymbolicMatrix>(m, n);
+        r->data = data;
+        r->indices = indices;
+        return r;
     }
 };
 
@@ -2387,10 +2406,8 @@ struct SparseMatrixInfo {
             SpinLabel q = wfn ? -ket.quanta[i] : ket.quanta[i];
             SpinLabel bs = dq + q;
             for (int k = 0; k < bs.count(); k++)
-                if (bra.find_state(bs[k]) != -1) {
-                    q.set_twos_low(bs[k].twos());
-                    qs.push_back(q);
-                }
+                if (bra.find_state(bs[k]) != -1)
+                    qs.push_back(dq.combine(bs[k], q));
         }
         n = qs.size();
         allocate(n);
@@ -3676,7 +3693,7 @@ struct BatchGEMMRef {
     }
 };
 
-enum SeqTypes : uint8_t { None, Simple, Auto };
+enum struct SeqTypes : uint8_t { None, Simple, Auto };
 
 struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> batch;
@@ -4665,6 +4682,8 @@ struct MPOSchemer {
     }
 };
 
+enum struct AncillaTypes : uint8_t { None, Ancilla };
+
 struct MPO {
     vector<shared_ptr<OperatorTensor>> tensors;
     vector<shared_ptr<Symbolic>> left_operator_names;
@@ -4679,6 +4698,7 @@ struct MPO {
     double const_e;
     MPO(int n_sites)
         : n_sites(n_sites), const_e(0.0), op(nullptr), schemer(nullptr) {}
+    virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual void deallocate() {}
     string get_blocking_formulas() const {
         stringstream ss;
@@ -5271,6 +5291,9 @@ struct SimplifiedMPO : MPO {
                 mexpr->data[j] = simplify_expr(mexpr->data[j]);
         }
     }
+    AncillaTypes get_ancilla_type() const override {
+        return prim_mpo->get_ancilla_type();
+    }
     void deallocate() override { prim_mpo->deallocate(); }
 };
 
@@ -5278,13 +5301,14 @@ struct MPSInfo {
     int n_sites;
     SpinLabel vaccum;
     SpinLabel target;
-    uint8_t *orbsym, n_syms;
+    vector<uint8_t> orbsym;
+    uint8_t n_syms;
     uint16_t bond_dim;
     StateInfo *basis, *left_dims_fci, *right_dims_fci;
     StateInfo *left_dims, *right_dims;
     string tag = "KET";
     MPSInfo(int n_sites, SpinLabel vaccum, SpinLabel target, StateInfo *basis,
-            uint8_t *orbsym, uint8_t n_syms)
+            const vector<uint8_t> orbsym, uint8_t n_syms)
         : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
           n_syms(n_syms), basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo[n_sites + 1];
@@ -5306,6 +5330,7 @@ struct MPSInfo {
         left_dims = nullptr;
         right_dims = nullptr;
     }
+    virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
                                       double bias = 1.0) {
         bond_dim = m;
@@ -5346,10 +5371,10 @@ struct MPSInfo {
             double *rprobs = dalloc->allocate(right_probs[i].n);
             for (int j = 0; j < left_probs[i].n; j++)
                 lprobs[j] = left_probs[i].probs[j] *
-                            (left_probs[i].quanta[j].twos() + 1);
+                            left_probs[i].quanta[j].multiplicity();
             for (int j = 0; j < right_probs[i].n; j++)
                 rprobs[j] = right_probs[i].probs[j] *
-                            (right_probs[i].quanta[j].twos() + 1);
+                            right_probs[i].quanta[j].multiplicity();
             for (int j = 0; i > 0 && j < left_probs[i].n; j++) {
                 if (left_probs[i].probs[j] == 0)
                     continue;
@@ -5576,6 +5601,50 @@ struct MPSInfo {
     }
 };
 
+struct AncillaMPSInfo : MPSInfo {
+    int n_physical_sites;
+    static vector<uint8_t> trans_orbsym(const vector<uint8_t> &a, int n_sites) {
+        vector<uint8_t> b(n_sites << 1, 0);
+        for (int i = 0, j = 0; i < n_sites; i++, j += 2)
+            b[j] = b[j + 1] = a[i];
+        return b;
+    }
+    AncillaMPSInfo(int n_sites, SpinLabel vaccum, SpinLabel target,
+                   StateInfo *basis, const vector<uint8_t> &orbsym,
+                   uint8_t n_syms)
+        : n_physical_sites(n_sites),
+          MPSInfo(n_sites << 1, vaccum, target, basis,
+                  trans_orbsym(orbsym, n_sites), n_syms) {}
+    AncillaTypes get_ancilla_type() const override {
+        return AncillaTypes::Ancilla;
+    }
+    void set_thermal_limit() {
+        left_dims = new StateInfo[n_sites + 1];
+        left_dims[0] = StateInfo(vaccum);
+        for (int i = 0; i < n_sites; i++)
+            if (i & 1) {
+                SpinLabel q = left_dims[i].quanta[left_dims[i].n - 1] +
+                              basis[orbsym[i]].quanta[0];
+                assert(q.count() == 1);
+                left_dims[i + 1] = StateInfo(q);
+            } else
+                left_dims[i + 1] = StateInfo::tensor_product(
+                    left_dims[i], basis[orbsym[i]], target);
+        right_dims = new StateInfo[n_sites + 1];
+        right_dims[n_sites] = StateInfo(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (i & 1)
+                right_dims[i] = StateInfo::tensor_product(
+                    basis[orbsym[i]], right_dims[i + 1], target);
+            else {
+                SpinLabel q = basis[orbsym[i]].quanta[0] +
+                              right_dims[i + 1].quanta[right_dims[i + 1].n - 1];
+                assert(q.count() == 1);
+                right_dims[i] = StateInfo(q);
+            }
+    }
+};
+
 struct MPS {
     int n_sites, center, dot;
     shared_ptr<MPSInfo> info;
@@ -5642,6 +5711,47 @@ struct MPS {
             if (mat_infos[i] != nullptr) {
                 tensors[i] = make_shared<SparseMatrix>();
                 tensors[i]->allocate(mat_infos[i]);
+            }
+    }
+    void fill_thermal_limit() {
+        assert(info->get_ancilla_type() == AncillaTypes::Ancilla);
+        for (int i = 0; i < n_sites; i++)
+            if (tensors[i] != nullptr) {
+                if (i < center || i > center || (i == center && dot == 1)) {
+                    int n = info->basis[info->orbsym[i]].n;
+                    assert(tensors[i]->total_memory == n);
+                    if (i & 1)
+                        for (int j = 0; j < n; j++)
+                            tensors[i]->data[j] = 1.0;
+                    else {
+                        double norm = 0;
+                        for (int j = 0; j < n; j++)
+                            norm += info->basis[info->orbsym[i]]
+                                        .quanta[j]
+                                        .multiplicity();
+                        norm = sqrt(norm);
+                        for (int j = 0; j < n; j++)
+                            tensors[i]->data[j] =
+                                sqrt(info->basis[info->orbsym[i]]
+                                         .quanta[j]
+                                         .multiplicity()) /
+                                norm;
+                    }
+                } else {
+                    assert(!(i & 1));
+                    assert(info->basis[info->orbsym[i]].n ==
+                           tensors[i]->info->n);
+                    double norm = 0;
+                    for (int j = 0; j < tensors[i]->info->n; j++)
+                        norm += tensors[i]->info->quanta[j].multiplicity();
+                    norm = sqrt(norm);
+                    for (int j = 0; j < tensors[i]->info->n; j++) {
+                        assert((*tensors[i])[j].size() == 1);
+                        (*tensors[i])[j](0, 0) =
+                            sqrt(tensors[i]->info->quanta[j].multiplicity()) /
+                            norm;
+                    }
+                }
             }
     }
     void random_canonicalize() {
@@ -5892,9 +6002,8 @@ struct Partition {
         assert(left_op_infos.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> lop = make_shared<SparseMatrixInfo>();
-            // only works for fermions!
             left_op_infos.push_back(make_pair(sl[i], lop));
-            lop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            lop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
         }
         frame->activate(0);
         if (bra_info != ket_info)
@@ -5938,10 +6047,9 @@ struct Partition {
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> lop_notrunc =
                 make_shared<SparseMatrixInfo>();
-            // only works for fermions!
             left_op_infos_notrunc.push_back(make_pair(sl[i], lop_notrunc));
             lop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
-                                    sl[i].twos() & 1);
+                                    sl[i].is_fermion());
             shared_ptr<SparseMatrixInfo::ConnectionInfo> cinfo =
                 make_shared<SparseMatrixInfo::ConnectionInfo>();
             cinfo->initialize_tp(
@@ -5977,7 +6085,7 @@ struct Partition {
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> rop = make_shared<SparseMatrixInfo>();
             right_op_infos.push_back(make_pair(sl[i], rop));
-            rop->initialize(ibra, iket, sl[i], sl[i].twos() & 1);
+            rop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
         }
         frame->activate(0);
         if (bra_info != ket_info)
@@ -6021,10 +6129,9 @@ struct Partition {
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo> rop_notrunc =
                 make_shared<SparseMatrixInfo>();
-            // only works for fermions!
             right_op_infos_notrunc.push_back(make_pair(sl[i], rop_notrunc));
             rop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
-                                    sl[i].twos() & 1);
+                                    sl[i].is_fermion());
             shared_ptr<SparseMatrixInfo::ConnectionInfo> cinfo =
                 make_shared<SparseMatrixInfo::ConnectionInfo>();
             cinfo->initialize_tp(
@@ -6448,7 +6555,8 @@ struct MovingEnvironment {
             MatrixRef wr(nullptr, w.n, 1);
             wr.allocate();
             MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
-            MatrixFunctions::iscale(wr, 1.0 / (dm->info->quanta[i].twos() + 1));
+            MatrixFunctions::iscale(wr,
+                                    1.0 / dm->info->quanta[i].multiplicity());
             eigen_values.push_back(w);
             eigen_values_reduced.push_back(wr);
             k_total += w.n;
@@ -6877,7 +6985,7 @@ struct Hamiltonian {
             for (auto &p : site_op_infos[i]) {
                 p.second = make_shared<SparseMatrixInfo>();
                 p.second->initialize(basis[i], basis[i], p.first,
-                                     p.first.twos() & 1);
+                                     p.first.is_fermion());
             }
         }
         op_prims[0][OpNames::I] = make_shared<SparseMatrix>();
@@ -6939,13 +7047,16 @@ struct Hamiltonian {
             pair<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>>>[n_syms];
         map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>
             ops[n_syms];
+        const shared_ptr<OpElement> i_op =
+            make_shared<OpElement>(OpNames::I, SiteIndex(), vaccum);
+        const shared_ptr<OpElement> n_op =
+            make_shared<OpElement>(OpNames::N, SiteIndex(), vaccum);
+        const shared_ptr<OpElement> nn_op =
+            make_shared<OpElement>(OpNames::NN, SiteIndex(), vaccum);
         for (uint8_t i = 0; i < n_syms; i++) {
-            ops[i][make_shared<OpElement>(OpNames::I, SiteIndex(), vaccum)] =
-                nullptr;
-            ops[i][make_shared<OpElement>(OpNames::N, SiteIndex(), vaccum)] =
-                nullptr;
-            ops[i][make_shared<OpElement>(OpNames::NN, SiteIndex(), vaccum)] =
-                nullptr;
+            ops[i][i_op] = nullptr;
+            ops[i][n_op] = nullptr;
+            ops[i][nn_op] = nullptr;
         }
         for (uint8_t m = 0; m < n_sites; m++) {
             ops[orb_sym[m]][make_shared<OpElement>(
@@ -7145,6 +7256,9 @@ struct Hamiltonian {
                     assert(false);
                 }
             }
+        const shared_ptr<OpElement> i_op =
+            make_shared<OpElement>(OpNames::I, SiteIndex(), vaccum);
+        ops[i_op] = nullptr;
         get_site_ops(m, ops);
         shared_ptr<OpExpr> zero = make_shared<OpExpr>();
         size_t kk;
@@ -7916,8 +8030,10 @@ struct QCMPO : MPO {
                 else
                     prop = make_shared<SymbolicColumnVector>(lshape);
                 SymbolicColumnVector &rop = *prop;
-                rop[0] = i_op;
-                if (m != 0) {
+                if (m == 0)
+                    rop[0] = h_op;
+                else {
+                    rop[0] = i_op;
                     rop[1] = h_op;
                     p = 2;
                     vector<double> su2_factor;
@@ -8177,6 +8293,61 @@ struct QCMPO : MPO {
                     it->second->deallocate();
             }
     }
+};
+
+struct AncillaMPO : MPO {
+    int n_physical_sites;
+    shared_ptr<MPO> prim_mpo;
+    AncillaMPO(const shared_ptr<MPO> &mpo)
+        : n_physical_sites(mpo->n_sites), prim_mpo(mpo),
+          MPO(mpo->n_sites << 1) {
+        const shared_ptr<OpElement> i_op =
+            make_shared<OpElement>(OpNames::I, SiteIndex(), SpinLabel());
+        const_e = mpo->const_e;
+        op = mpo->op;
+        schemer = mpo->schemer;
+        // operator names
+        left_operator_names.resize(n_sites, nullptr);
+        right_operator_names.resize(n_sites, nullptr);
+        for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
+            left_operator_names[j] = mpo->left_operator_names[i];
+            left_operator_names[j + 1] = left_operator_names[j]->copy();
+            right_operator_names[j] = mpo->right_operator_names[i];
+            if (j - 1 >= 0)
+                right_operator_names[j - 1] = right_operator_names[j]->copy();
+        }
+        right_operator_names[n_sites - 1] = make_shared<SymbolicColumnVector>(1);
+        right_operator_names[n_sites - 1]->data[0] = i_op;
+        assert(mpo->schemer == nullptr);
+        assert(mpo->middle_operator_names.size() == 0);
+        // operator tensors
+        tensors.resize(n_sites, nullptr);
+        for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
+            assert(mpo->tensors[i]->lmat == mpo->tensors[i]->rmat);
+            tensors[j + 1] = make_shared<OperatorTensor>();
+            if (j + 1 != n_sites - 1) {
+                tensors[j] = mpo->tensors[i];
+                int rshape = tensors[j]->lmat->n;
+                tensors[j + 1]->lmat = tensors[j + 1]->rmat =
+                    make_shared<SymbolicMatrix>(rshape, rshape);
+                for (int k = 0; k < tensors[j]->lmat->n; k++)
+                    (*tensors[j + 1]->lmat)[{k, k}] = i_op;
+            } else {
+                int lshape = mpo->tensors[i]->lmat->m;
+                tensors[j] = make_shared<OperatorTensor>();
+                tensors[j]->lmat = tensors[j]->rmat =
+                    make_shared<SymbolicMatrix>(lshape, 1);
+                for (int k = 0; k < lshape; k++)
+                    (*tensors[j]->lmat)[{k, 0}] = mpo->tensors[i]->lmat->data[k];
+                tensors[j]->ops = mpo->tensors[i]->ops;
+                tensors[j + 1]->lmat = tensors[j + 1]->rmat =
+                    make_shared<SymbolicColumnVector>(1);
+                tensors[j + 1]->lmat->data[0] = i_op;
+            }
+            tensors[j + 1]->ops[i_op] = tensors[j]->ops.at(i_op);
+        }
+    }
+    void deallocate() override { prim_mpo->deallocate(); }
 };
 
 struct RuleQCSU2 : Rule {
