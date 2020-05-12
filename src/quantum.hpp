@@ -2275,6 +2275,19 @@ struct SparseMatrixInfo {
     };
     shared_ptr<ConnectionInfo> cinfo;
     SparseMatrixInfo() : n(-1), cinfo(nullptr) {}
+    SparseMatrixInfo deep_copy() const {
+        SparseMatrixInfo other;
+        other.allocate(n);
+        copy_data_to(other);
+        other.delta_quantum = delta_quantum;
+        other.is_fermion = is_fermion;
+        other.is_wavefunction = is_wavefunction;
+        return other;
+    }
+    void copy_data_to(SparseMatrixInfo &other) const {
+        assert(other.n == n);
+        memcpy(other.quanta, quanta, ((n << 1) + n) * sizeof(uint32_t));
+    }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
         load_data(ifs);
@@ -3291,7 +3304,7 @@ struct SparseMatrix {
         ofs.write((char *)data, sizeof(double) * total_memory);
         ofs.close();
     }
-    void copy_data(const SparseMatrix &other) {
+    void copy_data_from(const SparseMatrix &other) {
         assert(total_memory == other.total_memory);
         memcpy(data, other.data, sizeof(double) * total_memory);
     }
@@ -3336,6 +3349,9 @@ struct SparseMatrix {
         for (int i = 0; i < info->n; i++)
             r += this->operator[](i).trace();
         return r;
+    }
+    double norm() const {
+        return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
     }
     void left_canonicalize(const shared_ptr<SparseMatrix> &rmat) {
         int nr = rmat->info->n, n = info->n;
@@ -3541,8 +3557,9 @@ struct SparseMatrix {
                             const StateInfo &r, const StateInfo &old_fused,
                             const StateInfo &old_fused_cinfo,
                             const StateInfo &new_fused,
-                            const StateInfo &new_fused_cinfo) const {
+                            const StateInfo &new_fused_cinfo) {
         assert(mat->info->is_wavefunction);
+        factor = mat->factor;
         map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             SpinLabel bra =
@@ -3593,8 +3610,9 @@ struct SparseMatrix {
                              const StateInfo &r, const StateInfo &old_fused,
                              const StateInfo &old_fused_cinfo,
                              const StateInfo &new_fused,
-                             const StateInfo &new_fused_cinfo) const {
+                             const StateInfo &new_fused_cinfo) {
         assert(mat->info->is_wavefunction);
+        factor = mat->factor;
         map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             SpinLabel bra =
@@ -4190,7 +4208,7 @@ struct OperatorFunctions {
     void tensor_rotate(const SparseMatrix &a, const SparseMatrix &c,
                        const SparseMatrix &rot_bra, const SparseMatrix &rot_ket,
                        bool trans, double scale = 1.0) const {
-        scale = scale * a.factor;
+        scale = scale * a.factor * rot_bra.factor * rot_ket.factor;
         assert(c.factor == 1.0);
         if (abs(scale) < TINY)
             return;
@@ -4407,6 +4425,18 @@ struct OperatorTensor {
         for (auto it = ops.crbegin(); it != ops.crend(); it++)
             it->second->deallocate();
     }
+    shared_ptr<OperatorTensor> deep_copy() const {
+        shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
+        r->lmat = lmat, r->rmat = rmat;
+        for (auto &p : ops) {
+            shared_ptr<SparseMatrix> mat = make_shared<SparseMatrix>();
+            mat->allocate(p.second->info);
+            mat->copy_data_from(*p.second);
+            mat->factor = p.second->factor;
+            r->ops[p.first] = mat;
+        }
+        return r;
+    }
 };
 
 struct DelayedOperatorTensor {
@@ -4445,7 +4475,7 @@ struct TensorFunctions {
                 assert(a->lmat->data[i] == c->lmat->data[i]);
                 auto pa = abs_value(a->lmat->data[i]),
                      pc = abs_value(c->lmat->data[i]);
-                c->ops[pc]->copy_data(*a->ops[pa]);
+                c->ops[pc]->copy_data_from(*a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
@@ -4464,7 +4494,7 @@ struct TensorFunctions {
                 assert(a->rmat->data[i] == c->rmat->data[i]);
                 auto pa = abs_value(a->rmat->data[i]),
                      pc = abs_value(c->rmat->data[i]);
-                c->ops[pc]->copy_data(*a->ops[pa]);
+                c->ops[pc]->copy_data_from(*a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
@@ -5895,7 +5925,7 @@ struct MPS {
             if (dot == 1 && i - 1 == center) {
                 shared_ptr<SparseMatrix> tmp = make_shared<SparseMatrix>();
                 tmp->allocate(tensors[i - 1]->info);
-                tmp->copy_data(*tensors[i - 1]);
+                tmp->copy_data_from(*tensors[i - 1]);
                 tensors[i - 1]->contract(tmp, tmat);
                 tmp->deallocate();
             } else {
@@ -6157,6 +6187,18 @@ struct Partition {
             op_infos_notrunc[i].second->deallocate();
         }
     }
+    static void copy_op_infos(
+        const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
+            &from_op_infos,
+        vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &to_op_infos) {
+        assert(to_op_infos.size() == 0);
+        to_op_infos.reserve(from_op_infos.size());
+        for (size_t i = 0; i < from_op_infos.size(); i++) {
+            shared_ptr<SparseMatrixInfo> info = make_shared<SparseMatrixInfo>(
+                from_op_infos[i].second->deep_copy());
+            to_op_infos.push_back(make_pair(from_op_infos[i].first, info));
+        }
+    }
     static void init_left_op_infos(
         int m, const shared_ptr<MPSInfo> &bra_info,
         const shared_ptr<MPSInfo> &ket_info, const vector<SpinLabel> &sl,
@@ -6324,8 +6366,8 @@ struct Partition {
 };
 
 struct EffectiveHamiltonian {
-    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos_notrunc,
-        right_op_infos_notrunc;
+    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos,
+        right_op_infos;
     shared_ptr<DelayedOperatorTensor> op;
     shared_ptr<SparseMatrix> bra, ket, diag, cmat, vmat;
     shared_ptr<TensorFunctions> tf;
@@ -6333,17 +6375,16 @@ struct EffectiveHamiltonian {
     bool compute_diag;
     EffectiveHamiltonian(
         const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &left_op_infos_notrunc,
+            &left_op_infos,
         const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-            &right_op_infos_notrunc,
+            &right_op_infos,
         const shared_ptr<DelayedOperatorTensor> &op,
         const shared_ptr<SparseMatrix> &bra,
         const shared_ptr<SparseMatrix> &ket, const shared_ptr<OpElement> &hop,
         const shared_ptr<SymbolicColumnVector> &hop_mat,
         const shared_ptr<TensorFunctions> &tf, bool compute_diag = true)
-        : left_op_infos_notrunc(left_op_infos_notrunc),
-          right_op_infos_notrunc(right_op_infos_notrunc), op(op), bra(bra),
-          ket(ket), tf(tf), compute_diag(compute_diag) {
+        : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
+          bra(bra), ket(ket), tf(tf), compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             assert(bra == ket);
@@ -6361,9 +6402,8 @@ struct EffectiveHamiltonian {
         if (compute_diag) {
             shared_ptr<SparseMatrixInfo::ConnectionInfo> diag_info =
                 make_shared<SparseMatrixInfo::ConnectionInfo>();
-            diag_info->initialize_diag(
-                cdq, opdq, msubsl[0], left_op_infos_notrunc,
-                right_op_infos_notrunc, diag->info, tf->opf->cg);
+            diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos,
+                                       right_op_infos, diag->info, tf->opf->cg);
             diag->info->cinfo = diag_info;
             tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops,
                                         diag, opdq);
@@ -6379,9 +6419,9 @@ struct EffectiveHamiltonian {
         // temp wavefunction info
         shared_ptr<SparseMatrixInfo::ConnectionInfo> wfn_info =
             make_shared<SparseMatrixInfo::ConnectionInfo>();
-        wfn_info->initialize_wfn(cdq, vdq, opdq, msubsl[0],
-                                 left_op_infos_notrunc, right_op_infos_notrunc,
-                                 ket->info, bra->info, tf->opf->cg);
+        wfn_info->initialize_wfn(cdq, vdq, opdq, msubsl[0], left_op_infos,
+                                 right_op_infos, ket->info, bra->info,
+                                 tf->opf->cg);
         cmat->info->cinfo = wfn_info;
         // prepare batch gemm
         if (tf->opf->seq->mode == SeqTypes::Auto) {
@@ -6435,6 +6475,34 @@ struct EffectiveHamiltonian {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(norm, nflop, t.get_time());
     }
+    // energy, norm, nexpo, nflop, texpo
+    tuple<double, double, int, size_t, double>
+    expo_apply(double beta, double const_e, bool iprint = false) {
+        assert(compute_diag);
+        DiagonalMatrix aa(diag->data, diag->total_memory);
+        double anorm = MatrixFunctions::norm(aa);
+        MatrixRef v(ket->data, ket->total_memory, 1);
+        Timer t;
+        t.get_time();
+        int nexpo = tf->opf->seq->mode == SeqTypes::Auto
+                        ? MatrixFunctions::expo_apply(*tf->opf->seq, beta,
+                                                      anorm, v, const_e, iprint)
+                        : MatrixFunctions::expo_apply(*this, beta, anorm, v,
+                                                      const_e, iprint);
+        double norm = MatrixFunctions::norm(v);
+        MatrixRef tmp(nullptr, ket->total_memory, 1);
+        tmp.allocate();
+        tmp.clear();
+        if (tf->opf->seq->mode == SeqTypes::Auto)
+            (*tf->opf->seq)(v, tmp);
+        else
+            (*this)(v, tmp);
+        double energy = MatrixFunctions::dot(v, tmp) / (norm * norm);
+        tmp.deallocate();
+        size_t nflop = tf->opf->seq->cumulative_nflop;
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(energy, norm, nexpo + 1, nflop, t.get_time());
+    }
     void deallocate() {
         frame->activate(0);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
@@ -6445,16 +6513,20 @@ struct EffectiveHamiltonian {
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
-        for (int i = right_op_infos_notrunc.size() - 1; i >= 0; i--) {
-            right_op_infos_notrunc[i].second->cinfo->deallocate();
-            right_op_infos_notrunc[i].second->deallocate();
+        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
+            if (right_op_infos[i].second->cinfo != nullptr)
+                right_op_infos[i].second->cinfo->deallocate();
+            right_op_infos[i].second->deallocate();
         }
-        for (int i = left_op_infos_notrunc.size() - 1; i >= 0; i--) {
-            left_op_infos_notrunc[i].second->cinfo->deallocate();
-            left_op_infos_notrunc[i].second->deallocate();
+        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
+            if (left_op_infos[i].second->cinfo != nullptr)
+                left_op_infos[i].second->cinfo->deallocate();
+            left_op_infos[i].second->deallocate();
         }
     }
 };
+
+enum FuseTypes : uint8_t { NoFuse = 0, FuseL = 1, FuseR = 2, FuseLR = 3 };
 
 struct MovingEnvironment {
     int n_sites, center, dot;
@@ -6582,14 +6654,14 @@ struct MovingEnvironment {
     }
     string get_left_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART.LEFT." << tag
-           << "." << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix << ".PART." << tag
+           << ".LEFT" << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART.RIGHT." << tag
-           << "." << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix << ".PART." << tag
+           << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
     void init_environments() {
@@ -6628,102 +6700,133 @@ struct MovingEnvironment {
             frame->load_data(1, get_right_partition_filename(center));
             right_contract_rotate(--center);
         }
+        bra->center = ket->center = center;
     }
-    shared_ptr<EffectiveHamiltonian> eff_ham(bool compute_diag) {
+    shared_ptr<EffectiveHamiltonian> eff_ham(FuseTypes fuse_type,
+                                             bool compute_diag) {
         if (dot == 2) {
-            // left contract infos
-            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-                left_op_infos_notrunc;
-            vector<shared_ptr<Symbolic>> lmats = {
-                mpo->left_operator_names[center]};
-            if (mpo->schemer != nullptr &&
-                center == mpo->schemer->left_trans_site &&
-                mpo->schemer->right_trans_site -
-                        mpo->schemer->left_trans_site <=
-                    1)
-                lmats.push_back(mpo->schemer->left_new_operator_names);
-            vector<SpinLabel> lsl = Partition::get_uniq_labels(lmats);
-            shared_ptr<Symbolic> lexprs =
-                envs[center]->left == nullptr
-                    ? nullptr
-                    : (mpo->left_operator_exprs.size() != 0
-                           ? mpo->left_operator_exprs[center]
-                           : envs[center]->left->lmat *
-                                 envs[center]->middle.front()->lmat);
-            vector<vector<pair<uint8_t, SpinLabel>>> lsubsl =
-                Partition::get_uniq_sub_labels(
-                    lexprs, mpo->left_operator_names[center], lsl);
-            if (envs[center]->left != nullptr)
-                frame->load_data(1, get_left_partition_filename(center));
-            Partition::init_left_op_infos_notrunc(
-                center, bra->info, ket->info, lsl, lsubsl,
-                envs[center]->left_op_infos,
-                site_op_infos[bra->info->orbsym[center]], left_op_infos_notrunc,
-                tf->opf->cg);
-            // left contract
-            frame->activate(0);
-            shared_ptr<OperatorTensor> new_left =
-                Partition::build_left(lmats, left_op_infos_notrunc);
-            tf->left_contract(envs[center]->left, envs[center]->middle.front(),
-                              new_left,
-                              mpo->left_operator_exprs.size() != 0
-                                  ? mpo->left_operator_exprs[center]
-                                  : nullptr);
-            if (mpo->schemer != nullptr &&
-                center == mpo->schemer->left_trans_site &&
-                mpo->schemer->right_trans_site -
-                        mpo->schemer->left_trans_site <=
-                    1)
-                tf->numerical_transform(new_left, lmats[1],
-                                        mpo->schemer->left_new_operator_exprs);
-            // right contract infos
-            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>
-                right_op_infos_notrunc;
-            vector<shared_ptr<Symbolic>> rmats = {
-                mpo->right_operator_names[center + 1]};
-            vector<SpinLabel> rsl = Partition::get_uniq_labels(rmats);
-            shared_ptr<Symbolic> rexprs =
-                envs[center]->right == nullptr
-                    ? nullptr
-                    : (mpo->right_operator_exprs.size() != 0
-                           ? mpo->right_operator_exprs[center + 1]
-                           : envs[center]->middle.back()->rmat *
-                                 envs[center]->right->rmat);
-            vector<vector<pair<uint8_t, SpinLabel>>> rsubsl =
-                Partition::get_uniq_sub_labels(
-                    rexprs, mpo->right_operator_names[center + 1], rsl);
-            if (envs[center]->right != nullptr)
-                frame->load_data(1, get_right_partition_filename(center));
-            Partition::init_right_op_infos_notrunc(
-                center + 1, bra->info, ket->info, rsl, rsubsl,
-                envs[center]->right_op_infos,
-                site_op_infos[bra->info->orbsym[center + 1]],
-                right_op_infos_notrunc, tf->opf->cg);
-            // right contract
-            frame->activate(0);
-            shared_ptr<OperatorTensor> new_right =
-                Partition::build_right(rmats, right_op_infos_notrunc);
-            tf->right_contract(envs[center]->right, envs[center]->middle.back(),
-                               new_right,
-                               mpo->right_operator_exprs.size() != 0
-                                   ? mpo->right_operator_exprs[center + 1]
-                                   : nullptr);
+            vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> left_op_infos,
+                right_op_infos;
+            shared_ptr<OperatorTensor> new_left, new_right;
+            int iL = -1, iR = -1, iM = -1;
+            if (fuse_type == FuseTypes::FuseLR)
+                iL = center, iR = center + 1, iM = center;
+            else if (fuse_type == FuseTypes::FuseR)
+                iL = center, iR = center, iM = center - 1;
+            else if (fuse_type == FuseTypes::FuseL)
+                iL = center + 1, iR = center + 1, iM = center + 1;
+            else
+                assert(false);
+            if (fuse_type & FuseTypes::FuseL) {
+                // left contract infos
+                vector<shared_ptr<Symbolic>> lmats = {
+                    mpo->left_operator_names[iL]};
+                if (mpo->schemer != nullptr &&
+                    iL == mpo->schemer->left_trans_site &&
+                    mpo->schemer->right_trans_site -
+                            mpo->schemer->left_trans_site <=
+                        1)
+                    lmats.push_back(mpo->schemer->left_new_operator_names);
+                vector<SpinLabel> lsl = Partition::get_uniq_labels(lmats);
+                shared_ptr<Symbolic> lexprs =
+                    envs[iL]->left == nullptr
+                        ? nullptr
+                        : (mpo->left_operator_exprs.size() != 0
+                               ? mpo->left_operator_exprs[iL]
+                               : envs[iL]->left->lmat *
+                                     envs[iL]->middle.front()->lmat);
+                vector<vector<pair<uint8_t, SpinLabel>>> lsubsl =
+                    Partition::get_uniq_sub_labels(
+                        lexprs, mpo->left_operator_names[iL], lsl);
+                if (envs[iL]->left != nullptr)
+                    frame->load_data(1, get_left_partition_filename(iL));
+                Partition::init_left_op_infos_notrunc(
+                    iL, bra->info, ket->info, lsl, lsubsl,
+                    envs[iL]->left_op_infos,
+                    site_op_infos[bra->info->orbsym[iL]], left_op_infos,
+                    tf->opf->cg);
+                // left contract
+                frame->activate(0);
+                new_left = Partition::build_left(lmats, left_op_infos);
+                tf->left_contract(envs[iL]->left, envs[iL]->middle.front(),
+                                  new_left,
+                                  mpo->left_operator_exprs.size() != 0
+                                      ? mpo->left_operator_exprs[iL]
+                                      : nullptr);
+                if (mpo->schemer != nullptr &&
+                    iL == mpo->schemer->left_trans_site &&
+                    mpo->schemer->right_trans_site -
+                            mpo->schemer->left_trans_site <=
+                        1)
+                    tf->numerical_transform(
+                        new_left, lmats[1],
+                        mpo->schemer->left_new_operator_exprs);
+            } else {
+                assert(envs[iL]->left != nullptr);
+                frame->load_data(1, get_left_partition_filename(iL));
+                frame->activate(0);
+                Partition::copy_op_infos(envs[iL]->left_op_infos,
+                                         left_op_infos);
+                new_left = envs[iL]->left->deep_copy();
+                for (auto &p : new_left->ops)
+                    p.second->info = Partition::find_op_info(
+                        left_op_infos, p.second->info->delta_quantum);
+            }
+            if (fuse_type & FuseTypes::FuseR) {
+                // right contract infos
+                vector<shared_ptr<Symbolic>> rmats = {
+                    mpo->right_operator_names[iR]};
+                vector<SpinLabel> rsl = Partition::get_uniq_labels(rmats);
+                shared_ptr<Symbolic> rexprs =
+                    envs[iR - 1]->right == nullptr
+                        ? nullptr
+                        : (mpo->right_operator_exprs.size() != 0
+                               ? mpo->right_operator_exprs[iR]
+                               : envs[iR - 1]->middle.back()->rmat *
+                                     envs[iR - 1]->right->rmat);
+                vector<vector<pair<uint8_t, SpinLabel>>> rsubsl =
+                    Partition::get_uniq_sub_labels(
+                        rexprs, mpo->right_operator_names[iR], rsl);
+                if (envs[iR - 1]->right != nullptr)
+                    frame->load_data(1, get_right_partition_filename(iR - 1));
+                Partition::init_right_op_infos_notrunc(
+                    iR, bra->info, ket->info, rsl, rsubsl,
+                    envs[iR - 1]->right_op_infos,
+                    site_op_infos[bra->info->orbsym[iR]], right_op_infos,
+                    tf->opf->cg);
+                // right contract
+                frame->activate(0);
+                new_right = Partition::build_right(rmats, right_op_infos);
+                tf->right_contract(envs[iR - 1]->right,
+                                   envs[iR - 1]->middle.back(), new_right,
+                                   mpo->right_operator_exprs.size() != 0
+                                       ? mpo->right_operator_exprs[iR]
+                                       : nullptr);
+            } else {
+                assert(envs[iR - 1]->right != nullptr);
+                frame->load_data(1, get_right_partition_filename(iR - 1));
+                frame->activate(0);
+                Partition::copy_op_infos(envs[iR - 1]->right_op_infos,
+                                         right_op_infos);
+                new_right = envs[iR - 1]->right->deep_copy();
+                for (auto &p : new_right->ops)
+                    p.second->info = Partition::find_op_info(
+                        right_op_infos, p.second->info->delta_quantum);
+            }
             // delayed left-right contract
             shared_ptr<DelayedOperatorTensor> op =
                 mpo->middle_operator_exprs.size() != 0
                     ? TensorFunctions::delayed_contract(
-                          new_left, new_right,
-                          mpo->middle_operator_names[center],
-                          mpo->middle_operator_exprs[center])
+                          new_left, new_right, mpo->middle_operator_names[iM],
+                          mpo->middle_operator_exprs[iM])
                     : TensorFunctions::delayed_contract(new_left, new_right,
                                                         mpo->op);
             frame->activate(0);
             frame->reset(1);
             shared_ptr<EffectiveHamiltonian> efh =
                 make_shared<EffectiveHamiltonian>(
-                    left_op_infos_notrunc, right_op_infos_notrunc, op,
-                    bra->tensors[center], ket->tensors[center], mpo->op,
-                    hop_mat, tf, compute_diag);
+                    left_op_infos, right_op_infos, op, bra->tensors[iL],
+                    ket->tensors[iL], mpo->op, hop_mat, tf, compute_diag);
             return efh;
         } else
             return nullptr;
@@ -6937,22 +7040,18 @@ struct MovingEnvironment {
     }
     static double propagate_wfn(int i, int n_sites, const shared_ptr<MPS> &mps,
                                 bool forward) {
-        shared_ptr<SparseMatrix> unswapped_wfn = nullptr;
-        shared_ptr<StateInfo> info = nullptr;
         shared_ptr<MPSInfo> mps_info = mps->info;
-        StateInfo lm, lmc, mr, mrc, p;
+        StateInfo l, m, r, lm, lmc, mr, mrc, p;
         shared_ptr<SparseMatrixInfo> wfn_info = make_shared<SparseMatrixInfo>();
         shared_ptr<SparseMatrix> wfn = make_shared<SparseMatrix>();
         bool swapped = false;
         if (forward) {
-            info = mps->tensors[i]->info->extract_state_info(forward);
-            mps_info->left_dims[i + 1] = *info;
-            mps_info->save_left_dims(i + 1);
             if ((swapped = i + 1 != n_sites - 1)) {
+                mps_info->load_left_dims(i + 1);
                 mps_info->load_right_dims(i + 2);
-                StateInfo l = mps_info->left_dims[i + 1],
-                          m = mps_info->basis[mps_info->orbsym[i + 1]],
-                          r = p = mps_info->right_dims[i + 2];
+                l = mps_info->left_dims[i + 1],
+                m = mps_info->basis[mps_info->orbsym[i + 1]],
+                r = mps_info->right_dims[i + 2];
                 lm = StateInfo::tensor_product(l, m,
                                                mps_info->left_dims_fci[i + 2]);
                 lmc = StateInfo::get_connection_info(l, m, lm);
@@ -6964,20 +7063,20 @@ struct MovingEnvironment {
                                      owinfo->is_fermion,
                                      owinfo->is_wavefunction);
                 wfn->allocate(wfn_info);
+                mps->load_tensor(i + 1);
                 wfn->swap_to_fused_left(mps->tensors[i + 1], l, m, r, mr, mrc,
                                         lm, lmc);
-                unswapped_wfn = mps->tensors[i + 1];
+                mps->unload_tensor(i + 1);
                 mps->tensors[i + 1] = wfn;
+                mps->save_tensor(i + 1);
             }
         } else {
-            info = mps->tensors[i + 1]->info->extract_state_info(forward);
-            mps_info->right_dims[i + 1] = *info;
-            mps_info->save_right_dims(i + 1);
             if ((swapped = i != 0)) {
                 mps_info->load_left_dims(i);
-                StateInfo l = p = mps_info->left_dims[i],
-                          m = mps_info->basis[mps_info->orbsym[i]],
-                          r = mps_info->right_dims[i + 1];
+                mps_info->load_right_dims(i + 1);
+                l = mps_info->left_dims[i],
+                m = mps_info->basis[mps_info->orbsym[i]],
+                r = mps_info->right_dims[i + 1];
                 lm = StateInfo::tensor_product(l, m,
                                                mps_info->left_dims_fci[i + 1]);
                 lmc = StateInfo::get_connection_info(l, m, lm);
@@ -6989,14 +7088,14 @@ struct MovingEnvironment {
                                      owinfo->is_fermion,
                                      owinfo->is_wavefunction);
                 wfn->allocate(wfn_info);
+                mps->load_tensor(i);
                 wfn->swap_to_fused_right(mps->tensors[i], l, m, r, lm, lmc, mr,
                                          mrc);
-                unswapped_wfn = mps->tensors[i];
+                mps->unload_tensor(i);
                 mps->tensors[i] = wfn;
+                mps->save_tensor(i);
             }
         }
-        mps->save_tensor(i);
-        mps->save_tensor(i + 1);
         if (swapped) {
             wfn->deallocate();
             wfn_info->deallocate();
@@ -7004,12 +7103,9 @@ struct MovingEnvironment {
             mr.deallocate();
             lmc.deallocate();
             lm.deallocate();
-            p.deallocate();
-            mps->tensors[forward ? i + 1 : i] = unswapped_wfn;
+            r.deallocate();
+            l.deallocate();
         }
-        info->deallocate();
-        mps->unload_tensor(i + 1);
-        mps->unload_tensor(i);
     }
 };
 
@@ -7051,7 +7147,8 @@ struct DMRG {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham(true);
+        shared_ptr<EffectiveHamiltonian> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, true);
         auto pdi = h_eff->eigs(false);
         h_eff->deallocate();
         shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i];
@@ -7060,11 +7157,30 @@ struct DMRG {
         double error = MovingEnvironment::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, me->ket->tensors[i],
             me->ket->tensors[i + 1]);
-        MovingEnvironment::propagate_wfn(i, me->n_sites, me->ket, forward);
+        shared_ptr<StateInfo> info = nullptr;
+        if (forward) {
+            info = me->ket->tensors[i]->info->extract_state_info(forward);
+            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->save_left_dims(i + 1);
+            me->ket->canonical_form[i] = 'L';
+            me->ket->canonical_form[i + 1] = 'C';
+        } else {
+            info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->save_right_dims(i + 1);
+            me->ket->canonical_form[i] = 'C';
+            me->ket->canonical_form[i + 1] = 'R';
+        }
+        info->deallocate();
+        me->ket->save_tensor(i + 1);
+        me->ket->save_tensor(i);
+        me->ket->unload_tensor(i + 1);
+        me->ket->unload_tensor(i);
         dm->info->deallocate();
         dm->deallocate();
         old_wfn->info->deallocate();
         old_wfn->deallocate();
+        MovingEnvironment::propagate_wfn(i, me->n_sites, me->ket, forward);
         return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
                          get<2>(pdi), get<3>(pdi));
     }
@@ -7137,6 +7253,186 @@ struct DMRG {
     }
 };
 
+struct ImaginaryTE {
+    shared_ptr<MovingEnvironment> me;
+    vector<uint16_t> bond_dims;
+    vector<double> noises;
+    vector<double> energies;
+    vector<double> normsqs;
+    bool forward;
+    ImaginaryTE(const shared_ptr<MovingEnvironment> &me,
+                const vector<uint16_t> &bond_dims)
+        : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
+          forward(false) {}
+    struct Iteration {
+        double energy, normsq, error;
+        int nexpo, nexpok;
+        double texpo, texpok;
+        size_t nflop, nflopk;
+        Iteration(double energy, double normsq, double error, int nexpo,
+                  int nexpok, size_t nflop = 0, double texpo = 1.0)
+            : energy(energy), normsq(normsq), error(error), nexpo(nexpo),
+              nexpok(nexpok), nflop(nflop), texpo(texpo) {}
+        friend ostream &operator<<(ostream &os, const Iteration &r) {
+            os << fixed << setprecision(8);
+            os << "Nexpo = " << setw(4) << r.nexpo << "/" << setw(4) << r.nexpok
+               << " E = " << setw(15) << r.energy << " Error = " << setw(15)
+               << setprecision(12) << r.error << " FLOPS = " << scientific
+               << setw(8) << setprecision(2) << (double)r.nflop / r.texpo
+               << " Texpo = " << fixed << setprecision(2) << r.texpo;
+            return os;
+        }
+    };
+    Iteration update_two_dot(int i, bool forward, double beta,
+                             uint16_t bond_dim, double noise) {
+        frame->activate(0);
+        if (me->ket->tensors[i] != nullptr &&
+            me->ket->tensors[i + 1] != nullptr)
+            MovingEnvironment::contract_two_dot(i, me->ket);
+        else {
+            me->ket->load_tensor(i);
+            me->ket->tensors[i + 1] = nullptr;
+        }
+        shared_ptr<EffectiveHamiltonian> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, true);
+        auto pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
+        h_eff->deallocate();
+        shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i];
+        shared_ptr<SparseMatrix> dm = MovingEnvironment::density_matrix(
+            h_eff->opdq, h_eff->ket, forward, noise);
+        double error = MovingEnvironment::split_density_matrix(
+            dm, h_eff->ket, (int)bond_dim, forward, me->ket->tensors[i],
+            me->ket->tensors[i + 1]);
+        shared_ptr<StateInfo> info = nullptr;
+        if (forward) {
+            info = me->ket->tensors[i]->info->extract_state_info(forward);
+            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->save_left_dims(i + 1);
+            me->ket->canonical_form[i] = 'L';
+            me->ket->canonical_form[i + 1] = 'C';
+        } else {
+            info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->save_right_dims(i + 1);
+            me->ket->canonical_form[i] = 'C';
+            me->ket->canonical_form[i + 1] = 'R';
+        }
+        info->deallocate();
+        me->ket->save_tensor(i + 1);
+        me->ket->save_tensor(i);
+        me->ket->unload_tensor(i + 1);
+        me->ket->unload_tensor(i);
+        dm->info->deallocate();
+        dm->deallocate();
+        old_wfn->info->deallocate();
+        old_wfn->deallocate();
+        int expok = 0;
+        if (forward && i + 1 != me->n_sites - 1) {
+            me->move_to(i + 1);
+            me->ket->load_tensor(i + 1);
+            shared_ptr<EffectiveHamiltonian> k_eff =
+                me->eff_ham(FuseTypes::FuseR, true);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
+            k_eff->deallocate();
+            me->ket->save_tensor(i + 1);
+            me->ket->unload_tensor(i + 1);
+            get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
+            expok = get<2>(pdk);
+        } else if (!forward && i != 0) {
+            me->move_to(i - 1);
+            me->ket->load_tensor(i);
+            shared_ptr<EffectiveHamiltonian> k_eff =
+                me->eff_ham(FuseTypes::FuseL, true);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
+            k_eff->deallocate();
+            me->ket->save_tensor(i);
+            me->ket->unload_tensor(i);
+            get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
+            expok = get<2>(pdk);
+        }
+        MovingEnvironment::propagate_wfn(i, me->n_sites, me->ket, forward);
+        return Iteration(get<0>(pdi) + me->mpo->const_e,
+                         get<1>(pdi) * get<1>(pdi), error, get<2>(pdi), expok,
+                         get<3>(pdi), get<4>(pdi));
+    }
+    Iteration blocking(int i, bool forward, double beta, uint16_t bond_dim,
+                       double noise) {
+        me->move_to(i);
+        if (me->dot == 2)
+            return update_two_dot(i, forward, beta, bond_dim, noise);
+        else
+            assert(false);
+    }
+    pair<double, double> sweep(bool forward, double beta, uint16_t bond_dim,
+                               double noise) {
+        me->prepare();
+        vector<double> energies, normsqs;
+        vector<int> sweep_range;
+        if (forward)
+            for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
+                sweep_range.push_back(it);
+        else
+            for (int it = me->center; it >= 0; it--)
+                sweep_range.push_back(it);
+
+        Timer t;
+        for (auto i : sweep_range) {
+            if (me->dot == 2)
+                cout << " " << (forward ? "-->" : "<--")
+                     << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
+                     << " .. ";
+            else
+                cout << " " << (forward ? "-->" : "<--")
+                     << " Site = " << setw(4) << i << " .. ";
+            cout.flush();
+            t.get_time();
+            Iteration r = blocking(i, forward, beta, bond_dim, noise);
+            cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                 << t.get_time() << endl;
+            energies.push_back(r.energy);
+            normsqs.push_back(r.normsq);
+        }
+        return make_pair(energies.back(), normsqs.back());
+    }
+    void normalize() {
+        size_t center = me->ket->canonical_form.find('C');
+        assert(center != string::npos);
+        me->ket->load_tensor(center);
+        me->ket->tensors[center]->factor /= sqrt(normsqs.back());
+        me->ket->save_tensor(center);
+        me->ket->unload_tensor(center);
+    }
+    double solve(int n_sweeps, double beta, bool forward = true,
+                 double tol = 1E-6) {
+        if (bond_dims.size() < n_sweeps)
+            bond_dims.resize(n_sweeps, bond_dims.back());
+        if (noises.size() < n_sweeps)
+            noises.resize(n_sweeps, noises.back());
+        Timer start, current;
+        start.get_time();
+        energies.clear();
+        normsqs.clear();
+        for (int iw = 0; iw < n_sweeps; iw++) {
+            cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
+                 << (forward ? "forward" : "backward")
+                 << " | Beta = " << setw(10) << setprecision(5) << beta
+                 << " | Bond dimension = " << setw(4) << bond_dims[iw]
+                 << " | Noise = " << scientific << setw(9) << setprecision(2)
+                 << noises[iw] << endl;
+            auto r = sweep(forward, beta, bond_dims[iw], noises[iw]);
+            energies.push_back(r.first);
+            normsqs.push_back(r.second);
+            normalize();
+            forward = !forward;
+            current.get_time();
+            cout << "Time elapsed = " << setw(10) << setprecision(2)
+                 << current.current - start.current << endl;
+        }
+        this->forward = forward;
+        return energies.back();
+    }
+};
+
 struct Compress {
     shared_ptr<MovingEnvironment> me;
     vector<uint16_t> bra_bond_dims, ket_bond_dims;
@@ -7176,7 +7472,8 @@ struct Compress {
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<EffectiveHamiltonian> h_eff = me->eff_ham(false);
+        shared_ptr<EffectiveHamiltonian> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, false);
         auto pdi = h_eff->multiply();
         h_eff->deallocate();
         shared_ptr<SparseMatrix> old_bra = me->bra->tensors[i];
@@ -7193,9 +7490,28 @@ struct Compress {
                 mps->tensors[i + 1]);
             if (mps == me->bra)
                 bra_error = error;
-            MovingEnvironment::propagate_wfn(i, me->n_sites, mps, forward);
+            shared_ptr<StateInfo> info = nullptr;
+            if (forward) {
+                info = mps->tensors[i]->info->extract_state_info(forward);
+                mps->info->left_dims[i + 1] = *info;
+                mps->info->save_left_dims(i + 1);
+                mps->canonical_form[i] = 'L';
+                mps->canonical_form[i + 1] = 'C';
+            } else {
+                info = mps->tensors[i + 1]->info->extract_state_info(forward);
+                mps->info->right_dims[i + 1] = *info;
+                mps->info->save_right_dims(i + 1);
+                mps->canonical_form[i] = 'C';
+                mps->canonical_form[i + 1] = 'R';
+            }
+            info->deallocate();
+            mps->save_tensor(i + 1);
+            mps->save_tensor(i);
+            mps->unload_tensor(i + 1);
+            mps->unload_tensor(i);
             dm->info->deallocate();
             dm->deallocate();
+            MovingEnvironment::propagate_wfn(i, me->n_sites, mps, forward);
         }
         for (auto &old_wfn : {old_ket, old_bra}) {
             old_wfn->info->deallocate();
@@ -7241,7 +7557,7 @@ struct Compress {
                  << t.get_time() << endl;
             norms.push_back(r.norm);
         }
-        return *min_element(norms.begin(), norms.end());
+        return norms.back();
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bra_bond_dims.size() < n_sweeps)
@@ -7290,6 +7606,7 @@ struct Hamiltonian {
     shared_ptr<FCIDUMP> fcidump;
     shared_ptr<OperatorFunctions> opf;
     vector<uint8_t> orb_sym;
+    double mu = 0;
     Hamiltonian(SpinLabel vaccum, SpinLabel target, int norb, bool su2,
                 const shared_ptr<FCIDUMP> &fcidump,
                 const vector<uint8_t> &orb_sym)
@@ -7502,10 +7819,10 @@ struct Hamiltonian {
                     p.second = make_shared<SparseMatrix>();
                     p.second->allocate(
                         find_site_op_info(op.q_label, orb_sym[m]));
-                    p.second->copy_data(*op_prims[0].at(OpNames::D));
+                    p.second->copy_data_from(*op_prims[0].at(OpNames::D));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(find_site_op_info(op.q_label, orb_sym[m]));
-                    tmp->copy_data(*op_prims[0].at(OpNames::R));
+                    tmp->copy_data_from(*op_prims[0].at(OpNames::R));
                     tmp->factor = v(i, m, m, m);
                     opf->iadd(*p.second, *tmp);
                     tmp->deallocate();
@@ -7520,10 +7837,10 @@ struct Hamiltonian {
                     p.second = make_shared<SparseMatrix>();
                     p.second->allocate(
                         find_site_op_info(op.q_label, orb_sym[m]));
-                    p.second->copy_data(*op_prims[0].at(OpNames::C));
+                    p.second->copy_data_from(*op_prims[0].at(OpNames::C));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(find_site_op_info(op.q_label, orb_sym[m]));
-                    tmp->copy_data(*op_prims[0].at(OpNames::RD));
+                    tmp->copy_data_from(*op_prims[0].at(OpNames::RD));
                     tmp->factor = v(i, m, m, m);
                     opf->iadd(*p.second, *tmp);
                     tmp->deallocate();
@@ -7730,7 +8047,7 @@ struct Hamiltonian {
     double v(uint8_t i, uint8_t j, uint8_t k, uint8_t l) const {
         return fcidump->vs[0](i, j, k, l);
     }
-    double t(uint8_t i, uint8_t j) const { return fcidump->ts[0](i, j); }
+    double t(uint8_t i, uint8_t j) const { return fcidump->ts[0](i, j) - mu; }
     double e() const { return fcidump->e; }
 };
 

@@ -34,6 +34,7 @@ TEST_F(TestAncilla, Test) {
     int n_sites = n_physical_sites * 2;
     bool su2 = !fcidump->uhf;
     uint16_t bond_dim = 200;
+    double beta = 0.02;
     Hamiltonian hamil(vaccum, target, n_physical_sites, su2, fcidump, orbsym);
 
     // Ancilla MPSInfo (thermal)
@@ -86,6 +87,7 @@ TEST_F(TestAncilla, Test) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
+    hamil.mu = 0.0;
     shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::NC);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
@@ -108,91 +110,30 @@ TEST_F(TestAncilla, Test) {
     impo = make_shared<AncillaMPO>(impo);
     impo = make_shared<SimplifiedMPO>(impo, make_shared<Rule>());
 
-    // ME
+    // Identity ME
     shared_ptr<TensorFunctions> tf = make_shared<TensorFunctions>(hamil.opf);
-    hamil.opf->seq->mode = SeqTypes::None;
-    shared_ptr<MovingEnvironment> me =
+    hamil.opf->seq->mode = SeqTypes::Simple;
+    shared_ptr<MovingEnvironment> ime =
         make_shared<MovingEnvironment>(impo, mps, mps_thermal, tf, hamil.site_op_infos);
-    me->tag = "COMPRESS";
-    me->init_environments();
+    ime->tag = "COMPRESS";
+    ime->init_environments();
 
     // Compress
     vector<uint16_t> bra_bdims = {bond_dim}, ket_bdims = {10};
     vector<double> noises = {0};
-    shared_ptr<Compress> cps = make_shared<Compress>(me, bra_bdims, ket_bdims, noises);
+    shared_ptr<Compress> cps = make_shared<Compress>(ime, bra_bdims, ket_bdims, noises);
     cps->solve(30, false);
 
-    // uint16_t bond_dim = 250;
+    // ME
+    shared_ptr<MovingEnvironment> me =
+        make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
+    me->tag = "TE";
+    me->init_environments();
 
-    // MPSInfo
-    // shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
-    //     n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
-    // mps_info->set_bond_dimension(50);
-    // assert(occs.size() == norb);
-    // for (size_t i = 0; i < occs.size(); i++)
-    //     cout << occs[i] << " ";
-    // mps_info->set_bond_dimension_using_occ(bond_dim, occs);
-    // cout << "left min dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->left_dims_fci[i].n << " ";
-    // cout << endl;
-    // cout << "right min dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->right_dims_fci[i].n << " ";
-    // cout << endl;
-    // cout << "left q dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->left_dims[i].n << " ";
-    // cout << endl;
-    // cout << "right q dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->right_dims[i].n << " ";
-    // cout << endl;
-    // cout << "left dims = ";
-    // for (int i = 0; i <= n_sites; i++)
-    //     cout << mps_info->left_dims[i].n_states_total << " ";
-    // cout << endl;
-    // cout << "right dims = ";
-    // for (int i = 0; i <= n_sites; i++)
-    //     cout << mps_info->right_dims[i].n_states_total << " ";
-    // cout << endl;
-
-    // // MPS
-    // Random::rand_seed(0);
-    // shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
-    // mps->initialize(mps_info);
-    // mps->random_canonicalize();
-
-    // // MPS/MPSInfo save mutable
-    // mps->save_mutable();
-    // mps->deallocate();
-    // mps_info->save_mutable();
-    // mps_info->deallocate_mutable();
-
-    // frame->activate(0);
-    // cout << "persistent memory used :: I = " << ialloc->used
-    //      << " D = " << dalloc->used << endl;
-    // frame->activate(1);
-    // cout << "exclusive  memory used :: I = " << ialloc->used
-    //      << " D = " << dalloc->used << endl;
-    // // ME
-    // shared_ptr<TensorFunctions> tf = make_shared<TensorFunctions>(hamil.opf);
-    // hamil.opf->seq->mode = SeqTypes::Simple;
-    // shared_ptr<MovingEnvironment> me =
-    //     make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
-    // me->init_environments();
-
-    // cout << *frame << endl;
-    // frame->activate(0);
-
-    // // DMRG
-    // vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-    //                           500, 500, 750, 750, 750, 750, 750};
-    // vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
-    // // vector<uint16_t> bdims = {200};
-    // // vector<double> noises = {0};
-    // shared_ptr<DMRG> dmrg = make_shared<DMRG>(me, bdims, noises);
-    // dmrg->solve(30, true);
+    // Imaginary TE
+    vector<uint16_t> bdims = {bond_dim};
+    shared_ptr<ImaginaryTE> te = make_shared<ImaginaryTE>(me, bdims);
+    te->solve(2, beta / 2, cps->forward);
 
     // deallocate persistent stack memory
     impo->deallocate();
