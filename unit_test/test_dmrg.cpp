@@ -21,8 +21,9 @@ class TestDMRG : public ::testing::Test {
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    vector<double> occs;
     string occ_filename = "data/CR2.SVP.OCC";
-    vector<double> occs = read_occ(occ_filename);
+    occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
@@ -56,12 +57,15 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
-        norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
-    // mps_info->set_bond_dimension(bond_dim);
-    assert(occs.size() == norb);
-    // for (size_t i = 0; i < occs.size(); i++)
-    //     cout << occs[i] << " ";
-    mps_info->set_bond_dimension_using_occ(bond_dim, occs);
+        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+    if (occs.size() == 0)
+        mps_info->set_bond_dimension(bond_dim);
+    else {
+        assert(occs.size() == norb);
+        // for (size_t i = 0; i < occs.size(); i++)
+        //     cout << occs[i] << " ";
+        mps_info->set_bond_dimension_using_occ(bond_dim, occs);
+    }
     // cout << "left min dims = ";
     // for (int i = 0; i <= norb; i++)
     //     cout << mps_info->left_dims_fci[i].n << " ";
@@ -119,8 +123,8 @@ TEST_F(TestDMRG, Test) {
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
-    // vector<uint16_t> bdims = {200};
-    // vector<double> noises = {0};
+    // vector<uint16_t> bdims = {bond_dim};
+    // vector<double> noises = {1E-6};
     shared_ptr<DMRG> dmrg = make_shared<DMRG>(me, bdims, noises);
     dmrg->solve(30, true);
 

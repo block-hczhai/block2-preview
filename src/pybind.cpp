@@ -428,6 +428,12 @@ PYBIND11_MODULE(block2, m) {
              py::arg("rmat"))
         .def("right_canonicalize", &SparseMatrix::right_canonicalize,
              py::arg("lmat"))
+        .def("left_multiply", &SparseMatrix::left_multiply, py::arg("lmat"),
+             py::arg("l"), py::arg("m"), py::arg("r"), py::arg("lm"),
+             py::arg("lm_cinfo"))
+        .def("right_multiply", &SparseMatrix::right_multiply, py::arg("rmat"),
+             py::arg("l"), py::arg("m"), py::arg("r"), py::arg("mr"),
+             py::arg("mr_cinfo"))
         .def("randomize", &SparseMatrix::randomize)
         .def("__repr__", [](SparseMatrix *self) {
             stringstream ss;
@@ -444,12 +450,23 @@ PYBIND11_MODULE(block2, m) {
         map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>>(
         m, "MapOpExprSpMat");
 
+    py::enum_<AncillaTypes>(m, "AncillaTypes", py::arithmetic())
+        .value("Nothing", AncillaTypes::None)
+        .value("Ancilla", AncillaTypes::Ancilla);
+
     py::class_<MPSInfo, shared_ptr<MPSInfo>>(m, "MPSInfo")
+        .def_readwrite("n_sites", &MPSInfo::n_sites)
+        .def_readwrite("vaccum", &MPSInfo::vaccum)
+        .def_readwrite("target", &MPSInfo::target)
+        .def_readwrite("orbsym", &MPSInfo::orbsym)
+        .def_readwrite("n_syms", &MPSInfo::n_syms)
+        .def_readwrite("bond_dim", &MPSInfo::bond_dim)
+        .def_readwrite("tag", &MPSInfo::tag)
         .def(py::init([](int n_sites, SpinLabel vaccum, SpinLabel target,
-                         Array<StateInfo> &basis, py::array_t<uint8_t> &orbsym,
+                         Array<StateInfo> &basis, const vector<uint8_t> &orbsym,
                          uint8_t n_syms) {
             return make_shared<MPSInfo>(n_sites, vaccum, target, basis.data,
-                                        orbsym.mutable_data(), n_syms);
+                                        orbsym, n_syms);
         }))
         .def_property_readonly("basis",
                                [](MPSInfo *self) {
@@ -476,14 +493,31 @@ PYBIND11_MODULE(block2, m) {
                                    return Array<StateInfo>(self->right_dims,
                                                            self->n_sites + 1);
                                })
+        .def("get_ancilla_type", &MPSInfo::get_ancilla_type)
+        .def("set_bond_dimension_using_occ",
+             &MPSInfo::set_bond_dimension_using_occ, py::arg("m"),
+             py::arg("occ"), py::arg("bias") = 1.0)
         .def("set_bond_dimension", &MPSInfo::set_bond_dimension)
         .def("save_mutable", &MPSInfo::save_mutable)
         .def("deallocate_mutable", &MPSInfo::deallocate_mutable)
+        .def("load_mutable", &MPSInfo::load_mutable)
         .def("save_left_dims", &MPSInfo::save_left_dims)
         .def("save_right_dims", &MPSInfo::save_right_dims)
         .def("load_left_dims", &MPSInfo::load_left_dims)
         .def("load_right_dims", &MPSInfo::load_right_dims)
         .def("deallocate", &MPSInfo::deallocate);
+
+    py::class_<AncillaMPSInfo, shared_ptr<AncillaMPSInfo>, MPSInfo>(
+        m, "AncillaMPSInfo")
+        .def_readwrite("n_physical_sites", &AncillaMPSInfo::n_physical_sites)
+        .def(py::init([](int n_sites, SpinLabel vaccum, SpinLabel target,
+                         Array<StateInfo> &basis, const vector<uint8_t> &orbsym,
+                         uint8_t n_syms) {
+            return make_shared<AncillaMPSInfo>(n_sites, vaccum, target,
+                                               basis.data, orbsym, n_syms);
+        }))
+        .def_static("trans_orbsym", &AncillaMPSInfo::trans_orbsym)
+        .def("set_thermal_limit", &AncillaMPSInfo::set_thermal_limit);
 
     py::class_<MPS, shared_ptr<MPS>>(m, "MPS")
         .def(py::init<int, int, int>())
@@ -495,16 +529,31 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("canonical_form", &MPS::canonical_form)
         .def("initialize", &MPS::initialize)
         .def("random_canonicalize", &MPS::random_canonicalize)
+        .def("canonicalize", &MPS::canonicalize)
+        .def("fill_thermal_limit", &MPS::fill_thermal_limit)
         .def("save_mutable", &MPS::save_mutable)
         .def("save_tensor", &MPS::save_tensor)
         .def("load_tensor", &MPS::load_tensor)
         .def("unload_tensor", &MPS::unload_tensor)
         .def("deallocate", &MPS::deallocate);
 
+    py::enum_<SeqTypes>(m, "SeqTypes", py::arithmetic())
+        .value("Nothing", SeqTypes::None)
+        .value("Simple", SeqTypes::Simple)
+        .value("Auto", SeqTypes::Auto);
+
+    py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")
+        .def_readwrite("batch", &BatchGEMMSeq::batch)
+        .def_readwrite("post_batch", &BatchGEMMSeq::post_batch)
+        .def_readwrite("refs", &BatchGEMMSeq::refs)
+        .def_readwrite("mode", &BatchGEMMSeq::mode);
+
     py::class_<CG, shared_ptr<CG>>(m, "CG").def(py::init<>());
 
     py::class_<OperatorFunctions, shared_ptr<OperatorFunctions>>(
         m, "OperatorFunctions")
+        .def_readwrite("cg", &OperatorFunctions::cg)
+        .def_readwrite("seq", &OperatorFunctions::seq)
         .def(py::init<const shared_ptr<CG> &>())
         .def("tensor_product", &OperatorFunctions::tensor_product);
 
@@ -565,21 +614,24 @@ PYBIND11_MODULE(block2, m) {
              const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
              const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
              const shared_ptr<DelayedOperatorTensor> &,
-             const shared_ptr<SparseMatrix> &, const shared_ptr<OpElement> &,
+             const shared_ptr<SparseMatrix> &, const shared_ptr<SparseMatrix> &,
+             const shared_ptr<OpElement> &,
              const shared_ptr<SymbolicColumnVector> &,
-             const shared_ptr<TensorFunctions> &>())
+             const shared_ptr<TensorFunctions> &, bool>())
         .def_readwrite("left_op_infos_notrunc",
                        &EffectiveHamiltonian::left_op_infos_notrunc)
         .def_readwrite("right_op_infos_notrunc",
                        &EffectiveHamiltonian::right_op_infos_notrunc)
         .def_readwrite("op", &EffectiveHamiltonian::op)
-        .def_readwrite("psi", &EffectiveHamiltonian::psi)
+        .def_readwrite("bra", &EffectiveHamiltonian::bra)
+        .def_readwrite("ket", &EffectiveHamiltonian::ket)
         .def_readwrite("diag", &EffectiveHamiltonian::diag)
         .def_readwrite("cmat", &EffectiveHamiltonian::cmat)
         .def_readwrite("vmat", &EffectiveHamiltonian::vmat)
         .def_readwrite("tf", &EffectiveHamiltonian::tf)
         .def_readwrite("opdq", &EffectiveHamiltonian::opdq)
         .def("eigs", &EffectiveHamiltonian::eigs)
+        .def("multiply", &EffectiveHamiltonian::multiply)
         .def("deallocate", &EffectiveHamiltonian::deallocate);
 
     py::class_<MovingEnvironment, shared_ptr<MovingEnvironment>>(
@@ -601,6 +653,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("ket", &MovingEnvironment::ket)
         .def_readwrite("envs", &MovingEnvironment::envs)
         .def_readwrite("tf", &MovingEnvironment::tf)
+        .def_readwrite("tag", &MovingEnvironment::tag)
         .def_property_readonly(
             "site_op_infos",
             [](MovingEnvironment *self) {
@@ -616,15 +669,20 @@ PYBIND11_MODULE(block2, m) {
              &MovingEnvironment::get_left_partition_filename)
         .def("get_right_partition_filename",
              &MovingEnvironment::get_right_partition_filename)
-        .def("density_matrix", &MovingEnvironment::density_matrix)
-        .def("split_density_matrix",
-             [](MovingEnvironment *self, const shared_ptr<SparseMatrix> &dm,
-                const shared_ptr<SparseMatrix> &wfn, int k, bool trace_right) {
-                 shared_ptr<SparseMatrix> left = nullptr, right = nullptr;
-                 double error = self->split_density_matrix(
-                     dm, wfn, k, trace_right, left, right);
-                 return make_tuple(error, left, right);
-             });
+        .def_static("contract_two_dot", &MovingEnvironment::contract_two_dot,
+                    py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
+        .def_static("density_matrix", &MovingEnvironment::density_matrix,
+                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("noise"))
+        .def_static(
+            "split_density_matrix",
+            [](const shared_ptr<SparseMatrix> &dm,
+               const shared_ptr<SparseMatrix> &wfn, int k, bool trace_right) {
+                shared_ptr<SparseMatrix> left = nullptr, right = nullptr;
+                double error = MovingEnvironment::split_density_matrix(
+                    dm, wfn, k, trace_right, left, right);
+                return make_tuple(error, left, right);
+            });
 
     py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")
         .def(py::init<SpinLabel, SpinLabel, int, bool,
@@ -637,11 +695,7 @@ PYBIND11_MODULE(block2, m) {
                                    return Array<StateInfo>(self->basis,
                                                            self->n_syms);
                                })
-        .def_property_readonly("orb_sym",
-                               [](Hamiltonian *self) {
-                                   return py::array_t<uint8_t>(
-                                       self->orb_sym.size(), &self->orb_sym[0]);
-                               })
+        .def_readwrite("orb_sym", &Hamiltonian::orb_sym)
         .def_property_readonly("op_prims",
                                [](Hamiltonian *self) {
                                    return make_pair(self->op_prims[0],
@@ -659,11 +713,14 @@ PYBIND11_MODULE(block2, m) {
             })
         .def("deallocate", &Hamiltonian::deallocate);
 
-    py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "Iteration")
+    py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "DMRGIteration")
+        .def(py::init<double, double, int, size_t, double>())
         .def(py::init<double, double, int>())
         .def_readwrite("energy", &DMRG::Iteration::energy)
         .def_readwrite("error", &DMRG::Iteration::error)
         .def_readwrite("ndav", &DMRG::Iteration::ndav)
+        .def_readwrite("tdav", &DMRG::Iteration::tdav)
+        .def_readwrite("nflop", &DMRG::Iteration::nflop)
         .def("__repr__", [](DMRG::Iteration *self) {
             stringstream ss;
             ss << *self;
@@ -678,12 +735,41 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("noises", &DMRG::noises)
         .def_readwrite("energies", &DMRG::energies)
         .def_readwrite("forward", &DMRG::forward)
-        .def("contract_two_dot", &DMRG::contract_two_dot)
         .def("update_two_dot", &DMRG::update_two_dot)
         .def("blocking", &DMRG::blocking)
         .def("sweep", &DMRG::sweep)
         .def("solve", &DMRG::solve, py::arg("n_sweeps"), py::arg("tol") = 1E-6,
              py::arg("forward") = true);
+
+    py::class_<Compress::Iteration, shared_ptr<Compress::Iteration>>(
+        m, "CompressIteration")
+        .def(py::init<double, double, size_t, double>())
+        .def(py::init<double, double>())
+        .def_readwrite("norm", &Compress::Iteration::norm)
+        .def_readwrite("error", &Compress::Iteration::error)
+        .def_readwrite("tmult", &Compress::Iteration::tmult)
+        .def_readwrite("nflop", &Compress::Iteration::nflop)
+        .def("__repr__", [](Compress::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<Compress, shared_ptr<Compress>>(m, "Compress")
+        .def(py::init<const shared_ptr<MovingEnvironment> &,
+                      const vector<uint16_t> &, const vector<uint16_t> &,
+                      const vector<double> &>())
+        .def_readwrite("me", &Compress::me)
+        .def_readwrite("bra_bond_dims", &Compress::bra_bond_dims)
+        .def_readwrite("ket_bond_dims", &Compress::ket_bond_dims)
+        .def_readwrite("noises", &Compress::noises)
+        .def_readwrite("norms", &Compress::norms)
+        .def_readwrite("forward", &Compress::forward)
+        .def("update_two_dot", &Compress::update_two_dot)
+        .def("blocking", &Compress::blocking)
+        .def("sweep", &Compress::sweep)
+        .def("solve", &Compress::solve, py::arg("n_sweeps"),
+             py::arg("tol") = 1E-6, py::arg("forward") = true);
 
     py::class_<MPOSchemer, shared_ptr<MPOSchemer>>(m, "MPOSchemer")
         .def_readwrite("left_trans_site", &MPOSchemer::left_trans_site)
@@ -713,19 +799,38 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("op", &MPO::op)
         .def_readwrite("schemer", &MPO::schemer)
         .def("get_blocking_formulas", &MPO::get_blocking_formulas)
+        .def("get_ancilla_type", &MPO::get_ancilla_type)
         .def("deallocate", &MPO::deallocate);
 
-    py::class_<Rule, shared_ptr<Rule>>(m, "Rule").def(py::init<>());
+    py::class_<Rule, shared_ptr<Rule>>(m, "Rule")
+        .def(py::init<>())
+        .def("__call__", &Rule::operator());
 
-    py::class_<SimplifiedMPO, shared_ptr<SimplifiedMPO>, MPO>(m,
-                                                              "SimplifiedMPO")
-        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &>());
-
-    py::class_<QCMPO, shared_ptr<QCMPO>, MPO>(m, "QCMPO")
-        .def(py::init<const Hamiltonian &>())
-        .def("deallocate", &QCMPO::deallocate);
+    py::class_<NoTransposeRule, shared_ptr<NoTransposeRule>, Rule>(
+        m, "NoTransposeRule")
+        .def_readwrite("prim_rule", &NoTransposeRule::prim_rule)
+        .def(py::init<const shared_ptr<Rule> &>());
 
     py::class_<RuleQCSU2, shared_ptr<RuleQCSU2>, Rule>(m, "RuleQCSU2")
         .def(py::init<>())
         .def(py::init<bool, bool, bool, bool, bool, bool>());
+
+    py::class_<SimplifiedMPO, shared_ptr<SimplifiedMPO>, MPO>(m,
+                                                              "SimplifiedMPO")
+        .def_readwrite("prim_mpo", &SimplifiedMPO::prim_mpo)
+        .def_readwrite("rule", &SimplifiedMPO::rule)
+        .def_readwrite("collect_terms", &SimplifiedMPO::collect_terms)
+        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &>())
+        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &,
+                      bool>());
+
+    py::class_<IdentityMPO, shared_ptr<IdentityMPO>, MPO>(m, "IdentityMPO")
+        .def(py::init<const Hamiltonian &>());
+
+    py::class_<QCMPO, shared_ptr<QCMPO>, MPO>(m, "QCMPO")
+        .def(py::init<const Hamiltonian &>());
+
+    py::class_<AncillaMPO, shared_ptr<AncillaMPO>, MPO>(m, "AncillaMPO")
+        .def_readwrite("n_physical_sites", &AncillaMPO::n_physical_sites)
+        .def(py::init<const shared_ptr<MPO> &>());
 }
