@@ -7,7 +7,7 @@ using namespace block2;
 class TestDMRG : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
-    size_t dsize = 1L << 36;
+    size_t dsize = 1L << 34;
     void SetUp() override {
         Random::rand_seed(0);
         frame = new DataFrame(isize, dsize, "nodex");
@@ -92,7 +92,10 @@ TEST_F(TestDMRG, Test) {
     cout << endl;
 
     // MPS
-    Random::rand_seed(0);
+    // Random::rand_seed(0);
+    // int x = Random::rand_int(0, 1000000);
+    Random::rand_seed(384666);
+    // cout << "Random = " << x << endl;
     shared_ptr<MPS> mps = make_shared<MPS>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
@@ -122,7 +125,7 @@ TEST_F(TestDMRG, Test) {
     // DMRG
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
+    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
     // vector<uint16_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG> dmrg = make_shared<DMRG>(me, bdims, noises);

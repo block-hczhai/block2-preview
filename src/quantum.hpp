@@ -4771,6 +4771,15 @@ struct MPOSchemer {
     MPOSchemer(uint8_t left_trans_site, uint8_t right_trans_site)
         : left_trans_site(left_trans_site), right_trans_site(right_trans_site) {
     }
+    shared_ptr<MPOSchemer> copy() const {
+        shared_ptr<MPOSchemer> r =
+            make_shared<MPOSchemer>(left_trans_site, right_trans_site);
+        r->left_new_operator_names = left_new_operator_names;
+        r->right_new_operator_names = right_new_operator_names;
+        r->left_new_operator_exprs = left_new_operator_exprs;
+        r->right_new_operator_exprs = right_new_operator_exprs;
+        return r;
+    }
     string get_transform_formulas() const {
         stringstream ss;
         ss << "LEFT  TRANSFORM :: SITE = " << (int)left_trans_site << endl;
@@ -5165,7 +5174,7 @@ struct SimplifiedMPO : MPO {
                     }
                 }
                 if (i != n_sites - 1) {
-                    if (schemer == nullptr || i + 1 != schemer->left_trans_site)
+                    if (schemer == nullptr || i + 1 != schemer->right_trans_site)
                         px[!(i & 1)].resize(
                             right_operator_names[i + 1]->data.size());
                     else
@@ -6479,8 +6488,7 @@ struct EffectiveHamiltonian {
     tuple<double, double, int, size_t, double>
     expo_apply(double beta, double const_e, bool iprint = false) {
         assert(compute_diag);
-        DiagonalMatrix aa(diag->data, diag->total_memory);
-        double anorm = MatrixFunctions::norm(aa);
+        double anorm = MatrixFunctions::norm(MatrixRef(diag->data, diag->total_memory, 1));
         MatrixRef v(ket->data, ket->total_memory, 1);
         Timer t;
         t.get_time();
@@ -9015,7 +9023,6 @@ struct AncillaMPO : MPO {
             make_shared<OpElement>(OpNames::I, SiteIndex(), SpinLabel());
         const_e = mpo->const_e;
         op = mpo->op;
-        schemer = mpo->schemer;
         // operator names
         left_operator_names.resize(n_sites, nullptr);
         right_operator_names.resize(n_sites, nullptr);
@@ -9029,12 +9036,10 @@ struct AncillaMPO : MPO {
         right_operator_names[n_sites - 1] =
             make_shared<SymbolicColumnVector>(1);
         right_operator_names[n_sites - 1]->data[0] = i_op;
-        assert(mpo->schemer == nullptr);
         assert(mpo->middle_operator_names.size() == 0);
         // operator tensors
         tensors.resize(n_sites, nullptr);
         for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
-            assert(mpo->tensors[i]->lmat == mpo->tensors[i]->rmat);
             tensors[j + 1] = make_shared<OperatorTensor>();
             if (j + 1 != n_sites - 1) {
                 tensors[j] = mpo->tensors[i];
@@ -9044,6 +9049,7 @@ struct AncillaMPO : MPO {
                 for (int k = 0; k < tensors[j]->lmat->n; k++)
                     (*tensors[j + 1]->lmat)[{k, k}] = i_op;
             } else {
+                assert(mpo->tensors[i]->lmat == mpo->tensors[i]->rmat);
                 int lshape = mpo->tensors[i]->lmat->m;
                 tensors[j] = make_shared<OperatorTensor>();
                 tensors[j]->lmat = tensors[j]->rmat =
@@ -9058,6 +9064,22 @@ struct AncillaMPO : MPO {
             }
             tensors[j + 1]->ops[i_op] = tensors[j]->ops.at(i_op);
         }
+        // numerical transform
+        if (mpo->schemer != nullptr &&
+            mpo->schemer->right_trans_site - mpo->schemer->left_trans_site ==
+                2) {
+            schemer = mpo->schemer->copy();
+            if (n_physical_sites & 1) {
+                schemer->left_trans_site = n_physical_sites - 2;
+                schemer->right_trans_site = n_physical_sites;
+            } else {
+                schemer->left_trans_site = n_physical_sites - 1;
+                schemer->right_trans_site = n_physical_sites + 1;
+            }
+        } else if (mpo->schemer != nullptr)
+            assert(false);
+        else
+            schemer = nullptr;
     }
     void deallocate() override { prim_mpo->deallocate(); }
 };

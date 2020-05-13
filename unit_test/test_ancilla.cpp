@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestAncilla : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 36;
+    size_t isize = 1L << 28;
+    size_t dsize = 1L << 32;
     void SetUp() override {
         Random::rand_seed(0);
         frame = new DataFrame(isize, dsize, "nodex");
@@ -21,8 +21,8 @@ class TestAncilla : public ::testing::Test {
 
 TEST_F(TestAncilla, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
+    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -33,7 +33,7 @@ TEST_F(TestAncilla, Test) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
     bool su2 = !fcidump->uhf;
-    uint16_t bond_dim = 200;
+    uint16_t bond_dim = 500;
     double beta = 0.02;
     Hamiltonian hamil(vaccum, target, n_physical_sites, su2, fcidump, orbsym);
 
@@ -88,7 +88,7 @@ TEST_F(TestAncilla, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     hamil.mu = 0.0;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::NC);
+    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // Ancilla MPO construction
@@ -98,9 +98,8 @@ TEST_F(TestAncilla, Test) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    shared_ptr<Rule> no_trans_rule =
-        make_shared<NoTransposeRule>(make_shared<RuleQCSU2>());
-    mpo = make_shared<SimplifiedMPO>(mpo, no_trans_rule);
+    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
+    // mpo = make_shared<SimplifiedMPO>(mpo, make_shared<Rule>());
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
