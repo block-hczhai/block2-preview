@@ -207,6 +207,12 @@ PYBIND11_MODULE(block2, m) {
         .def_property_readonly("twos", &FCIDUMP::twos)
         .def_property_readonly("isym", &FCIDUMP::isym)
         .def_property_readonly("n_sites", &FCIDUMP::n_sites)
+        .def_readwrite("params", &FCIDUMP::params)
+        .def_readwrite("ts", &FCIDUMP::ts)
+        .def_readwrite("vs", &FCIDUMP::vs)
+        .def_readwrite("vabs", &FCIDUMP::vabs)
+        .def_readwrite("e", &FCIDUMP::e)
+        .def_readwrite("total_memory", &FCIDUMP::total_memory)
         .def_readwrite("uhf", &FCIDUMP::uhf);
 
     py::class_<SpinLabel>(m, "SpinLabel")
@@ -246,13 +252,16 @@ PYBIND11_MODULE(block2, m) {
         .value("PD", OpNames::PD)
         .value("B", OpNames::B)
         .value("Q", OpNames::Q)
+        .value("Zero", OpNames::Zero)
         .value("PDM1", OpNames::PDM1);
 
     py::enum_<OpTypes>(m, "OpTypes", py::arithmetic())
         .value("Zero", OpTypes::Zero)
         .value("Elem", OpTypes::Elem)
         .value("Prod", OpTypes::Prod)
-        .value("Sum", OpTypes::Sum);
+        .value("Sum", OpTypes::Sum)
+        .value("ElemRef", OpTypes::ElemRef)
+        .value("SumProd", OpTypes::SumProd);
 
     py::class_<OpExpr, shared_ptr<OpExpr>>(m, "OpExpr")
         .def(py::init<>())
@@ -289,6 +298,13 @@ PYBIND11_MODULE(block2, m) {
         .def(py::self < py::self)
         .def("__hash__", &OpElement::hash);
 
+    py::class_<OpElementRef, shared_ptr<OpElementRef>, OpExpr>(m,
+                                                               "OpElementRef")
+        .def(py::init<const shared_ptr<OpElement> &, int8_t, int8_t>())
+        .def_readwrite("op", &OpElementRef::op)
+        .def_readwrite("factor", &OpElementRef::factor)
+        .def_readwrite("trans", &OpElementRef::trans);
+
     py::class_<OpString, shared_ptr<OpString>, OpExpr>(m, "OpString")
         .def(py::init<const shared_ptr<OpElement> &, double>())
         .def(py::init<const shared_ptr<OpElement> &, double, uint8_t>())
@@ -300,6 +316,22 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("conj", &OpString::conj)
         .def_readwrite("a", &OpString::a)
         .def_readwrite("b", &OpString::b);
+
+    py::class_<OpSumProd, shared_ptr<OpSumProd>, OpString>(m, "OpSumProd")
+        .def(py::init<const shared_ptr<OpElement> &,
+                      const vector<shared_ptr<OpElement>> &,
+                      const vector<bool> &, double, uint8_t>())
+        .def(py::init<const shared_ptr<OpElement> &,
+                      const vector<shared_ptr<OpElement>> &,
+                      const vector<bool> &, double>())
+        .def(py::init<const vector<shared_ptr<OpElement>> &,
+                      const shared_ptr<OpElement> &, const vector<bool> &,
+                      double, uint8_t>())
+        .def(py::init<const vector<shared_ptr<OpElement>> &,
+                      const shared_ptr<OpElement> &, const vector<bool> &,
+                      double>())
+        .def_readwrite("ops", &OpSumProd::ops)
+        .def_readwrite("conjs", &OpSumProd::conjs);
 
     py::class_<OpSum, shared_ptr<OpSum>, OpExpr>(m, "OpSum")
         .def(py::init<const vector<shared_ptr<OpString>> &>())
@@ -414,7 +446,11 @@ PYBIND11_MODULE(block2, m) {
                                        self->total_memory, self->data);
                                })
         .def("clear", &SparseMatrix::clear)
-        .def("copy_data", &SparseMatrix::copy_data)
+        .def("load_data", &SparseMatrix::load_data, py::arg("filename"),
+             py::arg("load_info") = false)
+        .def("save_data", &SparseMatrix::save_data, py::arg("filename"),
+             py::arg("save_info") = false)
+        .def("copy_data_from", &SparseMatrix::copy_data_from)
         .def("allocate",
              [](SparseMatrix *self, const shared_ptr<SparseMatrixInfo> &info) {
                  self->allocate(info);
@@ -422,6 +458,7 @@ PYBIND11_MODULE(block2, m) {
         .def("deallocate", &SparseMatrix::deallocate)
         .def("reallocate", &SparseMatrix::reallocate, py::arg("length"))
         .def("trace", &SparseMatrix::trace)
+        .def("norm", &SparseMatrix::norm)
         .def("__getitem__",
              [](SparseMatrix *self, int idx) { return (*self)[idx]; })
         .def("left_canonicalize", &SparseMatrix::left_canonicalize,
@@ -434,7 +471,11 @@ PYBIND11_MODULE(block2, m) {
         .def("right_multiply", &SparseMatrix::right_multiply, py::arg("rmat"),
              py::arg("l"), py::arg("m"), py::arg("r"), py::arg("mr"),
              py::arg("mr_cinfo"))
-        .def("randomize", &SparseMatrix::randomize)
+        .def("randomize", &SparseMatrix::randomize, py::arg("a") = 0.0,
+             py::arg("b") = 1.0)
+        .def("contract", &SparseMatrix::contract)
+        .def("swap_to_fused_left", &SparseMatrix::swap_to_fused_left)
+        .def("swap_to_fused_right", &SparseMatrix::swap_to_fused_right)
         .def("__repr__", [](SparseMatrix *self) {
             stringstream ss;
             ss << *self;
@@ -498,6 +539,7 @@ PYBIND11_MODULE(block2, m) {
              &MPSInfo::set_bond_dimension_using_occ, py::arg("m"),
              py::arg("occ"), py::arg("bias") = 1.0)
         .def("set_bond_dimension", &MPSInfo::set_bond_dimension)
+        .def("get_filename", &MPSInfo::get_filename)
         .def("save_mutable", &MPSInfo::save_mutable)
         .def("deallocate_mutable", &MPSInfo::deallocate_mutable)
         .def("load_mutable", &MPSInfo::load_mutable)
@@ -528,9 +570,10 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("tensors", &MPS::tensors)
         .def_readwrite("canonical_form", &MPS::canonical_form)
         .def("initialize", &MPS::initialize)
-        .def("random_canonicalize", &MPS::random_canonicalize)
-        .def("canonicalize", &MPS::canonicalize)
         .def("fill_thermal_limit", &MPS::fill_thermal_limit)
+        .def("canonicalize", &MPS::canonicalize)
+        .def("random_canonicalize", &MPS::random_canonicalize)
+        .def("get_filename", &MPS::get_filename)
         .def("save_mutable", &MPS::save_mutable)
         .def("save_tensor", &MPS::save_tensor)
         .def("load_tensor", &MPS::load_tensor)
@@ -546,16 +589,87 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("batch", &BatchGEMMSeq::batch)
         .def_readwrite("post_batch", &BatchGEMMSeq::post_batch)
         .def_readwrite("refs", &BatchGEMMSeq::refs)
-        .def_readwrite("mode", &BatchGEMMSeq::mode);
+        .def_readwrite("cumulative_nflop", &BatchGEMMSeq::cumulative_nflop)
+        .def_readwrite("mode", &BatchGEMMSeq::mode)
+        .def(py::init<>())
+        .def(py::init<size_t>())
+        .def(py::init<size_t, SeqTypes>())
+        .def("iadd", &BatchGEMMSeq::iadd, py::arg("a"), py::arg("b"),
+             py::arg("scale") = 1.0, py::arg("cfactor") = 1.0,
+             py::arg("conj") = false)
+        .def("rotate", &BatchGEMMSeq::rotate, py::arg("a"), py::arg("c"),
+             py::arg("bra"), py::arg("conj_bra"), py::arg("ket"),
+             py::arg("conj_ket"), py::arg("scale"))
+        .def("tensor_product_diagonal", &BatchGEMMSeq::tensor_product_diagonal,
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("scale"))
+        .def("tensor_product", &BatchGEMMSeq::tensor_product, py::arg("a"),
+             py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
+             py::arg("scale"), py::arg("stride"))
+        .def("divide_batch", &BatchGEMMSeq::divide_batch)
+        .def("check", &BatchGEMMSeq::check)
+        .def("prepare", &BatchGEMMSeq::prepare)
+        .def("allocate", &BatchGEMMSeq::allocate)
+        .def("deallocate", &BatchGEMMSeq::deallocate)
+        .def("simple_perform", &BatchGEMMSeq::simple_perform)
+        .def("auto_perform", &BatchGEMMSeq::auto_perform)
+        .def("perform", &BatchGEMMSeq::perform)
+        .def("clear", &BatchGEMMSeq::clear)
+        .def("__call__", &BatchGEMMSeq::operator())
+        .def("__repr__", [](BatchGEMMSeq *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
 
-    py::class_<CG, shared_ptr<CG>>(m, "CG").def(py::init<>());
+    py::class_<CG, shared_ptr<CG>>(m, "CG")
+        .def(py::init<>())
+        .def(py::init<int, int>())
+        .def("initialize", &CG::initialize)
+        .def("deallocate", &CG::deallocate)
+        .def_static("triangle", &CG::triangle, py::arg("tja"), py::arg("tjb"),
+                    py::arg("tjc"))
+        .def("sqrt_delta", &CG::sqrt_delta, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"))
+        .def("cg", &CG::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
+             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_3j", &CG::wigner_3j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &CG::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &CG::racah, py::arg("ta"), py::arg("tb"), py::arg("tc"),
+             py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &CG::transpose_cg, py::arg("td"), py::arg("tl"),
+             py::arg("tr"));
 
     py::class_<OperatorFunctions, shared_ptr<OperatorFunctions>>(
         m, "OperatorFunctions")
         .def_readwrite("cg", &OperatorFunctions::cg)
         .def_readwrite("seq", &OperatorFunctions::seq)
         .def(py::init<const shared_ptr<CG> &>())
-        .def("tensor_product", &OperatorFunctions::tensor_product);
+        .def("iadd", &OperatorFunctions::iadd, py::arg("a"), py::arg("b"),
+             py::arg("scale") = 1.0, py::arg("conj") = false)
+        .def("tensor_rotate", &OperatorFunctions::tensor_rotate, py::arg("a"),
+             py::arg("c"), py::arg("rot_bra"), py::arg("rot_ket"),
+             py::arg("trans"), py::arg("scale") = 1.0)
+        .def("tensor_product_diagonal",
+             &OperatorFunctions::tensor_product_diagonal, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("opdq"),
+             py::arg("scale") = 1.0)
+        .def("tensor_product_multiply",
+             &OperatorFunctions::tensor_product_multiply, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
+             py::arg("opdq"), py::arg("scale") = 1.0)
+        .def("tensor_product", &OperatorFunctions::tensor_product,
+             py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("scale") = 1.0)
+        .def("product", &OperatorFunctions::product, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("scale") = 1.0)
+        .def_static("trans_product", &OperatorFunctions::trans_product,
+                    py::arg("a"), py::arg("b"), py::arg("trace_right"),
+                    py::arg("noise") = 0.0);
 
     py::class_<OperatorTensor, shared_ptr<OperatorTensor>>(m, "OperatorTensor")
         .def(py::init<>())
@@ -589,8 +703,25 @@ PYBIND11_MODULE(block2, m) {
              py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
         .def("right_contract", &TensorFunctions::right_contract, py::arg("a"),
              py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
+        .def("tensor_product_multiply",
+             &TensorFunctions::tensor_product_multiply)
         .def("tensor_product_diagonal",
-             &TensorFunctions::tensor_product_diagonal);
+             &TensorFunctions::tensor_product_diagonal)
+        .def("tensor_product", &TensorFunctions::tensor_product)
+        .def("left_rotate", &TensorFunctions::left_rotate)
+        .def("right_rotate", &TensorFunctions::right_rotate)
+        .def("numerical_transform", &TensorFunctions::numerical_transform)
+        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor>(*)(
+                                     const shared_ptr<OperatorTensor> &,
+                                     const shared_ptr<OperatorTensor> &,
+                                     const shared_ptr<OpExpr> &)) &
+                                     TensorFunctions::delayed_contract)
+        .def("delayed_contract_simplified",
+             (shared_ptr<DelayedOperatorTensor>(*)(
+                 const shared_ptr<OperatorTensor> &,
+                 const shared_ptr<OperatorTensor> &,
+                 const shared_ptr<Symbolic> &, const shared_ptr<Symbolic> &)) &
+                 TensorFunctions::delayed_contract);
 
     py::class_<Partition, shared_ptr<Partition>>(m, "Partition")
         .def(py::init<const shared_ptr<OperatorTensor> &,
@@ -604,7 +735,21 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("right", &Partition::right)
         .def_readwrite("middle", &Partition::middle)
         .def_readwrite("left_op_infos", &Partition::left_op_infos)
-        .def_readwrite("right_op_infos", &Partition::right_op_infos);
+        .def_readwrite("right_op_infos", &Partition::right_op_infos)
+        .def_static("find_op_info", &Partition::find_op_info)
+        .def_static("build_left", &Partition::build_left)
+        .def_static("build_right", &Partition::build_right)
+        .def_static("get_uniq_labels", &Partition::get_uniq_labels)
+        .def_static("get_uniq_sub_labels", &Partition::get_uniq_sub_labels)
+        .def_static("deallocate_op_infos_notrunc",
+                    &Partition::deallocate_op_infos_notrunc)
+        .def_static("copy_op_infos", &Partition::copy_op_infos)
+        .def_static("init_left_op_infos", &Partition::init_left_op_infos)
+        .def_static("init_left_op_infos_notrunc",
+                    &Partition::init_left_op_infos_notrunc)
+        .def_static("init_right_op_infos", &Partition::init_right_op_infos)
+        .def_static("init_right_op_infos_notrunc",
+                    &Partition::init_right_op_infos_notrunc);
 
     py::bind_vector<vector<shared_ptr<Partition>>>(m, "VectorPartition");
 
@@ -618,10 +763,8 @@ PYBIND11_MODULE(block2, m) {
              const shared_ptr<OpElement> &,
              const shared_ptr<SymbolicColumnVector> &,
              const shared_ptr<TensorFunctions> &, bool>())
-        .def_readwrite("left_op_infos_notrunc",
-                       &EffectiveHamiltonian::left_op_infos_notrunc)
-        .def_readwrite("right_op_infos_notrunc",
-                       &EffectiveHamiltonian::right_op_infos_notrunc)
+        .def_readwrite("left_op_infos", &EffectiveHamiltonian::left_op_infos)
+        .def_readwrite("right_op_infos", &EffectiveHamiltonian::right_op_infos)
         .def_readwrite("op", &EffectiveHamiltonian::op)
         .def_readwrite("bra", &EffectiveHamiltonian::bra)
         .def_readwrite("ket", &EffectiveHamiltonian::ket)
@@ -630,21 +773,30 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("vmat", &EffectiveHamiltonian::vmat)
         .def_readwrite("tf", &EffectiveHamiltonian::tf)
         .def_readwrite("opdq", &EffectiveHamiltonian::opdq)
+        .def_readwrite("compute_diag", &EffectiveHamiltonian::compute_diag)
+        .def("__call__", &EffectiveHamiltonian::operator(), py::arg("b"),
+             py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0)
         .def("eigs", &EffectiveHamiltonian::eigs)
         .def("multiply", &EffectiveHamiltonian::multiply)
+        .def("expect", &EffectiveHamiltonian::expect)
+        .def("rk4_apply", &EffectiveHamiltonian::rk4_apply, py::arg("beta"),
+             py::arg("const_e"), py::arg("eval_energy") = false)
+        .def("expo_apply", &EffectiveHamiltonian::expo_apply, py::arg("beta"),
+             py::arg("const_e"), py::arg("iprint") = false)
         .def("deallocate", &EffectiveHamiltonian::deallocate);
+
+    py::enum_<FuseTypes>(m, "FuseTypes", py::arithmetic())
+        .value("NoFuse", FuseTypes::NoFuse)
+        .value("FuseL", FuseTypes::FuseL)
+        .value("FuseR", FuseTypes::FuseR)
+        .value("FuseLR", FuseTypes::FuseLR);
 
     py::class_<MovingEnvironment, shared_ptr<MovingEnvironment>>(
         m, "MovingEnvironment")
-        .def(py::init(
-            [](const shared_ptr<MPO> &mpo, const shared_ptr<MPS> &bra,
-               const shared_ptr<MPS> &ket,
-               const shared_ptr<TensorFunctions> &tf,
-               Array<vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>
-                   &site_op_infos) {
-                return make_shared<MovingEnvironment>(mpo, bra, ket, tf,
-                                                      site_op_infos.data);
-            }))
+        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<MPS> &,
+                      const shared_ptr<MPS> &>())
+        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<MPS> &,
+                      const shared_ptr<MPS> &, const string &>())
         .def_readwrite("n_sites", &MovingEnvironment::n_sites)
         .def_readwrite("center", &MovingEnvironment::center)
         .def_readwrite("dot", &MovingEnvironment::dot)
@@ -652,19 +804,14 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("bra", &MovingEnvironment::bra)
         .def_readwrite("ket", &MovingEnvironment::ket)
         .def_readwrite("envs", &MovingEnvironment::envs)
-        .def_readwrite("tf", &MovingEnvironment::tf)
         .def_readwrite("tag", &MovingEnvironment::tag)
-        .def_property_readonly(
-            "site_op_infos",
-            [](MovingEnvironment *self) {
-                return Array<
-                    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
-                    self->site_op_infos, self->ket->info->n_syms);
-            })
+        .def("left_contract_rotate", &MovingEnvironment::left_contract_rotate)
+        .def("right_contract_rotate", &MovingEnvironment::right_contract_rotate)
         .def("init_environments", &MovingEnvironment::init_environments)
         .def("prepare", &MovingEnvironment::prepare)
         .def("move_to", &MovingEnvironment::move_to)
-        .def("eff_ham", &MovingEnvironment::eff_ham)
+        .def("eff_ham", &MovingEnvironment::eff_ham, py::arg("fuse_type"),
+             py::arg("compute_diag"))
         .def("get_left_partition_filename",
              &MovingEnvironment::get_left_partition_filename)
         .def("get_right_partition_filename",
@@ -674,6 +821,10 @@ PYBIND11_MODULE(block2, m) {
         .def_static("density_matrix", &MovingEnvironment::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"))
+        .def_static("density_matrix_with_weights",
+                    &MovingEnvironment::density_matrix_with_weights,
+                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("noise"), py::arg("mats"), py::arg("weights"))
         .def_static(
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix> &dm,
@@ -682,7 +833,10 @@ PYBIND11_MODULE(block2, m) {
                 double error = MovingEnvironment::split_density_matrix(
                     dm, wfn, k, trace_right, left, right);
                 return make_tuple(error, left, right);
-            });
+            })
+        .def_static("propagate_wfn", &MovingEnvironment::propagate_wfn,
+                    py::arg("i"), py::arg("n_sites"), py::arg("mps"),
+                    py::arg("forward"));
 
     py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")
         .def(py::init<SpinLabel, SpinLabel, int, bool,
@@ -690,12 +844,17 @@ PYBIND11_MODULE(block2, m) {
         .def_static("swap_d2h", &Hamiltonian::swap_d2h)
         .def_readwrite("n_syms", &Hamiltonian::n_syms)
         .def_readwrite("opf", &Hamiltonian::opf)
+        .def_readwrite("mu", &Hamiltonian::mu)
+        .def_readwrite("n_sites", &Hamiltonian::n_sites)
+        .def_readwrite("orb_sym", &Hamiltonian::orb_sym)
+        .def_readwrite("vaccum", &Hamiltonian::vaccum)
+        .def_readwrite("target", &Hamiltonian::target)
+        .def_readwrite("su2", &Hamiltonian::su2)
         .def_property_readonly("basis",
                                [](Hamiltonian *self) {
                                    return Array<StateInfo>(self->basis,
                                                            self->n_syms);
                                })
-        .def_readwrite("orb_sym", &Hamiltonian::orb_sym)
         .def_property_readonly("op_prims",
                                [](Hamiltonian *self) {
                                    return make_pair(self->op_prims[0],
@@ -711,6 +870,11 @@ PYBIND11_MODULE(block2, m) {
                     vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
                     self->site_op_infos, self->n_syms);
             })
+        .def("init_site_ops", &Hamiltonian::init_site_ops)
+        .def("get_site_ops", &Hamiltonian::get_site_ops)
+        .def("filter_site_ops", &Hamiltonian::filter_site_ops)
+        .def("find_site_op_info", &Hamiltonian::find_site_op_info)
+        .def("find_site_norm_op", &Hamiltonian::find_site_norm_op)
         .def("deallocate", &Hamiltonian::deallocate);
 
     py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "DMRGIteration")
@@ -738,8 +902,46 @@ PYBIND11_MODULE(block2, m) {
         .def("update_two_dot", &DMRG::update_two_dot)
         .def("blocking", &DMRG::blocking)
         .def("sweep", &DMRG::sweep)
-        .def("solve", &DMRG::solve, py::arg("n_sweeps"), py::arg("tol") = 1E-6,
-             py::arg("forward") = true);
+        .def("solve", &DMRG::solve, py::arg("n_sweeps"),
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::enum_<TETypes>(m, "TETypes", py::arithmetic())
+        .value("TangentSpace", TETypes::TangentSpace)
+        .value("RK4", TETypes::RK4);
+
+    py::class_<ImaginaryTE::Iteration, shared_ptr<ImaginaryTE::Iteration>>(
+        m, "ImaginaryTEIteration")
+        .def(py::init<double, double, double, int, int, size_t, double>())
+        .def(py::init<double, double, double, int, int>())
+        .def_readwrite("energy", &ImaginaryTE::Iteration::energy)
+        .def_readwrite("normsq", &ImaginaryTE::Iteration::normsq)
+        .def_readwrite("error", &ImaginaryTE::Iteration::error)
+        .def_readwrite("nexpo", &ImaginaryTE::Iteration::nexpo)
+        .def_readwrite("nexpok", &ImaginaryTE::Iteration::nexpok)
+        .def_readwrite("texpo", &ImaginaryTE::Iteration::texpo)
+        .def_readwrite("nflop", &ImaginaryTE::Iteration::nflop)
+        .def("__repr__", [](ImaginaryTE::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<ImaginaryTE, shared_ptr<ImaginaryTE>>(m, "ImaginaryTE")
+        .def(py::init<const shared_ptr<MovingEnvironment> &,
+                      const vector<uint16_t> &, TETypes>())
+        .def_readwrite("me", &ImaginaryTE::me)
+        .def_readwrite("bond_dims", &ImaginaryTE::bond_dims)
+        .def_readwrite("noises", &ImaginaryTE::noises)
+        .def_readwrite("energies", &ImaginaryTE::energies)
+        .def_readwrite("normsqs", &ImaginaryTE::normsqs)
+        .def_readwrite("forward", &ImaginaryTE::forward)
+        .def_readwrite("mode", &ImaginaryTE::mode)
+        .def("update_two_dot", &ImaginaryTE::update_two_dot)
+        .def("blocking", &ImaginaryTE::blocking)
+        .def("sweep", &ImaginaryTE::sweep)
+        .def("normalize", &ImaginaryTE::normalize)
+        .def("solve", &ImaginaryTE::solve, py::arg("n_sweeps"), py::arg("beta"),
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
 
     py::class_<Compress::Iteration, shared_ptr<Compress::Iteration>>(
         m, "CompressIteration")
@@ -769,7 +971,39 @@ PYBIND11_MODULE(block2, m) {
         .def("blocking", &Compress::blocking)
         .def("sweep", &Compress::sweep)
         .def("solve", &Compress::solve, py::arg("n_sweeps"),
-             py::arg("tol") = 1E-6, py::arg("forward") = true);
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::class_<Expect::Iteration, shared_ptr<Expect::Iteration>>(
+        m, "ExpectIteration")
+        .def(py::init<const vector<pair<shared_ptr<OpExpr>, double>> &, double,
+                      double, size_t, double>())
+        .def(py::init<const vector<pair<shared_ptr<OpExpr>, double>> &, double,
+                      double>())
+        .def_readwrite("bra_error", &Expect::Iteration::bra_error)
+        .def_readwrite("ket_error", &Expect::Iteration::ket_error)
+        .def_readwrite("tmult", &Expect::Iteration::tmult)
+        .def_readwrite("nflop", &Expect::Iteration::nflop)
+        .def("__repr__", [](Expect::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<Expect, shared_ptr<Expect>>(m, "Expect")
+        .def(py::init<const shared_ptr<MovingEnvironment> &, uint16_t,
+                      uint16_t>())
+        .def_readwrite("me", &Expect::me)
+        .def_readwrite("bra_bond_dim", &Expect::bra_bond_dim)
+        .def_readwrite("ket_bond_dim", &Expect::ket_bond_dim)
+        .def_readwrite("expectations", &Expect::expectations)
+        .def_readwrite("forward", &Expect::forward)
+        .def("update_two_dot", &Expect::update_two_dot)
+        .def("blocking", &Expect::blocking)
+        .def("sweep", &Expect::sweep)
+        .def("solve", &Expect::solve, py::arg("propagate"),
+             py::arg("forward") = true)
+        .def("get_1pdm_spatial", &Expect::get_1pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U);
 
     py::class_<MPOSchemer, shared_ptr<MPOSchemer>>(m, "MPOSchemer")
         .def_readwrite("left_trans_site", &MPOSchemer::left_trans_site)
@@ -783,6 +1017,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("right_new_operator_exprs",
                        &MPOSchemer::right_new_operator_exprs)
         .def(py::init<uint8_t, uint8_t>())
+        .def("copy", &MPOSchemer::copy)
         .def("get_transform_formulas", &MPOSchemer::get_transform_formulas);
 
     py::class_<MPO, shared_ptr<MPO>>(m, "MPO")
@@ -797,6 +1032,9 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("right_operator_exprs", &MPO::right_operator_exprs)
         .def_readwrite("middle_operator_exprs", &MPO::middle_operator_exprs)
         .def_readwrite("op", &MPO::op)
+        .def_readwrite("schemer", &MPO::schemer)
+        .def_readwrite("tf", &MPO::tf)
+        .def_readwrite("site_op_infos", &MPO::site_op_infos)
         .def_readwrite("schemer", &MPO::schemer)
         .def("get_blocking_formulas", &MPO::get_blocking_formulas)
         .def("get_ancilla_type", &MPO::get_ancilla_type)
@@ -815,22 +1053,38 @@ PYBIND11_MODULE(block2, m) {
         .def(py::init<>())
         .def(py::init<bool, bool, bool, bool, bool, bool>());
 
+    py::enum_<QCTypes>(m, "QCTypes", py::arithmetic())
+        .value("NC", QCTypes::NC)
+        .value("CN", QCTypes::CN)
+        .value("NCCN", QCTypes(QCTypes::NC | QCTypes::CN))
+        .value("Conventional", QCTypes::Conventional);
+
     py::class_<SimplifiedMPO, shared_ptr<SimplifiedMPO>, MPO>(m,
                                                               "SimplifiedMPO")
         .def_readwrite("prim_mpo", &SimplifiedMPO::prim_mpo)
         .def_readwrite("rule", &SimplifiedMPO::rule)
         .def_readwrite("collect_terms", &SimplifiedMPO::collect_terms)
         .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &>())
-        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &,
-                      bool>());
+        .def(
+            py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &, bool>())
+        .def("simplify_expr", &SimplifiedMPO::simplify_expr)
+        .def("simplify_symbolic", &SimplifiedMPO::simplify_symbolic)
+        .def("simplify", &SimplifiedMPO::simplify);
 
     py::class_<IdentityMPO, shared_ptr<IdentityMPO>, MPO>(m, "IdentityMPO")
         .def(py::init<const Hamiltonian &>());
 
-    py::class_<QCMPO, shared_ptr<QCMPO>, MPO>(m, "QCMPO")
+    py::class_<MPOQCSU2, shared_ptr<MPOQCSU2>, MPO>(m, "MPOQCSU2")
+        .def_readwrite("mode", &MPOQCSU2::mode)
+        .def(py::init<const Hamiltonian &>())
+        .def(py::init<const Hamiltonian &, QCTypes>());
+
+    py::class_<PDM1MPOQCSU2, shared_ptr<PDM1MPOQCSU2>, MPO>(m, "PDM1MPOQCSU2")
         .def(py::init<const Hamiltonian &>());
 
     py::class_<AncillaMPO, shared_ptr<AncillaMPO>, MPO>(m, "AncillaMPO")
         .def_readwrite("n_physical_sites", &AncillaMPO::n_physical_sites)
-        .def(py::init<const shared_ptr<MPO> &>());
+        .def_readwrite("prim_mpo", &AncillaMPO::prim_mpo)
+        .def(py::init<const shared_ptr<MPO> &>())
+        .def(py::init<const shared_ptr<MPO> &, bool>());
 }

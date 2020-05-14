@@ -6458,7 +6458,8 @@ struct EffectiveHamiltonian {
             tf->opf->seq->allocate();
         }
     }
-    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0, double factor = 1.0) {
+    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
+                    double factor = 1.0) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
@@ -6550,12 +6551,12 @@ struct EffectiveHamiltonian {
             k[i].allocate(), k[i].clear();
         }
         assert(tf->opf->seq->mode != SeqTypes::Auto);
-        const vector<double> ks = vector<double>  { 0.0, 0.5, 0.5, 1.0 };
-        const vector<vector<double>> cs = vector<vector<double>> {
-            vector<double> { 31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0, -5.0 / 162.0 },
-            vector<double> { 16.0 /  81.0, 20.0 /  81.0, 20.0 /  81.0, -2.0 /  81.0 },
-            vector<double> { 1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0 }
-        };
+        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<double>> cs = vector<vector<double>>{
+            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
+                           -5.0 / 162.0},
+            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         // k0 ~ k3
         for (int i = 0; i < 4; i++) {
             if (i == 0)
@@ -6589,7 +6590,8 @@ struct EffectiveHamiltonian {
             k[i].deallocate();
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
-        return make_pair(r, make_tuple(energy, norm, 4, nflop, t.get_time()));
+        return make_pair(
+            r, make_tuple(energy, norm, 4 + eval_energy, nflop, t.get_time()));
     }
     // energy, norm, nexpo, nflop, texpo
     tuple<double, double, int, size_t, double>
@@ -7004,13 +7006,15 @@ struct MovingEnvironment {
         OperatorFunctions::trans_product(*psi, *dm, trace_right, noise);
         return dm;
     }
-    static shared_ptr<SparseMatrix>
-    density_matrix(SpinLabel opdq, const shared_ptr<SparseMatrix> &psi,
-                   bool trace_right, double noise, const vector<MatrixRef> &mats, const vector<double> &weights) {
+    static shared_ptr<SparseMatrix> density_matrix_with_weights(
+        SpinLabel opdq, const shared_ptr<SparseMatrix> &psi, bool trace_right,
+        double noise, const vector<MatrixRef> &mats,
+        const vector<double> &weights) {
         double factor = psi->factor, *ptr = psi->data;
         assert(mats.size() == weights.size() - 1);
         psi->factor = factor * sqrt(weights[0]);
-        shared_ptr<SparseMatrix> dm = density_matrix(opdq, psi, trace_right, noise);
+        shared_ptr<SparseMatrix> dm =
+            density_matrix(opdq, psi, trace_right, noise);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->factor = factor * sqrt(weights[i]);
             psi->data = mats[i - 1].data;
@@ -7399,14 +7403,15 @@ struct ImaginaryTE {
     bool forward;
     TETypes mode;
     ImaginaryTE(const shared_ptr<MovingEnvironment> &me,
-                const vector<uint16_t> &bond_dims, TETypes mode = TETypes::TangentSpace)
+                const vector<uint16_t> &bond_dims,
+                TETypes mode = TETypes::TangentSpace)
         : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
           forward(false), mode(mode) {}
     struct Iteration {
         double energy, normsq, error;
         int nexpo, nexpok;
-        double texpo, texpok;
-        size_t nflop, nflopk;
+        double texpo;
+        size_t nflop;
         Iteration(double energy, double normsq, double error, int nexpo,
                   int nexpok, size_t nflop = 0, double texpo = 1.0)
             : energy(energy), normsq(normsq), error(error), nexpo(nexpo),
@@ -7436,20 +7441,22 @@ struct ImaginaryTE {
         tuple<double, double, int, size_t, double> pdi;
         shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i];
         TETypes effective_mode = mode;
-        if (mode == TETypes::RK4 && ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
+        if (mode == TETypes::RK4 &&
+            ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         shared_ptr<SparseMatrix> dm;
         if (effective_mode == TETypes::TangentSpace) {
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
             h_eff->deallocate();
-            dm = MovingEnvironment::density_matrix(
-                h_eff->opdq, h_eff->ket, forward, noise);
+            dm = MovingEnvironment::density_matrix(h_eff->opdq, h_eff->ket,
+                                                   forward, noise);
         } else if (effective_mode == TETypes::RK4) {
-            const vector<double> weights = { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0 };
-            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e);
+            const vector<double> weights = {1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0,
+                                            1.0 / 6.0};
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
             pdi = pdp.second;
             h_eff->deallocate();
-            dm = MovingEnvironment::density_matrix(
+            dm = MovingEnvironment::density_matrix_with_weights(
                 h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights);
             frame->activate(1);
             for (int i = pdp.first.size() - 1; i >= 0; i--)
@@ -7483,7 +7490,8 @@ struct ImaginaryTE {
         old_wfn->info->deallocate();
         old_wfn->deallocate();
         int expok = 0;
-        if (mode == TETypes::TangentSpace && forward && i + 1 != me->n_sites - 1) {
+        if (mode == TETypes::TangentSpace && forward &&
+            i + 1 != me->n_sites - 1) {
             me->move_to(i + 1);
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian> k_eff =
@@ -7918,6 +7926,20 @@ struct Expect {
             assert(r.expectations.size() != 0);
             return r.expectations[0].second;
         }
+    }
+    MatrixRef get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        MatrixRef r(nullptr, n_physical_sites, n_physical_sites);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(x.first);
+                assert(op->name == OpNames::PDM1);
+                r(op->site_index[0], op->site_index[1]) = x.second;
+            }
+        return r;
     }
 };
 
