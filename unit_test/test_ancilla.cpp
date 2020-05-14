@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestAncilla : public ::testing::Test {
   protected:
-    size_t isize = 1L << 28;
-    size_t dsize = 1L << 32;
+    size_t isize = 1L << 26;
+    size_t dsize = 1L << 30;
     void SetUp() override {
         Random::rand_seed(0);
         frame = new DataFrame(isize, dsize, "nodex");
@@ -33,9 +33,10 @@ TEST_F(TestAncilla, Test) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
     bool su2 = !fcidump->uhf;
-    uint16_t bond_dim = 500;
+    uint16_t bond_dim = 200;
     double beta = 0.02;
     Hamiltonian hamil(vaccum, target, n_physical_sites, su2, fcidump, orbsym);
+    hamil.opf->seq->mode = SeqTypes::Simple;
 
     // Ancilla MPSInfo (thermal)
     shared_ptr<AncillaMPSInfo> mps_info_thermal = make_shared<AncillaMPSInfo>(
@@ -88,7 +89,7 @@ TEST_F(TestAncilla, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     hamil.mu = 0.0;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO> mpo = make_shared<MPOQCSU2>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // Ancilla MPO construction
@@ -109,12 +110,14 @@ TEST_F(TestAncilla, Test) {
     impo = make_shared<AncillaMPO>(impo);
     impo = make_shared<SimplifiedMPO>(impo, make_shared<Rule>());
 
+    // 1PDM MPO
+    shared_ptr<MPO> pmpo = make_shared<PDM1MPOQCSU2>(hamil);
+    pmpo = make_shared<AncillaMPO>(pmpo, true);
+    pmpo = make_shared<SimplifiedMPO>(pmpo, make_shared<Rule>());
+
     // Identity ME
-    shared_ptr<TensorFunctions> tf = make_shared<TensorFunctions>(hamil.opf);
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment> ime =
-        make_shared<MovingEnvironment>(impo, mps, mps_thermal, tf, hamil.site_op_infos);
-    ime->tag = "COMPRESS";
+        make_shared<MovingEnvironment>(impo, mps, mps_thermal, "COMPRESS");
     ime->init_environments();
 
     // Compress
@@ -123,10 +126,8 @@ TEST_F(TestAncilla, Test) {
     shared_ptr<Compress> cps = make_shared<Compress>(ime, bra_bdims, ket_bdims, noises);
     cps->solve(30, false);
 
-    // ME
-    shared_ptr<MovingEnvironment> me =
-        make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
-    me->tag = "TE";
+    // TE ME
+    shared_ptr<MovingEnvironment> me = make_shared<MovingEnvironment>(mpo, mps, mps, "TE");
     me->init_environments();
 
     // Imaginary TE
@@ -134,7 +135,16 @@ TEST_F(TestAncilla, Test) {
     shared_ptr<ImaginaryTE> te = make_shared<ImaginaryTE>(me, bdims);
     te->solve(2, beta / 2, cps->forward);
 
+    // 1PDM ME
+    shared_ptr<MovingEnvironment> pme = make_shared<MovingEnvironment>(pmpo, mps, mps, "1PDM");
+    pme->init_environments();
+
+    // 1PDM
+    shared_ptr<Expect> expect = make_shared<Expect>(pme, bond_dim, bond_dim);
+    expect->solve(true, te->forward);
+
     // deallocate persistent stack memory
+    pmpo->deallocate();
     impo->deallocate();
     mpo->deallocate();
     mps_info->deallocate();

@@ -43,7 +43,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO> mpo = make_shared<QCMPO>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO> mpo = make_shared<MPOQCSU2>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -117,7 +117,10 @@ TEST_F(TestDMRG, Test) {
     hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment> me =
         make_shared<MovingEnvironment>(mpo, mps, mps, tf, hamil.site_op_infos);
-    me->init_environments();
+    t.get_time();
+    cout << "INIT start" << endl;
+    me->init_environments(false);
+    cout << "INIT end .. T = " << t.get_time() << endl;
 
     cout << *frame << endl;
     frame->activate(0);
