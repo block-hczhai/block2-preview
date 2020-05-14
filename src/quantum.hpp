@@ -880,8 +880,7 @@ struct SiteIndex {
     SiteIndex() : data(0) {}
     SiteIndex(uint32_t data) : data(data) {}
     SiteIndex(uint8_t i) : data(1U | (i << 8)) {}
-    SiteIndex(uint8_t i, uint8_t j)
-        : data(2U | 0U | (i << 8) | (j << 16)) {}
+    SiteIndex(uint8_t i, uint8_t j) : data(2U | 0U | (i << 8) | (j << 16)) {}
     SiteIndex(uint8_t i, uint8_t j, uint8_t s)
         : data(2U | 4U | (i << 8) | (j << 16) | (s << 4)) {}
     uint8_t size() const noexcept { return (uint8_t)(data & 3); }
@@ -2593,6 +2592,7 @@ extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
 }
 
 struct MatrixFunctions {
+    // a = b
     static void copy(const MatrixRef &a, const MatrixRef &b, const int inca = 1,
                      const int incb = 1) {
         assert(a.m == b.m && a.n == b.n);
@@ -4830,7 +4830,7 @@ struct MPO {
     vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> *site_op_infos;
     MPO(int n_sites)
         : n_sites(n_sites), const_e(0.0), op(nullptr), schemer(nullptr),
-         tf(nullptr), site_op_infos(nullptr) {}
+          tf(nullptr), site_op_infos(nullptr) {}
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual void deallocate() {}
     string get_blocking_formulas() const {
@@ -5183,7 +5183,8 @@ struct SimplifiedMPO : MPO {
                     }
                 }
                 if (i != n_sites - 1) {
-                    if (schemer == nullptr || i + 1 != schemer->right_trans_site)
+                    if (schemer == nullptr ||
+                        i + 1 != schemer->right_trans_site)
                         px[!(i & 1)].resize(
                             right_operator_names[i + 1]->data.size());
                     else
@@ -5233,10 +5234,9 @@ struct SimplifiedMPO : MPO {
             shared_ptr<OpElement> a = opl == nullptr ? op->a : opl->op;
             shared_ptr<OpElement> b = opr == nullptr ? op->b : opr->op;
             uint8_t conj = (opl != nullptr && opl->trans) |
-                ((opr != nullptr && opr->trans) << 1);
+                           ((opr != nullptr && opr->trans) << 1);
             double factor = (opl != nullptr ? opl->factor : 1.0) *
-                (opr != nullptr ? opr->factor : 1.0) *
-                op->factor;
+                            (opr != nullptr ? opr->factor : 1.0) * op->factor;
             return make_shared<OpString>(a, b, factor, conj);
         } break;
         case OpTypes::Sum: {
@@ -6458,13 +6458,14 @@ struct EffectiveHamiltonian {
             tf->opf->seq->allocate();
         }
     }
-    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0) {
+    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0, double factor = 1.0) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
-        tf->tensor_product_multiply(op->mat->data[idx], op->lops, op->rops, cmat,
-                                    vmat, opdq);
+        cmat->factor = factor;
+        tf->tensor_product_multiply(op->mat->data[idx], op->lops, op->rops,
+                                    cmat, vmat, opdq);
     }
     // energy, ndav, nflop, tdav
     tuple<double, int, size_t, double> eigs(bool iprint = false) {
@@ -6513,9 +6514,11 @@ struct EffectiveHamiltonian {
         vector<pair<shared_ptr<OpExpr>, double>> expectations;
         expectations.reserve(op->mat->data.size());
         for (size_t i = 0; i < op->mat->data.size(); i++) {
-            if (dynamic_pointer_cast<OpElement>(op->ops[i])->name == OpNames::Zero)
+            if (dynamic_pointer_cast<OpElement>(op->ops[i])->name ==
+                OpNames::Zero)
                 continue;
-            else if (dynamic_pointer_cast<OpElement>(op->ops[i])->q_label != opdq)
+            else if (dynamic_pointer_cast<OpElement>(op->ops[i])->q_label !=
+                     opdq)
                 expectations.push_back(make_pair(op->ops[i], 0.0));
             else {
                 btmp.clear();
@@ -6529,11 +6532,71 @@ struct EffectiveHamiltonian {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(expectations, nflop, t.get_time());
     }
+    // k1~k4, energy, norm, nexpo, nflop, texpo
+    pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
+    rk4_apply(double beta, double const_e, bool eval_energy = false) {
+        MatrixRef v(ket->data, ket->total_memory, 1);
+        vector<MatrixRef> k, r;
+        Timer t;
+        t.get_time();
+        frame->activate(1);
+        for (int i = 0; i < 3; i++) {
+            r.push_back(MatrixRef(nullptr, ket->total_memory, 1));
+            r[i].allocate();
+        }
+        frame->activate(0);
+        for (int i = 0; i < 4; i++) {
+            k.push_back(MatrixRef(nullptr, ket->total_memory, 1));
+            k[i].allocate(), k[i].clear();
+        }
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        const vector<double> ks = vector<double>  { 0.0, 0.5, 0.5, 1.0 };
+        const vector<vector<double>> cs = vector<vector<double>> {
+            vector<double> { 31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0, -5.0 / 162.0 },
+            vector<double> { 16.0 /  81.0, 20.0 /  81.0, 20.0 /  81.0, -2.0 /  81.0 },
+            vector<double> { 1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0 }
+        };
+        // k0 ~ k3
+        for (int i = 0; i < 4; i++) {
+            if (i == 0)
+                (*this)(v, k[i], 0, beta);
+            else {
+                MatrixFunctions::copy(r[0], v);
+                tf->opf->seq->iadd(r[0], k[i - 1], ks[i], 1.0);
+                if (tf->opf->seq->mode != SeqTypes::None)
+                    tf->opf->seq->simple_perform();
+                (*this)(r[0], k[i], 0, beta);
+            }
+        }
+        // r0 ~ r2
+        for (int i = 0; i < 3; i++) {
+            MatrixFunctions::copy(r[i], v);
+            double factor = exp(beta * (i + 1) / 3 * const_e);
+            for (size_t j = 0; j < 4; j++) {
+                tf->opf->seq->iadd(r[i], k[j], cs[i][j] * factor, factor);
+                if (tf->opf->seq->mode != SeqTypes::None)
+                    tf->opf->seq->simple_perform();
+            }
+        }
+        double norm = MatrixFunctions::norm(r[2]);
+        double energy = -const_e;
+        if (eval_energy) {
+            k[0].clear();
+            (*this)(r[2], k[0]);
+            energy = MatrixFunctions::dot(r[2], k[0]) / (norm * norm);
+        }
+        for (int i = 3; i >= 0; i--)
+            k[i].deallocate();
+        size_t nflop = tf->opf->seq->cumulative_nflop;
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_pair(r, make_tuple(energy, norm, 4, nflop, t.get_time()));
+    }
     // energy, norm, nexpo, nflop, texpo
     tuple<double, double, int, size_t, double>
     expo_apply(double beta, double const_e, bool iprint = false) {
         assert(compute_diag);
-        double anorm = MatrixFunctions::norm(MatrixRef(diag->data, diag->total_memory, 1));
+        double anorm =
+            MatrixFunctions::norm(MatrixRef(diag->data, diag->total_memory, 1));
         MatrixRef v(ket->data, ket->total_memory, 1);
         Timer t;
         t.get_time();
@@ -6588,9 +6651,8 @@ struct MovingEnvironment {
     vector<shared_ptr<Partition>> envs;
     shared_ptr<SymbolicColumnVector> hop_mat;
     string tag;
-    MovingEnvironment(
-        const shared_ptr<MPO> &mpo, const shared_ptr<MPS> &bra,
-        const shared_ptr<MPS> &ket, const string &tag = "DMRG")
+    MovingEnvironment(const shared_ptr<MPO> &mpo, const shared_ptr<MPS> &bra,
+                      const shared_ptr<MPS> &ket, const string &tag = "DMRG")
         : n_sites(ket->n_sites), center(ket->center), dot(ket->dot), mpo(mpo),
           bra(bra), ket(ket), tag(tag) {
         assert(bra->n_sites == ket->n_sites && mpo->n_sites == ket->n_sites);
@@ -6623,10 +6685,10 @@ struct MovingEnvironment {
         shared_ptr<OperatorTensor> new_left = Partition::build_left(
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc);
         mpo->tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
-                          new_left,
-                          mpo->left_operator_exprs.size() != 0
-                              ? mpo->left_operator_exprs[i - 1]
-                              : nullptr);
+                               new_left,
+                               mpo->left_operator_exprs.size() != 0
+                                   ? mpo->left_operator_exprs[i - 1]
+                                   : nullptr);
         bra->load_tensor(i - 1);
         if (bra != ket)
             ket->load_tensor(i - 1);
@@ -6636,10 +6698,10 @@ struct MovingEnvironment {
         frame->activate(1);
         envs[i]->left = Partition::build_left(mats, envs[i]->left_op_infos);
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
-                        envs[i]->left);
+                             envs[i]->left);
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
-                                    mpo->schemer->left_new_operator_exprs);
+                                         mpo->schemer->left_new_operator_exprs);
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i - 1);
@@ -6670,16 +6732,16 @@ struct MovingEnvironment {
         Partition::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos,
-            mpo->site_op_infos[bra->info->orbsym[i + dot]], right_op_infos_notrunc,
-            mpo->tf->opf->cg);
+            mpo->site_op_infos[bra->info->orbsym[i + dot]],
+            right_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor> new_right = Partition::build_right(
             {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc);
         mpo->tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
-                           new_right,
-                           mpo->right_operator_exprs.size() != 0
-                               ? mpo->right_operator_exprs[i + dot]
-                               : nullptr);
+                                new_right,
+                                mpo->right_operator_exprs.size() != 0
+                                    ? mpo->right_operator_exprs[i + dot]
+                                    : nullptr);
         bra->load_tensor(i + dot);
         if (bra != ket)
             ket->load_tensor(i + dot);
@@ -6689,11 +6751,12 @@ struct MovingEnvironment {
         frame->activate(1);
         envs[i]->right = Partition::build_right(mats, envs[i]->right_op_infos);
         mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
-                         ket->tensors[i + dot], envs[i]->right);
+                              ket->tensors[i + dot], envs[i]->right);
         if (mpo->schemer != nullptr &&
             i + dot == mpo->schemer->right_trans_site)
-            mpo->tf->numerical_transform(envs[i]->right, mats[1],
-                                    mpo->schemer->right_new_operator_exprs);
+            mpo->tf->numerical_transform(
+                envs[i]->right, mats[1],
+                mpo->schemer->right_new_operator_exprs);
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i + dot);
@@ -6801,10 +6864,10 @@ struct MovingEnvironment {
                 frame->activate(0);
                 new_left = Partition::build_left(lmats, left_op_infos);
                 mpo->tf->left_contract(envs[iL]->left, envs[iL]->middle.front(),
-                                  new_left,
-                                  mpo->left_operator_exprs.size() != 0
-                                      ? mpo->left_operator_exprs[iL]
-                                      : nullptr);
+                                       new_left,
+                                       mpo->left_operator_exprs.size() != 0
+                                           ? mpo->left_operator_exprs[iL]
+                                           : nullptr);
                 if (mpo->schemer != nullptr &&
                     iL == mpo->schemer->left_trans_site &&
                     mpo->schemer->right_trans_site -
@@ -6850,10 +6913,10 @@ struct MovingEnvironment {
                 frame->activate(0);
                 new_right = Partition::build_right(rmats, right_op_infos);
                 mpo->tf->right_contract(envs[iR - 1]->right,
-                                   envs[iR - 1]->middle.back(), new_right,
-                                   mpo->right_operator_exprs.size() != 0
-                                       ? mpo->right_operator_exprs[iR]
-                                       : nullptr);
+                                        envs[iR - 1]->middle.back(), new_right,
+                                        mpo->right_operator_exprs.size() != 0
+                                            ? mpo->right_operator_exprs[iR]
+                                            : nullptr);
             } else {
                 assert(envs[iR - 1]->right != nullptr);
                 frame->load_data(1, get_right_partition_filename(iR - 1));
@@ -6875,8 +6938,10 @@ struct MovingEnvironment {
                                                         mpo->op);
             frame->activate(0);
             frame->reset(1);
-            shared_ptr<SymbolicColumnVector> hops
-                = mpo->middle_operator_exprs.size() != 0 ? dynamic_pointer_cast<SymbolicColumnVector>(mpo->middle_operator_names[iM])
+            shared_ptr<SymbolicColumnVector> hops =
+                mpo->middle_operator_exprs.size() != 0
+                    ? dynamic_pointer_cast<SymbolicColumnVector>(
+                          mpo->middle_operator_names[iM])
                     : hop_mat;
             shared_ptr<EffectiveHamiltonian> efh =
                 make_shared<EffectiveHamiltonian>(
@@ -6937,6 +7002,21 @@ struct MovingEnvironment {
         shared_ptr<SparseMatrix> dm = make_shared<SparseMatrix>();
         dm->allocate(dm_info);
         OperatorFunctions::trans_product(*psi, *dm, trace_right, noise);
+        return dm;
+    }
+    static shared_ptr<SparseMatrix>
+    density_matrix(SpinLabel opdq, const shared_ptr<SparseMatrix> &psi,
+                   bool trace_right, double noise, const vector<MatrixRef> &mats, const vector<double> &weights) {
+        double factor = psi->factor, *ptr = psi->data;
+        assert(mats.size() == weights.size() - 1);
+        psi->factor = factor * sqrt(weights[0]);
+        shared_ptr<SparseMatrix> dm = density_matrix(opdq, psi, trace_right, noise);
+        for (size_t i = 1; i < weights.size(); i++) {
+            psi->factor = factor * sqrt(weights[i]);
+            psi->data = mats[i - 1].data;
+            OperatorFunctions::trans_product(*psi, *dm, trace_right, 0.0);
+        }
+        psi->data = ptr, psi->factor = factor;
         return dm;
     }
     static double split_density_matrix(const shared_ptr<SparseMatrix> &dm,
@@ -7308,6 +7388,8 @@ struct DMRG {
     }
 };
 
+enum struct TETypes : uint8_t { TangentSpace, RK4 };
+
 struct ImaginaryTE {
     shared_ptr<MovingEnvironment> me;
     vector<uint16_t> bond_dims;
@@ -7315,10 +7397,11 @@ struct ImaginaryTE {
     vector<double> energies;
     vector<double> normsqs;
     bool forward;
+    TETypes mode;
     ImaginaryTE(const shared_ptr<MovingEnvironment> &me,
-                const vector<uint16_t> &bond_dims)
+                const vector<uint16_t> &bond_dims, TETypes mode = TETypes::TangentSpace)
         : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
-          forward(false) {}
+          forward(false), mode(mode) {}
     struct Iteration {
         double energy, normsq, error;
         int nexpo, nexpok;
@@ -7350,11 +7433,29 @@ struct ImaginaryTE {
         }
         shared_ptr<EffectiveHamiltonian> h_eff =
             me->eff_ham(FuseTypes::FuseLR, true);
-        auto pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
-        h_eff->deallocate();
+        tuple<double, double, int, size_t, double> pdi;
         shared_ptr<SparseMatrix> old_wfn = me->ket->tensors[i];
-        shared_ptr<SparseMatrix> dm = MovingEnvironment::density_matrix(
-            h_eff->opdq, h_eff->ket, forward, noise);
+        TETypes effective_mode = mode;
+        if (mode == TETypes::RK4 && ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
+            effective_mode = TETypes::TangentSpace;
+        shared_ptr<SparseMatrix> dm;
+        if (effective_mode == TETypes::TangentSpace) {
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
+            h_eff->deallocate();
+            dm = MovingEnvironment::density_matrix(
+                h_eff->opdq, h_eff->ket, forward, noise);
+        } else if (effective_mode == TETypes::RK4) {
+            const vector<double> weights = { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0 };
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e);
+            pdi = pdp.second;
+            h_eff->deallocate();
+            dm = MovingEnvironment::density_matrix(
+                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights);
+            frame->activate(1);
+            for (int i = pdp.first.size() - 1; i >= 0; i--)
+                pdp.first[i].deallocate();
+            frame->activate(0);
+        }
         double error = MovingEnvironment::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, me->ket->tensors[i],
             me->ket->tensors[i + 1]);
@@ -7382,7 +7483,7 @@ struct ImaginaryTE {
         old_wfn->info->deallocate();
         old_wfn->deallocate();
         int expok = 0;
-        if (forward && i + 1 != me->n_sites - 1) {
+        if (mode == TETypes::TangentSpace && forward && i + 1 != me->n_sites - 1) {
             me->move_to(i + 1);
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian> k_eff =
@@ -7393,7 +7494,7 @@ struct ImaginaryTE {
             me->ket->unload_tensor(i + 1);
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
-        } else if (!forward && i != 0) {
+        } else if (mode == TETypes::TangentSpace && !forward && i != 0) {
             me->move_to(i - 1);
             me->ket->load_tensor(i);
             shared_ptr<EffectiveHamiltonian> k_eff =
@@ -7656,9 +7757,8 @@ struct Expect {
     uint16_t bra_bond_dim, ket_bond_dim;
     vector<vector<pair<shared_ptr<OpExpr>, double>>> expectations;
     bool forward;
-    Expect(const shared_ptr<MovingEnvironment> &me,
-             uint16_t bra_bond_dim,
-             uint16_t ket_bond_dim)
+    Expect(const shared_ptr<MovingEnvironment> &me, uint16_t bra_bond_dim,
+           uint16_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
           forward(false) {
         expectations.resize(me->n_sites - me->dot + 1);
@@ -7668,27 +7768,31 @@ struct Expect {
         double bra_error, ket_error;
         double tmult;
         size_t nflop;
-        Iteration(const vector<pair<shared_ptr<OpExpr>, double>> &expectations, double bra_error, double ket_error, size_t nflop = 0,
+        Iteration(const vector<pair<shared_ptr<OpExpr>, double>> &expectations,
+                  double bra_error, double ket_error, size_t nflop = 0,
                   double tmult = 1.0)
-            : expectations(expectations), bra_error(bra_error), ket_error(ket_error), nflop(nflop), tmult(tmult) {}
+            : expectations(expectations), bra_error(bra_error),
+              ket_error(ket_error), nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             if (r.expectations.size() == 1)
                 os << " " << setw(14) << r.expectations[0].second;
             else
                 os << " Nterms = " << setw(5) << r.expectations.size();
-            os << " Error = " << setw(15)
-               << setprecision(12) << r.bra_error << "/" << setw(15)
-               << setprecision(12) << r.ket_error << " FLOPS = " << scientific
-               << setw(8) << setprecision(2) << (double)r.nflop / r.tmult
-               << " Tmult = " << fixed << setprecision(2) << r.tmult;
+            os << " Error = " << setw(15) << setprecision(12) << r.bra_error
+               << "/" << setw(15) << setprecision(12) << r.ket_error
+               << " FLOPS = " << scientific << setw(8) << setprecision(2)
+               << (double)r.nflop / r.tmult << " Tmult = " << fixed
+               << setprecision(2) << r.tmult;
             return os;
         }
     };
-    Iteration update_two_dot(int i, bool forward, bool propagate, uint16_t bra_bond_dim,
-                             uint16_t ket_bond_dim) {
+    Iteration update_two_dot(int i, bool forward, bool propagate,
+                             uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         frame->activate(0);
-        vector<shared_ptr<MPS>> mpss = me->bra == me->ket ? vector<shared_ptr<MPS>> { me->bra} : vector<shared_ptr<MPS>> {me->bra, me->ket};
+        vector<shared_ptr<MPS>> mpss =
+            me->bra == me->ket ? vector<shared_ptr<MPS>>{me->bra}
+                               : vector<shared_ptr<MPS>>{me->bra, me->ket};
         for (auto &mps : mpss) {
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
                 MovingEnvironment::contract_two_dot(i, mps, mps == me->ket);
@@ -7701,8 +7805,11 @@ struct Expect {
             me->eff_ham(FuseTypes::FuseLR, false);
         auto pdi = h_eff->expect();
         h_eff->deallocate();
-        vector<shared_ptr<SparseMatrix>> old_wfns = me->bra == me->ket ? vector<shared_ptr<SparseMatrix>> {me->bra->tensors[i]} : 
-            vector<shared_ptr<SparseMatrix>> {me->ket->tensors[i],  me->bra->tensors[i]};
+        vector<shared_ptr<SparseMatrix>> old_wfns =
+            me->bra == me->ket
+                ? vector<shared_ptr<SparseMatrix>>{me->bra->tensors[i]}
+                : vector<shared_ptr<SparseMatrix>>{me->ket->tensors[i],
+                                                   me->bra->tensors[i]};
         double bra_error = 0.0, ket_error = 0.0;
         if (propagate) {
             for (auto &mps : mpss) {
@@ -7726,7 +7833,8 @@ struct Expect {
                     mps->canonical_form[i] = 'L';
                     mps->canonical_form[i + 1] = 'C';
                 } else {
-                    info = mps->tensors[i + 1]->info->extract_state_info(forward);
+                    info =
+                        mps->tensors[i + 1]->info->extract_state_info(forward);
                     mps->info->right_dims[i + 1] = *info;
                     mps->info->save_right_dims(i + 1);
                     mps->canonical_form[i] = 'C';
@@ -7746,13 +7854,15 @@ struct Expect {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
         }
-        return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi), get<2>(pdi));
+        return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
+                         get<2>(pdi));
     }
-    Iteration blocking(int i, bool forward, bool propagate, uint16_t bra_bond_dim,
-                       uint16_t ket_bond_dim) {
+    Iteration blocking(int i, bool forward, bool propagate,
+                       uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         me->move_to(i);
         if (me->dot == 2)
-            return update_two_dot(i, forward, propagate, bra_bond_dim, ket_bond_dim);
+            return update_two_dot(i, forward, propagate, bra_bond_dim,
+                                  ket_bond_dim);
         else
             assert(false);
     }
@@ -7787,24 +7897,24 @@ struct Expect {
     double solve(bool propagate, bool forward = true) {
         Timer start, current;
         start.get_time();
-        for (auto &x: expectations)
+        for (auto &x : expectations)
             x.clear();
         if (propagate) {
             cout << "Expectation | Direction = " << setw(8)
-                << (forward ? "forward" : "backward")
-                << " | BRA bond dimension = " << setw(4) << bra_bond_dim
-                << " | KET bond dimension = " << setw(4) << ket_bond_dim
-                << endl;
+                 << (forward ? "forward" : "backward")
+                 << " | BRA bond dimension = " << setw(4) << bra_bond_dim
+                 << " | KET bond dimension = " << setw(4) << ket_bond_dim
+                 << endl;
             sweep(forward, bra_bond_dim, ket_bond_dim);
             forward = !forward;
             current.get_time();
             cout << "Time elapsed = " << setw(10) << setprecision(2)
-                << current.current - start.current << endl;
+                 << current.current - start.current << endl;
             this->forward = forward;
             return 0.0;
         } else {
-            Iteration r =
-                blocking(me->center, forward, false, bra_bond_dim, ket_bond_dim);
+            Iteration r = blocking(me->center, forward, false, bra_bond_dim,
+                                   ket_bond_dim);
             assert(r.expectations.size() != 0);
             return r.expectations[0].second;
         }
@@ -9266,7 +9376,7 @@ struct PDM1MPOQCSU2 : MPO {
             if (m != n_sites - 1)
                 for (uint8_t j = 0; j <= m; j++)
                     (*plop)[1 + j] = c_op[j],
-                    (*plop)[1 + (m + 1) + j] = b_op[j][m];
+                                (*plop)[1 + (m + 1) + j] = b_op[j][m];
             this->left_operator_names.push_back(plop);
             // right operator names
             shared_ptr<SymbolicColumnVector> prop =
@@ -9286,12 +9396,14 @@ struct PDM1MPOQCSU2 : MPO {
                     shared_ptr<OpExpr> expr = sqrt(2.0) * (b_op[j][m] * i_op);
                     (*pmop)[2 * j] = pdm1_op[m][j], (*pmexpr)[2 * j] = expr;
                     if (j != m)
-                        (*pmop)[2 * j + 1] = pdm1_op[j][m], (*pmexpr)[2 * j + 1] = expr;
+                        (*pmop)[2 * j + 1] = pdm1_op[j][m],
+                                        (*pmexpr)[2 * j + 1] = expr;
                 }
                 if (m == n_sites - 2) {
                     uint8_t p = 2 * m + 1;
                     for (uint8_t j = 0; j <= m; j++) {
-                        shared_ptr<OpExpr> expr = sqrt(2.0) * (c_op[j] * d_op[m + 1]);
+                        shared_ptr<OpExpr> expr =
+                            sqrt(2.0) * (c_op[j] * d_op[m + 1]);
                         (*pmop)[p + 2 * j] = pdm1_op[j][m + 1];
                         (*pmop)[p + 2 * j + 1] = pdm1_op[m + 1][j];
                         (*pmexpr)[p + 2 * j] = (*pmexpr)[p + 2 * j + 1] = expr;
@@ -9379,25 +9491,32 @@ struct AncillaMPO : MPO {
             assert(mpo->schemer == nullptr);
             middle_operator_names.resize(n_sites - 1);
             middle_operator_exprs.resize(n_sites - 1);
-            shared_ptr<SymbolicColumnVector> zero_mat = make_shared<SymbolicColumnVector>(1);
-            (*zero_mat)[0] = make_shared<OpElement>(OpNames::Zero, SiteIndex(), SpinLabel());
-            shared_ptr<SymbolicColumnVector> zero_expr = make_shared<SymbolicColumnVector>(1);
+            shared_ptr<SymbolicColumnVector> zero_mat =
+                make_shared<SymbolicColumnVector>(1);
+            (*zero_mat)[0] =
+                make_shared<OpElement>(OpNames::Zero, SiteIndex(), SpinLabel());
+            shared_ptr<SymbolicColumnVector> zero_expr =
+                make_shared<SymbolicColumnVector>(1);
             (*zero_expr)[0] = make_shared<OpExpr>();
             for (int i = 0, j = 0; i < n_physical_sites - 1; i++, j += 2) {
                 middle_operator_names[j] = mpo->middle_operator_names[i];
                 middle_operator_exprs[j] = mpo->middle_operator_exprs[i];
                 if (!npdm) {
-                    middle_operator_names[j + 1] = mpo->middle_operator_names[i];
-                    middle_operator_exprs[j + 1] = mpo->middle_operator_exprs[i];
+                    middle_operator_names[j + 1] =
+                        mpo->middle_operator_names[i];
+                    middle_operator_exprs[j + 1] =
+                        mpo->middle_operator_exprs[i];
                 } else {
                     middle_operator_names[j + 1] = zero_mat;
                     middle_operator_exprs[j + 1] = zero_expr;
                 }
             }
             if (mpo->op != nullptr && mpo->op->name != OpNames::Zero) {
-                shared_ptr<SymbolicColumnVector> hop_mat = make_shared<SymbolicColumnVector>(1);
+                shared_ptr<SymbolicColumnVector> hop_mat =
+                    make_shared<SymbolicColumnVector>(1);
                 (*hop_mat)[0] = mpo->op;
-                shared_ptr<SymbolicColumnVector> hop_expr = make_shared<SymbolicColumnVector>(1);
+                shared_ptr<SymbolicColumnVector> hop_expr =
+                    make_shared<SymbolicColumnVector>(1);
                 (*hop_expr)[0] = mpo->op * i_op;
                 middle_operator_names[n_sites - 2] = hop_mat;
                 middle_operator_exprs[n_sites - 2] = hop_expr;
@@ -9417,12 +9536,14 @@ struct AncillaMPO : MPO {
                     make_shared<SymbolicMatrix>(rshape, rshape);
                 for (int k = 0; k < rshape; k++)
                     (*tensors[j + 1]->lmat)[{k, k}] = i_op;
-                if (mpo->tensors[i]->lmat != mpo->tensors[i]->rmat && !(mpo->schemer != nullptr &&
-                    mpo->schemer->right_trans_site - mpo->schemer->left_trans_site ==
-                        2)) {
+                if (mpo->tensors[i]->lmat != mpo->tensors[i]->rmat &&
+                    !(mpo->schemer != nullptr &&
+                      mpo->schemer->right_trans_site -
+                              mpo->schemer->left_trans_site ==
+                          2)) {
                     int lshape = mpo->tensors[i + 1]->rmat->m;
                     tensors[j + 1]->rmat =
-                    make_shared<SymbolicMatrix>(lshape, lshape);
+                        make_shared<SymbolicMatrix>(lshape, lshape);
                     for (int k = 0; k < lshape; k++)
                         (*tensors[j + 1]->rmat)[{k, k}] = i_op;
                 }

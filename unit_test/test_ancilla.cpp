@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestAncilla : public ::testing::Test {
   protected:
-    size_t isize = 1L << 26;
-    size_t dsize = 1L << 30;
+    size_t isize = 1L << 28;
+    size_t dsize = 1L << 32;
     void SetUp() override {
         Random::rand_seed(0);
         frame = new DataFrame(isize, dsize, "nodex");
@@ -33,8 +33,8 @@ TEST_F(TestAncilla, Test) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
     bool su2 = !fcidump->uhf;
-    uint16_t bond_dim = 200;
-    double beta = 0.02;
+    uint16_t bond_dim = 1000;
+    double beta = 0.0025;
     Hamiltonian hamil(vaccum, target, n_physical_sites, su2, fcidump, orbsym);
     hamil.opf->seq->mode = SeqTypes::Simple;
 
@@ -132,8 +132,8 @@ TEST_F(TestAncilla, Test) {
 
     // Imaginary TE
     vector<uint16_t> bdims = {bond_dim};
-    shared_ptr<ImaginaryTE> te = make_shared<ImaginaryTE>(me, bdims);
-    te->solve(2, beta / 2, cps->forward);
+    shared_ptr<ImaginaryTE> te = make_shared<ImaginaryTE>(me, bdims, TETypes::RK4);
+    te->solve(10, beta / 2, cps->forward);
 
     // 1PDM ME
     shared_ptr<MovingEnvironment> pme = make_shared<MovingEnvironment>(pmpo, mps, mps, "1PDM");
