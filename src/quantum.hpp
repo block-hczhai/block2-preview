@@ -6821,7 +6821,7 @@ struct MovingEnvironment {
     string get_left_partition_filename(int i) const {
         stringstream ss;
         ss << frame->save_dir << "/" << frame->prefix << ".PART." << tag
-           << ".LEFT" << Parsing::to_string(i);
+           << ".LEFT." << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i) const {

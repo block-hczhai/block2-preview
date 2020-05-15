@@ -26,7 +26,7 @@ class FTDMRG:
     Finite-temperature DMRG for molecules.
     """
 
-    def __init__(self, su2=True, scratch='./nodex', memory=4 * 1E9, omp_threads=8, verbose=2):
+    def __init__(self, su2=True, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2):
         
         assert su2
         Random.rand_seed(0)
@@ -187,12 +187,18 @@ class FTDMRG:
         mps_info.deallocate_mutable()
 
         # MPO
+        tx = time.perf_counter()
         mpo = MPOQCSU2(self.hamil, QCTypes.Conventional)
         mpo = SimplifiedMPO(AncillaMPO(mpo), RuleQCSU2())
+        if self.verbose >= 2:
+            print('MPO time = ', time.perf_counter() - tx)
 
         # TE
         me = MovingEnvironment(mpo, mps, mps, "TE")
-        me.init_environments()
+        tx = time.perf_counter()
+        me.init_environments(self.verbose >= 3)
+        if self.verbose >= 2:
+            print('TE INIT time = ', time.perf_counter() - tx)
         te = ImaginaryTE(me, VectorUInt16(bond_dims), TETypes.RK4)
         n_steps = int(round(beta / beta_step) + 0.1)
         te.solve(n_steps, beta_step, mps.center == 0)
@@ -255,9 +261,9 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 300
-    beta = 0.01
-    beta_step = 0.0002
+    bond_dim = 500
+    beta = 1.0
+    beta_step = 0.1
     mu = -1.0
     bond_dims = [bond_dim]
     scratch = './nodex'
@@ -270,7 +276,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 8
+    N = 50
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom = [['H', (i * R, 0, 0)] for i in range(N)],
@@ -313,7 +319,7 @@ if __name__ == "__main__":
     ecore = mol.energy_nuc()
     ecore = 0.0
 
-    ft = FTDMRG(scratch=scratch)
+    ft = FTDMRG(scratch=scratch, memory=20E9, verbose=3)
     ft.init_hamiltonian_su2(pg, n_sites=n_mo, twos=0, isym=1, orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     ft.generate_initial_mps(bond_dim)
     ft.imaginary_time_evolution(beta, beta_step, mu, bond_dims)
