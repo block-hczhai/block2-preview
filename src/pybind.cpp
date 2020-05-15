@@ -105,6 +105,11 @@ PYBIND11_MODULE(block2, m) {
         delete frame;
     });
 
+    m.def("set_mkl_num_threads", [](int n) {
+        mkl_set_num_threads(n);
+        mkl_set_dynamic(0);
+    });
+
     py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
         .def(py::init<>())
         .def_readwrite("size", &StackAllocator<uint32_t>::size)
@@ -181,7 +186,8 @@ PYBIND11_MODULE(block2, m) {
                                    py::format_descriptor<double>::format(), 2,
                                    {self->m, self->n},
                                    {sizeof(double) * self->n, sizeof(double)});
-        });
+        })
+        .def("deallocate", &MatrixRef::deallocate);
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
         .def_static(
@@ -201,6 +207,13 @@ PYBIND11_MODULE(block2, m) {
     py::class_<FCIDUMP, shared_ptr<FCIDUMP>>(m, "FCIDUMP")
         .def(py::init<>())
         .def("read", &FCIDUMP::read)
+        .def("initialize_su2",
+             [](FCIDUMP *self, uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                uint16_t isym, double e, const py::array_t<double> &t,
+                const py::array_t<double> &v) {
+                 self->initialize_su2(n_sites, n_elec, twos, isym, e, t.data(),
+                                      t.size(), v.data(), v.size());
+             })
         .def("deallocate", &FCIDUMP::deallocate)
         .def_property_readonly("orb_sym", &FCIDUMP::orb_sym)
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
@@ -562,6 +575,7 @@ PYBIND11_MODULE(block2, m) {
         .def("set_thermal_limit", &AncillaMPSInfo::set_thermal_limit);
 
     py::class_<MPS, shared_ptr<MPS>>(m, "MPS")
+        .def(py::init<const shared_ptr<MPSInfo> &>())
         .def(py::init<int, int, int>())
         .def_readwrite("n_sites", &MPS::n_sites)
         .def_readwrite("center", &MPS::center)
@@ -574,6 +588,9 @@ PYBIND11_MODULE(block2, m) {
         .def("canonicalize", &MPS::canonicalize)
         .def("random_canonicalize", &MPS::random_canonicalize)
         .def("get_filename", &MPS::get_filename)
+        .def("load_data", &MPS::load_data)
+        .def("save_data", &MPS::save_data)
+        .def("load_mutable", &MPS::load_mutable)
         .def("save_mutable", &MPS::save_mutable)
         .def("save_tensor", &MPS::save_tensor)
         .def("load_tensor", &MPS::load_tensor)
@@ -807,7 +824,7 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("tag", &MovingEnvironment::tag)
         .def("left_contract_rotate", &MovingEnvironment::left_contract_rotate)
         .def("right_contract_rotate", &MovingEnvironment::right_contract_rotate)
-        .def("init_environments", &MovingEnvironment::init_environments)
+        .def("init_environments", &MovingEnvironment::init_environments, py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment::prepare)
         .def("move_to", &MovingEnvironment::move_to)
         .def("eff_ham", &MovingEnvironment::eff_ham, py::arg("fuse_type"),
@@ -842,6 +859,7 @@ PYBIND11_MODULE(block2, m) {
         .def(py::init<SpinLabel, SpinLabel, int, bool,
                       const shared_ptr<FCIDUMP> &, const vector<uint8_t> &>())
         .def_static("swap_d2h", &Hamiltonian::swap_d2h)
+        .def_readwrite("fcidump", &Hamiltonian::fcidump)
         .def_readwrite("n_syms", &Hamiltonian::n_syms)
         .def_readwrite("opf", &Hamiltonian::opf)
         .def_readwrite("mu", &Hamiltonian::mu)

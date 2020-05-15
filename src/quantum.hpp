@@ -412,6 +412,29 @@ struct FCIDUMP {
     size_t total_memory;
     bool uhf;
     FCIDUMP() : e(0.0), uhf(false), total_memory(0) {}
+    void initialize_su2(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                        uint16_t isym, double e, const double *t, size_t lt,
+                        const double *v, size_t lv) {
+        params.clear();
+        ts.clear();
+        vs.clear();
+        vabs.clear();
+        this->e = e;
+        params["norb"] = Parsing::to_string(n_sites);
+        params["nelec"] = Parsing::to_string(n_elec);
+        params["ms2"] = Parsing::to_string(twos);
+        params["isym"] = Parsing::to_string(isym);
+        params["iuhf"] = "0";
+        ts.push_back(TInt(n_sites));
+        vs.push_back(V8Int(n_sites));
+        total_memory = ts[0].size() + vs[0].size();
+        data = dalloc->allocate(total_memory);
+        ts[0].data = data;
+        vs[0].data = data + ts[0].size();
+        assert(lt == ts[0].size() && lv == vs[0].size());
+        memcpy(ts[0].data, t, sizeof(double) * lt);
+        memcpy(vs[0].data, v, sizeof(double) * lv);
+    }
     void read(const string &filename) {
         params.clear();
         ts.clear();
@@ -5472,8 +5495,8 @@ struct MPSInfo {
             left_dims_fci[i].collect();
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i].collect();
-        left_dims = nullptr;
-        right_dims = nullptr;
+        left_dims = new StateInfo[n_sites + 1];
+        right_dims = new StateInfo[n_sites + 1];
     }
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
@@ -5551,8 +5574,6 @@ struct MPSInfo {
             right_dims_fci_t[i] = right_dims_fci[i].deep_copy();
         }
         // left and right block dims
-        left_dims = new StateInfo[n_sites + 1];
-        right_dims = new StateInfo[n_sites + 1];
         left_dims[0] = StateInfo(vaccum);
         for (int i = 1; i <= n_sites; i++) {
             left_dims[i].allocate(left_probs[i].n);
@@ -5633,7 +5654,6 @@ struct MPSInfo {
     }
     void set_bond_dimension(uint16_t m) {
         bond_dim = m;
-        left_dims = new StateInfo[n_sites + 1];
         left_dims[0] = StateInfo(vaccum);
         for (int i = 0; i < n_sites; i++)
             left_dims[i + 1] = left_dims_fci[i + 1].deep_copy();
@@ -5651,7 +5671,6 @@ struct MPSInfo {
                 }
                 left_dims[i + 1].n_states_total = new_total;
             }
-        right_dims = new StateInfo[n_sites + 1];
         right_dims[n_sites] = StateInfo(vaccum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims[i] = right_dims_fci[i].deep_copy();
@@ -5743,10 +5762,8 @@ struct MPSInfo {
             left_dims_fci[i].deallocate();
     }
     ~MPSInfo() {
-        if (left_dims != nullptr) {
-            delete[] left_dims;
-            delete[] right_dims;
-        }
+        delete[] left_dims;
+        delete[] right_dims;
         delete[] left_dims_fci;
         delete[] right_dims_fci;
     }
@@ -5801,6 +5818,8 @@ struct MPS {
     shared_ptr<MPSInfo> info;
     vector<shared_ptr<SparseMatrix>> tensors;
     string canonical_form;
+    MPS(const shared_ptr<MPSInfo> &info)
+        : n_sites(0), center(0), dot(0), info(info) {}
     MPS(int n_sites, int center, int dot)
         : n_sites(n_sites), center(center), dot(dot) {
         canonical_form.resize(n_sites);
@@ -6010,6 +6029,38 @@ struct MPS {
         ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag
            << "." << Parsing::to_string(i);
         return ss.str();
+    }
+    void load_data() {
+        ifstream ifs(get_filename(-1).c_str(), ios::binary);
+        ifs.read((char *)&n_sites, sizeof(n_sites));
+        ifs.read((char *)&center, sizeof(center));
+        ifs.read((char *)&dot, sizeof(dot));
+        canonical_form = string(n_sites, ' ');
+        ifs.read((char *)&canonical_form[0], sizeof(char) * n_sites);
+        vector<uint8_t> bs(n_sites);
+        ifs.read((char *)&bs[0], sizeof(uint8_t) * n_sites);
+        ifs.close();
+        tensors.resize(n_sites, nullptr);
+        for (int i = 0; i < n_sites; i++)
+            if (bs[i])
+                tensors[i] = make_shared<SparseMatrix>();
+    }
+    void save_data() const {
+        ofstream ofs(get_filename(-1).c_str(), ios::binary);
+        ofs.write((char *)&n_sites, sizeof(n_sites));
+        ofs.write((char *)&center, sizeof(center));
+        ofs.write((char *)&dot, sizeof(dot));
+        ofs.write((char *)&canonical_form[0], sizeof(char) * n_sites);
+        vector<uint8_t> bs(n_sites);
+        for (int i = 0; i < n_sites; i++)
+            bs[i] = uint8_t(tensors[i] != nullptr);
+        ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
+        ofs.close();
+    }
+    void load_mutable() const {
+        for (int i = 0; i < n_sites; i++)
+            if (tensors[i] != nullptr)
+                tensors[i]->load_data(get_filename(i), true);
     }
     void save_mutable() const {
         for (int i = 0; i < n_sites; i++)
@@ -7579,10 +7630,10 @@ struct ImaginaryTE {
         for (int iw = 0; iw < n_sweeps; iw++) {
             cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
                  << (forward ? "forward" : "backward")
-                 << " | Beta = " << setw(10) << setprecision(5) << beta
-                 << " | Bond dimension = " << setw(4) << bond_dims[iw]
-                 << " | Noise = " << scientific << setw(9) << setprecision(2)
-                 << noises[iw] << endl;
+                 << " | Beta = " << setw(10) << setprecision(5)
+                 << beta * (iw + 1) << " | Bond dimension = " << setw(4)
+                 << bond_dims[iw] << " | Noise = " << scientific << setw(9)
+                 << setprecision(2) << noises[iw] << endl;
             auto r = sweep(forward, beta, bond_dims[iw], noises[iw]);
             energies.push_back(r.first);
             normsqs.push_back(r.second);
@@ -7935,7 +7986,8 @@ struct Expect {
         r.clear();
         for (auto &v : expectations)
             for (auto &x : v) {
-                shared_ptr<OpElement> op = dynamic_pointer_cast<OpElement>(x.first);
+                shared_ptr<OpElement> op =
+                    dynamic_pointer_cast<OpElement>(x.first);
                 assert(op->name == OpNames::PDM1);
                 r(op->site_index[0], op->site_index[1]) = x.second;
             }
@@ -8397,7 +8449,9 @@ struct Hamiltonian {
     double v(uint8_t i, uint8_t j, uint8_t k, uint8_t l) const {
         return fcidump->vs[0](i, j, k, l);
     }
-    double t(uint8_t i, uint8_t j) const { return fcidump->ts[0](i, j) - mu; }
+    double t(uint8_t i, uint8_t j) const {
+        return i == j ? fcidump->ts[0](i, i) - mu : fcidump->ts[0](i, j);
+    }
     double e() const { return fcidump->e; }
 };
 
