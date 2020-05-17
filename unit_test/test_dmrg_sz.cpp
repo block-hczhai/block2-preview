@@ -22,10 +22,10 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    // string occ_filename = "data/CR2.SVP.OCC";
-    // occs = read_occ(occ_filename);
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    string occ_filename = "data/CR2.SVP.OCC";
+    occs = read_occ(occ_filename);
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
@@ -46,7 +46,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(hamil, QCTypes::NC);
+    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -136,11 +136,11 @@ TEST_F(TestDMRG, Test) {
     // abort();
 
     // DMRG
-    // vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-    //                           500, 500, 750, 750, 750, 750, 750};
-    // vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    vector<uint16_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6};
+    vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+                              500, 500, 750, 750, 750, 750, 750};
+    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    // vector<uint16_t> bdims = {bond_dim};
+    // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->solve(30, true);
 

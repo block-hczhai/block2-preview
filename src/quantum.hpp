@@ -88,8 +88,18 @@ template <typename T> struct StackAllocator {
     }
 };
 
-extern StackAllocator<uint32_t> *ialloc;
-extern StackAllocator<double> *dalloc;
+inline StackAllocator<uint32_t>*& _ialloc() {
+    static StackAllocator<uint32_t> *ialloc;
+    return ialloc;
+}
+
+inline StackAllocator<double>*& _dalloc() {
+    static StackAllocator<double> *dalloc;
+    return dalloc;
+}
+
+#define ialloc (_ialloc())
+#define dalloc (_dalloc())
 
 struct Timer {
     double current;
@@ -104,26 +114,29 @@ struct Timer {
 };
 
 struct Random {
-    static mt19937 rng;
+    static mt19937 &rng() {
+        static mt19937 _rng;
+        return _rng;
+    }
     static void rand_seed(unsigned i = 0) {
-        rng = mt19937(
+        rng() = mt19937(
             i ? i : chrono::steady_clock::now().time_since_epoch().count());
     }
     // return a integer in [a, b)
     static int rand_int(int a, int b) {
         assert(b > a);
-        return uniform_int_distribution<int>(a, b - 1)(rng);
+        return uniform_int_distribution<int>(a, b - 1)(rng());
     }
     // return a double in [a, b)
     static double rand_double(double a = 0, double b = 1) {
         assert(b > a);
-        return uniform_real_distribution<double>(a, b)(rng);
+        return uniform_real_distribution<double>(a, b)(rng());
     }
     static void fill_rand_double(double *data, size_t n, double a = 0,
                                  double b = 1) {
         uniform_real_distribution<double> distr(a, b);
         for (size_t i = 0; i < n; i++)
-            data[i] = distr(rng);
+            data[i] = distr(rng());
     }
 };
 
@@ -269,7 +282,12 @@ struct DataFrame {
     }
 };
 
-extern DataFrame *frame;
+inline DataFrame *& _frame() {
+    static DataFrame *frame;
+    return frame;
+}
+
+#define frame (_frame())
 
 struct MatrixRef {
     int m, n;
@@ -10110,7 +10128,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
                                     TINY)
                                     exprs.push_back(
-                                        hamil.v(s & 1, s >> 1, j, h, g, k) *
+                                        -hamil.v(s & 1, s >> 1, j, h, g, k) *
                                         b_op[g][h][((s & 1) << 1) | (s >> 1)]);
                                 if ((s & 1) == (s >> 1))
                                     for (uint8_t sp = 0; sp < 2; sp++)
@@ -10183,7 +10201,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
                                     TINY)
                                     exprs.push_back(
-                                        hamil.v(s & 1, s >> 1, j, h, g, k) *
+                                        -hamil.v(s & 1, s >> 1, j, h, g, k) *
                                         b_op[g][h][((s & 1) << 1) | (s >> 1)]);
                                 if ((s & 1) == (s >> 1))
                                     for (uint8_t sp = 0; sp < 2; sp++)
