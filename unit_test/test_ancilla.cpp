@@ -26,20 +26,20 @@ TEST_F(TestAncilla, Test) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              Hamiltonian::swap_d2h);
-    SpinLabel vaccum(0);
-    SpinLabel target(fcidump->n_sites() * 2, fcidump->twos(),
-                     Hamiltonian::swap_d2h(fcidump->isym()));
+              PointGroup::swap_d2h);
+    SU2 vaccum(0);
+    SU2 target(fcidump->n_sites() * 2, fcidump->twos(),
+                     PointGroup::swap_d2h(fcidump->isym()));
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
     bool su2 = !fcidump->uhf;
-    uint16_t bond_dim = 1000;
+    uint16_t bond_dim = 500;
     double beta = 0.0025;
-    Hamiltonian hamil(vaccum, target, n_physical_sites, su2, fcidump, orbsym);
+    HamiltonianQC<SU2> hamil(vaccum, target, n_physical_sites, orbsym, fcidump);
     hamil.opf->seq->mode = SeqTypes::Simple;
 
     // Ancilla MPSInfo (thermal)
-    shared_ptr<AncillaMPSInfo> mps_info_thermal = make_shared<AncillaMPSInfo>(
+    shared_ptr<AncillaMPSInfo<SU2>> mps_info_thermal = make_shared<AncillaMPSInfo<SU2>>(
         n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
@@ -47,7 +47,7 @@ TEST_F(TestAncilla, Test) {
     mps_info_thermal->deallocate_mutable();
 
     // Ancilla MPSInfo (initial)
-    shared_ptr<AncillaMPSInfo> mps_info = make_shared<AncillaMPSInfo>(
+    shared_ptr<AncillaMPSInfo<SU2>> mps_info = make_shared<AncillaMPSInfo<SU2>>(
         n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "BRA";
@@ -65,13 +65,13 @@ TEST_F(TestAncilla, Test) {
 
     Random::rand_seed(1969);
     // Ancilla MPS (thermal)
-    shared_ptr<MPS> mps_thermal = make_shared<MPS>(n_sites, n_sites - 2, 2);
+    shared_ptr<MPS<SU2>> mps_thermal = make_shared<MPS<SU2>>(n_sites, n_sites - 2, 2);
     mps_info_thermal->load_mutable();
     mps_thermal->initialize(mps_info_thermal);
     mps_thermal->fill_thermal_limit();
 
     // Ancilla MPS (initial)
-    shared_ptr<MPS> mps = make_shared<MPS>(n_sites, n_sites - 2, 2);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(n_sites, n_sites - 2, 2);
     mps_info->load_mutable();
     mps->initialize(mps_info);
     mps->random_canonicalize();
@@ -89,58 +89,58 @@ TEST_F(TestAncilla, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     hamil.mu = 0.0;
-    shared_ptr<MPO> mpo = make_shared<MPOQCSU2>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // Ancilla MPO construction
     cout << "Ancilla MPO start" << endl;
-    mpo = make_shared<AncillaMPO>(mpo);
+    mpo = make_shared<AncillaMPO<SU2>>(mpo);
     cout << "Ancilla MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO>(mpo, make_shared<RuleQCSU2>());
+    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>());
     // mpo = make_shared<SimplifiedMPO>(mpo, make_shared<Rule>());
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
     // Identity MPO
-    shared_ptr<MPO> impo = make_shared<IdentityMPO>(hamil);
-    impo = make_shared<AncillaMPO>(impo);
-    impo = make_shared<SimplifiedMPO>(impo, make_shared<Rule>());
+    shared_ptr<MPO<SU2>> impo = make_shared<IdentityMPO<SU2>>(hamil);
+    impo = make_shared<AncillaMPO<SU2>>(impo);
+    impo = make_shared<SimplifiedMPO<SU2>>(impo, make_shared<Rule<SU2>>());
 
     // 1PDM MPO
-    shared_ptr<MPO> pmpo = make_shared<PDM1MPOQCSU2>(hamil);
-    pmpo = make_shared<AncillaMPO>(pmpo, true);
-    pmpo = make_shared<SimplifiedMPO>(pmpo, make_shared<Rule>());
+    shared_ptr<MPO<SU2>> pmpo = make_shared<PDM1MPOQC<SU2>>(hamil);
+    pmpo = make_shared<AncillaMPO<SU2>>(pmpo, true);
+    pmpo = make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<Rule<SU2>>());
 
     // Identity ME
-    shared_ptr<MovingEnvironment> ime =
-        make_shared<MovingEnvironment>(impo, mps, mps_thermal, "COMPRESS");
+    shared_ptr<MovingEnvironment<SU2>> ime =
+        make_shared<MovingEnvironment<SU2>>(impo, mps, mps_thermal, "COMPRESS");
     ime->init_environments();
 
     // Compress
     vector<uint16_t> bra_bdims = {bond_dim}, ket_bdims = {10};
     vector<double> noises = {0};
-    shared_ptr<Compress> cps = make_shared<Compress>(ime, bra_bdims, ket_bdims, noises);
+    shared_ptr<Compress<SU2>> cps = make_shared<Compress<SU2>>(ime, bra_bdims, ket_bdims, noises);
     cps->solve(30, false);
 
     // TE ME
-    shared_ptr<MovingEnvironment> me = make_shared<MovingEnvironment>(mpo, mps, mps, "TE");
+    shared_ptr<MovingEnvironment<SU2>> me = make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "TE");
     me->init_environments();
 
     // Imaginary TE
     vector<uint16_t> bdims = {bond_dim};
-    shared_ptr<ImaginaryTE> te = make_shared<ImaginaryTE>(me, bdims, TETypes::RK4);
+    shared_ptr<ImaginaryTE<SU2>> te = make_shared<ImaginaryTE<SU2>>(me, bdims, TETypes::RK4);
     te->solve(10, beta / 2, cps->forward);
 
     // 1PDM ME
-    shared_ptr<MovingEnvironment> pme = make_shared<MovingEnvironment>(pmpo, mps, mps, "1PDM");
+    shared_ptr<MovingEnvironment<SU2>> pme = make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
     pme->init_environments();
 
     // 1PDM
-    shared_ptr<Expect> expect = make_shared<Expect>(pme, bond_dim, bond_dim);
+    shared_ptr<Expect<SU2>> expect = make_shared<Expect<SU2>>(pme, bond_dim, bond_dim);
     expect->solve(true, te->forward);
 
     // deallocate persistent stack memory

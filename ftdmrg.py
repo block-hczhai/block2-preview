@@ -6,7 +6,7 @@
 #
 
 import sys
-sys.path[:0] = ["./build"]
+sys.path[:0] = ["../block2-old/build"]
 
 import numpy as np
 import time
@@ -261,12 +261,12 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 500
+    bond_dim = 1000
     beta = 1.0
-    beta_step = 0.1
+    beta_step = 0.25
     mu = -1.0
     bond_dims = [bond_dim]
-    scratch = './nodex'
+    scratch = '/central/scratch/hczhai/hchain'
 
     import os
     if not os.path.isdir(scratch):
@@ -276,7 +276,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 50
+    N = 24
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom = [['H', (i * R, 0, 0)] for i in range(N)],

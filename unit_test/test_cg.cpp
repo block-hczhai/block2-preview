@@ -10,11 +10,11 @@ class TestCG : public ::testing::Test {
     size_t dsize = 1E7;
     static const int max_twoj = 300;
     static const int n_tests = 1000;
-    CG cg;
+    CG<SU2> cg;
     double factorial[max_twoj];
     void SetUp() override {
         Random::rand_seed(0);
-        cg = CG(max_twoj, 15);
+        cg = CG<SU2>(max_twoj, 15);
         ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
         dalloc = new StackAllocator<double>(new double[dsize], dsize);
         cg.initialize();

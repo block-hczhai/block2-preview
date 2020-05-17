@@ -32,43 +32,43 @@ int main(int argc, char *argv[]) {
     dalloc = new StackAllocator<double>(new double[dsize], dsize);
     
     // system info
-    SpinLabel vaccum;
-    SpinLabel target(n_elec, 0, 0);
+    SU2 vaccum;
+    SU2 target(n_elec, 0, 0);
     int *orb_sym = new int[n_orb];
     for (int i = 0; i < n_orb; i++)
         orb_sym[i] = swap_d2h[cr2_orbsym[i]];
     
-    StateInfo *basis = new StateInfo[n_orb];
-    StateInfo *left_dims_fci = new StateInfo[n_orb + 1];
-    StateInfo *right_dims_fci = new StateInfo[n_orb + 1];
+    StateInfo<SU2> *basis = new StateInfo<SU2>[n_orb];
+    StateInfo<SU2> *left_dims_fci = new StateInfo<SU2>[n_orb + 1];
+    StateInfo<SU2> *right_dims_fci = new StateInfo<SU2>[n_orb + 1];
     
     // basis states
     for (int i = 0; i < n_orb; i++) {
         basis[i].allocate(3);
         basis[i].quanta[0] = vaccum;
-        basis[i].quanta[2] = SpinLabel(1, 1, orb_sym[i]);
-        basis[i].quanta[1] = SpinLabel(2, 0, 0);
+        basis[i].quanta[2] = SU2(1, 1, orb_sym[i]);
+        basis[i].quanta[1] = SU2(2, 0, 0);
         basis[i].n_states[0] = basis[i].n_states[1] = basis[i].n_states[2] = 1;
         basis[i].sort_states();
     }
     
     // left dims
-    left_dims_fci[0] = StateInfo(vaccum);
+    left_dims_fci[0] = StateInfo<SU2>(vaccum);
     cout << left_dims_fci[0] << endl;
     cout << *ialloc << endl;
     for (int i = 0; i < n_orb; i++) {
-        left_dims_fci[i + 1] = StateInfo::tensor_product(left_dims_fci[i], basis[i], target);
+        left_dims_fci[i + 1] = StateInfo<SU2>::tensor_product(left_dims_fci[i], basis[i], target);
         cout << i << " " << left_dims_fci[i + 1].n_states_total << endl;
     }
 
     cout << *ialloc << endl;
 
     // right dims
-    right_dims_fci[n_orb] = StateInfo(vaccum);
+    right_dims_fci[n_orb] = StateInfo<SU2>(vaccum);
     cout << right_dims_fci[n_orb] << endl;
     cout << *ialloc << endl;
     for (int i = n_orb - 1; i >= 0; i--) {
-        right_dims_fci[i] = StateInfo::tensor_product(basis[i], right_dims_fci[i + 1], target);
+        right_dims_fci[i] = StateInfo<SU2>::tensor_product(basis[i], right_dims_fci[i + 1], target);
         cout << i << " " << right_dims_fci[i].n_states_total << endl;
     }
     
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     
     // filter
     for (int i = 0; i <= n_orb; i++) {
-        StateInfo::filter(left_dims_fci[i], right_dims_fci[i], target);
+        StateInfo<SU2>::filter(left_dims_fci[i], right_dims_fci[i], target);
         cout << right_dims_fci[i] << endl;
     }
     
