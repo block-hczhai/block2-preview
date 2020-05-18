@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
@@ -12,18 +12,32 @@ PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement>>);
-PYBIND11_MAKE_OPAQUE(vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic>>);
-PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition>>);
-PYBIND11_MAKE_OPAQUE(
-    map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>);
+// SZ
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic<SZ>>>);
+PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ>>>);
+PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
+                         op_expr_less<SZ>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic<SU2>>>);
+PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SU2>>>);
+PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
+                         op_expr_less<SU2>>);
 
 template <typename T> struct Array {
     T *data;
@@ -71,9 +85,814 @@ py::class_<Array<T>, shared_ptr<Array<T>>> bind_array(py::module &m,
             py::keep_alive<0, 1>());
 }
 
+template <typename S>
+auto bind_cg(py::module &m) -> decltype(typename S::is_sz_t()) {
+    py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def("initialize", &CG<S>::initialize)
+        .def("deallocate", &CG<S>::deallocate)
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
+             py::arg("tr"));
+}
+
+template <typename S>
+auto bind_cg(py::module &m) -> decltype(typename S::is_su2_t()) {
+    py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def("initialize", &CG<S>::initialize)
+        .def("deallocate", &CG<S>::deallocate)
+        .def_static("triangle", &CG<S>::triangle, py::arg("tja"),
+                    py::arg("tjb"), py::arg("tjc"))
+        .def("sqrt_delta", &CG<S>::sqrt_delta, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"))
+        .def("cg", &CG<S>::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
+             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_3j", &CG<S>::wigner_3j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
+             py::arg("tr"));
+}
+
+template <typename S> void bind_class(py::module &m, const string &name) {
+
+    bind_array<StateInfo<S>>(m, "ArrayStateInfo");
+    bind_array<S>(m, ("Array" + name).c_str());
+    bind_array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
+        m, "ArrayVectorPLMatInfo");
+
+    py::class_<OpExpr<S>, shared_ptr<OpExpr<S>>>(m, "OpExpr")
+        .def(py::init<>())
+        .def("get_type", &OpExpr<S>::get_type)
+        .def(py::self == py::self)
+        .def("__repr__", &to_str<S>);
+
+    py::class_<OpElement<S>, shared_ptr<OpElement<S>>, OpExpr<S>>(m,
+                                                                  "OpElement")
+        .def(py::init<OpNames, SiteIndex, S>())
+        .def(py::init<OpNames, SiteIndex, S, double>())
+        .def_readwrite("name", &OpElement<S>::name)
+        .def_readwrite("site_index", &OpElement<S>::site_index)
+        .def_readwrite("factor", &OpElement<S>::factor)
+        .def_readwrite("q_label", &OpElement<S>::q_label)
+        .def("abs", &OpElement<S>::abs)
+        .def("__mul__", &OpElement<S>::operator*)
+        .def(py::self == py::self)
+        .def(py::self < py::self)
+        .def("__hash__", &OpElement<S>::hash);
+
+    py::class_<OpElementRef<S>, shared_ptr<OpElementRef<S>>, OpExpr<S>>(
+        m, "OpElementRef")
+        .def(py::init<const shared_ptr<OpElement<S>> &, int8_t, int8_t>())
+        .def_readwrite("op", &OpElementRef<S>::op)
+        .def_readwrite("factor", &OpElementRef<S>::factor)
+        .def_readwrite("trans", &OpElementRef<S>::trans);
+
+    py::class_<OpString<S>, shared_ptr<OpString<S>>, OpExpr<S>>(m, "OpString")
+        .def(py::init<const shared_ptr<OpElement<S>> &, double>())
+        .def(py::init<const shared_ptr<OpElement<S>> &, double, uint8_t>())
+        .def(py::init<const shared_ptr<OpElement<S>> &,
+                      const shared_ptr<OpElement<S>> &, double>())
+        .def(py::init<const shared_ptr<OpElement<S>> &,
+                      const shared_ptr<OpElement<S>> &, double, uint8_t>())
+        .def_readwrite("factor", &OpString<S>::factor)
+        .def_readwrite("conj", &OpString<S>::conj)
+        .def_readwrite("a", &OpString<S>::a)
+        .def_readwrite("b", &OpString<S>::b);
+
+    py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpString<S>>(m,
+                                                                    "OpSumProd")
+        .def(py::init<const shared_ptr<OpElement<S>> &,
+                      const vector<shared_ptr<OpElement<S>>> &,
+                      const vector<bool> &, double, uint8_t>())
+        .def(py::init<const shared_ptr<OpElement<S>> &,
+                      const vector<shared_ptr<OpElement<S>>> &,
+                      const vector<bool> &, double>())
+        .def(py::init<const vector<shared_ptr<OpElement<S>>> &,
+                      const shared_ptr<OpElement<S>> &, const vector<bool> &,
+                      double, uint8_t>())
+        .def(py::init<const vector<shared_ptr<OpElement<S>>> &,
+                      const shared_ptr<OpElement<S>> &, const vector<bool> &,
+                      double>())
+        .def_readwrite("ops", &OpSumProd<S>::ops)
+        .def_readwrite("conjs", &OpSumProd<S>::conjs);
+
+    py::class_<OpSum<S>, shared_ptr<OpSum<S>>, OpExpr<S>>(m, "OpSum")
+        .def(py::init<const vector<shared_ptr<OpString<S>>> &>())
+        .def_readwrite("strings", &OpSum<S>::strings);
+
+    py::bind_vector<vector<shared_ptr<OpExpr<S>>>>(m, "VectorOpExpr");
+    py::bind_vector<vector<shared_ptr<OpElement<S>>>>(m, "VectorOpElement");
+    py::bind_vector<vector<shared_ptr<OpString<S>>>>(m, "VectorOpString");
+
+    py::class_<Symbolic<S>, shared_ptr<Symbolic<S>>>(m, "Symbolic")
+        .def_readwrite("m", &Symbolic<S>::m)
+        .def_readwrite("n", &Symbolic<S>::n)
+        .def_readwrite("data", &Symbolic<S>::data)
+        .def("get_type", [](Symbolic<S> *self) { return self->get_type(); })
+        .def("__matmul__",
+             [](const shared_ptr<Symbolic<S>> &self,
+                const shared_ptr<Symbolic<S>> &other) { return self * other; });
+
+    py::class_<StateInfo<S>, shared_ptr<StateInfo<S>>>(m, "StateInfo")
+        .def_readwrite("n", &StateInfo<S>::n)
+        .def_readwrite("n_states_total", &StateInfo<S>::n_states_total)
+        .def_property_readonly(
+            "quanta",
+            [](StateInfo<S> *self) { return Array<S>(self->quanta, self->n); })
+        .def_property_readonly("n_states",
+                               [](StateInfo<S> *self) {
+                                   return Array<uint16_t>(self->n_states,
+                                                          self->n);
+                               })
+        .def("deallocate", &StateInfo<S>::deallocate)
+        .def("__repr__", [](StateInfo<S> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<typename SparseMatrixInfo<S>::ConnectionInfo,
+               shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>(
+        m, "ConnectionInfo")
+        .def(py::init<>())
+        .def_property_readonly(
+            "n",
+            [](typename SparseMatrixInfo<S>::ConnectionInfo *self) {
+                return self->n[4];
+            })
+        .def_readwrite("nc", &SparseMatrixInfo<S>::ConnectionInfo::nc)
+        .def("deallocate", &SparseMatrixInfo<S>::ConnectionInfo::deallocate)
+        .def("__repr__",
+             [](typename SparseMatrixInfo<S>::ConnectionInfo *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             });
+
+    py::class_<SparseMatrixInfo<S>, shared_ptr<SparseMatrixInfo<S>>>(
+        m, "SparseMatrixInfo")
+        .def(py::init<>())
+        .def_readwrite("delta_quantum", &SparseMatrixInfo<S>::delta_quantum)
+        .def_readwrite("is_fermion", &SparseMatrixInfo<S>::is_fermion)
+        .def_readwrite("is_wavefunction", &SparseMatrixInfo<S>::is_wavefunction)
+        .def_readwrite("n", &SparseMatrixInfo<S>::n)
+        .def_readwrite("cinfo", &SparseMatrixInfo<S>::cinfo)
+        .def_property_readonly("quanta",
+                               [](SparseMatrixInfo<S> *self) {
+                                   return Array<S>(self->quanta, self->n);
+                               })
+        .def_property_readonly("n_states_total",
+                               [](SparseMatrixInfo<S> *self) {
+                                   return py::array_t<uint32_t>(
+                                       self->n, self->n_states_total);
+                               })
+        .def_property_readonly("n_states_bra",
+                               [](SparseMatrixInfo<S> *self) {
+                                   return py::array_t<uint16_t>(
+                                       self->n, self->n_states_bra);
+                               })
+        .def_property_readonly("n_states_ket",
+                               [](SparseMatrixInfo<S> *self) {
+                                   return py::array_t<uint16_t>(
+                                       self->n, self->n_states_ket);
+                               })
+        .def("initialize", &SparseMatrixInfo<S>::initialize, py::arg("bra"),
+             py::arg("ket"), py::arg("dq"), py::arg("is_fermion"),
+             py::arg("wfn") = false)
+        .def("find_state", &SparseMatrixInfo<S>::find_state, py::arg("q"),
+             py::arg("start") = 0)
+        .def_property_readonly("total_memory",
+                               &SparseMatrixInfo<S>::get_total_memory)
+        .def("allocate", &SparseMatrixInfo<S>::allocate, py::arg("length"),
+             py::arg("ptr") = nullptr)
+        .def("deallocate", &SparseMatrixInfo<S>::deallocate)
+        .def("reallocate", &SparseMatrixInfo<S>::reallocate, py::arg("length"))
+        .def("__repr__", [](SparseMatrixInfo<S> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<SparseMatrix<S>, shared_ptr<SparseMatrix<S>>>(m, "SparseMatrix")
+        .def(py::init<>())
+        .def_readwrite("info", &SparseMatrix<S>::info)
+        .def_readwrite("factor", &SparseMatrix<S>::factor)
+        .def_readwrite("total_memory", &SparseMatrix<S>::total_memory)
+        .def_property_readonly("data",
+                               [](SparseMatrix<S> *self) {
+                                   return py::array_t<double>(
+                                       self->total_memory, self->data);
+                               })
+        .def("clear", &SparseMatrix<S>::clear)
+        .def("load_data", &SparseMatrix<S>::load_data, py::arg("filename"),
+             py::arg("load_info") = false)
+        .def("save_data", &SparseMatrix<S>::save_data, py::arg("filename"),
+             py::arg("save_info") = false)
+        .def("copy_data_from", &SparseMatrix<S>::copy_data_from)
+        .def("allocate",
+             [](SparseMatrix<S> *self,
+                const shared_ptr<SparseMatrixInfo<S>> &info) {
+                 self->allocate(info);
+             })
+        .def("deallocate", &SparseMatrix<S>::deallocate)
+        .def("reallocate", &SparseMatrix<S>::reallocate, py::arg("length"))
+        .def("trace", &SparseMatrix<S>::trace)
+        .def("norm", &SparseMatrix<S>::norm)
+        .def("__getitem__",
+             [](SparseMatrix<S> *self, int idx) { return (*self)[idx]; })
+        .def("left_canonicalize", &SparseMatrix<S>::left_canonicalize,
+             py::arg("rmat"))
+        .def("right_canonicalize", &SparseMatrix<S>::right_canonicalize,
+             py::arg("lmat"))
+        .def("left_multiply", &SparseMatrix<S>::left_multiply, py::arg("lmat"),
+             py::arg("l"), py::arg("m"), py::arg("r"), py::arg("lm"),
+             py::arg("lm_cinfo"))
+        .def("right_multiply", &SparseMatrix<S>::right_multiply,
+             py::arg("rmat"), py::arg("l"), py::arg("m"), py::arg("r"),
+             py::arg("mr"), py::arg("mr_cinfo"))
+        .def("randomize", &SparseMatrix<S>::randomize, py::arg("a") = 0.0,
+             py::arg("b") = 1.0)
+        .def("contract", &SparseMatrix<S>::contract)
+        .def("swap_to_fused_left", &SparseMatrix<S>::swap_to_fused_left)
+        .def("swap_to_fused_right", &SparseMatrix<S>::swap_to_fused_right)
+        .def("__repr__", [](SparseMatrix<S> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::bind_vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
+        m, "VectorPLMatInfo");
+    py::bind_vector<vector<shared_ptr<SparseMatrixInfo<S>>>>(m,
+                                                             "VectorSpMatInfo");
+    py::bind_vector<vector<shared_ptr<SparseMatrix<S>>>>(m, "VectorSpMat");
+    py::bind_map<map<OpNames, shared_ptr<SparseMatrix<S>>>>(m,
+                                                            "MapOpNamesSpMat");
+    py::bind_map<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
+                     op_expr_less<S>>>(m, "MapOpExprSpMat");
+
+    py::class_<MPSInfo<S>, shared_ptr<MPSInfo<S>>>(m, "MPSInfo")
+        .def_readwrite("n_sites", &MPSInfo<S>::n_sites)
+        .def_readwrite("vaccum", &MPSInfo<S>::vaccum)
+        .def_readwrite("target", &MPSInfo<S>::target)
+        .def_readwrite("orbsym", &MPSInfo<S>::orbsym)
+        .def_readwrite("n_syms", &MPSInfo<S>::n_syms)
+        .def_readwrite("bond_dim", &MPSInfo<S>::bond_dim)
+        .def_readwrite("tag", &MPSInfo<S>::tag)
+        .def(py::init([](int n_sites, S vaccum, S target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym, uint8_t n_syms) {
+            return make_shared<MPSInfo<S>>(n_sites, vaccum, target, basis.data,
+                                           orbsym, n_syms);
+        }))
+        .def_property_readonly("basis",
+                               [](MPSInfo<S> *self) {
+                                   return Array<StateInfo<S>>(self->basis,
+                                                              self->n_syms);
+                               })
+        .def_property_readonly("left_dims_fci",
+                               [](MPSInfo<S> *self) {
+                                   return Array<StateInfo<S>>(
+                                       self->left_dims_fci, self->n_sites + 1);
+                               })
+        .def_property_readonly("right_dims_fci",
+                               [](MPSInfo<S> *self) {
+                                   return Array<StateInfo<S>>(
+                                       self->right_dims_fci, self->n_sites + 1);
+                               })
+        .def_property_readonly("left_dims",
+                               [](MPSInfo<S> *self) {
+                                   return Array<StateInfo<S>>(
+                                       self->left_dims, self->n_sites + 1);
+                               })
+        .def_property_readonly("right_dims",
+                               [](MPSInfo<S> *self) {
+                                   return Array<StateInfo<S>>(
+                                       self->right_dims, self->n_sites + 1);
+                               })
+        .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
+        .def("set_bond_dimension_using_occ",
+             &MPSInfo<S>::set_bond_dimension_using_occ, py::arg("m"),
+             py::arg("occ"), py::arg("bias") = 1.0)
+        .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
+        .def("get_filename", &MPSInfo<S>::get_filename)
+        .def("save_mutable", &MPSInfo<S>::save_mutable)
+        .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
+        .def("load_mutable", &MPSInfo<S>::load_mutable)
+        .def("save_left_dims", &MPSInfo<S>::save_left_dims)
+        .def("save_right_dims", &MPSInfo<S>::save_right_dims)
+        .def("load_left_dims", &MPSInfo<S>::load_left_dims)
+        .def("load_right_dims", &MPSInfo<S>::load_right_dims)
+        .def("deallocate", &MPSInfo<S>::deallocate);
+
+    py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
+        m, "AncillaMPSInfo")
+        .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
+        .def(py::init([](int n_sites, S vaccum, S target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym, uint8_t n_syms) {
+            return make_shared<AncillaMPSInfo<S>>(n_sites, vaccum, target,
+                                                  basis.data, orbsym, n_syms);
+        }))
+        .def_static("trans_orbsym", &AncillaMPSInfo<S>::trans_orbsym)
+        .def("set_thermal_limit", &AncillaMPSInfo<S>::set_thermal_limit);
+
+    py::class_<MPS<S>, shared_ptr<MPS<S>>>(m, "MPS")
+        .def(py::init<const shared_ptr<MPSInfo<S>> &>())
+        .def(py::init<int, int, int>())
+        .def_readwrite("n_sites", &MPS<S>::n_sites)
+        .def_readwrite("center", &MPS<S>::center)
+        .def_readwrite("dot", &MPS<S>::dot)
+        .def_readwrite("info", &MPS<S>::info)
+        .def_readwrite("tensors", &MPS<S>::tensors)
+        .def_readwrite("canonical_form", &MPS<S>::canonical_form)
+        .def("initialize", &MPS<S>::initialize)
+        .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
+        .def("canonicalize", &MPS<S>::canonicalize)
+        .def("random_canonicalize", &MPS<S>::random_canonicalize)
+        .def("get_filename", &MPS<S>::get_filename)
+        .def("load_data", &MPS<S>::load_data)
+        .def("save_data", &MPS<S>::save_data)
+        .def("load_mutable", &MPS<S>::load_mutable)
+        .def("save_mutable", &MPS<S>::save_mutable)
+        .def("save_tensor", &MPS<S>::save_tensor)
+        .def("load_tensor", &MPS<S>::load_tensor)
+        .def("unload_tensor", &MPS<S>::unload_tensor)
+        .def("deallocate", &MPS<S>::deallocate);
+
+    bind_cg<S>(m);
+
+    py::class_<OperatorFunctions<S>, shared_ptr<OperatorFunctions<S>>>(
+        m, "OperatorFunctions")
+        .def_readwrite("cg", &OperatorFunctions<S>::cg)
+        .def_readwrite("seq", &OperatorFunctions<S>::seq)
+        .def(py::init<const shared_ptr<CG<S>> &>())
+        .def("iadd", &OperatorFunctions<S>::iadd, py::arg("a"), py::arg("b"),
+             py::arg("scale") = 1.0, py::arg("conj") = false)
+        .def("tensor_rotate", &OperatorFunctions<S>::tensor_rotate,
+             py::arg("a"), py::arg("c"), py::arg("rot_bra"), py::arg("rot_ket"),
+             py::arg("trans"), py::arg("scale") = 1.0)
+        .def("tensor_product_diagonal",
+             &OperatorFunctions<S>::tensor_product_diagonal, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("opdq"),
+             py::arg("scale") = 1.0)
+        .def("tensor_product_multiply",
+             &OperatorFunctions<S>::tensor_product_multiply, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
+             py::arg("opdq"), py::arg("scale") = 1.0)
+        .def("tensor_product", &OperatorFunctions<S>::tensor_product,
+             py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("scale") = 1.0)
+        .def("product", &OperatorFunctions<S>::product, py::arg("a"),
+             py::arg("b"), py::arg("c"), py::arg("scale") = 1.0)
+        .def_static("trans_product", &OperatorFunctions<S>::trans_product,
+                    py::arg("a"), py::arg("b"), py::arg("trace_right"),
+                    py::arg("noise") = 0.0);
+
+    py::class_<OperatorTensor<S>, shared_ptr<OperatorTensor<S>>>(
+        m, "OperatorTensor")
+        .def(py::init<>())
+        .def_readwrite("lmat", &OperatorTensor<S>::lmat)
+        .def_readwrite("rmat", &OperatorTensor<S>::rmat)
+        .def_readwrite("ops", &OperatorTensor<S>::ops)
+        .def("reallocate", &OperatorTensor<S>::reallocate, py::arg("clean"))
+        .def("deallocate", &OperatorTensor<S>::deallocate);
+
+    py::class_<DelayedOperatorTensor<S>, shared_ptr<DelayedOperatorTensor<S>>>(
+        m, "DelayedOperatorTensor")
+        .def(py::init<>())
+        .def_readwrite("ops", &DelayedOperatorTensor<S>::ops)
+        .def_readwrite("mat", &DelayedOperatorTensor<S>::mat)
+        .def_readwrite("lops", &DelayedOperatorTensor<S>::lops)
+        .def_readwrite("rops", &DelayedOperatorTensor<S>::rops)
+        .def("reallocate", &DelayedOperatorTensor<S>::reallocate,
+             py::arg("clean"))
+        .def("deallocate", &DelayedOperatorTensor<S>::deallocate);
+
+    py::bind_vector<vector<shared_ptr<OperatorTensor<S>>>>(m, "VectorOpTensor");
+
+    py::class_<TensorFunctions<S>, shared_ptr<TensorFunctions<S>>>(
+        m, "TensorFunctions")
+        .def(py::init<const shared_ptr<OperatorFunctions<S>> &>())
+        .def_readwrite("opf", &TensorFunctions<S>::opf)
+        .def_static("left_assign", &TensorFunctions<S>::left_assign,
+                    py::arg("a"), py::arg("c"))
+        .def_static("right_assign", &TensorFunctions<S>::right_assign,
+                    py::arg("a"), py::arg("c"))
+        .def("left_contract", &TensorFunctions<S>::left_contract, py::arg("a"),
+             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
+        .def("right_contract", &TensorFunctions<S>::right_contract,
+             py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("cexprs") = nullptr)
+        .def("tensor_product_multiply",
+             &TensorFunctions<S>::tensor_product_multiply)
+        .def("tensor_product_diagonal",
+             &TensorFunctions<S>::tensor_product_diagonal)
+        .def("tensor_product", &TensorFunctions<S>::tensor_product)
+        .def("left_rotate", &TensorFunctions<S>::left_rotate)
+        .def("right_rotate", &TensorFunctions<S>::right_rotate)
+        .def("numerical_transform", &TensorFunctions<S>::numerical_transform)
+        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor<S>>(*)(
+                                     const shared_ptr<OperatorTensor<S>> &,
+                                     const shared_ptr<OperatorTensor<S>> &,
+                                     const shared_ptr<OpExpr<S>> &)) &
+                                     TensorFunctions<S>::delayed_contract)
+        .def("delayed_contract_simplified",
+             (shared_ptr<DelayedOperatorTensor<S>>(*)(
+                 const shared_ptr<OperatorTensor<S>> &,
+                 const shared_ptr<OperatorTensor<S>> &,
+                 const shared_ptr<Symbolic<S>> &,
+                 const shared_ptr<Symbolic<S>> &)) &
+                 TensorFunctions<S>::delayed_contract);
+
+    py::class_<Partition<S>, shared_ptr<Partition<S>>>(m, "Partition")
+        .def(py::init<const shared_ptr<OperatorTensor<S>> &,
+                      const shared_ptr<OperatorTensor<S>> &,
+                      const shared_ptr<OperatorTensor<S>> &>())
+        .def(py::init<const shared_ptr<OperatorTensor<S>> &,
+                      const shared_ptr<OperatorTensor<S>> &,
+                      const shared_ptr<OperatorTensor<S>> &,
+                      const shared_ptr<OperatorTensor<S>> &>())
+        .def_readwrite("left", &Partition<S>::left)
+        .def_readwrite("right", &Partition<S>::right)
+        .def_readwrite("middle", &Partition<S>::middle)
+        .def_readwrite("left_op_infos", &Partition<S>::left_op_infos)
+        .def_readwrite("right_op_infos", &Partition<S>::right_op_infos)
+        .def_static("find_op_info", &Partition<S>::find_op_info)
+        .def_static("build_left", &Partition<S>::build_left)
+        .def_static("build_right", &Partition<S>::build_right)
+        .def_static("get_uniq_labels", &Partition<S>::get_uniq_labels)
+        .def_static("get_uniq_sub_labels", &Partition<S>::get_uniq_sub_labels)
+        .def_static("deallocate_op_infos_notrunc",
+                    &Partition<S>::deallocate_op_infos_notrunc)
+        .def_static("copy_op_infos", &Partition<S>::copy_op_infos)
+        .def_static("init_left_op_infos", &Partition<S>::init_left_op_infos)
+        .def_static("init_left_op_infos_notrunc",
+                    &Partition<S>::init_left_op_infos_notrunc)
+        .def_static("init_right_op_infos", &Partition<S>::init_right_op_infos)
+        .def_static("init_right_op_infos_notrunc",
+                    &Partition<S>::init_right_op_infos_notrunc);
+
+    py::bind_vector<vector<shared_ptr<Partition<S>>>>(m, "VectorPartition");
+
+    py::class_<EffectiveHamiltonian<S>, shared_ptr<EffectiveHamiltonian<S>>>(
+        m, "EffectiveHamiltonian")
+        .def(py::init<const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &,
+                      const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &,
+                      const shared_ptr<DelayedOperatorTensor<S>> &,
+                      const shared_ptr<SparseMatrix<S>> &,
+                      const shared_ptr<SparseMatrix<S>> &,
+                      const shared_ptr<OpElement<S>> &,
+                      const shared_ptr<SymbolicColumnVector<S>> &,
+                      const shared_ptr<TensorFunctions<S>> &, bool>())
+        .def_readwrite("left_op_infos", &EffectiveHamiltonian<S>::left_op_infos)
+        .def_readwrite("right_op_infos",
+                       &EffectiveHamiltonian<S>::right_op_infos)
+        .def_readwrite("op", &EffectiveHamiltonian<S>::op)
+        .def_readwrite("bra", &EffectiveHamiltonian<S>::bra)
+        .def_readwrite("ket", &EffectiveHamiltonian<S>::ket)
+        .def_readwrite("diag", &EffectiveHamiltonian<S>::diag)
+        .def_readwrite("cmat", &EffectiveHamiltonian<S>::cmat)
+        .def_readwrite("vmat", &EffectiveHamiltonian<S>::vmat)
+        .def_readwrite("tf", &EffectiveHamiltonian<S>::tf)
+        .def_readwrite("opdq", &EffectiveHamiltonian<S>::opdq)
+        .def_readwrite("compute_diag", &EffectiveHamiltonian<S>::compute_diag)
+        .def("__call__", &EffectiveHamiltonian<S>::operator(), py::arg("b"),
+             py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0)
+        .def("eigs", &EffectiveHamiltonian<S>::eigs)
+        .def("multiply", &EffectiveHamiltonian<S>::multiply)
+        .def("expect", &EffectiveHamiltonian<S>::expect)
+        .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
+             py::arg("const_e"), py::arg("eval_energy") = false)
+        .def("expo_apply", &EffectiveHamiltonian<S>::expo_apply,
+             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false)
+        .def("deallocate", &EffectiveHamiltonian<S>::deallocate);
+
+    py::class_<MovingEnvironment<S>, shared_ptr<MovingEnvironment<S>>>(
+        m, "MovingEnvironment")
+        .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<MPS<S>> &,
+                      const shared_ptr<MPS<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<MPS<S>> &,
+                      const shared_ptr<MPS<S>> &, const string &>())
+        .def_readwrite("n_sites", &MovingEnvironment<S>::n_sites)
+        .def_readwrite("center", &MovingEnvironment<S>::center)
+        .def_readwrite("dot", &MovingEnvironment<S>::dot)
+        .def_readwrite("mpo", &MovingEnvironment<S>::mpo)
+        .def_readwrite("bra", &MovingEnvironment<S>::bra)
+        .def_readwrite("ket", &MovingEnvironment<S>::ket)
+        .def_readwrite("envs", &MovingEnvironment<S>::envs)
+        .def_readwrite("tag", &MovingEnvironment<S>::tag)
+        .def("left_contract_rotate",
+             &MovingEnvironment<S>::left_contract_rotate)
+        .def("right_contract_rotate",
+             &MovingEnvironment<S>::right_contract_rotate)
+        .def("init_environments", &MovingEnvironment<S>::init_environments,
+             py::arg("iprint") = false)
+        .def("prepare", &MovingEnvironment<S>::prepare)
+        .def("move_to", &MovingEnvironment<S>::move_to)
+        .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
+             py::arg("compute_diag"))
+        .def("get_left_partition_filename",
+             &MovingEnvironment<S>::get_left_partition_filename)
+        .def("get_right_partition_filename",
+             &MovingEnvironment<S>::get_right_partition_filename)
+        .def_static("contract_two_dot", &MovingEnvironment<S>::contract_two_dot,
+                    py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
+        .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
+                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("noise"))
+        .def_static("density_matrix_with_weights",
+                    &MovingEnvironment<S>::density_matrix_with_weights,
+                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("noise"), py::arg("mats"), py::arg("weights"))
+        .def_static("split_density_matrix",
+                    [](const shared_ptr<SparseMatrix<S>> &dm,
+                       const shared_ptr<SparseMatrix<S>> &wfn, int k,
+                       bool trace_right) {
+                        shared_ptr<SparseMatrix<S>> left = nullptr,
+                                                    right = nullptr;
+                        double error =
+                            MovingEnvironment<S>::split_density_matrix(
+                                dm, wfn, k, trace_right, left, right);
+                        return make_tuple(error, left, right);
+                    })
+        .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
+                    py::arg("i"), py::arg("n_sites"), py::arg("mps"),
+                    py::arg("forward"));
+
+    py::class_<Hamiltonian<S>, shared_ptr<Hamiltonian<S>>>(m, "Hamiltonian")
+        .def(py::init<S, S, int, const vector<uint8_t> &>())
+        .def_readwrite("n_syms", &Hamiltonian<S>::n_syms)
+        .def_readwrite("opf", &Hamiltonian<S>::opf)
+        .def_readwrite("n_sites", &Hamiltonian<S>::n_sites)
+        .def_readwrite("orb_sym", &Hamiltonian<S>::orb_sym)
+        .def_readwrite("vaccum", &Hamiltonian<S>::vaccum)
+        .def_readwrite("target", &Hamiltonian<S>::target)
+        .def_property_readonly("basis",
+                               [](Hamiltonian<S> *self) {
+                                   return Array<StateInfo<S>>(self->basis,
+                                                              self->n_syms);
+                               })
+        .def_property_readonly(
+            "site_op_infos",
+            [](Hamiltonian<S> *self) {
+                return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
+                    self->site_op_infos, self->n_syms);
+            })
+        .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
+        .def("filter_site_ops", &Hamiltonian<S>::filter_site_ops)
+        .def("find_site_op_info", &Hamiltonian<S>::find_site_op_info)
+        .def("find_site_norm_op", &Hamiltonian<S>::find_site_norm_op)
+        .def("deallocate", &Hamiltonian<S>::deallocate);
+
+    py::class_<HamiltonianQC<S>, shared_ptr<HamiltonianQC<S>>, Hamiltonian<S>>(
+        m, "HamiltonianQC")
+        .def(py::init<S, S, int, const vector<uint8_t> &,
+                      const shared_ptr<FCIDUMP> &>())
+        .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
+        .def_readwrite("mu", &HamiltonianQC<S>::mu)
+        .def("op_prims",
+             [](HamiltonianQC<S> *self, int idx) { self->op_prims[idx]; })
+        .def("v", &HamiltonianQC<S>::v)
+        .def("t", &HamiltonianQC<S>::t)
+        .def("e", &HamiltonianQC<S>::e)
+        .def("init_site_ops", &HamiltonianQC<S>::init_site_ops)
+        .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
+
+    py::class_<typename DMRG<S>::Iteration,
+               shared_ptr<typename DMRG<S>::Iteration>>(m, "DMRGIteration")
+        .def(py::init<double, double, int, size_t, double>())
+        .def(py::init<double, double, int>())
+        .def_readwrite("energy", &DMRG<S>::Iteration::energy)
+        .def_readwrite("error", &DMRG<S>::Iteration::error)
+        .def_readwrite("ndav", &DMRG<S>::Iteration::ndav)
+        .def_readwrite("tdav", &DMRG<S>::Iteration::tdav)
+        .def_readwrite("nflop", &DMRG<S>::Iteration::nflop)
+        .def("__repr__", [](typename DMRG<S>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<DMRG<S>, shared_ptr<DMRG<S>>>(m, "DMRG")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<uint16_t> &, const vector<double> &>())
+        .def_readwrite("iprint", &DMRG<S>::iprint)
+        .def_readwrite("me", &DMRG<S>::me)
+        .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
+        .def_readwrite("noises", &DMRG<S>::noises)
+        .def_readwrite("energies", &DMRG<S>::energies)
+        .def_readwrite("forward", &DMRG<S>::forward)
+        .def("update_two_dot", &DMRG<S>::update_two_dot)
+        .def("blocking", &DMRG<S>::blocking)
+        .def("sweep", &DMRG<S>::sweep)
+        .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::class_<typename ImaginaryTE<S>::Iteration,
+               shared_ptr<typename ImaginaryTE<S>::Iteration>>(
+        m, "ImaginaryTEIteration")
+        .def(py::init<double, double, double, int, int, size_t, double>())
+        .def(py::init<double, double, double, int, int>())
+        .def_readwrite("energy", &ImaginaryTE<S>::Iteration::energy)
+        .def_readwrite("normsq", &ImaginaryTE<S>::Iteration::normsq)
+        .def_readwrite("error", &ImaginaryTE<S>::Iteration::error)
+        .def_readwrite("nexpo", &ImaginaryTE<S>::Iteration::nexpo)
+        .def_readwrite("nexpok", &ImaginaryTE<S>::Iteration::nexpok)
+        .def_readwrite("texpo", &ImaginaryTE<S>::Iteration::texpo)
+        .def_readwrite("nflop", &ImaginaryTE<S>::Iteration::nflop)
+        .def("__repr__", [](typename ImaginaryTE<S>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<ImaginaryTE<S>, shared_ptr<ImaginaryTE<S>>>(m, "ImaginaryTE")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<uint16_t> &, TETypes>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<uint16_t> &, TETypes, int>())
+        .def_readwrite("iprint", &ImaginaryTE<S>::iprint)
+        .def_readwrite("me", &ImaginaryTE<S>::me)
+        .def_readwrite("bond_dims", &ImaginaryTE<S>::bond_dims)
+        .def_readwrite("noises", &ImaginaryTE<S>::noises)
+        .def_readwrite("energies", &ImaginaryTE<S>::energies)
+        .def_readwrite("normsqs", &ImaginaryTE<S>::normsqs)
+        .def_readwrite("forward", &ImaginaryTE<S>::forward)
+        .def_readwrite("n_sub_sweeps", &ImaginaryTE<S>::n_sub_sweeps)
+        .def_readwrite("mode", &ImaginaryTE<S>::mode)
+        .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
+        .def("blocking", &ImaginaryTE<S>::blocking)
+        .def("sweep", &ImaginaryTE<S>::sweep)
+        .def("normalize", &ImaginaryTE<S>::normalize)
+        .def("solve", &ImaginaryTE<S>::solve, py::arg("n_sweeps"),
+             py::arg("beta"), py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::class_<typename Compress<S>::Iteration,
+               shared_ptr<typename Compress<S>::Iteration>>(m,
+                                                            "CompressIteration")
+        .def(py::init<double, double, size_t, double>())
+        .def(py::init<double, double>())
+        .def_readwrite("norm", &Compress<S>::Iteration::norm)
+        .def_readwrite("error", &Compress<S>::Iteration::error)
+        .def_readwrite("tmult", &Compress<S>::Iteration::tmult)
+        .def_readwrite("nflop", &Compress<S>::Iteration::nflop)
+        .def("__repr__", [](typename Compress<S>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<Compress<S>, shared_ptr<Compress<S>>>(m, "Compress")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<uint16_t> &, const vector<uint16_t> &,
+                      const vector<double> &>())
+        .def_readwrite("iprint", &Compress<S>::iprint)
+        .def_readwrite("me", &Compress<S>::me)
+        .def_readwrite("bra_bond_dims", &Compress<S>::bra_bond_dims)
+        .def_readwrite("ket_bond_dims", &Compress<S>::ket_bond_dims)
+        .def_readwrite("noises", &Compress<S>::noises)
+        .def_readwrite("norms", &Compress<S>::norms)
+        .def_readwrite("forward", &Compress<S>::forward)
+        .def("update_two_dot", &Compress<S>::update_two_dot)
+        .def("blocking", &Compress<S>::blocking)
+        .def("sweep", &Compress<S>::sweep)
+        .def("solve", &Compress<S>::solve, py::arg("n_sweeps"),
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::class_<typename Expect<S>::Iteration,
+               shared_ptr<typename Expect<S>::Iteration>>(m, "ExpectIteration")
+        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, double>> &,
+                      double, double, size_t, double>())
+        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, double>> &,
+                      double, double>())
+        .def_readwrite("bra_error", &Expect<S>::Iteration::bra_error)
+        .def_readwrite("ket_error", &Expect<S>::Iteration::ket_error)
+        .def_readwrite("tmult", &Expect<S>::Iteration::tmult)
+        .def_readwrite("nflop", &Expect<S>::Iteration::nflop)
+        .def("__repr__", [](typename Expect<S>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<Expect<S>, shared_ptr<Expect<S>>>(m, "Expect")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
+                      uint16_t>())
+        .def_readwrite("iprint", &Expect<S>::iprint)
+        .def_readwrite("me", &Expect<S>::me)
+        .def_readwrite("bra_bond_dim", &Expect<S>::bra_bond_dim)
+        .def_readwrite("ket_bond_dim", &Expect<S>::ket_bond_dim)
+        .def_readwrite("expectations", &Expect<S>::expectations)
+        .def_readwrite("forward", &Expect<S>::forward)
+        .def("update_two_dot", &Expect<S>::update_two_dot)
+        .def("blocking", &Expect<S>::blocking)
+        .def("sweep", &Expect<S>::sweep)
+        .def("solve", &Expect<S>::solve, py::arg("propagate"),
+             py::arg("forward") = true)
+        .def("get_1pdm_spatial", &Expect<S>::get_1pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U);
+
+    py::class_<MPOSchemer<S>, shared_ptr<MPOSchemer<S>>>(m, "MPOSchemer")
+        .def_readwrite("left_trans_site", &MPOSchemer<S>::left_trans_site)
+        .def_readwrite("right_trans_site", &MPOSchemer<S>::right_trans_site)
+        .def_readwrite("left_new_operator_names",
+                       &MPOSchemer<S>::left_new_operator_names)
+        .def_readwrite("right_new_operator_names",
+                       &MPOSchemer<S>::right_new_operator_names)
+        .def_readwrite("left_new_operator_exprs",
+                       &MPOSchemer<S>::left_new_operator_exprs)
+        .def_readwrite("right_new_operator_exprs",
+                       &MPOSchemer<S>::right_new_operator_exprs)
+        .def(py::init<uint8_t, uint8_t>())
+        .def("copy", &MPOSchemer<S>::copy)
+        .def("get_transform_formulas", &MPOSchemer<S>::get_transform_formulas);
+
+    py::class_<MPO<S>, shared_ptr<MPO<S>>>(m, "MPO")
+        .def(py::init<int>())
+        .def_readwrite("n_sites", &MPO<S>::n_sites)
+        .def_readwrite("const_e", &MPO<S>::const_e)
+        .def_readwrite("tensors", &MPO<S>::tensors)
+        .def_readwrite("left_operator_names", &MPO<S>::left_operator_names)
+        .def_readwrite("right_operator_names", &MPO<S>::right_operator_names)
+        .def_readwrite("middle_operator_names", &MPO<S>::middle_operator_names)
+        .def_readwrite("left_operator_exprs", &MPO<S>::left_operator_exprs)
+        .def_readwrite("right_operator_exprs", &MPO<S>::right_operator_exprs)
+        .def_readwrite("middle_operator_exprs", &MPO<S>::middle_operator_exprs)
+        .def_readwrite("op", &MPO<S>::op)
+        .def_readwrite("schemer", &MPO<S>::schemer)
+        .def_readwrite("tf", &MPO<S>::tf)
+        .def_readwrite("site_op_infos", &MPO<S>::site_op_infos)
+        .def_readwrite("schemer", &MPO<S>::schemer)
+        .def("get_blocking_formulas", &MPO<S>::get_blocking_formulas)
+        .def("get_ancilla_type", &MPO<S>::get_ancilla_type)
+        .def("deallocate", &MPO<S>::deallocate);
+
+    py::class_<Rule<S>, shared_ptr<Rule<S>>>(m, "Rule")
+        .def(py::init<>())
+        .def("__call__", &Rule<S>::operator());
+
+    py::class_<NoTransposeRule<S>, shared_ptr<NoTransposeRule<S>>, Rule<S>>(
+        m, "NoTransposeRule")
+        .def_readwrite("prim_rule", &NoTransposeRule<S>::prim_rule)
+        .def(py::init<const shared_ptr<Rule<S>> &>());
+
+    py::class_<RuleQC<S>, shared_ptr<RuleQC<S>>, Rule<S>>(m, "RuleQC")
+        .def(py::init<>())
+        .def(py::init<bool, bool, bool, bool, bool, bool>());
+
+    py::class_<SimplifiedMPO<S>, shared_ptr<SimplifiedMPO<S>>, MPO<S>>(
+        m, "SimplifiedMPO")
+        .def_readwrite("prim_mpo", &SimplifiedMPO<S>::prim_mpo)
+        .def_readwrite("rule", &SimplifiedMPO<S>::rule)
+        .def_readwrite("collect_terms", &SimplifiedMPO<S>::collect_terms)
+        .def(
+            py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
+                      bool>())
+        .def("simplify_expr", &SimplifiedMPO<S>::simplify_expr)
+        .def("simplify_symbolic", &SimplifiedMPO<S>::simplify_symbolic)
+        .def("simplify", &SimplifiedMPO<S>::simplify);
+
+    py::class_<IdentityMPO<S>, shared_ptr<IdentityMPO<S>>, MPO<S>>(
+        m, "IdentityMPO")
+        .def(py::init<const Hamiltonian<S> &>());
+
+    py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
+        .def_readwrite("mode", &MPOQC<S>::mode)
+        .def(py::init<const HamiltonianQC<S> &>())
+        .def(py::init<const HamiltonianQC<S> &, QCTypes>());
+
+    py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
+        .def(py::init<const Hamiltonian<S> &>());
+
+    py::class_<AncillaMPO<S>, shared_ptr<AncillaMPO<S>>, MPO<S>>(m,
+                                                                 "AncillaMPO")
+        .def_readwrite("n_physical_sites", &AncillaMPO<S>::n_physical_sites)
+        .def_readwrite("prim_mpo", &AncillaMPO<S>::prim_mpo)
+        .def(py::init<const shared_ptr<MPO<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S>> &, bool>());
+}
+
 PYBIND11_MODULE(block2, m) {
 
-    m.doc() = "python interface for block 2.0.";
+    m.doc() = "python interface for block2.";
 
     py::bind_vector<vector<int>>(m, "VectorInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
@@ -94,15 +913,15 @@ PYBIND11_MODULE(block2, m) {
     m.def(
         "init_memory",
         [](size_t isize, size_t dsize, const string &save_dir) {
-            frame = new DataFrame(isize, dsize, save_dir);
+            frame_() = new DataFrame(isize, dsize, save_dir);
         },
         py::arg("isize") = size_t(1L << 28),
         py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex");
 
     m.def("release_memory", []() {
-        frame->activate(0);
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete frame;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     });
 
     m.def("set_mkl_num_threads", [](int n) {
@@ -143,14 +962,14 @@ PYBIND11_MODULE(block2, m) {
 
     py::class_<Global>(m, "Global")
         .def_property_static(
-            "ialloc", [](py::object) { return ialloc; },
-            [](py::object, StackAllocator<uint32_t> *ia) { ialloc = ia; })
+            "ialloc", [](py::object) { return ialloc_(); },
+            [](py::object, StackAllocator<uint32_t> *ia) { ialloc_() = ia; })
         .def_property_static(
-            "dalloc", [](py::object) { return dalloc; },
-            [](py::object, StackAllocator<double> *da) { dalloc = da; })
+            "dalloc", [](py::object) { return dalloc_(); },
+            [](py::object, StackAllocator<double> *da) { dalloc_() = da; })
         .def_property_static(
-            "frame", [](py::object) { return frame; },
-            [](py::object, DataFrame *fr) { frame = fr; });
+            "frame", [](py::object) { return frame_(); },
+            [](py::object, DataFrame *fr) { frame_() = fr; });
 
     bind_array<uint8_t>(m, "ArrayUInt8")
         .def("__str__", [](Array<uint8_t> *self) {
@@ -162,10 +981,6 @@ PYBIND11_MODULE(block2, m) {
             return ss.str();
         });
     bind_array<uint16_t>(m, "ArrayUInt16");
-    bind_array<StateInfo>(m, "ArrayStateInfo");
-    bind_array<SpinLabel>(m, "ArraySpinLabel");
-    bind_array<vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
-        m, "ArrayVectorPLMatInfo");
 
     py::class_<Random, shared_ptr<Random>>(m, "Random")
         .def_static("rand_seed", &Random::rand_seed, py::arg("i") = 0U)
@@ -228,33 +1043,11 @@ PYBIND11_MODULE(block2, m) {
         .def_readwrite("total_memory", &FCIDUMP::total_memory)
         .def_readwrite("uhf", &FCIDUMP::uhf);
 
-    py::class_<SpinLabel>(m, "SpinLabel")
-        .def(py::init<>())
-        .def(py::init<uint32_t>())
-        .def(py::init<int, int, int>())
-        .def(py::init<int, int, int, int>())
-        .def_readwrite("data", &SpinLabel::data)
-        .def_property("n", &SpinLabel::n, &SpinLabel::set_n)
-        .def_property("twos", &SpinLabel::twos, &SpinLabel::set_twos)
-        .def_property("twos_low", &SpinLabel::twos_low,
-                      &SpinLabel::set_twos_low)
-        .def_property("pg", &SpinLabel::pg, &SpinLabel::set_pg)
-        .def(py::self == py::self)
-        .def(py::self != py::self)
-        .def(py::self < py::self)
-        .def(-py::self)
-        .def(py::self + py::self)
-        .def(py::self - py::self)
-        .def("get_ket", &SpinLabel::get_ket)
-        .def("get_bra", &SpinLabel::get_bra, py::arg("dq"))
-        .def("__repr__", &SpinLabel::to_str);
-
     py::enum_<OpNames>(m, "OpNames", py::arithmetic())
         .value("H", OpNames::H)
         .value("I", OpNames::I)
         .value("N", OpNames::N)
         .value("NN", OpNames::NN)
-        .value("NUD", OpNames::NUD)
         .value("C", OpNames::C)
         .value("D", OpNames::D)
         .value("R", OpNames::R)
@@ -276,12 +1069,6 @@ PYBIND11_MODULE(block2, m) {
         .value("ElemRef", OpTypes::ElemRef)
         .value("SumProd", OpTypes::SumProd);
 
-    py::class_<OpExpr, shared_ptr<OpExpr>>(m, "OpExpr")
-        .def(py::init<>())
-        .def("get_type", &OpExpr::get_type)
-        .def(py::self == py::self)
-        .def("__repr__", &to_str);
-
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())
         .def(py::init<uint32_t>())
@@ -298,304 +1085,60 @@ PYBIND11_MODULE(block2, m) {
         .def("__hash__", &SiteIndex::hash)
         .def("__repr__", &SiteIndex::to_str);
 
-    py::class_<OpElement, shared_ptr<OpElement>, OpExpr>(m, "OpElement")
-        .def(py::init<OpNames, SiteIndex, SpinLabel>())
-        .def(py::init<OpNames, SiteIndex, SpinLabel, double>())
-        .def_readwrite("name", &OpElement::name)
-        .def_readwrite("site_index", &OpElement::site_index)
-        .def_readwrite("factor", &OpElement::factor)
-        .def_readwrite("q_label", &OpElement::q_label)
-        .def("abs", &OpElement::abs)
-        .def("__mul__", &OpElement::operator*)
+    py::class_<SZ>(m, "SZ")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int, int>())
+        .def_readwrite("data", &SZ::data)
+        .def_property("n", &SZ::n, &SZ::set_n)
+        .def_property("twos", &SZ::twos, &SZ::set_twos)
+        .def_property("pg", &SZ::pg, &SZ::set_pg)
+        .def_property_readonly("multiplicity", &SZ::multiplicity)
+        .def_property_readonly("is_fermion", &SZ::is_fermion)
+        .def_property_readonly("count", &SZ::count)
+        .def("__getitem__", &SZ::operator[])
         .def(py::self == py::self)
+        .def(py::self != py::self)
         .def(py::self < py::self)
-        .def("__hash__", &OpElement::hash);
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SZ::get_ket)
+        .def("get_bra", &SZ::get_bra, py::arg("dq"))
+        .def("__repr__", &SZ::to_str);
 
-    py::class_<OpElementRef, shared_ptr<OpElementRef>, OpExpr>(m,
-                                                               "OpElementRef")
-        .def(py::init<const shared_ptr<OpElement> &, int8_t, int8_t>())
-        .def_readwrite("op", &OpElementRef::op)
-        .def_readwrite("factor", &OpElementRef::factor)
-        .def_readwrite("trans", &OpElementRef::trans);
-
-    py::class_<OpString, shared_ptr<OpString>, OpExpr>(m, "OpString")
-        .def(py::init<const shared_ptr<OpElement> &, double>())
-        .def(py::init<const shared_ptr<OpElement> &, double, uint8_t>())
-        .def(py::init<const shared_ptr<OpElement> &,
-                      const shared_ptr<OpElement> &, double>())
-        .def(py::init<const shared_ptr<OpElement> &,
-                      const shared_ptr<OpElement> &, double, uint8_t>())
-        .def_readwrite("factor", &OpString::factor)
-        .def_readwrite("conj", &OpString::conj)
-        .def_readwrite("a", &OpString::a)
-        .def_readwrite("b", &OpString::b);
-
-    py::class_<OpSumProd, shared_ptr<OpSumProd>, OpString>(m, "OpSumProd")
-        .def(py::init<const shared_ptr<OpElement> &,
-                      const vector<shared_ptr<OpElement>> &,
-                      const vector<bool> &, double, uint8_t>())
-        .def(py::init<const shared_ptr<OpElement> &,
-                      const vector<shared_ptr<OpElement>> &,
-                      const vector<bool> &, double>())
-        .def(py::init<const vector<shared_ptr<OpElement>> &,
-                      const shared_ptr<OpElement> &, const vector<bool> &,
-                      double, uint8_t>())
-        .def(py::init<const vector<shared_ptr<OpElement>> &,
-                      const shared_ptr<OpElement> &, const vector<bool> &,
-                      double>())
-        .def_readwrite("ops", &OpSumProd::ops)
-        .def_readwrite("conjs", &OpSumProd::conjs);
-
-    py::class_<OpSum, shared_ptr<OpSum>, OpExpr>(m, "OpSum")
-        .def(py::init<const vector<shared_ptr<OpString>> &>())
-        .def_readwrite("strings", &OpSum::strings);
-
-    py::bind_vector<vector<shared_ptr<OpExpr>>>(m, "VectorOpExpr");
-    py::bind_vector<vector<shared_ptr<OpElement>>>(m, "VectorOpElement");
-    py::bind_vector<vector<shared_ptr<OpString>>>(m, "VectorOpString");
+    py::class_<SU2>(m, "SU2")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int, int>())
+        .def(py::init<int, int, int, int>())
+        .def_readwrite("data", &SU2::data)
+        .def_property("n", &SU2::n, &SU2::set_n)
+        .def_property("twos", &SU2::twos, &SU2::set_twos)
+        .def_property("twos_low", &SU2::twos_low, &SU2::set_twos_low)
+        .def_property("pg", &SU2::pg, &SU2::set_pg)
+        .def_property_readonly("multiplicity", &SU2::multiplicity)
+        .def_property_readonly("is_fermion", &SU2::is_fermion)
+        .def_property_readonly("count", &SU2::count)
+        .def("__getitem__", &SU2::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SU2::get_ket)
+        .def("get_bra", &SU2::get_bra, py::arg("dq"))
+        .def("__repr__", &SU2::to_str);
 
     py::enum_<SymTypes>(m, "SymTypes", py::arithmetic())
         .value("RVec", SymTypes::RVec)
         .value("CVec", SymTypes::CVec)
         .value("Mat", SymTypes::Mat);
 
-    py::class_<Symbolic, shared_ptr<Symbolic>>(m, "Symbolic")
-        .def_readwrite("m", &Symbolic::m)
-        .def_readwrite("n", &Symbolic::n)
-        .def_readwrite("data", &Symbolic::data)
-        .def("get_type", [](Symbolic *self) { return self->get_type(); })
-        .def("__matmul__",
-             [](const shared_ptr<Symbolic> &self,
-                const shared_ptr<Symbolic> &other) { return self * other; });
-
-    py::class_<StateInfo, shared_ptr<StateInfo>>(m, "StateInfo")
-        .def_readwrite("n", &StateInfo::n)
-        .def_readwrite("n_states_total", &StateInfo::n_states_total)
-        .def_property_readonly("quanta",
-                               [](StateInfo *self) {
-                                   return Array<SpinLabel>(self->quanta,
-                                                           self->n);
-                               })
-        .def_property_readonly("n_states",
-                               [](StateInfo *self) {
-                                   return Array<uint16_t>(self->n_states,
-                                                          self->n);
-                               })
-        .def("deallocate", &StateInfo::deallocate)
-        .def("__repr__", [](StateInfo *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<SparseMatrixInfo::ConnectionInfo,
-               shared_ptr<SparseMatrixInfo::ConnectionInfo>>(m,
-                                                             "ConnectionInfo")
-        .def(py::init<>())
-        .def_property_readonly(
-            "n",
-            [](SparseMatrixInfo::ConnectionInfo *self) { return self->n[4]; })
-        .def_readwrite("nc", &SparseMatrixInfo::ConnectionInfo::nc)
-        .def("deallocate", &SparseMatrixInfo::ConnectionInfo::deallocate)
-        .def("__repr__", [](SparseMatrixInfo::ConnectionInfo *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<SparseMatrixInfo, shared_ptr<SparseMatrixInfo>>(
-        m, "SparseMatrixInfo")
-        .def(py::init<>())
-        .def_readwrite("delta_quantum", &SparseMatrixInfo::delta_quantum)
-        .def_readwrite("is_fermion", &SparseMatrixInfo::is_fermion)
-        .def_readwrite("is_wavefunction", &SparseMatrixInfo::is_wavefunction)
-        .def_readwrite("n", &SparseMatrixInfo::n)
-        .def_readwrite("cinfo", &SparseMatrixInfo::cinfo)
-        .def_property_readonly("quanta",
-                               [](SparseMatrixInfo *self) {
-                                   return Array<SpinLabel>(self->quanta,
-                                                           self->n);
-                               })
-        .def_property_readonly("n_states_total",
-                               [](SparseMatrixInfo *self) {
-                                   return py::array_t<uint32_t>(
-                                       self->n, self->n_states_total);
-                               })
-        .def_property_readonly("n_states_bra",
-                               [](SparseMatrixInfo *self) {
-                                   return py::array_t<uint16_t>(
-                                       self->n, self->n_states_bra);
-                               })
-        .def_property_readonly("n_states_ket",
-                               [](SparseMatrixInfo *self) {
-                                   return py::array_t<uint16_t>(
-                                       self->n, self->n_states_ket);
-                               })
-        .def("initialize", &SparseMatrixInfo::initialize, py::arg("bra"),
-             py::arg("ket"), py::arg("dq"), py::arg("is_fermion"),
-             py::arg("wfn") = false)
-        .def("find_state", &SparseMatrixInfo::find_state, py::arg("q"),
-             py::arg("start") = 0)
-        .def_property_readonly("total_memory",
-                               &SparseMatrixInfo::get_total_memory)
-        .def("allocate", &SparseMatrixInfo::allocate, py::arg("length"),
-             py::arg("ptr") = nullptr)
-        .def("deallocate", &SparseMatrixInfo::deallocate)
-        .def("reallocate", &SparseMatrixInfo::reallocate, py::arg("length"))
-        .def("__repr__", [](SparseMatrixInfo *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<SparseMatrix, shared_ptr<SparseMatrix>>(m, "SparseMatrix")
-        .def(py::init<>())
-        .def_readwrite("info", &SparseMatrix::info)
-        .def_readwrite("factor", &SparseMatrix::factor)
-        .def_readwrite("total_memory", &SparseMatrix::total_memory)
-        .def_property_readonly("data",
-                               [](SparseMatrix *self) {
-                                   return py::array_t<double>(
-                                       self->total_memory, self->data);
-                               })
-        .def("clear", &SparseMatrix::clear)
-        .def("load_data", &SparseMatrix::load_data, py::arg("filename"),
-             py::arg("load_info") = false)
-        .def("save_data", &SparseMatrix::save_data, py::arg("filename"),
-             py::arg("save_info") = false)
-        .def("copy_data_from", &SparseMatrix::copy_data_from)
-        .def("allocate",
-             [](SparseMatrix *self, const shared_ptr<SparseMatrixInfo> &info) {
-                 self->allocate(info);
-             })
-        .def("deallocate", &SparseMatrix::deallocate)
-        .def("reallocate", &SparseMatrix::reallocate, py::arg("length"))
-        .def("trace", &SparseMatrix::trace)
-        .def("norm", &SparseMatrix::norm)
-        .def("__getitem__",
-             [](SparseMatrix *self, int idx) { return (*self)[idx]; })
-        .def("left_canonicalize", &SparseMatrix::left_canonicalize,
-             py::arg("rmat"))
-        .def("right_canonicalize", &SparseMatrix::right_canonicalize,
-             py::arg("lmat"))
-        .def("left_multiply", &SparseMatrix::left_multiply, py::arg("lmat"),
-             py::arg("l"), py::arg("m"), py::arg("r"), py::arg("lm"),
-             py::arg("lm_cinfo"))
-        .def("right_multiply", &SparseMatrix::right_multiply, py::arg("rmat"),
-             py::arg("l"), py::arg("m"), py::arg("r"), py::arg("mr"),
-             py::arg("mr_cinfo"))
-        .def("randomize", &SparseMatrix::randomize, py::arg("a") = 0.0,
-             py::arg("b") = 1.0)
-        .def("contract", &SparseMatrix::contract)
-        .def("swap_to_fused_left", &SparseMatrix::swap_to_fused_left)
-        .def("swap_to_fused_right", &SparseMatrix::swap_to_fused_right)
-        .def("__repr__", [](SparseMatrix *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::bind_vector<vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
-        m, "VectorPLMatInfo");
-    py::bind_vector<vector<shared_ptr<SparseMatrixInfo>>>(m, "VectorSpMatInfo");
-    py::bind_vector<vector<shared_ptr<SparseMatrix>>>(m, "VectorSpMat");
-    py::bind_map<map<OpNames, shared_ptr<SparseMatrix>>>(m, "MapOpNamesSpMat");
-    py::bind_map<
-        map<shared_ptr<OpExpr>, shared_ptr<SparseMatrix>, op_expr_less>>(
-        m, "MapOpExprSpMat");
-
     py::enum_<AncillaTypes>(m, "AncillaTypes", py::arithmetic())
         .value("Nothing", AncillaTypes::None)
         .value("Ancilla", AncillaTypes::Ancilla);
-
-    py::class_<MPSInfo, shared_ptr<MPSInfo>>(m, "MPSInfo")
-        .def_readwrite("n_sites", &MPSInfo::n_sites)
-        .def_readwrite("vaccum", &MPSInfo::vaccum)
-        .def_readwrite("target", &MPSInfo::target)
-        .def_readwrite("orbsym", &MPSInfo::orbsym)
-        .def_readwrite("n_syms", &MPSInfo::n_syms)
-        .def_readwrite("bond_dim", &MPSInfo::bond_dim)
-        .def_readwrite("tag", &MPSInfo::tag)
-        .def(py::init([](int n_sites, SpinLabel vaccum, SpinLabel target,
-                         Array<StateInfo> &basis, const vector<uint8_t> &orbsym,
-                         uint8_t n_syms) {
-            return make_shared<MPSInfo>(n_sites, vaccum, target, basis.data,
-                                        orbsym, n_syms);
-        }))
-        .def_property_readonly("basis",
-                               [](MPSInfo *self) {
-                                   return Array<StateInfo>(self->basis,
-                                                           self->n_syms);
-                               })
-        .def_property_readonly("left_dims_fci",
-                               [](MPSInfo *self) {
-                                   return Array<StateInfo>(self->left_dims_fci,
-                                                           self->n_sites + 1);
-                               })
-        .def_property_readonly("right_dims_fci",
-                               [](MPSInfo *self) {
-                                   return Array<StateInfo>(self->right_dims_fci,
-                                                           self->n_sites + 1);
-                               })
-        .def_property_readonly("left_dims",
-                               [](MPSInfo *self) {
-                                   return Array<StateInfo>(self->left_dims,
-                                                           self->n_sites + 1);
-                               })
-        .def_property_readonly("right_dims",
-                               [](MPSInfo *self) {
-                                   return Array<StateInfo>(self->right_dims,
-                                                           self->n_sites + 1);
-                               })
-        .def("get_ancilla_type", &MPSInfo::get_ancilla_type)
-        .def("set_bond_dimension_using_occ",
-             &MPSInfo::set_bond_dimension_using_occ, py::arg("m"),
-             py::arg("occ"), py::arg("bias") = 1.0)
-        .def("set_bond_dimension", &MPSInfo::set_bond_dimension)
-        .def("get_filename", &MPSInfo::get_filename)
-        .def("save_mutable", &MPSInfo::save_mutable)
-        .def("deallocate_mutable", &MPSInfo::deallocate_mutable)
-        .def("load_mutable", &MPSInfo::load_mutable)
-        .def("save_left_dims", &MPSInfo::save_left_dims)
-        .def("save_right_dims", &MPSInfo::save_right_dims)
-        .def("load_left_dims", &MPSInfo::load_left_dims)
-        .def("load_right_dims", &MPSInfo::load_right_dims)
-        .def("deallocate", &MPSInfo::deallocate);
-
-    py::class_<AncillaMPSInfo, shared_ptr<AncillaMPSInfo>, MPSInfo>(
-        m, "AncillaMPSInfo")
-        .def_readwrite("n_physical_sites", &AncillaMPSInfo::n_physical_sites)
-        .def(py::init([](int n_sites, SpinLabel vaccum, SpinLabel target,
-                         Array<StateInfo> &basis, const vector<uint8_t> &orbsym,
-                         uint8_t n_syms) {
-            return make_shared<AncillaMPSInfo>(n_sites, vaccum, target,
-                                               basis.data, orbsym, n_syms);
-        }))
-        .def_static("trans_orbsym", &AncillaMPSInfo::trans_orbsym)
-        .def("set_thermal_limit", &AncillaMPSInfo::set_thermal_limit);
-
-    py::class_<MPS, shared_ptr<MPS>>(m, "MPS")
-        .def(py::init<const shared_ptr<MPSInfo> &>())
-        .def(py::init<int, int, int>())
-        .def_readwrite("n_sites", &MPS::n_sites)
-        .def_readwrite("center", &MPS::center)
-        .def_readwrite("dot", &MPS::dot)
-        .def_readwrite("info", &MPS::info)
-        .def_readwrite("tensors", &MPS::tensors)
-        .def_readwrite("canonical_form", &MPS::canonical_form)
-        .def("initialize", &MPS::initialize)
-        .def("fill_thermal_limit", &MPS::fill_thermal_limit)
-        .def("canonicalize", &MPS::canonicalize)
-        .def("random_canonicalize", &MPS::random_canonicalize)
-        .def("get_filename", &MPS::get_filename)
-        .def("load_data", &MPS::load_data)
-        .def("save_data", &MPS::save_data)
-        .def("load_mutable", &MPS::load_mutable)
-        .def("save_mutable", &MPS::save_mutable)
-        .def("save_tensor", &MPS::save_tensor)
-        .def("load_tensor", &MPS::load_tensor)
-        .def("unload_tensor", &MPS::unload_tensor)
-        .def("deallocate", &MPS::deallocate);
 
     py::enum_<SeqTypes>(m, "SeqTypes", py::arithmetic())
         .value("Nothing", SeqTypes::None)
@@ -638,169 +1181,8 @@ PYBIND11_MODULE(block2, m) {
             return ss.str();
         });
 
-    py::class_<CG, shared_ptr<CG>>(m, "CG")
-        .def(py::init<>())
-        .def(py::init<int, int>())
-        .def("initialize", &CG::initialize)
-        .def("deallocate", &CG::deallocate)
-        .def_static("triangle", &CG::triangle, py::arg("tja"), py::arg("tjb"),
-                    py::arg("tjc"))
-        .def("sqrt_delta", &CG::sqrt_delta, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"))
-        .def("cg", &CG::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
-             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
-        .def("wigner_3j", &CG::wigner_3j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
-        .def("wigner_6j", &CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
-        .def("wigner_9j", &CG::wigner_9j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
-             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
-        .def("racah", &CG::racah, py::arg("ta"), py::arg("tb"), py::arg("tc"),
-             py::arg("td"), py::arg("te"), py::arg("tf"))
-        .def("transpose_cg", &CG::transpose_cg, py::arg("td"), py::arg("tl"),
-             py::arg("tr"));
-
-    py::class_<OperatorFunctions, shared_ptr<OperatorFunctions>>(
-        m, "OperatorFunctions")
-        .def_readwrite("cg", &OperatorFunctions::cg)
-        .def_readwrite("seq", &OperatorFunctions::seq)
-        .def(py::init<const shared_ptr<CG> &>())
-        .def("iadd", &OperatorFunctions::iadd, py::arg("a"), py::arg("b"),
-             py::arg("scale") = 1.0, py::arg("conj") = false)
-        .def("tensor_rotate", &OperatorFunctions::tensor_rotate, py::arg("a"),
-             py::arg("c"), py::arg("rot_bra"), py::arg("rot_ket"),
-             py::arg("trans"), py::arg("scale") = 1.0)
-        .def("tensor_product_diagonal",
-             &OperatorFunctions::tensor_product_diagonal, py::arg("conj"),
-             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("opdq"),
-             py::arg("scale") = 1.0)
-        .def("tensor_product_multiply",
-             &OperatorFunctions::tensor_product_multiply, py::arg("conj"),
-             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
-             py::arg("opdq"), py::arg("scale") = 1.0)
-        .def("tensor_product", &OperatorFunctions::tensor_product,
-             py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
-             py::arg("scale") = 1.0)
-        .def("product", &OperatorFunctions::product, py::arg("a"), py::arg("b"),
-             py::arg("c"), py::arg("scale") = 1.0)
-        .def_static("trans_product", &OperatorFunctions::trans_product,
-                    py::arg("a"), py::arg("b"), py::arg("trace_right"),
-                    py::arg("noise") = 0.0);
-
-    py::class_<OperatorTensor, shared_ptr<OperatorTensor>>(m, "OperatorTensor")
-        .def(py::init<>())
-        .def_readwrite("lmat", &OperatorTensor::lmat)
-        .def_readwrite("rmat", &OperatorTensor::rmat)
-        .def_readwrite("ops", &OperatorTensor::ops)
-        .def("reallocate", &OperatorTensor::reallocate, py::arg("clean"))
-        .def("deallocate", &OperatorTensor::deallocate);
-
-    py::class_<DelayedOperatorTensor, shared_ptr<DelayedOperatorTensor>>(
-        m, "DelayedOperatorTensor")
-        .def(py::init<>())
-        .def_readwrite("ops", &DelayedOperatorTensor::ops)
-        .def_readwrite("mat", &DelayedOperatorTensor::mat)
-        .def_readwrite("lops", &DelayedOperatorTensor::lops)
-        .def_readwrite("rops", &DelayedOperatorTensor::rops)
-        .def("reallocate", &DelayedOperatorTensor::reallocate, py::arg("clean"))
-        .def("deallocate", &DelayedOperatorTensor::deallocate);
-
-    py::bind_vector<vector<shared_ptr<OperatorTensor>>>(m, "VectorOpTensor");
-
-    py::class_<TensorFunctions, shared_ptr<TensorFunctions>>(m,
-                                                             "TensorFunctions")
-        .def(py::init<const shared_ptr<OperatorFunctions> &>())
-        .def_readwrite("opf", &TensorFunctions::opf)
-        .def_static("left_assign", &TensorFunctions::left_assign, py::arg("a"),
-                    py::arg("c"))
-        .def_static("right_assign", &TensorFunctions::right_assign,
-                    py::arg("a"), py::arg("c"))
-        .def("left_contract", &TensorFunctions::left_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
-        .def("right_contract", &TensorFunctions::right_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
-        .def("tensor_product_multiply",
-             &TensorFunctions::tensor_product_multiply)
-        .def("tensor_product_diagonal",
-             &TensorFunctions::tensor_product_diagonal)
-        .def("tensor_product", &TensorFunctions::tensor_product)
-        .def("left_rotate", &TensorFunctions::left_rotate)
-        .def("right_rotate", &TensorFunctions::right_rotate)
-        .def("numerical_transform", &TensorFunctions::numerical_transform)
-        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor>(*)(
-                                     const shared_ptr<OperatorTensor> &,
-                                     const shared_ptr<OperatorTensor> &,
-                                     const shared_ptr<OpExpr> &)) &
-                                     TensorFunctions::delayed_contract)
-        .def("delayed_contract_simplified",
-             (shared_ptr<DelayedOperatorTensor>(*)(
-                 const shared_ptr<OperatorTensor> &,
-                 const shared_ptr<OperatorTensor> &,
-                 const shared_ptr<Symbolic> &, const shared_ptr<Symbolic> &)) &
-                 TensorFunctions::delayed_contract);
-
-    py::class_<Partition, shared_ptr<Partition>>(m, "Partition")
-        .def(py::init<const shared_ptr<OperatorTensor> &,
-                      const shared_ptr<OperatorTensor> &,
-                      const shared_ptr<OperatorTensor> &>())
-        .def(py::init<const shared_ptr<OperatorTensor> &,
-                      const shared_ptr<OperatorTensor> &,
-                      const shared_ptr<OperatorTensor> &,
-                      const shared_ptr<OperatorTensor> &>())
-        .def_readwrite("left", &Partition::left)
-        .def_readwrite("right", &Partition::right)
-        .def_readwrite("middle", &Partition::middle)
-        .def_readwrite("left_op_infos", &Partition::left_op_infos)
-        .def_readwrite("right_op_infos", &Partition::right_op_infos)
-        .def_static("find_op_info", &Partition::find_op_info)
-        .def_static("build_left", &Partition::build_left)
-        .def_static("build_right", &Partition::build_right)
-        .def_static("get_uniq_labels", &Partition::get_uniq_labels)
-        .def_static("get_uniq_sub_labels", &Partition::get_uniq_sub_labels)
-        .def_static("deallocate_op_infos_notrunc",
-                    &Partition::deallocate_op_infos_notrunc)
-        .def_static("copy_op_infos", &Partition::copy_op_infos)
-        .def_static("init_left_op_infos", &Partition::init_left_op_infos)
-        .def_static("init_left_op_infos_notrunc",
-                    &Partition::init_left_op_infos_notrunc)
-        .def_static("init_right_op_infos", &Partition::init_right_op_infos)
-        .def_static("init_right_op_infos_notrunc",
-                    &Partition::init_right_op_infos_notrunc);
-
-    py::bind_vector<vector<shared_ptr<Partition>>>(m, "VectorPartition");
-
-    py::class_<EffectiveHamiltonian, shared_ptr<EffectiveHamiltonian>>(
-        m, "EffectiveHamiltonian")
-        .def(py::init<
-             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
-             const vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>> &,
-             const shared_ptr<DelayedOperatorTensor> &,
-             const shared_ptr<SparseMatrix> &, const shared_ptr<SparseMatrix> &,
-             const shared_ptr<OpElement> &,
-             const shared_ptr<SymbolicColumnVector> &,
-             const shared_ptr<TensorFunctions> &, bool>())
-        .def_readwrite("left_op_infos", &EffectiveHamiltonian::left_op_infos)
-        .def_readwrite("right_op_infos", &EffectiveHamiltonian::right_op_infos)
-        .def_readwrite("op", &EffectiveHamiltonian::op)
-        .def_readwrite("bra", &EffectiveHamiltonian::bra)
-        .def_readwrite("ket", &EffectiveHamiltonian::ket)
-        .def_readwrite("diag", &EffectiveHamiltonian::diag)
-        .def_readwrite("cmat", &EffectiveHamiltonian::cmat)
-        .def_readwrite("vmat", &EffectiveHamiltonian::vmat)
-        .def_readwrite("tf", &EffectiveHamiltonian::tf)
-        .def_readwrite("opdq", &EffectiveHamiltonian::opdq)
-        .def_readwrite("compute_diag", &EffectiveHamiltonian::compute_diag)
-        .def("__call__", &EffectiveHamiltonian::operator(), py::arg("b"),
-             py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0)
-        .def("eigs", &EffectiveHamiltonian::eigs)
-        .def("multiply", &EffectiveHamiltonian::multiply)
-        .def("expect", &EffectiveHamiltonian::expect)
-        .def("rk4_apply", &EffectiveHamiltonian::rk4_apply, py::arg("beta"),
-             py::arg("const_e"), py::arg("eval_energy") = false)
-        .def("expo_apply", &EffectiveHamiltonian::expo_apply, py::arg("beta"),
-             py::arg("const_e"), py::arg("iprint") = false)
-        .def("deallocate", &EffectiveHamiltonian::deallocate);
+    py::class_<PointGroup, shared_ptr<PointGroup>>(m, "PointGroup")
+        .def_static("swap_d2h", &PointGroup::swap_d2h);
 
     py::enum_<FuseTypes>(m, "FuseTypes", py::arithmetic())
         .value("NoFuse", FuseTypes::NoFuse)
@@ -808,268 +1190,9 @@ PYBIND11_MODULE(block2, m) {
         .value("FuseR", FuseTypes::FuseR)
         .value("FuseLR", FuseTypes::FuseLR);
 
-    py::class_<MovingEnvironment, shared_ptr<MovingEnvironment>>(
-        m, "MovingEnvironment")
-        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<MPS> &,
-                      const shared_ptr<MPS> &>())
-        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<MPS> &,
-                      const shared_ptr<MPS> &, const string &>())
-        .def_readwrite("n_sites", &MovingEnvironment::n_sites)
-        .def_readwrite("center", &MovingEnvironment::center)
-        .def_readwrite("dot", &MovingEnvironment::dot)
-        .def_readwrite("mpo", &MovingEnvironment::mpo)
-        .def_readwrite("bra", &MovingEnvironment::bra)
-        .def_readwrite("ket", &MovingEnvironment::ket)
-        .def_readwrite("envs", &MovingEnvironment::envs)
-        .def_readwrite("tag", &MovingEnvironment::tag)
-        .def("left_contract_rotate", &MovingEnvironment::left_contract_rotate)
-        .def("right_contract_rotate", &MovingEnvironment::right_contract_rotate)
-        .def("init_environments", &MovingEnvironment::init_environments, py::arg("iprint") = false)
-        .def("prepare", &MovingEnvironment::prepare)
-        .def("move_to", &MovingEnvironment::move_to)
-        .def("eff_ham", &MovingEnvironment::eff_ham, py::arg("fuse_type"),
-             py::arg("compute_diag"))
-        .def("get_left_partition_filename",
-             &MovingEnvironment::get_left_partition_filename)
-        .def("get_right_partition_filename",
-             &MovingEnvironment::get_right_partition_filename)
-        .def_static("contract_two_dot", &MovingEnvironment::contract_two_dot,
-                    py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
-        .def_static("density_matrix", &MovingEnvironment::density_matrix,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"))
-        .def_static("density_matrix_with_weights",
-                    &MovingEnvironment::density_matrix_with_weights,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"), py::arg("mats"), py::arg("weights"))
-        .def_static(
-            "split_density_matrix",
-            [](const shared_ptr<SparseMatrix> &dm,
-               const shared_ptr<SparseMatrix> &wfn, int k, bool trace_right) {
-                shared_ptr<SparseMatrix> left = nullptr, right = nullptr;
-                double error = MovingEnvironment::split_density_matrix(
-                    dm, wfn, k, trace_right, left, right);
-                return make_tuple(error, left, right);
-            })
-        .def_static("propagate_wfn", &MovingEnvironment::propagate_wfn,
-                    py::arg("i"), py::arg("n_sites"), py::arg("mps"),
-                    py::arg("forward"));
-
-    py::class_<Hamiltonian, shared_ptr<Hamiltonian>>(m, "Hamiltonian")
-        .def(py::init<SpinLabel, SpinLabel, int, bool,
-                      const shared_ptr<FCIDUMP> &, const vector<uint8_t> &>())
-        .def_static("swap_d2h", &Hamiltonian::swap_d2h)
-        .def_readwrite("fcidump", &Hamiltonian::fcidump)
-        .def_readwrite("n_syms", &Hamiltonian::n_syms)
-        .def_readwrite("opf", &Hamiltonian::opf)
-        .def_readwrite("mu", &Hamiltonian::mu)
-        .def_readwrite("n_sites", &Hamiltonian::n_sites)
-        .def_readwrite("orb_sym", &Hamiltonian::orb_sym)
-        .def_readwrite("vaccum", &Hamiltonian::vaccum)
-        .def_readwrite("target", &Hamiltonian::target)
-        .def_readwrite("su2", &Hamiltonian::su2)
-        .def_property_readonly("basis",
-                               [](Hamiltonian *self) {
-                                   return Array<StateInfo>(self->basis,
-                                                           self->n_syms);
-                               })
-        .def_property_readonly("op_prims",
-                               [](Hamiltonian *self) {
-                                   return make_pair(self->op_prims[0],
-                                                    self->op_prims[1]);
-                               })
-        .def("v", &Hamiltonian::v)
-        .def("t", &Hamiltonian::t)
-        .def("e", &Hamiltonian::e)
-        .def_property_readonly(
-            "site_op_infos",
-            [](Hamiltonian *self) {
-                return Array<
-                    vector<pair<SpinLabel, shared_ptr<SparseMatrixInfo>>>>(
-                    self->site_op_infos, self->n_syms);
-            })
-        .def("init_site_ops", &Hamiltonian::init_site_ops)
-        .def("get_site_ops", &Hamiltonian::get_site_ops)
-        .def("filter_site_ops", &Hamiltonian::filter_site_ops)
-        .def("find_site_op_info", &Hamiltonian::find_site_op_info)
-        .def("find_site_norm_op", &Hamiltonian::find_site_norm_op)
-        .def("deallocate", &Hamiltonian::deallocate);
-
-    py::class_<DMRG::Iteration, shared_ptr<DMRG::Iteration>>(m, "DMRGIteration")
-        .def(py::init<double, double, int, size_t, double>())
-        .def(py::init<double, double, int>())
-        .def_readwrite("energy", &DMRG::Iteration::energy)
-        .def_readwrite("error", &DMRG::Iteration::error)
-        .def_readwrite("ndav", &DMRG::Iteration::ndav)
-        .def_readwrite("tdav", &DMRG::Iteration::tdav)
-        .def_readwrite("nflop", &DMRG::Iteration::nflop)
-        .def("__repr__", [](DMRG::Iteration *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<DMRG, shared_ptr<DMRG>>(m, "DMRG")
-        .def(py::init<const shared_ptr<MovingEnvironment> &,
-                      const vector<uint16_t> &, const vector<double> &>())
-        .def_readwrite("me", &DMRG::me)
-        .def_readwrite("bond_dims", &DMRG::bond_dims)
-        .def_readwrite("noises", &DMRG::noises)
-        .def_readwrite("energies", &DMRG::energies)
-        .def_readwrite("forward", &DMRG::forward)
-        .def("update_two_dot", &DMRG::update_two_dot)
-        .def("blocking", &DMRG::blocking)
-        .def("sweep", &DMRG::sweep)
-        .def("solve", &DMRG::solve, py::arg("n_sweeps"),
-             py::arg("forward") = true, py::arg("tol") = 1E-6);
-
     py::enum_<TETypes>(m, "TETypes", py::arithmetic())
         .value("TangentSpace", TETypes::TangentSpace)
         .value("RK4", TETypes::RK4);
-
-    py::class_<ImaginaryTE::Iteration, shared_ptr<ImaginaryTE::Iteration>>(
-        m, "ImaginaryTEIteration")
-        .def(py::init<double, double, double, int, int, size_t, double>())
-        .def(py::init<double, double, double, int, int>())
-        .def_readwrite("energy", &ImaginaryTE::Iteration::energy)
-        .def_readwrite("normsq", &ImaginaryTE::Iteration::normsq)
-        .def_readwrite("error", &ImaginaryTE::Iteration::error)
-        .def_readwrite("nexpo", &ImaginaryTE::Iteration::nexpo)
-        .def_readwrite("nexpok", &ImaginaryTE::Iteration::nexpok)
-        .def_readwrite("texpo", &ImaginaryTE::Iteration::texpo)
-        .def_readwrite("nflop", &ImaginaryTE::Iteration::nflop)
-        .def("__repr__", [](ImaginaryTE::Iteration *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<ImaginaryTE, shared_ptr<ImaginaryTE>>(m, "ImaginaryTE")
-        .def(py::init<const shared_ptr<MovingEnvironment> &,
-                      const vector<uint16_t> &, TETypes>())
-        .def_readwrite("me", &ImaginaryTE::me)
-        .def_readwrite("bond_dims", &ImaginaryTE::bond_dims)
-        .def_readwrite("noises", &ImaginaryTE::noises)
-        .def_readwrite("energies", &ImaginaryTE::energies)
-        .def_readwrite("normsqs", &ImaginaryTE::normsqs)
-        .def_readwrite("forward", &ImaginaryTE::forward)
-        .def_readwrite("mode", &ImaginaryTE::mode)
-        .def("update_two_dot", &ImaginaryTE::update_two_dot)
-        .def("blocking", &ImaginaryTE::blocking)
-        .def("sweep", &ImaginaryTE::sweep)
-        .def("normalize", &ImaginaryTE::normalize)
-        .def("solve", &ImaginaryTE::solve, py::arg("n_sweeps"), py::arg("beta"),
-             py::arg("forward") = true, py::arg("tol") = 1E-6);
-
-    py::class_<Compress::Iteration, shared_ptr<Compress::Iteration>>(
-        m, "CompressIteration")
-        .def(py::init<double, double, size_t, double>())
-        .def(py::init<double, double>())
-        .def_readwrite("norm", &Compress::Iteration::norm)
-        .def_readwrite("error", &Compress::Iteration::error)
-        .def_readwrite("tmult", &Compress::Iteration::tmult)
-        .def_readwrite("nflop", &Compress::Iteration::nflop)
-        .def("__repr__", [](Compress::Iteration *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<Compress, shared_ptr<Compress>>(m, "Compress")
-        .def(py::init<const shared_ptr<MovingEnvironment> &,
-                      const vector<uint16_t> &, const vector<uint16_t> &,
-                      const vector<double> &>())
-        .def_readwrite("me", &Compress::me)
-        .def_readwrite("bra_bond_dims", &Compress::bra_bond_dims)
-        .def_readwrite("ket_bond_dims", &Compress::ket_bond_dims)
-        .def_readwrite("noises", &Compress::noises)
-        .def_readwrite("norms", &Compress::norms)
-        .def_readwrite("forward", &Compress::forward)
-        .def("update_two_dot", &Compress::update_two_dot)
-        .def("blocking", &Compress::blocking)
-        .def("sweep", &Compress::sweep)
-        .def("solve", &Compress::solve, py::arg("n_sweeps"),
-             py::arg("forward") = true, py::arg("tol") = 1E-6);
-
-    py::class_<Expect::Iteration, shared_ptr<Expect::Iteration>>(
-        m, "ExpectIteration")
-        .def(py::init<const vector<pair<shared_ptr<OpExpr>, double>> &, double,
-                      double, size_t, double>())
-        .def(py::init<const vector<pair<shared_ptr<OpExpr>, double>> &, double,
-                      double>())
-        .def_readwrite("bra_error", &Expect::Iteration::bra_error)
-        .def_readwrite("ket_error", &Expect::Iteration::ket_error)
-        .def_readwrite("tmult", &Expect::Iteration::tmult)
-        .def_readwrite("nflop", &Expect::Iteration::nflop)
-        .def("__repr__", [](Expect::Iteration *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<Expect, shared_ptr<Expect>>(m, "Expect")
-        .def(py::init<const shared_ptr<MovingEnvironment> &, uint16_t,
-                      uint16_t>())
-        .def_readwrite("me", &Expect::me)
-        .def_readwrite("bra_bond_dim", &Expect::bra_bond_dim)
-        .def_readwrite("ket_bond_dim", &Expect::ket_bond_dim)
-        .def_readwrite("expectations", &Expect::expectations)
-        .def_readwrite("forward", &Expect::forward)
-        .def("update_two_dot", &Expect::update_two_dot)
-        .def("blocking", &Expect::blocking)
-        .def("sweep", &Expect::sweep)
-        .def("solve", &Expect::solve, py::arg("propagate"),
-             py::arg("forward") = true)
-        .def("get_1pdm_spatial", &Expect::get_1pdm_spatial,
-             py::arg("n_physical_sites") = (uint16_t)0U);
-
-    py::class_<MPOSchemer, shared_ptr<MPOSchemer>>(m, "MPOSchemer")
-        .def_readwrite("left_trans_site", &MPOSchemer::left_trans_site)
-        .def_readwrite("right_trans_site", &MPOSchemer::right_trans_site)
-        .def_readwrite("left_new_operator_names",
-                       &MPOSchemer::left_new_operator_names)
-        .def_readwrite("right_new_operator_names",
-                       &MPOSchemer::right_new_operator_names)
-        .def_readwrite("left_new_operator_exprs",
-                       &MPOSchemer::left_new_operator_exprs)
-        .def_readwrite("right_new_operator_exprs",
-                       &MPOSchemer::right_new_operator_exprs)
-        .def(py::init<uint8_t, uint8_t>())
-        .def("copy", &MPOSchemer::copy)
-        .def("get_transform_formulas", &MPOSchemer::get_transform_formulas);
-
-    py::class_<MPO, shared_ptr<MPO>>(m, "MPO")
-        .def(py::init<int>())
-        .def_readwrite("n_sites", &MPO::n_sites)
-        .def_readwrite("const_e", &MPO::const_e)
-        .def_readwrite("tensors", &MPO::tensors)
-        .def_readwrite("left_operator_names", &MPO::left_operator_names)
-        .def_readwrite("right_operator_names", &MPO::right_operator_names)
-        .def_readwrite("middle_operator_names", &MPO::middle_operator_names)
-        .def_readwrite("left_operator_exprs", &MPO::left_operator_exprs)
-        .def_readwrite("right_operator_exprs", &MPO::right_operator_exprs)
-        .def_readwrite("middle_operator_exprs", &MPO::middle_operator_exprs)
-        .def_readwrite("op", &MPO::op)
-        .def_readwrite("schemer", &MPO::schemer)
-        .def_readwrite("tf", &MPO::tf)
-        .def_readwrite("site_op_infos", &MPO::site_op_infos)
-        .def_readwrite("schemer", &MPO::schemer)
-        .def("get_blocking_formulas", &MPO::get_blocking_formulas)
-        .def("get_ancilla_type", &MPO::get_ancilla_type)
-        .def("deallocate", &MPO::deallocate);
-
-    py::class_<Rule, shared_ptr<Rule>>(m, "Rule")
-        .def(py::init<>())
-        .def("__call__", &Rule::operator());
-
-    py::class_<NoTransposeRule, shared_ptr<NoTransposeRule>, Rule>(
-        m, "NoTransposeRule")
-        .def_readwrite("prim_rule", &NoTransposeRule::prim_rule)
-        .def(py::init<const shared_ptr<Rule> &>());
-
-    py::class_<RuleQCSU2, shared_ptr<RuleQCSU2>, Rule>(m, "RuleQCSU2")
-        .def(py::init<>())
-        .def(py::init<bool, bool, bool, bool, bool, bool>());
 
     py::enum_<QCTypes>(m, "QCTypes", py::arithmetic())
         .value("NC", QCTypes::NC)
@@ -1077,32 +1200,9 @@ PYBIND11_MODULE(block2, m) {
         .value("NCCN", QCTypes(QCTypes::NC | QCTypes::CN))
         .value("Conventional", QCTypes::Conventional);
 
-    py::class_<SimplifiedMPO, shared_ptr<SimplifiedMPO>, MPO>(m,
-                                                              "SimplifiedMPO")
-        .def_readwrite("prim_mpo", &SimplifiedMPO::prim_mpo)
-        .def_readwrite("rule", &SimplifiedMPO::rule)
-        .def_readwrite("collect_terms", &SimplifiedMPO::collect_terms)
-        .def(py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &>())
-        .def(
-            py::init<const shared_ptr<MPO> &, const shared_ptr<Rule> &, bool>())
-        .def("simplify_expr", &SimplifiedMPO::simplify_expr)
-        .def("simplify_symbolic", &SimplifiedMPO::simplify_symbolic)
-        .def("simplify", &SimplifiedMPO::simplify);
+    py::module m_su2 = m.def_submodule("su2", "Spin-adapted.");
+    bind_class<SU2>(m_su2, "SU2");
 
-    py::class_<IdentityMPO, shared_ptr<IdentityMPO>, MPO>(m, "IdentityMPO")
-        .def(py::init<const Hamiltonian &>());
-
-    py::class_<MPOQCSU2, shared_ptr<MPOQCSU2>, MPO>(m, "MPOQCSU2")
-        .def_readwrite("mode", &MPOQCSU2::mode)
-        .def(py::init<const Hamiltonian &>())
-        .def(py::init<const Hamiltonian &, QCTypes>());
-
-    py::class_<PDM1MPOQCSU2, shared_ptr<PDM1MPOQCSU2>, MPO>(m, "PDM1MPOQCSU2")
-        .def(py::init<const Hamiltonian &>());
-
-    py::class_<AncillaMPO, shared_ptr<AncillaMPO>, MPO>(m, "AncillaMPO")
-        .def_readwrite("n_physical_sites", &AncillaMPO::n_physical_sites)
-        .def_readwrite("prim_mpo", &AncillaMPO::prim_mpo)
-        .def(py::init<const shared_ptr<MPO> &>())
-        .def(py::init<const shared_ptr<MPO> &, bool>());
+    py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
+    bind_class<SZ>(m_sz, "SZ");
 }

@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 
 using namespace std;
 using namespace block2;

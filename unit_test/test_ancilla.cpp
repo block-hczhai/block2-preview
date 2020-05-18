@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;

@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -10,12 +10,12 @@ class TestDMRG : public ::testing::Test {
     size_t dsize = 1L << 34;
     void SetUp() override {
         Random::rand_seed(0);
-        frame = new DataFrame(isize, dsize, "nodex");
+        frame_() = new DataFrame(isize, dsize, "nodex");
     }
     void TearDown() override {
-        frame->activate(0);
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete frame;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     }
 };
 
@@ -39,7 +39,7 @@ TEST_F(TestDMRG, Test) {
 
     // abort();
 
-    mkl_set_num_threads(8);
+    mkl_set_num_threads(2);
     mkl_set_dynamic(0);
 
     Timer t;
@@ -56,7 +56,7 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    uint16_t bond_dim = 250;
+    uint16_t bond_dim = 100;
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
@@ -115,12 +115,12 @@ TEST_F(TestDMRG, Test) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    frame->activate(0);
-    cout << "persistent memory used :: I = " << ialloc->used
-         << " D = " << dalloc->used << endl;
-    frame->activate(1);
-    cout << "exclusive  memory used :: I = " << ialloc->used
-         << " D = " << dalloc->used << endl;
+    frame_()->activate(0);
+    cout << "persistent memory used :: I = " << ialloc_()->used
+         << " D = " << dalloc_()->used << endl;
+    frame_()->activate(1);
+    cout << "exclusive  memory used :: I = " << ialloc_()->used
+         << " D = " << dalloc_()->used << endl;
     // abort();
     // ME
     hamil.opf->seq->mode = SeqTypes::Simple;
@@ -142,6 +142,7 @@ TEST_F(TestDMRG, Test) {
     // vector<uint16_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+    dmrg->iprint = 2;
     dmrg->solve(30, true);
 
     // deallocate persistent stack memory
