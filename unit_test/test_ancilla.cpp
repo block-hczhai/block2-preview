@@ -10,36 +10,37 @@ class TestAncilla : public ::testing::Test {
     size_t dsize = 1L << 32;
     void SetUp() override {
         Random::rand_seed(0);
-        frame = new DataFrame(isize, dsize, "nodex");
+        frame_() = new DataFrame(isize, dsize, "nodex");
     }
     void TearDown() override {
-        frame->activate(0);
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete frame;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     }
 };
 
+typedef SZ Spin;
+
 TEST_F(TestAncilla, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
+    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
-    SU2 vaccum(0);
-    SU2 target(fcidump->n_sites() * 2, fcidump->twos(),
+    Spin vaccum(0);
+    Spin target(fcidump->n_sites() * 2, fcidump->twos(),
                      PointGroup::swap_d2h(fcidump->isym()));
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
-    bool su2 = !fcidump->uhf;
     uint16_t bond_dim = 500;
     double beta = 0.0025;
-    HamiltonianQC<SU2> hamil(vaccum, target, n_physical_sites, orbsym, fcidump);
+    HamiltonianQC<Spin> hamil(vaccum, target, n_physical_sites, orbsym, fcidump);
     hamil.opf->seq->mode = SeqTypes::Simple;
 
     // Ancilla MPSInfo (thermal)
-    shared_ptr<AncillaMPSInfo<SU2>> mps_info_thermal = make_shared<AncillaMPSInfo<SU2>>(
+    shared_ptr<AncillaMPSInfo<Spin>> mps_info_thermal = make_shared<AncillaMPSInfo<Spin>>(
         n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
@@ -47,7 +48,7 @@ TEST_F(TestAncilla, Test) {
     mps_info_thermal->deallocate_mutable();
 
     // Ancilla MPSInfo (initial)
-    shared_ptr<AncillaMPSInfo<SU2>> mps_info = make_shared<AncillaMPSInfo<SU2>>(
+    shared_ptr<AncillaMPSInfo<Spin>> mps_info = make_shared<AncillaMPSInfo<Spin>>(
         n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "BRA";
@@ -65,13 +66,13 @@ TEST_F(TestAncilla, Test) {
 
     Random::rand_seed(1969);
     // Ancilla MPS (thermal)
-    shared_ptr<MPS<SU2>> mps_thermal = make_shared<MPS<SU2>>(n_sites, n_sites - 2, 2);
+    shared_ptr<MPS<Spin>> mps_thermal = make_shared<MPS<Spin>>(n_sites, n_sites - 2, 2);
     mps_info_thermal->load_mutable();
     mps_thermal->initialize(mps_info_thermal);
     mps_thermal->fill_thermal_limit();
 
     // Ancilla MPS (initial)
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(n_sites, n_sites - 2, 2);
+    shared_ptr<MPS<Spin>> mps = make_shared<MPS<Spin>>(n_sites, n_sites - 2, 2);
     mps_info->load_mutable();
     mps->initialize(mps_info);
     mps->random_canonicalize();
@@ -89,58 +90,60 @@ TEST_F(TestAncilla, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     hamil.mu = 0.0;
-    shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<Spin>> mpo = make_shared<MPOQC<Spin>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // Ancilla MPO construction
     cout << "Ancilla MPO start" << endl;
-    mpo = make_shared<AncillaMPO<SU2>>(mpo);
+    mpo = make_shared<AncillaMPO<Spin>>(mpo);
     cout << "Ancilla MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>());
+    mpo = make_shared<SimplifiedMPO<Spin>>(mpo, make_shared<RuleQC<Spin>>());
     // mpo = make_shared<SimplifiedMPO>(mpo, make_shared<Rule>());
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
     // Identity MPO
-    shared_ptr<MPO<SU2>> impo = make_shared<IdentityMPO<SU2>>(hamil);
-    impo = make_shared<AncillaMPO<SU2>>(impo);
-    impo = make_shared<SimplifiedMPO<SU2>>(impo, make_shared<Rule<SU2>>());
+    shared_ptr<MPO<Spin>> impo = make_shared<IdentityMPO<Spin>>(hamil);
+    impo = make_shared<AncillaMPO<Spin>>(impo);
+    impo = make_shared<SimplifiedMPO<Spin>>(impo, make_shared<Rule<Spin>>());
 
     // 1PDM MPO
-    shared_ptr<MPO<SU2>> pmpo = make_shared<PDM1MPOQC<SU2>>(hamil);
-    pmpo = make_shared<AncillaMPO<SU2>>(pmpo, true);
-    pmpo = make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<Rule<SU2>>());
+    shared_ptr<MPO<Spin>> pmpo = make_shared<PDM1MPOQC<Spin>>(hamil);
+    pmpo = make_shared<AncillaMPO<Spin>>(pmpo, true);
+    pmpo = make_shared<SimplifiedMPO<Spin>>(pmpo, make_shared<Rule<Spin>>());
+    // cout << mpo->get_blocking_formulas() << endl;
+    // abort();
 
     // Identity ME
-    shared_ptr<MovingEnvironment<SU2>> ime =
-        make_shared<MovingEnvironment<SU2>>(impo, mps, mps_thermal, "COMPRESS");
+    shared_ptr<MovingEnvironment<Spin>> ime =
+        make_shared<MovingEnvironment<Spin>>(impo, mps, mps_thermal, "COMPRESS");
     ime->init_environments();
 
     // Compress
     vector<uint16_t> bra_bdims = {bond_dim}, ket_bdims = {10};
     vector<double> noises = {0};
-    shared_ptr<Compress<SU2>> cps = make_shared<Compress<SU2>>(ime, bra_bdims, ket_bdims, noises);
+    shared_ptr<Compress<Spin>> cps = make_shared<Compress<Spin>>(ime, bra_bdims, ket_bdims, noises);
     cps->solve(30, false);
 
     // TE ME
-    shared_ptr<MovingEnvironment<SU2>> me = make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "TE");
+    shared_ptr<MovingEnvironment<Spin>> me = make_shared<MovingEnvironment<Spin>>(mpo, mps, mps, "TE");
     me->init_environments();
 
     // Imaginary TE
     vector<uint16_t> bdims = {bond_dim};
-    shared_ptr<ImaginaryTE<SU2>> te = make_shared<ImaginaryTE<SU2>>(me, bdims, TETypes::RK4);
-    te->solve(10, beta / 2, cps->forward);
+    shared_ptr<ImaginaryTE<Spin>> te = make_shared<ImaginaryTE<Spin>>(me, bdims, TETypes::RK4);
+    te->solve(2, beta / 2, cps->forward);
 
     // 1PDM ME
-    shared_ptr<MovingEnvironment<SU2>> pme = make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
+    shared_ptr<MovingEnvironment<Spin>> pme = make_shared<MovingEnvironment<Spin>>(pmpo, mps, mps, "1PDM");
     pme->init_environments();
 
     // 1PDM
-    shared_ptr<Expect<SU2>> expect = make_shared<Expect<SU2>>(pme, bond_dim, bond_dim);
+    shared_ptr<Expect<Spin>> expect = make_shared<Expect<Spin>>(pme, bond_dim, bond_dim);
     expect->solve(true, te->forward);
 
     // deallocate persistent stack memory

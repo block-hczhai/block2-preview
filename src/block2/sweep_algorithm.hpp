@@ -139,17 +139,18 @@ template <typename S> struct DMRG {
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
-                        << " .. ";
+                         << " Site = " << setw(4) << i << "-" << setw(4)
+                         << i + 1 << " .. ";
                 else
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << " .. ";
+                         << " Site = " << setw(4) << i << " .. ";
                 cout.flush();
             }
             t.get_time();
             Iteration r = blocking(i, forward, bond_dim, noise);
-            cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                 << t.get_time() << endl;
+            if (iprint >= 2)
+                cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                     << t.get_time() << endl;
             energies.push_back(r.energy);
         }
         return *min_element(energies.begin(), energies.end());
@@ -164,11 +165,12 @@ template <typename S> struct DMRG {
         energies.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
-                cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
-                    << (forward ? "forward" : "backward")
-                    << " | Bond dimension = " << setw(4) << bond_dims[iw]
-                    << " | Noise = " << scientific << setw(9) << setprecision(2)
-                    << noises[iw] << endl;
+                cout << "Sweep = " << setw(4) << iw
+                     << " | Direction = " << setw(8)
+                     << (forward ? "forward" : "backward")
+                     << " | Bond dimension = " << setw(4) << bond_dims[iw]
+                     << " | Noise = " << scientific << setw(9)
+                     << setprecision(2) << noises[iw] << endl;
             double energy = sweep(forward, bond_dims[iw], noises[iw]);
             energies.push_back(energy);
             bool converged = energies.size() >= 2 && tol > 0 &&
@@ -180,11 +182,11 @@ template <typename S> struct DMRG {
             current.get_time();
             if (iprint == 1) {
                 cout << fixed << setprecision(8);
-                cout << "Energy = " << setw(15) << energy << " ";
+                cout << " .. Energy = " << setw(15) << energy << " ";
             }
             if (iprint >= 1)
                 cout << "Time elapsed = " << setw(10) << setprecision(2)
-                    << current.current - start.current << endl;
+                     << current.current - start.current << endl;
             if (converged)
                 break;
         }
@@ -200,6 +202,7 @@ template <typename S> struct ImaginaryTE {
     shared_ptr<MovingEnvironment<S>> me;
     vector<uint16_t> bond_dims;
     vector<double> noises;
+    vector<double> errors;
     vector<double> energies;
     vector<double> normsqs;
     bool forward;
@@ -249,28 +252,36 @@ template <typename S> struct ImaginaryTE {
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         shared_ptr<SparseMatrix<S>> dm;
+        const vector<double> weights = {1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0,
+                                        1.0 / 6.0};
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
+            // TangentSpace method does not allow multiple sweeps for one time
+            // step
+            assert(mode == TETypes::RK4);
             MatrixRef tmp(nullptr, h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
-            memcpy(h_eff->ket->data, tmp.data, 
+            memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(double));
             tmp.deallocate();
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
             h_eff->deallocate();
-            dm = MovingEnvironment<S>::density_matrix(h_eff->opdq, h_eff->ket,
-                                                      forward, noise);
+            dm = MovingEnvironment<S>::density_matrix_with_weights(
+                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights);
+            frame->activate(1);
+            for (int i = pdp.first.size() - 1; i >= 0; i--)
+                pdp.first[i].deallocate();
+            frame->activate(0);
         } else if (effective_mode == TETypes::TangentSpace) {
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
             h_eff->deallocate();
             dm = MovingEnvironment<S>::density_matrix(h_eff->opdq, h_eff->ket,
                                                       forward, noise);
         } else if (effective_mode == TETypes::RK4) {
-            const vector<double> weights = {1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0,
-                                            1.0 / 6.0};
             auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
             pdi = pdp.second;
             h_eff->deallocate();
@@ -345,11 +356,12 @@ template <typename S> struct ImaginaryTE {
         else
             assert(false);
     }
-    pair<double, double> sweep(bool forward, bool advance, double beta,
-                               uint16_t bond_dim, double noise) {
+    tuple<double, double, double> sweep(bool forward, bool advance, double beta,
+                                        uint16_t bond_dim, double noise) {
         me->prepare();
         vector<double> energies, normsqs;
         vector<int> sweep_range;
+        double largest_error = 0.0;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
                 sweep_range.push_back(it);
@@ -362,31 +374,32 @@ template <typename S> struct ImaginaryTE {
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
-                        << " .. ";
+                         << " Site = " << setw(4) << i << "-" << setw(4)
+                         << i + 1 << " .. ";
                 else
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << " .. ";
+                         << " Site = " << setw(4) << i << " .. ";
                 cout.flush();
             }
             t.get_time();
             Iteration r = blocking(i, forward, advance, beta, bond_dim, noise);
-            cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                 << t.get_time() << endl;
+            if (iprint >= 2)
+                cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                     << t.get_time() << endl;
             energies.push_back(r.energy);
             normsqs.push_back(r.normsq);
+            largest_error = max(largest_error, r.error);
         }
-        return make_pair(energies.back(), normsqs.back());
+        return make_tuple(energies.back(), normsqs.back(), largest_error);
     }
     void normalize() {
-        if (normsqs.back() != 1.0) {
-            size_t center = me->ket->canonical_form.find('C');
-            assert(center != string::npos);
-            me->ket->load_tensor(center);
-            me->ket->tensors[center]->factor /= sqrt(normsqs.back());
-            me->ket->save_tensor(center);
-            me->ket->unload_tensor(center);
-        }
+        size_t center = me->ket->canonical_form.find('C');
+        assert(center != string::npos);
+        me->ket->load_tensor(center);
+        double norm = me->ket->tensors[center]->norm();
+        me->ket->tensors[center]->factor /= norm;
+        me->ket->save_tensor(center);
+        me->ket->unload_tensor(center);
     }
     double solve(int n_sweeps, double beta, bool forward = true,
                  double tol = 1E-6) {
@@ -398,36 +411,41 @@ template <typename S> struct ImaginaryTE {
         start.get_time();
         energies.clear();
         normsqs.clear();
-        for (int iw = 0; iw < n_sweeps; iw++)
+        for (int iw = 0; iw < n_sweeps; iw++) {
             for (int isw = 0; isw < n_sub_sweeps; isw++) {
                 if (iprint >= 1) {
                     cout << "Sweep = " << setw(4) << iw;
                     if (n_sub_sweeps != 1)
                         cout << " (" << setw(2) << isw << "/" << setw(2)
-                            << (int)n_sub_sweeps << ")";
+                             << (int)n_sub_sweeps << ")";
                     cout << " | Direction = " << setw(8)
-                        << (forward ? "forward" : "backward")
-                        << " | Beta = " << setw(10) << setprecision(5)
-                        << beta * (iw + 1) << " | Bond dimension = " << setw(4)
-                        << bond_dims[iw] << " | Noise = " << scientific << setw(9)
-                        << setprecision(2) << noises[iw] << endl;
+                         << (forward ? "forward" : "backward")
+                         << " | Beta = " << fixed << setw(10) << setprecision(5)
+                         << beta << " | Bond dimension = " << setw(4)
+                         << bond_dims[iw] << " | Noise = " << scientific
+                         << setw(9) << setprecision(2) << noises[iw] << endl;
                 }
                 auto r = sweep(forward, isw == n_sub_sweeps - 1, beta,
                                bond_dims[iw], noises[iw]);
-                energies.push_back(r.first);
-                normsqs.push_back(r.second);
-                normalize();
                 forward = !forward;
                 current.get_time();
                 if (iprint == 1) {
                     cout << fixed << setprecision(8);
-                    cout << "Energy = " << setw(15) << r.first
-                        << " Norm = " << setw(15) << sqrt(r.second) << " ";
+                    cout << " .. Energy = " << setw(15) << get<0>(r)
+                         << " Norm = " << setw(15) << sqrt(get<1>(r))
+                         << " MaxError = " << setw(15) << setprecision(12)
+                         << get<2>(r) << " ";
                 }
                 if (iprint >= 1)
                     cout << "Time elapsed = " << setw(10) << setprecision(2)
-                        << current.current - start.current << endl;
+                         << current.current - start.current << endl;
+                if (isw == n_sub_sweeps - 1) {
+                    energies.push_back(get<0>(r));
+                    normsqs.push_back(get<1>(r));
+                }
             }
+            normalize();
+        }
         this->forward = forward;
         return energies.back();
     }
@@ -550,18 +568,19 @@ template <typename S> struct Compress {
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
-                        << " .. ";
+                         << " Site = " << setw(4) << i << "-" << setw(4)
+                         << i + 1 << " .. ";
                 else
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << " .. ";
+                         << " Site = " << setw(4) << i << " .. ";
                 cout.flush();
             }
             t.get_time();
             Iteration r =
                 blocking(i, forward, bra_bond_dim, ket_bond_dim, noise);
-            cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                 << t.get_time() << endl;
+            if (iprint >= 2)
+                cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                     << t.get_time() << endl;
             norms.push_back(r.norm);
         }
         return norms.back();
@@ -578,11 +597,12 @@ template <typename S> struct Compress {
         norms.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
-                cout << "Sweep = " << setw(4) << iw << " | Direction = " << setw(8)
-                    << (forward ? "forward" : "backward")
-                    << " | BRA bond dimension = " << setw(4) << bra_bond_dims[iw]
-                    << " | Noise = " << scientific << setw(9) << setprecision(2)
-                    << noises[iw] << endl;
+                cout << "Sweep = " << setw(4) << iw
+                     << " | Direction = " << setw(8)
+                     << (forward ? "forward" : "backward")
+                     << " | BRA bond dimension = " << setw(4)
+                     << bra_bond_dims[iw] << " | Noise = " << scientific
+                     << setw(9) << setprecision(2) << noises[iw] << endl;
             double norm = sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw],
                                 noises[iw]);
             norms.push_back(norm);
@@ -595,11 +615,11 @@ template <typename S> struct Compress {
             current.get_time();
             if (iprint == 1) {
                 cout << fixed << setprecision(8);
-                cout << "Norm = " << setw(15) << norm << " ";
+                cout << " .. Norm = " << setw(15) << norm << " ";
             }
             if (iprint >= 1)
                 cout << "Time elapsed = " << setw(10) << setprecision(2)
-                    << current.current - start.current << endl;
+                     << current.current - start.current << endl;
             if (converged)
                 break;
         }
@@ -742,18 +762,19 @@ template <typename S> struct Expect {
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
-                        << " .. ";
+                         << " Site = " << setw(4) << i << "-" << setw(4)
+                         << i + 1 << " .. ";
                 else
                     cout << " " << (forward ? "-->" : "<--")
-                        << " Site = " << setw(4) << i << " .. ";
+                         << " Site = " << setw(4) << i << " .. ";
                 cout.flush();
             }
             t.get_time();
             Iteration r =
                 blocking(i, forward, true, bra_bond_dim, ket_bond_dim);
-            cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                 << t.get_time() << endl;
+            if (iprint >= 2)
+                cout << r << " T = " << setw(4) << fixed << setprecision(2)
+                     << t.get_time() << endl;
             expectations[i] = r.expectations;
         }
     }
@@ -765,16 +786,16 @@ template <typename S> struct Expect {
         if (propagate) {
             if (iprint >= 1)
                 cout << "Expectation | Direction = " << setw(8)
-                    << (forward ? "forward" : "backward")
-                    << " | BRA bond dimension = " << setw(4) << bra_bond_dim
-                    << " | KET bond dimension = " << setw(4) << ket_bond_dim
-                    << endl;
+                     << (forward ? "forward" : "backward")
+                     << " | BRA bond dimension = " << setw(4) << bra_bond_dim
+                     << " | KET bond dimension = " << setw(4) << ket_bond_dim
+                     << endl;
             sweep(forward, bra_bond_dim, ket_bond_dim);
             forward = !forward;
             current.get_time();
             if (iprint >= 1)
                 cout << "Time elapsed = " << setw(10) << setprecision(2)
-                    << current.current - start.current << endl;
+                     << current.current - start.current << endl;
             this->forward = forward;
             return 0.0;
         } else {
@@ -796,6 +817,22 @@ template <typename S> struct Expect {
                     dynamic_pointer_cast<OpElement<S>>(x.first);
                 assert(op->name == OpNames::PDM1);
                 r(op->site_index[0], op->site_index[1]) = x.second;
+            }
+        return r;
+    }
+    MatrixRef get_1pdm(uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        MatrixRef r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                r(2 * op->site_index[0] + op->site_index.s(0),
+                  2 * op->site_index[1] + op->site_index.s(1)) = x.second;
             }
         return r;
     }

@@ -65,9 +65,13 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    // for i > j, use spin of i <= j to make the quantum number matched
+                    // tranpose is not important since only expectation value matters
+                    // not working for diff bra ket!
+                    // TODO: keep more terms here and use simplification
                     pdm1_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::PDM1, sidx,
-                        S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                        S(0, i <= j ? sz_minus[s] : -sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
@@ -107,7 +111,7 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 shared_ptr<SymbolicColumnVector<S>> pmexpr =
                     make_shared<SymbolicColumnVector<S>>(mshape);
-                uint16_t p = 0;
+                int p = 0;
                 for (uint8_t s = 0; s < 4; s++) {
                     for (uint8_t j = 0; j <= m; j++) {
                         shared_ptr<OpExpr<S>> expr = b_op[j][m][s] * i_op;
@@ -261,7 +265,7 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                         (*pmexpr)[2 * j + 1] = expr;
                 }
                 if (m == n_sites - 2) {
-                    uint8_t p = 2 * m + 1;
+                    int p = 2 * m + 1;
                     for (uint8_t j = 0; j <= m; j++) {
                         shared_ptr<OpExpr<S>> expr =
                             sqrt(2.0) * (c_op[j] * d_op[m + 1]);

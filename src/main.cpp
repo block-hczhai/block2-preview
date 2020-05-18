@@ -28,8 +28,8 @@ size_t dsize = 1E7;
 int main(int argc, char *argv[]) {
     
     // allocator
-    ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
-    dalloc = new StackAllocator<double>(new double[dsize], dsize);
+    ialloc_() = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
+    dalloc_() = new StackAllocator<double>(new double[dsize], dsize);
     
     // system info
     SU2 vaccum;
@@ -55,24 +55,24 @@ int main(int argc, char *argv[]) {
     // left dims
     left_dims_fci[0] = StateInfo<SU2>(vaccum);
     cout << left_dims_fci[0] << endl;
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     for (int i = 0; i < n_orb; i++) {
         left_dims_fci[i + 1] = StateInfo<SU2>::tensor_product(left_dims_fci[i], basis[i], target);
         cout << i << " " << left_dims_fci[i + 1].n_states_total << endl;
     }
 
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
 
     // right dims
     right_dims_fci[n_orb] = StateInfo<SU2>(vaccum);
     cout << right_dims_fci[n_orb] << endl;
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     for (int i = n_orb - 1; i >= 0; i--) {
         right_dims_fci[i] = StateInfo<SU2>::tensor_product(basis[i], right_dims_fci[i + 1], target);
         cout << i << " " << right_dims_fci[i].n_states_total << endl;
     }
     
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     
     // filter
     for (int i = 0; i <= n_orb; i++) {
@@ -90,12 +90,12 @@ int main(int argc, char *argv[]) {
         cout << i << " " << right_dims_fci[i].n << endl;
     }
     
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     for (int i = 0; i <= n_orb; i++)
         right_dims_fci[i].deallocate();
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     for (int i = n_orb; i >= 0; i--)
         left_dims_fci[i].deallocate();
-    cout << *ialloc << endl;
+    cout << *ialloc_() << endl;
     return 0;
 }

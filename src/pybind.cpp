@@ -807,6 +807,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("solve", &Expect<S>::solve, py::arg("propagate"),
              py::arg("forward") = true)
         .def("get_1pdm_spatial", &Expect<S>::get_1pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1pdm", &Expect<S>::get_1pdm,
              py::arg("n_physical_sites") = (uint16_t)0U);
 
     py::class_<MPOSchemer<S>, shared_ptr<MPOSchemer<S>>>(m, "MPOSchemer")
@@ -1028,6 +1030,21 @@ PYBIND11_MODULE(block2, m) {
                 const py::array_t<double> &v) {
                  self->initialize_su2(n_sites, n_elec, twos, isym, e, t.data(),
                                       t.size(), v.data(), v.size());
+             })
+        .def("initialize_sz",
+             [](FCIDUMP *self, uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                uint16_t isym, double e, const py::tuple &t,
+                const py::tuple &v) {
+                 assert(t.size() == 2 && v.size() == 3);
+                 py::array_t<double> ta = t[0].cast<py::array_t<double>>();
+                 py::array_t<double> tb = t[1].cast<py::array_t<double>>();
+                 py::array_t<double> va = v[0].cast<py::array_t<double>>();
+                 py::array_t<double> vb = v[1].cast<py::array_t<double>>();
+                 py::array_t<double> vab = v[2].cast<py::array_t<double>>();
+                 self->initialize_sz(n_sites, n_elec, twos, isym, e, ta.data(),
+                                     ta.size(), tb.data(), tb.size(), va.data(),
+                                     va.size(), vb.data(), vb.size(),
+                                     vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
         .def_property_readonly("orb_sym", &FCIDUMP::orb_sym)

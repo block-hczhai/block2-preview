@@ -133,6 +133,70 @@ struct FCIDUMP {
     size_t total_memory;
     bool uhf, general;
     FCIDUMP() : e(0.0), uhf(false), total_memory(0) {}
+    // Initialize integrals: U(1) case
+    // Two-electron integrals can be three general rank-4 arrays
+    // or 8-fold, 8-fold, 4-fold rank-1 arrays
+    void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                       uint16_t isym, double e, const double *ta, size_t lta,
+                       const double *tb, size_t ltb, const double *va,
+                       size_t lva, const double *vb, size_t lvb,
+                       const double *vab, size_t lvab) {
+        params.clear();
+        ts.clear();
+        vs.clear();
+        vabs.clear();
+        vgs.clear();
+        this->e = e;
+        params["norb"] = Parsing::to_string(n_sites);
+        params["nelec"] = Parsing::to_string(n_elec);
+        params["ms2"] = Parsing::to_string(twos);
+        params["isym"] = Parsing::to_string(isym);
+        params["iuhf"] = "1";
+        ts.push_back(TInt(n_sites));
+        ts.push_back(TInt(n_sites));
+        assert(lta == ts[0].size() && ltb == ts[1].size());
+        vs.push_back(V8Int(n_sites));
+        vs.push_back(V8Int(n_sites));
+        vabs.push_back(V4Int(n_sites));
+        if (vs[0].size() == lva) {
+            assert(vs[1].size() == lvb);
+            assert(vabs[0].size() == lvab);
+            general = false;
+            total_memory = lta + ltb + lva + lvb + lvab;
+            data = dalloc->allocate(total_memory);
+            ts[0].data = data;
+            ts[1].data = data + lta;
+            vs[0].data = data + lta + ltb;
+            vs[1].data = data + lta + ltb + lva;
+            vabs[0].data = data + lta + ltb + lva + lvb;
+            memcpy(vs[0].data, va, sizeof(double) * lva);
+            memcpy(vs[1].data, vb, sizeof(double) * lvb);
+            memcpy(vabs[0].data, vab, sizeof(double) * lvab);
+        } else {
+            general = true;
+            vs.clear();
+            vabs.clear();
+            vgs.push_back(V1Int(n_sites));
+            vgs.push_back(V1Int(n_sites));
+            vgs.push_back(V1Int(n_sites));
+            assert(vgs[0].size() == lva);
+            assert(vgs[1].size() == lvb);
+            assert(vgs[2].size() == lvab);
+            total_memory = lta + ltb + lva + lvb + lvab;
+            data = dalloc->allocate(total_memory);
+            ts[0].data = data;
+            ts[1].data = data + lta;
+            vgs[0].data = data + lta + ltb;
+            vgs[1].data = data + lta + ltb + lva;
+            vgs[2].data = data + lta + ltb + lva + lvb;
+            memcpy(vgs[0].data, va, sizeof(double) * lva);
+            memcpy(vgs[1].data, vb, sizeof(double) * lvb);
+            memcpy(vgs[2].data, vab, sizeof(double) * lvab);
+        }
+        memcpy(ts[0].data, ta, sizeof(double) * lta);
+        memcpy(ts[1].data, tb, sizeof(double) * ltb);
+        uhf = true;
+    }
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
     void initialize_su2(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
@@ -142,6 +206,7 @@ struct FCIDUMP {
         ts.clear();
         vs.clear();
         vabs.clear();
+        vgs.clear();
         this->e = e;
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_elec);
@@ -149,6 +214,7 @@ struct FCIDUMP {
         params["isym"] = Parsing::to_string(isym);
         params["iuhf"] = "0";
         ts.push_back(TInt(n_sites));
+        assert(lt == ts[0].size());
         vs.push_back(V8Int(n_sites));
         if (vs[0].size() == lv) {
             general = false;
@@ -168,7 +234,6 @@ struct FCIDUMP {
             vgs[0].data = data + ts[0].size();
             memcpy(vgs[0].data, v, sizeof(double) * lv);
         }
-        assert(lt == ts[0].size());
         memcpy(ts[0].data, t, sizeof(double) * lt);
         uhf = false;
     }
