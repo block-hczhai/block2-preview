@@ -176,4 +176,10 @@ inline DataFrame *&frame_() {
 
 #define frame (frame_())
 
+// Function pointer for signal checking
+inline void (*&check_signal_())() {
+    static void (*check_signal)() = []() {};
+    return check_signal;
+}
+
 } // namespace block2

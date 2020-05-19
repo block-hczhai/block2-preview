@@ -915,6 +915,12 @@ PYBIND11_MODULE(block2, m) {
 
     m.doc() = "python interface for block2.";
 
+    // Handle Ctrl-C from python side
+    check_signal_() = []() {
+        if (PyErr_CheckSignals() != 0)
+            throw py::error_already_set();
+    };
+
     py::bind_vector<vector<int>>(m, "VectorInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<double>>(m, "VectorDouble");
