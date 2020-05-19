@@ -133,7 +133,7 @@ template <typename S> struct MPO {
         }
         if (middle_operator_names.size() != 0) {
             for (int i = 0; i < n_sites - 1; i++) {
-                ss << "HAMIL PARITITION :: SITE = " << i << endl;
+                ss << "HAMIL PARTITION :: SITE = " << i << endl;
                 for (int j = 0; j < middle_operator_names[i]->data.size(); j++)
                     ss << "[" << setw(4) << j << "] " << setw(15)
                        << middle_operator_names[i]->data[j]
