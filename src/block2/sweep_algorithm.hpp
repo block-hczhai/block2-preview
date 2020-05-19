@@ -136,6 +136,7 @@ template <typename S> struct DMRG {
 
         Timer t;
         for (auto i : sweep_range) {
+            check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
@@ -371,6 +372,7 @@ template <typename S> struct ImaginaryTE {
 
         Timer t;
         for (auto i : sweep_range) {
+            check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
@@ -565,6 +567,7 @@ template <typename S> struct Compress {
 
         Timer t;
         for (auto i : sweep_range) {
+            check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
@@ -759,6 +762,7 @@ template <typename S> struct Expect {
 
         Timer t;
         for (auto i : sweep_range) {
+            check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")

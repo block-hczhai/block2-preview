@@ -451,11 +451,13 @@ template <typename S> struct MovingEnvironment {
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
         for (int i = 1; i <= center; i++) {
+            check_signal_()();
             if (iprint)
                 cout << "init .. L = " << i << endl;
             left_contract_rotate(i);
         }
         for (int i = n_sites - dot - 1; i >= center; i--) {
+            check_signal_()();
             if (iprint)
                 cout << "init .. R = " << i << endl;
             right_contract_rotate(i);
