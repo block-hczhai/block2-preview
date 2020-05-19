@@ -21,6 +21,9 @@
 #pragma once
 
 #include "matrix.hpp"
+#ifdef _HAS_INTEL_MKL
+#include "mkl.h"
+#endif
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -33,6 +36,8 @@ using namespace std;
 namespace block2 {
 
 extern "C" {
+
+#ifndef _HAS_INTEL_MKL
 
 // vector scale
 // vector [sx] = double [sa] * vector [sx]
@@ -93,6 +98,9 @@ extern void dorglq(const int *m, const int *n, const int *k, double *a,
 extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
                   const int *lda, double *w, double *work, const int *lwork,
                   int *info);
+
+#endif
+
 }
 
 // Dense matrix operations

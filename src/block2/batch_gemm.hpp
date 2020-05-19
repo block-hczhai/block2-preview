@@ -23,7 +23,9 @@
 #include "allocator.hpp"
 #include "matrix.hpp"
 #include "matrix_functions.hpp"
+#ifdef _HAS_INTEL_MKL
 #include "mkl.h"
+#endif
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
