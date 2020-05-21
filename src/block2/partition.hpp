@@ -111,7 +111,8 @@ template <typename S> struct Partition {
         }
         return opt;
     }
-    // Get all possible delta quantum numbers from the symbolic matrix of operators
+    // Get all possible delta quantum numbers from the symbolic matrix of
+    // operators
     static vector<S>
     get_uniq_labels(const vector<shared_ptr<Symbolic<S>>> &mats) {
         vector<S> sl;
@@ -134,8 +135,8 @@ template <typename S> struct Partition {
     // from the matrix of symbolic expressions of operators
     static vector<vector<pair<uint8_t, S>>>
     get_uniq_sub_labels(const shared_ptr<Symbolic<S>> &exprs,
-                        const shared_ptr<Symbolic<S>> &mat,
-                        const vector<S> &sl) {
+                        const shared_ptr<Symbolic<S>> &mat, const vector<S> &sl,
+                        bool partial = false, bool left_only = true) {
         vector<vector<pair<uint8_t, S>>> subsl(sl.size());
         if (exprs == nullptr)
             return subsl;
@@ -155,9 +156,14 @@ template <typename S> struct Partition {
                 assert(op->b != nullptr);
                 S bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
-                S p = l.combine(bra, ket);
-                assert(p != S(0xFFFFFFFFU));
-                subsl[idx].push_back(make_pair(op->conj, p));
+                if (!partial) {
+                    S p = l.combine(bra, ket);
+                    assert(p != S(0xFFFFFFFFU));
+                    subsl[idx].push_back(make_pair(op->conj, p));
+                } else if (left_only)
+                    subsl[idx].push_back(make_pair(op->conj & 1, bra));
+                else
+                    subsl[idx].push_back(make_pair(!!(op->conj & 2), -ket));
             } break;
             case OpTypes::Sum: {
                 shared_ptr<OpSum<S>> sop =
@@ -186,9 +192,14 @@ template <typename S> struct Partition {
                         } else
                             assert(false);
                     }
-                    S p = l.combine(bra, ket);
-                    assert(p != S(0xFFFFFFFFU));
-                    subsl[idx].push_back(make_pair(op->conj, p));
+                    if (!partial) {
+                        S p = l.combine(bra, ket);
+                        assert(p != S(0xFFFFFFFFU));
+                        subsl[idx].push_back(make_pair(op->conj, p));
+                    } else if (left_only)
+                        subsl[idx].push_back(make_pair(op->conj & 1, bra));
+                    else
+                        subsl[idx].push_back(make_pair(!!(op->conj & 2), -ket));
                 }
             } break;
             default:

@@ -47,6 +47,7 @@ template <typename S> struct DMRG {
     vector<double> energies;
     bool forward;
     uint8_t iprint = 2;
+    NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -79,13 +80,26 @@ template <typename S> struct DMRG {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
+        shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, true);
         auto pdi = h_eff->eigs(false);
-        h_eff->deallocate();
-        shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
-        shared_ptr<SparseMatrix<S>> dm = MovingEnvironment<S>::density_matrix(
-            h_eff->opdq, h_eff->ket, forward, noise);
+        shared_ptr<SparseMatrix<S>> dm;
+        if (noise_type == NoiseTypes::Perturbative && noise != 0) {
+            shared_ptr<SparseMatrixGroup<S>> pket =
+                h_eff->perturbative_noise_two_dot(forward, i, me->ket->info);
+            h_eff->deallocate();
+            dm = MovingEnvironment<S>::density_matrix_with_perturbative_noise(
+                h_eff->opdq, h_eff->ket, forward, noise, pket);
+            frame->activate(1);
+            pket->deallocate();
+            pket->deallocate_infos();
+            frame->activate(0);
+        } else {
+            h_eff->deallocate();
+            dm = MovingEnvironment<S>::density_matrix(
+                h_eff->opdq, h_eff->ket, forward, noise, noise_type);
+        }
         double error = MovingEnvironment<S>::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, true, me->ket->tensors[i],
             me->ket->tensors[i + 1]);
@@ -206,6 +220,7 @@ template <typename S> struct ImaginaryTE {
     vector<double> errors;
     vector<double> energies;
     vector<double> normsqs;
+    NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     bool forward;
     TETypes mode;
     int n_sub_sweeps;
@@ -271,7 +286,8 @@ template <typename S> struct ImaginaryTE {
             auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
             h_eff->deallocate();
             dm = MovingEnvironment<S>::density_matrix_with_weights(
-                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights);
+                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights,
+                noise_type);
             frame->activate(1);
             for (int i = pdp.first.size() - 1; i >= 0; i--)
                 pdp.first[i].deallocate();
@@ -279,14 +295,15 @@ template <typename S> struct ImaginaryTE {
         } else if (effective_mode == TETypes::TangentSpace) {
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
             h_eff->deallocate();
-            dm = MovingEnvironment<S>::density_matrix(h_eff->opdq, h_eff->ket,
-                                                      forward, noise);
+            dm = MovingEnvironment<S>::density_matrix(
+                h_eff->opdq, h_eff->ket, forward, noise, noise_type);
         } else if (effective_mode == TETypes::RK4) {
             auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
             pdi = pdp.second;
             h_eff->deallocate();
             dm = MovingEnvironment<S>::density_matrix_with_weights(
-                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights);
+                h_eff->opdq, h_eff->ket, forward, noise, pdp.first, weights,
+                noise_type);
             frame->activate(1);
             for (int i = pdp.first.size() - 1; i >= 0; i--)
                 pdp.first[i].deallocate();
@@ -463,6 +480,7 @@ template <typename S> struct Compress {
     vector<uint16_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
     vector<double> norms;
+    NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     bool forward;
     uint8_t iprint = 2;
     Compress(const shared_ptr<MovingEnvironment<S>> &me,
@@ -510,8 +528,8 @@ template <typename S> struct Compress {
             shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
             shared_ptr<SparseMatrix<S>> dm =
                 MovingEnvironment<S>::density_matrix(
-                    h_eff->opdq, old_wfn, forward,
-                    mps == me->bra ? noise : 0.0);
+                    h_eff->opdq, old_wfn, forward, mps == me->bra ? noise : 0.0,
+                    mps == me->bra ? noise_type : NoiseTypes::None);
             int bond_dim =
                 mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
             double error = MovingEnvironment<S>::split_density_matrix(
@@ -701,8 +719,8 @@ template <typename S> struct Expect {
             for (auto &mps : mpss) {
                 shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
                 shared_ptr<SparseMatrix<S>> dm =
-                    MovingEnvironment<S>::density_matrix(h_eff->opdq, old_wfn,
-                                                         forward, 0.0);
+                    MovingEnvironment<S>::density_matrix(
+                        h_eff->opdq, old_wfn, forward, 0.0, NoiseTypes::None);
                 int bond_dim =
                     mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
                 double error = MovingEnvironment<S>::split_density_matrix(

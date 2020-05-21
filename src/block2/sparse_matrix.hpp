@@ -62,7 +62,8 @@ struct SparseMatrixInfo<
     // for performing SparseMatrix operations
     // These non-zero-block indices can be generated once for each type of
     // combination of delta quantum of operators
-    // So quantum numbers will not be checked repeatedly for individual SparseMatrix
+    // So quantum numbers will not be checked repeatedly for individual
+    // SparseMatrix
     struct ConnectionInfo {
         S *quanta;
         uint32_t *idx;
@@ -811,10 +812,11 @@ template <typename S> struct SparseMatrix {
     double norm() const {
         return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
     }
-    void normalize() const {
+    void iscale(double d) const {
         assert(factor == 1.0);
-        MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), 1 / norm());
+        MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), d);
     }
+    void normalize() const { iscale(1 / norm()); }
     void left_canonicalize(const shared_ptr<SparseMatrix<S>> &rmat) {
         int nr = rmat->info->n, n = info->n;
         uint32_t *tmp = ialloc->allocate(nr + 1);
@@ -1129,6 +1131,57 @@ template <typename S> struct SparseMatrix {
             os << setw(20) << setprecision(14) << c.data[i] << " ";
         os << "]" << endl;
         return os;
+    }
+};
+
+template <typename S> struct SparseMatrixGroup {
+    vector<shared_ptr<SparseMatrixInfo<S>>> infos;
+    vector<size_t> offsets;
+    double *data;
+    size_t total_memory;
+    int n;
+    SparseMatrixGroup() : infos(), offsets(), data(nullptr), total_memory() {}
+    void allocate(const vector<shared_ptr<SparseMatrixInfo<S>>> &infos,
+                  double *ptr = 0) {
+        this->infos = infos;
+        n = (int)infos.size();
+        offsets.resize(n);
+        if (n != 0) {
+            offsets[0] = 0;
+            for (size_t i = 0; i < n - 1; i++)
+                offsets[i + 1] = offsets[i] + infos[i]->get_total_memory();
+            total_memory = offsets[n - 1] + infos[n - 1]->get_total_memory();
+        } else {
+            total_memory = 0;
+            data = nullptr;
+            return;
+        }
+        if (ptr == 0) {
+            data = dalloc->allocate(total_memory);
+            memset(data, 0, sizeof(double) * total_memory);
+        } else
+            data = ptr;
+    }
+    void deallocate() {
+        if (total_memory == 0) {
+            assert(data == nullptr);
+            return;
+        }
+        dalloc->deallocate(data, total_memory);
+        total_memory = 0;
+        data = nullptr;
+    }
+    void deallocate_infos() {
+        for (int i = (int)infos.size() - 1; i >= 0; i--)
+            infos[i]->deallocate();
+    }
+    shared_ptr<SparseMatrix<S>> operator[](int idx) const {
+        assert(idx >= 0 && idx < n);
+        shared_ptr<SparseMatrix<S>> r = make_shared<SparseMatrix<S>>();
+        r->data = data + offsets[idx];
+        r->info = infos[idx];
+        r->total_memory = infos[idx]->get_total_memory();
+        return r;
     }
 };
 

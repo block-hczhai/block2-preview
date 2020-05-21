@@ -22,11 +22,11 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    string occ_filename = "data/CR2.SVP.OCC";
-    occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string occ_filename = "data/CR2.SVP.OCC";
+    // occs = read_occ(occ_filename);
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
-    // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
+    string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
@@ -39,8 +39,8 @@ TEST_F(TestDMRG, Test) {
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
 
-    // mkl_set_num_threads(4);
-    // mkl_set_dynamic(0);
+    mkl_set_num_threads(4);
+    mkl_set_dynamic(0);
 
     Timer t;
     t.get_time();
@@ -69,22 +69,6 @@ TEST_F(TestDMRG, Test) {
         //     cout << occs[i] << " ";
         mps_info->set_bond_dimension_using_occ(bond_dim, occs);
     }
-    // cout << "left min dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->left_dims_fci[i].n << " ";
-    // cout << endl;
-    // cout << "right min dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->right_dims_fci[i].n << " ";
-    // cout << endl;
-    // cout << "left q dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->left_dims[i].n << " ";
-    // cout << endl;
-    // cout << "right q dims = ";
-    // for (int i = 0; i <= norb; i++)
-    //     cout << mps_info->right_dims[i].n << " ";
-    // cout << endl;
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
         cout << mps_info->left_dims[i].n_states_total << " ";
@@ -110,17 +94,11 @@ TEST_F(TestDMRG, Test) {
     // abort();
 
     // MPS/MPSInfo save mutable
-        mps->save_mutable();
+    mps->save_mutable();
     mps->deallocate();
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    frame_()->activate(0);
-    cout << "persistent memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
-    frame_()->activate(1);
-    cout << "exclusive  memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
     // ME
     hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SU2>> me =

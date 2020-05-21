@@ -42,6 +42,7 @@ template <typename S> struct EffectiveHamiltonian {
     shared_ptr<DelayedOperatorTensor<S>> op;
     shared_ptr<SparseMatrix<S>> bra, ket, diag, cmat, vmat;
     shared_ptr<TensorFunctions<S>> tf;
+    shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
     S opdq;
     // Whether diagonal element of effective H should be computed
@@ -56,7 +57,8 @@ template <typename S> struct EffectiveHamiltonian {
         const shared_ptr<SymbolicColumnVector<S>> &hop_mat,
         const shared_ptr<TensorFunctions<S>> &tf, bool compute_diag = true)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
-          bra(bra), ket(ket), tf(tf), compute_diag(compute_diag) {
+          bra(bra), ket(ket), tf(tf), hop_mat(hop_mat),
+          compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             assert(bra == ket);
@@ -104,6 +106,88 @@ template <typename S> struct EffectiveHamiltonian {
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         }
+    }
+    shared_ptr<SparseMatrixGroup<S>>
+    perturbative_noise_two_dot(bool trace_right, int i,
+                               const shared_ptr<MPSInfo<S>> &mps_info) {
+        vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        assert(msl.size() == 1 && msl[0] == opdq);
+        vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
+            op->mat, hop_mat, msl, true, trace_right)[0];
+        vector<S> perturb_ket_labels;
+        S ket_label = ket->info->delta_quantum;
+        for (size_t j = 0; j < psubsl.size(); j++) {
+            S pks = ket_label + psubsl[j].second;
+            for (int k = 0; k < pks.count(); k++)
+                perturb_ket_labels.push_back(pks[k]);
+        }
+        sort(perturb_ket_labels.begin(), perturb_ket_labels.end());
+        perturb_ket_labels.resize(distance(
+            perturb_ket_labels.begin(),
+            unique(perturb_ket_labels.begin(), perturb_ket_labels.end())));
+        // perturbed wavefunctions infos
+        frame->activate(0);
+        mps_info->load_left_dims(i);
+        mps_info->load_right_dims(i + 2);
+        StateInfo<S> l = mps_info->left_dims[i],
+                     ml = mps_info->basis[mps_info->orbsym[i]],
+                     mr = mps_info->basis[mps_info->orbsym[i + 1]],
+                     r = mps_info->right_dims[i + 2];
+        StateInfo<S> ll =
+            StateInfo<S>::tensor_product(l, ml, mps_info->left_dims_fci[i + 1]);
+        StateInfo<S> rr = StateInfo<S>::tensor_product(
+            mr, r, mps_info->right_dims_fci[i + 1]);
+        frame->activate(1);
+        vector<shared_ptr<SparseMatrixInfo<S>>> infos;
+        infos.reserve(perturb_ket_labels.size());
+        for (size_t j = 0; j < perturb_ket_labels.size(); j++) {
+            shared_ptr<SparseMatrixInfo<S>> info =
+                make_shared<SparseMatrixInfo<S>>();
+            info->initialize(ll, rr, perturb_ket_labels[j], false, true);
+            infos.push_back(info);
+        }
+        frame->activate(0);
+        rr.deallocate();
+        ll.deallocate();
+        r.deallocate();
+        l.deallocate();
+        frame->activate(1);
+        // perturbed wavefunctions
+        shared_ptr<SparseMatrixGroup<S>> perturb_ket =
+            make_shared<SparseMatrixGroup<S>>();
+        perturb_ket->allocate(infos);
+        // connection infos
+        frame->activate(0);
+        vector<vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
+            cinfos;
+        cinfos.resize(psubsl.size());
+        S idq = S(0);
+        for (size_t j = 0; j < psubsl.size(); j++) {
+            S pks = ket_label + psubsl[j].second;
+            cinfos[j].resize(pks.count());
+            for (int k = 0; k < pks.count(); k++) {
+                cinfos[j][k] =
+                    make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
+                int ib = lower_bound(perturb_ket_labels.begin(),
+                                     perturb_ket_labels.end(), pks[k]) -
+                         perturb_ket_labels.begin();
+                vector<pair<uint8_t, S>> subdq = {
+                    trace_right ? make_pair(psubsl[j].first, idq)
+                                : make_pair((uint8_t)(psubsl[j].first << 1),
+                                            -psubsl[j].second)};
+                cinfos[j][k]->initialize_wfn(
+                    ket_label, pks[k], psubsl[j].second, subdq, left_op_infos,
+                    right_op_infos, ket->info, infos[ib], tf->opf->cg);
+            }
+        }
+        // perform multiplication
+        tf->tensor_product_partial_multiply(
+            op->mat->data[0], op->lops, op->rops, trace_right, cmat, psubsl,
+            cinfos, perturb_ket_labels, perturb_ket);
+        for (int j = (int)cinfos.size() - 1; j >= 0; j--)
+            for (int k = (int)cinfos[j].size() - 1; k >= 0; k--)
+                cinfos[j][k]->deallocate();
+        return perturb_ket;
     }
     // [c] = [H_eff[idx]] x [b]
     void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
@@ -668,27 +752,45 @@ template <typename S> struct MovingEnvironment {
     // Density matrix of a MPS tensor
     static shared_ptr<SparseMatrix<S>>
     density_matrix(S opdq, const shared_ptr<SparseMatrix<S>> &psi,
-                   bool trace_right, double noise) {
+                   bool trace_right, double noise, NoiseTypes noise_type) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(psi->info, opdq, trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
-        OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, noise);
+        OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, noise,
+                                            noise_type);
+        return dm;
+    }
+    // Density matrix with perturbed wavefunctions as noise
+    static shared_ptr<SparseMatrix<S>> density_matrix_with_perturbative_noise(
+        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        double noise, const shared_ptr<SparseMatrixGroup<S>> &mats) {
+        shared_ptr<SparseMatrixInfo<S>> dm_info =
+            make_shared<SparseMatrixInfo<S>>();
+        dm_info->initialize_dm(psi->info, opdq, trace_right);
+        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
+        dm->allocate(dm_info);
+        for (int i = 1; i < mats->n; i++)
+            OperatorFunctions<S>::trans_product(*(*mats)[i], *dm, trace_right,
+                                                0.0, NoiseTypes::None);
+        double norm = dm->norm();
+        dm->iscale(noise / norm);
+        OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, 0.0,
+                                            NoiseTypes::None);
         return dm;
     }
     // Density matrix of several MPS tensors summed with weights
-    static shared_ptr<SparseMatrix<S>>
-    density_matrix_with_weights(S opdq, const shared_ptr<SparseMatrix<S>> &psi,
-                                bool trace_right, double noise,
-                                const vector<MatrixRef> &mats,
-                                const vector<double> &weights) {
+    static shared_ptr<SparseMatrix<S>> density_matrix_with_weights(
+        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        double noise, const vector<MatrixRef> &mats,
+        const vector<double> &weights, NoiseTypes noise_type) {
         double *ptr = psi->data;
         assert(psi->factor == 1.0);
         assert(mats.size() == weights.size() - 1);
         psi->factor = sqrt(weights[0]);
         shared_ptr<SparseMatrix<S>> dm =
-            density_matrix(opdq, psi, trace_right, noise);
+            density_matrix(opdq, psi, trace_right, noise, noise_type);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
             psi->factor = sqrt(weights[i]);
@@ -858,7 +960,8 @@ template <typename S> struct MovingEnvironment {
         assert(iss == ss.size());
         return error;
     }
-    // Change the fusing type of MPS tensor so that it can be used in next sweep iteration
+    // Change the fusing type of MPS tensor so that it can be used in next sweep
+    // iteration
     static void propagate_wfn(int i, int n_sites, const shared_ptr<MPS<S>> &mps,
                               bool forward) {
         shared_ptr<MPSInfo<S>> mps_info = mps->info;

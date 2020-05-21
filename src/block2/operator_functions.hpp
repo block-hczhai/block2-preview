@@ -31,7 +31,12 @@ using namespace std;
 
 namespace block2 {
 
-enum struct NoiseTypes : uint8_t { Wavefunction, DensityMatrix, Perturbative };
+enum struct NoiseTypes : uint8_t {
+    None,
+    Wavefunction,
+    DensityMatrix,
+    Perturbative
+};
 
 // SparseMatrix operations
 template <typename S> struct OperatorFunctions {

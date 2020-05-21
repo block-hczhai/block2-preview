@@ -636,11 +636,11 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                     py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"))
+                    py::arg("noise"), py::arg("noise_type"))
         .def_static("density_matrix_with_weights",
                     &MovingEnvironment<S>::density_matrix_with_weights,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"), py::arg("mats"), py::arg("weights"))
+                    py::arg("noise"), py::arg("mats"), py::arg("weights"), py::arg("noise_type"))
         .def_static(
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,
@@ -1115,6 +1115,7 @@ PYBIND11_MODULE(block2, m) {
         .value("SumProd", OpTypes::SumProd);
 
     py::enum_<NoiseTypes>(m, "NoiseTypes", py::arithmetic())
+        .value("Nothing", NoiseTypes::None)
         .value("Wavefunction", NoiseTypes::Wavefunction)
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
         .value("Perturbative", NoiseTypes::Perturbative);
