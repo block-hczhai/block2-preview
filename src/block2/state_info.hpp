@@ -271,28 +271,29 @@ struct StateProbability<
     }
     void allocate(int length, uint32_t *ptr = 0) {
         if (ptr == 0)
-            ptr = ialloc->allocate((length << 1) + length);
+            ptr = ialloc->allocate((length << 1) + length + 1);
         n = length;
         quanta = (S *)ptr;
-        probs = (double *)(ptr + length);
+        // double must be 8-aligned
+        probs = (double *)(ptr + length + !!((size_t)(ptr + length) & 7));
     }
     void reallocate(int length) {
-        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n,
-                                           (length << 1) + length);
+        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n + 1,
+                                           (length << 1) + length + 1);
         if (ptr == (uint32_t *)quanta) {
-            memmove(ptr + length, probs, length * sizeof(double));
+            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs, length * sizeof(double));
             probs = (double *)(quanta + length);
         } else {
             memmove(ptr, quanta, length * sizeof(uint32_t));
-            memmove(ptr + length, probs, length * sizeof(double));
+            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs, length * sizeof(double));
             quanta = (S *)ptr;
-            probs = (double *)(quanta + length);
+            probs = (double *)(quanta + length + !!((size_t)(ptr + length) & 7));
         }
         n = length;
     }
     void deallocate() {
         assert(n != 0);
-        ialloc->deallocate((uint32_t *)quanta, (n << 1) + n);
+        ialloc->deallocate((uint32_t *)quanta, (n << 1) + n + 1);
         quanta = 0;
         probs = 0;
     }
@@ -324,7 +325,7 @@ struct StateProbability<
                               const StateInfo<S> &cref) {
         StateProbability<S> c;
         c.allocate(cref.n);
-        memcpy(c.quanta, cref.quanta, c.n * sizeof(uint32_t));
+        memcpy(c.quanta, cref.quanta, c.n * sizeof(S));
         memset(c.probs, 0, c.n * sizeof(double));
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {

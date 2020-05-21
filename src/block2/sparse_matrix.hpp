@@ -811,6 +811,10 @@ template <typename S> struct SparseMatrix {
     double norm() const {
         return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
     }
+    void normalize() const {
+        assert(factor == 1.0);
+        MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), 1 / norm());
+    }
     void left_canonicalize(const shared_ptr<SparseMatrix<S>> &rmat) {
         int nr = rmat->info->n, n = info->n;
         uint32_t *tmp = ialloc->allocate(nr + 1);

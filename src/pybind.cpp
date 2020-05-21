@@ -482,7 +482,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
              py::arg("b"), py::arg("c"), py::arg("scale") = 1.0)
         .def_static("trans_product", &OperatorFunctions<S>::trans_product,
                     py::arg("a"), py::arg("b"), py::arg("trace_right"),
-                    py::arg("noise") = 0.0);
+                    py::arg("noise") = 0.0,
+                    py::arg("noise_type") = NoiseTypes::DensityMatrix);
 
     py::class_<OperatorTensor<S>, shared_ptr<OperatorTensor<S>>>(
         m, "OperatorTensor")
@@ -640,17 +641,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                     &MovingEnvironment<S>::density_matrix_with_weights,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("mats"), py::arg("weights"))
-        .def_static("split_density_matrix",
-                    [](const shared_ptr<SparseMatrix<S>> &dm,
-                       const shared_ptr<SparseMatrix<S>> &wfn, int k,
-                       bool trace_right) {
-                        shared_ptr<SparseMatrix<S>> left = nullptr,
-                                                    right = nullptr;
-                        double error =
-                            MovingEnvironment<S>::split_density_matrix(
-                                dm, wfn, k, trace_right, left, right);
-                        return make_tuple(error, left, right);
-                    })
+        .def_static(
+            "split_density_matrix",
+            [](const shared_ptr<SparseMatrix<S>> &dm,
+               const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
+               bool normalize) {
+                shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
+                double error = MovingEnvironment<S>::split_density_matrix(
+                    dm, wfn, k, trace_right, normalize, left, right);
+                return make_tuple(error, left, right);
+            })
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
                     py::arg("forward"));
@@ -755,6 +755,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("normsqs", &ImaginaryTE<S>::normsqs)
         .def_readwrite("forward", &ImaginaryTE<S>::forward)
         .def_readwrite("n_sub_sweeps", &ImaginaryTE<S>::n_sub_sweeps)
+        .def_readwrite("weights", &ImaginaryTE<S>::weights)
         .def_readwrite("mode", &ImaginaryTE<S>::mode)
         .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
         .def("blocking", &ImaginaryTE<S>::blocking)
@@ -956,6 +957,8 @@ PYBIND11_MODULE(block2, m) {
         mkl_set_dynamic(0);
     });
 
+    m.def("read_occ", &read_occ);
+
     py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
         .def(py::init<>())
         .def_readwrite("size", &StackAllocator<uint32_t>::size)
@@ -1111,6 +1114,11 @@ PYBIND11_MODULE(block2, m) {
         .value("ElemRef", OpTypes::ElemRef)
         .value("SumProd", OpTypes::SumProd);
 
+    py::enum_<NoiseTypes>(m, "NoiseTypes", py::arithmetic())
+        .value("Wavefunction", NoiseTypes::Wavefunction)
+        .value("DensityMatrix", NoiseTypes::DensityMatrix)
+        .value("Perturbative", NoiseTypes::Perturbative);
+
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())
         .def(py::init<uint32_t>())
@@ -1246,5 +1254,5 @@ PYBIND11_MODULE(block2, m) {
     bind_class<SU2>(m_su2, "SU2");
 
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
-    bind_class<SZ>(m_sz, "SZ");
+    // bind_class<SZ>(m_sz, "SZ");
 }

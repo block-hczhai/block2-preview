@@ -31,6 +31,8 @@ using namespace std;
 
 namespace block2 {
 
+enum struct NoiseTypes : uint8_t { Wavefunction, DensityMatrix, Perturbative };
+
 // SparseMatrix operations
 template <typename S> struct OperatorFunctions {
     shared_ptr<CG<S>> cg;
@@ -259,17 +261,24 @@ template <typename S> struct OperatorFunctions {
         }
     }
     // Product with transposed tensor: [a] x [b]^T or [a]^T x [b]
-    static void trans_product(const SparseMatrix<S> &a,
-                              const SparseMatrix<S> &b, bool trace_right,
-                              double noise = 0.0) {
-        double scale = a.factor * a.factor;
+    static void
+    trans_product(const SparseMatrix<S> &a, const SparseMatrix<S> &b,
+                  bool trace_right, double noise = 0.0,
+                  NoiseTypes noise_type = NoiseTypes::DensityMatrix) {
+        double scale = a.factor * a.factor, noise_scale = 0;
         assert(b.factor == 1.0);
         if (abs(scale) < TINY && noise == 0.0)
             return;
         SparseMatrix<S> tmp;
-        if (noise != 0.0) {
+        if (noise != 0 && noise_type == NoiseTypes::Wavefunction) {
             tmp.allocate(a.info);
             tmp.randomize(-0.5, 0.5);
+            noise_scale = noise / tmp.norm();
+            noise_scale *= noise_scale;
+        } else if (noise != 0 && noise_type == NoiseTypes::DensityMatrix) {
+            tmp.allocate(b.info);
+            tmp.randomize(0.0, 1.0);
+            noise_scale = noise * noise / tmp.norm();
         }
         if (trace_right)
             for (int ia = 0; ia < a.info->n; ia++) {
@@ -277,9 +286,12 @@ template <typename S> struct OperatorFunctions {
                 int ib = b.info->find_state(qb);
                 MatrixFunctions::multiply(a[ia], false, a[ia], true, b[ib],
                                           scale, 1.0);
-                if (noise != 0.0)
+                if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
                     MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
-                                              b[ib], noise * noise, 1.0);
+                                              b[ib], noise_scale, 1.0);
+                else if (noise_scale != 0 &&
+                         noise_type == NoiseTypes::DensityMatrix)
+                    MatrixFunctions::iadd(b[ib], tmp[ib], noise_scale);
             }
         else
             for (int ia = 0; ia < a.info->n; ia++) {
@@ -287,11 +299,14 @@ template <typename S> struct OperatorFunctions {
                 int ib = b.info->find_state(qb);
                 MatrixFunctions::multiply(a[ia], true, a[ia], false, b[ib],
                                           scale, 1.0);
-                if (noise != 0.0)
+                if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
                     MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
-                                              b[ib], noise * noise, 1.0);
+                                              b[ib], noise_scale, 1.0);
+                else if (noise_scale != 0 &&
+                         noise_type == NoiseTypes::DensityMatrix)
+                    MatrixFunctions::iadd(b[ib], tmp[ib], noise_scale);
             }
-        if (noise != 0.0)
+        if (noise != 0)
             tmp.deallocate();
     }
 };

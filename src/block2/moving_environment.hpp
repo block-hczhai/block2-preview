@@ -683,23 +683,24 @@ template <typename S> struct MovingEnvironment {
                                 bool trace_right, double noise,
                                 const vector<MatrixRef> &mats,
                                 const vector<double> &weights) {
-        double factor = psi->factor, *ptr = psi->data;
+        double *ptr = psi->data;
+        assert(psi->factor == 1.0);
         assert(mats.size() == weights.size() - 1);
-        psi->factor = factor * sqrt(weights[0]);
+        psi->factor = sqrt(weights[0]);
         shared_ptr<SparseMatrix<S>> dm =
             density_matrix(opdq, psi, trace_right, noise);
         for (size_t i = 1; i < weights.size(); i++) {
-            psi->factor = factor * sqrt(weights[i]);
             psi->data = mats[i - 1].data;
+            psi->factor = sqrt(weights[i]);
             OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, 0.0);
         }
-        psi->data = ptr, psi->factor = factor;
+        psi->data = ptr, psi->factor = 1.0;
         return dm;
     }
     // Split density matrix to two MPS tensors by solving eigenvalue problem
     static double split_density_matrix(const shared_ptr<SparseMatrix<S>> &dm,
                                        const shared_ptr<SparseMatrix<S>> &wfn,
-                                       int k, bool trace_right,
+                                       int k, bool trace_right, bool normalize,
                                        shared_ptr<SparseMatrix<S>> &left,
                                        shared_ptr<SparseMatrix<S>> &right) {
         vector<DiagonalMatrix> eigen_values;
@@ -815,7 +816,7 @@ template <typename S> struct MovingEnvironment {
         left->allocate(linfo);
         right->allocate(rinfo);
         int iss = 0;
-        if (trace_right)
+        if (trace_right) {
             for (int i = 0; i < kk; i++) {
                 for (int j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
@@ -832,7 +833,9 @@ template <typename S> struct MovingEnvironment {
                                           (*right)[ir], 1.0, 0.0);
                 iss += im[i];
             }
-        else
+            if (normalize)
+                right->normalize();
+        } else {
             for (int i = 0; i < kk; i++) {
                 for (int j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
@@ -849,6 +852,9 @@ template <typename S> struct MovingEnvironment {
                                           (*left)[il], 1.0, 0.0);
                 iss += im[i];
             }
+            if (normalize)
+                left->normalize();
+        }
         assert(iss == ss.size());
         return error;
     }

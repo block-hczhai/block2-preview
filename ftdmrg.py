@@ -18,8 +18,8 @@ from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
 from block2 import SU2, SZ
 
 # Set spin-adapted or non-spin-adapted here
-# SpinLabel = SU2
-SpinLabel = SZ
+SpinLabel = SU2
+# SpinLabel = SZ
 
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, AncillaMPSInfo, MPS
@@ -278,16 +278,17 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 500
-    beta = 0.1
-    beta_step = 0.01
+    bond_dim = 1000
+    beta = 1.0
+    beta_step = 0.1
     mu = -1.0
     bond_dims = [bond_dim]
-    n_threads = 2
-    hf_type = "UHF"
+    n_threads = 8
+    hf_type = "RHF"
     pg_reorder = True
     scratch = '/central/scratch/hczhai/hchain'
     scratch = './nodex'
+    scratch = '/scratch/local/hczhai/hchain'
 
     import os
     if not os.path.isdir(scratch):
@@ -386,7 +387,7 @@ if __name__ == "__main__":
     ft.generate_initial_mps(bond_dim)
     n_steps = int(round(beta / beta_step) + 0.1)
     # use 4 sweeps for the first beta step
-    ft.imaginary_time_evolution(1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=4)
+    ft.imaginary_time_evolution(1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=6)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-    ft.imaginary_time_evolution(n_steps - 1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
+    # ft.imaginary_time_evolution(n_steps - 1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
     print(ft.get_one_pdm(ridx))

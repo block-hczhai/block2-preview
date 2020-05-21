@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -10,12 +10,12 @@ class TestDMRG : public ::testing::Test {
     size_t dsize = 1L << 34;
     void SetUp() override {
         Random::rand_seed(0);
-        frame = new DataFrame(isize, dsize, "nodex");
+        frame_() = new DataFrame(isize, dsize, "nodex");
     }
     void TearDown() override {
-        frame->activate(0);
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete frame;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     }
 };
 
@@ -31,13 +31,13 @@ TEST_F(TestDMRG, Test) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              Hamiltonian<SU2>::swap_d2h);
+              PointGroup::swap_d2h);
     SU2 vaccum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
-                     Hamiltonian<SU2>::swap_d2h(fcidump->isym()));
+                     PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    Hamiltonian<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
 
     // mkl_set_num_threads(4);
     // mkl_set_dynamic(0);
@@ -115,12 +115,12 @@ TEST_F(TestDMRG, Test) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    frame->activate(0);
-    cout << "persistent memory used :: I = " << ialloc->used
-         << " D = " << dalloc->used << endl;
-    frame->activate(1);
-    cout << "exclusive  memory used :: I = " << ialloc->used
-         << " D = " << dalloc->used << endl;
+    frame_()->activate(0);
+    cout << "persistent memory used :: I = " << ialloc_()->used
+         << " D = " << dalloc_()->used << endl;
+    frame_()->activate(1);
+    cout << "exclusive  memory used :: I = " << ialloc_()->used
+         << " D = " << dalloc_()->used << endl;
     // ME
     hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SU2>> me =
@@ -130,8 +130,8 @@ TEST_F(TestDMRG, Test) {
     me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
-    cout << *frame << endl;
-    frame->activate(0);
+    cout << *frame_() << endl;
+    frame_()->activate(0);
 
     // DMRG
     // vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,

@@ -1,4 +1,5 @@
 build/
+build_test/
 docs/build/
 my_test/
 node0/

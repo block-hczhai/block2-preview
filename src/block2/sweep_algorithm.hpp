@@ -87,7 +87,7 @@ template <typename S> struct DMRG {
         shared_ptr<SparseMatrix<S>> dm = MovingEnvironment<S>::density_matrix(
             h_eff->opdq, h_eff->ket, forward, noise);
         double error = MovingEnvironment<S>::split_density_matrix(
-            dm, h_eff->ket, (int)bond_dim, forward, me->ket->tensors[i],
+            dm, h_eff->ket, (int)bond_dim, forward, true, me->ket->tensors[i],
             me->ket->tensors[i + 1]);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
@@ -209,6 +209,7 @@ template <typename S> struct ImaginaryTE {
     bool forward;
     TETypes mode;
     int n_sub_sweeps;
+    vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
     ImaginaryTE(const shared_ptr<MovingEnvironment<S>> &me,
                 const vector<uint16_t> &bond_dims,
@@ -253,8 +254,6 @@ template <typename S> struct ImaginaryTE {
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         shared_ptr<SparseMatrix<S>> dm;
-        const vector<double> weights = {1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0,
-                                        1.0 / 6.0};
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -294,16 +293,20 @@ template <typename S> struct ImaginaryTE {
             frame->activate(0);
         }
         double error = MovingEnvironment<S>::split_density_matrix(
-            dm, h_eff->ket, (int)bond_dim, forward, me->ket->tensors[i],
+            dm, h_eff->ket, (int)bond_dim, forward, false, me->ket->tensors[i],
             me->ket->tensors[i + 1]);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
+            if (mode == TETypes::RK4 && (i + 1 != me->n_sites - 1 || !advance))
+                me->ket->tensors[i + 1]->normalize();
             info = me->ket->tensors[i]->info->extract_state_info(forward);
             me->ket->info->left_dims[i + 1] = *info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'C';
         } else {
+            if (mode == TETypes::RK4 && (i != 0 || !advance))
+                me->ket->tensors[i]->normalize();
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
             me->ket->info->right_dims[i + 1] = *info;
             me->ket->info->save_right_dims(i + 1);
@@ -328,6 +331,7 @@ template <typename S> struct ImaginaryTE {
                 me->eff_ham(FuseTypes::FuseR, true);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
             k_eff->deallocate();
+            me->ket->tensors[i + 1]->normalize();
             me->ket->save_tensor(i + 1);
             me->ket->unload_tensor(i + 1);
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
@@ -339,6 +343,7 @@ template <typename S> struct ImaginaryTE {
                 me->eff_ham(FuseTypes::FuseL, true);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
             k_eff->deallocate();
+            me->ket->tensors[i]->normalize();
             me->ket->save_tensor(i);
             me->ket->unload_tensor(i);
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
@@ -398,8 +403,7 @@ template <typename S> struct ImaginaryTE {
         size_t center = me->ket->canonical_form.find('C');
         assert(center != string::npos);
         me->ket->load_tensor(center);
-        double norm = me->ket->tensors[center]->norm();
-        me->ket->tensors[center]->factor /= norm;
+        me->ket->tensors[center]->normalize();
         me->ket->save_tensor(center);
         me->ket->unload_tensor(center);
     }
@@ -511,7 +515,7 @@ template <typename S> struct Compress {
             int bond_dim =
                 mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
             double error = MovingEnvironment<S>::split_density_matrix(
-                dm, old_wfn, bond_dim, forward, mps->tensors[i],
+                dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
                 mps->tensors[i + 1]);
             if (mps == me->bra)
                 bra_error = error;
@@ -702,7 +706,7 @@ template <typename S> struct Expect {
                 int bond_dim =
                     mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
                 double error = MovingEnvironment<S>::split_density_matrix(
-                    dm, old_wfn, bond_dim, forward, mps->tensors[i],
+                    dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
                     mps->tensors[i + 1]);
                 if (mps == me->bra)
                     bra_error = error;
