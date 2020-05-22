@@ -1,0 +1,56 @@
+#  Def2-SV(P)  EMSL  Basis Set Exchange Library  5/17/16 9:27 AM
+# Elements                             References
+# --------                             ----------
+# H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn : F. Weigend and R. Ahlrichs, Phys. Chem. Chem. Phys., Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence
+# quality for H to Rn: Design and assessment of accuracy 7, 3297 (2005).
+# 
+
+
+
+BASIS "ao basis" PRINT
+#BASIS SET: (14s,9p,5d) -> [5s,3p,2d]
+Cr    S
+  51528.0863490              0.14405823106E-02      
+   7737.2103487              0.11036202287E-01      
+   1760.3748470              0.54676651806E-01      
+    496.87706544             0.18965038103    
+    161.46520598             0.38295412850    
+     55.466352268            0.29090050668    
+Cr    S
+    107.54732999            -0.10932281100    
+     12.408671897            0.64472599471    
+      5.0423628826           0.46262712560    
+Cr    S
+      8.5461640165          -0.22711013286    
+      1.3900441221           0.73301527591    
+      0.56066602876          0.44225565433    
+Cr    S
+      0.71483705972E-01            1.0000000        
+Cr    S
+      0.28250687604E-01            1.0000000        
+Cr    P
+    640.48536096             0.96126715203E-02      
+    150.69711194             0.70889834655E-01      
+     47.503755296            0.27065258990    
+     16.934120165            0.52437343414    
+      6.2409680590           0.34107994714    
+Cr    P
+      3.0885463206           0.33973986903    
+      1.1791047769           0.57272062927    
+      0.43369774432          0.24582728206    
+Cr    D
+     27.559479426            0.30612488044D-01      
+      7.4687020327           0.15593270944    
+      2.4345903574           0.36984421276    
+      0.78244754808          0.47071118077    
+Cr    D
+      0.21995774311          1.0000000        
+END
+# Elements                             References
+# --------                             ----------
+# Y-Cd(ecp-28), Hf-Hg(ecp-46): D. Andrae,U. Haeussermann, M.Dolg, H.Stoll, H.Preuss, Theor.Chim.Acta, 1990, 77, 123?141.
+# In-Sb(ecp-28), Tl-Bi(ecp-46): B. Metz, H. Stoll, M. Dolg, J. Chem. Phys., 2000, 113, 2563?2569.
+# Te-Xe(ecp-28), Po-Rn(ecp-46): K. A. Peterson, D. Figgen, E. Goll, H. Stoll, M. Dolg, J. Chem. Phys., 2003, 119, 11113?11123.
+# Rb(ecp-28), Cs(ecp-46): T.Leininger, A.Nicklass, W.Kuechle, H.Stoll, M.Dolg, A.Bergner, Chem. Phys. Lett., 1996, 255, 274?280.
+# Sr(ecp-28), Ba(ecp-46): M. Kaupp, P. V. Schleyer, H. Stoll and H. Preuss, J. Chem. Phys., 1991, 94, 1360?1366.
+# 
