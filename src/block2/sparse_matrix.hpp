@@ -571,21 +571,25 @@ struct SparseMatrixInfo<
         }
     }
     // Generate SparseMatrixInfo for density matrix
-    void initialize_dm(const shared_ptr<SparseMatrixInfo> &wfn_info, S dq,
-                       bool trace_right) {
+    void initialize_dm(const vector<shared_ptr<SparseMatrixInfo>> &wfn_infos,
+                       S dq, bool trace_right) {
         this->is_fermion = false;
         this->is_wavefunction = false;
-        assert(wfn_info->is_wavefunction);
         delta_quantum = dq;
         vector<S> qs;
-        qs.reserve(wfn_info->n);
-        if (trace_right)
-            for (int i = 0; i < wfn_info->n; i++)
-                qs.push_back(
-                    wfn_info->quanta[i].get_bra(wfn_info->delta_quantum));
-        else
-            for (int i = 0; i < wfn_info->n; i++)
-                qs.push_back(-wfn_info->quanta[i].get_ket());
+        assert(wfn_infos.size() >= 1);
+        qs.reserve(wfn_infos[0]->n);
+        for (size_t iw = 0; iw < wfn_infos.size(); iw++) {
+            shared_ptr<SparseMatrixInfo> wfn_info = wfn_infos[iw];
+            assert(wfn_info->is_wavefunction);
+            if (trace_right)
+                for (int i = 0; i < wfn_info->n; i++)
+                    qs.push_back(
+                        wfn_info->quanta[i].get_bra(wfn_info->delta_quantum));
+            else
+                for (int i = 0; i < wfn_info->n; i++)
+                    qs.push_back(-wfn_info->quanta[i].get_ket());
+        }
         sort(qs.begin(), qs.end());
         qs.resize(distance(qs.begin(), unique(qs.begin(), qs.end())));
         n = qs.size();
@@ -593,18 +597,25 @@ struct SparseMatrixInfo<
         if (n != 0) {
             memcpy(quanta, &qs[0], n * sizeof(S));
             if (trace_right)
-                for (int i = 0; i < wfn_info->n; i++) {
-                    S q = wfn_info->quanta[i].get_bra(wfn_info->delta_quantum);
-                    int ii = find_state(q);
-                    n_states_bra[ii] = n_states_ket[ii] =
-                        wfn_info->n_states_bra[i];
+                for (size_t iw = 0; iw < wfn_infos.size(); iw++) {
+                    shared_ptr<SparseMatrixInfo> wfn_info = wfn_infos[iw];
+                    for (int i = 0; i < wfn_info->n; i++) {
+                        S q = wfn_info->quanta[i].get_bra(
+                            wfn_info->delta_quantum);
+                        int ii = find_state(q);
+                        n_states_bra[ii] = n_states_ket[ii] =
+                            wfn_info->n_states_bra[i];
+                    }
                 }
             else
-                for (int i = 0; i < wfn_info->n; i++) {
-                    S q = -wfn_info->quanta[i].get_ket();
-                    int ii = find_state(q);
-                    n_states_bra[ii] = n_states_ket[ii] =
-                        wfn_info->n_states_ket[i];
+                for (size_t iw = 0; iw < wfn_infos.size(); iw++) {
+                    shared_ptr<SparseMatrixInfo> wfn_info = wfn_infos[iw];
+                    for (int i = 0; i < wfn_info->n; i++) {
+                        S q = -wfn_info->quanta[i].get_ket();
+                        int ii = find_state(q);
+                        n_states_bra[ii] = n_states_ket[ii] =
+                            wfn_info->n_states_ket[i];
+                    }
                 }
             n_states_total[0] = 0;
             for (int i = 0; i < n - 1; i++)
@@ -635,6 +646,8 @@ struct SparseMatrixInfo<
             memcpy(quanta, &qs[0], n * sizeof(S));
             sort(quanta, quanta + n);
             for (int i = 0; i < n; i++) {
+                assert(ket.find_state(wfn ? -quanta[i].get_ket()
+                                          : quanta[i].get_ket()) != -1);
                 n_states_ket[i] = ket.n_states[ket.find_state(
                     wfn ? -quanta[i].get_ket() : quanta[i].get_ket())];
                 n_states_bra[i] =

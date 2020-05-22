@@ -48,6 +48,7 @@ template <typename S> struct DMRG {
     bool forward;
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
+    TruncationTypes trunc_type = TruncationTypes::Physical;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -102,7 +103,7 @@ template <typename S> struct DMRG {
         }
         double error = MovingEnvironment<S>::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, true, me->ket->tensors[i],
-            me->ket->tensors[i + 1]);
+            me->ket->tensors[i + 1], trunc_type);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
@@ -221,6 +222,7 @@ template <typename S> struct ImaginaryTE {
     vector<double> energies;
     vector<double> normsqs;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
+    TruncationTypes trunc_type = TruncationTypes::Physical;
     bool forward;
     TETypes mode;
     int n_sub_sweeps;
@@ -311,7 +313,7 @@ template <typename S> struct ImaginaryTE {
         }
         double error = MovingEnvironment<S>::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, false, me->ket->tensors[i],
-            me->ket->tensors[i + 1]);
+            me->ket->tensors[i + 1], trunc_type);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             if (mode == TETypes::RK4 && (i + 1 != me->n_sites - 1 || !advance))
@@ -481,6 +483,7 @@ template <typename S> struct Compress {
     vector<double> noises;
     vector<double> norms;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
+    TruncationTypes trunc_type = TruncationTypes::Physical;
     bool forward;
     uint8_t iprint = 2;
     Compress(const shared_ptr<MovingEnvironment<S>> &me,
@@ -534,7 +537,7 @@ template <typename S> struct Compress {
                 mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
             double error = MovingEnvironment<S>::split_density_matrix(
                 dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
-                mps->tensors[i + 1]);
+                mps->tensors[i + 1], trunc_type);
             if (mps == me->bra)
                 bra_error = error;
             shared_ptr<StateInfo<S>> info = nullptr;
@@ -659,6 +662,7 @@ template <typename S> struct Expect {
     uint16_t bra_bond_dim, ket_bond_dim;
     vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> expectations;
     bool forward;
+    TruncationTypes trunc_type = TruncationTypes::Physical;
     uint8_t iprint = 2;
     Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
            uint16_t ket_bond_dim)
@@ -725,7 +729,7 @@ template <typename S> struct Expect {
                     mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
                 double error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
-                    mps->tensors[i + 1]);
+                    mps->tensors[i + 1], trunc_type);
                 if (mps == me->bra)
                     bra_error = error;
                 else

@@ -80,8 +80,12 @@ template <typename T>
 py::class_<Array<T>, shared_ptr<Array<T>>> bind_array(py::module &m,
                                                       const char *name) {
     return py::class_<Array<T>, shared_ptr<Array<T>>>(m, name)
-        .def("__setitem__", [](Array<T> *self, size_t i,
-                               const T &t) { self->operator[](i) = t; })
+        .def(
+            "__setitem__",
+            [](Array<T> *self, size_t i, const T &t) {
+                self->operator[](i) = t;
+            },
+            py::keep_alive<1, 3>())
         .def("__getitem__",
              [](Array<T> *self, size_t i) { return self->operator[](i); })
         .def("__len__", [](Array<T> *self) { return self->n; })
@@ -229,6 +233,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                 const shared_ptr<Symbolic<S>> &other) { return self * other; });
 
     py::class_<StateInfo<S>, shared_ptr<StateInfo<S>>>(m, "StateInfo")
+        .def(py::init<>())
+        .def(py::init<S>())
         .def_readwrite("n", &StateInfo<S>::n)
         .def_readwrite("n_states_total", &StateInfo<S>::n_states_total)
         .def_property_readonly(
@@ -239,7 +245,25 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                                    return Array<uint16_t>(self->n_states,
                                                           self->n);
                                })
+        .def("allocate",
+             [](StateInfo<S> *self, int length) { self->allocate(length); })
         .def("deallocate", &StateInfo<S>::deallocate)
+        .def("sort_states", &StateInfo<S>::sort_states)
+        .def("copy_data_to", &StateInfo<S>::copy_data_to)
+        .def("deep_copy", &StateInfo<S>::deep_copy)
+        .def("collect", &StateInfo<S>::collect,
+             py::arg("target") = S(0x7FFFFFFF))
+        .def("find_state", &StateInfo<S>::find_state)
+        .def_static("tensor_product_ref",
+                    (StateInfo<S>(*)(const StateInfo<S> &, const StateInfo<S> &,
+                                     const StateInfo<S> &)) &
+                        StateInfo<S>::tensor_product)
+        .def_static(
+            "tensor_product",
+            (StateInfo<S>(*)(const StateInfo<S> &, const StateInfo<S> &, S)) &
+                StateInfo<S>::tensor_product)
+        .def_static("get_connection_info", &StateInfo<S>::get_connection_info)
+        .def_static("filter", &StateInfo<S>::filter)
         .def("__repr__", [](StateInfo<S> *self) {
             stringstream ss;
             ss << *self;
@@ -313,11 +337,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("info", &SparseMatrix<S>::info)
         .def_readwrite("factor", &SparseMatrix<S>::factor)
         .def_readwrite("total_memory", &SparseMatrix<S>::total_memory)
-        .def_property_readonly("data",
-                               [](SparseMatrix<S> *self) {
-                                   return py::array_t<double>(
-                                       self->total_memory, self->data);
-                               })
+        .def_property(
+            "data",
+            [](SparseMatrix<S> *self) {
+                return py::array_t<double>(self->total_memory, self->data);
+            },
+            [](SparseMatrix<S> *self, const py::array_t<double> &v) {
+                assert(v.size() == self->total_memory);
+                memcpy(self->data, v.data(),
+                       sizeof(double) * self->total_memory);
+            })
         .def("clear", &SparseMatrix<S>::clear)
         .def("load_data", &SparseMatrix<S>::load_data, py::arg("filename"),
              py::arg("load_info") = false)
@@ -335,6 +364,11 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("norm", &SparseMatrix<S>::norm)
         .def("__getitem__",
              [](SparseMatrix<S> *self, int idx) { return (*self)[idx]; })
+        .def("__setitem__",
+             [](SparseMatrix<S> *self, int idx, const py::array_t<double> &v) {
+                 assert(v.size() == (*self)[idx].size());
+                 memcpy((*self)[idx].data, v.data(), sizeof(double) * v.size());
+             })
         .def("left_canonicalize", &SparseMatrix<S>::left_canonicalize,
              py::arg("rmat"))
         .def("right_canonicalize", &SparseMatrix<S>::right_canonicalize,
@@ -640,7 +674,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_static("density_matrix_with_weights",
                     &MovingEnvironment<S>::density_matrix_with_weights,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"), py::arg("mats"), py::arg("weights"), py::arg("noise_type"))
+                    py::arg("noise"), py::arg("mats"), py::arg("weights"),
+                    py::arg("noise_type"))
         .def_static(
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,
@@ -718,6 +753,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("noises", &DMRG<S>::noises)
         .def_readwrite("energies", &DMRG<S>::energies)
         .def_readwrite("forward", &DMRG<S>::forward)
+        .def_readwrite("noise_type", &DMRG<S>::noise_type)
+        .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("blocking", &DMRG<S>::blocking)
         .def("sweep", &DMRG<S>::sweep)
@@ -757,6 +794,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("n_sub_sweeps", &ImaginaryTE<S>::n_sub_sweeps)
         .def_readwrite("weights", &ImaginaryTE<S>::weights)
         .def_readwrite("mode", &ImaginaryTE<S>::mode)
+        .def_readwrite("noise_type", &ImaginaryTE<S>::noise_type)
+        .def_readwrite("trunc_type", &ImaginaryTE<S>::trunc_type)
         .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
         .def("blocking", &ImaginaryTE<S>::blocking)
         .def("sweep", &ImaginaryTE<S>::sweep)
@@ -790,6 +829,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("noises", &Compress<S>::noises)
         .def_readwrite("norms", &Compress<S>::norms)
         .def_readwrite("forward", &Compress<S>::forward)
+        .def_readwrite("noise_type", &Compress<S>::noise_type)
+        .def_readwrite("trunc_type", &Compress<S>::trunc_type)
         .def("update_two_dot", &Compress<S>::update_two_dot)
         .def("blocking", &Compress<S>::blocking)
         .def("sweep", &Compress<S>::sweep)
@@ -821,6 +862,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("ket_bond_dim", &Expect<S>::ket_bond_dim)
         .def_readwrite("expectations", &Expect<S>::expectations)
         .def_readwrite("forward", &Expect<S>::forward)
+        .def_readwrite("trunc_type", &Expect<S>::trunc_type)
         .def("update_two_dot", &Expect<S>::update_two_dot)
         .def("blocking", &Expect<S>::blocking)
         .def("sweep", &Expect<S>::sweep)
@@ -1032,6 +1074,8 @@ PYBIND11_MODULE(block2, m) {
                                    {self->m, self->n},
                                    {sizeof(double) * self->n, sizeof(double)});
         })
+        .def_readwrite("m", &MatrixRef::m)
+        .def_readwrite("n", &MatrixRef::n)
         .def("deallocate", &MatrixRef::deallocate);
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
@@ -1120,6 +1164,11 @@ PYBIND11_MODULE(block2, m) {
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
         .value("Perturbative", NoiseTypes::Perturbative);
 
+    py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
+        .value("Physical", TruncationTypes::Physical)
+        .value("Reduced", TruncationTypes::Reduced)
+        .value("ReducedInversed", TruncationTypes::ReducedInversed);
+
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())
         .def(py::init<uint32_t>())
@@ -1147,6 +1196,7 @@ PYBIND11_MODULE(block2, m) {
         .def_property_readonly("multiplicity", &SZ::multiplicity)
         .def_property_readonly("is_fermion", &SZ::is_fermion)
         .def_property_readonly("count", &SZ::count)
+        .def("combine", &SZ::combine)
         .def("__getitem__", &SZ::operator[])
         .def(py::self == py::self)
         .def(py::self != py::self)
@@ -1171,6 +1221,7 @@ PYBIND11_MODULE(block2, m) {
         .def_property_readonly("multiplicity", &SU2::multiplicity)
         .def_property_readonly("is_fermion", &SU2::is_fermion)
         .def_property_readonly("count", &SU2::count)
+        .def("combine", &SU2::combine)
         .def("__getitem__", &SU2::operator[])
         .def(py::self == py::self)
         .def(py::self != py::self)

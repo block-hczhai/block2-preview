@@ -171,13 +171,16 @@ template <typename S> struct EffectiveHamiltonian {
                 int ib = lower_bound(perturb_ket_labels.begin(),
                                      perturb_ket_labels.end(), pks[k]) -
                          perturb_ket_labels.begin();
+                S opdq = psubsl[j].second;
                 vector<pair<uint8_t, S>> subdq = {
-                    trace_right ? make_pair(psubsl[j].first, idq)
-                                : make_pair((uint8_t)(psubsl[j].first << 1),
-                                            -psubsl[j].second)};
+                    trace_right
+                        ? make_pair(psubsl[j].first, opdq.combine(opdq, -idq))
+                        : make_pair((uint8_t)(psubsl[j].first << 1),
+                                    opdq.combine(idq, -opdq))};
                 cinfos[j][k]->initialize_wfn(
                     ket_label, pks[k], psubsl[j].second, subdq, left_op_infos,
                     right_op_infos, ket->info, infos[ib], tf->opf->cg);
+                assert(cinfos[j][k]->n[4] == 1);
             }
         }
         // perform multiplication
@@ -383,6 +386,12 @@ template <typename S> struct EffectiveHamiltonian {
 };
 
 enum FuseTypes : uint8_t { NoFuse = 0, FuseL = 1, FuseR = 2, FuseLR = 3 };
+
+enum struct TruncationTypes : uint8_t {
+    Physical = 0,
+    Reduced = 1,
+    ReducedInversed = 2
+};
 
 // A tensor network < bra | mpo | ket >
 template <typename S> struct MovingEnvironment {
@@ -755,7 +764,9 @@ template <typename S> struct MovingEnvironment {
                    bool trace_right, double noise, NoiseTypes noise_type) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
-        dm_info->initialize_dm(psi->info, opdq, trace_right);
+        dm_info->initialize_dm(
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
         OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, noise,
@@ -768,7 +779,9 @@ template <typename S> struct MovingEnvironment {
         double noise, const shared_ptr<SparseMatrixGroup<S>> &mats) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
-        dm_info->initialize_dm(psi->info, opdq, trace_right);
+        dm_info->initialize_dm(
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
         for (int i = 1; i < mats->n; i++)
@@ -800,11 +813,12 @@ template <typename S> struct MovingEnvironment {
         return dm;
     }
     // Split density matrix to two MPS tensors by solving eigenvalue problem
-    static double split_density_matrix(const shared_ptr<SparseMatrix<S>> &dm,
-                                       const shared_ptr<SparseMatrix<S>> &wfn,
-                                       int k, bool trace_right, bool normalize,
-                                       shared_ptr<SparseMatrix<S>> &left,
-                                       shared_ptr<SparseMatrix<S>> &right) {
+    static double split_density_matrix(
+        const shared_ptr<SparseMatrix<S>> &dm,
+        const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
+        bool normalize, shared_ptr<SparseMatrix<S>> &left,
+        shared_ptr<SparseMatrix<S>> &right,
+        TruncationTypes trunc_type = TruncationTypes::Physical) {
         vector<DiagonalMatrix> eigen_values;
         vector<MatrixRef> eigen_values_reduced;
         int k_total = 0;
@@ -815,8 +829,11 @@ template <typename S> struct MovingEnvironment {
             MatrixRef wr(nullptr, w.n, 1);
             wr.allocate();
             MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
-            MatrixFunctions::iscale(wr,
-                                    1.0 / dm->info->quanta[i].multiplicity());
+            if (trunc_type == TruncationTypes::Reduced)
+                MatrixFunctions::iscale(
+                    wr, 1.0 / dm->info->quanta[i].multiplicity());
+            else if (trunc_type == TruncationTypes::ReducedInversed)
+                MatrixFunctions::iscale(wr, dm->info->quanta[i].multiplicity());
             eigen_values.push_back(w);
             eigen_values_reduced.push_back(wr);
             k_total += w.n;

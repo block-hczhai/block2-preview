@@ -289,6 +289,8 @@ template <typename S> struct OperatorFunctions {
             for (int ia = 0; ia < a.info->n; ia++) {
                 S qb = a.info->quanta[ia].get_bra(a.info->delta_quantum);
                 int ib = b.info->find_state(qb);
+                if (ib == -1)
+                    continue;
                 MatrixFunctions::multiply(a[ia], false, a[ia], true, b[ib],
                                           scale, 1.0);
                 if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
@@ -302,6 +304,8 @@ template <typename S> struct OperatorFunctions {
             for (int ia = 0; ia < a.info->n; ia++) {
                 S qb = -a.info->quanta[ia].get_ket();
                 int ib = b.info->find_state(qb);
+                if (ib == -1)
+                    continue;
                 MatrixFunctions::multiply(a[ia], true, a[ia], false, b[ib],
                                           scale, 1.0);
                 if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
