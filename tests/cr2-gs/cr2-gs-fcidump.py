@@ -41,8 +41,9 @@ mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
 bond_dim = 250
 mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+mps_info.tag = "KET"
 mps_info.set_bond_dimension_using_occ(bond_dim, occs)
-mps = MPS(n_sites, 0, 2)
+mps = MPS(n_sites, 5, 2)
 mps.initialize(mps_info)
 mps.random_canonicalize()
 
@@ -54,7 +55,7 @@ mps_info.deallocate_mutable()
 me = MovingEnvironment(mpo, mps, mps, "DMRG")
 me.init_environments(True)
 dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
-dmrg.solve(5, mps.center == 0)
+dmrg.solve(10, mps.center == 0)
 
 mps_info.deallocate()
 mpo.deallocate()

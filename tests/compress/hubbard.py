@@ -7,7 +7,7 @@ from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, NoiseTypes
 from block2.su2 import HamiltonianQC, MPS, MPSInfo, IdentityMPO, Compress
 from block2.su2 import PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-from block2.su2 import DMRG, MovingEnvironment
+from block2.su2 import DMRG, MovingEnvironment, NoTransposeRule
 
 Random.rand_seed(0)
 scratch = './my_tmp'
@@ -54,10 +54,7 @@ dmrg.solve(10, mps.center == 0)
 bra_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
 bra_info.tag = 'BRA'
 bra_info.set_bond_dimension(bond_dims[0] // 2)
-if mps.center == 0:
-    bra = MPS(n_sites, 0, 2)
-else:
-    bra = MPS(n_sites, n_sites - 2, 2)
+bra = MPS(n_sites, mps.center, 2)
 bra.initialize(bra_info)
 bra.random_canonicalize()
 
@@ -66,17 +63,23 @@ bra.deallocate()
 bra_info.save_mutable()
 bra_info.deallocate_mutable()
 
-impo = IdentityMPO(hamil)
-impo = SimplifiedMPO(impo, Rule(), True)
+# impo = IdentityMPO(hamil)
+# impo = SimplifiedMPO(impo, Rule(), True)
 
-cps_me = MovingEnvironment(impo, bra, mps, "COMPRESS")
+cmpo = MPOQC(hamil, QCTypes.Conventional)
+cmpo = SimplifiedMPO(cmpo, NoTransposeRule(RuleQC()), True)
+
+cps_me = MovingEnvironment(cmpo, bra, mps, "COMPRESS")
 cps_me.init_environments(True)
 cps = Compress(cps_me, VectorUInt16([bond_dims[0] // 2]), VectorUInt16(bond_dims), VectorDouble([0.0]))
 cps.noise_type = NoiseTypes.DensityMatrix
 cps.solve(10, mps.center == 0)
 
+cmpo.deallocate()
 bra_info.deallocate()
 mps_info.deallocate()
 mpo.deallocate()
 hamil.deallocate()
 fcidump.deallocate()
+
+release_memory()
