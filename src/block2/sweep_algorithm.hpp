@@ -49,6 +49,7 @@ template <typename S> struct DMRG {
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
+    double cutoff = 1E-14;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -103,7 +104,7 @@ template <typename S> struct DMRG {
         }
         double error = MovingEnvironment<S>::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, true, me->ket->tensors[i],
-            me->ket->tensors[i + 1], trunc_type);
+            me->ket->tensors[i + 1], cutoff, trunc_type);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
@@ -201,7 +202,7 @@ template <typename S> struct DMRG {
                 cout << " .. Energy = " << setw(15) << energy << " ";
             }
             if (iprint >= 1)
-                cout << "Time elapsed = " << setw(10) << setprecision(2)
+                cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current << endl;
             if (converged)
                 break;
@@ -228,6 +229,7 @@ template <typename S> struct ImaginaryTE {
     int n_sub_sweeps;
     vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
+    double cutoff = 1E-14;
     ImaginaryTE(const shared_ptr<MovingEnvironment<S>> &me,
                 const vector<uint16_t> &bond_dims,
                 TETypes mode = TETypes::TangentSpace, int n_sub_sweeps = 1)
@@ -313,7 +315,7 @@ template <typename S> struct ImaginaryTE {
         }
         double error = MovingEnvironment<S>::split_density_matrix(
             dm, h_eff->ket, (int)bond_dim, forward, false, me->ket->tensors[i],
-            me->ket->tensors[i + 1], trunc_type);
+            me->ket->tensors[i + 1], cutoff, trunc_type);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             if (mode == TETypes::RK4 && (i + 1 != me->n_sites - 1 || !advance))
@@ -462,7 +464,7 @@ template <typename S> struct ImaginaryTE {
                          << get<2>(r) << " ";
                 }
                 if (iprint >= 1)
-                    cout << "Time elapsed = " << setw(10) << setprecision(2)
+                    cout << "Time elapsed = " << setw(10) << setprecision(3)
                          << current.current - start.current << endl;
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));
@@ -486,6 +488,7 @@ template <typename S> struct Compress {
     TruncationTypes trunc_type = TruncationTypes::Physical;
     bool forward;
     uint8_t iprint = 2;
+    double cutoff = 0.0;
     Compress(const shared_ptr<MovingEnvironment<S>> &me,
              const vector<uint16_t> &bra_bond_dims,
              const vector<uint16_t> &ket_bond_dims,
@@ -537,7 +540,7 @@ template <typename S> struct Compress {
                 mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
             double error = MovingEnvironment<S>::split_density_matrix(
                 dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
-                mps->tensors[i + 1], trunc_type);
+                mps->tensors[i + 1], cutoff, trunc_type);
             if (mps == me->bra)
                 bra_error = error;
             shared_ptr<StateInfo<S>> info = nullptr;
@@ -646,7 +649,7 @@ template <typename S> struct Compress {
                 cout << " .. Norm = " << setw(15) << norm << " ";
             }
             if (iprint >= 1)
-                cout << "Time elapsed = " << setw(10) << setprecision(2)
+                cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current << endl;
             if (converged)
                 break;
@@ -664,6 +667,7 @@ template <typename S> struct Expect {
     bool forward;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     uint8_t iprint = 2;
+    double cutoff = 0.0;
     Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
            uint16_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
@@ -729,7 +733,7 @@ template <typename S> struct Expect {
                     mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
                 double error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
-                    mps->tensors[i + 1], trunc_type);
+                    mps->tensors[i + 1], cutoff, trunc_type);
                 if (mps == me->bra)
                     bra_error = error;
                 else
@@ -824,7 +828,7 @@ template <typename S> struct Expect {
             forward = !forward;
             current.get_time();
             if (iprint >= 1)
-                cout << "Time elapsed = " << setw(10) << setprecision(2)
+                cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current << endl;
             this->forward = forward;
             return 0.0;

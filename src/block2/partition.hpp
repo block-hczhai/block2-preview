@@ -194,6 +194,8 @@ template <typename S> struct Partition {
                     }
                     if (!partial) {
                         S p = l.combine(bra, ket);
+                        // here possible error can be due to non-zero (small) integral element
+                        // violating point group symmetry
                         assert(p != S(0xFFFFFFFFU));
                         subsl[idx].push_back(make_pair(op->conj, p));
                     } else if (left_only)

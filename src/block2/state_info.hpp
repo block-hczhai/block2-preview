@@ -89,7 +89,6 @@ struct StateInfo<S, typename enable_if<integral_constant<
         n = length;
     }
     void deallocate() {
-        assert(n != 0);
         ialloc->deallocate((uint32_t *)quanta, (n << 1) - (n >> 1));
         quanta = 0;
         n_states = 0;

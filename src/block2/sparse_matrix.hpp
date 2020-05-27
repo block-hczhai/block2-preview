@@ -781,6 +781,14 @@ template <typename S> struct SparseMatrix {
         assert(total_memory == other.total_memory);
         memcpy(data, other.data, sizeof(double) * total_memory);
     }
+    void selective_copy_from(const SparseMatrix &other) {
+        for (int i = 0, k; i < other.info->n; i++)
+            if ((k = info->find_state(other.info->quanta[i])) != -1)
+                memcpy(data + info->n_states_total[k],
+                       other.data + other.info->n_states_total[i],
+                       sizeof(double) * ((size_t)info->n_states_bra[k] *
+                                         info->n_states_ket[k]));
+    }
     void clear() { memset(data, 0, sizeof(double) * total_memory); }
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
                   double *ptr = 0) {

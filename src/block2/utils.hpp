@@ -127,6 +127,7 @@ struct Parsing {
             rr.resize(rr.size() - x.length());
         return rr;
     }
+    static long long to_long_long(const string &x) { return atoll(x.c_str()); }
     static int to_int(const string &x) { return atoi(x.c_str()); }
     static double to_double(const string &x) { return atof(x.c_str()); }
     static string to_string(int i) {

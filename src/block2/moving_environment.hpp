@@ -817,7 +817,7 @@ template <typename S> struct MovingEnvironment {
         const shared_ptr<SparseMatrix<S>> &dm,
         const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
         bool normalize, shared_ptr<SparseMatrix<S>> &left,
-        shared_ptr<SparseMatrix<S>> &right,
+        shared_ptr<SparseMatrix<S>> &right, double cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical) {
         vector<DiagonalMatrix> eigen_values;
         vector<MatrixRef> eigen_values_reduced;
@@ -848,16 +848,29 @@ template <typename S> struct MovingEnvironment {
         for (int i = 0; i < (int)eigen_values.size(); i++)
             for (int j = 0; j < eigen_values[i].n; j++)
                 ss.push_back(make_pair(i, j));
-        if (k != -1 && k_total > k) {
+        if (k != -1) {
             sort(ss.begin(), ss.end(),
                  [&eigen_values_reduced](const pair<int, int> &a,
                                          const pair<int, int> &b) {
                      return eigen_values_reduced[a.first].data[a.second] >
                             eigen_values_reduced[b.first].data[b.second];
                  });
-            for (int i = k; i < k_total; i++)
-                error += eigen_values[ss[i].first].data[ss[i].second];
-            ss.resize(k);
+            for (int i = k; i < k_total; i++) {
+                double x = eigen_values[ss[i].first].data[ss[i].second];
+                if (x > 0)
+                    error += x;
+            }
+            for (k = min(k, (int)ss.size());
+                 k > 1 &&
+                 eigen_values_reduced[ss[k - 1].first].data[ss[k - 1].second] <
+                     cutoff;
+                 k--) {
+                double x = eigen_values[ss[k - 1].first].data[ss[k - 1].second];
+                if (x > 0)
+                    error += x;
+            }
+            if (k < (int)ss.size())
+                ss.resize(k);
             sort(ss.begin(), ss.end(),
                  [](const pair<int, int> &a, const pair<int, int> &b) {
                      return a.first != b.first ? a.first < b.first

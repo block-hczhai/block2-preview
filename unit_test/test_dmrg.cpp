@@ -22,19 +22,25 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    string occ_filename = "data/CR2.SVP.OCC";
+    PGTypes pg = PGTypes::D2H;
+
+    // string occ_filename = "data/CR2.SVP.OCC";
+    // occs = read_occ(occ_filename);
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string occ_filename = "data/H2O.TZVP.OCC";
     occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
+    pg = PGTypes::C2V;
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_d2h);
+              PointGroup::swap_pg(pg));
     SU2 vaccum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
-                     PointGroup::swap_d2h(fcidump->isym()));
+                     PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
@@ -59,6 +65,8 @@ TEST_F(TestDMRG, Test) {
     uint16_t bond_dim = 250;
 
     // MPSInfo
+    // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
+    //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
         norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     if (occs.size() == 0)
@@ -67,7 +75,7 @@ TEST_F(TestDMRG, Test) {
         assert(occs.size() == norb);
         // for (size_t i = 0; i < occs.size(); i++)
         //     cout << occs[i] << " ";
-        mps_info->set_bond_dimension_using_occ(bond_dim, occs);
+        mps_info->set_bond_dimension_using_occ(bond_dim, occs, 30);
     }
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)

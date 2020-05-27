@@ -31,6 +31,7 @@ PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
+PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
@@ -454,6 +455,22 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("load_right_dims", &MPSInfo<S>::load_right_dims)
         .def("deallocate", &MPSInfo<S>::deallocate);
 
+    py::class_<CASCIMPSInfo<S>, shared_ptr<CASCIMPSInfo<S>>, MPSInfo<S>>(
+        m, "CASCIMPSInfo")
+        .def_readwrite("casci_mask", &CASCIMPSInfo<S>::casci_mask)
+        .def(py::init([](int n_sites, S vaccum, S target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym, uint8_t n_syms, const vector<ActiveTypes> &casci_mask) {
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target, basis.data,
+                                           orbsym, n_syms, casci_mask);
+        }))
+        .def(py::init([](int n_sites, S vaccum, S target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym, uint8_t n_syms, int n_active_sites, int n_active_electrons) {
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target, basis.data,
+                                           orbsym, n_syms, n_active_sites, n_active_electrons);
+        }));
+
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
@@ -680,10 +697,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,
                const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
-               bool normalize) {
+               bool normalize, double cutoff) {
                 shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
                 double error = MovingEnvironment<S>::split_density_matrix(
-                    dm, wfn, k, trace_right, normalize, left, right);
+                    dm, wfn, k, trace_right, normalize, left, right, cutoff);
                 return make_tuple(error, left, right);
             })
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
@@ -748,6 +765,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<uint16_t> &, const vector<double> &>())
         .def_readwrite("iprint", &DMRG<S>::iprint)
+        .def_readwrite("cutoff", &DMRG<S>::cutoff)
         .def_readwrite("me", &DMRG<S>::me)
         .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
         .def_readwrite("noises", &DMRG<S>::noises)
@@ -785,6 +803,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<uint16_t> &, TETypes, int>())
         .def_readwrite("iprint", &ImaginaryTE<S>::iprint)
+        .def_readwrite("cutoff", &ImaginaryTE<S>::cutoff)
         .def_readwrite("me", &ImaginaryTE<S>::me)
         .def_readwrite("bond_dims", &ImaginaryTE<S>::bond_dims)
         .def_readwrite("noises", &ImaginaryTE<S>::noises)
@@ -823,6 +842,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                       const vector<uint16_t> &, const vector<uint16_t> &,
                       const vector<double> &>())
         .def_readwrite("iprint", &Compress<S>::iprint)
+        .def_readwrite("cutoff", &Compress<S>::cutoff)
         .def_readwrite("me", &Compress<S>::me)
         .def_readwrite("bra_bond_dims", &Compress<S>::bra_bond_dims)
         .def_readwrite("ket_bond_dims", &Compress<S>::ket_bond_dims)
@@ -857,6 +877,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
                       uint16_t>())
         .def_readwrite("iprint", &Expect<S>::iprint)
+        .def_readwrite("cutoff", &Expect<S>::cutoff)
         .def_readwrite("me", &Expect<S>::me)
         .def_readwrite("bra_bond_dim", &Expect<S>::bra_bond_dim)
         .def_readwrite("ket_bond_dim", &Expect<S>::ket_bond_dim)
@@ -1000,6 +1021,7 @@ PYBIND11_MODULE(block2, m) {
     });
 
     m.def("read_occ", &read_occ);
+    m.def("write_occ", &write_occ);
 
     py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
         .def(py::init<>())
@@ -1096,6 +1118,7 @@ PYBIND11_MODULE(block2, m) {
     py::class_<FCIDUMP, shared_ptr<FCIDUMP>>(m, "FCIDUMP")
         .def(py::init<>())
         .def("read", &FCIDUMP::read)
+        .def("write", &FCIDUMP::write)
         .def("initialize_su2",
              [](FCIDUMP *self, uint16_t n_sites, uint16_t n_elec, uint16_t twos,
                 uint16_t isym, double e, const py::array_t<double> &t,
@@ -1119,7 +1142,7 @@ PYBIND11_MODULE(block2, m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
-        .def_property_readonly("orb_sym", &FCIDUMP::orb_sym)
+        .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym)
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
         .def_property_readonly("twos", &FCIDUMP::twos)
         .def_property_readonly("isym", &FCIDUMP::isym)
@@ -1242,6 +1265,13 @@ PYBIND11_MODULE(block2, m) {
         .value("Nothing", AncillaTypes::None)
         .value("Ancilla", AncillaTypes::Ancilla);
 
+    py::enum_<ActiveTypes>(m, "ActiveTypes", py::arithmetic())
+        .value("Empty", ActiveTypes::Empty)
+        .value("Active", ActiveTypes::Active)
+        .value("Frozen", ActiveTypes::Frozen);
+    
+    py::bind_vector<vector<ActiveTypes>>(m, "VectorActTypes");
+
     py::enum_<SeqTypes>(m, "SeqTypes", py::arithmetic())
         .value("Nothing", SeqTypes::None)
         .value("Simple", SeqTypes::Simple)
@@ -1284,6 +1314,13 @@ PYBIND11_MODULE(block2, m) {
         });
 
     py::class_<PointGroup, shared_ptr<PointGroup>>(m, "PointGroup")
+        .def_static("swap_c1", &PointGroup::swap_c1)
+        .def_static("swap_ci", &PointGroup::swap_ci)
+        .def_static("swap_cs", &PointGroup::swap_cs)
+        .def_static("swap_c2", &PointGroup::swap_c2)
+        .def_static("swap_c2h", &PointGroup::swap_c2h)
+        .def_static("swap_c2v", &PointGroup::swap_c2v)
+        .def_static("swap_d2", &PointGroup::swap_d2)
         .def_static("swap_d2h", &PointGroup::swap_d2h);
 
     py::enum_<FuseTypes>(m, "FuseTypes", py::arithmetic())

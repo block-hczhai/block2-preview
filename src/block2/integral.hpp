@@ -52,6 +52,15 @@ struct TInt {
     double operator()(uint16_t i, uint16_t j) const {
         return *(data + find_index(i, j));
     }
+    friend ostream &operator<<(ostream &os, TInt x) {
+        os << fixed << setprecision(16);
+        for (uint16_t i = 0; i < x.n; i++)
+            for (uint16_t j = 0; j <= i; j++)
+                if (x(i, j) != 0.0)
+                    os << setw(20) << x(i, j) << setw(4) << i + 1 << setw(4)
+                       << j + 1 << setw(4) << 0 << setw(4) << 0 << endl;
+        return os;
+    }
 };
 
 // General 4D array for storage of two-electron integrals
@@ -68,6 +77,18 @@ struct V1Int {
     }
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + (((size_t)i * n + j) * n + k) * n + l);
+    }
+    friend ostream &operator<<(ostream &os, V1Int x) {
+        os << fixed << setprecision(16);
+        for (uint32_t i = 0; i < x.n; i++)
+            for (uint32_t j = 0; j < x.n; j++)
+                for (uint32_t k = 0; k < x.n; k++)
+                    for (uint32_t l = 0; l < x.n; l++)
+                        if (x(i, j, k, l) != 0.0)
+                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
+                               << setw(4) << j + 1 << setw(4) << k + 1
+                               << setw(4) << l + 1 << endl;
+        return os;
     }
 };
 
@@ -94,6 +115,18 @@ struct V4Int {
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
     }
+    friend ostream &operator<<(ostream &os, V4Int x) {
+        os << fixed << setprecision(16);
+        for (uint32_t i = 0; i < x.n; i++)
+            for (uint32_t j = 0; j <= i; j++)
+                for (uint32_t k = 0; k < x.n; k++)
+                    for (uint32_t l = 0; l <= k; l++)
+                        if (x(i, j, k, l) != 0.0)
+                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
+                               << setw(4) << j + 1 << setw(4) << k + 1
+                               << setw(4) << l + 1 << endl;
+        return os;
+    }
 };
 
 // 4D array with 8-fold symmetry for storage of two-electron integrals
@@ -118,6 +151,18 @@ struct V8Int {
     }
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
+    }
+    friend ostream &operator<<(ostream &os, V8Int x) {
+        os << fixed << setprecision(16);
+        for (uint32_t i = 0, ij = 0; i < x.n; i++)
+            for (uint32_t j = 0; j <= i; j++, ij++)
+                for (uint32_t k = 0, kl = 0; k <= i; k++)
+                    for (uint32_t l = 0; l <= k; l++, kl++)
+                        if (ij >= kl && x(i, j, k, l) != 0.0)
+                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
+                               << setw(4) << j + 1 << setw(4) << k + 1
+                               << setw(4) << l + 1 << endl;
+        return os;
     }
 };
 
@@ -236,6 +281,47 @@ struct FCIDUMP {
         }
         memcpy(ts[0].data, t, sizeof(double) * lt);
         uhf = false;
+    }
+    // Writing FCIDUMP file to disk
+    void write(const string &filename) const {
+        ofstream ofs(filename.c_str());
+        ofs << " &FCI NORB=" << setw(4) << (int)n_sites()
+            << ",NELEC=" << setw(4) << (int)n_elec() << ",MS2=" << setw(4)
+            << (int)twos() << "," << endl;
+        assert(params.count("orbsym") != 0);
+        ofs << "  ORBSYM=" << params.at("orbsym") << "," << endl;
+        ofs << "  ISYM=" << setw(4) << (int)isym() << "," << endl;
+        if (uhf)
+            ofs << "  IUHF=1," << endl;
+        if (general)
+            ofs << "  IGENERAL=1," << endl;
+        ofs << " &END" << endl;
+        auto write_const = [](ofstream &os, double x) {
+            os << fixed << setprecision(16);
+            os << setw(20) << x << setw(4) << 0 << setw(4) << 0 << setw(4) << 0
+               << setw(4) << 0 << endl;
+        };
+        if (!uhf) {
+            if (general)
+                ofs << vgs[0];
+            else
+                ofs << vs[0];
+            ofs << ts[0];
+            write_const(ofs, this->e);
+        } else {
+            if (general) {
+                for (size_t i = 0; i < vgs.size(); i++)
+                    ofs << vgs[i], write_const(ofs, 0.0);
+            } else {
+                for (size_t i = 0; i < vs.size(); i++)
+                    ofs << vs[i], write_const(ofs, 0.0);
+                ofs << vabs[0], write_const(ofs, 0.0);
+            }
+            for (size_t i = 0; i < ts.size(); i++)
+                ofs << ts[i], write_const(ofs, 0.0);
+            write_const(ofs, this->e);
+        }
+        ofs.close();
     }
     // Parsing a FCIDUMP file
     void read(const string &filename) {
@@ -406,6 +492,16 @@ struct FCIDUMP {
     }
     // Target point group irreducible representation (counting from 1)
     uint8_t isym() const { return (uint8_t)Parsing::to_int(params.at("isym")); }
+    // Set point group irreducible representation for each site
+    void set_orb_sym(const vector<uint8_t> &x) {
+        stringstream ss;
+        for (size_t i = 0; i < x.size(); i++) {
+            ss << (int)x[i];
+            if (i != x.size() - 1)
+                ss << ",";
+        }
+        params["orbsym"] = ss.str();
+    }
     // Point group irreducible representation for each site
     vector<uint8_t> orb_sym() const {
         vector<string> x = Parsing::split(params.at("orbsym"), ",", true);

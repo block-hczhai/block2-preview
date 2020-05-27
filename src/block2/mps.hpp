@@ -47,6 +47,16 @@ inline vector<double> read_occ(const string &filename) {
     return r;
 }
 
+// Write occupation numbers to a file
+inline void write_occ(const string &filename, const vector<double> &occ) {
+    ofstream ofs(filename.c_str());
+    ofs << fixed << setprecision(8);
+    for (auto x : occ)
+        ofs << setw(12) << x;
+    ofs << endl;
+    ofs.close();
+}
+
 // Quantum number infomation in a MPS
 template <typename S> struct MPSInfo {
     int n_sites;
@@ -59,15 +69,22 @@ template <typename S> struct MPSInfo {
     StateInfo<S> *left_dims, *right_dims;
     string tag = "KET";
     MPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
-            const vector<uint8_t> orbsym, uint8_t n_syms)
+            const vector<uint8_t> orbsym, uint8_t n_syms, bool init_fci = true)
         : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
           n_syms(n_syms), basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo<S>[n_sites + 1];
+        right_dims_fci = new StateInfo<S>[n_sites + 1];
+        left_dims = new StateInfo<S>[n_sites + 1];
+        right_dims = new StateInfo<S>[n_sites + 1];
+        if (init_fci)
+            set_bond_dimension_fci();
+    }
+    virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
+    virtual void set_bond_dimension_fci() {
         left_dims_fci[0] = StateInfo<S>(vaccum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
                 left_dims_fci[i], basis[orbsym[i]], target);
-        right_dims_fci = new StateInfo<S>[n_sites + 1];
         right_dims_fci[n_sites] = StateInfo<S>(vaccum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] = StateInfo<S>::tensor_product(
@@ -78,10 +95,7 @@ template <typename S> struct MPSInfo {
             left_dims_fci[i].collect();
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i].collect();
-        left_dims = new StateInfo<S>[n_sites + 1];
-        right_dims = new StateInfo<S>[n_sites + 1];
     }
-    virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
                                       double bias = 1.0) {
         bond_dim = m;
@@ -350,6 +364,106 @@ template <typename S> struct MPSInfo {
         delete[] right_dims;
         delete[] left_dims_fci;
         delete[] right_dims_fci;
+    }
+};
+
+enum struct ActiveTypes : uint8_t { Empty, Active, Frozen };
+
+// MPSInfo for CASCI calculation
+template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
+    vector<ActiveTypes> casci_mask;
+    static vector<ActiveTypes> active_space(int n_sites, S target,
+                                            int n_active_sites,
+                                            int n_active_electrons) {
+        vector<ActiveTypes> casci_mask(n_sites, ActiveTypes::Empty);
+        assert(!((target.n() - n_active_electrons) & 1));
+        int n_frozen = (target.n() - n_active_electrons) >> 1;
+        assert(n_frozen + n_active_sites <= n_sites);
+        for (size_t i = 0; i < n_frozen; i++)
+            casci_mask[i] = ActiveTypes::Frozen;
+        for (size_t i = n_frozen; i < n_frozen + n_active_sites; i++)
+            casci_mask[i] = ActiveTypes::Active;
+        return casci_mask;
+    }
+    CASCIMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+                 const vector<uint8_t> orbsym, uint8_t n_syms,
+                 const vector<ActiveTypes> &casci_mask)
+        : casci_mask(casci_mask), MPSInfo<S>(n_sites, vaccum, target, basis,
+                                             orbsym, n_syms, false) {
+        set_bond_dimension_fci();
+    }
+    CASCIMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+                 const vector<uint8_t> orbsym, uint8_t n_syms,
+                 int n_active_sites, int n_active_electrons)
+        : casci_mask(active_space(n_sites, target, n_active_sites,
+                                  n_active_electrons)),
+          MPSInfo<S>(n_sites, vaccum, target, basis, orbsym, n_syms, false) {
+        set_bond_dimension_fci();
+    }
+    void set_bond_dimension_fci() override {
+        assert(casci_mask.size() == MPSInfo<S>::n_sites);
+        StateInfo<S> empty = StateInfo<S>(MPSInfo<S>::vaccum);
+        S frozen_state;
+        for (int i = 0; i < MPSInfo<S>::basis[0].n; i++)
+            if (MPSInfo<S>::basis[0].quanta[i].n() == 2) {
+                frozen_state = MPSInfo<S>::basis[0].quanta[i];
+                break;
+            }
+        StateInfo<S> frozen = StateInfo<S>(frozen_state);
+        MPSInfo<S>::left_dims_fci[0] = StateInfo<S>(MPSInfo<S>::vaccum);
+        for (int i = 0; i < MPSInfo<S>::n_sites; i++)
+            switch (casci_mask[i]) {
+            case ActiveTypes::Active:
+                MPSInfo<S>::left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
+                    MPSInfo<S>::left_dims_fci[i],
+                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
+                    MPSInfo<S>::target);
+                break;
+            case ActiveTypes::Frozen:
+                MPSInfo<S>::left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
+                    MPSInfo<S>::left_dims_fci[i], frozen, MPSInfo<S>::target);
+                break;
+            case ActiveTypes::Empty:
+                MPSInfo<S>::left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
+                    MPSInfo<S>::left_dims_fci[i], empty, MPSInfo<S>::target);
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        MPSInfo<S>::right_dims_fci[MPSInfo<S>::n_sites] =
+            StateInfo<S>(MPSInfo<S>::vaccum);
+        for (int i = MPSInfo<S>::n_sites - 1; i >= 0; i--)
+            switch (casci_mask[i]) {
+            case ActiveTypes::Active:
+                MPSInfo<S>::right_dims_fci[i] = StateInfo<S>::tensor_product(
+                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
+                    MPSInfo<S>::right_dims_fci[i + 1], MPSInfo<S>::target);
+                break;
+            case ActiveTypes::Frozen:
+                MPSInfo<S>::right_dims_fci[i] = StateInfo<S>::tensor_product(
+                    frozen, MPSInfo<S>::right_dims_fci[i + 1],
+                    MPSInfo<S>::target);
+                break;
+            case ActiveTypes::Empty:
+                MPSInfo<S>::right_dims_fci[i] = StateInfo<S>::tensor_product(
+                    empty, MPSInfo<S>::right_dims_fci[i + 1],
+                    MPSInfo<S>::target);
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        for (int i = 0; i <= MPSInfo<S>::n_sites; i++)
+            StateInfo<S>::filter(MPSInfo<S>::left_dims_fci[i],
+                                 MPSInfo<S>::right_dims_fci[i],
+                                 MPSInfo<S>::target);
+        empty.reallocate(0);
+        frozen.reallocate(0);
+        for (int i = 0; i <= MPSInfo<S>::n_sites; i++)
+            MPSInfo<S>::left_dims_fci[i].collect();
+        for (int i = MPSInfo<S>::n_sites; i >= 0; i--)
+            MPSInfo<S>::right_dims_fci[i].collect();
     }
 };
 

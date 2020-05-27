@@ -51,7 +51,10 @@ template <typename S> struct TensorFunctions {
                 assert(a->lmat->data[i] == c->lmat->data[i]);
                 auto pa = abs_value(a->lmat->data[i]),
                      pc = abs_value(c->lmat->data[i]);
-                c->ops[pc]->copy_data_from(*a->ops[pa]);
+                if (c->ops[pc]->info->n == a->ops[pa]->info->n)
+                    c->ops[pc]->copy_data_from(*a->ops[pa]);
+                else
+                    c->ops[pc]->selective_copy_from(*a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
@@ -71,7 +74,10 @@ template <typename S> struct TensorFunctions {
                 assert(a->rmat->data[i] == c->rmat->data[i]);
                 auto pa = abs_value(a->rmat->data[i]),
                      pc = abs_value(c->rmat->data[i]);
-                c->ops[pc]->copy_data_from(*a->ops[pa]);
+                if (c->ops[pc]->info->n == a->ops[pa]->info->n)
+                    c->ops[pc]->copy_data_from(*a->ops[pa]);
+                else
+                    c->ops[pc]->selective_copy_from(*a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
