@@ -62,6 +62,8 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vaccum;
     S target;
+    // if orbsym is empty, the basis index is orbital index (general case)
+    // otherwise, the basis index is pg symmetry index
     vector<uint8_t> orbsym;
     uint8_t n_syms;
     uint16_t bond_dim;
@@ -78,23 +80,127 @@ template <typename S> struct MPSInfo {
         right_dims = new StateInfo<S>[n_sites + 1];
         if (init_fci)
             set_bond_dimension_fci();
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i].n = 0;
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i].n = 0;
+    }
+    virtual const StateInfo<S> get_basis(int i) const noexcept {
+        return orbsym.empty() ? basis[i] : basis[orbsym[i]];
     }
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
+    virtual bool is_dynamic() const { return false; }
     virtual void set_bond_dimension_fci() {
         left_dims_fci[0] = StateInfo<S>(vaccum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
-                left_dims_fci[i], basis[orbsym[i]], target);
+                left_dims_fci[i], get_basis(i), target);
         right_dims_fci[n_sites] = StateInfo<S>(vaccum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] = StateInfo<S>::tensor_product(
-                basis[orbsym[i]], right_dims_fci[i + 1], target);
+                get_basis(i), right_dims_fci[i + 1], target);
         for (int i = 0; i <= n_sites; i++)
             StateInfo<S>::filter(left_dims_fci[i], right_dims_fci[i], target);
         for (int i = 0; i <= n_sites; i++)
             left_dims_fci[i].collect();
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i].collect();
+    }
+    void set_bond_dimension_using_hf(uint16_t m, const vector<double> &occ,
+                                     int n_local = 0) {
+        bond_dim = m;
+        assert(occ.size() == n_sites);
+        // currently only works with symmetrized basis
+        assert(!orbsym.empty());
+        S occupied;
+        for (int i = 0; i < basis[0].n; i++)
+            if (basis[0].quanta[i].n() == 2) {
+                occupied = basis[0].quanta[i];
+                break;
+            }
+        for (auto x : occ)
+            assert(x == 2 || x == 0);
+        StateInfo<S> *left_dims_hf = new StateInfo<S>[n_sites + 1];
+        StateInfo<S> *right_dims_hf = new StateInfo<S>[n_sites + 1];
+        left_dims_hf[0] = StateInfo<S>(vaccum);
+        for (int i = 0; i < n_sites; i++)
+            left_dims_hf[i + 1] = StateInfo<S>(
+                left_dims_hf[i].quanta[0] + (occ[i] == 2 ? occupied : vaccum));
+        right_dims_hf[n_sites] = StateInfo<S>(vaccum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            right_dims_hf[i] = StateInfo<S>((occ[i] == 2 ? occupied : vaccum) +
+                                            right_dims_hf[i + 1].quanta[0]);
+        left_dims[0] = StateInfo<S>(vaccum);
+        for (int i = 0, j; i < n_sites; i++) {
+            vector<StateInfo<S>> tmps;
+            j = max(0, i - n_local + 1);
+            tmps.push_back(left_dims_hf[j].deep_copy());
+            for (; j <= i; j++) {
+                StateInfo<S> tmp = StateInfo<S>::tensor_product(
+                    tmps.back(), get_basis(j), left_dims_fci[j + 1]);
+                tmps.push_back(tmp);
+                tmps.back().reduce_n_states(m);
+            }
+            for (size_t k = 0; k < tmps.size() - 1; k++)
+                tmps[k].reallocate(0);
+            tmps.back().reallocate(tmps.back().n);
+            left_dims[i + 1] = tmps.back();
+            if (i != n_sites - 1) {
+                StateInfo<S> tmp = StateInfo<S>::tensor_product(
+                    left_dims[i], get_basis(i), left_dims_fci[i + 1]);
+                for (int j = 0; j < left_dims[i + 1].n; j++) {
+                    int k = tmp.find_state(left_dims[i + 1].quanta[j]);
+                    if (k == -1)
+                        left_dims[i + 1].n_states[j] = 0;
+                    else
+                        left_dims[i + 1].n_states[j] =
+                            min(tmp.n_states[k], left_dims[i + 1].n_states[j]);
+                }
+                tmp.deallocate();
+                left_dims[i + 1].collect();
+            }
+        }
+        right_dims[n_sites] = StateInfo<S>(vaccum);
+        for (int i = n_sites - 1, j; i >= 0; i--) {
+            vector<StateInfo<S>> tmps;
+            j = min(n_sites - 1, i + n_local - 1);
+            tmps.push_back(right_dims_hf[j + 1].deep_copy());
+            for (; j >= i; j--) {
+                StateInfo<S> tmp = StateInfo<S>::tensor_product(
+                    get_basis(j), tmps.back(), right_dims_fci[j]);
+                tmps.push_back(tmp);
+                tmps.back().reduce_n_states(m);
+            }
+            for (size_t k = 0; k < tmps.size() - 1; k++)
+                tmps[k].reallocate(0);
+            tmps.back().reallocate(tmps.back().n);
+            right_dims[i] = tmps.back();
+            if (i != 0) {
+                StateInfo<S> tmp = StateInfo<S>::tensor_product(
+                    get_basis(i), right_dims[i + 1], right_dims_fci[i]);
+                for (int j = 0; j < right_dims[i].n; j++) {
+                    int k = tmp.find_state(right_dims[i].quanta[j]);
+                    if (k == -1)
+                        right_dims[i].n_states[j] = 0;
+                    else
+                        right_dims[i].n_states[j] =
+                            min(tmp.n_states[k], right_dims[i].n_states[j]);
+                }
+                tmp.deallocate();
+                right_dims[i].collect();
+            }
+        }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_hf[i].reallocate(0);
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_hf[i].reallocate(0);
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i].reallocate(left_dims[i].n);
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i].reallocate(right_dims[i].n);
+        assert(ialloc->shift == 0);
+        delete[] right_dims_hf;
+        delete[] left_dims_hf;
     }
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
                                       double bias = 1.0) {
@@ -114,10 +220,10 @@ template <typename S> struct MPSInfo {
             vector<double> probs = {(1 - alpha_occ) * (1 - alpha_occ),
                                     (1 - alpha_occ) * alpha_occ,
                                     alpha_occ * alpha_occ};
-            site_probs[i].allocate(basis[orbsym[i]].n);
-            for (int j = 0; j < basis[orbsym[i]].n; j++) {
-                site_probs[i].quanta[j] = basis[orbsym[i]].quanta[j];
-                site_probs[i].probs[j] = probs[basis[orbsym[i]].quanta[j].n()];
+            site_probs[i].allocate(get_basis(i).n);
+            for (int j = 0; j < get_basis(i).n; j++) {
+                site_probs[i].quanta[j] = get_basis(i).quanta[j];
+                site_probs[i].probs[j] = probs[get_basis(i).quanta[j].n()];
             }
         }
         // left and right block probabilities
@@ -187,7 +293,7 @@ template <typename S> struct MPSInfo {
             left_dims[i].collect();
             if (i != n_sites) {
                 StateInfo<S> tmp = StateInfo<S>::tensor_product(
-                    left_dims[i], basis[orbsym[i]], left_dims_fci_t[i + 1]);
+                    left_dims[i], get_basis(i), left_dims_fci_t[i + 1]);
                 for (int j = 0, k; j < left_dims_fci_t[i + 1].n; j++)
                     if ((k = tmp.find_state(
                              left_dims_fci_t[i + 1].quanta[j])) != -1)
@@ -215,8 +321,7 @@ template <typename S> struct MPSInfo {
             right_dims[i].collect();
             if (i != 0) {
                 StateInfo<S> tmp = StateInfo<S>::tensor_product(
-                    basis[orbsym[i - 1]], right_dims[i],
-                    right_dims_fci_t[i - 1]);
+                    get_basis(i - 1), right_dims[i], right_dims_fci_t[i - 1]);
                 for (int j = 0, k; j < right_dims_fci_t[i - 1].n; j++)
                     if ((k = tmp.find_state(
                              right_dims_fci_t[i - 1].quanta[j])) != -1)
@@ -250,7 +355,7 @@ template <typename S> struct MPSInfo {
         delete[] left_probs;
         delete[] site_probs;
     }
-    void set_bond_dimension(uint16_t m) {
+    virtual void set_bond_dimension(uint16_t m) {
         bond_dim = m;
         left_dims[0] = StateInfo<S>(vaccum);
         for (int i = 0; i < n_sites; i++)
@@ -288,7 +393,7 @@ template <typename S> struct MPSInfo {
             }
         for (int i = -1; i < n_sites - 1; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                left_dims[i + 1], basis[orbsym[i + 1]], target);
+                left_dims[i + 1], get_basis(i + 1), target);
             int new_total = 0;
             for (int k = 0; k < left_dims[i + 2].n; k++) {
                 int tk = t.find_state(left_dims[i + 2].quanta[k]);
@@ -303,7 +408,7 @@ template <typename S> struct MPSInfo {
         }
         for (int i = n_sites; i > 0; i--) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                basis[orbsym[i - 1]], right_dims[i], target);
+                get_basis(i - 1), right_dims[i], target);
             int new_total = 0;
             for (int k = 0; k < right_dims[i - 1].n; k++) {
                 int tk = t.find_state(right_dims[i - 1].quanta[k]);
@@ -329,11 +434,17 @@ template <typename S> struct MPSInfo {
             right_dims[i].save_data(get_filename(false, i));
         }
     }
-    void load_mutable() const {
+    void load_mutable_left() const {
         for (int i = 0; i <= n_sites; i++)
             left_dims[i].load_data(get_filename(true, i));
+    }
+    void load_mutable_right() const {
         for (int i = n_sites; i >= 0; i--)
             right_dims[i].load_data(get_filename(false, i));
+    }
+    void load_mutable() const {
+        load_mutable_left();
+        load_mutable_right();
     }
     void deallocate_mutable() {
         for (int i = 0; i <= n_sites; i++)
@@ -353,17 +464,95 @@ template <typename S> struct MPSInfo {
     void load_right_dims(int i) {
         right_dims[i].load_data(get_filename(false, i));
     }
-    void deallocate() {
-        for (int i = 0; i <= n_sites; i++)
-            right_dims_fci[i].deallocate();
+    void deallocate_left() {
         for (int i = n_sites; i >= 0; i--)
             left_dims_fci[i].deallocate();
+    }
+    void deallocate_right() {
+        for (int i = 0; i <= n_sites; i++)
+            right_dims_fci[i].deallocate();
+    }
+    void deallocate() {
+        deallocate_right();
+        deallocate_left();
     }
     ~MPSInfo() {
         delete[] left_dims;
         delete[] right_dims;
         delete[] left_dims_fci;
         delete[] right_dims_fci;
+    }
+};
+
+// Quantum number infomation in a MPS
+// Used for warmup sweep
+template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
+    vector<uint8_t> iocc;
+    int n_local;
+    DynamicMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+                   const vector<uint8_t> orbsym, uint8_t n_syms,
+                   const vector<uint8_t> &iocc, int n_local = 0)
+        : iocc(iocc), n_local(n_local), MPSInfo<S>(n_sites, vaccum, target,
+                                                   basis, orbsym, n_syms) {}
+    void set_bond_dimension(uint16_t m) override {
+        this->bond_dim = m;
+        this->left_dims[0] = StateInfo<S>(this->vaccum);
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+    }
+    bool is_dynamic() const override { return true; }
+    void set_left_bond_dimension_local(uint16_t i, bool match_prev = false) {
+        this->left_dims[0] = StateInfo<S>(this->vaccum);
+        int j = max(0, i - n_local + 1);
+        for (int k = 0; k < j; k++)
+            this->left_dims[k + 1] =
+                StateInfo<S>(this->left_dims[k].quanta[0] +
+                             this->get_basis(k).quanta[iocc[k]]);
+        for (int k = j; k <= i; k--) {
+            StateInfo<S> x = StateInfo<S>::tensor_product(
+                this->left_dims[k], this->get_basis(k),
+                this->left_dims_fci[k + 1]);
+            x.reduce_n_states(this->bond_dim);
+            if (match_prev) {
+                this->load_left_dims(k + 1);
+                for (int l = 0, il; l < this->left_dims[k + 1].n; l++) {
+                    assert((il = x.find_state(
+                                this->left_dims[k + 1].quanta[l])) != -1);
+                    x.n_states[il] =
+                        max(x.n_states[il], this->left_dims[k + 1].n_states[l]);
+                }
+                this->left_dims[k + 1].deallocate();
+            }
+            this->left_dims[k + 1] = x;
+        }
+        for (int k = i + 1; k < this->n_sites; k++)
+            this->left_dims[k + 1].n = 0;
+    }
+    void set_right_bond_dimension_local(uint16_t i, bool match_prev = false) {
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+        int j = min(this->n_sites - 1, i + n_local - 1);
+        for (int k = this->n_sites - 1; k > j; k--)
+            this->right_dims[k] =
+                StateInfo<S>(this->get_basis(k).quanta[iocc[k]] +
+                             this->right_dims[k + 1].quanta[0]);
+        for (int k = j; k >= i; k--) {
+            StateInfo<S> x = StateInfo<S>::tensor_product(
+                this->get_basis(k), this->right_dims[k + 1],
+                this->right_dims_fci[k]);
+            x.reduce_n_states(this->bond_dim);
+            if (match_prev) {
+                this->load_right_dims(k);
+                for (int l = 0, il; l < this->right_dims[k].n; l++) {
+                    assert((il = x.find_state(this->right_dims[k].quanta[l])) !=
+                           -1);
+                    x.n_states[il] =
+                        max(x.n_states[il], this->right_dims[k].n_states[l]);
+                }
+                this->right_dims[k].deallocate();
+            }
+            this->right_dims[k] = x;
+        }
+        for (int k = i - 1; k >= 0; k--)
+            this->right_dims[k].n = 0;
     }
 };
 
@@ -404,6 +593,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         assert(casci_mask.size() == MPSInfo<S>::n_sites);
         StateInfo<S> empty = StateInfo<S>(MPSInfo<S>::vaccum);
         S frozen_state;
+        // currently only works with symmetrized basis
+        assert(!MPSInfo<S>::orbsym.empty());
         for (int i = 0; i < MPSInfo<S>::basis[0].n; i++)
             if (MPSInfo<S>::basis[0].quanta[i].n() == 2) {
                 frozen_state = MPSInfo<S>::basis[0].quanta[i];
@@ -415,8 +606,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
                 MPSInfo<S>::left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
-                    MPSInfo<S>::left_dims_fci[i],
-                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
+                    MPSInfo<S>::left_dims_fci[i], MPSInfo<S>::get_basis(i),
                     MPSInfo<S>::target);
                 break;
             case ActiveTypes::Frozen:
@@ -437,8 +627,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
                 MPSInfo<S>::right_dims_fci[i] = StateInfo<S>::tensor_product(
-                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
-                    MPSInfo<S>::right_dims_fci[i + 1], MPSInfo<S>::target);
+                    MPSInfo<S>::get_basis(i), MPSInfo<S>::right_dims_fci[i + 1],
+                    MPSInfo<S>::target);
                 break;
             case ActiveTypes::Frozen:
                 MPSInfo<S>::right_dims_fci[i] = StateInfo<S>::tensor_product(
@@ -492,23 +682,22 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
             if (i & 1) {
                 S q = MPSInfo<S>::left_dims[i]
                           .quanta[MPSInfo<S>::left_dims[i].n - 1] +
-                      MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]].quanta[0];
+                      MPSInfo<S>::get_basis(i).quanta[0];
                 assert(q.count() == 1);
                 MPSInfo<S>::left_dims[i + 1] = StateInfo<S>(q);
             } else
                 MPSInfo<S>::left_dims[i + 1] = StateInfo<S>::tensor_product(
-                    MPSInfo<S>::left_dims[i],
-                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
+                    MPSInfo<S>::left_dims[i], MPSInfo<S>::get_basis(i),
                     MPSInfo<S>::target);
         MPSInfo<S>::right_dims[MPSInfo<S>::n_sites] =
             StateInfo<S>(MPSInfo<S>::vaccum);
         for (int i = MPSInfo<S>::n_sites - 1; i >= 0; i--)
             if (i & 1)
                 MPSInfo<S>::right_dims[i] = StateInfo<S>::tensor_product(
-                    MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]],
-                    MPSInfo<S>::right_dims[i + 1], MPSInfo<S>::target);
+                    MPSInfo<S>::get_basis(i), MPSInfo<S>::right_dims[i + 1],
+                    MPSInfo<S>::target);
             else {
-                S q = MPSInfo<S>::basis[MPSInfo<S>::orbsym[i]].quanta[0] +
+                S q = MPSInfo<S>::get_basis(i).quanta[0] +
                       MPSInfo<S>::right_dims[i + 1]
                           .quanta[MPSInfo<S>::right_dims[i + 1].n - 1];
                 assert(q.count() == 1);
@@ -530,70 +719,92 @@ template <typename S> struct MPS {
         canonical_form.resize(n_sites);
         for (int i = 0; i < center; i++)
             canonical_form[i] = 'L';
-        for (int i = center; i < center + dot; i++)
-            canonical_form[i] = 'C';
+        if (center >= 0 && center < n_sites)
+            for (int i = center; i < center + dot; i++)
+                canonical_form[i] = 'C';
         for (int i = center + dot; i < n_sites; i++)
             canonical_form[i] = 'R';
     }
-    void initialize(const shared_ptr<MPSInfo<S>> &info) {
+    void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {
         this->info = info;
         vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
         mat_infos.resize(n_sites);
         tensors.resize(n_sites);
-        for (int i = 0; i < center; i++) {
+        for (int i = 0; i <= i_right; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                info->left_dims[i], info->basis[info->orbsym[i]],
+                info->left_dims[i], info->get_basis(i),
                 info->left_dims_fci[i + 1]);
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>();
             mat_infos[i]->initialize(t, info->left_dims[i + 1], info->vaccum,
                                      false);
             t.reallocate(0);
             mat_infos[i]->reallocate(mat_infos[i]->n);
+            tensors[i] = make_shared<SparseMatrix<S>>();
+            tensors[i]->allocate(mat_infos[i]);
         }
-        mat_infos[center] = make_shared<SparseMatrixInfo<S>>();
-        if (dot == 1) {
+    }
+    void initialize_right(const shared_ptr<MPSInfo<S>> &info, int i_left) {
+        this->info = info;
+        vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
+        mat_infos.resize(n_sites);
+        tensors.resize(n_sites);
+        for (int i = i_left; i < n_sites; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                info->left_dims[center], info->basis[info->orbsym[center]],
-                info->left_dims_fci[center + dot]);
-            mat_infos[center]->initialize(t, info->right_dims[center + dot],
-                                          info->target, false, true);
-            t.reallocate(0);
-            mat_infos[center]->reallocate(mat_infos[center]->n);
-        } else {
-            StateInfo<S> tl = StateInfo<S>::tensor_product(
-                info->left_dims[center], info->basis[info->orbsym[center]],
-                info->left_dims_fci[center + 1]);
-            StateInfo<S> tr = StateInfo<S>::tensor_product(
-                info->basis[info->orbsym[center + 1]],
-                info->right_dims[center + dot],
-                info->right_dims_fci[center + 1]);
-            mat_infos[center]->initialize(tl, tr, info->target, false, true);
-            tl.reallocate(0);
-            tr.reallocate(0);
-            mat_infos[center]->reallocate(mat_infos[center]->n);
-        }
-        for (int i = center + dot; i < n_sites; i++) {
-            StateInfo<S> t = StateInfo<S>::tensor_product(
-                info->basis[info->orbsym[i]], info->right_dims[i + 1],
+                info->get_basis(i), info->right_dims[i + 1],
                 info->right_dims_fci[i]);
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>();
             mat_infos[i]->initialize(info->right_dims[i], t, info->vaccum,
                                      false);
             t.reallocate(0);
             mat_infos[i]->reallocate(mat_infos[i]->n);
+            tensors[i] = make_shared<SparseMatrix<S>>();
+            tensors[i]->allocate(mat_infos[i]);
         }
-        for (int i = 0; i < n_sites; i++)
-            if (mat_infos[i] != nullptr) {
-                tensors[i] = make_shared<SparseMatrix<S>>();
-                tensors[i]->allocate(mat_infos[i]);
+    }
+    void initialize(const shared_ptr<MPSInfo<S>> &info, bool init_left = true,
+                    bool init_right = true) {
+        this->info = info;
+        vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
+        mat_infos.resize(n_sites);
+        tensors.resize(n_sites);
+        if (init_left)
+            initialize_left(info, center - 1);
+        if (center >= 0 && center < n_sites && (init_left || init_right)) {
+            mat_infos[center] = make_shared<SparseMatrixInfo<S>>();
+            if (dot == 1) {
+                StateInfo<S> t = StateInfo<S>::tensor_product(
+                    info->left_dims[center], info->get_basis(center),
+                    info->left_dims_fci[center + dot]);
+                mat_infos[center]->initialize(t, info->right_dims[center + dot],
+                                              info->target, false, true);
+                t.reallocate(0);
+                mat_infos[center]->reallocate(mat_infos[center]->n);
+            } else {
+                StateInfo<S> tl = StateInfo<S>::tensor_product(
+                    info->left_dims[center], info->get_basis(center),
+                    info->left_dims_fci[center + 1]);
+                StateInfo<S> tr = StateInfo<S>::tensor_product(
+                    info->get_basis(center + 1), info->right_dims[center + dot],
+                    info->right_dims_fci[center + 1]);
+                mat_infos[center]->initialize(tl, tr, info->target, false,
+                                              true);
+                tl.reallocate(0);
+                tr.reallocate(0);
+                mat_infos[center]->reallocate(mat_infos[center]->n);
+                mat_infos[center + 1] = nullptr;
             }
+            tensors[center] = make_shared<SparseMatrix<S>>();
+            tensors[center]->allocate(mat_infos[center]);
+        }
+        if (init_right)
+            initialize_right(info, center + dot);
     }
     void fill_thermal_limit() {
         assert(info->get_ancilla_type() == AncillaTypes::Ancilla);
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr) {
                 if (i < center || i > center || (i == center && dot == 1)) {
-                    int n = info->basis[info->orbsym[i]].n;
+                    int n = info->get_basis(i).n;
                     assert(tensors[i]->total_memory == n);
                     if (i & 1)
                         for (int j = 0; j < n; j++)
@@ -601,21 +812,17 @@ template <typename S> struct MPS {
                     else {
                         double norm = 0;
                         for (int j = 0; j < n; j++)
-                            norm += info->basis[info->orbsym[i]]
-                                        .quanta[j]
-                                        .multiplicity();
+                            norm += info->get_basis(i).quanta[j].multiplicity();
                         norm = sqrt(norm);
                         for (int j = 0; j < n; j++)
-                            tensors[i]->data[j] =
-                                sqrt(info->basis[info->orbsym[i]]
-                                         .quanta[j]
-                                         .multiplicity()) /
-                                norm;
+                            tensors[i]->data[j] = sqrt(info->get_basis(i)
+                                                           .quanta[j]
+                                                           .multiplicity()) /
+                                                  norm;
                     }
                 } else {
                     assert(!(i & 1));
-                    assert(info->basis[info->orbsym[i]].n ==
-                           tensors[i]->info->n);
+                    assert(info->get_basis(i).n == tensors[i]->info->n);
                     double norm = 0;
                     for (int j = 0; j < tensors[i]->info->n; j++)
                         norm += tensors[i]->info->quanta[j].multiplicity();
@@ -639,8 +846,7 @@ template <typename S> struct MPS {
                                   info->left_dims[i + 1], info->vaccum, false);
             tmat->allocate(tmat_info);
             tensors[i]->left_canonicalize(tmat);
-            StateInfo<S> l = info->left_dims[i + 1],
-                         m = info->basis[info->orbsym[i + 1]];
+            StateInfo<S> l = info->left_dims[i + 1], m = info->get_basis(i + 1);
             StateInfo<S> lm = StateInfo<S>::tensor_product(
                              l, m, info->left_dims_fci[i + 2]),
                          r;
@@ -649,8 +855,7 @@ template <typename S> struct MPS {
                 r = info->right_dims[center + dot];
             else if (i + 1 == center && dot == 2)
                 r = StateInfo<S>::tensor_product(
-                    info->basis[info->orbsym[center + 1]],
-                    info->right_dims[center + dot],
+                    info->get_basis(center + 1), info->right_dims[center + dot],
                     info->right_dims_fci[center + 1]);
             else
                 r = info->left_dims[i + 2];
@@ -679,7 +884,7 @@ template <typename S> struct MPS {
                 tensors[i - 1]->contract(tmp, tmat);
                 tmp->deallocate();
             } else {
-                StateInfo<S> m = info->basis[info->orbsym[i - 1]],
+                StateInfo<S> m = info->get_basis(i - 1),
                              r = info->right_dims[i];
                 StateInfo<S> mr = StateInfo<S>::tensor_product(
                     m, r, info->right_dims_fci[i - 1]);
@@ -687,8 +892,7 @@ template <typename S> struct MPS {
                 StateInfo<S> l;
                 if (i - 1 == center + 1 && dot == 2) {
                     l = StateInfo<S>::tensor_product(
-                        info->left_dims[center],
-                        info->basis[info->orbsym[center]],
+                        info->left_dims[center], info->get_basis(center),
                         info->left_dims_fci[center + 1]);
                     tensors[i - 2]->right_multiply(tmat, l, m, r, mr, mrc);
                 } else {
@@ -704,32 +908,33 @@ template <typename S> struct MPS {
             tmat->deallocate();
         }
     }
+    void random_canonicalize_tensor(int i) {
+        if (tensors[i] != nullptr) {
+            shared_ptr<SparseMatrix<S>> tmat = make_shared<SparseMatrix<S>>();
+            shared_ptr<SparseMatrixInfo<S>> tmat_info =
+                make_shared<SparseMatrixInfo<S>>();
+            tensors[i]->randomize();
+            if (i < center) {
+                tmat_info->initialize(info->left_dims[i + 1],
+                                      info->left_dims[i + 1], info->vaccum,
+                                      false);
+                tmat->allocate(tmat_info);
+                tensors[i]->left_canonicalize(tmat);
+            } else if (i > center) {
+                tmat_info->initialize(info->right_dims[i], info->right_dims[i],
+                                      info->vaccum, false);
+                tmat->allocate(tmat_info);
+                tensors[i]->right_canonicalize(tmat);
+            }
+            if (i != center) {
+                tmat_info->deallocate();
+                tmat->deallocate();
+            }
+        }
+    }
     void random_canonicalize() {
         for (int i = 0; i < n_sites; i++)
-            if (tensors[i] != nullptr) {
-                shared_ptr<SparseMatrix<S>> tmat =
-                    make_shared<SparseMatrix<S>>();
-                shared_ptr<SparseMatrixInfo<S>> tmat_info =
-                    make_shared<SparseMatrixInfo<S>>();
-                tensors[i]->randomize();
-                if (i < center) {
-                    tmat_info->initialize(info->left_dims[i + 1],
-                                          info->left_dims[i + 1], info->vaccum,
-                                          false);
-                    tmat->allocate(tmat_info);
-                    tensors[i]->left_canonicalize(tmat);
-                } else if (i > center) {
-                    tmat_info->initialize(info->right_dims[i],
-                                          info->right_dims[i], info->vaccum,
-                                          false);
-                    tmat->allocate(tmat_info);
-                    tensors[i]->right_canonicalize(tmat);
-                }
-                if (i != center) {
-                    tmat_info->deallocate();
-                    tmat->deallocate();
-                }
-            }
+            random_canonicalize_tensor(i);
     }
     string get_filename(int i) const {
         stringstream ss;
@@ -763,6 +968,16 @@ template <typename S> struct MPS {
             bs[i] = uint8_t(tensors[i] != nullptr);
         ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
         ofs.close();
+    }
+    void load_mutable_left() const {
+        for (int i = 0; i < center; i++)
+            if (tensors[i] != nullptr)
+                tensors[i]->load_data(get_filename(i), true);
+    }
+    void load_mutable_right() const {
+        for (int i = center + dot; i < n_sites; i++)
+            if (tensors[i] != nullptr)
+                tensors[i]->load_data(get_filename(i), true);
     }
     void load_mutable() const {
         for (int i = 0; i < n_sites; i++)

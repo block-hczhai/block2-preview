@@ -129,9 +129,8 @@ template <typename S> struct EffectiveHamiltonian {
         frame->activate(0);
         mps_info->load_left_dims(i);
         mps_info->load_right_dims(i + 2);
-        StateInfo<S> l = mps_info->left_dims[i],
-                     ml = mps_info->basis[mps_info->orbsym[i]],
-                     mr = mps_info->basis[mps_info->orbsym[i + 1]],
+        StateInfo<S> l = mps_info->left_dims[i], ml = mps_info->get_basis(i),
+                     mr = mps_info->get_basis(i + 1),
                      r = mps_info->right_dims[i + 2];
         StateInfo<S> ll =
             StateInfo<S>::tensor_product(l, ml, mps_info->left_dims_fci[i + 1]);
@@ -404,6 +403,7 @@ template <typename S> struct MovingEnvironment {
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Tag is used to generate filename for disk storage
     string tag;
+    bool iprint = false;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
                       const shared_ptr<MPS<S>> &ket, const string &tag = "DMRG")
@@ -534,7 +534,11 @@ template <typename S> struct MovingEnvironment {
         return ss.str();
     }
     // Generate contracted environment blocks for all center sites
-    void init_environments(bool iprint = false) {
+    // To activate dynamic environment generation, init_left and init_right must
+    // be false
+    virtual void init_environments(bool iprint = false, bool init_left = true,
+                                   bool init_right = true) {
+        this->iprint = iprint;
         envs.clear();
         envs.resize(n_sites);
         for (int i = 0; i < n_sites; i++) {
@@ -543,13 +547,13 @@ template <typename S> struct MovingEnvironment {
             if (i != n_sites - 1 && dot == 2)
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
-        for (int i = 1; i <= center; i++) {
+        for (int i = 1; i <= center && init_left; i++) {
             check_signal_()();
             if (iprint)
                 cout << "init .. L = " << i << endl;
             left_contract_rotate(i);
         }
-        for (int i = n_sites - dot - 1; i >= center; i--) {
+        for (int i = n_sites - dot - 1; i >= center && init_right; i--) {
             check_signal_()();
             if (iprint)
                 cout << "init .. R = " << i << endl;
@@ -569,15 +573,110 @@ template <typename S> struct MovingEnvironment {
         }
     }
     // Move the center site by one
-    void move_to(int i) {
+    virtual void move_to(int i) {
+        string new_data_name = "";
         if (i > center) {
             frame->load_data(1, get_left_partition_filename(center));
             left_contract_rotate(++center);
+            new_data_name = get_left_partition_filename(center);
         } else if (i < center) {
             frame->load_data(1, get_right_partition_filename(center));
             right_contract_rotate(--center);
+            new_data_name = get_right_partition_filename(center);
         }
         bra->center = ket->center = center;
+        // dynamic environment generation for warmup sweep
+        if (i != n_sites - dot && envs[i]->right == nullptr) {
+            frame->reset(1);
+            frame->activate(0);
+            vector<shared_ptr<MPS<S>>> mpss =
+                bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
+                           : vector<shared_ptr<MPS<S>>>{bra, ket};
+            for (auto &mps : mpss) {
+                if (mps->info->is_dynamic()) {
+                    mps->info->load_mutable_left();
+                    shared_ptr<DynamicMPSInfo<S>> mps_info =
+                        dynamic_pointer_cast<DynamicMPSInfo<S>>(mps->info);
+                    if (mps->tensors[i + 1] == nullptr || mps->dot == 1) {
+                        mps_info->set_right_bond_dimension_local(i + dot);
+                        mps->load_mutable_left();
+                        mps->initialize(mps_info, false, true);
+                        for (int j = i; j < n_sites; j++)
+                            mps->random_canonicalize_tensor(j);
+                    } else {
+                        mps_info->set_right_bond_dimension_local(i + dot, true);
+                        mps_info->load_right_dims(i + 1);
+                        mps->load_mutable_left();
+                        mps->load_tensor(i);
+                        mps->initialize_right(mps_info, i + 1);
+                        for (int j = i + 1; j < n_sites; j++)
+                            mps->random_canonicalize_tensor(j);
+                    }
+                    mps->save_mutable();
+                    mps->deallocate();
+                    mps->info->save_mutable();
+                    mps->info->deallocate_mutable();
+                }
+            }
+            for (int j = n_sites - dot - 1; j >= i; j--) {
+                check_signal_()();
+                if (iprint)
+                    cout << "warm up init .. R = " << j << endl;
+                right_contract_rotate(j);
+            }
+            for (int j = n_sites - dot - 1; j > i; j--) {
+                envs[j]->right_op_infos.clear();
+                envs[j]->right = nullptr;
+            }
+            frame->reset(1);
+            if (new_data_name != "")
+                frame->load_data(1, new_data_name);
+        }
+        if (i != 0 && envs[i]->left == nullptr) {
+            frame->reset(1);
+            frame->activate(0);
+            vector<shared_ptr<MPS<S>>> mpss =
+                bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
+                           : vector<shared_ptr<MPS<S>>>{bra, ket};
+            for (auto &mps : mpss) {
+                if (mps->info->is_dynamic()) {
+                    shared_ptr<DynamicMPSInfo<S>> mps_info =
+                        dynamic_pointer_cast<DynamicMPSInfo<S>>(mps->info);
+                    if (mps->tensors[i + 1] != nullptr && mps->dot == 2) {
+                        mps_info->set_left_bond_dimension_local(i - 1, true);
+                        mps_info->load_left_dims(i);
+                    } else
+                        mps_info->set_left_bond_dimension_local(i - 1);
+                    mps->info->load_mutable_right();
+                    if (mps->tensors[i + 1] == nullptr || mps->dot == 1) {
+                        mps->initialize(mps_info, true, false);
+                    } else {
+                        mps->initialize_left(mps_info, i);
+                        mps->load_tensor(i + 1);
+                    }
+                    mps->load_mutable_right();
+                    for (int j = 0; j <= i; j++)
+                        mps->random_canonicalize_tensor(j);
+                    mps->save_mutable();
+                    mps->deallocate();
+                    mps->info->save_mutable();
+                    mps->info->deallocate_mutable();
+                }
+            }
+            for (int j = 1; j <= i; j++) {
+                check_signal_()();
+                if (iprint)
+                    cout << "warm up init .. L = " << j << endl;
+                left_contract_rotate(j);
+            }
+            for (int j = 1; j < i; j++) {
+                envs[j]->left_op_infos.clear();
+                envs[j]->left = nullptr;
+            }
+            frame->reset(1);
+            if (new_data_name != "")
+                frame->load_data(1, new_data_name);
+        }
     }
     // Generate effective hamiltonian at current center site
     shared_ptr<EffectiveHamiltonian<S>> eff_ham(FuseTypes fuse_type,
@@ -732,8 +831,8 @@ template <typename S> struct MovingEnvironment {
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 2);
             StateInfo<S> l = mps->info->left_dims[i],
-                         ml = mps->info->basis[mps->info->orbsym[i]],
-                         mr = mps->info->basis[mps->info->orbsym[i + 1]],
+                         ml = mps->info->get_basis(i),
+                         mr = mps->info->get_basis(i + 1),
                          r = mps->info->right_dims[i + 2];
             StateInfo<S> ll = StateInfo<S>::tensor_product(
                 l, ml, mps->info->left_dims_fci[i + 1]);
@@ -1004,8 +1103,7 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i + 1 != n_sites - 1)) {
                 mps_info->load_left_dims(i + 1);
                 mps_info->load_right_dims(i + 2);
-                l = mps_info->left_dims[i + 1],
-                m = mps_info->basis[mps_info->orbsym[i + 1]],
+                l = mps_info->left_dims[i + 1], m = mps_info->get_basis(i + 1),
                 r = mps_info->right_dims[i + 2];
                 lm = StateInfo<S>::tensor_product(
                     l, m, mps_info->left_dims_fci[i + 2]);
@@ -1030,8 +1128,7 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i != 0)) {
                 mps_info->load_left_dims(i);
                 mps_info->load_right_dims(i + 1);
-                l = mps_info->left_dims[i],
-                m = mps_info->basis[mps_info->orbsym[i]],
+                l = mps_info->left_dims[i], m = mps_info->get_basis(i),
                 r = mps_info->right_dims[i + 1];
                 lm = StateInfo<S>::tensor_product(
                     l, m, mps_info->left_dims_fci[i + 1]);

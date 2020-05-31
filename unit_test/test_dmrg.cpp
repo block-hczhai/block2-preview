@@ -25,12 +25,13 @@ TEST_F(TestDMRG, Test) {
     PGTypes pg = PGTypes::D2H;
 
     // string occ_filename = "data/CR2.SVP.OCC";
-    // occs = read_occ(occ_filename);
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    string occ_filename = "data/H2O.TZVP.OCC";
+    string occ_filename = "data/CR2.SVP.HF";
     occs = read_occ(occ_filename);
-    string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
-    pg = PGTypes::C2V;
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string occ_filename = "data/H2O.TZVP.OCC";
+    // occs = read_occ(occ_filename);
+    // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
+    // pg = PGTypes::C2V;
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
@@ -67,16 +68,26 @@ TEST_F(TestDMRG, Test) {
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
     //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
-    if (occs.size() == 0)
-        mps_info->set_bond_dimension(bond_dim);
-    else {
-        assert(occs.size() == norb);
-        // for (size_t i = 0; i < occs.size(); i++)
-        //     cout << occs[i] << " ";
-        mps_info->set_bond_dimension_using_occ(bond_dim, occs, 30);
-    }
+
+    // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
+    //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+    // if (occs.size() == 0)
+    //     mps_info->set_bond_dimension(bond_dim);
+    // else {
+    //     assert(occs.size() == norb);
+    //     // for (size_t i = 0; i < occs.size(); i++)
+    //     //     cout << occs[i] << " ";
+    //     // mps_info->set_bond_dimension_using_occ(bond_dim, occs, 30);
+    //     mps_info->set_bond_dimension_using_hf(bond_dim, occs, 0);
+    // }
+
+    vector<uint8_t> ioccs;
+    for (auto x : occs)
+        ioccs.push_back(uint8_t(x));
+    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<DynamicMPSInfo<SU2>>(
+        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms, ioccs, 4);
+    mps_info->set_bond_dimension(bond_dim);
+
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
         cout << mps_info->left_dims[i].n_states_total << " ";
@@ -113,7 +124,7 @@ TEST_F(TestDMRG, Test) {
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
-    me->init_environments(false);
+    me->init_environments(false, false, false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
     cout << *frame_() << endl;
@@ -123,11 +134,13 @@ TEST_F(TestDMRG, Test) {
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    noises = vector<double> {1E-5};
     // vector<uint16_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
-    dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->solve(50, true);
+    dmrg->iprint = 2;
+    // dmrg->noise_type = NoiseTypes::Perturbative;
+    dmrg->solve(50, true, 0.0);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

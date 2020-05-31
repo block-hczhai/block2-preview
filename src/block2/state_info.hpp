@@ -146,6 +146,19 @@ struct StateInfo<S, typename enable_if<integral_constant<
         else
             return p - quanta;
     }
+    void reduce_n_states(int m) {
+        bool can_reduce = true;
+        while (can_reduce && n_states_total > m) {
+            can_reduce = false;
+            for (int k = 0; k < n; k++)
+                if (n_states[k] > 1) {
+                    can_reduce = true;
+                    n_states_total -= n_states[k];
+                    n_states[k] >>= 1;
+                    n_states_total += n_states[k];
+                }
+        }
+    }
     // Tensor product of StateInfo a and b
     // If resulting state does not appear in cref, it will be removed
     static StateInfo tensor_product(const StateInfo &a, const StateInfo &b,

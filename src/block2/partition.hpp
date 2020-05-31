@@ -194,8 +194,8 @@ template <typename S> struct Partition {
                     }
                     if (!partial) {
                         S p = l.combine(bra, ket);
-                        // here possible error can be due to non-zero (small) integral element
-                        // violating point group symmetry
+                        // here possible error can be due to non-zero (small)
+                        // integral element violating point group symmetry
                         assert(p != S(0xFFFFFFFFU));
                         subsl[idx].push_back(make_pair(op->conj, p));
                     } else if (left_only)
@@ -276,21 +276,20 @@ template <typename S> struct Partition {
         bra_info->load_left_dims(m);
         StateInfo<S> ibra_prev = bra_info->left_dims[m], iket_prev = ibra_prev;
         StateInfo<S> ibra_notrunc = StateInfo<S>::tensor_product(
-                         ibra_prev, bra_info->basis[bra_info->orbsym[m]],
+                         ibra_prev, bra_info->get_basis(m),
                          bra_info->left_dims_fci[m + 1]),
                      iket_notrunc = ibra_notrunc;
         StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         ibra_prev, bra_info->basis[bra_info->orbsym[m]],
-                         ibra_notrunc),
+                         ibra_prev, bra_info->get_basis(m), ibra_notrunc),
                      iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m);
             iket_prev = ket_info->left_dims[m];
-            iket_notrunc = StateInfo<S>::tensor_product(
-                iket_prev, ket_info->basis[ket_info->orbsym[m]],
-                ket_info->left_dims_fci[m + 1]);
+            iket_notrunc =
+                StateInfo<S>::tensor_product(iket_prev, ket_info->get_basis(m),
+                                             ket_info->left_dims_fci[m + 1]);
             iket_cinfo = StateInfo<S>::get_connection_info(
-                iket_prev, ket_info->basis[ket_info->orbsym[m]], iket_notrunc);
+                iket_prev, ket_info->get_basis(m), iket_notrunc);
         }
         frame->activate(0);
         assert(left_op_infos_notrunc.size() == 0);
@@ -302,11 +301,11 @@ template <typename S> struct Partition {
                                     sl[i].is_fermion());
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-            cinfo->initialize_tp(
-                sl[i], subsl[i], ibra_notrunc, iket_notrunc, ibra_prev,
-                bra_info->basis[bra_info->orbsym[m]], iket_prev,
-                ket_info->basis[ket_info->orbsym[m]], ibra_cinfo, iket_cinfo,
-                prev_left_op_infos, site_op_infos, lop_notrunc, cg);
+            cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
+                                 ibra_prev, bra_info->get_basis(m), iket_prev,
+                                 ket_info->get_basis(m), ibra_cinfo, iket_cinfo,
+                                 prev_left_op_infos, site_op_infos, lop_notrunc,
+                                 cg);
             lop_notrunc->cinfo = cinfo;
         }
         frame->activate(1);
@@ -362,21 +361,19 @@ template <typename S> struct Partition {
         StateInfo<S> ibra_prev = bra_info->right_dims[m + 1],
                      iket_prev = ibra_prev;
         StateInfo<S> ibra_notrunc = StateInfo<S>::tensor_product(
-                         bra_info->basis[bra_info->orbsym[m]], ibra_prev,
+                         bra_info->get_basis(m), ibra_prev,
                          bra_info->right_dims_fci[m]),
                      iket_notrunc = ibra_notrunc;
         StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         bra_info->basis[bra_info->orbsym[m]], ibra_prev,
-                         ibra_notrunc),
+                         bra_info->get_basis(m), ibra_prev, ibra_notrunc),
                      iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m + 1);
             iket_prev = ket_info->right_dims[m + 1];
             iket_notrunc = StateInfo<S>::tensor_product(
-                ket_info->basis[ket_info->orbsym[m]], iket_prev,
-                ket_info->right_dims_fci[m]);
+                ket_info->get_basis(m), iket_prev, ket_info->right_dims_fci[m]);
             iket_cinfo = StateInfo<S>::get_connection_info(
-                ket_info->basis[ket_info->orbsym[m]], iket_prev, iket_notrunc);
+                ket_info->get_basis(m), iket_prev, iket_notrunc);
         }
         frame->activate(0);
         assert(right_op_infos_notrunc.size() == 0);
@@ -388,12 +385,11 @@ template <typename S> struct Partition {
                                     sl[i].is_fermion());
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-            cinfo->initialize_tp(
-                sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                bra_info->basis[bra_info->orbsym[m]], ibra_prev,
-                ket_info->basis[ket_info->orbsym[m]], iket_prev, ibra_cinfo,
-                iket_cinfo, site_op_infos, prev_right_op_infos, rop_notrunc,
-                cg);
+            cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
+                                 bra_info->get_basis(m), ibra_prev,
+                                 ket_info->get_basis(m), iket_prev, ibra_cinfo,
+                                 iket_cinfo, site_op_infos, prev_right_op_infos,
+                                 rop_notrunc, cg);
             rop_notrunc->cinfo = cinfo;
         }
         frame->activate(1);

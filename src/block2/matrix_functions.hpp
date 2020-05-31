@@ -100,7 +100,6 @@ extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
                   int *info);
 
 #endif
-
 }
 
 // Dense matrix operations

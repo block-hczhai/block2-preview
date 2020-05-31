@@ -85,7 +85,7 @@ template <typename S> struct DMRG {
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, true);
-        auto pdi = h_eff->eigs(false);
+        auto pdi = h_eff->eigs(iprint >= 3);
         shared_ptr<SparseMatrix<S>> dm;
         if (noise_type == NoiseTypes::Perturbative && noise != 0) {
             shared_ptr<SparseMatrixGroup<S>> pket =
@@ -283,7 +283,7 @@ template <typename S> struct ImaginaryTE {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(double));
             tmp.deallocate();
@@ -297,7 +297,7 @@ template <typename S> struct ImaginaryTE {
                 pdp.first[i].deallocate();
             frame->activate(0);
         } else if (effective_mode == TETypes::TangentSpace) {
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, false);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3);
             h_eff->deallocate();
             dm = MovingEnvironment<S>::density_matrix(
                 h_eff->opdq, h_eff->ket, forward, noise, noise_type);
@@ -350,7 +350,7 @@ template <typename S> struct ImaginaryTE {
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, true);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
             k_eff->deallocate();
             me->ket->tensors[i + 1]->normalize();
             me->ket->save_tensor(i + 1);
@@ -362,7 +362,7 @@ template <typename S> struct ImaginaryTE {
             me->ket->load_tensor(i);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, true);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, false);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
             k_eff->deallocate();
             me->ket->tensors[i]->normalize();
             me->ket->save_tensor(i);

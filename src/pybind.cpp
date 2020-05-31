@@ -417,8 +417,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         }))
         .def_property_readonly("basis",
                                [](MPSInfo<S> *self) {
-                                   return Array<StateInfo<S>>(self->basis,
-                                                              self->n_syms);
+                                   Array<StateInfo<S>>(self->basis,
+                                                       self->orbsym.empty()
+                                                           ? self->n_sites
+                                                           : self->n_syms);
                                })
         .def_property_readonly("left_dims_fci",
                                [](MPSInfo<S> *self) {
@@ -440,10 +442,14 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                                    return Array<StateInfo<S>>(
                                        self->right_dims, self->n_sites + 1);
                                })
+        .def("get_basis", &MPSInfo<S>::get_basis)
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
         .def("set_bond_dimension_using_occ",
              &MPSInfo<S>::set_bond_dimension_using_occ, py::arg("m"),
              py::arg("occ"), py::arg("bias") = 1.0)
+        .def("set_bond_dimension_using_hf",
+             &MPSInfo<S>::set_bond_dimension_using_hf, py::arg("m"),
+             py::arg("occ"), py::arg("n_local") = 0)
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
         .def("get_filename", &MPSInfo<S>::get_filename)
         .def("save_mutable", &MPSInfo<S>::save_mutable)
@@ -460,15 +466,19 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("casci_mask", &CASCIMPSInfo<S>::casci_mask)
         .def(py::init([](int n_sites, S vaccum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms, const vector<ActiveTypes> &casci_mask) {
-            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target, basis.data,
-                                           orbsym, n_syms, casci_mask);
+                         const vector<uint8_t> &orbsym, uint8_t n_syms,
+                         const vector<ActiveTypes> &casci_mask) {
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target,
+                                                basis.data, orbsym, n_syms,
+                                                casci_mask);
         }))
         .def(py::init([](int n_sites, S vaccum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms, int n_active_sites, int n_active_electrons) {
-            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target, basis.data,
-                                           orbsym, n_syms, n_active_sites, n_active_electrons);
+                         const vector<uint8_t> &orbsym, uint8_t n_syms,
+                         int n_active_sites, int n_active_electrons) {
+            return make_shared<CASCIMPSInfo<S>>(
+                n_sites, vaccum, target, basis.data, orbsym, n_syms,
+                n_active_sites, n_active_electrons);
         }));
 
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
@@ -674,7 +684,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("right_contract_rotate",
              &MovingEnvironment<S>::right_contract_rotate)
         .def("init_environments", &MovingEnvironment<S>::init_environments,
-             py::arg("iprint") = false)
+             py::arg("iprint") = false, py::arg("init_left") = true,
+             py::arg("init_right") = true)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
         .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
@@ -1269,7 +1280,7 @@ PYBIND11_MODULE(block2, m) {
         .value("Empty", ActiveTypes::Empty)
         .value("Active", ActiveTypes::Active)
         .value("Frozen", ActiveTypes::Frozen);
-    
+
     py::bind_vector<vector<ActiveTypes>>(m, "VectorActTypes");
 
     py::enum_<SeqTypes>(m, "SeqTypes", py::arithmetic())
