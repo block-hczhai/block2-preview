@@ -25,7 +25,7 @@ TEST_F(TestDMRG, Test) {
     PGTypes pg = PGTypes::D2H;
 
     // string occ_filename = "data/CR2.SVP.OCC";
-    string occ_filename = "data/CR2.SVP.HF";
+    string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
     occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
@@ -36,12 +36,21 @@ TEST_F(TestDMRG, Test) {
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
+
+    vector<uint8_t> ioccs;
+    for (auto x : occs)
+        ioccs.push_back(uint8_t(x));
+
+    cout << "HF energy = " << fixed << setprecision(12)
+         << fcidump->det_energy(ioccs, 0, fcidump->n_sites()) + fcidump->e
+         << endl;
+
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     SU2 vaccum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
-                     PointGroup::swap_pg(pg)(fcidump->isym()));
+               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
@@ -53,12 +62,14 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SU2>> mpo =
+        make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+    mpo =
+        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -69,6 +80,7 @@ TEST_F(TestDMRG, Test) {
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
     //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
 
+    // CCSD init
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
     //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     // if (occs.size() == 0)
@@ -81,11 +93,17 @@ TEST_F(TestDMRG, Test) {
     //     mps_info->set_bond_dimension_using_hf(bond_dim, occs, 0);
     // }
 
-    vector<uint8_t> ioccs;
-    for (auto x : occs)
-        ioccs.push_back(uint8_t(x));
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<DynamicMPSInfo<SU2>>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms, ioccs, 4);
+    // Local init
+    // shared_ptr<DynamicMPSInfo<SU2>> mps_info =
+    //     make_shared<DynamicMPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
+    //                                      hamil.orb_sym, hamil.n_syms, ioccs);
+    // mps_info->n_local = 4;
+    // mps_info->set_bond_dimension(bond_dim);
+
+    // Determinant init
+    shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
+        make_shared<DeterminantMPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
+                                         hamil.orb_sym, hamil.n_syms, ioccs, fcidump);
     mps_info->set_bond_dimension(bond_dim);
 
     cout << "left dims = ";
@@ -124,7 +142,7 @@ TEST_F(TestDMRG, Test) {
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
-    me->init_environments(false, false, false);
+    me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
     cout << *frame_() << endl;
@@ -133,8 +151,9 @@ TEST_F(TestDMRG, Test) {
     // DMRG
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    noises = vector<double> {1E-5};
+    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
+                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    noises = vector<double>{1E-5};
     // vector<uint16_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);

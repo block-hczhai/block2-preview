@@ -684,8 +684,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("right_contract_rotate",
              &MovingEnvironment<S>::right_contract_rotate)
         .def("init_environments", &MovingEnvironment<S>::init_environments,
-             py::arg("iprint") = false, py::arg("init_left") = true,
-             py::arg("init_right") = true)
+             py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
         .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "determinant.hpp"
 #include "mpo.hpp"
 #include "mps.hpp"
 #include "partition.hpp"
@@ -536,8 +537,7 @@ template <typename S> struct MovingEnvironment {
     // Generate contracted environment blocks for all center sites
     // To activate dynamic environment generation, init_left and init_right must
     // be false
-    virtual void init_environments(bool iprint = false, bool init_left = true,
-                                   bool init_right = true) {
+    virtual void init_environments(bool iprint = false) {
         this->iprint = iprint;
         envs.clear();
         envs.resize(n_sites);
@@ -547,17 +547,20 @@ template <typename S> struct MovingEnvironment {
             if (i != n_sites - 1 && dot == 2)
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
-        for (int i = 1; i <= center && init_left; i++) {
-            check_signal_()();
-            if (iprint)
-                cout << "init .. L = " << i << endl;
-            left_contract_rotate(i);
-        }
-        for (int i = n_sites - dot - 1; i >= center && init_right; i--) {
-            check_signal_()();
-            if (iprint)
-                cout << "init .. R = " << i << endl;
-            right_contract_rotate(i);
+        if (bra->info->get_warm_up_type() == WarmUpTypes::None &&
+            ket->info->get_warm_up_type() == WarmUpTypes::None) {
+            for (int i = 1; i <= center; i++) {
+                check_signal_()();
+                if (iprint)
+                    cout << "init .. L = " << i << endl;
+                left_contract_rotate(i);
+            }
+            for (int i = n_sites - dot - 1; i >= center; i--) {
+                check_signal_()();
+                if (iprint)
+                    cout << "init .. R = " << i << endl;
+                right_contract_rotate(i);
+            }
         }
         frame->reset(1);
     }
@@ -593,7 +596,7 @@ template <typename S> struct MovingEnvironment {
                 bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
                            : vector<shared_ptr<MPS<S>>>{bra, ket};
             for (auto &mps : mpss) {
-                if (mps->info->is_dynamic()) {
+                if (mps->info->get_warm_up_type() == WarmUpTypes::Local) {
                     mps->info->load_mutable_left();
                     shared_ptr<DynamicMPSInfo<S>> mps_info =
                         dynamic_pointer_cast<DynamicMPSInfo<S>>(mps->info);
@@ -612,11 +615,38 @@ template <typename S> struct MovingEnvironment {
                         for (int j = i + 1; j < n_sites; j++)
                             mps->random_canonicalize_tensor(j);
                     }
-                    mps->save_mutable();
-                    mps->deallocate();
-                    mps->info->save_mutable();
-                    mps->info->deallocate_mutable();
+                } else if (mps->info->get_warm_up_type() ==
+                           WarmUpTypes::Determinant) {
+                    shared_ptr<DeterminantMPSInfo<S>> mps_info =
+                        dynamic_pointer_cast<DeterminantMPSInfo<S>>(mps->info);
+                    bool ctrd_two_dot =
+                        mps->tensors[i + 1] == nullptr || mps->dot == 1;
+                    StateInfo<S> st = mps_info->get_complementary_right_dims(
+                        i + dot, i - 1, !ctrd_two_dot);
+                    vector<vector<vector<uint8_t>>> dets =
+                        mps_info->get_determinants(st, i + dot,
+                                                   mps->info->n_sites);
+                    mps->info->load_mutable_left();
+                    if (ctrd_two_dot) {
+                        mps_info->set_right_bond_dimension(i + dot, dets);
+                        mps->load_mutable_left();
+                        mps->initialize(mps_info, false, true);
+                        for (int j = i; j < n_sites; j++)
+                            mps->random_canonicalize_tensor(j);
+                    } else {
+                        mps_info->set_right_bond_dimension(i + dot, dets);
+                        mps_info->load_right_dims(i + 1);
+                        mps->load_mutable_left();
+                        mps->load_tensor(i);
+                        mps->initialize_right(mps_info, i + 1);
+                        for (int j = i + 1; j < n_sites; j++)
+                            mps->random_canonicalize_tensor(j);
+                    }
                 }
+                mps->save_mutable();
+                mps->deallocate();
+                mps->info->save_mutable();
+                mps->info->deallocate_mutable();
             }
             for (int j = n_sites - dot - 1; j >= i; j--) {
                 check_signal_()();
@@ -639,7 +669,7 @@ template <typename S> struct MovingEnvironment {
                 bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
                            : vector<shared_ptr<MPS<S>>>{bra, ket};
             for (auto &mps : mpss) {
-                if (mps->info->is_dynamic()) {
+                if (mps->info->get_warm_up_type() == WarmUpTypes::Local) {
                     shared_ptr<DynamicMPSInfo<S>> mps_info =
                         dynamic_pointer_cast<DynamicMPSInfo<S>>(mps->info);
                     if (mps->tensors[i + 1] != nullptr && mps->dot == 2) {
@@ -657,11 +687,35 @@ template <typename S> struct MovingEnvironment {
                     mps->load_mutable_right();
                     for (int j = 0; j <= i; j++)
                         mps->random_canonicalize_tensor(j);
-                    mps->save_mutable();
-                    mps->deallocate();
-                    mps->info->save_mutable();
-                    mps->info->deallocate_mutable();
+                } else if (mps->info->get_warm_up_type() ==
+                           WarmUpTypes::Determinant) {
+                    shared_ptr<DeterminantMPSInfo<S>> mps_info =
+                        dynamic_pointer_cast<DeterminantMPSInfo<S>>(mps->info);
+                    bool ctrd_two_dot =
+                        mps->tensors[i + 1] == nullptr || mps->dot == 1;
+                    StateInfo<S> st = mps_info->get_complementary_left_dims(
+                        i - 1, i + dot, !ctrd_two_dot);
+                    vector<vector<vector<uint8_t>>> dets =
+                        mps_info->get_determinants(st, 0, i - 1);
+                    if (ctrd_two_dot) {
+                        mps_info->set_left_bond_dimension(i - 1, dets);
+                        mps->info->load_mutable_left();
+                        mps->load_mutable_right();
+                        mps->initialize(mps_info, true, false);
+                    } else {
+                        mps_info->set_right_bond_dimension(i - 1, dets);
+                        mps_info->load_left_dims(i);
+                        mps->load_tensor(i + 1);
+                        mps->initialize_left(mps_info, i);
+                    }
+                    mps->load_mutable_right();
+                    for (int j = 0; j <= i; j++)
+                        mps->random_canonicalize_tensor(j);
                 }
+                mps->save_mutable();
+                mps->deallocate();
+                mps->info->save_mutable();
+                mps->info->deallocate_mutable();
             }
             for (int j = 1; j <= i; j++) {
                 check_signal_()();

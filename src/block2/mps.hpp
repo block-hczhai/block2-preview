@@ -57,6 +57,8 @@ inline void write_occ(const string &filename, const vector<double> &occ) {
     ofs.close();
 }
 
+enum struct WarmUpTypes : uint8_t { None, Local, Determinant };
+
 // Quantum number infomation in a MPS
 template <typename S> struct MPSInfo {
     int n_sites;
@@ -89,7 +91,7 @@ template <typename S> struct MPSInfo {
         return orbsym.empty() ? basis[i] : basis[orbsym[i]];
     }
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
-    virtual bool is_dynamic() const { return false; }
+    virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual void set_bond_dimension_fci() {
         left_dims_fci[0] = StateInfo<S>(vaccum);
         for (int i = 0; i < n_sites; i++)
@@ -106,6 +108,8 @@ template <typename S> struct MPSInfo {
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i].collect();
     }
+    // set up initial mps using integral HF occupation numbers
+    // construct local FCI space using n_local nearest sites
     void set_bond_dimension_using_hf(uint16_t m, const vector<double> &occ,
                                      int n_local = 0) {
         bond_dim = m;
@@ -202,6 +206,7 @@ template <typename S> struct MPSInfo {
         delete[] right_dims_hf;
         delete[] left_dims_hf;
     }
+    // set up initial mps using fractional occupation numbers
     void set_bond_dimension_using_occ(uint16_t m, const vector<double> &occ,
                                       double bias = 1.0) {
         bond_dim = m;
@@ -355,6 +360,8 @@ template <typename S> struct MPSInfo {
         delete[] left_probs;
         delete[] site_probs;
     }
+    // set up bond dimension using FCI quantum numbers
+    // each FCI quantum number has at least one state kept
     virtual void set_bond_dimension(uint16_t m) {
         bond_dim = m;
         left_dims[0] = StateInfo<S>(vaccum);
@@ -485,21 +492,20 @@ template <typename S> struct MPSInfo {
 };
 
 // Quantum number infomation in a MPS
-// Used for warmup sweep
+// Used for warm-up sweep
 template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
     vector<uint8_t> iocc;
-    int n_local;
+    uint16_t n_local = 0;      // number of nearset sites using FCI quantum numbers
     DynamicMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
                    const vector<uint8_t> orbsym, uint8_t n_syms,
-                   const vector<uint8_t> &iocc, int n_local = 0)
-        : iocc(iocc), n_local(n_local), MPSInfo<S>(n_sites, vaccum, target,
-                                                   basis, orbsym, n_syms) {}
+                   const vector<uint8_t> &iocc)
+        : iocc(iocc), MPSInfo<S>(n_sites, vaccum, target, basis,
+                                             orbsym, n_syms) {}
     void set_bond_dimension(uint16_t m) override {
         this->bond_dim = m;
         this->left_dims[0] = StateInfo<S>(this->vaccum);
         this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
     }
-    bool is_dynamic() const override { return true; }
     void set_left_bond_dimension_local(uint16_t i, bool match_prev = false) {
         this->left_dims[0] = StateInfo<S>(this->vaccum);
         int j = max(0, i - n_local + 1);
@@ -507,7 +513,7 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
             this->left_dims[k + 1] =
                 StateInfo<S>(this->left_dims[k].quanta[0] +
                              this->get_basis(k).quanta[iocc[k]]);
-        for (int k = j; k <= i; k--) {
+        for (int k = j; k <= i; k++) {
             StateInfo<S> x = StateInfo<S>::tensor_product(
                 this->left_dims[k], this->get_basis(k),
                 this->left_dims_fci[k + 1]);

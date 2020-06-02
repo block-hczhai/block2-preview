@@ -511,19 +511,59 @@ struct FCIDUMP {
             r.push_back((uint8_t)Parsing::to_int(xx));
         return r;
     }
+    // energy of a determinant
+    double det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
+                      uint16_t i_end) const {
+        double energy = 0;
+        uint16_t n_block_sites = i_end - i_begin;
+        vector<uint8_t> spin_occ;
+        assert(iocc.size() == n_block_sites ||
+               iocc.size() == n_block_sites * 2);
+        if (iocc.size() == n_block_sites) {
+            spin_occ = vector<uint8_t>(n_block_sites * 2, 0);
+            for (uint16_t i = 0; i < n_block_sites; i++) {
+                spin_occ[i * 2] = iocc[i] >= 1;
+                spin_occ[i * 2 + 1] = iocc[i] == 2;
+            }
+        } else
+            spin_occ = iocc;
+        for (uint16_t i = 0; i < n_block_sites; i++)
+            for (uint8_t si = 0; si < 2; si++)
+                if (spin_occ[i * 2 + si]) {
+                    energy += t(si, i + i_begin, i + i_begin);
+                    for (uint16_t j = 0; j < n_block_sites; j++)
+                        for (uint8_t sj = 0; sj < 2; sj++)
+                            if (spin_occ[j * 2 + sj]) {
+                                energy +=
+                                    0.5 * v(si, sj, i + i_begin, i + i_begin,
+                                            j + i_begin, j + i_begin);
+                                if (si == sj)
+                                    energy -= 0.5 * v(si, sj, i + i_begin,
+                                                      j + i_begin, j + i_begin,
+                                                      i + i_begin);
+                            }
+                }
+        return energy;
+    }
+    vector<double> h1e_energy() const {
+        vector<double> r(n_sites());
+        for (uint16_t i = 0; i < n_sites(); i++)
+            r[i] = t(i, i);
+        return r;
+    }
     // One-electron integral element (SU(2))
-    double t(uint8_t i, uint8_t j) const { return ts[0](i, j); }
+    double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
     // One-electron integral element (SZ)
-    double t(uint8_t s, uint8_t i, uint8_t j) const {
+    double t(uint8_t s, uint16_t i, uint16_t j) const {
         return uhf ? ts[s](i, j) : ts[0](i, j);
     }
     // Two-electron integral element (SU(2))
-    double v(uint8_t i, uint8_t j, uint8_t k, uint8_t l) const {
+    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
     // Two-electron integral element (SZ)
-    double v(uint8_t sl, uint8_t sr, uint8_t i, uint8_t j, uint8_t k,
-             uint8_t l) const {
+    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+             uint16_t l) const {
         if (uhf) {
             if (sl == sr)
                 return general ? vgs[sl](i, j, k, l) : vs[sl](i, j, k, l);
