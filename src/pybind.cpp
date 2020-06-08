@@ -502,7 +502,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("info", &MPS<S>::info)
         .def_readwrite("tensors", &MPS<S>::tensors)
         .def_readwrite("canonical_form", &MPS<S>::canonical_form)
-        .def("initialize", &MPS<S>::initialize)
+        .def("initialize", &MPS<S>::initialize, py::arg("info"),
+             py::arg("init_left") = true, py::arg("init_right") = true)
         .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
         .def("canonicalize", &MPS<S>::canonicalize)
         .def("random_canonicalize", &MPS<S>::random_canonicalize)
@@ -715,7 +716,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
             })
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
-                    py::arg("forward"));
+                    py::arg("forward"), py::arg("cg"));
 
     py::class_<Hamiltonian<S>, shared_ptr<Hamiltonian<S>>>(m, "Hamiltonian")
         .def(py::init<S, S, int, const vector<uint8_t> &>())
@@ -1353,5 +1354,5 @@ PYBIND11_MODULE(block2, m) {
     bind_class<SU2>(m_su2, "SU2");
 
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
-    // bind_class<SZ>(m_sz, "SZ");
+    bind_class<SZ>(m_sz, "SZ");
 }

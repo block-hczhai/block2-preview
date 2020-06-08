@@ -335,7 +335,7 @@ if __name__ == "__main__":
             mo_coeff = mo_coeff[:, idx]
             ridx = np.argsort(idx)
         else:
-            ridx = np.array(list(range(n_mo), dtype=int))
+            ridx = np.array(list(range(n_mo)), dtype=int)
 
         h1e = mo_coeff.T @ m.get_hcore() @ mo_coeff
         g2e = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff), n_mo)
@@ -381,13 +381,13 @@ if __name__ == "__main__":
         ecore = mol.energy_nuc()
         ecore = 0.0
 
-    ft = FTDMRG(scratch=scratch, memory=20E9, verbose=2, omp_threads=n_threads)
+    ft = FTDMRG(scratch=scratch, memory=10E9, verbose=1, omp_threads=n_threads)
     ft.init_hamiltonian(pg, n_sites=n_mo, twos=0, isym=1,
                         orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     ft.generate_initial_mps(bond_dim)
     n_steps = int(round(beta / beta_step) + 0.1)
     # use 4 sweeps for the first beta step
-    ft.imaginary_time_evolution(1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=6)
+    ft.imaginary_time_evolution(1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
     # ft.imaginary_time_evolution(n_steps - 1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
     print(ft.get_one_pdm(ridx))

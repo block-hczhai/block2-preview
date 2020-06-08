@@ -29,6 +29,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -1045,10 +1046,11 @@ template <typename S> struct SparseMatrix {
                             const StateInfo<S> &old_fused,
                             const StateInfo<S> &old_fused_cinfo,
                             const StateInfo<S> &new_fused,
-                            const StateInfo<S> &new_fused_cinfo) {
+                            const StateInfo<S> &new_fused_cinfo,
+                            const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
-        map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
+        map<uint32_t, map<uint16_t, pair<uint32_t, int>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
@@ -1061,8 +1063,7 @@ template <typename S> struct SparseMatrix {
                 uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
                 uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
-                mp[(ib << 16) + ikka][ikkb] =
-                    make_pair(p, old_fused.n_states[ik]);
+                mp[(ib << 16) + ikka][ikkb] = make_pair(p, ik);
                 p += lp;
             }
         }
@@ -1078,13 +1079,27 @@ template <typename S> struct SparseMatrix {
                 uint16_t ibba = new_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = new_fused_cinfo.quanta[bb].data & (0xFFFFU);
                 uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
+                S bra_l = l.quanta[ibba], bra_m = m.quanta[ibbb];
                 if (mp.count(new_fused_cinfo.quanta[bb].data) &&
                     mp[new_fused_cinfo.quanta[bb].data].count(ik)) {
-                    pair<uint32_t, uint32_t> &t =
+                    pair<uint32_t, int> &t =
                         mp.at(new_fused_cinfo.quanta[bb].data).at(ik);
+                    S ket_mr = old_fused.quanta[t.second];
+                    double factor =
+                        cg->racah(bra_l.twos(), bra_m.twos(),
+                                  info->delta_quantum.twos(), ket.twos(),
+                                  bra.twos(), ket_mr.twos()) *
+                        sqrt(1.0 * bra.multiplicity() * ket_mr.multiplicity());
+                    assert(abs(factor) > 1E-10);
                     for (int j = 0; j < l.n_states[ibba]; j++)
-                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second,
+                        memcpy(ptr + j * lp,
+                               mat->data + t.first +
+                                   j * old_fused.n_states[t.second],
                                lp * sizeof(double));
+                    if (factor != 1)
+                        MatrixFunctions::iscale(
+                            MatrixRef(ptr, (int)l.n_states[ibba] * lp, 1),
+                            factor);
                 }
                 ptr += (size_t)l.n_states[ibba] * lp;
             }
@@ -1099,10 +1114,11 @@ template <typename S> struct SparseMatrix {
                              const StateInfo<S> &old_fused,
                              const StateInfo<S> &old_fused_cinfo,
                              const StateInfo<S> &new_fused,
-                             const StateInfo<S> &new_fused_cinfo) {
+                             const StateInfo<S> &new_fused_cinfo,
+                             const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
-        map<uint32_t, map<uint16_t, pair<uint32_t, uint32_t>>> mp;
+        map<uint32_t, map<uint16_t, tuple<uint32_t, uint32_t, int>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
@@ -1115,7 +1131,7 @@ template <typename S> struct SparseMatrix {
                 uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
                 uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
-                mp[(ibbb << 16) + ik][ibba] = make_pair(p, lp);
+                mp[(ibbb << 16) + ik][ibba] = make_tuple(p, lp, ib);
                 p += l.n_states[ibba] * lp;
             }
             assert(p == (i != mat->info->n - 1
@@ -1134,13 +1150,27 @@ template <typename S> struct SparseMatrix {
             for (int kk = new_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = new_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = new_fused_cinfo.quanta[kk].data & (0xFFFFU);
+                S ket_m = m.quanta[ikka], ket_r = r.quanta[ikkb];
                 if (mp.count(new_fused_cinfo.quanta[kk].data) &&
                     mp[new_fused_cinfo.quanta[kk].data].count(ib)) {
-                    pair<uint32_t, uint32_t> &t =
+                    tuple<uint32_t, uint32_t, int> &t =
                         mp.at(new_fused_cinfo.quanta[kk].data).at(ib);
-                    for (int j = 0; j < l.n_states[ib]; j++)
-                        memcpy(ptr + j * lp, mat->data + t.first + j * t.second,
-                               t.second * sizeof(double));
+                    S bra_lm = old_fused.quanta[get<2>(t)];
+                    double factor =
+                        cg->racah(ket_r.twos(), ket_m.twos(),
+                                  info->delta_quantum.twos(), bra.twos(),
+                                  ket.twos(), bra_lm.twos()) *
+                        sqrt(1.0 * ket.multiplicity() * bra_lm.multiplicity());
+                    assert(abs(factor) > 1E-10);
+                    for (int j = 0; j < l.n_states[ib]; j++) {
+                        memcpy(ptr + j * lp,
+                               mat->data + get<0>(t) + j * get<1>(t),
+                               get<1>(t) * sizeof(double));
+                        if (factor != 1)
+                            MatrixFunctions::iscale(
+                                MatrixRef(ptr + j * lp, (int)get<1>(t), 1),
+                                factor);
+                    }
                 }
                 ptr += (size_t)m.n_states[ikka] * r.n_states[ikkb];
             }

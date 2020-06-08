@@ -23,7 +23,7 @@
 using namespace std;
 using namespace block2;
 
-map<string, string> read_input(const string& filename) {
+map<string, string> read_input(const string &filename) {
     if (!Parsing::file_exists(filename)) {
         cerr << "cannot find input file : " << filename << endl;
         abort();
@@ -49,7 +49,7 @@ map<string, string> read_input(const string& filename) {
 }
 
 int main(int argc, char *argv[]) {
-    
+
     if (argc != 2) {
         cout << "usage : block2 <input filename>" << endl;
         abort();
@@ -66,16 +66,19 @@ int main(int argc, char *argv[]) {
 
     size_t memory = 4ULL << 30;
     if (params.count("memory") != 0)
-        memory = (size_t) Parsing::to_double(params.at("memory"));
+        memory = (size_t)Parsing::to_double(params.at("memory"));
 
     string scratch = "./node0";
     if (params.count("scratch") != 0)
         scratch = params.at("scratch");
-    
-    frame_() = new DataFrame((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
 
-    cout << "integer stack memory = " << fixed << setprecision(4) << ((frame_()->isize << 2) / 1E9) << " GB" << endl;
-    cout << "double  stack memory = " << fixed << setprecision(4) << ((frame_()->dsize << 3) / 1E9) << " GB" << endl;
+    frame_() =
+        new DataFrame((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
+
+    cout << "integer stack memory = " << fixed << setprecision(4)
+         << ((frame_()->isize << 2) / 1E9) << " GB" << endl;
+    cout << "double  stack memory = " << fixed << setprecision(4)
+         << ((frame_()->dsize << 3) / 1E9) << " GB" << endl;
 
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
@@ -83,17 +86,25 @@ int main(int argc, char *argv[]) {
 
     if (params.count("occ_file") != 0)
         occs = read_occ(params.at("occ_file"));
-    
+
     if (params.count("pg") != 0) {
         string xpg = params.at("pg");
-        if (xpg == "c1") pg = PGTypes::C1;
-        else if (xpg == "c2") pg = PGTypes::C2;
-        else if (xpg == "ci") pg = PGTypes::CI;
-        else if (xpg == "cs") pg = PGTypes::CS;
-        else if (xpg == "c2h") pg = PGTypes::C2H;
-        else if (xpg == "c2v") pg = PGTypes::C2V;
-        else if (xpg == "d2") pg = PGTypes::D2;
-        else if (xpg == "d2h") pg = PGTypes::D2H;
+        if (xpg == "c1")
+            pg = PGTypes::C1;
+        else if (xpg == "c2")
+            pg = PGTypes::C2;
+        else if (xpg == "ci")
+            pg = PGTypes::CI;
+        else if (xpg == "cs")
+            pg = PGTypes::CS;
+        else if (xpg == "c2h")
+            pg = PGTypes::C2H;
+        else if (xpg == "c2v")
+            pg = PGTypes::C2V;
+        else if (xpg == "d2")
+            pg = PGTypes::D2;
+        else if (xpg == "d2h")
+            pg = PGTypes::D2H;
         else {
             cerr << "unknown point group : " << xpg << endl;
             abort();
@@ -107,6 +118,15 @@ int main(int argc, char *argv[]) {
         abort();
     }
 
+    if (params.count("n_elec") != 0)
+        fcidump->params["nelec"] = params.at("n_elec");
+
+    if (params.count("twos") != 0)
+        fcidump->params["ms2"] = params.at("twos");
+
+    if (params.count("ipg") != 0)
+        fcidump->params["isym"] = params.at("ipg");
+
     if (params.count("mkl_threads") != 0) {
         mkl_set_num_threads(Parsing::to_int(params.at("mkl_threads")));
         mkl_set_dynamic(1);
@@ -118,7 +138,8 @@ int main(int argc, char *argv[]) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     SU2 vaccum(0);
-    SU2 target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_pg(pg)(fcidump->isym()));
+    SU2 target(fcidump->n_elec(), fcidump->twos(),
+               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
@@ -147,7 +168,8 @@ int main(int argc, char *argv[]) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+    mpo =
+        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     if (params.count("print_mpo") != 0)
@@ -176,8 +198,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (params.count("noises") != 0) {
-        vector<string> xnoises =
-            Parsing::split(params.at("noises"), " ", true);
+        vector<string> xnoises = Parsing::split(params.at("noises"), " ", true);
         noises.clear();
         for (auto x : xnoises)
             noises.push_back(Parsing::to_double(x));
@@ -203,15 +224,16 @@ int main(int argc, char *argv[]) {
     if (params.count("casci") != 0) {
         // active sites, active electrons
         vector<string> xcasci = Parsing::split(params.at("casci"), " ", true);
-        mps_info = make_shared<CASCIMPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
-                                hamil.orb_sym, hamil.n_syms, Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
+        mps_info = make_shared<CASCIMPSInfo<SU2>>(
+            norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms,
+            Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
     } else
         mps_info = make_shared<MPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
-                                hamil.orb_sym, hamil.n_syms);
+                                             hamil.orb_sym, hamil.n_syms);
     double bias = 1.0;
 
     if (params.count("occ_bias") != 0)
-         bias = Parsing::to_double(params.at("occ_bias"));
+        bias = Parsing::to_double(params.at("occ_bias"));
 
     if (params.count("mps") != 0) {
         mps_info->tag = params.at("mps");
@@ -271,7 +293,7 @@ int main(int argc, char *argv[]) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    int iprint = 3;
+    int iprint = 2;
     if (params.count("iprint") != 0)
         iprint = Parsing::to_int(params.at("iprint"));
 
@@ -291,7 +313,7 @@ int main(int argc, char *argv[]) {
 
     if (params.count("forward") != 0)
         forward = !!Parsing::to_int(params.at("forward"));
-    
+
     if (params.count("tol") != 0)
         tol = Parsing::to_double(params.at("tol"));
 
@@ -321,6 +343,10 @@ int main(int argc, char *argv[]) {
             abort();
         }
     }
+
+    if (params.count("davidson_conv_thrd") != 0)
+        dmrg->davidson_conv_thrd =
+            Parsing::to_double(params.at("davidson_conv_thrd"));
 
     if (params.count("cutoff") != 0)
         dmrg->cutoff = Parsing::to_double(params.at("cutoff"));

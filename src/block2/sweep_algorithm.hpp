@@ -49,7 +49,7 @@ template <typename S> struct DMRG {
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
-    double cutoff = 1E-14;
+    double cutoff = 1E-14, davidson_conv_thrd = 5E-6;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -85,7 +85,7 @@ template <typename S> struct DMRG {
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, true);
-        auto pdi = h_eff->eigs(iprint >= 3);
+        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd);
         shared_ptr<SparseMatrix<S>> dm;
         if (noise_type == NoiseTypes::Perturbative && noise != 0) {
             shared_ptr<SparseMatrixGroup<S>> pket =
@@ -128,7 +128,7 @@ template <typename S> struct DMRG {
         dm->deallocate();
         old_wfn->info->deallocate();
         old_wfn->deallocate();
-        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward);
+        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
         return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
                          get<2>(pdi), get<3>(pdi));
     }
@@ -370,7 +370,7 @@ template <typename S> struct ImaginaryTE {
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
         }
-        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward);
+        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
         return Iteration(get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, get<2>(pdi), expok,
                          get<3>(pdi), get<4>(pdi));
@@ -564,7 +564,7 @@ template <typename S> struct Compress {
             mps->unload_tensor(i);
             dm->info->deallocate();
             dm->deallocate();
-            MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps, forward);
+            MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
         }
         for (auto &old_wfn : {old_ket, old_bra}) {
             old_wfn->info->deallocate();
@@ -761,7 +761,7 @@ template <typename S> struct Expect {
                 dm->info->deallocate();
                 dm->deallocate();
                 MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps,
-                                                    forward);
+                                                    forward, me->mpo->tf->opf->cg);
             }
         }
         for (auto &old_wfn : old_wfns) {

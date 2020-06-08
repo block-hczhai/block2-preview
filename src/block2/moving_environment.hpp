@@ -205,7 +205,7 @@ template <typename S> struct EffectiveHamiltonian {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<double, int, size_t, double> eigs(bool iprint = false) {
+    tuple<double, int, size_t, double> eigs(bool iprint = false, double conv_thrd = 5E-6) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -216,8 +216,8 @@ template <typename S> struct EffectiveHamiltonian {
         t.get_time();
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
-                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint)
-                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint);
+                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint, conv_thrd)
+                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint, conv_thrd);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, nflop, t.get_time());
@@ -1052,22 +1052,29 @@ template <typename S> struct MovingEnvironment {
             trace_right ? dm->info->delta_quantum : wfn->info->delta_quantum;
         rinfo->delta_quantum =
             trace_right ? wfn->info->delta_quantum : dm->info->delta_quantum;
-        linfo->allocate(kk);
-        rinfo->allocate(kk);
-        uint16_t idx_dm_to_wfn[dm->info->n];
+        vector<uint16_t> idx_dm_to_wfn[dm->info->n];
         if (trace_right) {
             for (int i = 0; i < wfn->info->n; i++) {
                 S pb = wfn->info->quanta[i].get_bra(wfn->info->delta_quantum);
-                idx_dm_to_wfn[dm->info->find_state(pb)] = i;
+                idx_dm_to_wfn[dm->info->find_state(pb)].push_back(i);
             }
-            for (int i = 0; i < kk; i++) {
+            int kkw = 0;
+            for (int i = 0; i < kk; i++)
+                kkw += idx_dm_to_wfn[ilr[i]].size();
+            linfo->allocate(kk);
+            rinfo->allocate(kkw);
+            for (int i = 0, j = 0; i < kk; i++) {
                 linfo->quanta[i] = dm->info->quanta[ilr[i]];
-                rinfo->quanta[i] = wfn->info->quanta[idx_dm_to_wfn[ilr[i]]];
                 linfo->n_states_bra[i] = dm->info->n_states_bra[ilr[i]];
                 linfo->n_states_ket[i] = im[i];
-                rinfo->n_states_bra[i] = im[i];
-                rinfo->n_states_ket[i] =
-                    wfn->info->n_states_ket[idx_dm_to_wfn[ilr[i]]];
+                for (int iw = 0; iw < (int)idx_dm_to_wfn[ilr[i]].size(); iw++) {
+                    rinfo->quanta[j + iw] =
+                        wfn->info->quanta[idx_dm_to_wfn[ilr[i]][iw]];
+                    rinfo->n_states_bra[j + iw] = im[i];
+                    rinfo->n_states_ket[j + iw] =
+                        wfn->info->n_states_ket[idx_dm_to_wfn[ilr[i]][iw]];
+                }
+                j += (int)idx_dm_to_wfn[ilr[i]].size();
             }
             linfo->n_states_total[0] = 0;
             for (int i = 0; i < kk - 1; i++)
@@ -1078,16 +1085,25 @@ template <typename S> struct MovingEnvironment {
         } else {
             for (int i = 0; i < wfn->info->n; i++) {
                 S pk = -wfn->info->quanta[i].get_ket();
-                idx_dm_to_wfn[dm->info->find_state(pk)] = i;
+                idx_dm_to_wfn[dm->info->find_state(pk)].push_back(i);
             }
-            for (int i = 0; i < kk; i++) {
-                linfo->quanta[i] = wfn->info->quanta[idx_dm_to_wfn[ilr[i]]];
-                rinfo->quanta[i] = dm->info->quanta[ilr[i]];
-                linfo->n_states_bra[i] =
-                    wfn->info->n_states_bra[idx_dm_to_wfn[ilr[i]]];
-                linfo->n_states_ket[i] = im[i];
+            int kkw = 0;
+            for (int i = 0; i < kk; i++)
+                kkw += idx_dm_to_wfn[ilr[i]].size();
+            linfo->allocate(kkw);
+            rinfo->allocate(kk);
+            for (int i = 0, j = 0; i < kk; i++) {
                 rinfo->n_states_bra[i] = im[i];
+                rinfo->quanta[i] = dm->info->quanta[ilr[i]];
                 rinfo->n_states_ket[i] = dm->info->n_states_ket[ilr[i]];
+                for (int iw = 0; iw < (int)idx_dm_to_wfn[ilr[i]].size(); iw++) {
+                    linfo->quanta[j + iw] =
+                        wfn->info->quanta[idx_dm_to_wfn[ilr[i]][iw]];
+                    linfo->n_states_bra[j + iw] =
+                        wfn->info->n_states_bra[idx_dm_to_wfn[ilr[i]][iw]];
+                    linfo->n_states_ket[j + iw] = im[i];
+                }
+                j += (int)idx_dm_to_wfn[ilr[i]].size();
             }
             linfo->sort_states();
             rinfo->n_states_total[0] = 0;
@@ -1111,11 +1127,14 @@ template <typename S> struct MovingEnvironment {
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
                             linfo->n_states_bra[i], 1),
                         linfo->n_states_ket[i], 1);
-                int iw = idx_dm_to_wfn[ss[iss].first];
-                int ir = right->info->find_state(wfn->info->quanta[iw]);
-                assert(ir != -1);
-                MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw], false,
-                                          (*right)[ir], 1.0, 0.0);
+                for (int iww = 0;
+                     iww < (int)idx_dm_to_wfn[ss[iss].first].size(); iww++) {
+                    int iw = idx_dm_to_wfn[ss[iss].first][iww];
+                    int ir = right->info->find_state(wfn->info->quanta[iw]);
+                    assert(ir != -1);
+                    MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw],
+                                              false, (*right)[ir], 1.0, 0.0);
+                }
                 iss += im[i];
             }
             if (normalize)
@@ -1130,11 +1149,14 @@ template <typename S> struct MovingEnvironment {
                         MatrixRef(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0), 1,
                             (*right)[i].n));
-                int iw = idx_dm_to_wfn[ss[iss].first];
-                int il = left->info->find_state(wfn->info->quanta[iw]);
-                assert(il != -1);
-                MatrixFunctions::multiply((*wfn)[iw], false, (*right)[i], true,
-                                          (*left)[il], 1.0, 0.0);
+                for (int iww = 0;
+                     iww < (int)idx_dm_to_wfn[ss[iss].first].size(); iww++) {
+                    int iw = idx_dm_to_wfn[ss[iss].first][iww];
+                    int il = left->info->find_state(wfn->info->quanta[iw]);
+                    assert(il != -1);
+                    MatrixFunctions::multiply((*wfn)[iw], false, (*right)[i],
+                                              true, (*left)[il], 1.0, 0.0);
+                }
                 iss += im[i];
             }
             if (normalize)
@@ -1146,7 +1168,7 @@ template <typename S> struct MovingEnvironment {
     // Change the fusing type of MPS tensor so that it can be used in next sweep
     // iteration
     static void propagate_wfn(int i, int n_sites, const shared_ptr<MPS<S>> &mps,
-                              bool forward) {
+                              bool forward, const shared_ptr<CG<S>> &cg) {
         shared_ptr<MPSInfo<S>> mps_info = mps->info;
         StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
         shared_ptr<SparseMatrixInfo<S>> wfn_info =
@@ -1173,7 +1195,7 @@ template <typename S> struct MovingEnvironment {
                 wfn->allocate(wfn_info);
                 mps->load_tensor(i + 1);
                 wfn->swap_to_fused_left(mps->tensors[i + 1], l, m, r, mr, mrc,
-                                        lm, lmc);
+                                        lm, lmc, cg);
                 mps->unload_tensor(i + 1);
                 mps->tensors[i + 1] = wfn;
                 mps->save_tensor(i + 1);
@@ -1197,7 +1219,7 @@ template <typename S> struct MovingEnvironment {
                 wfn->allocate(wfn_info);
                 mps->load_tensor(i);
                 wfn->swap_to_fused_right(mps->tensors[i], l, m, r, lm, lmc, mr,
-                                         mrc);
+                                         mrc, cg);
                 mps->unload_tensor(i);
                 mps->tensors[i] = wfn;
                 mps->save_tensor(i);
