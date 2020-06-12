@@ -137,12 +137,12 @@ int main(int argc, char *argv[]) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    SU2 vaccum(0);
+    SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
 
     QCTypes qc_type = QCTypes::Conventional;
 
@@ -225,10 +225,10 @@ int main(int argc, char *argv[]) {
         // active sites, active electrons
         vector<string> xcasci = Parsing::split(params.at("casci"), " ", true);
         mps_info = make_shared<CASCIMPSInfo<SU2>>(
-            norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms,
+            norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms,
             Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
     } else
-        mps_info = make_shared<MPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
+        mps_info = make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
                                              hamil.orb_sym, hamil.n_syms);
     double bias = 1.0;
 

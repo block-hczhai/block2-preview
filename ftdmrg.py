@@ -23,12 +23,12 @@ SpinLabel = SU2
 
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, AncillaMPSInfo, MPS
-    from block2.su2 import AncillaMPO, PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.su2 import MovingEnvironment, ImaginaryTE, Expect
+    from block2.su2 import AncillaMPO, PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.su2 import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
 else:
     from block2.sz import HamiltonianQC, AncillaMPSInfo, MPS
-    from block2.sz import AncillaMPO, PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.sz import MovingEnvironment, ImaginaryTE, Expect
+    from block2.sz import AncillaMPO, PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
 
 
 class FTDMRGError(Exception):
@@ -59,14 +59,14 @@ class FTDMRG:
             map(PointGroup.swap_d2h, self.fcidump.orb_sym))
         n_elec = self.fcidump.n_sites * 2
 
-        vaccum = SpinLabel(0)
+        vacuum = SpinLabel(0)
         target = SpinLabel(n_elec, self.fcidump.twos,
                            PointGroup.swap_d2h(self.fcidump.isym))
         self.n_physical_sites = self.fcidump.n_sites
         self.n_sites = self.fcidump.n_sites * 2
 
         self.hamil = HamiltonianQC(
-            vaccum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
+            vacuum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
         self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
@@ -109,13 +109,13 @@ class FTDMRG:
                 n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
         self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
 
-        vaccum = SpinLabel(0)
+        vacuum = SpinLabel(0)
         target = SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))
         self.n_physical_sites = n_sites
         self.n_sites = n_sites * 2
 
         self.hamil = HamiltonianQC(
-            vaccum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
+            vacuum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
         self.hamil.opf.seq.mode = SeqTypes.Simple
 
         assert pg in ["d2h", "c1"]
@@ -127,7 +127,7 @@ class FTDMRG:
         assert self.hamil is not None
 
         # Ancilla MPSInfo (thermal)
-        mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vaccum,
+        mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                           self.hamil.target, self.hamil.basis,
                                           self.hamil.orb_sym, self.hamil.n_syms)
         mps_info_thermal.set_thermal_limit()
@@ -168,7 +168,7 @@ class FTDMRG:
         self.hamil.mu = mu
 
         # Ancilla MPSInfo (initial)
-        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vaccum,
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
                                   self.hamil.orb_sym, self.hamil.n_syms)
         mps_info.tag = "INIT" if not cont else "FINAL"
@@ -212,6 +212,132 @@ class FTDMRG:
         if self.verbose >= 2:
             print('>>> COMPLETE imaginary time evolution | Time = %.2f <<<' %
                   (time.perf_counter() - t))
+    
+    def decompression(self, bond_dim):
+        if self.verbose >= 2:
+            print('>>> START decompression <<<')
+        t = time.perf_counter()
+
+        # Ancilla MPSInfo (thermal)
+        mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
+                                  self.hamil.target, self.hamil.basis,
+                                  self.hamil.orb_sym, self.hamil.n_syms)
+        mps_info_thermal.tag = "INIT"
+
+        # Ancilla MPSInfo (initial)
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.hamil.target,
+            self.hamil.basis, self.hamil.orb_sym, self.hamil.n_syms)
+        mps_info.set_bond_dimension(bond_dim)
+        mps_info.tag = "INIT2"
+        mps_info.save_mutable()
+        mps_info.deallocate_mutable()
+
+        # Ancilla MPS (thermal)
+        mps_info_thermal.load_mutable()
+        mps_thermal = MPS(mps_info_thermal)
+        mps_thermal.load_data()
+        mps_thermal.load_mutable()
+
+        # Ancilla MPS (initial)
+        mps = MPS(self.n_sites, self.n_sites - 2, 2)
+        mps_info.load_mutable()
+        mps.initialize(mps_info)
+        mps.random_canonicalize()
+
+        # MPS/MPSInfo save mutable
+        mps.save_mutable()
+        mps.deallocate()
+        mps_info.deallocate_mutable()
+        mps_thermal.save_mutable()
+        mps_thermal.deallocate()
+        mps_info_thermal.deallocate_mutable()
+
+        # Identity MPO
+        impo = IdentityMPO(self.hamil)
+        impo = AncillaMPO(impo)
+        impo = SimplifiedMPO(impo, Rule())
+
+        # ME
+        ime = MovingEnvironment(impo, mps, mps_thermal, "COMPRESS")
+        ime.init_environments()
+
+        # Compress
+        cps = Compress(ime, VectorUInt16([bond_dim]), VectorUInt16([10]), VectorDouble([0.0]))
+        cps.solve(30, False)
+
+        mps_info.load_mutable()
+        mps.load_mutable()
+        mps_info.tag = "INIT"
+        mps.save_data()
+        mps_info.save_mutable()
+        mps.save_mutable()
+        mps.deallocate()
+        mps_info.deallocate_mutable()
+        impo.deallocate()
+        mps_info.deallocate()
+        mps_info_thermal.deallocate()
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE decompression mps | Time = %.2f <<<' % (time.perf_counter() - t))
+
+    # particle number correlation
+    def get_one_npc(self, ridx=None):
+        if self.verbose >= 2:
+            print('>>> START one-npc <<<')
+        t = time.perf_counter()
+
+        self.hamil.mu = 0.0
+
+        # Ancilla MPSInfo (final)
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
+                                  self.hamil.target, self.hamil.basis,
+                                  self.hamil.orb_sym, self.hamil.n_syms)
+        mps_info.tag = "FINAL"
+
+        # Ancilla MPS (final)
+        mps = MPS(mps_info)
+        mps.load_data()
+
+        # 1NPC MPO
+        pmpo = NPC1MPOQC(self.hamil)
+        pmpo = AncillaMPO(pmpo, True)
+        pmpo = SimplifiedMPO(pmpo, Rule())
+
+        # 1NPC
+        pme = MovingEnvironment(pmpo, mps, mps, "1NPC")
+        pme.init_environments(self.verbose >= 3)
+        expect = Expect(pme, self.bond_dim, self.bond_dim)
+        expect.iprint = self.verbose
+        expect.solve(True, mps.center == 0)
+        if SpinLabel == SU2:
+            dmr = expect.get_1npc_spatial(0, self.n_physical_sites)
+            dm = np.array(dmr).copy()
+        else:
+            dmr = expect.get_1npc(0, self.n_physical_sites)
+            dm = np.array(dmr).copy()
+            dm = dm.reshape((self.n_physical_sites, 2,
+                             self.n_physical_sites, 2))
+            dm = np.transpose(dm, (0, 2, 1, 3))
+
+        if ridx is not None:
+            dm[:, :] = dm[ridx, :][:, ridx]
+
+        dmr.deallocate()
+        pmpo.deallocate()
+        mps_info.deallocate()
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE one-npc | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
+
+        if SpinLabel == SU2:
+            # SU2 cannot generate spin correlation, the output will be zero
+            # but spin correlation is not zero even in SU2 case
+            return np.concatenate([dm[None, :, :], np.zeros(dm.shape)[None, :, :]], axis=0)
+        else:
+            dm_plus = dm[:, :, 0, 0] + dm[:, :, 0, 1] + dm[:, :, 1, 0] + dm[:, :, 1, 1]
+            dm_minus = dm[:, :, 0, 0] - dm[:, :, 0, 1] - dm[:, :, 1, 0] + dm[:, :, 1, 1]
+            return np.concatenate([dm_plus[None, :, :], dm_minus[None, :, :]], axis=0)
 
     def get_one_pdm(self, ridx=None):
         if self.verbose >= 2:
@@ -221,7 +347,7 @@ class FTDMRG:
         self.hamil.mu = 0.0
 
         # Ancilla MPSInfo (final)
-        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vaccum,
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
                                   self.hamil.orb_sym, self.hamil.n_syms)
         mps_info.tag = "FINAL"
@@ -279,8 +405,8 @@ if __name__ == "__main__":
 
     # parameters
     bond_dim = 1000
-    beta = 1.0
-    beta_step = 0.1
+    beta = 2.0
+    beta_step = 0.2
     mu = -1.0
     bond_dims = [bond_dim]
     n_threads = 8
@@ -381,13 +507,25 @@ if __name__ == "__main__":
         ecore = mol.energy_nuc()
         ecore = 0.0
 
-    ft = FTDMRG(scratch=scratch, memory=10E9, verbose=1, omp_threads=n_threads)
+    ft = FTDMRG(scratch=scratch, memory=10E9, verbose=2, omp_threads=n_threads)
     ft.init_hamiltonian(pg, n_sites=n_mo, twos=0, isym=1,
                         orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     ft.generate_initial_mps(bond_dim)
     n_steps = int(round(beta / beta_step) + 0.1)
-    # use 4 sweeps for the first beta step
+
+    # sub-division first-step (log)
+    # ng = 10
+    # ngx = [1]
+    # for i in range(1, ng):
+    #     ngx.append(ngx[-1] * 2)
+    # ngxs = sum(ngx)
+    # stp = [float(x) / ngxs for x in ngx]
+    # for i in range(0, ng):
+    #     ft.imaginary_time_evolution(1, beta_step / 2 * stp[i], mu, bond_dims, TETypes.TangentSpace, n_sub_sweeps=1, cont=i != 0)
+
+    # ft.decompression(50)
+
     ft.imaginary_time_evolution(1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-    # ft.imaginary_time_evolution(n_steps - 1, beta_step, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
-    print(ft.get_one_pdm(ridx))
+    ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
+    print(ft.get_one_npc(ridx))

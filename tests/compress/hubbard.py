@@ -22,18 +22,18 @@ set_mkl_num_threads(n_threads)
 fcidump = FCIDUMP()
 fcidump.read('../../data/HUBBARD-L16.FCIDUMP')
 
-vaccum = SU2(0)
+vacuum = SU2(0)
 target = SU2(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
 
 n_sites = fcidump.n_sites
 orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
-hamil = HamiltonianQC(vaccum, target, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, target, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 
 mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
-mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
 mps_info.tag = 'KET'
 mps_info.set_bond_dimension(bond_dims[0])
 mps = MPS(n_sites, 0, 2)
@@ -51,7 +51,7 @@ dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
 dmrg.noise_type = NoiseTypes.DensityMatrix
 dmrg.solve(10, mps.center == 0)
 
-bra_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
 bra_info.tag = 'BRA'
 bra_info.set_bond_dimension(bond_dims[0] // 2)
 bra = MPS(n_sites, mps.center, 2)

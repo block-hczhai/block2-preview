@@ -40,6 +40,7 @@
 #include "block2/point_group.hpp"
 #include "block2/qc_hamiltonian.hpp"
 #include "block2/qc_mpo.hpp"
+#include "block2/qc_ncorr.hpp"
 #include "block2/qc_npdm.hpp"
 #include "block2/qc_rule.hpp"
 #include "block2/rule.hpp"

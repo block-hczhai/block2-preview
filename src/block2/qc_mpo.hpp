@@ -37,7 +37,7 @@ namespace block2 {
 template <typename S> struct IdentityMPO : MPO<S> {
     IdentityMPO(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
         shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         MPO<S>::op = i_op;
         MPO<S>::const_e = 0.0;
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
@@ -88,9 +88,9 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
           bool symmetrized_p = true)
         : MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
         shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites][2], d_op[hamil.n_sites][2];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites][2], md_op[hamil.n_sites][2];
         shared_ptr<OpExpr<S>> rd_op[hamil.n_sites][2], r_op[hamil.n_sites][2];
@@ -1150,9 +1150,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
     MPOQC(const HamiltonianQC<S> &hamil, QCTypes mode = QCTypes::NC)
         : MPO<S>(hamil.n_sites), mode(mode) {
         shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites], d_op[hamil.n_sites];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites], md_op[hamil.n_sites];
         shared_ptr<OpExpr<S>> trd_op[hamil.n_sites], tr_op[hamil.n_sites];

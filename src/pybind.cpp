@@ -403,16 +403,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 
     py::class_<MPSInfo<S>, shared_ptr<MPSInfo<S>>>(m, "MPSInfo")
         .def_readwrite("n_sites", &MPSInfo<S>::n_sites)
-        .def_readwrite("vaccum", &MPSInfo<S>::vaccum)
+        .def_readwrite("vacuum", &MPSInfo<S>::vacuum)
         .def_readwrite("target", &MPSInfo<S>::target)
         .def_readwrite("orbsym", &MPSInfo<S>::orbsym)
         .def_readwrite("n_syms", &MPSInfo<S>::n_syms)
         .def_readwrite("bond_dim", &MPSInfo<S>::bond_dim)
         .def_readwrite("tag", &MPSInfo<S>::tag)
-        .def(py::init([](int n_sites, S vaccum, S target,
+        .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
                          const vector<uint8_t> &orbsym, uint8_t n_syms) {
-            return make_shared<MPSInfo<S>>(n_sites, vaccum, target, basis.data,
+            return make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis.data,
                                            orbsym, n_syms);
         }))
         .def_property_readonly("basis",
@@ -461,33 +461,51 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("load_right_dims", &MPSInfo<S>::load_right_dims)
         .def("deallocate", &MPSInfo<S>::deallocate);
 
+    py::class_<DynamicMPSInfo<S>, shared_ptr<DynamicMPSInfo<S>>, MPSInfo<S>>(
+        m, "DynamicMPSInfo")
+        .def_readwrite("iocc", &DynamicMPSInfo<S>::iocc)
+        .def_readwrite("n_local", &DynamicMPSInfo<S>::n_local)
+        .def(py::init([](int n_sites, S vacuum, S target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym, uint8_t n_syms,
+                         const vector<uint8_t> &iocc) {
+            return make_shared<DynamicMPSInfo<S>>(
+                n_sites, vacuum, target, basis.data, orbsym, n_syms, iocc);
+        }))
+        .def("set_left_bond_dimension_local",
+             &DynamicMPSInfo<S>::set_left_bond_dimension_local, py::arg("i"),
+             py::arg("match_prev") = false)
+        .def("set_right_bond_dimension_local",
+             &DynamicMPSInfo<S>::set_right_bond_dimension_local, py::arg("i"),
+             py::arg("match_prev") = false);
+
     py::class_<CASCIMPSInfo<S>, shared_ptr<CASCIMPSInfo<S>>, MPSInfo<S>>(
         m, "CASCIMPSInfo")
         .def_readwrite("casci_mask", &CASCIMPSInfo<S>::casci_mask)
-        .def(py::init([](int n_sites, S vaccum, S target,
+        .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
                          const vector<uint8_t> &orbsym, uint8_t n_syms,
                          const vector<ActiveTypes> &casci_mask) {
-            return make_shared<CASCIMPSInfo<S>>(n_sites, vaccum, target,
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target,
                                                 basis.data, orbsym, n_syms,
                                                 casci_mask);
         }))
-        .def(py::init([](int n_sites, S vaccum, S target,
+        .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
                          const vector<uint8_t> &orbsym, uint8_t n_syms,
                          int n_active_sites, int n_active_electrons) {
             return make_shared<CASCIMPSInfo<S>>(
-                n_sites, vaccum, target, basis.data, orbsym, n_syms,
+                n_sites, vacuum, target, basis.data, orbsym, n_syms,
                 n_active_sites, n_active_electrons);
         }));
 
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
-        .def(py::init([](int n_sites, S vaccum, S target,
+        .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
                          const vector<uint8_t> &orbsym, uint8_t n_syms) {
-            return make_shared<AncillaMPSInfo<S>>(n_sites, vaccum, target,
+            return make_shared<AncillaMPSInfo<S>>(n_sites, vacuum, target,
                                                   basis.data, orbsym, n_syms);
         }))
         .def_static("trans_orbsym", &AncillaMPSInfo<S>::trans_orbsym)
@@ -724,7 +742,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("opf", &Hamiltonian<S>::opf)
         .def_readwrite("n_sites", &Hamiltonian<S>::n_sites)
         .def_readwrite("orb_sym", &Hamiltonian<S>::orb_sym)
-        .def_readwrite("vaccum", &Hamiltonian<S>::vaccum)
+        .def_readwrite("vacuum", &Hamiltonian<S>::vacuum)
         .def_readwrite("target", &Hamiltonian<S>::target)
         .def_property_readonly("basis",
                                [](Hamiltonian<S> *self) {
@@ -903,6 +921,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("get_1pdm_spatial", &Expect<S>::get_1pdm_spatial,
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1pdm", &Expect<S>::get_1pdm,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1npc_spatial", &Expect<S>::get_1npc_spatial, py::arg("s"),
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1npc", &Expect<S>::get_1npc, py::arg("s"),
              py::arg("n_physical_sites") = (uint16_t)0U);
 
     py::class_<MPOSchemer<S>, shared_ptr<MPOSchemer<S>>>(m, "MPOSchemer")
@@ -976,6 +998,9 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def(py::init<const HamiltonianQC<S> &, QCTypes>());
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
+        .def(py::init<const Hamiltonian<S> &>());
+
+    py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
         .def(py::init<const Hamiltonian<S> &>());
 
     py::class_<AncillaMPO<S>, shared_ptr<AncillaMPO<S>>, MPO<S>>(m,

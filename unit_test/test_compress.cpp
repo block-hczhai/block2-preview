@@ -32,12 +32,12 @@ TEST_F(TestCompress, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
-    SU2 vaccum(0);
+    SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                      PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
 
     mkl_set_num_threads(4);
     mkl_set_dynamic(0);
@@ -60,7 +60,7 @@ TEST_F(TestCompress, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info->tag = "KET";
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
@@ -123,7 +123,7 @@ TEST_F(TestCompress, Test) {
     dmrg->solve(10, true);
 
     shared_ptr<MPSInfo<SU2>> bra_info = make_shared<MPSInfo<SU2>>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     bra_info->tag = "BRA";
     bra_info->set_bond_dimension(bond_dim / 2);
     shared_ptr<MPS<SU2>> bra;

@@ -29,19 +29,19 @@ TEST_F(TestAncilla, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
-    Spin vaccum(0);
+    Spin vacuum(0);
     Spin target(fcidump->n_sites() * 2, fcidump->twos(),
                      PointGroup::swap_d2h(fcidump->isym()));
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
     uint16_t bond_dim = 500;
     double beta = 0.0025;
-    HamiltonianQC<Spin> hamil(vaccum, target, n_physical_sites, orbsym, fcidump);
+    HamiltonianQC<Spin> hamil(vacuum, target, n_physical_sites, orbsym, fcidump);
     hamil.opf->seq->mode = SeqTypes::Simple;
 
     // Ancilla MPSInfo (thermal)
     shared_ptr<AncillaMPSInfo<Spin>> mps_info_thermal = make_shared<AncillaMPSInfo<Spin>>(
-        n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
     mps_info_thermal->save_mutable();
@@ -49,7 +49,7 @@ TEST_F(TestAncilla, Test) {
 
     // Ancilla MPSInfo (initial)
     shared_ptr<AncillaMPSInfo<Spin>> mps_info = make_shared<AncillaMPSInfo<Spin>>(
-        n_physical_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "BRA";
     mps_info->save_mutable();

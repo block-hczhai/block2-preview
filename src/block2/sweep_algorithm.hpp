@@ -128,7 +128,8 @@ template <typename S> struct DMRG {
         dm->deallocate();
         old_wfn->info->deallocate();
         old_wfn->deallocate();
-        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
+        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward,
+                                            me->mpo->tf->opf->cg);
         return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
                          get<2>(pdi), get<3>(pdi));
     }
@@ -370,7 +371,8 @@ template <typename S> struct ImaginaryTE {
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
         }
-        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
+        MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward,
+                                            me->mpo->tf->opf->cg);
         return Iteration(get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, get<2>(pdi), expok,
                          get<3>(pdi), get<4>(pdi));
@@ -564,7 +566,8 @@ template <typename S> struct Compress {
             mps->unload_tensor(i);
             dm->info->deallocate();
             dm->deallocate();
-            MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+            MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps, forward,
+                                                me->mpo->tf->opf->cg);
         }
         for (auto &old_wfn : {old_ket, old_bra}) {
             old_wfn->info->deallocate();
@@ -760,8 +763,8 @@ template <typename S> struct Expect {
                 mps->unload_tensor(i);
                 dm->info->deallocate();
                 dm->deallocate();
-                MovingEnvironment<S>::propagate_wfn(i, me->n_sites, mps,
-                                                    forward, me->mpo->tf->opf->cg);
+                MovingEnvironment<S>::propagate_wfn(
+                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
             }
         }
         for (auto &old_wfn : old_wfns) {
@@ -839,6 +842,7 @@ template <typename S> struct Expect {
             return r.expectations[0].second;
         }
     }
+    // only works for SU2
     MatrixRef get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
@@ -854,6 +858,7 @@ template <typename S> struct Expect {
             }
         return r;
     }
+    // only works for SZ
     MatrixRef get_1pdm(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
@@ -867,6 +872,49 @@ template <typename S> struct Expect {
                 assert(op->name == OpNames::PDM1);
                 r(2 * op->site_index[0] + op->site_index.s(0),
                   2 * op->site_index[1] + op->site_index.s(1)) = x.second;
+            }
+        return r;
+    }
+    // only works for SU2
+    // number of particle correlation
+    // s == 0: pure spin; s == 1: mixed spin
+    MatrixRef get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        MatrixRef r(nullptr, n_physical_sites, n_physical_sites);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                assert(op->site_index.ss() < 2);
+                if (s == op->site_index.ss())
+                    r(op->site_index[0], op->site_index[1]) = x.second;
+            }
+        return r;
+    }
+    // only works for SZ
+    // number of particle correlation
+    // s == 0: pure spin; s == 1: mixed spin
+    MatrixRef get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        MatrixRef r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                if (s == 0 && op->site_index.s(2) == 0)
+                    r(2 * op->site_index[0] + op->site_index.s(0),
+                      2 * op->site_index[1] + op->site_index.s(1)) = x.second;
+                else if (s == 1 && op->site_index.s(2) == 1)
+                    r(2 * op->site_index[0] + op->site_index.s(0),
+                      2 * op->site_index[1] + !op->site_index.s(0)) = x.second;
             }
         return r;
     }
