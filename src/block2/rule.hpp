@@ -36,7 +36,7 @@ template <typename S> struct Rule {
     }
 };
 
-// Remove rules involving tranposed operator from a rule
+// Remove rules involving transposed operator from a rule
 // The original rule is not changed
 template <typename S> struct NoTransposeRule : Rule<S> {
     shared_ptr<Rule<S>> prim_rule;
