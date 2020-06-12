@@ -12,7 +12,7 @@ Features
 * State symmetry
     * U(1) particle number symmetry
     * SU(2) or U(1) spin symmetry
-    * Abeliean point group symmetry
+    * Abelian point group symmetry
 * Sweep algorithms
     * Ground-State DMRG (2 site algorithm)
     * MPS compression
