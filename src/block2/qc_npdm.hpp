@@ -40,9 +40,9 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
     PDM1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][4];
@@ -204,9 +204,9 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
     PDM1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vaccum);
+            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> c_op[n_sites], d_op[n_sites];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites];

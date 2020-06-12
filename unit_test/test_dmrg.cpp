@@ -48,12 +48,12 @@ TEST_F(TestDMRG, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    SU2 vaccum(0);
+    SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vaccum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
 
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
@@ -78,11 +78,11 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+    //     norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
 
     // CCSD init
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    //     norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+    //     norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     // if (occs.size() == 0)
     //     mps_info->set_bond_dimension(bond_dim);
     // else {
@@ -95,14 +95,14 @@ TEST_F(TestDMRG, Test) {
 
     // Local init
     // shared_ptr<DynamicMPSInfo<SU2>> mps_info =
-    //     make_shared<DynamicMPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
+    //     make_shared<DynamicMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
     //                                      hamil.orb_sym, hamil.n_syms, ioccs);
     // mps_info->n_local = 4;
     // mps_info->set_bond_dimension(bond_dim);
 
     // Determinant init
     shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
-        make_shared<DeterminantMPSInfo<SU2>>(norb, vaccum, target, hamil.basis,
+        make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
                                          hamil.orb_sym, hamil.n_syms, ioccs, fcidump);
     mps_info->set_bond_dimension(bond_dim);
 

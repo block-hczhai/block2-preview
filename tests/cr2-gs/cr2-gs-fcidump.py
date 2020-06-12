@@ -29,18 +29,18 @@ fcidump = FCIDUMP()
 occs = read_occ('../data/CR2.SVP.OCC')
 fcidump.read('../data/CR2.SVP.FCIDUMP')
 
-vaccum = SU2(0)
+vacuum = SU2(0)
 target = SU2(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
 n_sites = fcidump.n_sites
 orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
-hamil = HamiltonianQC(vaccum, target, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, target, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 
 mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
 bond_dim = 250
-mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
 mps_info.tag = "KET"
 mps_info.set_bond_dimension_using_occ(bond_dim, occs)
 mps = MPS(n_sites, 5, 2)

@@ -96,25 +96,25 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     shared_ptr<DeterminantQC<S>> det;
     vector<uint8_t> iocc;
     uint16_t n_det_states = 2; // number of states for each determinant
-    DeterminantMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    DeterminantMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
                        const vector<uint8_t> orbsym, uint8_t n_syms,
                        const vector<uint8_t> &iocc,
                        const shared_ptr<FCIDUMP> &fcidump)
         : iocc(iocc), fcidump(fcidump),
           det(make_shared<DeterminantQC<S>>(iocc, orbsym,
                                             fcidump->h1e_energy())),
-          MPSInfo<S>(n_sites, vaccum, target, basis, orbsym, n_syms) {}
+          MPSInfo<S>(n_sites, vacuum, target, basis, orbsym, n_syms) {}
     void set_bond_dimension(uint16_t m) override {
         this->bond_dim = m;
-        this->left_dims[0] = StateInfo<S>(this->vaccum);
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+        this->left_dims[0] = StateInfo<S>(this->vacuum);
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
     }
     WarmUpTypes get_warm_up_type() const override {
         return WarmUpTypes::Determinant;
     }
     void set_left_bond_dimension(int i,
                                  const vector<vector<vector<uint8_t>>> &dets) {
-        this->left_dims[0] = StateInfo<S>(this->vaccum);
+        this->left_dims[0] = StateInfo<S>(this->vacuum);
         for (int j = 0; j < i; j++) {
             set<vector<uint8_t>, typename DeterminantQC<S>::det_less> mp;
             for (auto &idets : dets)
@@ -143,7 +143,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     }
     void set_right_bond_dimension(int i,
                                   const vector<vector<vector<uint8_t>>> &dets) {
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
         for (int j = this->n_sites - 1; j > i; j--) {
             set<vector<uint8_t>, typename DeterminantQC<S>::det_less> mp;
             for (auto &idets : dets)

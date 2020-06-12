@@ -29,13 +29,13 @@ TEST_F(TestHamiltonian, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               Hamiltonian::swap_d2h);
-    SpinLabel vaccum(0);
+    SpinLabel vacuum(0);
     SpinLabel target(fcidump->n_elec(), fcidump->twos(),
                      Hamiltonian::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     // cout << ialloc->used << " " << dalloc->used << endl;
-    Hamiltonian hamil(vaccum, target, norb, su2, fcidump, orbsym);
+    Hamiltonian hamil(vacuum, target, norb, su2, fcidump, orbsym);
     // for (auto &g : hamil.site_norm_ops[0]) {
     //     cout << "OP=" << g.first << endl;
     //     cout << *(g.second->info);
@@ -43,7 +43,7 @@ TEST_F(TestHamiltonian, Test) {
     // }
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
-        norb, vaccum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
+        norb, vacuum, target, hamil.basis, &hamil.orb_sym[0], hamil.n_syms);
     // cout << "left min dims fci = ";
     // for (int i = 0; i <= norb; i++)
     //     cout << mps_info->left_dims_fci[i].n << " ";
@@ -96,12 +96,12 @@ TEST_F(TestHamiltonian, Test) {
     cout << ialloc->used << " " << dalloc->used << endl;
     cout << *si << endl;
     shared_ptr<SparseMatrixInfo> smi = make_shared<SparseMatrixInfo>();
-    smi->initialize(*si, *si, hamil.vaccum, false);
+    smi->initialize(*si, *si, hamil.vacuum, false);
     shared_ptr<SparseMatrix> c = make_shared<SparseMatrix>();
     c->allocate(smi);
     // cout << "total = " << c->total_memory << endl;
     shared_ptr<OpExpr> op_h =
-        make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vaccum);
+        make_shared<OpElement>(OpNames::H, vector<uint8_t>{}, hamil.vacuum);
     shared_ptr<SparseMatrix> a = mpo->tensors[0]->lop[op_h];
     shared_ptr<SparseMatrix> b = mpo->tensors[1]->lop[op_h];
     // hamil.opf->tensor_product(*a, *b, *c);

@@ -83,11 +83,11 @@ mg2e[np.abs(mg2e) < tol] = 0.0
 
 fcidump.initialize_su2(n_sites, n_elec, twos, isym, ecore, mh1e, mg2e)
 
-vaccum = SU2(0)
+vacuum = SU2(0)
 target = SU2(n_elec, twos, PointGroup.swap_d2h(isym))
 
 orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
-hamil = HamiltonianQC(vaccum, target, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, target, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 
 print('CCSD ...')
@@ -103,7 +103,7 @@ if pg_reorder:
 mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
-mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
 mps_info.set_bond_dimension_using_occ(bond_dims[0], VectorDouble(occ))
 mps = MPS(n_sites, 0, 2)
 mps.initialize(mps_info)

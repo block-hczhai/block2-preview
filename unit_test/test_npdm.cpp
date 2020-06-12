@@ -28,12 +28,12 @@ TEST_F(TestNPDM, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               Hamiltonian::swap_d2h);
-    SpinLabel vaccum(0);
+    SpinLabel vacuum(0);
     SpinLabel target(fcidump->n_elec(), fcidump->twos(),
                      Hamiltonian::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    Hamiltonian hamil(vaccum, target, norb, su2, fcidump, orbsym);
+    Hamiltonian hamil(vacuum, target, norb, su2, fcidump, orbsym);
     hamil.opf->seq->mode = SeqTypes::Simple;
 
     Timer t;
@@ -64,7 +64,7 @@ TEST_F(TestNPDM, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo> mps_info = make_shared<MPSInfo>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS

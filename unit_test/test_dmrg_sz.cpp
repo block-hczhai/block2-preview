@@ -31,11 +31,11 @@ TEST_F(TestDMRG, Test) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(), PointGroup::swap_d2h);
-    SZ vaccum(0);
+    SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SZ> hamil(vaccum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SZ> hamil(vacuum, target, norb, orbsym, fcidump);
 
     // abort();
 
@@ -60,7 +60,7 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vaccum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {

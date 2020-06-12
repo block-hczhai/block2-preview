@@ -62,7 +62,7 @@ enum struct WarmUpTypes : uint8_t { None, Local, Determinant };
 // Quantum number infomation in a MPS
 template <typename S> struct MPSInfo {
     int n_sites;
-    S vaccum;
+    S vacuum;
     S target;
     // if orbsym is empty, the basis index is orbital index (general case)
     // otherwise, the basis index is pg symmetry index
@@ -72,9 +72,9 @@ template <typename S> struct MPSInfo {
     StateInfo<S> *basis, *left_dims_fci, *right_dims_fci;
     StateInfo<S> *left_dims, *right_dims;
     string tag = "KET";
-    MPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    MPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
             const vector<uint8_t> orbsym, uint8_t n_syms, bool init_fci = true)
-        : n_sites(n_sites), vaccum(vaccum), target(target), orbsym(orbsym),
+        : n_sites(n_sites), vacuum(vacuum), target(target), orbsym(orbsym),
           n_syms(n_syms), basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo<S>[n_sites + 1];
         right_dims_fci = new StateInfo<S>[n_sites + 1];
@@ -93,11 +93,11 @@ template <typename S> struct MPSInfo {
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual void set_bond_dimension_fci() {
-        left_dims_fci[0] = StateInfo<S>(vaccum);
+        left_dims_fci[0] = StateInfo<S>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
                 left_dims_fci[i], get_basis(i), target);
-        right_dims_fci[n_sites] = StateInfo<S>(vaccum);
+        right_dims_fci[n_sites] = StateInfo<S>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] = StateInfo<S>::tensor_product(
                 get_basis(i), right_dims_fci[i + 1], target);
@@ -126,15 +126,15 @@ template <typename S> struct MPSInfo {
             assert(x == 2 || x == 0);
         StateInfo<S> *left_dims_hf = new StateInfo<S>[n_sites + 1];
         StateInfo<S> *right_dims_hf = new StateInfo<S>[n_sites + 1];
-        left_dims_hf[0] = StateInfo<S>(vaccum);
+        left_dims_hf[0] = StateInfo<S>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_hf[i + 1] = StateInfo<S>(
-                left_dims_hf[i].quanta[0] + (occ[i] == 2 ? occupied : vaccum));
-        right_dims_hf[n_sites] = StateInfo<S>(vaccum);
+                left_dims_hf[i].quanta[0] + (occ[i] == 2 ? occupied : vacuum));
+        right_dims_hf[n_sites] = StateInfo<S>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_hf[i] = StateInfo<S>((occ[i] == 2 ? occupied : vaccum) +
+            right_dims_hf[i] = StateInfo<S>((occ[i] == 2 ? occupied : vacuum) +
                                             right_dims_hf[i + 1].quanta[0]);
-        left_dims[0] = StateInfo<S>(vaccum);
+        left_dims[0] = StateInfo<S>(vacuum);
         for (int i = 0, j; i < n_sites; i++) {
             vector<StateInfo<S>> tmps;
             j = max(0, i - n_local + 1);
@@ -164,7 +164,7 @@ template <typename S> struct MPSInfo {
                 left_dims[i + 1].collect();
             }
         }
-        right_dims[n_sites] = StateInfo<S>(vaccum);
+        right_dims[n_sites] = StateInfo<S>(vacuum);
         for (int i = n_sites - 1, j; i >= 0; i--) {
             vector<StateInfo<S>> tmps;
             j = min(n_sites - 1, i + n_local - 1);
@@ -234,11 +234,11 @@ template <typename S> struct MPSInfo {
         // left and right block probabilities
         StateProbability<S> *left_probs = new StateProbability<S>[n_sites + 1];
         StateProbability<S> *right_probs = new StateProbability<S>[n_sites + 1];
-        left_probs[0] = StateProbability<S>(vaccum);
+        left_probs[0] = StateProbability<S>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_probs[i + 1] = StateProbability<S>::tensor_product_no_collect(
                 left_probs[i], site_probs[i], left_dims_fci[i + 1]);
-        right_probs[n_sites] = StateProbability<S>(vaccum);
+        right_probs[n_sites] = StateProbability<S>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_probs[i] = StateProbability<S>::tensor_product_no_collect(
                 site_probs[i], right_probs[i + 1], right_dims_fci[i]);
@@ -283,7 +283,7 @@ template <typename S> struct MPSInfo {
             right_dims_fci_t[i] = right_dims_fci[i].deep_copy();
         }
         // left and right block dims
-        left_dims[0] = StateInfo<S>(vaccum);
+        left_dims[0] = StateInfo<S>(vacuum);
         for (int i = 1; i <= n_sites; i++) {
             left_dims[i].allocate(left_probs[i].n);
             memcpy(left_dims[i].quanta, left_probs[i].quanta,
@@ -311,7 +311,7 @@ template <typename S> struct MPSInfo {
                 tmp.deallocate();
             }
         }
-        right_dims[n_sites] = StateInfo<S>(vaccum);
+        right_dims[n_sites] = StateInfo<S>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--) {
             right_dims[i].allocate(right_probs[i].n);
             memcpy(right_dims[i].quanta, right_probs[i].quanta,
@@ -364,7 +364,7 @@ template <typename S> struct MPSInfo {
     // each FCI quantum number has at least one state kept
     virtual void set_bond_dimension(uint16_t m) {
         bond_dim = m;
-        left_dims[0] = StateInfo<S>(vaccum);
+        left_dims[0] = StateInfo<S>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims[i + 1] = left_dims_fci[i + 1].deep_copy();
         for (int i = 0; i < n_sites; i++)
@@ -381,7 +381,7 @@ template <typename S> struct MPSInfo {
                 }
                 left_dims[i + 1].n_states_total = new_total;
             }
-        right_dims[n_sites] = StateInfo<S>(vaccum);
+        right_dims[n_sites] = StateInfo<S>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims[i] = right_dims_fci[i].deep_copy();
         for (int i = n_sites - 1; i >= 0; i--)
@@ -496,18 +496,18 @@ template <typename S> struct MPSInfo {
 template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
     vector<uint8_t> iocc;
     uint16_t n_local = 0;      // number of nearset sites using FCI quantum numbers
-    DynamicMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    DynamicMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
                    const vector<uint8_t> orbsym, uint8_t n_syms,
                    const vector<uint8_t> &iocc)
-        : iocc(iocc), MPSInfo<S>(n_sites, vaccum, target, basis,
+        : iocc(iocc), MPSInfo<S>(n_sites, vacuum, target, basis,
                                              orbsym, n_syms) {}
     void set_bond_dimension(uint16_t m) override {
         this->bond_dim = m;
-        this->left_dims[0] = StateInfo<S>(this->vaccum);
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+        this->left_dims[0] = StateInfo<S>(this->vacuum);
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
     }
     void set_left_bond_dimension_local(uint16_t i, bool match_prev = false) {
-        this->left_dims[0] = StateInfo<S>(this->vaccum);
+        this->left_dims[0] = StateInfo<S>(this->vacuum);
         int j = max(0, i - n_local + 1);
         for (int k = 0; k < j; k++)
             this->left_dims[k + 1] =
@@ -534,7 +534,7 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
             this->left_dims[k + 1].n = 0;
     }
     void set_right_bond_dimension_local(uint16_t i, bool match_prev = false) {
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vaccum);
+        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
         int j = min(this->n_sites - 1, i + n_local - 1);
         for (int k = this->n_sites - 1; k > j; k--)
             this->right_dims[k] =
@@ -580,24 +580,24 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
             casci_mask[i] = ActiveTypes::Active;
         return casci_mask;
     }
-    CASCIMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    CASCIMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
                  const vector<uint8_t> orbsym, uint8_t n_syms,
                  const vector<ActiveTypes> &casci_mask)
-        : casci_mask(casci_mask), MPSInfo<S>(n_sites, vaccum, target, basis,
+        : casci_mask(casci_mask), MPSInfo<S>(n_sites, vacuum, target, basis,
                                              orbsym, n_syms, false) {
         set_bond_dimension_fci();
     }
-    CASCIMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    CASCIMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
                  const vector<uint8_t> orbsym, uint8_t n_syms,
                  int n_active_sites, int n_active_electrons)
         : casci_mask(active_space(n_sites, target, n_active_sites,
                                   n_active_electrons)),
-          MPSInfo<S>(n_sites, vaccum, target, basis, orbsym, n_syms, false) {
+          MPSInfo<S>(n_sites, vacuum, target, basis, orbsym, n_syms, false) {
         set_bond_dimension_fci();
     }
     void set_bond_dimension_fci() override {
         assert(casci_mask.size() == MPSInfo<S>::n_sites);
-        StateInfo<S> empty = StateInfo<S>(MPSInfo<S>::vaccum);
+        StateInfo<S> empty = StateInfo<S>(MPSInfo<S>::vacuum);
         S frozen_state;
         // currently only works with symmetrized basis
         assert(!MPSInfo<S>::orbsym.empty());
@@ -607,7 +607,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 break;
             }
         StateInfo<S> frozen = StateInfo<S>(frozen_state);
-        MPSInfo<S>::left_dims_fci[0] = StateInfo<S>(MPSInfo<S>::vaccum);
+        MPSInfo<S>::left_dims_fci[0] = StateInfo<S>(MPSInfo<S>::vacuum);
         for (int i = 0; i < MPSInfo<S>::n_sites; i++)
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
@@ -628,7 +628,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 break;
             }
         MPSInfo<S>::right_dims_fci[MPSInfo<S>::n_sites] =
-            StateInfo<S>(MPSInfo<S>::vaccum);
+            StateInfo<S>(MPSInfo<S>::vacuum);
         for (int i = MPSInfo<S>::n_sites - 1; i >= 0; i--)
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
@@ -673,9 +673,9 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
             b[j] = b[j + 1] = a[i];
         return b;
     }
-    AncillaMPSInfo(int n_sites, S vaccum, S target, StateInfo<S> *basis,
+    AncillaMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
                    const vector<uint8_t> &orbsym, uint8_t n_syms)
-        : n_physical_sites(n_sites), MPSInfo<S>(n_sites << 1, vaccum, target,
+        : n_physical_sites(n_sites), MPSInfo<S>(n_sites << 1, vacuum, target,
                                                 basis,
                                                 trans_orbsym(orbsym, n_sites),
                                                 n_syms) {}
@@ -683,7 +683,7 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
         return AncillaTypes::Ancilla;
     }
     void set_thermal_limit() {
-        MPSInfo<S>::left_dims[0] = StateInfo<S>(MPSInfo<S>::vaccum);
+        MPSInfo<S>::left_dims[0] = StateInfo<S>(MPSInfo<S>::vacuum);
         for (int i = 0; i < MPSInfo<S>::n_sites; i++)
             if (i & 1) {
                 S q = MPSInfo<S>::left_dims[i]
@@ -696,7 +696,7 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
                     MPSInfo<S>::left_dims[i], MPSInfo<S>::get_basis(i),
                     MPSInfo<S>::target);
         MPSInfo<S>::right_dims[MPSInfo<S>::n_sites] =
-            StateInfo<S>(MPSInfo<S>::vaccum);
+            StateInfo<S>(MPSInfo<S>::vacuum);
         for (int i = MPSInfo<S>::n_sites - 1; i >= 0; i--)
             if (i & 1)
                 MPSInfo<S>::right_dims[i] = StateInfo<S>::tensor_product(
@@ -741,7 +741,7 @@ template <typename S> struct MPS {
                 info->left_dims[i], info->get_basis(i),
                 info->left_dims_fci[i + 1]);
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>();
-            mat_infos[i]->initialize(t, info->left_dims[i + 1], info->vaccum,
+            mat_infos[i]->initialize(t, info->left_dims[i + 1], info->vacuum,
                                      false);
             t.reallocate(0);
             mat_infos[i]->reallocate(mat_infos[i]->n);
@@ -759,7 +759,7 @@ template <typename S> struct MPS {
                 info->get_basis(i), info->right_dims[i + 1],
                 info->right_dims_fci[i]);
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>();
-            mat_infos[i]->initialize(info->right_dims[i], t, info->vaccum,
+            mat_infos[i]->initialize(info->right_dims[i], t, info->vacuum,
                                      false);
             t.reallocate(0);
             mat_infos[i]->reallocate(mat_infos[i]->n);
@@ -849,7 +849,7 @@ template <typename S> struct MPS {
             shared_ptr<SparseMatrixInfo<S>> tmat_info =
                 make_shared<SparseMatrixInfo<S>>();
             tmat_info->initialize(info->left_dims[i + 1],
-                                  info->left_dims[i + 1], info->vaccum, false);
+                                  info->left_dims[i + 1], info->vacuum, false);
             tmat->allocate(tmat_info);
             tensors[i]->left_canonicalize(tmat);
             StateInfo<S> l = info->left_dims[i + 1], m = info->get_basis(i + 1);
@@ -879,7 +879,7 @@ template <typename S> struct MPS {
             shared_ptr<SparseMatrixInfo<S>> tmat_info =
                 make_shared<SparseMatrixInfo<S>>();
             tmat_info->initialize(info->right_dims[i], info->right_dims[i],
-                                  info->vaccum, false);
+                                  info->vacuum, false);
             tmat->allocate(tmat_info);
             tensors[i]->right_canonicalize(tmat);
             if (dot == 1 && i - 1 == center) {
@@ -922,13 +922,13 @@ template <typename S> struct MPS {
             tensors[i]->randomize();
             if (i < center) {
                 tmat_info->initialize(info->left_dims[i + 1],
-                                      info->left_dims[i + 1], info->vaccum,
+                                      info->left_dims[i + 1], info->vacuum,
                                       false);
                 tmat->allocate(tmat_info);
                 tensors[i]->left_canonicalize(tmat);
             } else if (i > center) {
                 tmat_info->initialize(info->right_dims[i], info->right_dims[i],
-                                      info->vaccum, false);
+                                      info->vacuum, false);
                 tmat->allocate(tmat_info);
                 tensors[i]->right_canonicalize(tmat);
             }

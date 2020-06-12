@@ -29,7 +29,7 @@ namespace block2 {
 
 template <typename, typename = void> struct CG;
 
-// Trivial CG factors for Abeliean symmetry
+// Trivial CG factors for Abelian symmetry
 template <typename S> struct CG<S, typename S::is_sz_t> {
     CG() {}
     CG(int n_sqrt_fact) {}

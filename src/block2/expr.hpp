@@ -196,7 +196,7 @@ template <typename S> struct OpElement : OpExpr<S> {
     }
 };
 
-// Refernce to original or tranposed symbol: (A) or (A)^T
+// Reference to original or transposed symbol: (A) or (A)^T
 template <typename S> struct OpElementRef : OpExpr<S> {
     shared_ptr<OpElement<S>> op;
     int8_t factor;

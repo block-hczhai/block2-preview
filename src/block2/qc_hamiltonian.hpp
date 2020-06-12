@@ -40,13 +40,13 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     map<OpNames, shared_ptr<SparseMatrix<S>>> op_prims[4];
     shared_ptr<FCIDUMP> fcidump;
     double mu = 0;
-    HamiltonianQC(S vaccum, S target, int n_sites,
+    HamiltonianQC(S vacuum, S target, int n_sites,
                   const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
-        : Hamiltonian<S>(vaccum, target, n_sites, orb_sym), fcidump(fcidump) {
+        : Hamiltonian<S>(vacuum, target, n_sites, orb_sym), fcidump(fcidump) {
         for (int i = 0; i < this->n_syms; i++) {
             this->basis[i].allocate(4);
-            this->basis[i].quanta[0] = this->vaccum;
+            this->basis[i].quanta[0] = this->vacuum;
             this->basis[i].quanta[1] = S(1, -1, i);
             this->basis[i].quanta[2] = S(1, 1, i);
             this->basis[i].quanta[3] = S(2, 0, 0);
@@ -60,7 +60,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         // site operator infos
         for (int i = 0; i < this->n_syms; i++) {
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
-            info[this->vaccum] = nullptr;
+            info[this->vacuum] = nullptr;
             for (int n = -1; n <= 1; n += 2)
                 for (int s = -1; s <= 1; s += 2)
                     info[S(n, s, i)] = nullptr;
@@ -150,21 +150,21 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             ops[this->n_syms];
         const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vacuum);
         const shared_ptr<OpElement<S>> n_op[2] = {
             make_shared<OpElement<S>>(OpNames::N, SiteIndex({}, {0}),
-                                      this->vaccum),
+                                      this->vacuum),
             make_shared<OpElement<S>>(OpNames::N, SiteIndex({}, {1}),
-                                      this->vaccum)};
+                                      this->vacuum)};
         const shared_ptr<OpElement<S>> nn_op[4] = {
             make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {0, 0}),
-                                      this->vaccum),
+                                      this->vacuum),
             make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {1, 0}),
-                                      this->vaccum),
+                                      this->vacuum),
             make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {0, 1}),
-                                      this->vaccum),
+                                      this->vacuum),
             make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {1, 1}),
-                                      this->vaccum)};
+                                      this->vacuum)};
         for (uint8_t i = 0; i < this->n_syms; i++) {
             ops[i][i_op] = nullptr;
             for (uint8_t s = 0; s < 2; s++)
@@ -411,14 +411,14 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     map<OpNames, shared_ptr<SparseMatrix<S>>> op_prims[2];
     shared_ptr<FCIDUMP> fcidump;
     double mu = 0;
-    HamiltonianQC(S vaccum, S target, int n_sites,
+    HamiltonianQC(S vacuum, S target, int n_sites,
                   const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
-        : Hamiltonian<S>(vaccum, target, n_sites, orb_sym), fcidump(fcidump) {
+        : Hamiltonian<S>(vacuum, target, n_sites, orb_sym), fcidump(fcidump) {
         assert(!fcidump->uhf);
         for (int i = 0; i < this->n_syms; i++) {
             this->basis[i].allocate(3);
-            this->basis[i].quanta[0] = vaccum;
+            this->basis[i].quanta[0] = vacuum;
             this->basis[i].quanta[1] = S(1, 1, i);
             this->basis[i].quanta[2] = S(2, 0, 0);
             this->basis[i].n_states[0] = this->basis[i].n_states[1] =
@@ -431,7 +431,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
         // site operator infos
         for (int i = 0; i < this->n_syms; i++) {
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
-            info[this->vaccum] = nullptr;
+            info[this->vacuum] = nullptr;
             info[S(1, 1, i)] = nullptr;
             info[S(-1, 1, i)] = nullptr;
             for (int n = -2; n <= 2; n += 2)
@@ -508,11 +508,11 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             ops[this->n_syms];
         const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vaccum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vacuum);
         const shared_ptr<OpElement<S>> n_op =
-            make_shared<OpElement<S>>(OpNames::N, SiteIndex(), this->vaccum);
+            make_shared<OpElement<S>>(OpNames::N, SiteIndex(), this->vacuum);
         const shared_ptr<OpElement<S>> nn_op =
-            make_shared<OpElement<S>>(OpNames::NN, SiteIndex(), this->vaccum);
+            make_shared<OpElement<S>>(OpNames::NN, SiteIndex(), this->vacuum);
         for (uint8_t i = 0; i < this->n_syms; i++) {
             ops[i][i_op] = nullptr;
             ops[i][n_op] = nullptr;
