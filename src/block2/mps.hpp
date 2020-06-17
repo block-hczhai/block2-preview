@@ -666,6 +666,58 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
     }
 };
 
+/** Restrict quantum numbers to describe an uncontracted MRCI wavefunction.
+ *
+ * The last *right* n_ext sites are restricted to have only up to ci_order electrons.
+ * I.e., ci_order = 2 gives MR-CISD.
+ * @author: Henrik R. Larsson <larsson@caltech.edu>
+ */
+template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
+    using MPSInfo<S>::left_dims_fci; // Resolve names of template base class
+    using MPSInfo<S>::right_dims_fci;
+    using MPSInfo<S>::vacuum;
+    using MPSInfo<S>::target;
+    using MPSInfo<S>::n_sites;
+    using MPSInfo<S>::get_basis;
+    int n_ext; //!> Number of external orbitals: CI space
+    int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2 gives MR-CISD
+    MRCIMPSInfo(int n_sites, int n_ext, int ci_order, S vacuum, S target, StateInfo<S> *basis,
+                const vector<uint8_t> orbsym, uint8_t n_syms, bool init_fci = true):
+                MPSInfo<S>{n_sites, vacuum, target, basis, orbsym, n_syms, false},
+                n_ext{n_ext}, ci_order{ci_order}{
+        assert(n_ext < n_sites);
+        if (init_fci)
+            set_bond_dimension_fci();
+    }
+    void set_bond_dimension_fci() override {
+        // Same as in the base class: Create left/right fci dims w/o restrictions
+        left_dims_fci[0] = StateInfo<S>(vacuum);
+        for (int i = 0; i < n_sites; i++)
+            left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
+                    left_dims_fci[i], get_basis(i), target);
+        right_dims_fci[n_sites] = StateInfo<S>(vacuum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            right_dims_fci[i] = StateInfo<S>::tensor_product(
+                    get_basis(i), right_dims_fci[i + 1], target);
+        // Now, restrict right_dims_fci
+        for (int i = n_sites-n_ext; i < n_sites; ++i){
+            auto& state_info = right_dims_fci[i];
+            for(int q = 0; q < state_info.n; ++q){
+                if(state_info.quanta[q].n() > ci_order){
+                    state_info.n_states[q] = 0;
+                }
+            }
+        }
+        //vv same as in base class: Take intersection of left/right fci dims
+        for (int i = 0; i <= n_sites; i++)
+            StateInfo<S>::filter(left_dims_fci[i], right_dims_fci[i], target);
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i].collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i].collect();
+    }
+};
+
 // Adding tensors for ancilla sites to a MPS
 // n_sites = 2 * n_physical_sites
 template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
