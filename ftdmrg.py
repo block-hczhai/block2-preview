@@ -18,8 +18,8 @@ from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
 from block2 import SU2, SZ
 
 # Set spin-adapted or non-spin-adapted here
-SpinLabel = SU2
-# SpinLabel = SZ
+# SpinLabel = SU2
+SpinLabel = SZ
 
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, AncillaMPSInfo, MPS
@@ -40,9 +40,8 @@ class FTDMRG:
     Finite-temperature DMRG for molecules.
     """
 
-    def __init__(self, su2=True, scratch='./nodex', memory=1 * 1E9, omp_threads=2, verbose=2):
+    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=2, verbose=2):
 
-        assert su2
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
@@ -404,13 +403,13 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 1000
+    bond_dim = 400
     beta = 2.0
     beta_step = 0.2
     mu = -1.0
     bond_dims = [bond_dim]
     n_threads = 8
-    hf_type = "RHF"
+    hf_type = "UHF"
     pg_reorder = True
     scratch = '/central/scratch/hczhai/hchain'
     scratch = './nodex'
@@ -428,7 +427,7 @@ if __name__ == "__main__":
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],
-                basis='sto6g', verbose=0, symmetry='d2h')
+                basis='sto6g', verbose=0, symmetry='c1')
     pg = mol.symmetry.lower()
 
     # Reorder
@@ -527,5 +526,5 @@ if __name__ == "__main__":
 
     ft.imaginary_time_evolution(1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-    ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
+    ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
     print(ft.get_one_npc(ridx))

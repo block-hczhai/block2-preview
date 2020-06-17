@@ -510,7 +510,7 @@ inline const shared_ptr<OpExpr<S>> operator+=(shared_ptr<OpExpr<S>> &a,
     return a = a + b;
 }
 
-// An symbolic expression multiply a scalar
+// A symbolic expression multiply a scalar
 template <typename S>
 inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
                                              double d) {
@@ -531,7 +531,7 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
     assert(false);
 }
 
-// A scalar multiply an symbolic expression
+// A scalar multiply a symbolic expression
 template <typename S>
 inline const shared_ptr<OpExpr<S>> operator*(double d,
                                              const shared_ptr<OpExpr<S>> &x) {

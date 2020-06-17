@@ -205,7 +205,8 @@ template <typename S> struct EffectiveHamiltonian {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<double, int, size_t, double> eigs(bool iprint = false, double conv_thrd = 5E-6) {
+    tuple<double, int, size_t, double> eigs(bool iprint = false,
+                                            double conv_thrd = 5E-6) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -216,8 +217,10 @@ template <typename S> struct EffectiveHamiltonian {
         t.get_time();
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
-                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint, conv_thrd)
-                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint, conv_thrd);
+                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint,
+                                            conv_thrd)
+                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint,
+                                            conv_thrd);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, nflop, t.get_time());
@@ -435,8 +438,10 @@ template <typename S> struct MovingEnvironment {
                 exprs, mpo->left_operator_names[i - 1], sl);
         Partition<S>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
-            mpo->site_op_infos[bra->info->orbsym[i - 1]], left_op_infos_notrunc,
-            mpo->tf->opf->cg);
+            mpo->site_op_infos[bra->info->orbsym.size() == 0
+                                   ? i - 1
+                                   : bra->info->orbsym[i - 1]],
+            left_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_left = Partition<S>::build_left(
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc);
@@ -488,7 +493,9 @@ template <typename S> struct MovingEnvironment {
         Partition<S>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos,
-            mpo->site_op_infos[bra->info->orbsym[i + dot]],
+            mpo->site_op_infos[bra->info->orbsym.size() == 0
+                                   ? i + dot
+                                   : bra->info->orbsym[i + dot]],
             right_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_right = Partition<S>::build_right(
@@ -535,8 +542,6 @@ template <typename S> struct MovingEnvironment {
         return ss.str();
     }
     // Generate contracted environment blocks for all center sites
-    // To activate dynamic environment generation, init_left and init_right must
-    // be false
     virtual void init_environments(bool iprint = false) {
         this->iprint = iprint;
         envs.clear();
@@ -774,8 +779,10 @@ template <typename S> struct MovingEnvironment {
                 Partition<S>::init_left_op_infos_notrunc(
                     iL, bra->info, ket->info, lsl, lsubsl,
                     envs[iL]->left_op_infos,
-                    mpo->site_op_infos[bra->info->orbsym[iL]], left_op_infos,
-                    mpo->tf->opf->cg);
+                    mpo->site_op_infos[bra->info->orbsym.size() == 0
+                                           ? iL
+                                           : bra->info->orbsym[iL]],
+                    left_op_infos, mpo->tf->opf->cg);
                 // left contract
                 frame->activate(0);
                 new_left = Partition<S>::build_left(lmats, left_op_infos);
@@ -823,8 +830,10 @@ template <typename S> struct MovingEnvironment {
                 Partition<S>::init_right_op_infos_notrunc(
                     iR, bra->info, ket->info, rsl, rsubsl,
                     envs[iR - 1]->right_op_infos,
-                    mpo->site_op_infos[bra->info->orbsym[iR]], right_op_infos,
-                    mpo->tf->opf->cg);
+                    mpo->site_op_infos[bra->info->orbsym.size() == 0
+                                           ? iR
+                                           : bra->info->orbsym[iR]],
+                    right_op_infos, mpo->tf->opf->cg);
                 // right contract
                 frame->activate(0);
                 new_right = Partition<S>::build_right(rmats, right_op_infos);
