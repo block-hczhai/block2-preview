@@ -188,6 +188,7 @@ int main(int argc, char *argv[]) {
 
     vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
+    vector<double> davidson_conv_thrds = {5E-6};
 
     if (params.count("bond_dims") != 0) {
         vector<string> xbdims =
@@ -202,6 +203,16 @@ int main(int argc, char *argv[]) {
         noises.clear();
         for (auto x : xnoises)
             noises.push_back(Parsing::to_double(x));
+    }
+
+    if (params.count("davidson_conv_thrds") != 0) {
+        davidson_conv_thrds.clear();
+        if (params.at("davidson_conv_thrds") != "auto") {
+            vector<string> xdavidson_conv_thrds =
+                Parsing::split(params.at("davidson_conv_thrds"), " ", true);
+            for (auto x : xdavidson_conv_thrds)
+                davidson_conv_thrds.push_back(Parsing::to_double(x));
+        }
     }
 
     hamil.opf->seq->mode = SeqTypes::Simple;
@@ -318,6 +329,7 @@ int main(int argc, char *argv[]) {
         tol = Parsing::to_double(params.at("tol"));
 
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    dmrg->davidson_conv_thrds = davidson_conv_thrds;
     dmrg->iprint = iprint;
 
     if (params.count("noise_type") != 0) {
@@ -343,10 +355,6 @@ int main(int argc, char *argv[]) {
             abort();
         }
     }
-
-    if (params.count("davidson_conv_thrd") != 0)
-        dmrg->davidson_conv_thrd =
-            Parsing::to_double(params.at("davidson_conv_thrd"));
 
     if (params.count("cutoff") != 0)
         dmrg->cutoff = Parsing::to_double(params.at("cutoff"));

@@ -45,11 +45,12 @@ template <typename S> struct DMRG {
     vector<uint16_t> bond_dims;
     vector<double> noises;
     vector<double> energies;
+    vector<double> davidson_conv_thrds;
     bool forward;
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
-    double cutoff = 1E-14, davidson_conv_thrd = 5E-6;
+    double cutoff = 1E-14;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -73,7 +74,7 @@ template <typename S> struct DMRG {
         }
     };
     Iteration update_two_dot(int i, bool forward, uint16_t bond_dim,
-                             double noise) {
+                             double noise, double davidson_conv_thrd) {
         frame->activate(0);
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr)
@@ -133,14 +134,17 @@ template <typename S> struct DMRG {
         return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
                          get<2>(pdi), get<3>(pdi));
     }
-    Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise) {
+    Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise,
+                       double davidson_conv_thrd) {
         me->move_to(i);
         if (me->dot == 2)
-            return update_two_dot(i, forward, bond_dim, noise);
+            return update_two_dot(i, forward, bond_dim, noise,
+                                  davidson_conv_thrd);
         else
             assert(false);
     }
-    double sweep(bool forward, uint16_t bond_dim, double noise) {
+    double sweep(bool forward, uint16_t bond_dim, double noise,
+                 double davidson_conv_thrd) {
         me->prepare();
         vector<double> energies;
         vector<int> sweep_range;
@@ -165,7 +169,8 @@ template <typename S> struct DMRG {
                 cout.flush();
             }
             t.get_time();
-            Iteration r = blocking(i, forward, bond_dim, noise);
+            Iteration r =
+                blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -178,6 +183,11 @@ template <typename S> struct DMRG {
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
             noises.resize(n_sweeps, noises.back());
+        if (davidson_conv_thrds.size() < n_sweeps)
+            for (size_t i = davidson_conv_thrds.size(); i < noises.size(); i++)
+                davidson_conv_thrds.push_back(
+                    (noises[i] == 0 ? (tol == 0 ? 1E-9 : tol) : noises[i]) *
+                    0.1);
         Timer start, current;
         start.get_time();
         energies.clear();
@@ -188,8 +198,11 @@ template <typename S> struct DMRG {
                      << (forward ? "forward" : "backward")
                      << " | Bond dimension = " << setw(4) << bond_dims[iw]
                      << " | Noise = " << scientific << setw(9)
-                     << setprecision(2) << noises[iw] << endl;
-            double energy = sweep(forward, bond_dims[iw], noises[iw]);
+                     << setprecision(2) << noises[iw]
+                     << " | Dav threshold = " << scientific << setw(9)
+                     << setprecision(2) << davidson_conv_thrds[iw] << endl;
+            double energy = sweep(forward, bond_dims[iw], noises[iw],
+                                  davidson_conv_thrds[iw]);
             energies.push_back(energy);
             bool converged = energies.size() >= 2 && tol > 0 &&
                              abs(energies[energies.size() - 1] -

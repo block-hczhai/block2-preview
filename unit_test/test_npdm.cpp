@@ -64,7 +64,6 @@ TEST_F(TestNPDM, TestSU2) {
     // cout << pmpo->get_blocking_formulas() << endl;
     // abort();
 
-
     // 1NPC MPO construction
     cout << "1NPC MPO start" << endl;
     shared_ptr<MPO<SU2>> nmpo = make_shared<NPC1MPOQC<SU2>>(hamil);
@@ -114,7 +113,7 @@ TEST_F(TestNPDM, TestSU2) {
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-8, 0};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->iprint = 2;
-    dmrg->davidson_conv_thrd = 1E-8;
+    dmrg->davidson_conv_thrds = vector<double>{1E-8};
     dmrg->solve(30, true);
 
     // 1PDM ME
@@ -149,8 +148,7 @@ TEST_F(TestNPDM, TestSU2) {
     cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
     // 1NPC
-    expect =
-        make_shared<Expect<SU2>>(nme, bond_dim, bond_dim);
+    expect = make_shared<Expect<SU2>>(nme, bond_dim, bond_dim);
     expect->solve(true, dmrg->forward);
     expect->solve(true, !dmrg->forward);
 
@@ -183,7 +181,7 @@ TEST_F(TestNPDM, TestSZ) {
               PointGroup::swap_d2h);
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
-               PointGroup::swap_d2h(fcidump->isym()));
+              PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, target, norb, orbsym, fcidump);
 
@@ -200,8 +198,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true);
+    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1PDM MPO construction
@@ -211,12 +208,10 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo =
-        make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<Rule<SZ>>(), true);
+    pmpo = make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<Rule<SZ>>(), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
     // cout << pmpo->get_blocking_formulas() << endl;
     // abort();
-
 
     // 1NPC MPO construction
     cout << "1NPC MPO start" << endl;
@@ -225,8 +220,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 1NPC MPO simplification
     cout << "1NPC MPO simplification start" << endl;
-    nmpo =
-        make_shared<SimplifiedMPO<SZ>>(nmpo, make_shared<Rule<SZ>>(), true);
+    nmpo = make_shared<SimplifiedMPO<SZ>>(nmpo, make_shared<Rule<SZ>>(), true);
     cout << "1NPC MPO simplification end .. T = " << t.get_time() << endl;
     // cout << nmpo->get_blocking_formulas() << endl;
     // abort();
@@ -267,7 +261,7 @@ TEST_F(TestNPDM, TestSZ) {
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-8, 0};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;
-    dmrg->davidson_conv_thrd = 1E-8;
+    dmrg->davidson_conv_thrds = vector<double>{1E-8};
     dmrg->solve(30, true);
 
     // 1PDM ME
@@ -302,8 +296,7 @@ TEST_F(TestNPDM, TestSZ) {
     cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
     // 1NPC
-    expect =
-        make_shared<Expect<SZ>>(nme, bond_dim, bond_dim);
+    expect = make_shared<Expect<SZ>>(nme, bond_dim, bond_dim);
     expect->solve(true, dmrg->forward);
     expect->solve(true, !dmrg->forward);
 

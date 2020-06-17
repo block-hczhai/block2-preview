@@ -153,7 +153,7 @@ TEST_F(TestDMRG, Test) {
                               500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
                              1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    noises = vector<double>{1E-5};
+    // noises = vector<double>{1E-5};
     // vector<uint16_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
