@@ -499,6 +499,18 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                 n_active_sites, n_active_electrons);
         }));
 
+    py::class_<MRCIMPSInfo<S>, shared_ptr<MRCIMPSInfo<S>>, MPSInfo<S>>(
+            m, "MRCIMPSInfo")
+            .def_readonly("n_ext", &MRCIMPSInfo<S>::n_ext, "Number of external orbitals")
+            .def_readonly("ci_order", &MRCIMPSInfo<S>::ci_order,
+                    "Up to how many electrons are allowed in ext. orbitals: 2 gives MR-CISD")
+            .def(py::init([](int n_sites, int n_ext, int ci_order, S vacuum, S target,
+                             Array<StateInfo<S>> &basis,
+                             const vector<uint8_t> &orbsym, uint8_t n_syms){
+                return make_shared<MRCIMPSInfo<S>>(n_sites, n_ext, ci_order, vacuum, target,
+                                                    basis.data, orbsym, n_syms);
+            }));
+
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
