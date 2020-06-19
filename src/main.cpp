@@ -236,11 +236,11 @@ int main(int argc, char *argv[]) {
         // active sites, active electrons
         vector<string> xcasci = Parsing::split(params.at("casci"), " ", true);
         mps_info = make_shared<CASCIMPSInfo<SU2>>(
-            norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms,
+            norb, vacuum, target, hamil.basis, hamil.orb_sym,
             Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
     } else
         mps_info = make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
-                                             hamil.orb_sym, hamil.n_syms);
+                                             hamil.orb_sym);
     double bias = 1.0;
 
     if (params.count("occ_bias") != 0)

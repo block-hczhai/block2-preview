@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <map>
 #include <type_traits>
 #include <vector>
@@ -235,7 +236,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
     }
     // Remove unmatched quantum numbers in left or right blocks
     // Using the target quantum number as the constraint
-    static void filter(StateInfo &a, StateInfo &b, S target) {
+    // b is unchanged
+    static void filter(StateInfo &a, const StateInfo &b, S target) {
         a.n_states_total = 0;
         for (int i = 0; i < a.n; i++) {
             S qb = target - a.quanta[i];
@@ -247,16 +249,22 @@ struct StateInfo<S, typename enable_if<integral_constant<
             a.n_states[i] = (uint16_t)min(x, (int)a.n_states[i]);
             a.n_states_total += a.n_states[i];
         }
-        b.n_states_total = 0;
-        for (int i = 0; i < b.n; i++) {
-            S qa = target - b.quanta[i];
-            int x = 0;
-            for (int k = 0; k < qa.count(); k++) {
-                int idx = a.find_state(qa[k]);
-                x += idx == -1 ? 0 : a.n_states[idx];
+    }
+    static void multi_target_filter(StateInfo &a, const StateInfo &b, const vector<S> &targets) {
+        a.n_states_total = 0;
+        for (int i = 0; i < a.n; i++) {
+            set<int> idxs;
+            for (S target : targets) {
+                S qb = target - a.quanta[i];
+                for (int k = 0, idx; k < qb.count(); k++)
+                    if ((idx = b.find_state(qb[k])) != -1)
+                        idxs.insert(idx);
             }
-            b.n_states[i] = (uint16_t)min(x, (int)b.n_states[i]);
-            b.n_states_total += b.n_states[i];
+            int x = 0;
+            for (auto idx : idxs)
+                x += b.n_states[idx];
+            a.n_states[i] = (uint16_t)min(x, (int)a.n_states[i]);
+            a.n_states_total += a.n_states[i];
         }
     }
     friend ostream &operator<<(ostream &os, const StateInfo<S> &c) {

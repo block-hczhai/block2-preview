@@ -60,7 +60,7 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {

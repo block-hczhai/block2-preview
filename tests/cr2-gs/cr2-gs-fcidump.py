@@ -40,7 +40,7 @@ mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
 bond_dim = 250
-mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym)
 mps_info.tag = "KET"
 mps_info.set_bond_dimension_using_occ(bond_dim, occs)
 mps = MPS(n_sites, 5, 2)

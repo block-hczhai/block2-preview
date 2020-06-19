@@ -69,7 +69,7 @@ class FTDMRG:
         self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
-    def init_hamiltonian(self, pg, n_sites, twos, isym, orb_sym, e_core, h1e, g2e, tol=1E-13):
+    def init_hamiltonian(self, pg, n_sites, twos, isym, orb_sym, e_core, h1e, g2e, tol=1E-13, save_fcidump=None):
         assert self.fcidump is None
         self.fcidump = FCIDUMP()
         n_elec = n_sites * 2
@@ -117,6 +117,9 @@ class FTDMRG:
             vacuum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
         self.hamil.opf.seq.mode = SeqTypes.Simple
 
+        if save_fcidump is not None:
+            self.fcidump.orb_sym = VectorUInt8(orb_sym)
+            self.fcidump.write(save_fcidump)
         assert pg in ["d2h", "c1"]
 
     def generate_initial_mps(self, bond_dim):
@@ -128,7 +131,7 @@ class FTDMRG:
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                           self.hamil.target, self.hamil.basis,
-                                          self.hamil.orb_sym, self.hamil.n_syms)
+                                          self.hamil.orb_sym)
         mps_info_thermal.set_thermal_limit()
         mps_info_thermal.tag = "INIT"
         mps_info_thermal.save_mutable()
@@ -169,7 +172,7 @@ class FTDMRG:
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
-                                  self.hamil.orb_sym, self.hamil.n_syms)
+                                  self.hamil.orb_sym)
         mps_info.tag = "INIT" if not cont else "FINAL"
         mps_info.load_mutable()
 
@@ -220,12 +223,12 @@ class FTDMRG:
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
-                                  self.hamil.orb_sym, self.hamil.n_syms)
+                                  self.hamil.orb_sym)
         mps_info_thermal.tag = "INIT"
 
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.hamil.target,
-            self.hamil.basis, self.hamil.orb_sym, self.hamil.n_syms)
+            self.hamil.basis, self.hamil.orb_sym)
         mps_info.set_bond_dimension(bond_dim)
         mps_info.tag = "INIT2"
         mps_info.save_mutable()
@@ -280,6 +283,13 @@ class FTDMRG:
             print('>>> COMPLETE decompression mps | Time = %.2f <<<' % (time.perf_counter() - t))
 
     # particle number correlation
+    # return value (SU2):
+    #     npc[0, :, :] -> <(N_{i,alpha}+N_{i,beta}) (N_{j,alpha}+N_{j,beta})>
+    # return value (SZ):
+    #     npc[0, :, :] -> <N_{i,alpha} N_{j,alpha}>
+    #     npc[1, :, :] -> <N_{i,alpha}  N_{j,beta}>
+    #     npc[2, :, :] -> < N_{i,beta} N_{j,alpha}>
+    #     npc[3, :, :] -> < N_{i,beta}  N_{j,beta}>
     def get_one_npc(self, ridx=None):
         if self.verbose >= 2:
             print('>>> START one-npc <<<')
@@ -290,7 +300,7 @@ class FTDMRG:
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
-                                  self.hamil.orb_sym, self.hamil.n_syms)
+                                  self.hamil.orb_sym)
         mps_info.tag = "FINAL"
 
         # Ancilla MPS (final)
@@ -321,6 +331,7 @@ class FTDMRG:
         if ridx is not None:
             dm[:, :] = dm[ridx, :][:, ridx]
 
+        mps.save_data()
         dmr.deallocate()
         pmpo.deallocate()
         mps_info.deallocate()
@@ -330,14 +341,15 @@ class FTDMRG:
                   (time.perf_counter() - t))
 
         if SpinLabel == SU2:
-            # SU2 cannot generate spin correlation, the output will be zero
-            # but spin correlation is not zero even in SU2 case
-            return np.concatenate([dm[None, :, :], np.zeros(dm.shape)[None, :, :]], axis=0)
+            return dm[None, :, :]
         else:
-            dm_plus = dm[:, :, 0, 0] + dm[:, :, 0, 1] + dm[:, :, 1, 0] + dm[:, :, 1, 1]
-            dm_minus = dm[:, :, 0, 0] - dm[:, :, 0, 1] - dm[:, :, 1, 0] + dm[:, :, 1, 1]
-            return np.concatenate([dm_plus[None, :, :], dm_minus[None, :, :]], axis=0)
+            return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 0, 1],
+                dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
 
+    # one-particle density matrix
+    # return value:
+    #     pdm[0, :, :] -> <AD_{i,alpha} A_{j,alpha}>
+    #     pdm[1, :, :] -> < AD_{i,beta}  A_{j,beta}>
     def get_one_pdm(self, ridx=None):
         if self.verbose >= 2:
             print('>>> START one-pdm <<<')
@@ -348,7 +360,7 @@ class FTDMRG:
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                   self.hamil.target, self.hamil.basis,
-                                  self.hamil.orb_sym, self.hamil.n_syms)
+                                  self.hamil.orb_sym)
         mps_info.tag = "FINAL"
 
         # Ancilla MPS (final)
@@ -379,6 +391,7 @@ class FTDMRG:
         if ridx is not None:
             dm[:, :] = dm[ridx, :][:, ridx]
 
+        mps.save_data()
         dmr.deallocate()
         pmpo.deallocate()
         mps_info.deallocate()
@@ -403,13 +416,14 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 400
+    bond_dim = 1000
     beta = 2.0
     beta_step = 0.2
     mu = -1.0
     bond_dims = [bond_dim]
     n_threads = 8
     hf_type = "UHF"
+    mpg = 'd2h'
     pg_reorder = True
     scratch = '/central/scratch/hczhai/hchain'
     scratch = './nodex'
@@ -427,7 +441,7 @@ if __name__ == "__main__":
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],
-                basis='sto6g', verbose=0, symmetry='c1')
+                basis='sto6g', verbose=0, symmetry=mpg)
     pg = mol.symmetry.lower()
 
     # Reorder
@@ -460,6 +474,7 @@ if __name__ == "__main__":
             mo_coeff = mo_coeff[:, idx]
             ridx = np.argsort(idx)
         else:
+            orb_sym = orb_sym_a
             ridx = np.array(list(range(n_mo)), dtype=int)
 
         h1e = mo_coeff.T @ m.get_hcore() @ mo_coeff
@@ -494,7 +509,8 @@ if __name__ == "__main__":
             orb_sym = orb_sym_a
             ridx = np.argsort(idx_a)
         else:
-            ridx = np.array(list(range(n_mo), dtype=int))
+            orb_sym = orb_sym_a
+            ridx = np.array(list(range(n_mo)), dtype=int)
 
         h1ea = mo_coeff_a.T @ m.get_hcore() @ mo_coeff_a
         h1eb = mo_coeff_b.T @ m.get_hcore() @ mo_coeff_b
@@ -510,6 +526,11 @@ if __name__ == "__main__":
     ft.init_hamiltonian(pg, n_sites=n_mo, twos=0, isym=1,
                         orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     ft.generate_initial_mps(bond_dim)
+    # when reorder == False, for some bad ordering
+    # it is hard for sweep algorithm to recover missing quantum numbers
+    # then 1pdm will have large error
+    # decompression can alleviate this problem
+    ft.decompression(bond_dim)
     n_steps = int(round(beta / beta_step) + 0.1)
 
     # sub-division first-step (log)
@@ -527,4 +548,5 @@ if __name__ == "__main__":
     ft.imaginary_time_evolution(1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
     ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
+    print(ft.get_one_pdm(ridx))
     print(ft.get_one_npc(ridx))

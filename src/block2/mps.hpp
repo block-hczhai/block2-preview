@@ -67,15 +67,14 @@ template <typename S> struct MPSInfo {
     // if orbsym is empty, the basis index is orbital index (general case)
     // otherwise, the basis index is pg symmetry index
     vector<uint8_t> orbsym;
-    uint8_t n_syms;
     uint16_t bond_dim;
     StateInfo<S> *basis, *left_dims_fci, *right_dims_fci;
     StateInfo<S> *left_dims, *right_dims;
     string tag = "KET";
     MPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-            const vector<uint8_t> orbsym, uint8_t n_syms, bool init_fci = true)
+            const vector<uint8_t> orbsym, bool init_fci = true)
         : n_sites(n_sites), vacuum(vacuum), target(target), orbsym(orbsym),
-          n_syms(n_syms), basis(basis), bond_dim(0) {
+          basis(basis), bond_dim(0) {
         left_dims_fci = new StateInfo<S>[n_sites + 1];
         right_dims_fci = new StateInfo<S>[n_sites + 1];
         left_dims = new StateInfo<S>[n_sites + 1];
@@ -92,6 +91,9 @@ template <typename S> struct MPSInfo {
     }
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
+    virtual vector<S> get_complementary(S q) const {
+        return vector<S>{target - q};
+    }
     virtual void set_bond_dimension_fci() {
         left_dims_fci[0] = StateInfo<S>(vacuum);
         for (int i = 0; i < n_sites; i++)
@@ -101,8 +103,10 @@ template <typename S> struct MPSInfo {
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] = StateInfo<S>::tensor_product(
                 get_basis(i), right_dims_fci[i + 1], target);
-        for (int i = 0; i <= n_sites; i++)
+        for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::filter(left_dims_fci[i], right_dims_fci[i], target);
+            StateInfo<S>::filter(right_dims_fci[i], left_dims_fci[i], target);
+        }
         for (int i = 0; i <= n_sites; i++)
             left_dims_fci[i].collect();
         for (int i = n_sites; i >= 0; i--)
@@ -256,20 +260,22 @@ template <typename S> struct MPSInfo {
                 if (left_probs[i].probs[j] == 0)
                     continue;
                 double x = 0;
-                S rks = target - left_probs[i].quanta[j];
-                for (int k = 0, ik; k < rks.count(); k++)
-                    if ((ik = right_probs[i].find_state(rks[k])) != -1)
-                        x += rprobs[ik];
+                vector<S> rkss = get_complementary(left_probs[i].quanta[j]);
+                for (auto rks : rkss)
+                    for (int k = 0, ik; k < rks.count(); k++)
+                        if ((ik = right_probs[i].find_state(rks[k])) != -1)
+                            x += rprobs[ik];
                 left_probs[i].probs[j] *= x;
             }
             for (int j = 0; i < n_sites && j < right_probs[i].n; j++) {
                 if (right_probs[i].probs[j] == 0)
                     continue;
                 double x = 0;
-                S lks = target - right_probs[i].quanta[j];
-                for (int k = 0, ik; k < lks.count(); k++)
-                    if ((ik = left_probs[i].find_state(lks[k])) != -1)
-                        x += lprobs[ik];
+                vector<S> lkss = get_complementary(right_probs[i].quanta[j]);
+                for (auto lks : lkss)
+                    for (int k = 0, ik; k < lks.count(); k++)
+                        if ((ik = left_probs[i].find_state(lks[k])) != -1)
+                            x += lprobs[ik];
                 right_probs[i].probs[j] *= x;
             }
             dalloc->deallocate(rprobs, right_probs[i].n);
@@ -400,7 +406,7 @@ template <typename S> struct MPSInfo {
             }
         for (int i = -1; i < n_sites - 1; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                left_dims[i + 1], get_basis(i + 1), target);
+                left_dims[i + 1], get_basis(i + 1), left_dims_fci[i + 2]);
             int new_total = 0;
             for (int k = 0; k < left_dims[i + 2].n; k++) {
                 int tk = t.find_state(left_dims[i + 2].quanta[k]);
@@ -415,7 +421,7 @@ template <typename S> struct MPSInfo {
         }
         for (int i = n_sites; i > 0; i--) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
-                get_basis(i - 1), right_dims[i], target);
+                get_basis(i - 1), right_dims[i], right_dims_fci[i - 1]);
             int new_total = 0;
             for (int k = 0; k < right_dims[i - 1].n; k++) {
                 int tk = t.find_state(right_dims[i - 1].quanta[k]);
@@ -497,10 +503,8 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
     vector<uint8_t> iocc;
     uint16_t n_local = 0; // number of nearset sites using FCI quantum numbers
     DynamicMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-                   const vector<uint8_t> orbsym, uint8_t n_syms,
-                   const vector<uint8_t> &iocc)
-        : iocc(iocc), MPSInfo<S>(n_sites, vacuum, target, basis, orbsym,
-                                 n_syms) {}
+                   const vector<uint8_t> orbsym, const vector<uint8_t> &iocc)
+        : iocc(iocc), MPSInfo<S>(n_sites, vacuum, target, basis, orbsym) {}
     WarmUpTypes get_warm_up_type() const override { return WarmUpTypes::Local; }
     void set_bond_dimension(uint16_t m) override {
         this->bond_dim = m;
@@ -582,18 +586,18 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         return casci_mask;
     }
     CASCIMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-                 const vector<uint8_t> orbsym, uint8_t n_syms,
+                 const vector<uint8_t> orbsym,
                  const vector<ActiveTypes> &casci_mask)
         : casci_mask(casci_mask), MPSInfo<S>(n_sites, vacuum, target, basis,
-                                             orbsym, n_syms, false) {
+                                             orbsym, false) {
         set_bond_dimension_fci();
     }
     CASCIMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-                 const vector<uint8_t> orbsym, uint8_t n_syms,
-                 int n_active_sites, int n_active_electrons)
+                 const vector<uint8_t> orbsym, int n_active_sites,
+                 int n_active_electrons)
         : casci_mask(active_space(n_sites, target, n_active_sites,
                                   n_active_electrons)),
-          MPSInfo<S>(n_sites, vacuum, target, basis, orbsym, n_syms, false) {
+          MPSInfo<S>(n_sites, vacuum, target, basis, orbsym, false) {
         set_bond_dimension_fci();
     }
     void set_bond_dimension_fci() override {
@@ -651,10 +655,14 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 assert(false);
                 break;
             }
-        for (int i = 0; i <= MPSInfo<S>::n_sites; i++)
+        for (int i = 0; i <= MPSInfo<S>::n_sites; i++) {
             StateInfo<S>::filter(MPSInfo<S>::left_dims_fci[i],
                                  MPSInfo<S>::right_dims_fci[i],
                                  MPSInfo<S>::target);
+            StateInfo<S>::filter(MPSInfo<S>::right_dims_fci[i],
+                                 MPSInfo<S>::left_dims_fci[i],
+                                 MPSInfo<S>::target);
+        }
         empty.reallocate(0);
         frozen.reallocate(0);
         for (int i = 0; i <= MPSInfo<S>::n_sites; i++)
@@ -679,11 +687,11 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::get_basis;
     int n_ext;    //!> Number of external orbitals: CI space
     int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2
-                  //!gives MR-CISD
+                  //! gives MR-CISD
     MRCIMPSInfo(int n_sites, int n_ext, int ci_order, S vacuum, S target,
                 StateInfo<S> *basis, const vector<uint8_t> orbsym,
-                uint8_t n_syms, bool init_fci = true)
-        : MPSInfo<S>{n_sites, vacuum, target, basis, orbsym, n_syms, false},
+                bool init_fci = true)
+        : MPSInfo<S>{n_sites, vacuum, target, basis, orbsym, false},
           n_ext{n_ext}, ci_order{ci_order} {
         assert(n_ext < n_sites);
         if (init_fci)
@@ -710,8 +718,10 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
             }
         }
         // vv same as in base class: Take intersection of left/right fci dims
-        for (int i = 0; i <= n_sites; i++)
+        for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::filter(left_dims_fci[i], right_dims_fci[i], target);
+            StateInfo<S>::filter(right_dims_fci[i], left_dims_fci[i], target);
+        }
         for (int i = 0; i <= n_sites; i++)
             left_dims_fci[i].collect();
         for (int i = n_sites; i >= 0; i--)
@@ -730,11 +740,11 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
         return b;
     }
     AncillaMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-                   const vector<uint8_t> &orbsym, uint8_t n_syms)
+                   const vector<uint8_t> &orbsym)
         : n_physical_sites(n_sites), MPSInfo<S>(n_sites << 1, vacuum, target,
                                                 basis,
-                                                trans_orbsym(orbsym, n_sites),
-                                                n_syms) {}
+                                                trans_orbsym(orbsym, n_sites)) {
+    }
     AncillaTypes get_ancilla_type() const override {
         return AncillaTypes::Ancilla;
     }

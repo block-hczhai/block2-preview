@@ -41,7 +41,7 @@ TEST_F(TestAncilla, Test) {
 
     // Ancilla MPSInfo (thermal)
     shared_ptr<AncillaMPSInfo<Spin>> mps_info_thermal = make_shared<AncillaMPSInfo<Spin>>(
-        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
     mps_info_thermal->save_mutable();
@@ -49,7 +49,7 @@ TEST_F(TestAncilla, Test) {
 
     // Ancilla MPSInfo (initial)
     shared_ptr<AncillaMPSInfo<Spin>> mps_info = make_shared<AncillaMPSInfo<Spin>>(
-        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        n_physical_sites, vacuum, target, hamil.basis, hamil.orb_sym);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "BRA";
     mps_info->save_mutable();

@@ -406,21 +406,23 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("vacuum", &MPSInfo<S>::vacuum)
         .def_readwrite("target", &MPSInfo<S>::target)
         .def_readwrite("orbsym", &MPSInfo<S>::orbsym)
-        .def_readwrite("n_syms", &MPSInfo<S>::n_syms)
         .def_readwrite("bond_dim", &MPSInfo<S>::bond_dim)
         .def_readwrite("tag", &MPSInfo<S>::tag)
         .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms) {
+                         const vector<uint8_t> &orbsym) {
             return make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis.data,
-                                           orbsym, n_syms);
+                                           orbsym);
         }))
         .def_property_readonly("basis",
                                [](MPSInfo<S> *self) {
-                                   Array<StateInfo<S>>(self->basis,
-                                                       self->orbsym.empty()
-                                                           ? self->n_sites
-                                                           : self->n_syms);
+                                   Array<StateInfo<S>>(
+                                       self->basis,
+                                       self->orbsym.empty()
+                                           ? self->n_sites
+                                           : *max_element(self->orbsym.begin(),
+                                                          self->orbsym.end()) +
+                                                 1);
                                })
         .def_property_readonly("left_dims_fci",
                                [](MPSInfo<S> *self) {
@@ -465,13 +467,12 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         m, "DynamicMPSInfo")
         .def_readwrite("iocc", &DynamicMPSInfo<S>::iocc)
         .def_readwrite("n_local", &DynamicMPSInfo<S>::n_local)
-        .def(py::init([](int n_sites, S vacuum, S target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms,
-                         const vector<uint8_t> &iocc) {
-            return make_shared<DynamicMPSInfo<S>>(
-                n_sites, vacuum, target, basis.data, orbsym, n_syms, iocc);
-        }))
+        .def(py::init(
+            [](int n_sites, S vacuum, S target, Array<StateInfo<S>> &basis,
+               const vector<uint8_t> &orbsym, const vector<uint8_t> &iocc) {
+                return make_shared<DynamicMPSInfo<S>>(n_sites, vacuum, target,
+                                                      basis.data, orbsym, iocc);
+            }))
         .def("set_left_bond_dimension_local",
              &DynamicMPSInfo<S>::set_left_bond_dimension_local, py::arg("i"),
              py::arg("match_prev") = false)
@@ -484,41 +485,42 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("casci_mask", &CASCIMPSInfo<S>::casci_mask)
         .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms,
+                         const vector<uint8_t> &orbsym,
                          const vector<ActiveTypes> &casci_mask) {
             return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target,
-                                                basis.data, orbsym, n_syms,
-                                                casci_mask);
+                                                basis.data, orbsym, casci_mask);
         }))
         .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms,
-                         int n_active_sites, int n_active_electrons) {
+                         const vector<uint8_t> &orbsym, int n_active_sites,
+                         int n_active_electrons) {
             return make_shared<CASCIMPSInfo<S>>(
-                n_sites, vacuum, target, basis.data, orbsym, n_syms,
-                n_active_sites, n_active_electrons);
+                n_sites, vacuum, target, basis.data, orbsym, n_active_sites,
+                n_active_electrons);
         }));
 
     py::class_<MRCIMPSInfo<S>, shared_ptr<MRCIMPSInfo<S>>, MPSInfo<S>>(
-            m, "MRCIMPSInfo")
-            .def_readonly("n_ext", &MRCIMPSInfo<S>::n_ext, "Number of external orbitals")
-            .def_readonly("ci_order", &MRCIMPSInfo<S>::ci_order,
-                    "Up to how many electrons are allowed in ext. orbitals: 2 gives MR-CISD")
-            .def(py::init([](int n_sites, int n_ext, int ci_order, S vacuum, S target,
-                             Array<StateInfo<S>> &basis,
-                             const vector<uint8_t> &orbsym, uint8_t n_syms){
-                return make_shared<MRCIMPSInfo<S>>(n_sites, n_ext, ci_order, vacuum, target,
-                                                    basis.data, orbsym, n_syms);
-            }));
+        m, "MRCIMPSInfo")
+        .def_readonly("n_ext", &MRCIMPSInfo<S>::n_ext,
+                      "Number of external orbitals")
+        .def_readonly("ci_order", &MRCIMPSInfo<S>::ci_order,
+                      "Up to how many electrons are allowed in ext. orbitals: "
+                      "2 gives MR-CISD")
+        .def(py::init([](int n_sites, int n_ext, int ci_order, S vacuum,
+                         S target, Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym) {
+            return make_shared<MRCIMPSInfo<S>>(n_sites, n_ext, ci_order, vacuum,
+                                               target, basis.data, orbsym);
+        }));
 
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
         .def(py::init([](int n_sites, S vacuum, S target,
                          Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, uint8_t n_syms) {
+                         const vector<uint8_t> &orbsym) {
             return make_shared<AncillaMPSInfo<S>>(n_sites, vacuum, target,
-                                                  basis.data, orbsym, n_syms);
+                                                  basis.data, orbsym);
         }))
         .def_static("trans_orbsym", &AncillaMPSInfo<S>::trans_orbsym)
         .def("set_thermal_limit", &AncillaMPSInfo<S>::set_thermal_limit);

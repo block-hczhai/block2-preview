@@ -60,7 +60,7 @@ TEST_F(TestCompress, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym);
     mps_info->tag = "KET";
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
@@ -123,7 +123,7 @@ TEST_F(TestCompress, Test) {
     dmrg->solve(10, true);
 
     shared_ptr<MPSInfo<SU2>> bra_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym, hamil.n_syms);
+        norb, vacuum, target, hamil.basis, hamil.orb_sym);
     bra_info->tag = "BRA";
     bra_info->set_bond_dimension(bond_dim / 2);
     shared_ptr<MPS<SU2>> bra;
