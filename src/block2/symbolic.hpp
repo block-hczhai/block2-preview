@@ -33,7 +33,7 @@ enum struct SymTypes : uint8_t { RVec, CVec, Mat };
 
 // General symbolic tensor
 template <typename S> struct Symbolic {
-    int m, n;
+    int m, n; //!< rows, columns
     vector<shared_ptr<OpExpr<S>>> data;
     Symbolic(int m, int n) : m(m), n(n), data(){};
     virtual const SymTypes get_type() const = 0;
@@ -49,9 +49,12 @@ template <typename S> struct SymbolicRowVector : Symbolic<S> {
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
     const SymTypes get_type() const override { return SymTypes::RVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) { return Symbolic<S>::data[i]; }
+    shared_ptr<OpExpr<S>> &operator[](int i) { assert(i < this->data.size()); return Symbolic<S>::data[i]; }
+    /** Access via {0,i} (treated as matrix) */
     shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) override {
+        assert(ix.size() == 2 and "access via {0,i}");
         auto i = ix.begin();
+        assert(*i == 0);
         return (*this)[*(++i)];
     }
     shared_ptr<Symbolic<S>> copy() const override {
@@ -69,8 +72,11 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
     const SymTypes get_type() const override { return SymTypes::CVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) { return Symbolic<S>::data[i]; }
+    shared_ptr<OpExpr<S>> &operator[](int i) { assert(i < this->data.size()); return Symbolic<S>::data[i]; }
+    /** Access via {i,0} (treated as matrix) */
     shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) override {
+        assert(ix.size() == 2 and "access via {i,0}");
+        assert(*(ix.begin()+1)==0);
         return (*this)[*ix.begin()];
     }
     shared_ptr<Symbolic<S>> copy() const override {
@@ -87,6 +93,8 @@ template <typename S> struct SymbolicMatrix : Symbolic<S> {
     SymbolicMatrix(int m, int n) : Symbolic<S>(m, n) {}
     const SymTypes get_type() const override { return SymTypes::Mat; }
     void add(int i, int j, const shared_ptr<OpExpr<S>> elem) {
+        assert(i < this->m);
+        assert(j < this->n);
         indices.push_back(make_pair(i, j));
         Symbolic<S>::data.push_back(elem);
     }
