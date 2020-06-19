@@ -22,6 +22,7 @@
 
 #include "expr.hpp"
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <vector>
 
@@ -49,10 +50,13 @@ template <typename S> struct SymbolicRowVector : Symbolic<S> {
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
     const SymTypes get_type() const override { return SymTypes::RVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) { assert(i < this->data.size()); return Symbolic<S>::data[i]; }
+    shared_ptr<OpExpr<S>> &operator[](int i) {
+        assert(i < this->data.size());
+        return Symbolic<S>::data[i];
+    }
     /** Access via {0,i} (treated as matrix) */
     shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) override {
-        assert(ix.size() == 2 and "access via {0,i}");
+        assert(ix.size() == 2 && "access via {0,i}");
         auto i = ix.begin();
         assert(*i == 0);
         return (*this)[*(++i)];
@@ -72,11 +76,14 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
     const SymTypes get_type() const override { return SymTypes::CVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) { assert(i < this->data.size()); return Symbolic<S>::data[i]; }
+    shared_ptr<OpExpr<S>> &operator[](int i) {
+        assert(i < this->data.size());
+        return Symbolic<S>::data[i];
+    }
     /** Access via {i,0} (treated as matrix) */
     shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) override {
-        assert(ix.size() == 2 and "access via {i,0}");
-        assert(*(ix.begin()+1)==0);
+        assert(ix.size() == 2 && "access via {i,0}");
+        assert(*(ix.begin() + 1) == 0);
         return (*this)[*ix.begin()];
     }
     shared_ptr<Symbolic<S>> copy() const override {
@@ -89,7 +96,7 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
 
 // (Element-wise) sparse matrix of symbols
 template <typename S> struct SymbolicMatrix : Symbolic<S> {
-    vector<pair<int, int>> indices;
+    vector<pair<int, int>> indices; // there can be repeated pair of indices
     SymbolicMatrix(int m, int n) : Symbolic<S>(m, n) {}
     const SymTypes get_type() const override { return SymTypes::Mat; }
     void add(int i, int j, const shared_ptr<OpExpr<S>> elem) {
