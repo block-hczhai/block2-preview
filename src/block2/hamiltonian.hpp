@@ -37,7 +37,7 @@ namespace block2 {
 // Hamiltonian includes sparse matrix info and matrix representations
 // of site operators
 template <typename S> struct Hamiltonian {
-    S vacuum, target;
+    S vacuum;
     // Site basis
     StateInfo<S> *basis;
     // Sparse matrix info for site operators
@@ -50,8 +50,8 @@ template <typename S> struct Hamiltonian {
     shared_ptr<OperatorFunctions<S>> opf;
     // Point group symmetry of orbitals
     vector<uint8_t> orb_sym;
-    Hamiltonian(S vacuum, S target, int n_sites, const vector<uint8_t> &orb_sym)
-        : vacuum(vacuum), target(target), n_sites((uint8_t)n_sites),
+    Hamiltonian(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
+        : vacuum(vacuum), n_sites((uint8_t)n_sites),
           orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
         n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;

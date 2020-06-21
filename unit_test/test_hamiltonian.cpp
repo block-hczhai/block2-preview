@@ -35,7 +35,7 @@ TEST_F(TestHamiltonian, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     // cout << ialloc->used << " " << dalloc->used << endl;
-    Hamiltonian hamil(vacuum, target, norb, su2, fcidump, orbsym);
+    Hamiltonian hamil(vacuum, norb, su2, fcidump, orbsym);
     // for (auto &g : hamil.site_norm_ops[0]) {
     //     cout << "OP=" << g.first << endl;
     //     cout << *(g.second->info);

@@ -35,7 +35,7 @@ TEST_F(TestDMRG, Test) {
     SZ target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SZ> hamil(vacuum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
     // abort();
 

@@ -4,10 +4,10 @@
 
 using namespace block2;
 
-class TestDMRG : public ::testing::Test {
+class TestSA : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 26;
+    size_t dsize = 1L << 30;
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = new DataFrame(isize, dsize, "nodex");
@@ -19,27 +19,28 @@ class TestDMRG : public ::testing::Test {
     }
 };
 
-TEST_F(TestDMRG, Test) {
+// Multi-target state-averaged DMRG
+TEST_F(TestSA, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
 
-    string occ_filename = "data/CR2.SVP.OCC";
+    // string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
-    occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // occs = read_occ(occ_filename);
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
     // occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
     // pg = PGTypes::C2V;
-    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
 
-    vector<uint8_t> ioccs;
-    for (auto x : occs)
-        ioccs.push_back(uint8_t(x));
+    // vector<uint8_t> ioccs;
+    // for (auto x : occs)
+    //     ioccs.push_back(uint8_t(x));
 
     // cout << "HF energy = " << fixed << setprecision(12)
     //      << fcidump->det_energy(ioccs, 0, fcidump->n_sites()) + fcidump->e
@@ -51,11 +52,20 @@ TEST_F(TestDMRG, Test) {
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
+    vector<SU2> targets = {target};
+    targets.push_back(
+        SU2(fcidump->n_elec(), 2, PointGroup::swap_pg(pg)(fcidump->isym())));
+    targets.push_back(
+        SU2(fcidump->n_elec(), 4, PointGroup::swap_pg(pg)(fcidump->isym())));
+    targets.push_back(SU2(fcidump->n_elec() + 1, 1,
+                          PointGroup::swap_pg(pg)(fcidump->isym())));
+    targets.push_back(SU2(fcidump->n_elec(), 0, 2));
+    targets.push_back(SU2(fcidump->n_elec(), 2, 2));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
-    mkl_set_num_threads(8);
+    mkl_set_num_threads(2);
     mkl_set_dynamic(0);
 
     Timer t;
@@ -76,35 +86,9 @@ TEST_F(TestDMRG, Test) {
 
     uint16_t bond_dim = 250;
 
-    // MPSInfo
-    // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    //     norb, vacuum, target, hamil.basis, hamil.orb_sym);
-
-    // CCSD init
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
-    if (occs.size() == 0)
-        mps_info->set_bond_dimension(bond_dim);
-    else {
-        assert(occs.size() == norb);
-        // for (size_t i = 0; i < occs.size(); i++)
-        //     cout << occs[i] << " ";
-        mps_info->set_bond_dimension_using_occ(bond_dim, occs, 1);
-        // mps_info->set_bond_dimension_using_hf(bond_dim, occs, 0);
-    }
-
-    // Local init
-    // shared_ptr<DynamicMPSInfo<SU2>> mps_info =
-    //     make_shared<DynamicMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
-    //                                      hamil.orb_sym, ioccs);
-    // mps_info->n_local = 4;
-    // mps_info->set_bond_dimension(bond_dim);
-
-    // Determinant init
-    // shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
-    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
-    //                                      hamil.orb_sym, ioccs, fcidump);
-    // mps_info->set_bond_dimension(bond_dim);
+    shared_ptr<MultiMPSInfo<SU2>> mps_info = make_shared<MultiMPSInfo<SU2>>(
+        norb, vacuum, targets, hamil.basis, hamil.orb_sym);
+    mps_info->set_bond_dimension(bond_dim);
 
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
@@ -114,14 +98,13 @@ TEST_F(TestDMRG, Test) {
     for (int i = 0; i <= norb; i++)
         cout << mps_info->right_dims[i].n_states_total << " ";
     cout << endl;
-    // abort();
 
     // MPS
     Random::rand_seed(0);
     // int x = Random::rand_int(0, 1000000);
     // Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    shared_ptr<MultiMPS<SU2>> mps = make_shared<MultiMPS<SU2>>(norb, 0, 2, 24);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -145,21 +128,22 @@ TEST_F(TestDMRG, Test) {
     me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
+    // abort();
+
     cout << *frame_() << endl;
     frame_()->activate(0);
 
     // DMRG
-    vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
-                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    // noises = vector<double>{1E-5};
-    // vector<uint16_t> bdims = {bond_dim};
-    // vector<double> noises = {1E-6};
+    // vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+    //                           500, 500, 750, 750, 750, 750, 750};
+    // vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
+    //                          1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<uint16_t> bdims = {bond_dim};
+    vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->iprint = 2;
     // dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->solve(50, true, 0.0);
+    dmrg->solve(50, true);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

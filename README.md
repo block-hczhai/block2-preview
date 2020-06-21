@@ -13,8 +13,9 @@ Features
     * U(1) particle number symmetry
     * SU(2) or U(1) spin symmetry
     * Abelian point group symmetry
-* Sweep algorithms
-    * Ground-State DMRG (2 site algorithm)
+* Sweep algorithms (2-site algorithm)
+    * Ground-State DMRG
+    * Multi-Target State-Averaged Excited-State DMRG
     * MPS compression
     * Expectation
     * Imaginary time evolution (tangent space and RK4 method)

@@ -59,13 +59,13 @@ class FTDMRG:
         n_elec = self.fcidump.n_sites * 2
 
         vacuum = SpinLabel(0)
-        target = SpinLabel(n_elec, self.fcidump.twos,
+        self.target = SpinLabel(n_elec, self.fcidump.twos,
                            PointGroup.swap_d2h(self.fcidump.isym))
         self.n_physical_sites = self.fcidump.n_sites
         self.n_sites = self.fcidump.n_sites * 2
 
         self.hamil = HamiltonianQC(
-            vacuum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
+            vacuum, self.n_physical_sites, self.orb_sym, self.fcidump)
         self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
@@ -109,12 +109,12 @@ class FTDMRG:
         self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
 
         vacuum = SpinLabel(0)
-        target = SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))
+        self.target = SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))
         self.n_physical_sites = n_sites
         self.n_sites = n_sites * 2
 
         self.hamil = HamiltonianQC(
-            vacuum, target, self.n_physical_sites, self.orb_sym, self.fcidump)
+            vacuum, self.n_physical_sites, self.orb_sym, self.fcidump)
         self.hamil.opf.seq.mode = SeqTypes.Simple
 
         if save_fcidump is not None:
@@ -130,7 +130,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                          self.hamil.target, self.hamil.basis,
+                                          self.target, self.hamil.basis,
                                           self.hamil.orb_sym)
         mps_info_thermal.set_thermal_limit()
         mps_info_thermal.tag = "INIT"
@@ -171,7 +171,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.hamil.target, self.hamil.basis,
+                                  self.target, self.hamil.basis,
                                   self.hamil.orb_sym)
         mps_info.tag = "INIT" if not cont else "FINAL"
         mps_info.load_mutable()
@@ -222,12 +222,12 @@ class FTDMRG:
 
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.hamil.target, self.hamil.basis,
+                                  self.target, self.hamil.basis,
                                   self.hamil.orb_sym)
         mps_info_thermal.tag = "INIT"
 
         # Ancilla MPSInfo (initial)
-        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.hamil.target,
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.target,
             self.hamil.basis, self.hamil.orb_sym)
         mps_info.set_bond_dimension(bond_dim)
         mps_info.tag = "INIT2"
@@ -299,7 +299,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.hamil.target, self.hamil.basis,
+                                  self.target, self.hamil.basis,
                                   self.hamil.orb_sym)
         mps_info.tag = "FINAL"
 
@@ -359,7 +359,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.hamil.target, self.hamil.basis,
+                                  self.target, self.hamil.basis,
                                   self.hamil.orb_sym)
         mps_info.tag = "FINAL"
 
@@ -416,7 +416,7 @@ class FTDMRG:
 if __name__ == "__main__":
 
     # parameters
-    bond_dim = 1000
+    bond_dim = 400
     beta = 2.0
     beta_step = 0.2
     mu = -1.0

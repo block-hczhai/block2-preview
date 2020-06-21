@@ -751,13 +751,12 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                     py::arg("forward"), py::arg("cg"));
 
     py::class_<Hamiltonian<S>, shared_ptr<Hamiltonian<S>>>(m, "Hamiltonian")
-        .def(py::init<S, S, int, const vector<uint8_t> &>())
+        .def(py::init<S, int, const vector<uint8_t> &>())
         .def_readwrite("n_syms", &Hamiltonian<S>::n_syms)
         .def_readwrite("opf", &Hamiltonian<S>::opf)
         .def_readwrite("n_sites", &Hamiltonian<S>::n_sites)
         .def_readwrite("orb_sym", &Hamiltonian<S>::orb_sym)
         .def_readwrite("vacuum", &Hamiltonian<S>::vacuum)
-        .def_readwrite("target", &Hamiltonian<S>::target)
         .def_property_readonly("basis",
                                [](Hamiltonian<S> *self) {
                                    return Array<StateInfo<S>>(self->basis,
@@ -777,7 +776,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 
     py::class_<HamiltonianQC<S>, shared_ptr<HamiltonianQC<S>>, Hamiltonian<S>>(
         m, "HamiltonianQC")
-        .def(py::init<S, S, int, const vector<uint8_t> &,
+        .def(py::init<S, int, const vector<uint8_t> &,
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQC<S>::mu)
@@ -791,9 +790,9 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 
     py::class_<typename DMRG<S>::Iteration,
                shared_ptr<typename DMRG<S>::Iteration>>(m, "DMRGIteration")
-        .def(py::init<double, double, int, size_t, double>())
-        .def(py::init<double, double, int>())
-        .def_readwrite("energy", &DMRG<S>::Iteration::energy)
+        .def(py::init<const vector<double>&, double, int, size_t, double>())
+        .def(py::init<const vector<double>&, double, int>())
+        .def_readwrite("energies", &DMRG<S>::Iteration::energies)
         .def_readwrite("error", &DMRG<S>::Iteration::error)
         .def_readwrite("ndav", &DMRG<S>::Iteration::ndav)
         .def_readwrite("tdav", &DMRG<S>::Iteration::tdav)

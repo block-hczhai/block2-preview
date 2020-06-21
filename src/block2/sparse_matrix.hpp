@@ -1190,6 +1190,33 @@ template <typename S> struct SparseMatrixGroup {
     size_t total_memory;
     int n;
     SparseMatrixGroup() : infos(), offsets(), data(nullptr), total_memory() {}
+    void load_data(const string &filename, bool load_info = false) {
+        ifstream ifs(filename.c_str(), ios::binary);
+        ifs.read((char *)&n, sizeof(n));
+        infos.resize(n);
+        offsets.resize(n);
+        ifs.read((char *)&offsets[0], sizeof(size_t) * n);
+        if (load_info)
+            for (int i = 0; i < n; i++) {
+                infos[i] = make_shared<SparseMatrixInfo<S>>();
+                infos[i]->load_data(ifs);
+            }
+        ifs.read((char *)&total_memory, sizeof(total_memory));
+        data = dalloc->allocate(total_memory);
+        ifs.read((char *)data, sizeof(double) * total_memory);
+        ifs.close();
+    }
+    void save_data(const string &filename, bool save_info = false) const {
+        ofstream ofs(filename.c_str(), ios::binary);
+        ofs.write((char *)&n, sizeof(n));
+        ofs.write((char *)&offsets[0], sizeof(size_t) * n);
+        if (save_info)
+            for (int i = 0; i < n; i++)
+                infos[i]->save_data(ofs);
+        ofs.write((char *)&total_memory, sizeof(total_memory));
+        ofs.write((char *)data, sizeof(double) * total_memory);
+        ofs.close();
+    }
     void allocate(const vector<shared_ptr<SparseMatrixInfo<S>>> &infos,
                   double *ptr = 0) {
         this->infos = infos;
@@ -1221,9 +1248,29 @@ template <typename S> struct SparseMatrixGroup {
         data = nullptr;
     }
     void deallocate_infos() {
-        for (int i = (int)infos.size() - 1; i >= 0; i--)
+        for (int i = n - 1; i >= 0; i--)
             infos[i]->deallocate();
     }
+    void randomize(double a = 0.0, double b = 1.0) const {
+        Random::fill_rand_double(data, total_memory, a, b);
+    }
+    vector<pair<S, double>> delta_quanta() const {
+        vector<pair<S, double>> r(n);
+        for (int i = 0; i < n; i++)
+            r[i] = make_pair(infos[i]->delta_quantum, (*this)[i]->norm());
+        sort(r.begin(), r.end(),
+             [](const pair<S, double> &a, const pair<S, double> &b) {
+                 return a.second > b.second;
+             });
+        return r;
+    }
+    double norm() const {
+        return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
+    }
+    void iscale(double d) const {
+        MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), d);
+    }
+    void normalize() const { iscale(1 / norm()); }
     shared_ptr<SparseMatrix<S>> operator[](int idx) const {
         assert(idx >= 0 && idx < n);
         shared_ptr<SparseMatrix<S>> r = make_shared<SparseMatrix<S>>();

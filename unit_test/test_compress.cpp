@@ -37,7 +37,7 @@ TEST_F(TestCompress, Test) {
                      PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
     mkl_set_num_threads(4);
     mkl_set_dynamic(0);

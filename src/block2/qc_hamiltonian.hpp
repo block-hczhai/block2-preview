@@ -40,10 +40,9 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     map<OpNames, shared_ptr<SparseMatrix<S>>> op_prims[6];
     shared_ptr<FCIDUMP> fcidump;
     double mu = 0;
-    HamiltonianQC(S vacuum, S target, int n_sites,
-                  const vector<uint8_t> &orb_sym,
+    HamiltonianQC(S vacuum, int n_sites, const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
-        : Hamiltonian<S>(vacuum, target, n_sites, orb_sym), fcidump(fcidump) {
+        : Hamiltonian<S>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         for (int i = 0; i < this->n_syms; i++) {
             this->basis[i].allocate(4);
             this->basis[i].quanta[0] = this->vacuum;
@@ -420,10 +419,9 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     map<OpNames, shared_ptr<SparseMatrix<S>>> op_prims[2];
     shared_ptr<FCIDUMP> fcidump;
     double mu = 0;
-    HamiltonianQC(S vacuum, S target, int n_sites,
-                  const vector<uint8_t> &orb_sym,
+    HamiltonianQC(S vacuum, int n_sites, const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
-        : Hamiltonian<S>(vacuum, target, n_sites, orb_sym), fcidump(fcidump) {
+        : Hamiltonian<S>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         assert(!fcidump->uhf);
         for (int i = 0; i < this->n_syms; i++) {
             this->basis[i].allocate(3);

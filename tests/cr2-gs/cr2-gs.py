@@ -87,7 +87,7 @@ vacuum = SU2(0)
 target = SU2(n_elec, twos, PointGroup.swap_d2h(isym))
 
 orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
-hamil = HamiltonianQC(vacuum, target, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 
 print('CCSD ...')

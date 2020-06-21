@@ -59,6 +59,8 @@ inline void write_occ(const string &filename, const vector<double> &occ) {
 
 enum struct WarmUpTypes : uint8_t { None, Local, Determinant };
 
+enum struct MultiTypes : uint8_t { None, Multi };
+
 // Quantum number infomation in a MPS
 template <typename S> struct MPSInfo {
     int n_sites;
@@ -91,6 +93,7 @@ template <typename S> struct MPSInfo {
     }
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
+    virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
@@ -833,8 +836,8 @@ template <typename S> struct MPS {
             tensors[i]->allocate(mat_infos[i]);
         }
     }
-    void initialize(const shared_ptr<MPSInfo<S>> &info, bool init_left = true,
-                    bool init_right = true) {
+    virtual void initialize(const shared_ptr<MPSInfo<S>> &info,
+                            bool init_left = true, bool init_right = true) {
         this->info = info;
         vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
         mat_infos.resize(n_sites);
@@ -931,6 +934,7 @@ template <typename S> struct MPS {
                     info->right_dims_fci[center + 1]);
             else
                 r = info->left_dims[i + 2];
+            assert(tensors[i + 1] != nullptr);
             tensors[i + 1]->left_multiply(tmat, l, m, r, lm, lmc);
             if (i + 1 == center && dot == 2)
                 r.deallocate();
@@ -953,6 +957,7 @@ template <typename S> struct MPS {
                     make_shared<SparseMatrix<S>>();
                 tmp->allocate(tensors[i - 1]->info);
                 tmp->copy_data_from(*tensors[i - 1]);
+                assert(tensors[i - 1] != nullptr);
                 tensors[i - 1]->contract(tmp, tmat);
                 tmp->deallocate();
             } else {
@@ -966,9 +971,11 @@ template <typename S> struct MPS {
                     l = StateInfo<S>::tensor_product(
                         info->left_dims[center], info->get_basis(center),
                         info->left_dims_fci[center + 1]);
+                    assert(tensors[i - 2] != nullptr);
                     tensors[i - 2]->right_multiply(tmat, l, m, r, mr, mrc);
                 } else {
                     l = info->right_dims[i - 1];
+                    assert(tensors[i - 1] != nullptr);
                     tensors[i - 1]->right_multiply(tmat, l, m, r, mr, mrc);
                 }
                 if (i - 1 == center + 1 && dot == 2)
@@ -1004,18 +1011,17 @@ template <typename S> struct MPS {
             }
         }
     }
-    void random_canonicalize() {
+    virtual void random_canonicalize() {
         for (int i = 0; i < n_sites; i++)
             random_canonicalize_tensor(i);
     }
-    string get_filename(int i) const {
+    virtual string get_filename(int i) const {
         stringstream ss;
         ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag
            << "." << Parsing::to_string(i);
         return ss.str();
     }
-    void load_data() {
-        ifstream ifs(get_filename(-1).c_str(), ios::binary);
+    void load_data_from(ifstream &ifs) {
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&center, sizeof(center));
         ifs.read((char *)&dot, sizeof(dot));
@@ -1023,14 +1029,17 @@ template <typename S> struct MPS {
         ifs.read((char *)&canonical_form[0], sizeof(char) * n_sites);
         vector<uint8_t> bs(n_sites);
         ifs.read((char *)&bs[0], sizeof(uint8_t) * n_sites);
-        ifs.close();
         tensors.resize(n_sites, nullptr);
         for (int i = 0; i < n_sites; i++)
             if (bs[i])
                 tensors[i] = make_shared<SparseMatrix<S>>();
     }
-    void save_data() const {
-        ofstream ofs(get_filename(-1).c_str(), ios::binary);
+    virtual void load_data() {
+        ifstream ifs(get_filename(-1).c_str(), ios::binary);
+        load_data_from(ifs);
+        ifs.close();
+    }
+    void save_data_to(ofstream &ofs) const {
         ofs.write((char *)&n_sites, sizeof(n_sites));
         ofs.write((char *)&center, sizeof(center));
         ofs.write((char *)&dot, sizeof(dot));
@@ -1039,6 +1048,10 @@ template <typename S> struct MPS {
         for (int i = 0; i < n_sites; i++)
             bs[i] = uint8_t(tensors[i] != nullptr);
         ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
+    }
+    virtual void save_data() const {
+        ofstream ofs(get_filename(-1).c_str(), ios::binary);
+        save_data_to(ofs);
         ofs.close();
     }
     void load_mutable_left() const {
@@ -1051,30 +1064,30 @@ template <typename S> struct MPS {
             if (tensors[i] != nullptr)
                 tensors[i]->load_data(get_filename(i), true);
     }
-    void load_mutable() const {
+    virtual void load_mutable() const {
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr)
                 tensors[i]->load_data(get_filename(i), true);
     }
-    void save_mutable() const {
+    virtual void save_mutable() const {
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr)
                 tensors[i]->save_data(get_filename(i), true);
     }
-    void save_tensor(int i) const {
+    virtual void save_tensor(int i) const {
         assert(tensors[i] != nullptr);
         tensors[i]->save_data(get_filename(i), true);
     }
-    void load_tensor(int i) {
+    virtual void load_tensor(int i) {
         assert(tensors[i] != nullptr);
         tensors[i]->load_data(get_filename(i), true);
     }
-    void unload_tensor(int i) {
+    virtual void unload_tensor(int i) {
         assert(tensors[i] != nullptr);
         tensors[i]->info->deallocate();
         tensors[i]->deallocate();
     }
-    void deallocate() {
+    virtual void deallocate() {
         for (int i = n_sites - 1; i >= 0; i--)
             if (tensors[i] != nullptr)
                 tensors[i]->deallocate();

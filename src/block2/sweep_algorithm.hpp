@@ -44,32 +44,56 @@ template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
     vector<uint16_t> bond_dims;
     vector<double> noises;
-    vector<double> energies;
+    vector<vector<double>> energies;
+    vector<vector<vector<pair<S, double>>>> mps_quanta;
     vector<double> davidson_conv_thrds;
     bool forward;
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     double cutoff = 1E-14;
+    double quanta_cutoff = 1E-3;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
-        double energy, error;
+        vector<double> energies;
+        vector<vector<pair<S, double>>> quanta;
+        double error;
         int ndav;
         double tdav;
         size_t nflop;
-        Iteration(double energy, double error, int ndav, size_t nflop = 0,
-                  double tdav = 1.0)
-            : energy(energy), error(error), ndav(ndav), nflop(nflop),
+        Iteration(const vector<double> &energies, double error, int ndav,
+                  size_t nflop = 0, double tdav = 1.0,
+                  const vector<vector<pair<S, double>>> &quanta =
+                      vector<vector<pair<S, double>>>())
+            : energies(energies), error(error), ndav(ndav), nflop(nflop),
               tdav(tdav) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
-            os << "Ndav = " << setw(4) << r.ndav << " E = " << setw(15)
-               << r.energy << " Error = " << setw(15) << setprecision(12)
-               << r.error << " FLOPS = " << scientific << setw(8)
-               << setprecision(2) << (double)r.nflop / r.tdav
-               << " Tdav = " << fixed << setprecision(2) << r.tdav;
+            os << "Ndav = " << setw(4) << r.ndav;
+            if (r.energies.size() == 1)
+                os << " E = " << setw(15) << r.energies[0];
+            else if (r.quanta.size() == 0) {
+                os << " E = ";
+                for (auto x : r.energies)
+                    os << setw(15) << setprecision(8) << x;
+            }
+            os << " Error = " << setw(15) << setprecision(12) << r.error
+               << " FLOPS = " << scientific << setw(8) << setprecision(2)
+               << (double)r.nflop / r.tdav << " Tdav = " << fixed
+               << setprecision(2) << r.tdav;
+            if (r.energies.size() != 1 && r.quanta.size() != 0) {
+                for (size_t i = 0; i < r.energies.size(); i++) {
+                    os << endl;
+                    os << setw(15) << " .. E[" << setw(3) << i << "] = ";
+                    os << setw(15) << setprecision(8) << r.energies[i];
+                    for (size_t j = 0; j < r.quanta[i].size(); j++)
+                        os << " " << setw(20) << r.quanta[i][j].first << " ("
+                           << setw(8) << setprecision(6)
+                           << r.quanta[i][j].second << ")";
+                }
+            }
             return os;
         }
     };
@@ -131,22 +155,103 @@ template <typename S> struct DMRG {
         old_wfn->deallocate();
         MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward,
                                             me->mpo->tf->opf->cg);
-        return Iteration(get<0>(pdi) + me->mpo->const_e, error, get<1>(pdi),
-                         get<2>(pdi), get<3>(pdi));
+        return Iteration(vector<double>{get<0>(pdi) + me->mpo->const_e}, error,
+                         get<1>(pdi), get<2>(pdi), get<3>(pdi));
+    }
+    // State-averaged
+    Iteration update_multi_two_dot(int i, bool forward, uint16_t bond_dim,
+                                   double noise, double davidson_conv_thrd) {
+        shared_ptr<MultiMPS<S>> mket =
+            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+        frame->activate(0);
+        if (mket->tensors[i] != nullptr || mket->tensors[i + 1] != nullptr)
+            MovingEnvironment<S>::contract_multi_two_dot(i, mket);
+        else
+            mket->load_tensor(i);
+        mket->tensors[i] = mket->tensors[i + 1] = nullptr;
+        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(FuseTypes::FuseLR, true);
+        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd);
+        vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
+        for (int i = 0; i < mket->nroots; i++) {
+            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+            mps_quanta[i].erase(
+                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                          [this](const pair<S, double> &p) {
+                              return p.second < this->quanta_cutoff;
+                          }),
+                mps_quanta[i].end());
+        }
+        shared_ptr<SparseMatrix<S>> dm;
+        assert(noise_type != NoiseTypes::Perturbative);
+        h_eff->deallocate();
+        dm = MovingEnvironment<S>::density_matrix_with_multi_target(
+            h_eff->opdq, h_eff->ket, mket->weights, forward, noise, noise_type);
+        double error = MovingEnvironment<S>::multi_split_density_matrix(
+            dm, h_eff->ket, (int)bond_dim, forward, true, mket->wfns,
+            forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
+            trunc_type);
+        shared_ptr<StateInfo<S>> info = nullptr;
+        if (forward) {
+            info = me->ket->tensors[i]->info->extract_state_info(forward);
+            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->save_left_dims(i + 1);
+            me->ket->canonical_form[i] = 'L';
+            me->ket->canonical_form[i + 1] = 'M';
+        } else {
+            info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->save_right_dims(i + 1);
+            me->ket->canonical_form[i] = 'M';
+            me->ket->canonical_form[i + 1] = 'R';
+        }
+        info->deallocate();
+        if (forward) {
+            mket->save_wavefunction(i + 1);
+            mket->save_tensor(i);
+            mket->unload_wavefunction(i + 1);
+            mket->unload_tensor(i);
+        } else {
+            mket->save_tensor(i + 1);
+            mket->save_wavefunction(i);
+            mket->unload_tensor(i + 1);
+            mket->unload_wavefunction(i);
+        }
+        dm->info->deallocate();
+        dm->deallocate();
+        for (int k = mket->nroots - 1; k >= 0; k--)
+            old_wfns[k]->deallocate();
+        old_wfns[0]->deallocate_infos();
+        MovingEnvironment<S>::propagate_multi_wfn(i, me->n_sites, mket, forward,
+                                                  me->mpo->tf->opf->cg);
+        for (auto &x : get<0>(pdi))
+            x += me->mpo->const_e;
+        Iteration r = Iteration(get<0>(pdi), error, get<1>(pdi), get<2>(pdi),
+                                get<3>(pdi));
+        r.quanta = mps_quanta;
+        return r;
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise,
                        double davidson_conv_thrd) {
         me->move_to(i);
-        if (me->dot == 2)
-            return update_two_dot(i, forward, bond_dim, noise,
-                                  davidson_conv_thrd);
-        else
+        if (me->dot == 2) {
+            if (me->ket->canonical_form[i] == 'M' ||
+                me->ket->canonical_form[i + 1] == 'M')
+                return update_multi_two_dot(i, forward, bond_dim, noise,
+                                            davidson_conv_thrd);
+            else
+                return update_two_dot(i, forward, bond_dim, noise,
+                                      davidson_conv_thrd);
+        } else
             assert(false);
     }
-    double sweep(bool forward, uint16_t bond_dim, double noise,
-                 double davidson_conv_thrd) {
+    pair<vector<double>, vector<vector<pair<S, double>>>>
+    sweep(bool forward, uint16_t bond_dim, double noise,
+          double davidson_conv_thrd) {
         me->prepare();
-        vector<double> energies;
+        vector<vector<double>> energies;
+        vector<vector<vector<pair<S, double>>>> quanta;
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
@@ -174,9 +279,16 @@ template <typename S> struct DMRG {
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
-            energies.push_back(r.energy);
+            energies.push_back(r.energies);
+            quanta.push_back(r.quanta);
         }
-        return *min_element(energies.begin(), energies.end());
+        size_t idx =
+            min_element(energies.begin(), energies.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x[0] < y[0];
+                        }) -
+            energies.begin();
+        return make_pair(energies[idx], quanta[idx]);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
@@ -191,6 +303,7 @@ template <typename S> struct DMRG {
         Timer start, current;
         start.get_time();
         energies.clear();
+        mps_quanta.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
                 cout << "Sweep = " << setw(4) << iw
@@ -201,19 +314,29 @@ template <typename S> struct DMRG {
                      << setprecision(2) << noises[iw]
                      << " | Dav threshold = " << scientific << setw(9)
                      << setprecision(2) << davidson_conv_thrds[iw] << endl;
-            double energy = sweep(forward, bond_dims[iw], noises[iw],
-                                  davidson_conv_thrds[iw]);
-            energies.push_back(energy);
+            auto sweep_results = sweep(forward, bond_dims[iw], noises[iw],
+                                       davidson_conv_thrds[iw]);
+            energies.push_back(sweep_results.first);
+            mps_quanta.push_back(sweep_results.second);
             bool converged = energies.size() >= 2 && tol > 0 &&
-                             abs(energies[energies.size() - 1] -
-                                 energies[energies.size() - 2]) < tol &&
+                             abs(energies[energies.size() - 1].back() -
+                                 energies[energies.size() - 2].back()) < tol &&
                              noises[iw] == noises.back() &&
                              bond_dims[iw] == bond_dims.back();
             forward = !forward;
             current.get_time();
             if (iprint == 1) {
                 cout << fixed << setprecision(8);
-                cout << " .. Energy = " << setw(15) << energy << " ";
+                if (sweep_results.first.size() == 1)
+                    cout << " .. Energy = " << setw(15)
+                         << sweep_results.first[0] << " ";
+                else {
+                    cout << " .. Energy[" << setw(3)
+                         << sweep_results.first.size() << "] = ";
+                    for (double x : sweep_results.first)
+                        cout << setw(15) << x;
+                    cout << " ";
+                }
             }
             if (iprint >= 1)
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
@@ -222,7 +345,7 @@ template <typename S> struct DMRG {
                 break;
         }
         this->forward = forward;
-        return energies.back();
+        return energies.back()[0];
     }
 };
 

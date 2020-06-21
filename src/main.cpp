@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
     QCTypes qc_type = QCTypes::Conventional;
 

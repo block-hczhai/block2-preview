@@ -33,7 +33,7 @@ vacuum = SU2(0)
 target = SU2(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
 n_sites = fcidump.n_sites
 orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
-hamil = HamiltonianQC(vacuum, target, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 
 mpo = MPOQC(hamil, QCTypes.Conventional)
