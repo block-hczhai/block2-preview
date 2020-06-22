@@ -236,7 +236,7 @@ template <typename S> struct Partition {
         }
     }
     // Generate SparseMatrixInfo for contracted left block operators
-    // after renormlization (or rotation)
+    // after renormalization (or rotation)
     static void init_left_op_infos(
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
@@ -262,7 +262,7 @@ template <typename S> struct Partition {
         ibra.deallocate();
     }
     // Generate SparseMatrixInfo for contracted left block operators
-    // before renormlization (or rotation)
+    // before renormalization (or rotation)
     static void init_left_op_infos_notrunc(
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
@@ -319,7 +319,7 @@ template <typename S> struct Partition {
         ibra_prev.deallocate();
     }
     // Generate SparseMatrixInfo for contracted right block operators
-    // after renormlization (or rotation)
+    // after renormalization (or rotation)
     static void init_right_op_infos(
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
@@ -345,7 +345,7 @@ template <typename S> struct Partition {
         ibra.deallocate();
     }
     // Generate SparseMatrixInfo for contracted right block operators
-    // before renormlization (or rotation)
+    // before renormalization (or rotation)
     static void init_right_op_infos_notrunc(
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
