@@ -45,7 +45,7 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
                                        false) {
         set_bond_dimension_fci();
     }
-    virtual MultiTypes get_multi_type() const { return MultiTypes::Multi; }
+    MultiTypes get_multi_type() const override { return MultiTypes::Multi; }
     vector<S> get_complementary(S q) const override {
         vector<S> r;
         for (auto target : targets) {
@@ -173,6 +173,7 @@ template <typename S> struct MultiMPS : MPS<S> {
         MPS<S>::load_data_from(ifs);
         ifs.read((char *)&nroots, sizeof(nroots));
         weights.resize(nroots);
+        wfns.resize(nroots);
         ifs.read((char *)&weights[0], sizeof(double) * nroots);
         for (int i = 0; i < nroots; i++)
             wfns[i] = make_shared<SparseMatrixGroup<S>>();

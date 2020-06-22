@@ -47,6 +47,7 @@ template <typename S> struct DMRG {
     vector<vector<double>> energies;
     vector<vector<vector<pair<S, double>>>> mps_quanta;
     vector<double> davidson_conv_thrds;
+    int davidson_max_iter = 5000;
     bool forward;
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -110,7 +111,8 @@ template <typename S> struct DMRG {
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, true);
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd);
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
         shared_ptr<SparseMatrix<S>> dm;
         if (noise_type == NoiseTypes::Perturbative && noise != 0) {
             shared_ptr<SparseMatrixGroup<S>> pket =
@@ -172,7 +174,8 @@ template <typename S> struct DMRG {
         vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, true);
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd);
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
@@ -798,6 +801,22 @@ template <typename S> struct Compress {
     }
 };
 
+inline vector<long double>
+get_partition_weights(double beta, const vector<double> &energies,
+                      const vector<uint8_t> &multiplicities) {
+    vector<long double> partition_weights(energies.size());
+    for (size_t i = 0; i < energies.size(); i++)
+        partition_weights[i] =
+            multiplicities[i] *
+            expl(-(long double)beta *
+                 ((long double)energies[i] - (long double)energies[0]));
+    long double psum =
+        accumulate(partition_weights.begin(), partition_weights.end(), 0.0L);
+    for (size_t i = 0; i < energies.size(); i++)
+        partition_weights[i] /= psum;
+    return partition_weights;
+}
+
 // Expectation value
 template <typename S> struct Expect {
     shared_ptr<MovingEnvironment<S>> me;
@@ -807,11 +826,23 @@ template <typename S> struct Expect {
     TruncationTypes trunc_type = TruncationTypes::Physical;
     uint8_t iprint = 2;
     double cutoff = 0.0;
+    double beta = 0.0;
+    // partition function (for thermal-averaged MultiMPS)
+    vector<long double> partition_weights;
     Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
            uint16_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
           forward(false) {
         expectations.resize(me->n_sites - me->dot + 1);
+        partition_weights = vector<long double>{1.0L};
+    }
+    Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
+           uint16_t ket_bond_dim, double beta, const vector<double> &energies,
+           const vector<uint8_t> &multiplicities)
+        : Expect(me, bra_bond_dim, ket_bond_dim) {
+        this->beta = beta;
+        this->partition_weights =
+            get_partition_weights(beta, energies, multiplicities);
     }
     struct Iteration {
         vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
@@ -910,13 +941,115 @@ template <typename S> struct Expect {
         return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
     }
+    Iteration update_multi_two_dot(int i, bool forward, bool propagate,
+                                   uint16_t bra_bond_dim,
+                                   uint16_t ket_bond_dim) {
+        shared_ptr<MultiMPS<S>> mket =
+                                    dynamic_pointer_cast<MultiMPS<S>>(me->ket),
+                                mbra =
+                                    dynamic_pointer_cast<MultiMPS<S>>(me->bra);
+        if (me->bra == me->ket)
+            assert(mbra == mket);
+        frame->activate(0);
+        vector<shared_ptr<MultiMPS<S>>> mpss =
+            me->bra == me->ket ? vector<shared_ptr<MultiMPS<S>>>{mbra}
+                               : vector<shared_ptr<MultiMPS<S>>>{mbra, mket};
+        for (auto &mps : mpss) {
+            if (mps->tensors[i] != nullptr || mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S>::contract_multi_two_dot(i, mps,
+                                                             mps == mket);
+            else
+                mps->load_tensor(i);
+            mps->tensors[i] = mps->tensors[i + 1] = nullptr;
+        }
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(FuseTypes::FuseLR, false);
+        auto pdi = h_eff->expect();
+        h_eff->deallocate();
+        vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
+            me->bra == me->ket
+                ? vector<vector<shared_ptr<SparseMatrixGroup<S>>>>{mbra->wfns}
+                : vector<vector<shared_ptr<SparseMatrixGroup<S>>>>{mket->wfns,
+                                                                   mbra->wfns};
+        double bra_error = 0.0, ket_error = 0.0;
+        if (propagate) {
+            for (auto &mps : mpss) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> old_wfn = mps->wfns;
+                shared_ptr<SparseMatrix<S>> dm =
+                    MovingEnvironment<S>::density_matrix_with_multi_target(
+                        h_eff->opdq, old_wfn, mps->weights, forward, 0.0,
+                        NoiseTypes::None);
+                int bond_dim =
+                    mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                double error = MovingEnvironment<S>::multi_split_density_matrix(
+                    dm, old_wfn, bond_dim, forward, false, mps->wfns,
+                    forward ? mps->tensors[i] : mps->tensors[i + 1], cutoff,
+                    trunc_type);
+                if (mps == mbra)
+                    bra_error = error;
+                else
+                    ket_error = error;
+                shared_ptr<StateInfo<S>> info = nullptr;
+                if (forward) {
+                    info = mps->tensors[i]->info->extract_state_info(forward);
+                    mps->info->left_dims[i + 1] = *info;
+                    mps->info->save_left_dims(i + 1);
+                    mps->canonical_form[i] = 'L';
+                    mps->canonical_form[i + 1] = 'M';
+                } else {
+                    info =
+                        mps->tensors[i + 1]->info->extract_state_info(forward);
+                    mps->info->right_dims[i + 1] = *info;
+                    mps->info->save_right_dims(i + 1);
+                    mps->canonical_form[i] = 'M';
+                    mps->canonical_form[i + 1] = 'R';
+                }
+                info->deallocate();
+                if (forward) {
+                    mps->save_wavefunction(i + 1);
+                    mps->save_tensor(i);
+                    mps->unload_wavefunction(i + 1);
+                    mps->unload_tensor(i);
+                } else {
+                    mps->save_tensor(i + 1);
+                    mps->save_wavefunction(i);
+                    mps->unload_tensor(i + 1);
+                    mps->unload_wavefunction(i);
+                }
+                dm->info->deallocate();
+                dm->deallocate();
+                MovingEnvironment<S>::propagate_multi_wfn(
+                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+            }
+        }
+        for (auto &old_wfns : old_wfnss) {
+            for (int k = mket->nroots - 1; k >= 0; k--)
+                old_wfns[k]->deallocate();
+            old_wfns[0]->deallocate_infos();
+        }
+        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(
+            get<0>(pdi).size());
+        for (size_t k = 0; k < get<0>(pdi).size(); k++) {
+            long double x = 0.0;
+            for (size_t l = 0; l < partition_weights.size(); l++)
+                x += partition_weights[l] * get<0>(pdi)[k].second[l];
+            expectations[k] = make_pair(get<0>(pdi)[k].first, (double)x);
+        }
+        return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
+                         get<2>(pdi));
+    }
     Iteration blocking(int i, bool forward, bool propagate,
                        uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         me->move_to(i);
-        if (me->dot == 2)
-            return update_two_dot(i, forward, propagate, bra_bond_dim,
-                                  ket_bond_dim);
-        else
+        if (me->dot == 2) {
+            if (me->ket->canonical_form[i] == 'M' ||
+                me->ket->canonical_form[i + 1] == 'M')
+                return update_multi_two_dot(i, forward, propagate, bra_bond_dim,
+                                            ket_bond_dim);
+            else
+                return update_two_dot(i, forward, propagate, bra_bond_dim,
+                                      ket_bond_dim);
+        } else
             assert(false);
     }
     void sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
@@ -957,12 +1090,16 @@ template <typename S> struct Expect {
         for (auto &x : expectations)
             x.clear();
         if (propagate) {
-            if (iprint >= 1)
+            if (iprint >= 1) {
                 cout << "Expectation | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
                      << " | BRA bond dimension = " << setw(4) << bra_bond_dim
-                     << " | KET bond dimension = " << setw(4) << ket_bond_dim
-                     << endl;
+                     << " | KET bond dimension = " << setw(4) << ket_bond_dim;
+                if (beta != 0.0)
+                    cout << " | 1/T = " << fixed << setw(10) << setprecision(5)
+                         << beta;
+                cout << endl;
+            }
             sweep(forward, bra_bond_dim, ket_bond_dim);
             forward = !forward;
             current.get_time();

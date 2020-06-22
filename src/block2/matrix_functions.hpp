@@ -373,6 +373,8 @@ struct MatrixFunctions {
         int k = (int)bs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
+        if (deflation_max_size < k + k / 2)
+            deflation_max_size = k + k / 2;
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -dot(bs[j], bs[i]));

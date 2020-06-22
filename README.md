@@ -20,6 +20,7 @@ Features
     * Expectation
     * Imaginary time evolution (tangent space and RK4 method)
 * Finite-Temperature DMRG (ancilla approach)
+* Low-Temperature DMRG (partition function approach)
 * One Particle Density Matrix
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
@@ -40,7 +41,7 @@ Dependence: `pybind11`, `python3`, and `mkl`. For unit tests, `googletest` is re
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON
     make
 
-This will build the python extension (may take 4 minutes to compile).
+This will build the python extension (may take 5 minutes to compile, need 7GB memory).
 
 To build unit tests and binary executable (instead of python extension), use the following:
 

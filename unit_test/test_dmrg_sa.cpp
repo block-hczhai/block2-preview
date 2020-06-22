@@ -145,7 +145,42 @@ TEST_F(TestSA, Test) {
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->solve(50, true);
 
+    vector<uint8_t> multiplicities(dmrg->energies.back().size());
+    for (size_t i = 0; i < dmrg->energies.back().size(); i++)
+        multiplicities[i] = dmrg->mps_quanta.back()[i][0].first.multiplicity();
+
+    // 1PDM MPO construction
+    cout << "1PDM MPO start" << endl;
+    shared_ptr<MPO<SU2>> pmpo = make_shared<PDM1MPOQC<SU2>>(hamil);
+    cout << "1PDM MPO end .. T = " << t.get_time() << endl;
+
+    // 1PDM MPO simplification
+    cout << "1PDM MPO simplification start" << endl;
+    pmpo =
+        make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<Rule<SU2>>(), true);
+    cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
+
+    // 1PDM ME
+    shared_ptr<MovingEnvironment<SU2>> pme =
+        make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
+    t.get_time();
+    cout << "1PDM INIT start" << endl;
+    pme->init_environments(false);
+    cout << "1PDM INIT end .. T = " << t.get_time() << endl;
+
+    // 1PDM
+    double beta = 60.0;
+    shared_ptr<Expect<SU2>> expect = make_shared<Expect<SU2>>(
+        pme, bond_dim, bond_dim, beta, dmrg->energies.back(), multiplicities);
+    expect->solve(true, dmrg->forward);
+
+    cout << fixed << setprecision(15);
+    for (size_t i = 0; i < expect->partition_weights.size(); i++)
+        cout << "[" << i << "] = " << dmrg->energies.back()[i] << " "
+             << expect->partition_weights[i] << endl;
+
     // deallocate persistent stack memory
+    pmpo->deallocate();
     mps_info->deallocate();
     mpo->deallocate();
     hamil.deallocate();

@@ -208,8 +208,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<double, int, size_t, double> eigs(bool iprint = false,
-                                            double conv_thrd = 5E-6) {
+    tuple<double, int, size_t, double>
+    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -221,9 +221,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
                 ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint,
-                                            conv_thrd)
+                                            conv_thrd, max_iter)
                 : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint,
-                                            conv_thrd);
+                                            conv_thrd, max_iter);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, nflop, t.get_time());
@@ -247,7 +247,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         return make_tuple(norm, nflop, t.get_time());
     }
     // X = < [bra] | [H_eff] | [ket] >
-    // expectations, nflop, tdav
+    // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, double>>, size_t, double>
     expect() {
         Timer t;
@@ -485,9 +485,9 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                                         (*cmat)[i], (*vmat)[i], opdq);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
-    // energy, ndav, nflop, tdav
-    tuple<vector<double>, int, size_t, double> eigs(bool iprint = false,
-                                                    double conv_thrd = 5E-6) {
+    // energies, ndav, nflop, tdav
+    tuple<vector<double>, int, size_t, double>
+    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -500,12 +500,49 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
                 ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint,
-                                            conv_thrd)
+                                            conv_thrd, max_iter)
                 : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint,
-                                            conv_thrd);
+                                            conv_thrd, max_iter);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners, ndav, nflop, t.get_time());
+    }
+    // X = < [bra] | [H_eff] | [ket] >
+    // expectations, nflop, tmult
+    tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
+    expect() {
+        Timer t;
+        t.get_time();
+        MatrixRef ktmp(nullptr, ket[0]->total_memory, 1);
+        MatrixRef rtmp(nullptr, bra[0]->total_memory, 1);
+        MatrixRef btmp(nullptr, bra[0]->total_memory, 1);
+        btmp.allocate();
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        vector<pair<shared_ptr<OpExpr<S>>, vector<double>>> expectations;
+        expectations.reserve(op->mat->data.size());
+        for (size_t i = 0; i < op->mat->data.size(); i++) {
+            vector<double> rr(ket.size(), 0);
+            if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->name ==
+                OpNames::Zero)
+                continue;
+            else if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->q_label !=
+                     opdq)
+                expectations.push_back(make_pair(op->ops[i], rr));
+            else {
+                for (int j = 0; j < (int)ket.size(); j++) {
+                    ktmp.data = ket[j]->data;
+                    rtmp.data = bra[j]->data;
+                    btmp.clear();
+                    (*this)(ktmp, btmp, i);
+                    rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                }
+                expectations.push_back(make_pair(op->ops[i], rr));
+            }
+        }
+        btmp.deallocate();
+        size_t nflop = tf->opf->seq->cumulative_nflop;
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(expectations, nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);
@@ -1538,8 +1575,9 @@ template <typename S> struct MovingEnvironment {
         vector<vector<vector<uint16_t>>> idx_dm_to_wfns;
         idx_dm_to_wfns.resize(wfns[0]->n);
         if (trace_right)
-            rinfo = MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                dm->info, trace_right, ilr, im);
+            rinfo =
+                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
+                    dm->info, trace_right, ilr, im);
         winfos.resize(wfns[0]->n);
         for (size_t j = 0; j < wfns[0]->n; j++) {
             winfos[j] =
@@ -1548,8 +1586,9 @@ template <typename S> struct MovingEnvironment {
                     idx_dm_to_wfns[j]);
         }
         if (!trace_right)
-            rinfo = MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                dm->info, trace_right, ilr, im);
+            rinfo =
+                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
+                    dm->info, trace_right, ilr, im);
         int kk = ilr.size();
         rot_mat = make_shared<SparseMatrix<S>>();
         new_wfns =

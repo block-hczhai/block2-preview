@@ -31,8 +31,11 @@ PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
+PYBIND11_MAKE_OPAQUE(vector<size_t>);
+PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 // SZ
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
@@ -46,6 +49,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
                          op_expr_less<SZ>>);
 // SU2
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
@@ -159,6 +163,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_array<S>(m, ("Array" + name).c_str());
     bind_array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
         m, "ArrayVectorPLMatInfo");
+    py::bind_vector<vector<pair<S, double>>>(m, "VectorPSDouble");
+    py::bind_vector<vector<vector<pair<S, double>>>>(m, "VectorVectorPSDouble");
+    py::bind_vector<vector<vector<vector<pair<S, double>>>>>(
+        m, "VectorVectorVectorPSDouble");
 
     py::class_<OpExpr<S>, shared_ptr<OpExpr<S>>>(m, "OpExpr")
         .def(py::init<>())
@@ -401,6 +409,46 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     py::bind_map<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                      op_expr_less<S>>>(m, "MapOpExprSpMat");
 
+    py::class_<SparseMatrixGroup<S>, shared_ptr<SparseMatrixGroup<S>>>(
+        m, "SparseMatrixGroup")
+        .def(py::init<>())
+        .def_readwrite("infos", &SparseMatrixGroup<S>::infos)
+        .def_readwrite("offsets", &SparseMatrixGroup<S>::offsets)
+        .def_readwrite("total_memory", &SparseMatrixGroup<S>::total_memory)
+        .def_readwrite("n", &SparseMatrixGroup<S>::n)
+        .def_property(
+            "data",
+            [](SparseMatrixGroup<S> *self) {
+                return py::array_t<double>(self->total_memory, self->data);
+            },
+            [](SparseMatrixGroup<S> *self, const py::array_t<double> &v) {
+                assert(v.size() == self->total_memory);
+                memcpy(self->data, v.data(),
+                       sizeof(double) * self->total_memory);
+            })
+        .def("load_data", &SparseMatrixGroup<S>::load_data, py::arg("filename"),
+             py::arg("load_info") = false)
+        .def("save_data", &SparseMatrixGroup<S>::save_data, py::arg("filename"),
+             py::arg("save_info") = false)
+        .def("allocate",
+             [](SparseMatrixGroup<S> *self,
+                const vector<shared_ptr<SparseMatrixInfo<S>>> &infos) {
+                 self->allocate(infos);
+             })
+        .def("deallocate", &SparseMatrixGroup<S>::deallocate)
+        .def("deallocate_infos", &SparseMatrixGroup<S>::deallocate_infos)
+        .def("delta_quanta", &SparseMatrixGroup<S>::delta_quanta)
+        .def("randomize", &SparseMatrixGroup<S>::randomize, py::arg("a") = 0.0,
+             py::arg("b") = 1.0)
+        .def("norm", &SparseMatrixGroup<S>::norm)
+        .def("iscale", &SparseMatrixGroup<S>::iscale, py::arg("d"))
+        .def("normalize", &SparseMatrixGroup<S>::normalize)
+        .def("__getitem__",
+             [](SparseMatrixGroup<S> *self, int idx) { return (*self)[idx]; });
+
+    py::bind_vector<vector<shared_ptr<SparseMatrixGroup<S>>>>(
+        m, "VectorSpMatGroup");
+
     py::class_<MPSInfo<S>, shared_ptr<MPSInfo<S>>>(m, "MPSInfo")
         .def_readwrite("n_sites", &MPSInfo<S>::n_sites)
         .def_readwrite("vacuum", &MPSInfo<S>::vacuum)
@@ -446,6 +494,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                                })
         .def("get_basis", &MPSInfo<S>::get_basis)
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
+        .def("get_multi_type", &MPSInfo<S>::get_multi_type)
         .def("set_bond_dimension_using_occ",
              &MPSInfo<S>::set_bond_dimension_using_occ, py::arg("m"),
              py::arg("occ"), py::arg("bias") = 1.0)
@@ -525,6 +574,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_static("trans_orbsym", &AncillaMPSInfo<S>::trans_orbsym)
         .def("set_thermal_limit", &AncillaMPSInfo<S>::set_thermal_limit);
 
+    py::class_<MultiMPSInfo<S>, shared_ptr<MultiMPSInfo<S>>, MPSInfo<S>>(
+        m, "MultiMPSInfo")
+        .def_readwrite("targets", &MultiMPSInfo<S>::targets)
+        .def(py::init([](int n_sites, S vacuum, const vector<S> &target,
+                         Array<StateInfo<S>> &basis,
+                         const vector<uint8_t> &orbsym) {
+            return make_shared<MultiMPSInfo<S>>(n_sites, vacuum, target,
+                                                basis.data, orbsym);
+        }));
+
     py::class_<MPS<S>, shared_ptr<MPS<S>>>(m, "MPS")
         .def(py::init<const shared_ptr<MPSInfo<S>> &>())
         .def(py::init<int, int, int>())
@@ -548,6 +607,17 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("load_tensor", &MPS<S>::load_tensor)
         .def("unload_tensor", &MPS<S>::unload_tensor)
         .def("deallocate", &MPS<S>::deallocate);
+
+    py::class_<MultiMPS<S>, shared_ptr<MultiMPS<S>>, MPS<S>>(m, "MultiMPS")
+        .def(py::init<const shared_ptr<MultiMPSInfo<S>> &>())
+        .def(py::init<int, int, int, int>())
+        .def_readwrite("nroots", &MultiMPS<S>::nroots)
+        .def_readwrite("wfns", &MultiMPS<S>::wfns)
+        .def_readwrite("weights", &MultiMPS<S>::weights)
+        .def("get_wfn_filename", &MultiMPS<S>::get_wfn_filename)
+        .def("save_wavefunction", &MultiMPS<S>::save_wavefunction)
+        .def("load_wavefunction", &MultiMPS<S>::load_wavefunction)
+        .def("unload_wavefunction", &MultiMPS<S>::unload_wavefunction);
 
     bind_cg<S>(m);
 
@@ -698,6 +768,37 @@ template <typename S> void bind_class(py::module &m, const string &name) {
              py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false)
         .def("deallocate", &EffectiveHamiltonian<S>::deallocate);
 
+    py::class_<EffectiveHamiltonian<S, MultiMPS<S>>,
+               shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>>>(
+        m, "EffectiveHamiltonianMultiMPS")
+        .def(py::init<const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &,
+                      const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &,
+                      const shared_ptr<DelayedOperatorTensor<S>> &,
+                      const vector<shared_ptr<SparseMatrixGroup<S>>> &,
+                      const vector<shared_ptr<SparseMatrixGroup<S>>> &,
+                      const shared_ptr<OpElement<S>> &,
+                      const shared_ptr<SymbolicColumnVector<S>> &,
+                      const shared_ptr<TensorFunctions<S>> &, bool>())
+        .def_readwrite("left_op_infos",
+                       &EffectiveHamiltonian<S, MultiMPS<S>>::left_op_infos)
+        .def_readwrite("right_op_infos",
+                       &EffectiveHamiltonian<S, MultiMPS<S>>::right_op_infos)
+        .def_readwrite("op", &EffectiveHamiltonian<S, MultiMPS<S>>::op)
+        .def_readwrite("bra", &EffectiveHamiltonian<S, MultiMPS<S>>::bra)
+        .def_readwrite("ket", &EffectiveHamiltonian<S, MultiMPS<S>>::ket)
+        .def_readwrite("diag", &EffectiveHamiltonian<S, MultiMPS<S>>::diag)
+        .def_readwrite("cmat", &EffectiveHamiltonian<S, MultiMPS<S>>::cmat)
+        .def_readwrite("vmat", &EffectiveHamiltonian<S, MultiMPS<S>>::vmat)
+        .def_readwrite("tf", &EffectiveHamiltonian<S, MultiMPS<S>>::tf)
+        .def_readwrite("opdq", &EffectiveHamiltonian<S, MultiMPS<S>>::opdq)
+        .def_readwrite("compute_diag",
+                       &EffectiveHamiltonian<S, MultiMPS<S>>::compute_diag)
+        .def("__call__", &EffectiveHamiltonian<S, MultiMPS<S>>::operator(),
+             py::arg("b"), py::arg("c"), py::arg("idx") = 0)
+        .def("eigs", &EffectiveHamiltonian<S, MultiMPS<S>>::eigs)
+        .def("expect", &EffectiveHamiltonian<S, MultiMPS<S>>::expect)
+        .def("deallocate", &EffectiveHamiltonian<S, MultiMPS<S>>::deallocate);
+
     py::class_<MovingEnvironment<S>, shared_ptr<MovingEnvironment<S>>>(
         m, "MovingEnvironment")
         .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<MPS<S>> &,
@@ -716,16 +817,22 @@ template <typename S> void bind_class(py::module &m, const string &name) {
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
              &MovingEnvironment<S>::right_contract_rotate)
+        .def("left_contract", &MovingEnvironment<S>::left_contract)
+        .def("right_contract", &MovingEnvironment<S>::right_contract)
+        .def("left_copy", &MovingEnvironment<S>::left_copy)
+        .def("right_copy", &MovingEnvironment<S>::right_copy)
         .def("init_environments", &MovingEnvironment<S>::init_environments,
              py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
-        .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
-             py::arg("compute_diag"))
         .def("get_left_partition_filename",
              &MovingEnvironment<S>::get_left_partition_filename)
         .def("get_right_partition_filename",
              &MovingEnvironment<S>::get_right_partition_filename)
+        .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
+             py::arg("compute_diag"))
+        .def("multi_eff_ham", &MovingEnvironment<S>::multi_eff_ham,
+             py::arg("fuse_type"), py::arg("compute_diag"))
         .def_static("contract_two_dot", &MovingEnvironment<S>::contract_two_dot,
                     py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
@@ -736,6 +843,31 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("mats"), py::arg("weights"),
                     py::arg("noise_type"))
+        .def_static("truncate_density_matrix",
+                    [](const shared_ptr<SparseMatrix<S>> &dm, int k,
+                       double cutoff, TruncationTypes trunc_type) {
+                        vector<pair<int, int>> ss;
+                        double error =
+                            MovingEnvironment<S>::truncate_density_matrix(
+                                dm, ss, k, cutoff, trunc_type);
+                        return make_pair(error, ss);
+                    })
+        .def_static(
+            "rotation_matrix_info_from_density_matrix",
+            &MovingEnvironment<S>::rotation_matrix_info_from_density_matrix,
+            py::arg("dminfo"), py::arg("trace_right"), py::arg("ilr"),
+            py::arg("im"))
+        .def_static(
+            "wavefunction_info_from_density_matrix",
+            [](const shared_ptr<SparseMatrixInfo<S>> &dminfo,
+               const shared_ptr<SparseMatrixInfo<S>> &wfninfo, bool trace_right,
+               const vector<uint16_t> &ilr, const vector<uint16_t> &im) {
+                vector<vector<uint16_t>> idx_dm_to_wfn;
+                shared_ptr<SparseMatrixInfo<S>> r =
+                    MovingEnvironment<S>::wavefunction_info_from_density_matrix(
+                        dminfo, wfninfo, trace_right, ilr, im, idx_dm_to_wfn);
+                return make_pair(r, idx_dm_to_wfn);
+            })
         .def_static(
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,
@@ -747,6 +879,29 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                 return make_tuple(error, left, right);
             })
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
+                    py::arg("i"), py::arg("n_sites"), py::arg("mps"),
+                    py::arg("forward"), py::arg("cg"))
+        .def_static("contract_multi_two_dot",
+                    &MovingEnvironment<S>::contract_multi_two_dot, py::arg("i"),
+                    py::arg("mps"), py::arg("reduced") = false)
+        .def_static("density_matrix_with_multi_target",
+                    &MovingEnvironment<S>::density_matrix_with_multi_target,
+                    py::arg("opdq"), py::arg("psi"), py::arg("weights"),
+                    py::arg("trace_right"), py::arg("noise"),
+                    py::arg("noise_type"))
+        .def_static("multi_split_density_matrix",
+                    [](const shared_ptr<SparseMatrix<S>> &dm,
+                       const vector<shared_ptr<SparseMatrixGroup<S>>> &wfns,
+                       int k, bool trace_right, bool normalize, double cutoff) {
+                        vector<shared_ptr<SparseMatrixGroup<S>>> new_wfns;
+                        shared_ptr<SparseMatrix<S>> rot_mat = nullptr;
+                        double error =
+                            MovingEnvironment<S>::multi_split_density_matrix(
+                                dm, wfns, k, trace_right, normalize, new_wfns,
+                                rot_mat, cutoff);
+                        return make_tuple(error, new_wfns, rot_mat);
+                    })
+        .def_static("propagate_multi_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
                     py::arg("forward"), py::arg("cg"));
 
@@ -790,8 +945,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 
     py::class_<typename DMRG<S>::Iteration,
                shared_ptr<typename DMRG<S>::Iteration>>(m, "DMRGIteration")
-        .def(py::init<const vector<double>&, double, int, size_t, double>())
-        .def(py::init<const vector<double>&, double, int>())
+        .def(py::init<const vector<double> &, double, int, size_t, double>())
+        .def(py::init<const vector<double> &, double, int>())
         .def_readwrite("energies", &DMRG<S>::Iteration::energies)
         .def_readwrite("error", &DMRG<S>::Iteration::error)
         .def_readwrite("ndav", &DMRG<S>::Iteration::ndav)
@@ -811,11 +966,15 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("me", &DMRG<S>::me)
         .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
         .def_readwrite("noises", &DMRG<S>::noises)
+        .def_readwrite("davidson_conv_thrds", &DMRG<S>::davidson_conv_thrds)
+        .def_readwrite("davidson_max_iter", &DMRG<S>::davidson_max_iter)
         .def_readwrite("energies", &DMRG<S>::energies)
+        .def_readwrite("mps_quanta", &DMRG<S>::mps_quanta)
         .def_readwrite("forward", &DMRG<S>::forward)
         .def_readwrite("noise_type", &DMRG<S>::noise_type)
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
+        .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
         .def("blocking", &DMRG<S>::blocking)
         .def("sweep", &DMRG<S>::sweep)
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
@@ -918,8 +1077,13 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     py::class_<Expect<S>, shared_ptr<Expect<S>>>(m, "Expect")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
                       uint16_t>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
+                      uint16_t, double, const vector<double> &,
+                      const vector<uint8_t> &>())
         .def_readwrite("iprint", &Expect<S>::iprint)
         .def_readwrite("cutoff", &Expect<S>::cutoff)
+        .def_readwrite("beta", &Expect<S>::beta)
+        .def_readwrite("partition_weights", &Expect<S>::partition_weights)
         .def_readwrite("me", &Expect<S>::me)
         .def_readwrite("bra_bond_dim", &Expect<S>::bra_bond_dim)
         .def_readwrite("ket_bond_dim", &Expect<S>::ket_bond_dim)
@@ -927,6 +1091,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("forward", &Expect<S>::forward)
         .def_readwrite("trunc_type", &Expect<S>::trunc_type)
         .def("update_two_dot", &Expect<S>::update_two_dot)
+        .def("update_multi_two_dot", &Expect<S>::update_multi_two_dot)
         .def("blocking", &Expect<S>::blocking)
         .def("sweep", &Expect<S>::sweep)
         .def("solve", &Expect<S>::solve, py::arg("propagate"),
@@ -1037,6 +1202,9 @@ PYBIND11_MODULE(block2, m) {
     py::bind_vector<vector<int>>(m, "VectorInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<double>>(m, "VectorDouble");
+    py::bind_vector<vector<long double>>(m, "VectorLDouble");
+    py::bind_vector<vector<size_t>>(m, "VectorULInt");
+    py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
         .def_property_readonly(
             "ptr",
@@ -1071,6 +1239,9 @@ PYBIND11_MODULE(block2, m) {
 
     m.def("read_occ", &read_occ);
     m.def("write_occ", &write_occ);
+
+    m.def("get_partition_weights", &get_partition_weights, py::arg("beta"),
+          py::arg("energies"), py::arg("multiplicities"));
 
     py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
         .def(py::init<>())
@@ -1280,6 +1451,8 @@ PYBIND11_MODULE(block2, m) {
         .def("get_bra", &SZ::get_bra, py::arg("dq"))
         .def("__repr__", &SZ::to_str);
 
+    py::bind_vector<vector<SZ>>(m, "VectorSZ");
+
     py::class_<SU2>(m, "SU2")
         .def(py::init<>())
         .def(py::init<uint32_t>())
@@ -1305,6 +1478,8 @@ PYBIND11_MODULE(block2, m) {
         .def("get_bra", &SU2::get_bra, py::arg("dq"))
         .def("__repr__", &SU2::to_str);
 
+    py::bind_vector<vector<SU2>>(m, "VectorSU2");
+
     py::enum_<SymTypes>(m, "SymTypes", py::arithmetic())
         .value("RVec", SymTypes::RVec)
         .value("CVec", SymTypes::CVec)
@@ -1313,6 +1488,10 @@ PYBIND11_MODULE(block2, m) {
     py::enum_<AncillaTypes>(m, "AncillaTypes", py::arithmetic())
         .value("Nothing", AncillaTypes::None)
         .value("Ancilla", AncillaTypes::Ancilla);
+
+    py::enum_<MultiTypes>(m, "MultiTypes", py::arithmetic())
+        .value("Nothing", MultiTypes::None)
+        .value("Multi", MultiTypes::Multi);
 
     py::enum_<ActiveTypes>(m, "ActiveTypes", py::arithmetic())
         .value("Empty", ActiveTypes::Empty)
