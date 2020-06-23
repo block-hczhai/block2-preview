@@ -550,3 +550,5 @@ if __name__ == "__main__":
     ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
     print(ft.get_one_pdm(ridx))
     print(ft.get_one_npc(ridx))
+
+    del ft

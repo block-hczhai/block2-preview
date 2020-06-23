@@ -1,5 +1,5 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include "gtest/gtest.h"
 
 using namespace block2;
@@ -9,14 +9,13 @@ class TestCG : public ::testing::Test {
     size_t isize = 1E7;
     size_t dsize = 1E7;
     static const int max_twoj = 300;
-    static const int n_tests = 1000;
+    static const int n_tests = 10000;
     CG<SU2> cg;
     double factorial[max_twoj];
     void SetUp() override {
         Random::rand_seed(0);
-        cg = CG<SU2>(max_twoj, 15);
-        ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
-        dalloc = new StackAllocator<double>(new double[dsize], dsize);
+        cg = CG<SU2>(max_twoj);
+        frame_() = new DataFrame(isize, dsize, "nodex");
         cg.initialize();
         factorial[0] = 1;
         for (int i = 1; i < max_twoj; i++)
@@ -24,9 +23,9 @@ class TestCG : public ::testing::Test {
     }
     void TearDown() override {
         cg.deallocate();
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete[] ialloc->data;
-        delete[] dalloc->data;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     }
     int rand_proj(int tj) { return Random::rand_int(0, tj + 1) * 2 - tj; }
     int rand_triangle(int tj1, int tj2) {

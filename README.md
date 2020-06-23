@@ -52,12 +52,23 @@ The following will switch to gnu openMP library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=GNU
 
+The following will use sequential mkl library:
+
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=SEQ
+
 FT-DMRG
 -------
 
-Test FT-DMRG (need `pyscf` module):
+Test Finite-Temperature (FT)-DMRG (need `pyscf` module):
 
     python3 ftdmrg.py
+
+LT-DMRG
+-------
+
+Test Low-Temperature (LT)-DMRG (need `pyscf` module):
+
+    python3 ltdmrg.py
 
 Input File
 ----------

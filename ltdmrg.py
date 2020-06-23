@@ -120,6 +120,7 @@ class LTDMRG:
             self.fcidump.write(save_fcidump)
         assert pg in ["d2h", "c1"]
     
+    # State-averaged DMRG for multipile targets and multiple roots
     def dmrg(self, mu, bond_dims, noises, n_steps=30, conv_tol=1E-7):
 
         if self.verbose >= 2:
@@ -157,7 +158,7 @@ class LTDMRG:
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
-            print('TE INIT time = ', time.perf_counter() - tx)
+            print('DMRG INIT time = ', time.perf_counter() - tx)
         dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
         dmrg.davidson_max_iter = 1000 * self.nroots
         dmrg.iprint = self.verbose
@@ -420,19 +421,21 @@ if __name__ == "__main__":
     lt.init_hamiltonian(pg, n_sites=n_mo, n_elec=nelec, twos=0, isym=1,
                         orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
 
-    # Multiple targets
+    # Set multiple targets
     lt.targets = VectorSL([])
     pgs = list(set(list(lt.orb_sym)))
-    smax2 = 6 // 2 * 2
     for xpg in pgs:
-        for xn in range(nelec - 4, nelec):
-            if SpinLabel == SZ:
-                for xs2 in range(-smax2 + xn % 2, smax2 + 1, 2):
-                    lt.targets.append(SpinLabel(xn, xs2, xpg))
-            else:
-                for xs2 in range(0 + xn % 2, smax2 + 1, 2):
-                    lt.targets.append(SpinLabel(xn, xs2, xpg))
+        for na in range(nelec // 2 - 2, nelec // 2 + 3):
+            for nb in range(nelec // 2 - 2, nelec // 2 + 3):
+                xn = na + nb
+                xs2 = na - nb
+                if SpinLabel == SU2 and xs2 < 0:
+                    continue
+                lt.targets.append(SpinLabel(xn, xs2, xpg))
+    # Numebr of states
     lt.nroots = nroots
+    print("Targets : LEN = ", len(lt.targets), lt.targets)
+    print("Nroots = ", lt.nroots)
 
     lt.dmrg(mu, bond_dims, noises, n_steps=max_dmrg_steps, conv_tol=sweep_tol)
 
@@ -450,3 +453,5 @@ if __name__ == "__main__":
 
     print(lt.get_one_pdm(beta, ridx))
     print(lt.get_one_npc(beta, ridx))
+
+    del lt

@@ -124,7 +124,7 @@ struct MatrixFunctions {
         } else {
             assert(a.m == b.n && a.n == b.m);
             for (int i = 0, inc = 1; i < a.m; i++)
-                daxpy(&a.n, &scale, b.data + i, &a.m, a.data, &inc);
+                daxpy(&a.n, &scale, b.data + i, &a.m, a.data + i * a.n, &inc);
         }
     }
     static double norm(const MatrixRef &a) {

@@ -80,10 +80,9 @@ template <typename S> struct OperatorFunctions {
                     if (seq->mode != SeqTypes::None)
                         seq->iadd(a[ia], b[ib], factor, a.factor, conj);
                     else {
-                        if (a.factor != 1.0) {
+                        if (a.factor != 1.0)
                             MatrixFunctions::iscale(a[ia], a.factor);
-                        }
-                        if (scale != 0.0)
+                        if (factor != 0.0)
                             MatrixFunctions::iadd(a[ia], b[ib], factor, conj);
                     }
                 }

@@ -79,11 +79,10 @@ struct BatchGEMM {
         static double x = 1.0;
         this->dgemm(false, false, n, 1, 1, 0.0, a, 1, &x, 1, scale, a, 1);
     }
-    // [c] = [a] * (scalar b) or [c] = (scalar a) * [b]
+    // [c] = [a] * (scalar b) or [c] = (scalar a) * [b] or [c] = [a] \otimes [b]
     void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
                         bool conjb, const MatrixRef &c, double scale,
                         uint32_t stride, double cfactor = 1.0) {
-        assert((a.m == 1 && a.n == 1) || (b.m == 1 && b.n == 1));
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
                 this->dgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
@@ -99,7 +98,7 @@ struct BatchGEMM {
                 for (int k = 0; k < b.n; k++)
                     this->dgemm_array(&b(0, k), a.data, &c(k, stride));
             }
-        } else {
+        } else if (b.m == 1 && b.n == 1) {
             if (!conja && a.n == c.n)
                 this->dgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
                             b.data, 1, cfactor, &c(0, stride), 1);
@@ -113,6 +112,44 @@ struct BatchGEMM {
                                   cfactor, 1, a.n);
                 for (int k = 0; k < a.n; k++)
                     this->dgemm_array(&a(0, k), b.data, &c(k, stride));
+            }
+        } else {
+            if (!conja && !conjb) {
+                this->dgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
+                                  1, b.m * a.m * a.n);
+                for (int i = 0; i < a.m; i++)
+                    for (int j = 0; j < a.n; j++)
+                        for (int k = 0; k < b.m; k++)
+                            this->dgemm_array(
+                                &b(k, 0), &a(i, j),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (conja && !conjb) {
+                this->dgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
+                                  1, b.m * a.m * a.n);
+                for (int i = 0; i < a.n; i++)
+                    for (int j = 0; j < a.m; j++)
+                        for (int k = 0; k < b.m; k++)
+                            this->dgemm_array(
+                                &b(k, 0), &a(j, i),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (!conja && conjb) {
+                this->dgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                  cfactor, 1, b.n * a.m * a.n);
+                for (int i = 0; i < a.m; i++)
+                    for (int j = 0; j < a.n; j++)
+                        for (int k = 0; k < b.n; k++)
+                            this->dgemm_array(
+                                &b(0, k), &a(i, j),
+                                &c(i * b.n + k, j * b.m + stride));
+            } else {
+                this->dgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                  cfactor, 1, b.n * a.m * a.n);
+                for (int i = 0; i < a.n; i++)
+                    for (int j = 0; j < a.m; j++)
+                        for (int k = 0; k < b.n; k++)
+                            this->dgemm_array(
+                                &b(0, k), &a(j, i),
+                                &c(i * b.n + k, j * b.m + stride));
             }
         }
     }

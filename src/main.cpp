@@ -48,21 +48,7 @@ map<string, string> read_input(const string &filename) {
     return params;
 }
 
-int main(int argc, char *argv[]) {
-
-    if (argc != 2) {
-        cout << "usage : block2 <input filename>" << endl;
-        abort();
-    }
-
-    string input = argv[1];
-
-    auto params = read_input(input);
-
-    if (params.count("rand_seed") != 0)
-        Random::rand_seed(Parsing::to_int(params.at("rand_seed")));
-    else
-        Random::rand_seed(0);
+template <typename S> void run(const map<string, string> &params) {
 
     size_t memory = 4ULL << 30;
     if (params.count("memory") != 0)
@@ -74,6 +60,21 @@ int main(int argc, char *argv[]) {
 
     frame_() =
         new DataFrame((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
+
+    // random scratch file prefix to avoid conflicts
+    if (params.count("prefix") != 0 && params.at("prefix") != "auto")
+        frame_()->prefix = params.at("prefix");
+    else {
+        Random::rand_seed(0);
+        stringstream ss;
+        ss << hex << Random::rand_int(0, 0xFFFFFF);
+        frame_()->prefix = ss.str();
+    }
+
+    if (params.count("rand_seed") != 0)
+        Random::rand_seed(Parsing::to_int(params.at("rand_seed")));
+    else
+        Random::rand_seed(0);
 
     cout << "integer stack memory = " << fixed << setprecision(4)
          << ((frame_()->isize << 2) / 1E9) << " GB" << endl;
@@ -137,12 +138,11 @@ int main(int argc, char *argv[]) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    SU2 vacuum(0);
-    SU2 target(fcidump->n_elec(), fcidump->twos(),
-               PointGroup::swap_pg(pg)(fcidump->isym()));
+    S vacuum(0);
+    S target(fcidump->n_elec(), fcidump->twos(),
+             PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
-    bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    HamiltonianQC<S> hamil(vacuum, norb, orbsym, fcidump);
 
     QCTypes qc_type = QCTypes::Conventional;
 
@@ -163,13 +163,12 @@ int main(int argc, char *argv[]) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, qc_type);
+    shared_ptr<MPO<S>> mpo = make_shared<MPOQC<S>>(hamil, qc_type);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     if (params.count("print_mpo") != 0)
@@ -230,17 +229,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    shared_ptr<MPSInfo<SU2>> mps_info = nullptr;
+    shared_ptr<MPSInfo<S>> mps_info = nullptr;
 
     if (params.count("casci") != 0) {
         // active sites, active electrons
         vector<string> xcasci = Parsing::split(params.at("casci"), " ", true);
-        mps_info = make_shared<CASCIMPSInfo<SU2>>(
+        mps_info = make_shared<CASCIMPSInfo<S>>(
             norb, vacuum, target, hamil.basis, hamil.orb_sym,
             Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
     } else
-        mps_info = make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
-                                             hamil.orb_sym);
+        mps_info = make_shared<MPSInfo<S>>(norb, vacuum, target, hamil.basis,
+                                           hamil.orb_sym);
     double bias = 1.0;
 
     if (params.count("occ_bias") != 0)
@@ -285,16 +284,16 @@ int main(int argc, char *argv[]) {
 
     if (params.count("dot") != 0)
         dot = Parsing::to_int(params.at("dot"));
-    shared_ptr<MPS<SU2>> mps = nullptr;
+    shared_ptr<MPS<S>> mps = nullptr;
 
     if (params.count("mps") != 0) {
         mps_info->tag = params.at("mps");
-        mps = make_shared<MPS<SU2>>(mps_info);
+        mps = make_shared<MPS<S>>(mps_info);
         mps->load_data();
         mps->load_mutable();
         mps_info->tag = "KET";
     } else {
-        mps = make_shared<MPS<SU2>>(norb, center, dot);
+        mps = make_shared<MPS<S>>(norb, center, dot);
         mps->initialize(mps_info);
         mps->random_canonicalize();
     }
@@ -308,8 +307,8 @@ int main(int argc, char *argv[]) {
     if (params.count("iprint") != 0)
         iprint = Parsing::to_int(params.at("iprint"));
 
-    shared_ptr<MovingEnvironment<SU2>> me =
-        make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S>> me =
+        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(iprint >= 2);
@@ -328,7 +327,7 @@ int main(int argc, char *argv[]) {
     if (params.count("tol") != 0)
         tol = Parsing::to_double(params.at("tol"));
 
-    shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
     dmrg->davidson_conv_thrds = davidson_conv_thrds;
     dmrg->iprint = iprint;
 
@@ -371,6 +370,26 @@ int main(int argc, char *argv[]) {
     frame_()->activate(0);
     assert(ialloc_()->used == 0 && dalloc_()->used == 0);
     delete frame_();
+}
+
+int main(int argc, char *argv[]) {
+
+    if (argc != 2) {
+        cout << "usage : block2 <input filename>" << endl;
+        abort();
+    }
+
+    string input = argv[1];
+
+    auto params = read_input(input);
+
+    if (params.count("su2") == 0 || !!Parsing::to_int(params.at("su2"))) {
+        cout << "SPIN-ADAPTED" << endl;
+        run<SU2>(params);
+    } else {
+        cout << "NON-SPIN-ADAPTED" << endl;
+        run<SZ>(params);
+    }
 
     return 0;
 }
