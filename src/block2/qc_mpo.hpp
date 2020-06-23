@@ -72,8 +72,8 @@ template <typename S> struct IdentityMPO : MPO<S> {
 };
 
 // Quantum Chemistry MPO schemes
-// NC: Normal (left block) / Compementary (right block) scheme
-// CN: Compementary (left block) / Normal (right block) scheme
+// NC: Normal (left block) / Complementary (right block) scheme
+// CN: Complementary (left block) / Normal (right block) scheme
 // Conventional: Use NC scheme before middle site
 //               and CN scheme after middle site
 enum QCTypes : uint8_t { NC = 1, CN = 2, Conventional = 4 };
