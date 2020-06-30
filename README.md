@@ -61,14 +61,14 @@ FT-DMRG
 
 Test Finite-Temperature (FT)-DMRG (need `pyscf` module):
 
-    python3 ftdmrg.py
+    python3 -m pyblock2.ftdmrg
 
 LT-DMRG
 -------
 
 Test Low-Temperature (LT)-DMRG (need `pyscf` module):
 
-    python3 ltdmrg.py
+    python3 -m pyblock2.ltdmrg
 
 Input File
 ----------
