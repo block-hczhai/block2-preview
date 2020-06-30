@@ -1,14 +1,29 @@
 
-#
-# Low-Temperature DMRG
-# Multi-Target State-Averaged Excited-State Approach
-# using pyscf and block2
-#
-# Author: Huanchen Zhai, Jun 21, 2020
+#  block2: Efficient MPO implementation of quantum chemistry DMRG
+#  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+# 
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
 #
 
-import sys
-sys.path[:0] = ["./build"]
+"""
+Low-Temperature (LT)-dmrg.
+Multi-Target State-Averaged Excited-State Approach;
+using pyscf and block2.
+
+Author: Huanchen Zhai, Jun 21, 2020
+"""
 
 import numpy as np
 import time
@@ -31,6 +46,7 @@ else:
     from block2.sz import HamiltonianQC, MultiMPSInfo, MultiMPS
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MovingEnvironment, Expect, DMRG
+
 
 class LTDMRGError(Exception):
     pass
@@ -56,11 +72,12 @@ class LTDMRG:
         assert self.fcidump is None
         self.fcidump = FCIDUMP()
         self.fcidump.read(filename)
-        self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, self.fcidump.orb_sym))
+        self.orb_sym = VectorUInt8(
+            map(PointGroup.swap_d2h, self.fcidump.orb_sym))
 
         vacuum = SpinLabel(0)
         self.targets = VectorSL([SpinLabel(self.fcidump.n_elec, self.fcidump.twos,
-                           PointGroup.swap_d2h(self.fcidump.isym))])
+                                           PointGroup.swap_d2h(self.fcidump.isym))])
         self.n_sites = self.fcidump.n_sites
 
         self.hamil = HamiltonianQC(
@@ -108,7 +125,8 @@ class LTDMRG:
         self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
 
         vacuum = SpinLabel(0)
-        self.targets = VectorSL([SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))])
+        self.targets = VectorSL(
+            [SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))])
         self.n_sites = n_sites
 
         self.hamil = HamiltonianQC(
@@ -119,7 +137,7 @@ class LTDMRG:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)
             self.fcidump.write(save_fcidump)
         assert pg in ["d2h", "c1"]
-    
+
     # State-averaged DMRG for multipile targets and multiple roots
     def dmrg(self, mu, bond_dims, noises, n_steps=30, conv_tol=1E-7):
 
@@ -152,7 +170,7 @@ class LTDMRG:
         mpo = SimplifiedMPO(mpo, RuleQC())
         if self.verbose >= 2:
             print('MPO time = ', time.perf_counter() - tx)
-        
+
         # DMRG
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         tx = time.perf_counter()
@@ -166,7 +184,8 @@ class LTDMRG:
 
         self.energies = dmrg.energies[-1]
         self.quanta = dmrg.mps_quanta[-1]
-        self.multiplicities = VectorUInt8([qs[0][0].multiplicity for qs in self.quanta])
+        self.multiplicities = VectorUInt8(
+            [qs[0][0].multiplicity for qs in self.quanta])
 
         self.bond_dim = bond_dims[-1]
         mps.save_data()
@@ -174,7 +193,8 @@ class LTDMRG:
         mps_info.deallocate()
 
         if self.verbose >= 2:
-            print('>>> COMPLETE DMRG | Time = %.2f <<<' % (time.perf_counter() - t))
+            print('>>> COMPLETE DMRG | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
 
     # particle number correlation
     # return value (SU2):
@@ -209,7 +229,8 @@ class LTDMRG:
         # 1NPC
         pme = MovingEnvironment(pmpo, mps, mps, "1NPC")
         pme.init_environments(self.verbose >= 3)
-        expect = Expect(pme, self.bond_dim, self.bond_dim, beta, self.energies, self.multiplicities)
+        expect = Expect(pme, self.bond_dim, self.bond_dim,
+                        beta, self.energies, self.multiplicities)
         expect.iprint = self.verbose
         expect.solve(True, mps.center == 0)
         if SpinLabel == SU2:
@@ -237,7 +258,7 @@ class LTDMRG:
             return dm[None, :, :]
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 0, 1],
-                dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
+                                   dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
 
     # one-particle density matrix
     # return value:
@@ -268,7 +289,8 @@ class LTDMRG:
         # 1PDM
         pme = MovingEnvironment(pmpo, mps, mps, "1PDM")
         pme.init_environments(self.verbose >= 3)
-        expect = Expect(pme, self.bond_dim, self.bond_dim, beta, self.energies, self.multiplicities)
+        expect = Expect(pme, self.bond_dim, self.bond_dim,
+                        beta, self.energies, self.multiplicities)
         expect.iprint = self.verbose
         expect.solve(True, mps.center == 0)
         if SpinLabel == SU2:
@@ -349,7 +371,7 @@ if __name__ == "__main__":
         optimal_reorder = ["A"]
     else:
         raise LTDMRGError("Point group %d not supported yet!" % pg)
-    
+
     if hf_type == "RHF":
         # SCF
         m = scf.RHF(mol)
@@ -386,17 +408,21 @@ if __name__ == "__main__":
         n_ao = mo_coeff_a.shape[0]
         n_mo = mo_coeff_b.shape[1]
 
-        orb_sym_str_a = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
-        orb_sym_str_b = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_coeff_b)
+        orb_sym_str_a = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
+        orb_sym_str_b = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff_b)
         orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
         orb_sym_b = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_b])
 
         # Sort the orbitals by symmetry for more efficient DMRG
         if pg_reorder:
-            idx_a = np.argsort([optimal_reorder.index(i) for i in orb_sym_str_a])
+            idx_a = np.argsort([optimal_reorder.index(i)
+                                for i in orb_sym_str_a])
             orb_sym_a = orb_sym_a[idx_a]
             mo_coeff_a = mo_coeff_a[:, idx_a]
-            idx_b = np.argsort([optimal_reorder.index(i) for i in orb_sym_str_b])
+            idx_b = np.argsort([optimal_reorder.index(i)
+                                for i in orb_sym_str_b])
             orb_sym_b = orb_sym_b[idx_b]
             mo_coeff_b = mo_coeff_b[:, idx_b]
             assert np.allclose(idx_a, idx_b)
@@ -411,7 +437,8 @@ if __name__ == "__main__":
         h1eb = mo_coeff_b.T @ m.get_hcore() @ mo_coeff_b
         g2eaa = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_a), n_mo)
         g2ebb = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_b), n_mo)
-        g2eab = ao2mo.kernel(mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
+        g2eab = ao2mo.kernel(
+            mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
         h1e = (h1ea, h1eb)
         g2e = (g2eaa, g2ebb, g2eab)
         ecore = mol.energy_nuc()
@@ -439,7 +466,8 @@ if __name__ == "__main__":
 
     lt.dmrg(mu, bond_dims, noises, n_steps=max_dmrg_steps, conv_tol=sweep_tol)
 
-    partition_weights = get_partition_weights(beta, lt.energies, lt.multiplicities)
+    partition_weights = get_partition_weights(
+        beta, lt.energies, lt.multiplicities)
 
     print("Partition Function Weights (beta = %9.5f, mu = %9.5f):" % (beta, mu))
     for ii, (e, qs, pw) in enumerate(zip(lt.energies, lt.quanta, partition_weights)):
@@ -447,9 +475,9 @@ if __name__ == "__main__":
 
     print("Multiplicities = ", lt.multiplicities)
     print("Average Energy = %20.15f" % sum([(e + mu * qs[0][0].n) * pw
-        for e, qs, pw in zip(lt.energies, lt.quanta, partition_weights)]))
+                                            for e, qs, pw in zip(lt.energies, lt.quanta, partition_weights)]))
     print("Average Particle Number = %20.15f" % sum([qs[0][0].n * pw
-        for qs, pw in zip(lt.quanta, partition_weights)]))
+                                                     for qs, pw in zip(lt.quanta, partition_weights)]))
 
     print(lt.get_one_pdm(beta, ridx))
     print(lt.get_one_npc(beta, ridx))

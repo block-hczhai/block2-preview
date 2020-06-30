@@ -38,8 +38,11 @@ template <typename S> struct Symbolic {
     vector<shared_ptr<OpExpr<S>>> data;
     Symbolic(int m, int n) : m(m), n(n), data(){};
     virtual const SymTypes get_type() const = 0;
-    virtual shared_ptr<OpExpr<S>> &
-    operator[](const initializer_list<int> ix) = 0;
+    virtual shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) {
+        // The purpose of this implementation is to simplify pybind
+        assert(false);
+        return data[0];
+    }
     virtual shared_ptr<Symbolic<S>> copy() const = 0;
 };
 

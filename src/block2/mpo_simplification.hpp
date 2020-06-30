@@ -22,6 +22,7 @@
 
 #include "mpo.hpp"
 #include "rule.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -55,7 +56,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         MPO<S>::tf = mpo->tf;
         MPO<S>::site_op_infos = mpo->site_op_infos;
         MPO<S>::left_operator_names = mpo->left_operator_names;
+        for (auto &x : MPO<S>::left_operator_names)
+            x = x->copy();
         MPO<S>::right_operator_names = mpo->right_operator_names;
+        for (auto &x : MPO<S>::right_operator_names)
+            x = x->copy();
         MPO<S>::left_operator_exprs.resize(MPO<S>::n_sites);
         MPO<S>::right_operator_exprs.resize(MPO<S>::n_sites);
         if (MPO<S>::schemer != nullptr) {
@@ -87,10 +92,16 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             }
         }
         for (int i = 0; i < MPO<S>::n_sites; i++) {
-            if (i == 0)
+            if (i == 0) {
+                MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
+                if (MPO<S>::tensors[i]->lmat == MPO<S>::tensors[i]->rmat)
+                    MPO<S>::tensors[i]->lmat = MPO<S>::tensors[i]->rmat =
+                        MPO<S>::tensors[i]->rmat->copy();
+                else
+                    MPO<S>::tensors[i]->lmat = MPO<S>::tensors[i]->lmat->copy();
                 MPO<S>::left_operator_exprs[i] = MPO<S>::tensors[i]->lmat;
-            else if (MPO<S>::schemer == nullptr ||
-                     i - 1 != MPO<S>::schemer->left_trans_site)
+            } else if (MPO<S>::schemer == nullptr ||
+                       i - 1 != MPO<S>::schemer->left_trans_site)
                 MPO<S>::left_operator_exprs[i] =
                     MPO<S>::left_operator_names[i - 1] *
                     MPO<S>::tensors[i]->lmat;
@@ -124,13 +135,17 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             MPO<S>::left_operator_exprs[i]->data[j];
             }
         }
-        MPO<S>::right_operator_exprs[MPO<S>::n_sites - 1] =
-            MPO<S>::tensors[MPO<S>::n_sites - 1]->rmat;
         for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {
-            if (i == MPO<S>::n_sites - 1)
+            if (i == MPO<S>::n_sites - 1) {
+                MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
+                if (MPO<S>::tensors[i]->lmat == MPO<S>::tensors[i]->rmat)
+                    MPO<S>::tensors[i]->rmat = MPO<S>::tensors[i]->lmat =
+                        MPO<S>::tensors[i]->lmat->copy();
+                else
+                    MPO<S>::tensors[i]->rmat = MPO<S>::tensors[i]->rmat->copy();
                 MPO<S>::right_operator_exprs[i] = MPO<S>::tensors[i]->rmat;
-            else if (MPO<S>::schemer == nullptr ||
-                     i + 1 != MPO<S>::schemer->right_trans_site)
+            } else if (MPO<S>::schemer == nullptr ||
+                       i + 1 != MPO<S>::schemer->right_trans_site)
                 MPO<S>::right_operator_exprs[i] =
                     MPO<S>::tensors[i]->rmat *
                     MPO<S>::right_operator_names[i + 1];

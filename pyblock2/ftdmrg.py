@@ -1,21 +1,35 @@
 
-#
-# FT-DMRG using pyscf and block2
-#
-# Author: Huanchen Zhai, May 14, 2020
-#
-# Revised:     added sz, May 18, 2020
+#  block2: Efficient MPO implementation of quantum chemistry DMRG
+#  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+# 
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+# 
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+# 
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <https://www.gnu.org/licenses/>.
+# 
 #
 
-import sys
-sys.path[:0] = ["./build"]
+"""
+Finite-Temperature (FT)-DMRG using pyscf and block2.
 
-import numpy as np
-import time
-from block2 import init_memory, release_memory, set_mkl_num_threads
-from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
-from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
+Author: Huanchen Zhai, May 14, 2020
+Revised:     added sz, May 18, 2020
+"""
+
 from block2 import SU2, SZ
+from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
+from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
+from block2 import init_memory, release_memory, set_mkl_num_threads
+import time
+import numpy as np
 
 # Set spin-adapted or non-spin-adapted here
 # SpinLabel = SU2
@@ -60,7 +74,7 @@ class FTDMRG:
 
         vacuum = SpinLabel(0)
         self.target = SpinLabel(n_elec, self.fcidump.twos,
-                           PointGroup.swap_d2h(self.fcidump.isym))
+                                PointGroup.swap_d2h(self.fcidump.isym))
         self.n_physical_sites = self.fcidump.n_sites
         self.n_sites = self.fcidump.n_sites * 2
 
@@ -214,7 +228,7 @@ class FTDMRG:
         if self.verbose >= 2:
             print('>>> COMPLETE imaginary time evolution | Time = %.2f <<<' %
                   (time.perf_counter() - t))
-    
+
     def decompression(self, bond_dim):
         if self.verbose >= 2:
             print('>>> START decompression <<<')
@@ -222,13 +236,13 @@ class FTDMRG:
 
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.target, self.hamil.basis,
-                                  self.hamil.orb_sym)
+                                          self.target, self.hamil.basis,
+                                          self.hamil.orb_sym)
         mps_info_thermal.tag = "INIT"
 
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.target,
-            self.hamil.basis, self.hamil.orb_sym)
+                                  self.hamil.basis, self.hamil.orb_sym)
         mps_info.set_bond_dimension(bond_dim)
         mps_info.tag = "INIT2"
         mps_info.save_mutable()
@@ -264,7 +278,8 @@ class FTDMRG:
         ime.init_environments()
 
         # Compress
-        cps = Compress(ime, VectorUInt16([bond_dim]), VectorUInt16([10]), VectorDouble([0.0]))
+        cps = Compress(ime, VectorUInt16(
+            [bond_dim]), VectorUInt16([10]), VectorDouble([0.0]))
         cps.solve(30, False)
 
         mps_info.load_mutable()
@@ -280,7 +295,8 @@ class FTDMRG:
         mps_info_thermal.deallocate()
 
         if self.verbose >= 2:
-            print('>>> COMPLETE decompression mps | Time = %.2f <<<' % (time.perf_counter() - t))
+            print('>>> COMPLETE decompression mps | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
 
     # particle number correlation
     # return value (SU2):
@@ -344,7 +360,7 @@ class FTDMRG:
             return dm[None, :, :]
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 0, 1],
-                dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
+                                   dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
 
     # one-particle density matrix
     # return value:
@@ -454,7 +470,7 @@ if __name__ == "__main__":
         optimal_reorder = ["A"]
     else:
         raise FTDMRGError("Point group %d not supported yet!" % pg)
-    
+
     if hf_type == "RHF":
         # SCF
         m = scf.RHF(mol)
@@ -491,17 +507,21 @@ if __name__ == "__main__":
         n_ao = mo_coeff_a.shape[0]
         n_mo = mo_coeff_b.shape[1]
 
-        orb_sym_str_a = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
-        orb_sym_str_b = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_coeff_b)
+        orb_sym_str_a = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
+        orb_sym_str_b = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff_b)
         orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
         orb_sym_b = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_b])
 
         # Sort the orbitals by symmetry for more efficient DMRG
         if pg_reorder:
-            idx_a = np.argsort([optimal_reorder.index(i) for i in orb_sym_str_a])
+            idx_a = np.argsort([optimal_reorder.index(i)
+                                for i in orb_sym_str_a])
             orb_sym_a = orb_sym_a[idx_a]
             mo_coeff_a = mo_coeff_a[:, idx_a]
-            idx_b = np.argsort([optimal_reorder.index(i) for i in orb_sym_str_b])
+            idx_b = np.argsort([optimal_reorder.index(i)
+                                for i in orb_sym_str_b])
             orb_sym_b = orb_sym_b[idx_b]
             mo_coeff_b = mo_coeff_b[:, idx_b]
             assert np.allclose(idx_a, idx_b)
@@ -516,7 +536,8 @@ if __name__ == "__main__":
         h1eb = mo_coeff_b.T @ m.get_hcore() @ mo_coeff_b
         g2eaa = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_a), n_mo)
         g2ebb = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_b), n_mo)
-        g2eab = ao2mo.kernel(mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
+        g2eab = ao2mo.kernel(
+            mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
         h1e = (h1ea, h1eb)
         g2e = (g2eaa, g2ebb, g2eab)
         ecore = mol.energy_nuc()
@@ -545,9 +566,11 @@ if __name__ == "__main__":
 
     # ft.decompression(50)
 
-    ft.imaginary_time_evolution(1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
+    ft.imaginary_time_evolution(
+        1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-    ft.imaginary_time_evolution(n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
+    ft.imaginary_time_evolution(
+        n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
     print(ft.get_one_pdm(ridx))
     print(ft.get_one_npc(ridx))
 

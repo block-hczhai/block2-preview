@@ -33,6 +33,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
@@ -44,6 +45,9 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
@@ -58,6 +62,9 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Symbolic<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
@@ -232,7 +239,19 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     py::bind_vector<vector<shared_ptr<OpElement<S>>>>(m, "VectorOpElement");
     py::bind_vector<vector<shared_ptr<OpString<S>>>>(m, "VectorOpString");
 
-    py::class_<Symbolic<S>, shared_ptr<Symbolic<S>>>(m, "Symbolic")
+    struct PySymbolic : Symbolic<S> {
+        using Symbolic<S>::Symbolic;
+        const SymTypes get_type() const override {
+            PYBIND11_OVERLOAD_PURE(const SymTypes, Symbolic<S>, get_type, );
+        }
+        shared_ptr<Symbolic<S>> copy() const override {
+            PYBIND11_OVERLOAD_PURE(shared_ptr<Symbolic<S>>, Symbolic<S>,
+                                   copy, );
+        }
+    };
+
+    py::class_<Symbolic<S>, PySymbolic, shared_ptr<Symbolic<S>>>(m, "Symbolic")
+        .def(py::init<int, int>())
         .def_readwrite("m", &Symbolic<S>::m)
         .def_readwrite("n", &Symbolic<S>::n)
         .def_readwrite("data", &Symbolic<S>::data)
@@ -240,6 +259,47 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("__matmul__",
              [](const shared_ptr<Symbolic<S>> &self,
                 const shared_ptr<Symbolic<S>> &other) { return self * other; });
+
+    py::class_<SymbolicRowVector<S>, shared_ptr<SymbolicRowVector<S>>,
+               Symbolic<S>>(m, "SymbolicRowVector")
+        .def(py::init<int>())
+        .def("__getitem__",
+             [](SymbolicRowVector<S> *self, int idx) { return (*self)[idx]; })
+        .def("__setitem__",
+             [](SymbolicRowVector<S> *self, int idx,
+                const shared_ptr<OpExpr<S>> &v) { (*self)[idx] = v; })
+        .def("__len__", [](SymbolicRowVector<S> *self) { return self->n; })
+        .def("copy", &SymbolicRowVector<S>::copy);
+
+    py::class_<SymbolicColumnVector<S>, shared_ptr<SymbolicColumnVector<S>>,
+               Symbolic<S>>(m, "SymbolicColumnVector")
+        .def(py::init<int>())
+        .def("__getitem__", [](SymbolicColumnVector<S> *self,
+                               int idx) { return (*self)[idx]; })
+        .def("__setitem__",
+             [](SymbolicColumnVector<S> *self, int idx,
+                const shared_ptr<OpExpr<S>> &v) { (*self)[idx] = v; })
+        .def("__len__", [](SymbolicColumnVector<S> *self) { return self->m; })
+        .def("copy", &SymbolicColumnVector<S>::copy);
+
+    py::class_<SymbolicMatrix<S>, shared_ptr<SymbolicMatrix<S>>, Symbolic<S>>(
+        m, "SymbolicMatrix")
+        .def(py::init<int, int>())
+        .def_readwrite("indices", &SymbolicMatrix<S>::indices)
+        .def("__setitem__",
+             [](SymbolicMatrix<S> *self, int i, int j,
+                const shared_ptr<OpExpr<S>> &v) {
+                 (*self)[{i, j}] = v;
+             })
+        .def("copy", &SymbolicMatrix<S>::copy);
+
+    py::bind_vector<vector<shared_ptr<Symbolic<S>>>>(m, "VectorSymbolic");
+    py::bind_vector<vector<shared_ptr<SymbolicRowVector<S>>>>(
+        m, "VectorSymbolicRowVector");
+    py::bind_vector<vector<shared_ptr<SymbolicColumnVector<S>>>>(
+        m, "VectorSymbolicColumnVector");
+    py::bind_vector<vector<shared_ptr<SymbolicMatrix<S>>>>(
+        m, "VectorSymbolicMatrix");
 
     py::class_<StateInfo<S>, shared_ptr<StateInfo<S>>>(m, "StateInfo")
         .def(py::init<>())
@@ -656,7 +716,9 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("rmat", &OperatorTensor<S>::rmat)
         .def_readwrite("ops", &OperatorTensor<S>::ops)
         .def("reallocate", &OperatorTensor<S>::reallocate, py::arg("clean"))
-        .def("deallocate", &OperatorTensor<S>::deallocate);
+        .def("deallocate", &OperatorTensor<S>::deallocate)
+        .def("copy", &OperatorTensor<S>::copy)
+        .def("deep_copy", &OperatorTensor<S>::deep_copy);
 
     py::class_<DelayedOperatorTensor<S>, shared_ptr<DelayedOperatorTensor<S>>>(
         m, "DelayedOperatorTensor")
@@ -1200,6 +1262,7 @@ PYBIND11_MODULE(block2, m) {
     };
 
     py::bind_vector<vector<int>>(m, "VectorInt");
+    py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
@@ -1449,6 +1512,7 @@ PYBIND11_MODULE(block2, m) {
         .def(py::self - py::self)
         .def("get_ket", &SZ::get_ket)
         .def("get_bra", &SZ::get_bra, py::arg("dq"))
+        .def("__hash__", &SZ::hash)
         .def("__repr__", &SZ::to_str);
 
     py::bind_vector<vector<SZ>>(m, "VectorSZ");
@@ -1476,6 +1540,7 @@ PYBIND11_MODULE(block2, m) {
         .def(py::self - py::self)
         .def("get_ket", &SU2::get_ket)
         .def("get_bra", &SU2::get_bra, py::arg("dq"))
+        .def("__hash__", &SU2::hash)
         .def("__repr__", &SU2::to_str);
 
     py::bind_vector<vector<SU2>>(m, "VectorSU2");
