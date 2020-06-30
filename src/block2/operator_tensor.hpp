@@ -47,6 +47,12 @@ template <typename S> struct OperatorTensor {
         for (auto it = ops.crbegin(); it != ops.crend(); it++)
             it->second->deallocate();
     }
+    shared_ptr<OperatorTensor> copy() const {
+        shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
+        r->lmat = lmat, r->rmat = rmat;
+        r->ops = ops;
+        return r;
+    }
     shared_ptr<OperatorTensor> deep_copy() const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
