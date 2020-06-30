@@ -1178,7 +1178,8 @@ template <typename S> struct SparseMatrix {
         os << "DATA = [ ";
         for (int i = 0; i < c.total_memory; i++)
             os << setw(20) << setprecision(14) << c.data[i] << " ";
-        os << "]" << endl;
+        os << "]" << " FACTOR = ";
+        os << setw(20) << setprecision(14) << c.factor << endl;
         return os;
     }
 };
