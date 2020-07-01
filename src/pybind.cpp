@@ -1078,6 +1078,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("mode", &ImaginaryTE<S>::mode)
         .def_readwrite("noise_type", &ImaginaryTE<S>::noise_type)
         .def_readwrite("trunc_type", &ImaginaryTE<S>::trunc_type)
+        .def_readwrite("trunc_pattern", &ImaginaryTE<S>::trunc_pattern)
         .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
         .def("blocking", &ImaginaryTE<S>::blocking)
         .def("sweep", &ImaginaryTE<S>::sweep)
@@ -1625,6 +1626,11 @@ PYBIND11_MODULE(block2, m) {
     py::enum_<TETypes>(m, "TETypes", py::arithmetic())
         .value("TangentSpace", TETypes::TangentSpace)
         .value("RK4", TETypes::RK4);
+
+    py::enum_<TruncPatternTypes>(m, "TruncPatternTypes", py::arithmetic())
+        .value("Nothing", TruncPatternTypes::None)
+        .value("TruncAfterOdd", TruncPatternTypes::TruncAfterOdd)
+        .value("TruncAfterEven", TruncPatternTypes::TruncAfterEven);
 
     py::enum_<QCTypes>(m, "QCTypes", py::arithmetic())
         .value("NC", QCTypes::NC)

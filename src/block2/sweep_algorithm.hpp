@@ -354,6 +354,8 @@ template <typename S> struct DMRG {
 
 enum struct TETypes : uint8_t { TangentSpace, RK4 };
 
+enum struct TruncPatternTypes : uint8_t { None, TruncAfterOdd, TruncAfterEven };
+
 // Imaginary Time Evolution
 template <typename S> struct ImaginaryTE {
     shared_ptr<MovingEnvironment<S>> me;
@@ -364,6 +366,7 @@ template <typename S> struct ImaginaryTE {
     vector<double> normsqs;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
+    TruncPatternTypes trunc_pattern = TruncPatternTypes::None;
     bool forward;
     TETypes mode;
     int n_sub_sweeps;
@@ -453,8 +456,14 @@ template <typename S> struct ImaginaryTE {
                 pdp.first[i].deallocate();
             frame->activate(0);
         }
+        int bdim = bond_dim;
+        if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
+             i % 2 == 0) ||
+            (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
+             i % 2 == 1))
+            bdim = -1;
         double error = MovingEnvironment<S>::split_density_matrix(
-            dm, h_eff->ket, (int)bond_dim, forward, false, me->ket->tensors[i],
+            dm, h_eff->ket, bdim, forward, false, me->ket->tensors[i],
             me->ket->tensors[i + 1], cutoff, trunc_type);
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
