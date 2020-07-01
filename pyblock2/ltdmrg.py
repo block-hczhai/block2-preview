@@ -391,7 +391,6 @@ if __name__ == "__main__":
             mo_coeff = mo_coeff[:, idx]
             ridx = np.argsort(idx)
         else:
-            orb_sym = orb_sym_a
             ridx = np.array(list(range(n_mo)), dtype=int)
 
         h1e = mo_coeff.T @ m.get_hcore() @ mo_coeff

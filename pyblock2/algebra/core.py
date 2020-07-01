@@ -162,6 +162,8 @@ class Tensor:
                 The contracted Tensor.
         """
         assert len(idxa) == len(idxb)
+        idxa = [x if x >= 0 else tsa.rank + x for x in idxa]
+        idxb = [x if x >= 0 else tsb.rank + x for x in idxb]
         out_idx_a = list(set(range(0, tsa.rank)) - set(idxa))
         out_idx_b = list(set(range(0, tsb.rank)) - set(idxb))
 
@@ -606,8 +608,37 @@ class MPS:
     def __sub__(self, other):
         return self + (-other)
 
+    def __or__(self, other):
+        """
+        Contraction of two general MPS to a number. <MPS|MPS>.
+        A general MPS is MPS/MPO with one or more physical indices in the middle,
+        but two-site tensor is not allowed.
+        """
+
+        assert self.__class__ == other.__class__
+        assert self.n_sites == other.n_sites
+        left = 0.0
+        for i in range(self.n_sites):
+            assert self.tensors[i] is not None
+            assert other.tensors[i] is not None
+            assert self.tensors[i].rank == other.tensors[i].rank
+            if self.tensors[i].n_blocks == 0 or other.tensors[i].n_blocks == 0:
+                return 0.0
+            if i != self.n_sites - 1:
+                cidx = list(range(0, self.tensors[i].rank - 1))
+            else:
+                cidx = list(range(0, self.tensors[i].rank))
+            if i == 0:
+                left = Tensor.contract(self.tensors[i], other.tensors[i], cidx, cidx)
+            else:
+                lbra = Tensor.contract(left, self.tensors[i], [0], [0])
+                left = Tensor.contract(lbra, other.tensors[i], cidx, cidx)
+        assert isinstance(left, float)
+
+        return left
+
     def __matmul__(self, other):
-        """Contraction of two MPS. <MPS|MPS>"""
+        """Contraction of two MPS. <MPS|MPS>."""
 
         assert isinstance(other, MPS)
         if isinstance(other, MPO):

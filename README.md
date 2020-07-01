@@ -28,6 +28,7 @@ Features
     * Conventional scheme (switch between NC and CN near the middle site)
 * Symbolic MPO simplification
 * MPS initialization using occupation number
+* Fermionic MPS algebra (U(1) spin symmetry)
 
 Installation
 ------------
@@ -107,3 +108,9 @@ Example input file for binary executable:
 To run this example:
 
     ./build/block2 input.txt
+
+Known Bugs
+----------
+
+* Imaginary TE not working with `SeqTypes::None`.
+* MPS algebra not working with MPS containing 2-site tensor.
