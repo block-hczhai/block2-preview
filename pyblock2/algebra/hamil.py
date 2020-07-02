@@ -45,17 +45,19 @@ class HamilTools:
 
     @staticmethod
     @contextlib.contextmanager
-    def _init(scratch='./my_tmp', rand_seed=1234):
+    def _init(scratch='./my_tmp', rand_seed=1234, memory=int(1E9), n_threads=1):
         Random.rand_seed(rand_seed)
-        memory = int(1 * 1E9)  # 1G memory
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
-        set_mkl_num_threads(1)
+        import os
+        empty_scratch = len(os.listdir(scratch)) == 0
+        set_mkl_num_threads(n_threads)
 
         yield ()
 
         release_memory()
-        shutil.rmtree(scratch)
+        if empty_scratch:
+            shutil.rmtree(scratch)
 
     @staticmethod
     @contextlib.contextmanager
@@ -75,11 +77,11 @@ class HamilTools:
     
     @staticmethod
     @contextlib.contextmanager
-    def from_fcidump(filename, pg='d2h', scratch='./my_tmp', rand_seed=1234):
+    def from_fcidump(filename, pg='d2h', **kwargs):
         """
         Read quantum chemistry system from FCIDUMP file.
         """
-        with HamilTools._init(scratch, rand_seed) as ():
+        with HamilTools._init(**kwargs) as ():
             fcidump = FCIDUMP()
             fcidump.read(filename)
             with HamilTools._from_fcidump(fcidump, pg=pg) as hamil:
@@ -87,14 +89,15 @@ class HamilTools:
     
     @staticmethod
     @contextlib.contextmanager
-    def hchain(n_sites, r=1.8, pg_reorder=True, scratch='./my_tmp', rand_seed=1234):
+    def hchain(n_sites, r=1.8, pg_reorder=True, **kwargs):
         """
         1D Hydrogen chain model. r in bohr.
         """
-        import os
-        if not os.path.isdir(scratch):
-            os.mkdir(scratch)
-        os.environ['TMPDIR'] = scratch
+        if 'scratch' in kwargs:
+            import os
+            if not os.path.isdir(kwargs['scratch']):
+                os.mkdir(kwargs['scratch'])
+            os.environ['TMPDIR'] = kwargs['scratch']
 
         from pyscf import gto, scf, symm, ao2mo
 
@@ -140,7 +143,7 @@ class HamilTools:
         ecore = mol.energy_nuc()
         del m, mol
 
-        with HamilTools._init(scratch, rand_seed) as ():
+        with HamilTools._init(**kwargs) as ():
             fcidump = FCIDUMP()
             n_elec = n_sites
             tol = 1E-13
@@ -161,11 +164,11 @@ class HamilTools:
 
     @staticmethod
     @contextlib.contextmanager
-    def hubbard(n_sites, u=2, t=1, scratch='./my_tmp', rand_seed=1234):
+    def hubbard(n_sites, u=2, t=1, **kwargs):
         """
         1D Hubbard model.
         """
-        with HamilTools._init(scratch, rand_seed) as ():
+        with HamilTools._init(**kwargs) as ():
             fcidump = FCIDUMP()
             h1e = np.zeros((n_sites * (n_sites + 1) // 2), dtype=float)
             g2e = np.zeros((n_sites * (n_sites + 1) // 2 * (n_sites * (n_sites + 1) // 2 + 1) // 2), dtype=float)
@@ -284,7 +287,7 @@ class HamilTools:
         return PYMPS(tensors=tensors)
 
     @contextlib.contextmanager
-    def get_ground_state_mps_block2(self, bond_dim=250):
+    def get_ground_state_mps_block2(self, bond_dim=250, n_sweeps=20):
         hamil = self.hamil
         with self.get_init_mps_block2(bond_dim=bond_dim, dot=2) as mps:
             mpo = MPOQC(hamil, QCTypes.Conventional)
@@ -293,14 +296,14 @@ class HamilTools:
             me = MovingEnvironment(mpo, mps, mps, "DMRG")
             me.init_environments(True)
             dmrg = DMRG(me, VectorUInt16([bond_dim]), VectorDouble([1E-6, 0]))
-            energy = dmrg.solve(20, mps.center == 0)
+            energy = dmrg.solve(n_sweeps, mps.center == 0)
 
             print("Ground State Energy = ", energy)
             yield mps
             mpo.deallocate()
 
-    def get_ground_state_mps(self, bond_dim=250):
-        with self.get_ground_state_mps_block2(bond_dim=bond_dim) as mps:
+    def get_ground_state_mps(self, bond_dim=250, n_sweeps=20):
+        with self.get_ground_state_mps_block2(bond_dim=bond_dim, n_sweeps=n_sweeps) as mps:
             if mps.center == 0:
                 mps.dot = 1
             elif mps.center == mps.n_sites - 2:

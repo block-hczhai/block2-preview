@@ -1,20 +1,20 @@
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
 #  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
-# 
+#
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation, either version 3 of the License, or
 #  (at your option) any later version.
-# 
+#
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-# 
+#
 #  You should have received a copy of the GNU General Public License
 #  along with this program. If not, see <https://www.gnu.org/licenses/>.
-# 
+#
 #
 
 """
@@ -142,8 +142,8 @@ class TensorTools:
                     ikkb = cmr.quanta[kk].data & 0xFFFF
                     qmb, nmb = mb.quanta[ikka], mb.n_states[ikka]
                     qr, nr = r.quanta[ikkb], r.n_states[ikkb]
-                    rmat = pmat[ipl: ipl + nl * nma, ipr: ipr +
-                                nmb * nr].reshape((nl, nma, nmb, nr))
+                    rmat = pmat[ipl: ipl + nl * nma, ipr: ipr
+                                + nmb * nr].reshape((nl, nma, nmb, nr))
                     blocks.append(
                         SubTensor(q_labels=(ql, qma, qmb, qr), reduced=rmat.copy()))
                     ipr += nmb * nr
@@ -162,18 +162,17 @@ class MPSTools:
             if bmps.tensors[i] is None:
                 continue
             if (i == 0 and i < bmps.center) or (
-                    i == bmps.n_sites - 1 and
-                    i >= bmps.center + bmps.dot) or (
+                    i == bmps.n_sites - 1
+                    and i >= bmps.center + bmps.dot) or (
                     i == 0 and i == bmps.center and bmps.dot == 1) or (
-                    i == 0 and i == bmps.center and
-                    i == bmps.n_sites - 2 and bmps.dot == 2):
+                    i == 0 and i == bmps.center
+                    and i == bmps.n_sites - 2 and bmps.dot == 2):
                 bmps.load_tensor(i)
-                tensors[i] = TensorTools.from_block2_no_fused(
-                    bmps.tensors[i])
+                tensors[i] = TensorTools.from_block2_no_fused(bmps.tensors[i])
                 bmps.unload_tensor(i)
             elif i < bmps.center or (
-                    i == bmps.center and i == bmps.n_sites - 2
-                    and bmps.dot == 2) or (
+                    i == bmps.center and i == bmps.n_sites - 2 and
+                    bmps.dot == 2) or (
                     i == bmps.center and bmps.dot == 1):
                 bmps.info.load_left_dims(i)
                 l = bmps.info.left_dims[i]
@@ -183,8 +182,13 @@ class MPSTools:
                 clm = StateInfo.get_connection_info(l, m, lm)
                 bmps.load_tensor(i)
                 if i == bmps.n_sites - 1 and i == bmps.center and bmps.dot == 1:
-                    tensors[i] = TensorTools.from_block2_fused(
-                        bmps.tensors[i], l, m, lm, clm)
+                    if bmps.tensors[i].info.n == 1 and \
+                            bmps.tensors[i].info.quanta[0].get_ket() == -bmps.target:
+                        tensors[i] = TensorTools.from_block2_fused(
+                            bmps.tensors[i], l, m, lm, clm)
+                    else:
+                        tensors[i] = TensorTools.from_block2_no_fused(
+                            bmps.tensors[i])
                 else:
                     tensors[i] = TensorTools.from_block2_left_fused(
                         bmps.tensors[i], l, m, lm, clm)
@@ -358,7 +362,7 @@ class MPOTools:
                                 map_blocks[qx] = SubTensor(
                                     q_labels=qx, reduced=np.zeros((nl, nu, nd, nr)))
                             map_blocks[qx].reduced[il, :, :,
-                                                    ir] += expr.factor * spmat.factor * np.array(spmat[p])
+                                                   ir] += expr.factor * spmat.factor * np.array(spmat[p])
                     else:
                         assert False
             tensors[i] = Tensor(blocks=list(map_blocks.values()))
