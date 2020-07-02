@@ -40,6 +40,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ>>>);
@@ -57,6 +58,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2>>>);
@@ -180,6 +182,9 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def("get_type", &OpExpr<S>::get_type)
         .def(py::self == py::self)
         .def("__repr__", &to_str<S>);
+
+    py::bind_vector<vector<pair<shared_ptr<OpExpr<S>>, double>>>(
+        m, "VectorPExprDouble");
 
     py::class_<OpElement<S>, shared_ptr<OpElement<S>>, OpExpr<S>>(m,
                                                                   "OpElement")
@@ -393,6 +398,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                                &SparseMatrixInfo<S>::get_total_memory)
         .def("allocate", &SparseMatrixInfo<S>::allocate, py::arg("length"),
              py::arg("ptr") = nullptr)
+        .def("extract_state_info", &SparseMatrixInfo<S>::extract_state_info,
+             py::arg("right"))
         .def("deallocate", &SparseMatrixInfo<S>::deallocate)
         .def("reallocate", &SparseMatrixInfo<S>::reallocate, py::arg("length"))
         .def("__repr__", [](SparseMatrixInfo<S> *self) {
@@ -934,12 +941,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
             "split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,
                const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
-               bool normalize, double cutoff) {
+               bool normalize, double cutoff, TruncationTypes trunc_type) {
                 shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
                 double error = MovingEnvironment<S>::split_density_matrix(
-                    dm, wfn, k, trace_right, normalize, left, right, cutoff);
+                    dm, wfn, k, trace_right, normalize, left, right, cutoff,
+                    trunc_type);
                 return make_tuple(error, left, right);
-            })
+            },
+            py::arg("dm"), py::arg("wfn"), py::arg("k"), py::arg("trace_right"),
+            py::arg("normalize"), py::arg("cutoff"),
+            py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
                     py::arg("forward"), py::arg("cg"))
@@ -951,18 +962,22 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                     py::arg("opdq"), py::arg("psi"), py::arg("weights"),
                     py::arg("trace_right"), py::arg("noise"),
                     py::arg("noise_type"))
-        .def_static("multi_split_density_matrix",
-                    [](const shared_ptr<SparseMatrix<S>> &dm,
-                       const vector<shared_ptr<SparseMatrixGroup<S>>> &wfns,
-                       int k, bool trace_right, bool normalize, double cutoff) {
-                        vector<shared_ptr<SparseMatrixGroup<S>>> new_wfns;
-                        shared_ptr<SparseMatrix<S>> rot_mat = nullptr;
-                        double error =
-                            MovingEnvironment<S>::multi_split_density_matrix(
-                                dm, wfns, k, trace_right, normalize, new_wfns,
-                                rot_mat, cutoff);
-                        return make_tuple(error, new_wfns, rot_mat);
-                    })
+        .def_static(
+            "multi_split_density_matrix",
+            [](const shared_ptr<SparseMatrix<S>> &dm,
+               const vector<shared_ptr<SparseMatrixGroup<S>>> &wfns, int k,
+               bool trace_right, bool normalize, double cutoff,
+               TruncationTypes trunc_type) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> new_wfns;
+                shared_ptr<SparseMatrix<S>> rot_mat = nullptr;
+                double error = MovingEnvironment<S>::multi_split_density_matrix(
+                    dm, wfns, k, trace_right, normalize, new_wfns, rot_mat,
+                    cutoff, trunc_type);
+                return make_tuple(error, new_wfns, rot_mat);
+            },
+            py::arg("dm"), py::arg("wfns"), py::arg("k"),
+            py::arg("trace_right"), py::arg("normalize"), py::arg("cutoff"),
+            py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_multi_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
                     py::arg("forward"), py::arg("cg"));
@@ -1478,7 +1493,6 @@ PYBIND11_MODULE(block2, m) {
 
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
         .def(py::init<uint8_t>())
         .def(py::init<uint8_t, uint8_t, uint8_t>())
         .def("size", &SiteIndex::size)
