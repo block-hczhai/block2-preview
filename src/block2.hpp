@@ -54,6 +54,10 @@
 #include "block2/tensor_functions.hpp"
 #include "block2/utils.hpp"
 
+#ifdef _EXPLICIT_TEMPLATE
+#include "instantiation/instantiation.hpp"
+#endif
+
 #undef ialloc
 #undef dalloc
 #undef frame

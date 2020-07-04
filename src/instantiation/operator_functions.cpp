@@ -18,27 +18,7 @@
  *
  */
 
-#include "pybind/pybind.hpp"
+#include "instantiation.hpp"
 
-PYBIND11_MODULE(block2, m) {
-
-    m.doc() = "python interface for block2.";
-
-    // Handle Ctrl-C from python side
-    check_signal_() = []() {
-        if (PyErr_CheckSignals() != 0)
-            throw py::error_already_set();
-    };
-
-    bind_data<>(m);
-    bind_types<>(m);
-    bind_io<>(m);
-    bind_matrix<>(m);
-    bind_symmetry<>(m);
-
-    py::module m_su2 = m.def_submodule("su2", "Spin-adapted.");
-    bind_class<SU2>(m_su2, "SU2");
-
-    py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
-    bind_class<SZ>(m_sz, "SZ");
-}
+template struct block2::OperatorFunctions<block2::SZ>;
+template struct block2::OperatorFunctions<block2::SU2>;

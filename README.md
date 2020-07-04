@@ -40,9 +40,20 @@ Dependence: `pybind11`, `python3`, and `mkl`. For unit tests, `googletest` is re
     mkdir build
     cd build
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON
-    make
+    make -j 10
 
-This will build the python extension (may take 5 minutes to compile, need 7GB memory).
+This will build the python extension (using 10 CPU cores).
+
+By default, the C++ templates will be explicitly instantiated in different compilation units, so that parallel
+compilation is possible.
+
+Alternatively, one can do single-file compilation using `-DEXP_TMPL=NONE`, then total compilation time can be
+saved by avoiding unnecessary template instantiation, as follows:
+
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DEXP_TMPL=NONE
+    make -j 1
+
+This may take 5 minutes, need 7 to 10 GB memory.
 
 To build unit tests and binary executable (instead of python extension), use the following:
 
