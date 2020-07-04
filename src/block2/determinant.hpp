@@ -22,13 +22,164 @@
 
 #include "integral.hpp"
 #include "mps.hpp"
+#include "mps_unfused.hpp"
 #include <algorithm>
+#include <array>
 #include <set>
+#include <stack>
+#include <tuple>
 #include <vector>
 
 using namespace std;
 
 namespace block2 {
+
+template <typename, typename = void> struct DeterminantTRIE;
+
+// Prefix trie structure of determinants (non-spin-adapted)
+// can be used as map<DET, double>
+// memory complexity:
+//    (n_dets << 4^n_sites) : (4 * n_sites + 1) * n_dets * sizeof(int)
+//    (n_dets  ~ 4^n_sites) : (19 / 3) * n_dets * sizeof(int)
+// time complexity: (D = MPS bond dimension)
+//    (n_dets << 4^n_sites) : n_sites * n_dets * D * D
+//    (n_dets  ~ 4^n_sites) : (4 / 3) * n_dets * D * D
+template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
+    vector<array<int, 4>> data;
+    vector<int> dets, invs;
+    vector<double> vals;
+    int n_sites;
+    bool enable_look_up;
+    DeterminantTRIE(int n_sites, bool enable_look_up = false)
+        : n_sites(n_sites), enable_look_up(enable_look_up) {
+        data.reserve(n_sites + 1);
+        data.push_back(array<int, 4>{0, 0, 0, 0});
+    }
+    // empty trie
+    void clear() {
+        data.clear(), dets.clear(), invs.clear(), vals.clear();
+        data.push_back(array<int, 4>{0, 0, 0, 0});
+    }
+    // deep copy
+    shared_ptr<DeterminantTRIE<S>> copy() {
+        shared_ptr<DeterminantTRIE<S>> dett =
+            make_shared<DeterminantTRIE<S>>(n_sites, enable_look_up);
+        dett->data = vector<array<int, 4>>(data.begin(), data.end());
+        dett->dets = vector<int>(dets.begin(), dets.end());
+        dett->invs = vector<int>(invs.begin(), invs.end());
+        dett->vals = vector<double>(vals.begin(), vals.end());
+        return dett;
+    }
+    // number of determinants
+    size_t size() const noexcept { return dets.size(); }
+    // add a determinant to trie
+    // det[i] = 0 (empty) 1 (alpha) 2 (beta) 3 (double)
+    void push_back(const vector<uint8_t> &det) {
+        assert((int)det.size() == n_sites);
+        int cur = 0;
+        for (int i = 0; i < n_sites; i++) {
+            uint8_t j = det[i];
+            if (data[cur][j] == 0) {
+                data[cur][j] = (int)data.size();
+                data.push_back(array<int, 4>{0, 0, 0, 0});
+            }
+            cur = data[cur][j];
+        }
+        // cannot push_back repeated determinants
+        assert(dets.size() == 0 || cur > dets.back());
+        dets.push_back(cur);
+        if (enable_look_up) {
+            invs.resize(data.size());
+            for (int i = 0, cur = 0; i < n_sites; i++) {
+                uint8_t j = det[i];
+                invs[data[cur][j]] = cur;
+                cur = data[cur][j];
+            }
+        }
+    }
+    // find the index of a determinant
+    int find(const vector<uint8_t> &det) {
+        assert((int)det.size() == n_sites);
+        int cur = 0;
+        for (int i = 0; i < n_sites; i++) {
+            uint8_t j = det[i];
+            if (data[cur][j] == 0)
+                return -1;
+            cur = data[cur][j];
+        }
+        return (int)(lower_bound(dets.begin(), dets.end(), cur) - dets.begin());
+    }
+    // get a determinant in trie
+    vector<uint8_t> operator[](int idx) const {
+        assert(enable_look_up && idx < dets.size());
+        vector<uint8_t> r(n_sites, 0);
+        for (int cur = dets[idx], i = n_sites - 1, ir; i >= 0; i--, cur = ir) {
+            ir = invs[cur];
+            for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
+                if (data[ir][j] == cur) {
+                    r[i] = j;
+                    break;
+                }
+        }
+        return r;
+    }
+    // set the value for each determinant to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S>> &mps, double cutoff = 0) {
+        vals.resize(dets.size());
+        memset(&vals[0], 0, sizeof(double) * vals.size());
+        stack<tuple<int, int, int>> ptrs;
+        vector<map<S, vector<double>>> partials;
+        for (uint8_t j = 0; j < (int)data[0].size(); j++)
+            if (data[0][j] != 0)
+                ptrs.push(make_tuple(data[0][j], j, 0));
+        map<S, vector<double>> mp;
+        mp[mps->info->vacuum] = vector<double>{1.0};
+        partials.push_back(mp);
+        // depth-first traverse of trie
+        while (!ptrs.empty()) {
+            check_signal_()();
+            auto &p = ptrs.top();
+            int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+            partials.resize(d + 1);
+            partials.push_back(map<S, vector<double>>());
+            map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
+            for (auto &m : mps->tensors[d]->data[j]) {
+                S bra = m.first.first, ket = m.first.second;
+                MatrixRef mat = m.second->ref();
+                if (pmp.count(bra) != 0) {
+                    if (cmp.count(ket) == 0)
+                        cmp[ket] = vector<double>(mat.n, 0);
+                    MatrixFunctions::multiply(
+                        MatrixRef(&pmp[bra][0], 1, mat.m), false, mat, false,
+                        MatrixRef(&cmp[ket][0], 1, mat.n), 1.0, 1.0);
+                }
+            }
+            ptrs.pop();
+            if (cmp.size() == 0)
+                continue;
+            if (cutoff != 0) {
+                double sqsum = 0;
+                for (auto &m : cmp) {
+                    double m_norm = MatrixFunctions::norm(
+                        MatrixRef(&m.second[0], (int)m.second.size(), 1));
+                    sqsum += m_norm * m_norm;
+                }
+                if (sqrt(sqsum) < cutoff)
+                    continue;
+            }
+            if (d == n_sites - 1) {
+                assert(cmp.size() == 1 && cmp.count(mps->info->target) != 0);
+                assert(cmp[mps->info->target].size() == 1);
+                vals[lower_bound(dets.begin(), dets.end(), cur) -
+                     dets.begin()] = cmp[mps->info->target][0];
+            } else {
+                for (uint8_t jj = 0; jj < (int)data[cur].size(); jj++)
+                    if (data[cur][jj] != 0)
+                        ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
+            }
+        }
+    }
+};
 
 template <typename S> struct DeterminantQC {
     vector<uint8_t> hf_occ, orb_sym;

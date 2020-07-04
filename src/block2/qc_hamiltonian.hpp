@@ -46,8 +46,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         for (int i = 0; i < this->n_syms; i++) {
             this->basis[i].allocate(4);
             this->basis[i].quanta[0] = this->vacuum;
-            this->basis[i].quanta[1] = S(1, -1, i);
-            this->basis[i].quanta[2] = S(1, 1, i);
+            this->basis[i].quanta[1] = S(1, 1, i);
+            this->basis[i].quanta[2] = S(1, -1, i);
             this->basis[i].quanta[3] = S(2, 0, 0);
             this->basis[i].n_states[0] = this->basis[i].n_states[1] =
                 this->basis[i].n_states[2] = this->basis[i].n_states[3] = 1;

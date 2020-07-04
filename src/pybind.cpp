@@ -53,6 +53,8 @@ PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
                          op_expr_less<SZ>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
@@ -71,6 +73,8 @@ PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
                          op_expr_less<SU2>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>>);
 
 template <typename T> struct Array {
     T *data;
@@ -164,6 +168,49 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_su2_t()) {
              py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
         .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
              py::arg("tr"));
+}
+
+template <typename S>
+auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {}
+
+template <typename S>
+auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
+
+    py::class_<UnfusedMPS<S>, shared_ptr<UnfusedMPS<S>>>(m, "UnfusedMPS")
+        .def(py::init<>())
+        .def(py::init<const shared_ptr<MPS<S>> &>())
+        .def_readwrite("info", &UnfusedMPS<S>::info)
+        .def_readwrite("tensors", &UnfusedMPS<S>::tensors)
+        .def_static("transform_left_fused",
+                    &UnfusedMPS<S>::transform_left_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("wfn"))
+        .def_static("transform_right_fused",
+                    &UnfusedMPS<S>::transform_right_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("wfn"))
+        .def_static("transform_mps_tensor",
+                    &UnfusedMPS<S>::transform_mps_tensor, py::arg("i"),
+                    py::arg("mps"))
+        .def("initialize", &UnfusedMPS<S>::initialize);
+
+    py::class_<DeterminantTRIE<S>, shared_ptr<DeterminantTRIE<S>>>(
+        m, "DeterminantTRIE")
+        .def(py::init<int>(), py::arg("n_sites"))
+        .def(py::init<int, bool>(), py::arg("n_sites"),
+             py::arg("enable_look_up"))
+        .def_readwrite("data", &DeterminantTRIE<S>::data)
+        .def_readwrite("dets", &DeterminantTRIE<S>::dets)
+        .def_readwrite("invs", &DeterminantTRIE<S>::invs)
+        .def_readwrite("vals", &DeterminantTRIE<S>::vals)
+        .def_readwrite("n_sites", &DeterminantTRIE<S>::n_sites)
+        .def_readwrite("enable_look_up", &DeterminantTRIE<S>::enable_look_up)
+        .def("clear", &DeterminantTRIE<S>::clear)
+        .def("copy", &DeterminantTRIE<S>::copy)
+        .def("__len__", &DeterminantTRIE<S>::size)
+        .def("append", &DeterminantTRIE<S>::push_back, py::arg("det"))
+        .def("find", &DeterminantTRIE<S>::find, py::arg("det"))
+        .def("__getitem__", &DeterminantTRIE<S>::operator[], py::arg("idx"))
+        .def("evaluate", &DeterminantTRIE<S>::evaluate, py::arg("mps"),
+             py::arg("cutoff") = 0.0);
 }
 
 template <typename S> void bind_class(py::module &m, const string &name) {
@@ -466,6 +513,17 @@ template <typename S> void bind_class(py::module &m, const string &name) {
             return ss.str();
         });
 
+    py::class_<SparseTensor<S>, shared_ptr<SparseTensor<S>>>(m, "SparseTensor")
+        .def(py::init<>())
+        .def(py::init<
+             const vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>> &>())
+        .def_readwrite("data", &SparseTensor<S>::data)
+        .def("__repr__", [](SparseTensor<S> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
     py::bind_vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
         m, "VectorPLMatInfo");
     py::bind_vector<vector<shared_ptr<SparseMatrixInfo<S>>>>(m,
@@ -475,6 +533,12 @@ template <typename S> void bind_class(py::module &m, const string &name) {
                                                             "MapOpNamesSpMat");
     py::bind_map<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                      op_expr_less<S>>>(m, "MapOpExprSpMat");
+
+    py::bind_vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>>(
+        m, "VectorPSSTensor");
+    py::bind_vector<vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>>>(
+        m, "VectorVectorPSSTensor");
+    py::bind_vector<vector<shared_ptr<SparseTensor<S>>>>(m, "VectorSpTensor");
 
     py::class_<SparseMatrixGroup<S>, shared_ptr<SparseMatrixGroup<S>>>(
         m, "SparseMatrixGroup")
@@ -1265,6 +1329,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
         .def_readwrite("prim_mpo", &AncillaMPO<S>::prim_mpo)
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
+
+    bind_spin_specific<S>(m);
 }
 
 PYBIND11_MODULE(block2, m) {
@@ -1296,6 +1362,29 @@ PYBIND11_MODULE(block2, m) {
             ss << "]";
             return ss.str();
         });
+
+    py::class_<array<int, 4>>(m, "Array4Int")
+        .def("__setitem__",
+             [](array<int, 4> *self, size_t i, int t) { (*self)[i] = t; })
+        .def("__getitem__",
+             [](array<int, 4> *self, size_t i) { return (*self)[i]; })
+        .def("__len__", [](array<int, 4> *self) { return self->size(); })
+        .def("__repr__",
+             [](array<int, 4> *self) {
+                 stringstream ss;
+                 ss << "(LEN=" << self->size() << ")[";
+                 for (auto x : *self)
+                     ss << x << ",";
+                 ss << "]";
+                 return ss.str();
+             })
+        .def("__iter__", [](array<int, 4> *self) {
+            return py::make_iterator<
+                py::return_value_policy::reference_internal, int *, int *,
+                int &>(&(*self)[0], &(*self)[0] + self->size());
+        });
+
+    py::bind_vector<vector<array<int, 4>>>(m, "VectorArray4Int");
 
     m.def(
         "init_memory",
@@ -1397,7 +1486,37 @@ PYBIND11_MODULE(block2, m) {
         })
         .def_readwrite("m", &MatrixRef::m)
         .def_readwrite("n", &MatrixRef::n)
+        .def("__repr__",
+             [](MatrixRef *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
         .def("deallocate", &MatrixRef::deallocate);
+
+    py::class_<Tensor, shared_ptr<Tensor>>(m, "Tensor", py::buffer_protocol())
+        .def(py::init<int, int, int>())
+        .def(py::init<const vector<int> &>())
+        .def_buffer([](Tensor *self) -> py::buffer_info {
+            vector<ssize_t> shape, strides;
+            for (auto x : self->shape)
+                shape.push_back(x);
+            strides.push_back(sizeof(double));
+            for (int i = (int)shape.size() - 1; i > 0; i--)
+                strides.push_back(strides.back() * shape[i]);
+            reverse(strides.begin(), strides.end());
+            return py::buffer_info(&self->data[0], sizeof(double),
+                                   py::format_descriptor<double>::format(),
+                                   shape.size(), shape, strides);
+        })
+        .def_readwrite("shape", &Tensor::shape)
+        .def_readwrite("data", &Tensor::data)
+        .def_property_readonly("ref", &Tensor::ref)
+        .def("__repr__", [](Tensor *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
         .def_static(

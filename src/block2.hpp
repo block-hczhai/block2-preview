@@ -34,6 +34,7 @@
 #include "block2/mpo.hpp"
 #include "block2/mpo_simplification.hpp"
 #include "block2/mps.hpp"
+#include "block2/mps_unfused.hpp"
 #include "block2/operator_functions.hpp"
 #include "block2/operator_tensor.hpp"
 #include "block2/partition.hpp"
