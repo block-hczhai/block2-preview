@@ -145,7 +145,7 @@ TEST_F(TestSA, Test) {
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->solve(50, true);
 
-    vector<uint8_t> multiplicities(dmrg->energies.back().size());
+    vector<int> multiplicities(dmrg->energies.back().size());
     for (size_t i = 0; i < dmrg->energies.back().size(); i++)
         multiplicities[i] = dmrg->mps_quanta.back()[i][0].first.multiplicity();
 

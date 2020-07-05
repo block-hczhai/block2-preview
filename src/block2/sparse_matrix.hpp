@@ -349,7 +349,7 @@ struct SparseMatrixInfo<
                                                      bra_b.quanta[jbb])
                                        : bdq.combine(bra_b.quanta[jbb],
                                                      ket_b.quanta[jkb]);
-                            if (qa != S(0xFFFFFFFFU) && qb != S(0xFFFFFFFFU)) {
+                            if (qa != S(S::invalid) && qb != S(S::invalid)) {
                                 int ia = ainfo->find_state(qa),
                                     ib = binfo->find_state(qb);
                                 if (ia != -1 && ib != -1) {

@@ -168,7 +168,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             for (uint8_t s = 0; s < 2; s++)
                 ops[i][n_op[s]] = nullptr;
         }
-        for (uint8_t m = 0; m < this->n_sites; m++) {
+        for (uint16_t m = 0; m < this->n_sites; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[this->orb_sym[m]]
                    [make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
@@ -214,10 +214,11 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             }
         }
     }
-    void get_site_ops(uint8_t m,
+    void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
-        uint8_t i, j, k, s;
+        uint16_t i, j, k;
+        uint8_t s;
         shared_ptr<SparseMatrix<S>> zero = make_shared<SparseMatrix<S>>();
         shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
         zero->factor = 0.0;
@@ -403,11 +404,11 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             this->basis[i].deallocate();
         Hamiltonian<S>::deallocate();
     }
-    double v(uint8_t sl, uint8_t sr, uint8_t i, uint8_t j, uint8_t k,
-             uint8_t l) const {
+    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+             uint16_t l) const {
         return fcidump->v(sl, sr, i, j, k, l);
     }
-    double t(uint8_t s, uint8_t i, uint8_t j) const {
+    double t(uint8_t s, uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
     }
     double e() const { return fcidump->e; }
@@ -534,7 +535,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             ops[i][i_op] = nullptr;
             ops[i][n_op] = nullptr;
         }
-        for (uint8_t m = 0; m < this->n_sites; m++) {
+        for (uint16_t m = 0; m < this->n_sites; m++) {
             ops[this->orb_sym[m]][make_shared<OpElement<S>>(
                 OpNames::C, SiteIndex(m), S(1, 1, this->orb_sym[m]))] = nullptr;
             ops[this->orb_sym[m]][make_shared<OpElement<S>>(
@@ -564,10 +565,11 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             }
         }
     }
-    void get_site_ops(uint8_t m,
+    void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
-        uint8_t i, j, k, s;
+        uint16_t i, j, k;
+        uint8_t s;
         shared_ptr<SparseMatrix<S>> zero = make_shared<SparseMatrix<S>>();
         shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
         zero->factor = 0.0;
@@ -713,10 +715,10 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             this->basis[i].deallocate();
         Hamiltonian<S>::deallocate();
     }
-    double v(uint8_t i, uint8_t j, uint8_t k, uint8_t l) const {
+    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return fcidump->v(i, j, k, l);
     }
-    double t(uint8_t i, uint8_t j) const {
+    double t(uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(i, i) - mu : fcidump->t(i, j);
     }
     double e() const { return fcidump->e; }

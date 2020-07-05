@@ -71,7 +71,7 @@ template <typename S> struct OperatorFunctions {
                 S bra = a.info->quanta[ia].get_bra(a.info->delta_quantum);
                 S ket = a.info->quanta[ia].get_ket();
                 S bq = conj ? bdq.combine(ket, bra) : bdq.combine(bra, ket);
-                if (bq != S(0xFFFFFFFF) &&
+                if (bq != S(S::invalid) &&
                     ((ib = b.info->find_state(bq)) != -1)) {
                     double factor = scale * b.factor;
                     if (conj)
@@ -245,7 +245,7 @@ template <typename S> struct OperatorFunctions {
                     a.info->delta_quantum.combine(cq, aps[k]));
                 if (ia != -1) {
                     S bl = b.info->delta_quantum.combine(aqprime, cqprime);
-                    if (bl != S(0xFFFFFFFFU)) {
+                    if (bl != S(S::invalid)) {
                         int ib = b.info->find_state(bl);
                         if (ib != -1) {
                             int aqpj = aqprime.multiplicity() - 1,

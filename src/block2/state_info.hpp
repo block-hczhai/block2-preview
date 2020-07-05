@@ -24,8 +24,8 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <set>
 #include <map>
+#include <set>
 #include <type_traits>
 #include <vector>
 
@@ -121,11 +121,12 @@ struct StateInfo<S, typename enable_if<integral_constant<
             n_states_total += n_states[i];
     }
     // Remove quanta larger than target and quanta with zero n_states
-    void collect(S target = 0x7FFFFFFF) {
+    void collect(S target = S(S::invalid)) {
         int k = -1;
-        int nn = upper_bound(quanta, quanta + n, target) - quanta;
-        for (int i = 0; i < nn; i++)
+        for (int i = 0; i < n; i++)
             if (n_states[i] == 0)
+                continue;
+            else if (quanta[i].n() > target.n())
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
                 n_states[k] =
@@ -250,7 +251,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
             a.n_states_total += a.n_states[i];
         }
     }
-    static void multi_target_filter(StateInfo &a, const StateInfo &b, const vector<S> &targets) {
+    static void multi_target_filter(StateInfo &a, const StateInfo &b,
+                                    const vector<S> &targets) {
         a.n_states_total = 0;
         for (int i = 0; i < a.n; i++) {
             set<int> idxs;
@@ -301,13 +303,16 @@ struct StateProbability<
         uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n + 1,
                                            (length << 1) + length + 1);
         if (ptr == (uint32_t *)quanta) {
-            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs, length * sizeof(double));
+            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs,
+                    length * sizeof(double));
             probs = (double *)(quanta + length);
         } else {
             memmove(ptr, quanta, length * sizeof(uint32_t));
-            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs, length * sizeof(double));
+            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs,
+                    length * sizeof(double));
             quanta = (S *)ptr;
-            probs = (double *)(quanta + length + !!((size_t)(ptr + length) & 7));
+            probs =
+                (double *)(quanta + length + !!((size_t)(ptr + length) & 7));
         }
         n = length;
     }
@@ -317,11 +322,12 @@ struct StateProbability<
         quanta = 0;
         probs = 0;
     }
-    void collect(S target = 0x7FFFFFFF) {
+    void collect(S target = S(S::invalid)) {
         int k = -1;
-        int nn = upper_bound(quanta, quanta + n, target) - quanta;
-        for (int i = 0; i < nn; i++)
+        for (int i = 0; i < n; i++)
             if (probs[i] == 0.0)
+                continue;
+            else if (quanta[i].n() > target.n())
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
                 probs[k] = probs[k] + probs[i];

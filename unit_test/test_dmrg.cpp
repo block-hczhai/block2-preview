@@ -119,7 +119,7 @@ TEST_F(TestDMRG, Test) {
     // MPS
     Random::rand_seed(0);
     // int x = Random::rand_int(0, 1000000);
-    // Random::rand_seed(384666);
+    Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
     shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
     mps->initialize(mps_info);

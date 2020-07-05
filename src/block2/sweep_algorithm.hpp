@@ -812,7 +812,7 @@ template <typename S> struct Compress {
 
 inline vector<long double>
 get_partition_weights(double beta, const vector<double> &energies,
-                      const vector<uint8_t> &multiplicities) {
+                      const vector<int> &multiplicities) {
     vector<long double> partition_weights(energies.size());
     for (size_t i = 0; i < energies.size(); i++)
         partition_weights[i] =
@@ -847,7 +847,7 @@ template <typename S> struct Expect {
     }
     Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
            uint16_t ket_bond_dim, double beta, const vector<double> &energies,
-           const vector<uint8_t> &multiplicities)
+           const vector<int> &multiplicities)
         : Expect(me, bra_bond_dim, ket_bond_dim) {
         this->beta = beta;
         this->partition_weights =

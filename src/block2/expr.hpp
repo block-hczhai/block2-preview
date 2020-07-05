@@ -49,13 +49,14 @@ enum struct OpNames : uint8_t {
     B,
     Q,
     Zero,
-    PDM1
+    PDM1,
+    PDM2
 };
 
 inline ostream &operator<<(ostream &os, const OpNames c) {
-    const static string repr[] = {"H", "I",  "N",    "NN",  "C", "D",
-                                  "R", "RD", "A",    "AD",  "P", "PD",
-                                  "B", "Q",  "Zero", "PDM1"};
+    const static string repr[] = {"H", "I",  "N",    "NN",   "C",   "D",
+                                  "R", "RD", "A",    "AD",   "P",   "PD",
+                                  "B", "Q",  "Zero", "PDM1", "PDM2"};
     os << repr[(uint8_t)c];
     return os;
 }
@@ -70,39 +71,45 @@ template <typename S> struct OpExpr {
 };
 
 // Site index in operator symbol
-// (support at most 3 site indices and 4 spin indices)
+// (support at most 4 site indices (< 4096) and 8 spin indices)
+// (spin-index: 8bits) - (orb-index: 4 * 12bits at 8/20/32/44) - (nspin: 4bits)
+// - (norb: 4bits)
 struct SiteIndex {
-    uint32_t data;
+    uint64_t data;
     SiteIndex() : data(0) {}
-    SiteIndex(uint32_t data) : data(data) {}
-    SiteIndex(uint8_t i) : data(1U | (i << 8)) {}
-    SiteIndex(uint8_t i, uint8_t j) : data(2U | 0U | (i << 8) | (j << 16)) {}
-    SiteIndex(uint8_t i, uint8_t j, uint8_t s)
-        : data(2U | 4U | (i << 8) | (j << 16) | (s << 4)) {}
-    SiteIndex(const initializer_list<uint8_t> i,
+    SiteIndex(uint64_t data) : data(data) {}
+    SiteIndex(uint16_t i) : data(1ULL | ((uint64_t)i << 8)) {}
+    SiteIndex(uint16_t i, uint16_t j)
+        : data(2ULL | ((uint64_t)i << 8) | ((uint64_t)j << 20)) {}
+    SiteIndex(uint16_t i, uint16_t j, uint8_t s)
+        : data(2ULL | (1ULL << 4) | ((uint64_t)i << 8) | ((uint64_t)j << 20) |
+               ((uint64_t)s << 56)) {}
+    SiteIndex(const initializer_list<uint16_t> i,
               const initializer_list<uint8_t> s)
         : data(0) {
-        data |= i.size() | (s.size() << 2);
+        data |= i.size() | (s.size() << 4);
         int x = 8;
-        for (auto iit = i.begin(); iit != i.end(); iit++, x += 8)
-            data |= (*iit) << x;
-        x = 4;
-        for (auto sit = s.begin(); sit != s.end(); sit++, x++)
-            data |= (*sit) << x;
+        for (auto iit = i.begin(); iit != i.end(); iit++, x += 12)
+            data |= (uint64_t)(*iit) << x;
+        x = 56;
+        for (auto sit = s.begin(); sit != s.end(); sit++, x++) {
+            assert((*sit) == 0 || (*sit) == 1);
+            data |= (uint64_t)(*sit) << x;
+        }
     }
     // Number of site indices
-    uint8_t size() const noexcept { return (uint8_t)(data & 3); }
+    uint8_t size() const noexcept { return (uint8_t)(data & 0xFU); }
     // Number of spin indices
-    uint8_t spin_size() const noexcept { return (uint8_t)((data >> 2) & 3); }
+    uint8_t spin_size() const noexcept { return (uint8_t)((data >> 4) & 0xFU); }
     // Composite spin index
-    uint8_t ss() const noexcept { return (data >> 4) & 0xFU; }
+    uint8_t ss() const noexcept { return (data >> 56) & 0xFFU; }
     // Spin index
     uint8_t s(uint8_t i = 0) const noexcept {
-        return !!(data & (1U << (4 + i)));
+        return !!(data & (1ULL << (56 + i)));
     }
     // Site index
-    uint8_t operator[](uint8_t i) const noexcept {
-        return (data >> (1U << (3 + i))) & 0xFFU;
+    uint16_t operator[](uint8_t i) const noexcept {
+        return (data >> (8 + i * 12)) & 0xFFFU;
     }
     bool operator==(SiteIndex other) const noexcept {
         return data == other.data;
@@ -113,18 +120,19 @@ struct SiteIndex {
     bool operator<(SiteIndex other) const noexcept { return data < other.data; }
     // Flip first two site indices
     SiteIndex flip_spatial() const noexcept {
-        return SiteIndex((uint32_t)((data & (0xFF0000FFU)) |
-                                    ((*this)[0] << 16) | ((*this)[1] << 8)));
+        return SiteIndex((uint64_t)((data & 0xFF000000000000FFULL) |
+                                    ((uint64_t)(*this)[0] << 20) |
+                                    ((uint64_t)(*this)[1] << 8)));
     }
     // Flip first two site indices and associated spin indices
     SiteIndex flip() const noexcept {
-        return SiteIndex((uint32_t)((data & (0xFF00000FU)) | (s(0) << 5) |
-                                    (s(1) << 4) | ((*this)[0] << 16) |
-                                    ((*this)[1] << 8)));
+        return SiteIndex((uint64_t)(
+            (data & 0xFFULL) | ((uint64_t)s(0) << 57) | ((uint64_t)s(1) << 56) |
+            ((uint64_t)(*this)[0] << 20) | ((uint64_t)(*this)[1] << 8)));
     }
     size_t hash() const noexcept { return (size_t)data; }
-    vector<uint8_t> to_array() const {
-        vector<uint8_t> r;
+    vector<uint16_t> to_array() const {
+        vector<uint16_t> r;
         r.reserve(size() + spin_size());
         for (uint8_t i = 0; i < size(); i++)
             r.push_back((*this)[i]);

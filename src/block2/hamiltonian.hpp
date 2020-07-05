@@ -46,12 +46,12 @@ template <typename S> struct Hamiltonian {
     vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
         *site_norm_ops;
     // Number of orbitals and point group symmetry irreducible representations
-    uint8_t n_sites, n_syms;
+    uint16_t n_sites, n_syms;
     shared_ptr<OperatorFunctions<S>> opf;
     // Point group symmetry of orbitals
     vector<uint8_t> orb_sym;
     Hamiltonian(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
-        : vacuum(vacuum), n_sites((uint8_t)n_sites),
+        : vacuum(vacuum), n_sites((uint16_t)n_sites),
           orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
         n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;
@@ -66,12 +66,12 @@ template <typename S> struct Hamiltonian {
     // Fill the map with sparse matrix representation of site operators
     // The keys in map should be already set by filter_site_ops
     virtual void get_site_ops(
-        uint8_t m,
+        uint16_t m,
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             &ops) const {};
     // Fill the map with sparse matrix representation of site operators
     // Trivial sparse matrices are removed from symbolic operator tensor and map
-    void filter_site_ops(uint8_t m, const vector<shared_ptr<Symbolic<S>>> &mats,
+    void filter_site_ops(uint16_t m, const vector<shared_ptr<Symbolic<S>>> &mats,
                          map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                              op_expr_less<S>> &ops) const {
         vector<shared_ptr<Symbolic<S>>> pmats = mats;
@@ -168,7 +168,7 @@ template <typename S> struct Hamiltonian {
     }
     // Find sparse matrix info for site operator with the given delta quantum q
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(S q,
-                                                      uint8_t i_sym) const {
+                                                      uint16_t i_sym) const {
         auto p = lower_bound(site_op_infos[i_sym].begin(),
                              site_op_infos[i_sym].end(), q,
                              SparseMatrixInfo<S>::cmp_op_info);
@@ -179,7 +179,7 @@ template <typename S> struct Hamiltonian {
     }
     // Find site normal operator with the given symbol q
     shared_ptr<SparseMatrix<S>>
-    find_site_norm_op(const shared_ptr<OpExpr<S>> &q, uint8_t i_sym) const {
+    find_site_norm_op(const shared_ptr<OpExpr<S>> &q, uint16_t i_sym) const {
         auto p = lower_bound(site_norm_ops[i_sym].begin(),
                              site_norm_ops[i_sym].end(), q, cmp_site_norm_op);
         if (p == site_norm_ops[i_sym].end() || !(p->first == q))

@@ -25,8 +25,8 @@ TEST_F(TestDMRG, Test) {
     // string occ_filename = "data/CR2.SVP.OCC";
     // occs = read_occ(occ_filename);
     // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
-    string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
+    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
@@ -34,7 +34,6 @@ TEST_F(TestDMRG, Test) {
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    bool su2 = !fcidump->uhf;
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
     // abort();

@@ -454,7 +454,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         simplify();
     }
     shared_ptr<OpExpr<S>> simplify_expr(const shared_ptr<OpExpr<S>> &expr,
-                                        S op = S(0xFFFFFFFFU)) {
+                                        S op = S(S::invalid)) {
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         switch (expr->get_type()) {
         case OpTypes::Prod: {
@@ -514,7 +514,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 return zero;
             else if (terms[0]->b == nullptr || terms.size() <= 2)
                 return make_shared<OpSum<S>>(terms);
-            else if (collect_terms && op != S(0xFFFFFFFFU)) {
+            else if (collect_terms && op != S(S::invalid)) {
                 map<shared_ptr<OpExpr<S>>,
                     map<int, vector<shared_ptr<OpString<S>>>>, op_expr_less<S>>
                     mpa[2], mpb[2];

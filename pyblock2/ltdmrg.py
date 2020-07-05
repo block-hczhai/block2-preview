@@ -28,7 +28,7 @@ Author: Huanchen Zhai, Jun 21, 2020
 import numpy as np
 import time
 from block2 import init_memory, release_memory, set_mkl_num_threads
-from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
+from block2 import VectorUInt8, VectorUInt16, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
 from block2 import SU2, SZ, get_partition_weights
 
@@ -184,7 +184,7 @@ class LTDMRG:
 
         self.energies = dmrg.energies[-1]
         self.quanta = dmrg.mps_quanta[-1]
-        self.multiplicities = VectorUInt8(
+        self.multiplicities = VectorInt(
             [qs[0][0].multiplicity for qs in self.quanta])
 
         self.bond_dim = bond_dims[-1]

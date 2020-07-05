@@ -1,31 +1,31 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include "gtest/gtest.h"
 
 using namespace block2;
 
 class TestOperator : public ::testing::Test {
   protected:
-    vector<shared_ptr<OpExpr>> ops;
+    vector<shared_ptr<OpExpr<SZ>>> ops;
     vector<string> reprs;
-    shared_ptr<OpExpr> zero;
+    shared_ptr<OpExpr<SZ>> zero;
     void SetUp() override {
-        ops.push_back(make_shared<OpElement>(
-            OpElement(OpNames::H, SiteIndex(), SpinLabel(0, 0, 0))));
+        ops.push_back(
+            make_shared<OpElement<SZ>>(OpNames::H, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("H");
-        ops.push_back(make_shared<OpElement>(
-            OpElement(OpNames::I, SiteIndex(), SpinLabel(0, 0, 0))));
+        ops.push_back(
+            make_shared<OpElement<SZ>>(OpNames::I, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("I");
-        ops.push_back(make_shared<OpElement>(
-            OpElement(OpNames::C, SiteIndex(0), SpinLabel(1, 1, 0))));
+        ops.push_back(
+            make_shared<OpElement<SZ>>(OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
         reprs.push_back("C0");
-        ops.push_back(make_shared<OpElement>(
-            OpElement(OpNames::Q, SiteIndex(1, 1, 0), SpinLabel(0, 0, 0))));
+        ops.push_back(make_shared<OpElement<SZ>>(OpNames::Q, SiteIndex(1, 1, 0),
+                                                 SZ(0, 0, 0)));
         reprs.push_back("Q[ 1 1 0 ]");
-        ops.push_back(make_shared<OpElement>(OpElement(
-            OpNames::P, SiteIndex(1, 2, 1), SpinLabel(2, 0, 0))));
+        ops.push_back(make_shared<OpElement<SZ>>(OpNames::P, SiteIndex(1, 2, 1),
+                                                 SZ(2, 0, 0)));
         reprs.push_back("P[ 1 2 1 ]");
-        zero = make_shared<OpExpr>();
+        zero = make_shared<OpExpr<SZ>>();
     }
 };
 
@@ -33,15 +33,17 @@ TEST_F(TestOperator, TestSiteIndex) {
     EXPECT_EQ(SiteIndex().size(), 0);
     EXPECT_EQ(SiteIndex().spin_size(), 0);
     EXPECT_EQ(SiteIndex()[0], 0);
-    EXPECT_EQ(SiteIndex(3).size(), 1);
-    EXPECT_EQ(SiteIndex(3).spin_size(), 0);
-    EXPECT_EQ(SiteIndex(3)[0], 3);
+    EXPECT_EQ(SiteIndex((uint16_t)3).size(), 1);
+    EXPECT_EQ(SiteIndex((uint16_t)3).spin_size(), 0);
+    EXPECT_EQ(SiteIndex((uint16_t)3)[0], 3);
     EXPECT_EQ(SiteIndex(3, 4, 1).size(), 2);
     EXPECT_EQ(SiteIndex(3, 4, 1).spin_size(), 1);
     EXPECT_EQ(SiteIndex(3, 4, 1)[0], 3);
     EXPECT_EQ(SiteIndex(3, 4, 1)[1], 4);
     EXPECT_EQ(SiteIndex(3, 4, 1).s(), 1);
     EXPECT_EQ(SiteIndex(3, 4, 0).s(), 0);
+    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data, SiteIndex({4, 3}, {1, 0}).flip_spatial().data);
+    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data, SiteIndex({4, 3}, {0, 1}).flip().data);
 }
 
 TEST_F(TestOperator, TestExpr) {
@@ -68,9 +70,9 @@ TEST_F(TestOperator, TestExpr) {
         EXPECT_TRUE(ops[i] + zero == ops[i]);
         EXPECT_TRUE(zero + ops[i] == ops[i]);
     }
-    shared_ptr<OpExpr> a = ops[0], b = ops[1], c = ops[2];
-    shared_ptr<OpExpr> d = a * 0.5;
-    shared_ptr<OpExpr> e = b * 0.2;
+    shared_ptr<OpExpr<SZ>> a = ops[0], b = ops[1], c = ops[2];
+    shared_ptr<OpExpr<SZ>> d = a * 0.5;
+    shared_ptr<OpExpr<SZ>> e = b * 0.2;
     EXPECT_NE(to_str(a * b), to_str(b * a));
     EXPECT_NE(to_str(a + b), to_str(b + a));
     EXPECT_TRUE(a * b * 1.0 == a * b);

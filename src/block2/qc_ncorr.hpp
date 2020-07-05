@@ -50,14 +50,14 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][6];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][6];
         const int sz_minus[4] = {0, -2, 2, 0};
-        for (uint8_t m = 0; m < n_sites; m++)
+        for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 4; s++)
                 b_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::B,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(0, sz_minus[s], 0));
-        for (uint8_t i = 0; i < n_sites; i++)
-            for (uint8_t j = 0; j < n_sites; j++) {
+        for (uint16_t i = 0; i < n_sites; i++)
+            for (uint16_t j = 0; j < n_sites; j++) {
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
@@ -80,7 +80,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         MPO<S>::schemer = nullptr;
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
-        for (uint8_t m = 0; m < n_sites; m++) {
+        for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 10 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 11;
             // left operator names
@@ -88,7 +88,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 make_shared<SymbolicRowVector<S>>(lshape);
             (*plop)[0] = i_op;
             if (m != n_sites - 1)
-                for (uint8_t j = 0; j <= m; j++) {
+                for (uint16_t j = 0; j <= m; j++) {
                     for (uint8_t s = 0; s < 4; s++)
                         (*plop)[1 + (m + 1) * s + j] = b_op[j][s];
                     for (uint8_t s = 0; s < 6; s++)
@@ -115,7 +115,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 int p = 0;
                 for (uint8_t s = 0; s < 6; s++) {
-                    for (uint8_t j = 0; j <= m; j++) {
+                    for (uint16_t j = 0; j <= m; j++) {
                         shared_ptr<OpExpr<S>> expr = nn_op[j][m][s] * i_op;
                         (*pmop)[p + 2 * j] = pdm1_op[j][m][s];
                         (*pmexpr)[p + 2 * j] = expr;
@@ -130,7 +130,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 }
                 if (m == n_sites - 2) {
                     for (uint8_t s = 0; s < 4; s++) {
-                        for (uint8_t j = 0; j <= m; j++) {
+                        for (uint16_t j = 0; j <= m; j++) {
                             shared_ptr<OpExpr<S>> expr =
                                 b_op[j][(s & 1) | ((s & 1) << 1)] *
                                 b_op[m + 1][(s >> 1) | ((s >> 1) << 1)];
@@ -146,7 +146,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                         p += 2 * m + 3;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j <= m; j++) {
+                        for (uint16_t j = 0; j <= m; j++) {
                             shared_ptr<OpExpr<S>> expr =
                                 b_op[j][s | ((!s) << 1)] *
                                 b_op[m + 1][(!s) | (s << 1)];
@@ -182,20 +182,20 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             if (m != n_sites - 1) {
                 int pi = 0, pb[4] = {1, 1 + m, 1 + m + m, 1 + m + m + m}, p = 1;
                 for (uint8_t s = 0; s < 4; s++) {
-                    for (uint8_t i = 0; i < m; i++)
+                    for (uint16_t i = 0; i < m; i++)
                         (*plmat)[{pb[s] + i, p + i}] = i_op;
                     (*plmat)[{pi, p + m}] = b_op[m][s];
                     p += m + 1;
                 }
                 for (uint8_t s = 0; s < 4; s++) {
-                    for (uint8_t i = 0; i < m; i++)
+                    for (uint16_t i = 0; i < m; i++)
                         (*plmat)[{pb[(s & 1) | ((s & 1) << 1)] + i, p + i}] =
                             b_op[m][(s >> 1) | ((s >> 1) << 1)];
                     (*plmat)[{pi, p + m}] = nn_op[m][m][s];
                     p += m + 1;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t i = 0; i < m; i++)
+                    for (uint16_t i = 0; i < m; i++)
                         (*plmat)[{pb[s | ((!s) << 1)] + i, p + i}] =
                             b_op[m][(!s) | (s << 1)];
                     (*plmat)[{pi, p + m}] = nn_op[m][m][s + 4];
@@ -243,12 +243,12 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         shared_ptr<OpExpr<S>> b_op[n_sites][2];
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][2];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][2];
-        for (uint8_t m = 0; m < n_sites; m++)
+        for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 2; s++)
                 b_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::B, SiteIndex(m, m, s), S(0, s * 2, 0));
-        for (uint8_t i = 0; i < n_sites; i++)
-            for (uint8_t j = 0; j < n_sites; j++)
+        for (uint16_t i = 0; i < n_sites; i++)
+            for (uint16_t j = 0; j < n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     nn_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::NN, SiteIndex(i, j, s), hamil.vacuum);
@@ -260,7 +260,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         MPO<S>::schemer = nullptr;
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
-        for (uint8_t m = 0; m < n_sites; m++) {
+        for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 4 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 5;
             // left operator names
@@ -268,7 +268,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 make_shared<SymbolicRowVector<S>>(lshape);
             (*plop)[0] = i_op;
             if (m != n_sites - 1)
-                for (uint8_t j = 0; j <= m; j++) {
+                for (uint16_t j = 0; j <= m; j++) {
                     for (uint8_t s = 0; s < 2; s++)
                         (*plop)[1 + (m + 1) * s + j] = b_op[j][s];
                     for (uint8_t s = 0; s < 2; s++)
@@ -295,7 +295,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 int p = 0;
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t j = 0; j <= m; j++) {
+                    for (uint16_t j = 0; j <= m; j++) {
                         shared_ptr<OpExpr<S>> expr = nn_op[j][m][s] * i_op;
                         (*pmop)[p + 2 * j] = pdm1_op[m][j][s],
                                         (*pmexpr)[p + 2 * j] = expr;
@@ -307,7 +307,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 }
                 if (m == n_sites - 2) {
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j <= m; j++) {
+                        for (uint16_t j = 0; j <= m; j++) {
                             shared_ptr<OpExpr<S>> expr =
                                 s == 0 ? 2.0 * (b_op[j][0] * b_op[m + 1][0])
                                        : (-sqrt(3.0)) *
@@ -343,16 +343,16 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
             if (m != n_sites - 1) {
                 int pi = 0, pb[2] = {1, 1 + m}, p = 1;
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t i = 0; i < m; i++)
+                    for (uint16_t i = 0; i < m; i++)
                         (*plmat)[{pb[s] + i, p + i}] = i_op;
                     (*plmat)[{pi, p + m}] = b_op[m][s];
                     p += m + 1;
                 }
-                for (uint8_t i = 0; i < m; i++)
+                for (uint16_t i = 0; i < m; i++)
                     (*plmat)[{pb[0] + i, p + i}] = 2.0 * b_op[m][0];
                 (*plmat)[{pi, p + m}] = nn_op[m][m][0];
                 p += m + 1;
-                for (uint8_t i = 0; i < m; i++) {
+                for (uint16_t i = 0; i < m; i++) {
                     (*plmat)[{pb[0] + i, p + i}] = b_op[m][0];
                     (*plmat)[{pb[1] + i, p + i}] = (-sqrt(3.0)) * b_op[m][1];
                 }

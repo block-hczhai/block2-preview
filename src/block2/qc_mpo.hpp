@@ -42,7 +42,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
         MPO<S>::const_e = 0.0;
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
-        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
             // site tensor
             shared_ptr<Symbolic<S>> pmat;
             if (m == 0)
@@ -105,7 +105,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         MPO<S>::const_e = hamil.e();
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
-        uint8_t trans_l = -1, trans_r = hamil.n_sites;
+        uint16_t trans_l = -1, trans_r = hamil.n_sites;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
             trans_l = (hamil.n_sites >> 1) - 1, trans_r = (hamil.n_sites >> 1);
         else if (mode == QCTypes::Conventional)
@@ -113,7 +113,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             trans_r = (hamil.n_sites >> 1) + 1;
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
-        for (uint8_t m = 0; m < hamil.n_sites; m++)
+        for (uint16_t m = 0; m < hamil.n_sites; m++)
             for (uint8_t s = 0; s < 2; s++) {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
@@ -140,8 +140,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     OpNames::R, SiteIndex({m}, {s}),
                     S(-1, -sz[s], hamil.orb_sym[m]), -1.0);
             }
-        for (uint8_t i = 0; i < hamil.n_sites; i++)
-            for (uint8_t j = 0; j < hamil.n_sites; j++)
+        for (uint16_t i = 0; i < hamil.n_sites; i++)
+            for (uint16_t j = 0; j < hamil.n_sites; j++)
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
@@ -169,7 +169,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 }
         int p;
         bool repeat_m = false;
-        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
             shared_ptr<Symbolic<S>> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
@@ -213,12 +213,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 mat[{0, 5}] = d_op[m][1];
                 p = 6;
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         mat[{0, p + j - m - 1}] = rd_op[j][s];
                     p += hamil.n_sites - (m + 1);
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         mat[{0, p + j - m - 1}] = mr_op[j][s];
                     p += hamil.n_sites - (m + 1);
                 }
@@ -227,12 +227,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 mat[{1, 0}] = h_op;
                 p = 2;
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         mat[{p + j, 0}] = r_op[j][s];
                     p += m;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         mat[{p + j, 0}] = mrd_op[j][s];
                     p += m;
                 }
@@ -264,12 +264,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                         mat[{1, 0}] = h_op;
                         p = 2;
                         for (uint8_t s = 0; s < 2; s++) {
-                            for (uint8_t j = 0; j < m; j++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{p + j, 0}] = r_op[j][s];
                             p += m;
                         }
                         for (uint8_t s = 0; s < 2; s++) {
-                            for (uint8_t j = 0; j < m; j++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{p + j, 0}] = mrd_op[j][s];
                             p += m;
                         }
@@ -283,20 +283,20 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                         }
                     }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] = 0.5 * p_op[j][k][s];
                             p += m;
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] = 0.5 * pd_op[j][k][s];
                             p += m;
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] = q_op[j][k][s];
                             p += m;
                         }
@@ -326,25 +326,25 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                  2 + hamil.n_sites * 4 + m * m * 11};
                     // C
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             mat[{pc[s] + j, p + j}] = i_op;
                         mat[{pi, p + m}] = c_op[m][s];
                         p += m + 1;
                     }
                     // D
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             mat[{pd[s] + j, p + j}] = i_op;
                         mat[{pi, p + m}] = d_op[m][s];
                         p += m + 1;
                     }
                     // RD
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{prd[s] + i, p + i - (m + 1)}] = i_op;
                             mat[{pi, p + i - (m + 1)}] = rd_op[i][s];
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = 0; k < m; k++) {
+                                for (uint16_t k = 0; k < m; k++) {
                                     mat[{pd[sp] + k, p + i - (m + 1)}] =
                                         pd_op[i][k][s | (sp << 1)];
                                     mat[{pc[sp] + k, p + i - (m + 1)}] =
@@ -352,8 +352,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 }
                             if (!symmetrized_p)
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = 0; j < m; j++)
-                                        for (uint8_t l = 0; l < m; l++) {
+                                    for (uint16_t j = 0; j < m; j++)
+                                        for (uint16_t l = 0; l < m; l++) {
                                             double f =
                                                 hamil.v(s, sp, i, j, m, l);
                                             mat[{pa[s | (sp << 1)] + j * m + l,
@@ -362,8 +362,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         }
                             else
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = 0; j < m; j++)
-                                        for (uint8_t l = 0; l < m; l++) {
+                                    for (uint16_t j = 0; j < m; j++)
+                                        for (uint16_t l = 0; l < m; l++) {
                                             double f0 = 0.5 * hamil.v(s, sp, i,
                                                                       j, m, l),
                                                    f1 = -0.5 * hamil.v(s, sp, i,
@@ -376,15 +376,15 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 f1 * d_op[m][sp];
                                         }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = 0; k < m; k++)
-                                    for (uint8_t l = 0; l < m; l++) {
+                                for (uint16_t k = 0; k < m; k++)
+                                    for (uint16_t l = 0; l < m; l++) {
                                         double f = hamil.v(s, sp, i, m, k, l);
                                         mat[{pb[sp | (sp << 1)] + l * m + k,
                                              p + i - (m + 1)}] = f * c_op[m][s];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t j = 0; j < m; j++)
-                                    for (uint8_t k = 0; k < m; k++) {
+                                for (uint16_t j = 0; j < m; j++)
+                                    for (uint16_t k = 0; k < m; k++) {
                                         double f =
                                             -1.0 * hamil.v(s, sp, i, j, k, m);
                                         mat[{pb[s | (sp << 1)] + j * m + k,
@@ -396,11 +396,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     // R
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{pr[s] + i, p + i - (m + 1)}] = i_op;
                             mat[{pi, p + i - (m + 1)}] = mr_op[i][s];
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = 0; k < m; k++) {
+                                for (uint16_t k = 0; k < m; k++) {
                                     mat[{pc[sp] + k, p + i - (m + 1)}] =
                                         -1.0 * p_op[i][k][s | (sp << 1)];
                                     mat[{pd[sp] + k, p + i - (m + 1)}] =
@@ -408,8 +408,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 }
                             if (!symmetrized_p)
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = 0; j < m; j++)
-                                        for (uint8_t l = 0; l < m; l++) {
+                                    for (uint16_t j = 0; j < m; j++)
+                                        for (uint16_t l = 0; l < m; l++) {
                                             double f = -1.0 * hamil.v(s, sp, i,
                                                                       j, m, l);
                                             mat[{pad[s | (sp << 1)] + j * m + l,
@@ -418,8 +418,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         }
                             else
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = 0; j < m; j++)
-                                        for (uint8_t l = 0; l < m; l++) {
+                                    for (uint16_t j = 0; j < m; j++)
+                                        for (uint16_t l = 0; l < m; l++) {
                                             double f0 = -0.5 * hamil.v(s, sp, i,
                                                                        j, m, l),
                                                    f1 = 0.5 * hamil.v(s, sp, i,
@@ -432,16 +432,16 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 f1 * c_op[m][sp];
                                         }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = 0; k < m; k++)
-                                    for (uint8_t l = 0; l < m; l++) {
+                                for (uint16_t k = 0; k < m; k++)
+                                    for (uint16_t l = 0; l < m; l++) {
                                         double f =
                                             -1.0 * hamil.v(s, sp, i, m, k, l);
                                         mat[{pb[sp | (sp << 1)] + k * m + l,
                                              p + i - (m + 1)}] = f * d_op[m][s];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t j = 0; j < m; j++)
-                                    for (uint8_t k = 0; k < m; k++) {
+                                for (uint16_t j = 0; j < m; j++)
+                                    for (uint16_t k = 0; k < m; k++) {
                                         double f = (-1.0) * (-1.0) *
                                                    hamil.v(s, sp, i, j, k, m);
                                         mat[{pb[sp | (s << 1)] + k * m + j,
@@ -453,11 +453,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     // A
                     for (uint8_t s = 0; s < 4; s++) {
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pa[s] + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pc[s & 1] + i, p + i * (m + 1) + m}] =
                                 c_op[m][s >> 1];
                             mat[{pc[s >> 1] + i, p + m * (m + 1) + i}] =
@@ -468,11 +468,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     // AD
                     for (uint8_t s = 0; s < 4; s++) {
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pad[s] + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pd[s & 1] + i, p + i * (m + 1) + m}] =
                                 md_op[m][s >> 1];
                             mat[{pd[s >> 1] + i, p + m * (m + 1) + i}] =
@@ -483,11 +483,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     // B
                     for (uint8_t s = 0; s < 4; s++) {
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pb[s] + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pc[s & 1] + i, p + i * (m + 1) + m}] =
                                 d_op[m][s >> 1];
                             mat[{pd[s >> 1] + i, p + m * (m + 1) + i}] =
@@ -525,32 +525,32 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             p += m + 1;
                         }
                         for (uint8_t s = 0; s < 2; s++) {
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{1, p + j - m - 1}] = rd_op[j][s];
                             p += hamil.n_sites - m - 1;
                         }
                         for (uint8_t s = 0; s < 2; s++) {
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{1, p + j - m - 1}] = mr_op[j][s];
                             p += hamil.n_sites - m - 1;
                         }
                     }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] = 0.5 * p_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] =
                                     0.5 * pd_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] = q_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
@@ -583,14 +583,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                  2 + hamil.n_sites * 4 + mm * mm * 11};
                     // R
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{p + i, pi}] = r_op[i][s];
                             mat[{p + i, pr[s] + i}] = i_op;
                             if (!symmetrized_p)
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = m + 1; j < hamil.n_sites;
+                                    for (uint16_t j = m + 1; j < hamil.n_sites;
                                          j++)
-                                        for (uint8_t l = m + 1;
+                                        for (uint16_t l = m + 1;
                                              l < hamil.n_sites; l++) {
                                             double f =
                                                 hamil.v(s, sp, i, j, m, l);
@@ -601,9 +601,9 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         }
                             else
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = m + 1; j < hamil.n_sites;
+                                    for (uint16_t j = m + 1; j < hamil.n_sites;
                                          j++)
-                                        for (uint8_t l = m + 1;
+                                        for (uint16_t l = m + 1;
                                              l < hamil.n_sites; l++) {
                                             double f0 = 0.5 * hamil.v(s, sp, i,
                                                                       j, m, l);
@@ -619,8 +619,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 f1 * c_op[m][sp];
                                         }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                    for (uint8_t l = m + 1; l < hamil.n_sites;
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
+                                    for (uint16_t l = m + 1; l < hamil.n_sites;
                                          l++) {
                                         double f = hamil.v(s, sp, i, m, k, l);
                                         mat[{p + i, pb[sp | (sp << 1)] +
@@ -629,8 +629,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                             f * d_op[m][s];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                                    for (uint8_t k = m + 1; k < hamil.n_sites;
+                                for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                                    for (uint16_t k = m + 1; k < hamil.n_sites;
                                          k++) {
                                         double f =
                                             (-1.0) * hamil.v(s, sp, i, j, k, m);
@@ -640,7 +640,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                             f * d_op[m][sp];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = m + 1; k < hamil.n_sites;
+                                for (uint16_t k = m + 1; k < hamil.n_sites;
                                      k++) {
                                     mat[{p + i, pc[sp] + k}] =
                                         -1.0 * p_op[k][i][sp | (s << 1)];
@@ -652,14 +652,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     // RD
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{p + i, pi}] = mrd_op[i][s];
                             mat[{p + i, prd[s] + i}] = i_op;
                             if (!symmetrized_p)
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = m + 1; j < hamil.n_sites;
+                                    for (uint16_t j = m + 1; j < hamil.n_sites;
                                          j++)
-                                        for (uint8_t l = m + 1;
+                                        for (uint16_t l = m + 1;
                                              l < hamil.n_sites; l++) {
                                             double f = -1.0 * hamil.v(s, sp, i,
                                                                       j, m, l);
@@ -670,9 +670,9 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         }
                             else
                                 for (uint8_t sp = 0; sp < 2; sp++)
-                                    for (uint8_t j = m + 1; j < hamil.n_sites;
+                                    for (uint16_t j = m + 1; j < hamil.n_sites;
                                          j++)
-                                        for (uint8_t l = m + 1;
+                                        for (uint16_t l = m + 1;
                                              l < hamil.n_sites; l++) {
                                             double f0 = -0.5 * hamil.v(s, sp, i,
                                                                        j, m, l);
@@ -688,8 +688,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 f1 * d_op[m][sp];
                                         }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                                    for (uint8_t l = m + 1; l < hamil.n_sites;
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
+                                    for (uint16_t l = m + 1; l < hamil.n_sites;
                                          l++) {
                                         double f =
                                             -1.0 * hamil.v(s, sp, i, m, k, l);
@@ -699,8 +699,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                             f * c_op[m][s];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                                    for (uint8_t k = m + 1; k < hamil.n_sites;
+                                for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                                    for (uint16_t k = m + 1; k < hamil.n_sites;
                                          k++) {
                                         double f = hamil.v(s, sp, i, j, k, m);
                                         mat[{p + i, pb[s | (sp << 1)] +
@@ -709,7 +709,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                             f * c_op[m][sp];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint8_t k = m + 1; k < hamil.n_sites;
+                                for (uint16_t k = m + 1; k < hamil.n_sites;
                                      k++) {
                                     mat[{p + i, pd[sp] + k}] =
                                         pd_op[k][i][sp | (s << 1)];
@@ -722,28 +722,28 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     // D
                     for (uint8_t s = 0; s < 2; s++) {
                         mat[{p + m - m, pi}] = d_op[m][s];
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             mat[{p + j - m, pd[s] + j}] = i_op;
                         p += hamil.n_sites - m;
                     }
                     // C
                     for (uint8_t s = 0; s < 2; s++) {
                         mat[{p + m - m, pi}] = c_op[m][s];
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             mat[{p + j - m, pc[s] + j}] = i_op;
                         p += hamil.n_sites - m;
                     }
                     // A
                     for (uint8_t s = 0; s < 4; s++) {
                         mat[{p + (m - m) * pm + m - m, pi}] = a_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pc[s >> 1] + i}] =
                                 c_op[m][s & 1];
                             mat[{p + (i - m) * pm + m - m, pc[s & 1] + i}] =
                                 mc_op[m][s >> 1];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pa[s] + (i - m - 1) * mm + j - m - 1}] =
                                     i_op;
@@ -752,14 +752,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     // AD
                     for (uint8_t s = 0; s < 4; s++) {
                         mat[{p + (m - m) * pm + m - m, pi}] = ad_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pd[s >> 1] + i}] =
                                 md_op[m][s & 1];
                             mat[{p + (i - m) * pm + m - m, pd[s & 1] + i}] =
                                 d_op[m][s >> 1];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pad[s] + (i - m - 1) * mm + j - m - 1}] =
                                     i_op;
@@ -768,14 +768,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     // B
                     for (uint8_t s = 0; s < 4; s++) {
                         mat[{p + (m - m) * pm + m - m, pi}] = b_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pd[s >> 1] + i}] =
                                 c_op[m][s & 1];
                             mat[{p + (i - m) * pm + m - m, pc[s & 1] + i}] =
                                 md_op[m][s >> 1];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pb[s] + (i - m - 1) * mm + j - m - 1}] =
                                     i_op;
@@ -814,62 +814,62 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     lop[1] = i_op;
                     p = 2;
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m + 1; j++)
+                        for (uint16_t j = 0; j < m + 1; j++)
                             lop[p + j] = c_op[j][s];
                         p += m + 1;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m + 1; j++)
+                        for (uint16_t j = 0; j < m + 1; j++)
                             lop[p + j] = d_op[j][s];
                         p += m + 1;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             lop[p + j - (m + 1)] = rd_op[j][s];
                         p += hamil.n_sites - (m + 1);
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             lop[p + j - (m + 1)] = mr_op[j][s];
                         p += hamil.n_sites - (m + 1);
                     }
                     switch (effective_mode) {
                     case QCTypes::NC:
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = a_op[j][k][s];
                                 p += m + 1;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = ad_op[j][k][s];
                                 p += m + 1;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = b_op[j][k][s];
                                 p += m + 1;
                             }
                         break;
                     case QCTypes::CN:
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] = 0.5 * p_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] = 0.5 * pd_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] = q_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
                             }
@@ -896,62 +896,62 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     rop[1] = h_op;
                     p = 2;
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             rop[p + j] = r_op[j][s];
                         p += m;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             rop[p + j] = mrd_op[j][s];
                         p += m;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                        for (uint16_t j = m; j < hamil.n_sites; j++)
                             rop[p + j - m] = d_op[j][s];
                         p += hamil.n_sites - m;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint8_t j = m; j < hamil.n_sites; j++)
+                        for (uint16_t j = m; j < hamil.n_sites; j++)
                             rop[p + j - m] = c_op[j][s];
                         p += hamil.n_sites - m;
                     }
                     switch (effective_mode) {
                     case QCTypes::NC:
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = 0.5 * p_op[j][k][s];
                                 p += m;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = 0.5 * pd_op[j][k][s];
                                 p += m;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = q_op[j][k][s];
                                 p += m;
                             }
                         break;
                     case QCTypes::CN:
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = a_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = ad_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
                         for (uint8_t s = 0; s < 4; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = b_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
@@ -976,7 +976,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
-            uint8_t m;
+            uint16_t m;
             MPO<S>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
             // left transform
             m = trans_l;
@@ -996,12 +996,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             p = 2 + 4 * hamil.n_sites;
             vector<shared_ptr<OpExpr<S>>> exprs;
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                         lop[p + k - m - 1] = 0.5 * p_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = 0; g < m + 1; g++)
-                            for (uint8_t h = 0; h < m + 1; h++)
+                        for (uint16_t g = 0; g < m + 1; g++)
+                            for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
                                     TINY)
                                     exprs.push_back(
@@ -1013,12 +1013,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     p += hamil.n_sites - m - 1;
                 }
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                         lop[p + k - m - 1] = 0.5 * pd_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = 0; g < m + 1; g++)
-                            for (uint8_t h = 0; h < m + 1; h++)
+                        for (uint16_t g = 0; g < m + 1; g++)
+                            for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
                                     TINY)
                                     exprs.push_back(
@@ -1030,12 +1030,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     p += hamil.n_sites - m - 1;
                 }
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                         lop[p + k - m - 1] = q_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = 0; g < m + 1; g++)
-                            for (uint8_t h = 0; h < m + 1; h++) {
+                        for (uint16_t g = 0; g < m + 1; g++)
+                            for (uint16_t h = 0; h < m + 1; h++) {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
                                     TINY)
                                     exprs.push_back(
@@ -1069,12 +1069,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 rop[i] = this->right_operator_names[m + 1]->data[i];
             p = 2 + 4 * hamil.n_sites;
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++) {
+                for (uint16_t j = 0; j < m + 1; j++) {
+                    for (uint16_t k = 0; k < m + 1; k++) {
                         rop[p + k] = 0.5 * p_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
                                     TINY)
                                     exprs.push_back(
@@ -1086,12 +1086,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     p += m + 1;
                 }
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++) {
+                for (uint16_t j = 0; j < m + 1; j++) {
+                    for (uint16_t k = 0; k < m + 1; k++) {
                         rop[p + k] = 0.5 * pd_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
                                     TINY)
                                     exprs.push_back(
@@ -1103,12 +1103,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     p += m + 1;
                 }
             for (uint8_t s = 0; s < 4; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++) {
+                for (uint16_t j = 0; j < m + 1; j++) {
+                    for (uint16_t k = 0; k < m + 1; k++) {
                         rop[p + k] = q_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint8_t h = m + 1; h < hamil.n_sites; h++) {
+                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint16_t h = m + 1; h < hamil.n_sites; h++) {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
                                     TINY)
                                     exprs.push_back(
@@ -1130,7 +1130,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {
-        for (uint8_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
+        for (uint16_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
             for (auto it = this->tensors[m]->ops.crbegin();
                  it != this->tensors[m]->ops.crend(); ++it) {
                 OpElement<S> &op =
@@ -1166,13 +1166,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         MPO<S>::const_e = hamil.e();
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
-        uint8_t trans_l = -1, trans_r = hamil.n_sites;
+        uint16_t trans_l = -1, trans_r = hamil.n_sites;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
             trans_l = (hamil.n_sites >> 1) - 1, trans_r = (hamil.n_sites >> 1);
         else if (mode == QCTypes::Conventional)
             trans_l = (hamil.n_sites >> 1) - 1,
             trans_r = (hamil.n_sites >> 1) + 1;
-        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
                                                 S(1, 1, hamil.orb_sym[m]));
             d_op[m] = make_shared<OpElement<S>>(OpNames::D, SiteIndex(m),
@@ -1186,8 +1186,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             tr_op[m] = make_shared<OpElement<S>>(
                 OpNames::R, SiteIndex(m), S(-1, 1, hamil.orb_sym[m]), 2.0);
         }
-        for (uint8_t i = 0; i < hamil.n_sites; i++)
-            for (uint8_t j = 0; j < hamil.n_sites; j++)
+        for (uint16_t i = 0; i < hamil.n_sites; i++)
+            for (uint16_t j = 0; j < hamil.n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, SiteIndex(i, j, s),
@@ -1210,7 +1210,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 }
         int p;
         bool repeat_m = false;
-        for (uint8_t m = 0; m < hamil.n_sites; m++) {
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
             shared_ptr<Symbolic<S>> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
@@ -1252,20 +1252,20 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 mat[{0, 2}] = c_op[m];
                 mat[{0, 3}] = d_op[m];
                 p = 4;
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                     mat[{0, p + j - m - 1}] = trd_op[j];
                 p += hamil.n_sites - (m + 1);
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                     mat[{0, p + j - m - 1}] = tr_op[j];
                 p += hamil.n_sites - (m + 1);
             } else if (m == hamil.n_sites - 1) {
                 mat[{0, 0}] = i_op;
                 mat[{1, 0}] = h_op;
                 p = 2;
-                for (uint8_t j = 0; j < m; j++)
+                for (uint16_t j = 0; j < m; j++)
                     mat[{p + j, 0}] = tr_op[j];
                 p += m;
-                for (uint8_t j = 0; j < m; j++)
+                for (uint16_t j = 0; j < m; j++)
                     mat[{p + j, 0}] = trd_op[j];
                 p += m;
                 mat[{p, 0}] = d_op[m];
@@ -1291,10 +1291,10 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{0, 0}] = i_op;
                         mat[{1, 0}] = h_op;
                         p = 2;
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             mat[{p + j, 0}] = tr_op[j];
                         p += m;
-                        for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < m; j++)
                             mat[{p + j, 0}] = trd_op[j];
                         p += m;
                         mat[{p, 0}] = d_op[m];
@@ -1304,22 +1304,22 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] = su2_factor[s] * p_op[j][k][s];
                             p += m;
                         }
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] =
                                     su2_factor[s] * pd_op[j][k][s];
                             p += m;
                         }
                     su2_factor = {1.0, sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = 0; j < m; j++) {
-                            for (uint8_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
                                 mat[{p + k, 0}] = su2_factor[s] * q_op[j][k][s];
                             p += m;
                         }
@@ -1338,20 +1338,20 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     int pb0 = 2 + (hamil.n_sites << 1) + m * m * 4;
                     int pb1 = 2 + (hamil.n_sites << 1) + m * m * 5;
                     // C
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         mat[{pc + j, p + j}] = i_op;
                     mat[{pi, p + m}] = c_op[m];
                     p += m + 1;
                     // D
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         mat[{pd + j, p + j}] = i_op;
                     mat[{pi, p + m}] = d_op[m];
                     p += m + 1;
                     // RD
-                    for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                    for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                         mat[{prd + i, p + i - (m + 1)}] = i_op;
                         mat[{pi, p + i - (m + 1)}] = trd_op[i];
-                        for (uint8_t k = 0; k < m; k++) {
+                        for (uint16_t k = 0; k < m; k++) {
                             mat[{pd + k, p + i - (m + 1)}] =
                                 2.0 * ((-0.5) * pd_op[i][k][0] +
                                        (-0.5 * sqrt(3)) * pd_op[i][k][1]);
@@ -1359,8 +1359,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                 2.0 * ((0.5) * q_op[k][i][0] +
                                        (-0.5 * sqrt(3)) * q_op[k][i][1]);
                         }
-                        for (uint8_t j = 0; j < m; j++)
-                            for (uint8_t l = 0; l < m; l++) {
+                        for (uint16_t j = 0; j < m; j++)
+                            for (uint16_t l = 0; l < m; l++) {
                                 double f0 =
                                     hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
                                 double f1 =
@@ -1370,15 +1370,15 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                 mat[{pa1 + j * m + l, p + i - (m + 1)}] =
                                     f1 * (0.5 * sqrt(3)) * d_op[m];
                             }
-                        for (uint8_t k = 0; k < m; k++)
-                            for (uint8_t l = 0; l < m; l++) {
+                        for (uint16_t k = 0; k < m; k++)
+                            for (uint16_t l = 0; l < m; l++) {
                                 double f = 2.0 * hamil.v(i, m, k, l) -
                                            hamil.v(i, l, k, m);
                                 mat[{pb0 + l * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
                             }
-                        for (uint8_t j = 0; j < m; j++)
-                            for (uint8_t k = 0; k < m; k++) {
+                        for (uint16_t j = 0; j < m; j++)
+                            for (uint16_t k = 0; k < m; k++) {
                                 double f = hamil.v(i, j, k, m) * sqrt(3);
                                 mat[{pb1 + j * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
@@ -1386,10 +1386,10 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     p += hamil.n_sites - (m + 1);
                     // R
-                    for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                    for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                         mat[{pr + i, p + i - (m + 1)}] = i_op;
                         mat[{pi, p + i - (m + 1)}] = tr_op[i];
-                        for (uint8_t k = 0; k < m; k++) {
+                        for (uint16_t k = 0; k < m; k++) {
                             mat[{pc + k, p + i - (m + 1)}] =
                                 2.0 * ((-0.5) * p_op[i][k][0] +
                                        (0.5 * sqrt(3)) * p_op[i][k][1]);
@@ -1397,8 +1397,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                 2.0 * ((0.5) * q_op[i][k][0] +
                                        (0.5 * sqrt(3)) * q_op[i][k][1]);
                         }
-                        for (uint8_t j = 0; j < m; j++)
-                            for (uint8_t l = 0; l < m; l++) {
+                        for (uint16_t j = 0; j < m; j++)
+                            for (uint16_t l = 0; l < m; l++) {
                                 double f0 =
                                     hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
                                 double f1 =
@@ -1408,15 +1408,15 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                 mat[{pad1 + j * m + l, p + i - (m + 1)}] =
                                     f1 * (-0.5 * sqrt(3)) * c_op[m];
                             }
-                        for (uint8_t k = 0; k < m; k++)
-                            for (uint8_t l = 0; l < m; l++) {
+                        for (uint16_t k = 0; k < m; k++)
+                            for (uint16_t l = 0; l < m; l++) {
                                 double f = 2.0 * hamil.v(i, m, k, l) -
                                            hamil.v(i, l, k, m);
                                 mat[{pb0 + k * m + l, p + i - (m + 1)}] =
                                     f * d_op[m];
                             }
-                        for (uint8_t j = 0; j < m; j++)
-                            for (uint8_t k = 0; k < m; k++) {
+                        for (uint16_t j = 0; j < m; j++)
+                            for (uint16_t k = 0; k < m; k++) {
                                 double f =
                                     (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
                                 mat[{pb1 + k * m + j, p + i - (m + 1)}] =
@@ -1427,11 +1427,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     // A
                     for (uint8_t s = 0; s < 2; s++) {
                         int pa = s ? pa1 : pa0;
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pa + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
                             mat[{pc + i, p + m * (m + 1) + i}] =
                                 s ? mc_op[m] : c_op[m];
@@ -1442,11 +1442,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     // AD
                     for (uint8_t s = 0; s < 2; s++) {
                         int pad = s ? pad1 : pad0;
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pad + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pd + i, p + i * (m + 1) + m}] =
                                 s ? md_op[m] : d_op[m];
                             mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
@@ -1457,11 +1457,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     // B
                     for (uint8_t s = 0; s < 2; s++) {
                         int pb = s ? pb1 : pb0;
-                        for (uint8_t i = 0; i < m; i++)
-                            for (uint8_t j = 0; j < m; j++)
+                        for (uint16_t i = 0; i < m; i++)
+                            for (uint16_t j = 0; j < m; j++)
                                 mat[{pb + i * m + j, p + i * (m + 1) + j}] =
                                     i_op;
-                        for (uint8_t i = 0; i < m; i++) {
+                        for (uint16_t i = 0; i < m; i++) {
                             mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
                             mat[{pd + i, p + m * (m + 1) + i}] =
                                 s ? mc_op[m] : c_op[m];
@@ -1493,32 +1493,32 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         p += m + 1;
                         mat[{1, p + m}] = d_op[m];
                         p += m + 1;
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             mat[{1, p + j - m - 1}] = trd_op[j];
                         p += hamil.n_sites - m - 1;
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                             mat[{1, p + j - m - 1}] = tr_op[j];
                         p += hamil.n_sites - m - 1;
                     }
                     vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] =
                                     su2_factor[s] * p_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] =
                                     su2_factor[s] * pd_op[j][k][s];
                             p += hamil.n_sites - m - 1;
                         }
                     su2_factor = {1.0, sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                 mat[{!!m, p + k - m - 1}] =
                                     su2_factor[s] * q_op[j][k][s];
                             p += hamil.n_sites - m - 1;
@@ -1541,11 +1541,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     int pb0 = 2 + (hamil.n_sites << 1) + mm * mm * 4;
                     int pb1 = 2 + (hamil.n_sites << 1) + mm * mm * 5;
                     // R
-                    for (uint8_t i = 0; i < m; i++) {
+                    for (uint16_t i = 0; i < m; i++) {
                         mat[{p + i, pi}] = tr_op[i];
                         mat[{p + i, pr + i}] = i_op;
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t l = m + 1; l < hamil.n_sites; l++) {
                                 double f0 =
                                     hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
                                 double f1 =
@@ -1556,20 +1556,20 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                      pad1 + (j - m - 1) * mm + l - m - 1}] =
                                     f1 * (0.5 * sqrt(3)) * c_op[m];
                             }
-                        for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                        for (uint16_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t l = m + 1; l < hamil.n_sites; l++) {
                                 double f = 2.0 * hamil.v(i, m, k, l) -
                                            hamil.v(i, l, k, m);
                                 mat[{p + i, pb0 + (k - m - 1) * mm + l - m -
                                                 1}] = f * d_op[m];
                             }
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                                 double f = hamil.v(i, j, k, m) * sqrt(3);
                                 mat[{p + i, pb1 + (k - m - 1) * mm + j - m -
                                                 1}] = f * d_op[m];
                             }
-                        for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                             mat[{p + i, pc + k}] =
                                 2.0 * ((-0.5) * p_op[k][i][0] +
                                        (0.5 * sqrt(3)) * p_op[k][i][1]);
@@ -1580,11 +1580,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     p += m;
                     // RD
-                    for (uint8_t i = 0; i < m; i++) {
+                    for (uint16_t i = 0; i < m; i++) {
                         mat[{p + i, pi}] = trd_op[i];
                         mat[{p + i, prd + i}] = i_op;
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t l = m + 1; l < hamil.n_sites; l++) {
                                 double f0 =
                                     hamil.v(i, j, m, l) + hamil.v(i, l, m, j);
                                 double f1 =
@@ -1595,21 +1595,21 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                      pa1 + (j - m - 1) * mm + l - m - 1}] =
                                     f1 * (-0.5 * sqrt(3)) * d_op[m];
                             }
-                        for (uint8_t k = m + 1; k < hamil.n_sites; k++)
-                            for (uint8_t l = m + 1; l < hamil.n_sites; l++) {
+                        for (uint16_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t l = m + 1; l < hamil.n_sites; l++) {
                                 double f = 2.0 * hamil.v(i, m, k, l) -
                                            hamil.v(i, l, k, m);
                                 mat[{p + i, pb0 + (l - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }
-                        for (uint8_t j = m + 1; j < hamil.n_sites; j++)
-                            for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        for (uint16_t j = m + 1; j < hamil.n_sites; j++)
+                            for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                                 double f =
                                     (-1.0) * hamil.v(i, j, k, m) * sqrt(3);
                                 mat[{p + i, pb1 + (j - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }
-                        for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                        for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                             mat[{p + i, pd + k}] =
                                 2.0 * ((-0.5) * pd_op[k][i][0] +
                                        (-0.5 * sqrt(3)) * pd_op[k][i][1]);
@@ -1621,25 +1621,25 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     p += m;
                     // D
                     mat[{p + m - m, pi}] = d_op[m];
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         mat[{p + j - m, pd + j}] = i_op;
                     p += hamil.n_sites - m;
                     // C
                     mat[{p + m - m, pi}] = c_op[m];
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         mat[{p + j - m, pc + j}] = i_op;
                     p += hamil.n_sites - m;
                     // A
                     for (uint8_t s = 0; s < 2; s++) {
                         int pa = s ? pa1 : pa0;
                         mat[{p + (m - m) * pm + m - m, pi}] = a_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pc + i}] = c_op[m];
                             mat[{p + (i - m) * pm + m - m, pc + i}] =
                                 s ? mc_op[m] : c_op[m];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pa + (i - m - 1) * mm + j - m - 1}] = i_op;
                         p += pm * pm;
@@ -1648,13 +1648,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     for (uint8_t s = 0; s < 2; s++) {
                         int pad = s ? pad1 : pad0;
                         mat[{p + (m - m) * pm + m - m, pi}] = ad_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pd + i}] =
                                 s ? md_op[m] : d_op[m];
                             mat[{p + (i - m) * pm + m - m, pd + i}] = d_op[m];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pad + (i - m - 1) * mm + j - m - 1}] =
                                     i_op;
@@ -1664,13 +1664,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     for (uint8_t s = 0; s < 2; s++) {
                         int pb = s ? pb1 : pb0;
                         mat[{p + (m - m) * pm + m - m, pi}] = b_op[m][m][s];
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++) {
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++) {
                             mat[{p + (m - m) * pm + i - m, pd + i}] = c_op[m];
                             mat[{p + (i - m) * pm + m - m, pc + i}] =
                                 s ? md_op[m] : d_op[m];
                         }
-                        for (uint8_t i = m + 1; i < hamil.n_sites; i++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                        for (uint16_t i = m + 1; i < hamil.n_sites; i++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                                 mat[{p + (i - m) * pm + j - m,
                                      pb + (i - m - 1) * mm + j - m - 1}] = i_op;
                         p += pm * pm;
@@ -1707,36 +1707,36 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 if (m != hamil.n_sites - 1) {
                     lop[1] = i_op;
                     p = 2;
-                    for (uint8_t j = 0; j < m + 1; j++)
+                    for (uint16_t j = 0; j < m + 1; j++)
                         lop[p + j] = c_op[j];
                     p += m + 1;
-                    for (uint8_t j = 0; j < m + 1; j++)
+                    for (uint16_t j = 0; j < m + 1; j++)
                         lop[p + j] = d_op[j];
                     p += m + 1;
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         lop[p + j - (m + 1)] = trd_op[j];
                     p += hamil.n_sites - (m + 1);
-                    for (uint8_t j = m + 1; j < hamil.n_sites; j++)
+                    for (uint16_t j = m + 1; j < hamil.n_sites; j++)
                         lop[p + j - (m + 1)] = tr_op[j];
                     p += hamil.n_sites - (m + 1);
                     vector<double> su2_factor;
                     switch (effective_mode) {
                     case QCTypes::NC:
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = a_op[j][k][s];
                                 p += m + 1;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = ad_op[j][k][s];
                                 p += m + 1;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m + 1; j++) {
-                                for (uint8_t k = 0; k < m + 1; k++)
+                            for (uint16_t j = 0; j < m + 1; j++) {
+                                for (uint16_t k = 0; k < m + 1; k++)
                                     lop[p + k] = b_op[j][k][s];
                                 p += m + 1;
                             }
@@ -1744,23 +1744,23 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     case QCTypes::CN:
                         su2_factor = {-0.5, -0.5 * sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] =
                                         su2_factor[s] * p_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] =
                                         su2_factor[s] * pd_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
                             }
                         su2_factor = {1.0, sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m + 1; k < hamil.n_sites; k++)
+                            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m + 1; k < hamil.n_sites; k++)
                                     lop[p + k - m - 1] =
                                         su2_factor[s] * q_op[j][k][s];
                                 p += hamil.n_sites - m - 1;
@@ -1787,16 +1787,16 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     rop[0] = i_op;
                     rop[1] = h_op;
                     p = 2;
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         rop[p + j] = tr_op[j];
                     p += m;
-                    for (uint8_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < m; j++)
                         rop[p + j] = trd_op[j];
                     p += m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                    for (uint16_t j = m; j < hamil.n_sites; j++)
                         rop[p + j - m] = d_op[j];
                     p += hamil.n_sites - m;
-                    for (uint8_t j = m; j < hamil.n_sites; j++)
+                    for (uint16_t j = m; j < hamil.n_sites; j++)
                         rop[p + j - m] = c_op[j];
                     p += hamil.n_sites - m;
                     vector<double> su2_factor;
@@ -1804,41 +1804,41 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     case QCTypes::NC:
                         su2_factor = {-0.5, -0.5 * sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = su2_factor[s] * p_op[j][k][s];
                                 p += m;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = su2_factor[s] * pd_op[j][k][s];
                                 p += m;
                             }
                         su2_factor = {1.0, sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = 0; j < m; j++) {
-                                for (uint8_t k = 0; k < m; k++)
+                            for (uint16_t j = 0; j < m; j++) {
+                                for (uint16_t k = 0; k < m; k++)
                                     rop[p + k] = su2_factor[s] * q_op[j][k][s];
                                 p += m;
                             }
                         break;
                     case QCTypes::CN:
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = a_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = ad_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
                         for (uint8_t s = 0; s < 2; s++)
-                            for (uint8_t j = m; j < hamil.n_sites; j++) {
-                                for (uint8_t k = m; k < hamil.n_sites; k++)
+                            for (uint16_t j = m; j < hamil.n_sites; j++) {
+                                for (uint16_t k = m; k < hamil.n_sites; k++)
                                     rop[p + k - m] = b_op[j][k][s];
                                 p += hamil.n_sites - m;
                             }
@@ -1863,7 +1863,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
-            uint8_t m;
+            uint16_t m;
             MPO<S>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
             // left transform
             m = trans_l;
@@ -1885,12 +1885,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
             vector<double> su2_factor_q = {1.0, sqrt(3)};
             for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                         lop[p + k - m - 1] = su2_factor_p[s] * p_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = 0; g < m + 1; g++)
-                            for (uint8_t h = 0; h < m + 1; h++)
+                        for (uint16_t g = 0; g < m + 1; g++)
+                            for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
                                     exprs.push_back(
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
@@ -1901,12 +1901,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     p += hamil.n_sites - m - 1;
                 }
             for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                         lop[p + k - m - 1] = su2_factor_p[s] * pd_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = 0; g < m + 1; g++)
-                            for (uint8_t h = 0; h < m + 1; h++)
+                        for (uint16_t g = 0; g < m + 1; g++)
+                            for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
                                     exprs.push_back(
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
@@ -1916,12 +1916,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     p += hamil.n_sites - m - 1;
                 }
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                     lop[p + k - m - 1] = su2_factor_q[0] * q_op[j][k][0];
                     exprs.clear();
-                    for (uint8_t g = 0; g < m + 1; g++)
-                        for (uint8_t h = 0; h < m + 1; h++)
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
                                 exprs.push_back((su2_factor_q[0] *
@@ -1932,12 +1932,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 }
                 p += hamil.n_sites - m - 1;
             }
-            for (uint8_t j = m + 1; j < hamil.n_sites; j++) {
-                for (uint8_t k = m + 1; k < hamil.n_sites; k++) {
+            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                     lop[p + k - m - 1] = su2_factor_q[1] * q_op[j][k][1];
                     exprs.clear();
-                    for (uint8_t g = 0; g < m + 1; g++)
-                        for (uint8_t h = 0; h < m + 1; h++)
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_q[1] * hamil.v(j, h, g, k)) *
@@ -1962,12 +1962,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 rop[i] = this->right_operator_names[m + 1]->data[i];
             p = 2 + 2 * hamil.n_sites;
             for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++) {
+                for (uint16_t j = 0; j < m + 1; j++) {
+                    for (uint16_t k = 0; k < m + 1; k++) {
                         rop[p + k] = su2_factor_p[s] * p_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
                                     exprs.push_back(
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
@@ -1978,12 +1978,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     p += m + 1;
                 }
             for (uint8_t s = 0; s < 2; s++)
-                for (uint8_t j = 0; j < m + 1; j++) {
-                    for (uint8_t k = 0; k < m + 1; k++) {
+                for (uint16_t j = 0; j < m + 1; j++) {
+                    for (uint16_t k = 0; k < m + 1; k++) {
                         rop[p + k] = su2_factor_p[s] * pd_op[j][k][s];
                         exprs.clear();
-                        for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
                                     exprs.push_back(
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
@@ -1993,12 +1993,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     p += m + 1;
                 }
-            for (uint8_t j = 0; j < m + 1; j++) {
-                for (uint8_t k = 0; k < m + 1; k++) {
+            for (uint16_t j = 0; j < m + 1; j++) {
+                for (uint16_t k = 0; k < m + 1; k++) {
                     rop[p + k] = su2_factor_q[0] * q_op[j][k][0];
                     exprs.clear();
-                    for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                        for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(2 * hamil.v(j, k, g, h) -
                                     hamil.v(j, h, g, k)) > TINY)
                                 exprs.push_back((su2_factor_q[0] *
@@ -2009,12 +2009,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 }
                 p += m + 1;
             }
-            for (uint8_t j = 0; j < m + 1; j++) {
-                for (uint8_t k = 0; k < m + 1; k++) {
+            for (uint16_t j = 0; j < m + 1; j++) {
+                for (uint16_t k = 0; k < m + 1; k++) {
                     rop[p + k] = su2_factor_q[1] * q_op[j][k][1];
                     exprs.clear();
-                    for (uint8_t g = m + 1; g < hamil.n_sites; g++)
-                        for (uint8_t h = m + 1; h < hamil.n_sites; h++)
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                             if (abs(hamil.v(j, h, g, k)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_q[1] * hamil.v(j, h, g, k)) *
@@ -2027,7 +2027,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
     }
     void deallocate() override {
-        for (uint8_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
+        for (uint16_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
             for (auto it = this->tensors[m]->ops.crbegin();
                  it != this->tensors[m]->ops.crend(); ++it) {
                 OpElement<S> &op =

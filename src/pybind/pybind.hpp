@@ -376,7 +376,7 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
         .def("copy_data_to", &StateInfo<S>::copy_data_to)
         .def("deep_copy", &StateInfo<S>::deep_copy)
         .def("collect", &StateInfo<S>::collect,
-             py::arg("target") = S(0x7FFFFFFF))
+             py::arg("target") = S(S::invalid))
         .def("find_state", &StateInfo<S>::find_state)
         .def_static("tensor_product_ref",
                     (StateInfo<S>(*)(const StateInfo<S> &, const StateInfo<S> &,
@@ -1237,7 +1237,7 @@ template <typename S> void bind_algorithms(py::module &m) {
                       uint16_t>())
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
                       uint16_t, double, const vector<double> &,
-                      const vector<uint8_t> &>())
+                      const vector<int> &>())
         .def_readwrite("iprint", &Expect<S>::iprint)
         .def_readwrite("cutoff", &Expect<S>::cutoff)
         .def_readwrite("beta", &Expect<S>::beta)
@@ -1277,7 +1277,7 @@ template <typename S> void bind_mpo(py::module &m) {
                        &MPOSchemer<S>::left_new_operator_exprs)
         .def_readwrite("right_new_operator_exprs",
                        &MPOSchemer<S>::right_new_operator_exprs)
-        .def(py::init<uint8_t, uint8_t>())
+        .def(py::init<uint16_t, uint16_t>())
         .def("copy", &MPOSchemer<S>::copy)
         .def("get_transform_formulas", &MPOSchemer<S>::get_transform_formulas);
 
@@ -1740,8 +1740,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())
-        .def(py::init<uint8_t>())
-        .def(py::init<uint8_t, uint8_t, uint8_t>())
+        .def(py::init<uint16_t>())
+        .def(py::init<uint16_t, uint16_t, uint8_t>())
         .def("size", &SiteIndex::size)
         .def("spin_size", &SiteIndex::spin_size)
         .def("s", &SiteIndex::s, py::arg("i") = 0)

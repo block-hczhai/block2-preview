@@ -36,12 +36,12 @@ namespace block2 {
 // Information for middle site numerical tranform
 // from normal operators to complementary operators
 template <typename S> struct MPOSchemer {
-    uint8_t left_trans_site, right_trans_site;
+    uint16_t left_trans_site, right_trans_site;
     shared_ptr<SymbolicRowVector<S>> left_new_operator_names;
     shared_ptr<SymbolicColumnVector<S>> right_new_operator_names;
     shared_ptr<SymbolicRowVector<S>> left_new_operator_exprs;
     shared_ptr<SymbolicColumnVector<S>> right_new_operator_exprs;
-    MPOSchemer(uint8_t left_trans_site, uint8_t right_trans_site)
+    MPOSchemer(uint16_t left_trans_site, uint16_t right_trans_site)
         : left_trans_site(left_trans_site), right_trans_site(right_trans_site) {
     }
     shared_ptr<MPOSchemer> copy() const {

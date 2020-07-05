@@ -158,7 +158,7 @@ template <typename S> struct Partition {
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
                 if (!partial) {
                     S p = l.combine(bra, ket);
-                    assert(p != S(0xFFFFFFFFU));
+                    assert(p != S(S::invalid));
                     subsl[idx].push_back(make_pair(op->conj, p));
                 } else if (left_only)
                     subsl[idx].push_back(make_pair(op->conj & 1, bra));
@@ -196,7 +196,7 @@ template <typename S> struct Partition {
                         S p = l.combine(bra, ket);
                         // here possible error can be due to non-zero (small)
                         // integral element violating point group symmetry
-                        assert(p != S(0xFFFFFFFFU));
+                        assert(p != S(S::invalid));
                         subsl[idx].push_back(make_pair(op->conj, p));
                     } else if (left_only)
                         subsl[idx].push_back(make_pair(op->conj & 1, bra));
