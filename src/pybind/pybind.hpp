@@ -1090,7 +1090,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQC<S>::mu)
         .def("op_prims",
-             [](HamiltonianQC<S> *self, int idx) { self->op_prims[idx]; })
+             [](HamiltonianQC<S> *self, int idx) { return self->op_prims[idx]; })
         .def("v", &HamiltonianQC<S>::v)
         .def("t", &HamiltonianQC<S>::t)
         .def("e", &HamiltonianQC<S>::e)
