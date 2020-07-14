@@ -493,6 +493,9 @@ struct SparseMatrixInfo<
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
+        if (not ifs.good()){
+            throw std::runtime_error("SparseMatrixInfo:load_data on '"+ filename+"' failed.");
+        }
         load_data(ifs);
         ifs.close();
     }
@@ -758,6 +761,9 @@ template <typename S> struct SparseMatrix {
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0) {}
     void load_data(const string &filename, bool load_info = false) {
         ifstream ifs(filename.c_str(), ios::binary);
+        if (not ifs.good()){
+            throw std::runtime_error("SparseMatrix:load_data on '"+ filename+"' failed.");
+        }
         if (load_info) {
             info = make_shared<SparseMatrixInfo<S>>();
             info->load_data(ifs);
@@ -1193,6 +1199,9 @@ template <typename S> struct SparseMatrixGroup {
     SparseMatrixGroup() : infos(), offsets(), data(nullptr), total_memory() {}
     void load_data(const string &filename, bool load_info = false) {
         ifstream ifs(filename.c_str(), ios::binary);
+        if (not ifs.good()){
+            throw std::runtime_error("SparseMatrixGroup:load_data on '"+ filename+"' failed.");
+        }
         ifs.read((char *)&n, sizeof(n));
         infos.resize(n);
         offsets.resize(n);

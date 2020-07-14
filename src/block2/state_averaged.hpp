@@ -170,6 +170,9 @@ template <typename S> struct MultiMPS : MPS<S> {
     }
     void load_data() override {
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
+        if (not ifs.good()){
+            throw std::runtime_error("MultiMPS:load_data on '"+ get_filename(-1)+"' failed.");
+        }
         MPS<S>::load_data_from(ifs);
         ifs.read((char *)&nroots, sizeof(nroots));
         weights.resize(nroots);

@@ -39,6 +39,9 @@ namespace block2 {
 inline vector<double> read_occ(const string &filename) {
     assert(Parsing::file_exists(filename));
     ifstream ifs(filename.c_str());
+    if (not ifs.good()){
+        throw std::runtime_error("read_occ:read '"+ filename+"' failed.");
+    }
     vector<string> lines = Parsing::readlines(&ifs);
     assert(lines.size() >= 1);
     vector<string> vals = Parsing::split(lines[0], " ", true);
@@ -1036,6 +1039,9 @@ template <typename S> struct MPS {
     }
     virtual void load_data() {
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
+        if (not ifs.good()){
+            throw std::runtime_error("MPS:load_data on '"+ get_filename(-1)+"' failed.");
+        }
         load_data_from(ifs);
         ifs.close();
     }
