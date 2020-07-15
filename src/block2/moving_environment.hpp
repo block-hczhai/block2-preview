@@ -764,13 +764,17 @@ template <typename S> struct MovingEnvironment {
     virtual void move_to(int i) {
         string new_data_name = "";
         if (i > center) {
-            frame->load_data(1, get_left_partition_filename(center));
+            if (envs[center]->left != nullptr)
+                frame->load_data(1, get_left_partition_filename(center));
             left_contract_rotate(++center);
-            new_data_name = get_left_partition_filename(center);
+            if (envs[center]->left != nullptr)
+                new_data_name = get_left_partition_filename(center);
         } else if (i < center) {
-            frame->load_data(1, get_right_partition_filename(center));
+            if (envs[center]->right != nullptr)
+                frame->load_data(1, get_right_partition_filename(center));
             right_contract_rotate(--center);
-            new_data_name = get_right_partition_filename(center);
+            if (envs[center]->right != nullptr)
+                new_data_name = get_right_partition_filename(center);
         }
         bra->center = ket->center = center;
         // dynamic environment generation for warmup sweep
