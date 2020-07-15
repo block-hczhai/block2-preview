@@ -214,7 +214,13 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
              py::arg("cutoff") = 0.0);
 
     py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
-        .def(py::init<const Hamiltonian<S> &>());
+        .def_property_readonly_static(
+            "s_all", [](py::object) { return PDM2MPOQC<S>::s_all; })
+        .def_property_readonly_static(
+            "s_minimal", [](py::object) { return PDM2MPOQC<S>::s_minimal; })
+        .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
+        .def(py::init<const Hamiltonian<S> &, uint16_t>(), py::arg("hamil"),
+             py::arg("mask"));
 }
 
 template <typename S> void bind_expr(py::module &m) {
@@ -1092,8 +1098,8 @@ template <typename S> void bind_hamiltonian(py::module &m) {
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQC<S>::mu)
-        .def("op_prims",
-             [](HamiltonianQC<S> *self, int idx) { return self->op_prims[idx]; })
+        .def("op_prims", [](HamiltonianQC<S> *self,
+                            int idx) { return self->op_prims[idx]; })
         .def("v", &HamiltonianQC<S>::v)
         .def("t", &HamiltonianQC<S>::t)
         .def("e", &HamiltonianQC<S>::e)

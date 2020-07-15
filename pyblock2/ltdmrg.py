@@ -321,8 +321,9 @@ class LTDMRG:
 
     # two-particle density matrix (SZ only)
     # return value:
-    #     spin : 0 = alpha, 1 = beta
-    #     pdm[i, j, k, l, si, sj, sk, sl] -> <AD_{i,si} AD_{j,sj} A_{k,sk} A_{l,sl}>
+    #     pdm[0, i, j, k, l] -> <AD_{i,alpha} AD_{j,alpha} A_{k,alpha} A_{l,alpha}>
+    #     pdm[1, i, j, k, l] -> <AD_{i,alpha} AD_{j, beta} A_{k, beta} A_{l,alpha}>
+    #     pdm[2, i, j, k, l] -> <AD_{i, beta} AD_{j, beta} A_{k, beta} A_{l, beta}>
     def get_two_pdm(self, beta, ridx=None):
         if self.verbose >= 2:
             print('>>> START two-pdm <<<')
@@ -346,7 +347,7 @@ class LTDMRG:
         mps.load_data()
 
         # 2PDM MPO
-        pmpo = PDM2MPOQC(self.hamil)
+        pmpo = PDM2MPOQC(self.hamil, mask=PDM2MPOQC.s_minimal)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 
         # 2PDM
@@ -375,7 +376,8 @@ class LTDMRG:
             print('>>> COMPLETE two-pdm | Time = %.2f <<<' %
                   (time.perf_counter() - t))
 
-        return dm
+        return np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
+                               dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
 
     def __del__(self):
         if self.hamil is not None:
@@ -393,7 +395,7 @@ if __name__ == "__main__":
     sweep_tol = 1E-8
     max_dmrg_steps = 30
 
-    nroots = 30
+    nroots = 60
     beta = 20.0
     mu = -1.0
     n_threads = 8
@@ -411,7 +413,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 8
+    N = 6
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],
@@ -536,8 +538,12 @@ if __name__ == "__main__":
     print("Average Particle Number = %20.15f" % sum([qs[0][0].n * pw
                                                      for qs, pw in zip(lt.quanta, partition_weights)]))
 
-    print(lt.get_one_pdm(beta, ridx))
-    print(lt.get_one_npc(beta, ridx))
-    print(lt.get_two_pdm(beta, ridx)[:, :, :, :, 0, 1, 1, 0])
+    pdm1 = lt.get_one_pdm(beta, ridx)
+    npc1 = lt.get_one_npc(beta, ridx)
+    pdm2 = lt.get_two_pdm(beta, ridx)
+
+    import pickle
+    pickle.dump(pdm1, open('ltpdm1', "wb"))
+    pickle.dump(pdm2, open('ltpdm2', "wb"))
 
     del lt

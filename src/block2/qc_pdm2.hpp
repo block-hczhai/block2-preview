@@ -41,6 +41,7 @@ using namespace std;
 #define PL(s) ((s) << 3)
 #define PIJ(si, sj) (PI(si) | PJ(sj))
 #define PIJK(si, sj, sk) (PI(si) | PJ(sj) | PK(sk))
+#define PIJKL(si, sj, sk, sl) (PI(si) | PJ(sj) | PK(sk) | PL(sl))
 
 namespace block2 {
 
@@ -48,7 +49,13 @@ template <typename, typename = void> struct PDM2MPOQC;
 
 // "MPO" for two particle density matrix (non-spin-adapted)
 template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    PDM2MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
+    // mask is used to select specific spin combinations
+    const static uint16_t s_all = 0xFFFFU, s_aaaa = 1U << PIJKL(0, 0, 0, 0),
+                          s_bbbb = 1U << PIJKL(1, 1, 1, 1),
+                          s_abba = 1U << PIJKL(0, 1, 1, 0),
+                          s_minimal = s_aaaa | s_abba | s_bbbb;
+    PDM2MPOQC(const Hamiltonian<S> &hamil, uint16_t mask = s_all)
+        : MPO<S>(hamil.n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
@@ -329,20 +336,26 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
             //   4*16*(n-m-1) : mjjj(jmjj:jjmj:jjjm) / ccdd cddc (j > m)
             //   1*16*1 : jjjj / ccdd (j > m) (last site only)
             if (m != n_sites - 1) {
-                int mshape = 16 * (1 * 1 + 4 * (n_sites - m - 1) +
-                                   12 * m * (n_sites - m - 1) +
-                                   6 * (2 * m + 1) * (n_sites - m - 1) +
-                                   12 * (2 * m + 1) * (n_sites - m - 2) *
-                                       (n_sites - m - 1) / 2 +
-                                   4 * (n_sites - m - 1));
+                int scount = 0;
+                for (uint8_t s = 0; s < 16; s++)
+                    if (mask & (1U << s))
+                        scount++;
+                int mshape = scount * (1 * 1 + 4 * (n_sites - m - 1) +
+                                       12 * m * (n_sites - m - 1) +
+                                       6 * (2 * m + 1) * (n_sites - m - 1) +
+                                       12 * (2 * m + 1) * (n_sites - m - 2) *
+                                           (n_sites - m - 1) / 2 +
+                                       4 * (n_sites - m - 1));
                 if (m == n_sites - 2)
-                    mshape += 16 * 1;
+                    mshape += scount * 1;
                 shared_ptr<SymbolicColumnVector<S>> pmop =
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 shared_ptr<SymbolicColumnVector<S>> pmexpr =
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 p = 0;
                 for (uint8_t s = 0; s < 16; s++) {
+                    if (!(mask & (1U << s)))
+                        continue;
                     // 1*16*1 : mmmm / ccdd
                     (*pmop)[p] = pdm2_op[m][m][m][m][s];
                     (*pmexpr)[p] = ccdd_op[m][s] * i_op;
@@ -738,6 +751,8 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 // 1*16*1 : jjjj / ccdd (j > m) (last site only)
                 if (m == n_sites - 2)
                     for (uint8_t s = 0; s < 16; s++) {
+                        if (!(mask & (1U << s)))
+                            continue;
                         (*pmop)[p] = pdm2_op[m + 1][m + 1][m + 1][m + 1][s];
                         (*pmexpr)[p] = i_op * ccdd_op[m + 1][s];
                         p++;
@@ -1073,3 +1088,4 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
 #undef PL
 #undef PIJ
 #undef PIJK
+#undef PIJKL

@@ -423,8 +423,9 @@ class FTDMRG:
 
     # two-particle density matrix (SZ only)
     # return value:
-    #     spin : 0 = alpha, 1 = beta
-    #     pdm[i, j, k, l, si, sj, sk, sl] -> <AD_{i,si} AD_{j,sj} A_{k,sk} A_{l,sl}>
+    #     pdm[0, i, j, k, l] -> <AD_{i,alpha} AD_{j,alpha} A_{k,alpha} A_{l,alpha}>
+    #     pdm[1, i, j, k, l] -> <AD_{i,alpha} AD_{j, beta} A_{k, beta} A_{l,alpha}>
+    #     pdm[2, i, j, k, l] -> <AD_{i, beta} AD_{j, beta} A_{k, beta} A_{l, beta}>
     def get_two_pdm(self, ridx=None):
         if self.verbose >= 2:
             print('>>> START two-pdm <<<')
@@ -446,7 +447,7 @@ class FTDMRG:
         mps.load_data()
 
         # 2PDM MPO
-        pmpo = PDM2MPOQC(self.hamil)
+        pmpo = PDM2MPOQC(self.hamil, mask=PDM2MPOQC.s_minimal)
         pmpo = AncillaMPO(pmpo, True)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 
@@ -475,7 +476,8 @@ class FTDMRG:
             print('>>> COMPLETE two-pdm | Time = %.2f <<<' %
                   (time.perf_counter() - t))
 
-        return dm
+        return np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
+                               dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
 
     def __del__(self):
         if self.hamil is not None:
@@ -489,12 +491,12 @@ if __name__ == "__main__":
 
     # parameters
     bond_dim = 400
-    beta = 2.0
+    beta = 1.0
     beta_step = 0.2
     mu = -1.0
     bond_dims = [bond_dim]
     n_threads = 8
-    hf_type = "UHF"
+    hf_type = "RHF"
     mpg = 'd2h'
     pg_reorder = True
     scratch = '/central/scratch/hczhai/hchain'
@@ -509,7 +511,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 8
+    N = 6
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],
@@ -621,13 +623,19 @@ if __name__ == "__main__":
 
     # ft.decompression(50)
 
+    print("n_steps = ", n_steps)
     ft.imaginary_time_evolution(
         1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=10)
     # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-    ft.imaginary_time_evolution(
-        n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
-    print(ft.get_one_pdm(ridx))
-    print(ft.get_one_npc(ridx))
-    print(ft.get_two_pdm(ridx)[:, :, :, :, 0, 1, 1, 0])
+    if n_steps != 1:
+        ft.imaginary_time_evolution(
+            n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=2, cont=True)
+    pdm1 = ft.get_one_pdm(ridx)
+    npc1 = ft.get_one_npc(ridx)
+    pdm2 = ft.get_two_pdm(ridx)
+
+    import pickle
+    pickle.dump(pdm1, open('pdm1', "wb"))
+    pickle.dump(pdm2, open('pdm2', "wb"))
 
     del ft
