@@ -1,20 +1,20 @@
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
 #  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
-# 
+#
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation, either version 3 of the License, or
 #  (at your option) any later version.
-# 
+#
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-# 
+#
 #  You should have received a copy of the GNU General Public License
 #  along with this program. If not, see <https://www.gnu.org/licenses/>.
-# 
+#
 #
 
 """
@@ -33,8 +33,8 @@ from block2 import Random, FCIDUMP, QCTypes, SeqTypes
 from block2 import SU2, SZ, get_partition_weights
 
 # Set spin-adapted or non-spin-adapted here
-SpinLabel = SU2
-# SpinLabel = SZ
+# SpinLabel = SU2
+SpinLabel = SZ
 
 if SpinLabel == SU2:
     from block2 import VectorSU2 as VectorSL
@@ -44,7 +44,7 @@ if SpinLabel == SU2:
 else:
     from block2 import VectorSZ as VectorSL
     from block2.sz import HamiltonianQC, MultiMPSInfo, MultiMPS
-    from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import PDM1MPOQC, PDM2MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MovingEnvironment, Expect, DMRG
 
 
@@ -284,7 +284,7 @@ class LTDMRG:
 
         # 1PDM MPO
         pmpo = PDM1MPOQC(self.hamil)
-        pmpo = SimplifiedMPO(pmpo, Rule())
+        pmpo = SimplifiedMPO(pmpo, RuleQC())
 
         # 1PDM
         pme = MovingEnvironment(pmpo, mps, mps, "1PDM")
@@ -319,6 +319,64 @@ class LTDMRG:
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
 
+    # two-particle density matrix (SZ only)
+    # return value:
+    #     spin : 0 = alpha, 1 = beta
+    #     pdm[i, j, k, l, si, sj, sk, sl] -> <AD_{i,si} AD_{j,sj} A_{k,sk} A_{l,sl}>
+    def get_two_pdm(self, beta, ridx=None):
+        if self.verbose >= 2:
+            print('>>> START two-pdm <<<')
+        t = time.perf_counter()
+
+        self.hamil.mu = 0.0
+
+        # only support SZ
+        assert SpinLabel == SZ
+
+        assert isinstance(beta, float)
+
+        # MultiMPSInfo
+        mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
+                                self.targets, self.hamil.basis,
+                                self.hamil.orb_sym)
+        mps_info.tag = "FINAL"
+
+        # MultiMPS (final)
+        mps = MultiMPS(mps_info)
+        mps.load_data()
+
+        # 2PDM MPO
+        pmpo = PDM2MPOQC(self.hamil)
+        pmpo = SimplifiedMPO(pmpo, RuleQC())
+
+        # 2PDM
+        pme = MovingEnvironment(pmpo, mps, mps, "2PDM")
+        pme.init_environments(self.verbose >= 3)
+        expect = Expect(pme, self.bond_dim, self.bond_dim,
+                        beta, self.energies, self.multiplicities)
+        expect.iprint = self.verbose
+        expect.solve(True, mps.center == 0)
+
+        dmr = expect.get_2pdm(self.n_sites)
+        dm = np.array(dmr, copy=True)
+        dm = dm.reshape((self.n_sites, 2, self.n_sites, 2,
+                         self.n_sites, 2, self.n_sites, 2))
+        dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+
+        if ridx is not None:
+            dm[:, :, :, :] = dm[ridx, :, :, :][:, ridx,
+                                               :, :][:, :, ridx, :][:, :, :, ridx]
+
+        mps.save_data()
+        pmpo.deallocate()
+        mps_info.deallocate()
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE two-pdm | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
+
+        return dm
+
     def __del__(self):
         if self.hamil is not None:
             self.hamil.deallocate()
@@ -335,7 +393,7 @@ if __name__ == "__main__":
     sweep_tol = 1E-8
     max_dmrg_steps = 30
 
-    nroots = 50
+    nroots = 30
     beta = 20.0
     mu = -1.0
     n_threads = 8
@@ -480,5 +538,6 @@ if __name__ == "__main__":
 
     print(lt.get_one_pdm(beta, ridx))
     print(lt.get_one_npc(beta, ridx))
+    print(lt.get_two_pdm(beta, ridx)[:, :, :, :, 0, 1, 1, 0])
 
     del lt

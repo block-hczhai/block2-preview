@@ -21,14 +21,18 @@ Features
     * Imaginary time evolution (tangent space and RK4 method)
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
-* One Particle Density Matrix
+* Particle Density Matrix
+    * 1PDM
+    * 2PDM (non-spin-adapted only)
+    * Spin/charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
     * Complementary-Normal (CN) partition
     * Conventional scheme (switch between NC and CN near the middle site)
 * Symbolic MPO simplification
 * MPS initialization using occupation number
-* Fermionic MPS algebra (U(1) spin symmetry)
+* Fermionic MPS algebra (non-spin-adapted only)
+* Determinant overlap (non-spin-adapted only)
 
 Installation
 ------------

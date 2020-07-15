@@ -869,7 +869,7 @@ template <typename S> struct Expect {
             if (r.expectations.size() == 1)
                 os << " " << setw(14) << r.expectations[0].second;
             else
-                os << " Nterms = " << setw(5) << r.expectations.size();
+                os << " Nterms = " << setw(6) << r.expectations.size();
             os << " Error = " << setw(15) << setprecision(12) << r.bra_error
                << "/" << setw(15) << setprecision(12) << r.ket_error
                << " FLOPS = " << scientific << setw(8) << setprecision(2)
@@ -1154,6 +1154,26 @@ template <typename S> struct Expect {
                 assert(op->name == OpNames::PDM1);
                 r(2 * op->site_index[0] + op->site_index.s(0),
                   2 * op->site_index[1] + op->site_index.s(1)) = x.second;
+            }
+        return r;
+    }
+    // only works for SZ
+    shared_ptr<Tensor> get_2pdm(uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        shared_ptr<Tensor> r = make_shared<Tensor>(
+            vector<int>{n_physical_sites * 2, n_physical_sites * 2,
+                        n_physical_sites * 2, n_physical_sites * 2});
+        r->clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM2);
+                (*r)({op->site_index[0] * 2 + op->site_index.s(0),
+                      op->site_index[1] * 2 + op->site_index.s(1),
+                      op->site_index[2] * 2 + op->site_index.s(2),
+                      op->site_index[3] * 2 + op->site_index.s(3)}) = x.second;
             }
         return r;
     }

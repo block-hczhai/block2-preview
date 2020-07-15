@@ -346,7 +346,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = 0; k < m; k++) {
                                     mat[{pd[sp] + k, p + i - (m + 1)}] =
-                                        pd_op[i][k][s | (sp << 1)];
+                                        -1.0 * pd_op[k][i][sp | (s << 1)];
                                     mat[{pc[sp] + k, p + i - (m + 1)}] =
                                         q_op[k][i][sp | (s << 1)];
                                 }
@@ -402,7 +402,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = 0; k < m; k++) {
                                     mat[{pc[sp] + k, p + i - (m + 1)}] =
-                                        -1.0 * p_op[i][k][s | (sp << 1)];
+                                        p_op[k][i][sp | (s << 1)];
                                     mat[{pd[sp] + k, p + i - (m + 1)}] =
                                         -1.0 * q_op[i][k][s | (sp << 1)];
                                 }
@@ -643,7 +643,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint16_t k = m + 1; k < hamil.n_sites;
                                      k++) {
                                     mat[{p + i, pc[sp] + k}] =
-                                        -1.0 * p_op[k][i][sp | (s << 1)];
+                                        p_op[i][k][s | (sp << 1)];
                                     mat[{p + i, pd[sp] + k}] =
                                         q_op[i][k][s | (sp << 1)];
                                 }
@@ -712,7 +712,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint16_t k = m + 1; k < hamil.n_sites;
                                      k++) {
                                     mat[{p + i, pd[sp] + k}] =
-                                        pd_op[k][i][sp | (s << 1)];
+                                        -1.0 * pd_op[i][k][s | (sp << 1)];
                                     mat[{p + i, pc[sp] + k}] =
                                         -1.0 * q_op[k][i][sp | (s << 1)];
                                 }

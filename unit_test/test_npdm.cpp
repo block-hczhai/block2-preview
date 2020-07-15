@@ -32,7 +32,7 @@ TEST_F(TestNPDM, TestSU2) {
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
@@ -59,7 +59,7 @@ TEST_F(TestNPDM, TestSU2) {
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
     pmpo =
-        make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<Rule<SU2>>(), true);
+        make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<RuleQC<SU2>>(), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
     // cout << pmpo->get_blocking_formulas() << endl;
     // abort();
@@ -183,7 +183,7 @@ TEST_F(TestNPDM, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, target, norb, orbsym, fcidump);
+    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
@@ -208,9 +208,23 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo = make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<Rule<SZ>>(), true);
+    pmpo =
+        make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<RuleQC<SZ>>(), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
     // cout << pmpo->get_blocking_formulas() << endl;
+    // abort();
+
+    // 2PDM MPO construction
+    cout << "2PDM MPO start" << endl;
+    shared_ptr<MPO<SZ>> p2mpo = make_shared<PDM2MPOQC<SZ>>(hamil);
+    cout << "2PDM MPO end .. T = " << t.get_time() << endl;
+
+    // 2PDM MPO simplification
+    cout << "2PDM MPO simplification start" << endl;
+    p2mpo =
+        make_shared<SimplifiedMPO<SZ>>(p2mpo, make_shared<RuleQC<SZ>>(), true);
+    cout << "2PDM MPO simplification end .. T = " << t.get_time() << endl;
+    // cout << p2mpo->get_blocking_formulas() << endl;
     // abort();
 
     // 1NPC MPO construction
@@ -225,7 +239,7 @@ TEST_F(TestNPDM, TestSZ) {
     // cout << nmpo->get_blocking_formulas() << endl;
     // abort();
 
-    uint16_t bond_dim = 250;
+    uint16_t bond_dim = 500;
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
@@ -287,6 +301,29 @@ TEST_F(TestNPDM, TestSZ) {
 
     dm.deallocate();
 
+    // 2PDM ME
+    shared_ptr<MovingEnvironment<SZ>> p2me =
+        make_shared<MovingEnvironment<SZ>>(p2mpo, mps, mps, "2PDM");
+    t.get_time();
+    cout << "2PDM INIT start" << endl;
+    p2me->init_environments(false);
+    cout << "2PDM INIT end .. T = " << t.get_time() << endl;
+
+    // 2PDM
+    expect = make_shared<Expect<SZ>>(p2me, bond_dim, bond_dim);
+    expect->solve(true, dmrg->forward);
+    expect->solve(true, !dmrg->forward);
+
+    // shared_ptr<Tensor> dm2 = expect->get_2pdm();
+    // for (int i = 0; i < dm2->shape[0]; i++)
+    //     for (int j = 0; j < dm2->shape[1]; j++)
+    //         for (int k = 0; k < dm2->shape[2]; k++)
+    //             for (int l = 0; l < dm2->shape[3]; l++)
+    //                 if (abs((*dm2)({i, j, k, l})) > TINY)
+    //                     cout << setw(5) << i << setw(5) << j << setw(5) << k
+    //                          << setw(5) << l << fixed << setprecision(20)
+    //                          << setw(25) << (*dm2)({i, j, k, l}) << endl;
+
     // 1NPC ME
     shared_ptr<MovingEnvironment<SZ>> nme =
         make_shared<MovingEnvironment<SZ>>(nmpo, mps, mps, "1NPC");
@@ -312,6 +349,7 @@ TEST_F(TestNPDM, TestSZ) {
     // deallocate persistent stack memory
     mps_info->deallocate();
     nmpo->deallocate();
+    p2mpo->deallocate();
     pmpo->deallocate();
     mpo->deallocate();
     hamil.deallocate();
