@@ -135,6 +135,9 @@ struct DataFrame {
     // Load one data frame from disk
     void load_data(uint16_t i, const string &filename) const {
         ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("DataFrame::load_data on '" + filename +
+                                "' failed.");
         ifs.read((char *)&dallocs[i].used, sizeof(dallocs[i].used));
         ifs.read((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
         ifs.read((char *)&iallocs[i].used, sizeof(iallocs[i].used));
