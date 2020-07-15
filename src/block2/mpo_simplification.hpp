@@ -182,6 +182,57 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         if (mpo->middle_operator_exprs.size() != 0) {
             MPO<S>::middle_operator_names = mpo->middle_operator_names;
             MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
+            assert(MPO<S>::schemer == nullptr);
+            // if some operators are erased in left/right operator names
+            // they should not appear in middle operator exprs
+            // and the expr should be zero
+            for (size_t i = 0; i < MPO<S>::middle_operator_names.size(); i++) {
+                set<shared_ptr<OpExpr<S>>, op_expr_less<S>> left_zero_ops,
+                    right_zero_ops;
+                for (size_t j = 0;
+                     j < MPO<S>::left_operator_names[i]->data.size(); j++)
+                    if (MPO<S>::left_operator_names[i]->data[j]->get_type() ==
+                        OpTypes::Zero)
+                        left_zero_ops.insert(
+                            mpo->left_operator_names[i]->data[j]);
+                for (size_t j = 0;
+                     j < MPO<S>::right_operator_names[i + 1]->data.size(); j++)
+                    if (MPO<S>::right_operator_names[i + 1]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero)
+                        right_zero_ops.insert(
+                            mpo->right_operator_names[i + 1]->data[j]);
+                for (size_t j = 0;
+                     j < MPO<S>::middle_operator_exprs[i]->data.size(); j++) {
+                    shared_ptr<OpExpr<S>> &x =
+                        MPO<S>::middle_operator_exprs[i]->data[j];
+                    switch (x->get_type()) {
+                    case OpTypes::Zero:
+                        break;
+                    case OpTypes::Prod:
+                        if (left_zero_ops.count(
+                                dynamic_pointer_cast<OpString<S>>(x)->a) ||
+                            right_zero_ops.count(
+                                dynamic_pointer_cast<OpString<S>>(x)->b))
+                            MPO<S>::middle_operator_exprs[i]->data[j] = zero;
+                        break;
+                    case OpTypes::Sum:
+                        for (auto &r :
+                             dynamic_pointer_cast<OpSum<S>>(x)->strings)
+                            if (left_zero_ops.count(
+                                    dynamic_pointer_cast<OpString<S>>(r)->a) ||
+                                right_zero_ops.count(
+                                    dynamic_pointer_cast<OpString<S>>(r)->b)) {
+                                MPO<S>::middle_operator_exprs[i]->data[j] =
+                                    zero;
+                                break;
+                            }
+                        break;
+                    default:
+                        assert(false);
+                    }
+                }
+            }
         } else {
             vector<uint8_t> px[2];
             for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {

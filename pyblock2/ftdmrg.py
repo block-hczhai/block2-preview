@@ -1,20 +1,20 @@
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
 #  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
-# 
+#
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation, either version 3 of the License, or
 #  (at your option) any later version.
-# 
+#
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-# 
+#
 #  You should have received a copy of the GNU General Public License
 #  along with this program. If not, see <https://www.gnu.org/licenses/>.
-# 
+#
 #
 
 """
@@ -41,7 +41,7 @@ if SpinLabel == SU2:
     from block2.su2 import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
 else:
     from block2.sz import HamiltonianQC, AncillaMPSInfo, MPS
-    from block2.sz import AncillaMPO, PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import AncillaMPO, PDM1MPOQC, PDM2MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
 
 
@@ -386,7 +386,7 @@ class FTDMRG:
         # 1PDM MPO
         pmpo = PDM1MPOQC(self.hamil)
         pmpo = AncillaMPO(pmpo, True)
-        pmpo = SimplifiedMPO(pmpo, Rule())
+        pmpo = SimplifiedMPO(pmpo, RuleQC())
 
         # 1PDM
         pme = MovingEnvironment(pmpo, mps, mps, "1PDM")
@@ -420,6 +420,62 @@ class FTDMRG:
             return np.concatenate([dm[None, :, :], dm[None, :, :]], axis=0) / 2
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+
+    # two-particle density matrix (SZ only)
+    # return value:
+    #     spin : 0 = alpha, 1 = beta
+    #     pdm[i, j, k, l, si, sj, sk, sl] -> <AD_{i,si} AD_{j,sj} A_{k,sk} A_{l,sl}>
+    def get_two_pdm(self, ridx=None):
+        if self.verbose >= 2:
+            print('>>> START two-pdm <<<')
+        t = time.perf_counter()
+
+        self.hamil.mu = 0.0
+
+        # only support SZ
+        assert SpinLabel == SZ
+
+        # Ancilla MPSInfo (final)
+        mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
+                                  self.target, self.hamil.basis,
+                                  self.hamil.orb_sym)
+        mps_info.tag = "FINAL"
+
+        # Ancilla MPS (final)
+        mps = MPS(mps_info)
+        mps.load_data()
+
+        # 2PDM MPO
+        pmpo = PDM2MPOQC(self.hamil)
+        pmpo = AncillaMPO(pmpo, True)
+        pmpo = SimplifiedMPO(pmpo, RuleQC())
+
+        # 2PDM
+        pme = MovingEnvironment(pmpo, mps, mps, "2PDM")
+        pme.init_environments(self.verbose >= 3)
+        expect = Expect(pme, self.bond_dim, self.bond_dim)
+        expect.iprint = self.verbose
+        expect.solve(True, mps.center == 0)
+
+        dmr = expect.get_2pdm(self.n_physical_sites)
+        dm = np.array(dmr, copy=True)
+        dm = dm.reshape((self.n_physical_sites, 2,
+                         self.n_physical_sites, 2, self.n_physical_sites, 2, self.n_physical_sites, 2))
+        dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+
+        if ridx is not None:
+            dm[:, :, :, :] = dm[ridx, :, :, :][:, ridx,
+                                               :, :][:, :, ridx, :][:, :, :, ridx]
+
+        mps.save_data()
+        pmpo.deallocate()
+        mps_info.deallocate()
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE two-pdm | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
+
+        return dm
 
     def __del__(self):
         if self.hamil is not None:
@@ -572,5 +628,6 @@ if __name__ == "__main__":
         n_steps - 1, beta_step / 2, mu, bond_dims, TETypes.RK4, n_sub_sweeps=1, cont=True)
     print(ft.get_one_pdm(ridx))
     print(ft.get_one_npc(ridx))
+    print(ft.get_two_pdm(ridx)[:, :, :, :, 0, 1, 1, 0])
 
     del ft

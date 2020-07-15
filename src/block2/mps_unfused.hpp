@@ -36,40 +36,6 @@ using namespace std;
 
 namespace block2 {
 
-// General rank-n dense tensor
-struct Tensor {
-    vector<int> shape;
-    vector<double> data;
-    Tensor(int m, int k, int n) : shape{m, k, n} { data.resize(m * k * n); }
-    Tensor(const vector<int> &shape) : shape(shape) {
-        data.resize(
-            accumulate(shape.begin(), shape.end(), 1, multiplies<double>()));
-    }
-    MatrixRef ref() {
-        if (shape.size() == 3 && shape[1] == 1)
-            return MatrixRef(&data[0], shape[0], shape[2]);
-        else if (shape.size() == 2)
-            return MatrixRef(&data[0], shape[0], shape[1]);
-        else if (shape.size() == 1)
-            return MatrixRef(&data[0], shape[0], 1);
-        else {
-            assert(false);
-            return MatrixRef(&data[0], 0, 1);
-        }
-    }
-    friend ostream &operator<<(ostream &os, const Tensor &ts) {
-        os << "TENSOR ( ";
-        for (auto sh : ts.shape)
-            os << sh << " ";
-        os << ")" << endl;
-        os << "   DATA [";
-        for (auto x : ts.data)
-            os << fixed << setw(20) << setprecision(14) << x << " ";
-        os << "]" << endl;
-        return os;
-    }
-};
-
 // block-sparse three-index tensor
 template <typename S> struct SparseTensor {
     vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>> data;

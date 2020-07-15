@@ -61,10 +61,10 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
             info[this->vacuum] = nullptr;
             for (int n = -1; n <= 1; n += 2)
-                for (int s = -1; s <= 1; s += 2)
+                for (int s = -3; s <= 3; s += 2)
                     info[S(n, s, i)] = nullptr;
             for (int n = -2; n <= 2; n += 2)
-                for (int s = -2; s <= 2; s += 2)
+                for (int s = -4; s <= 4; s += 2)
                     info[S(n, s, 0)] = nullptr;
             this->site_op_infos[i] =
                 vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
@@ -129,6 +129,12 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             this->opf->product(*op_prims[s & 1][OpNames::C],
                                *op_prims[s >> 1][OpNames::D],
                                *op_prims[s][OpNames::B]);
+            op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>();
+            op_prims[s][OpNames::BD]->allocate(
+                this->find_site_op_info(S(0, -sz_minus[s], 0), 0));
+            this->opf->product(*op_prims[s & 1][OpNames::D],
+                               *op_prims[s >> 1][OpNames::C],
+                               *op_prims[s][OpNames::BD]);
         }
         for (uint8_t s = 0; s < 2; s++) {
             op_prims[s + 4][OpNames::NN] = make_shared<SparseMatrix<S>>();
@@ -197,6 +203,10 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(0, sz_minus[s], 0))] = nullptr;
                 ops[this->orb_sym[m]][make_shared<OpElement<S>>(
+                    OpNames::BD,
+                    SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
+                    S(0, -sz_minus[s], 0))] = nullptr;
+                ops[this->orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::NN,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(0, 0, 0))] = nullptr;
@@ -233,7 +243,77 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::A:
             case OpNames::AD:
             case OpNames::B:
+            case OpNames::BD:
                 p.second = this->find_site_norm_op(p.first, this->orb_sym[m]);
+                break;
+            case OpNames::CCDD:
+                s = op.site_index.ss();
+                p.second = make_shared<SparseMatrix<S>>();
+                p.second->allocate(
+                    this->find_site_op_info(op.q_label, this->orb_sym[m]));
+                // q_label is not used for comparison
+                this->opf->product(
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::A,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::AD,
+                            SiteIndex({m, m}, {(uint8_t)((s & 8) >> 3),
+                                               (uint8_t)((s & 4) >> 2)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *p.second);
+                break;
+            case OpNames::CCD:
+                s = op.site_index.ss();
+                p.second = make_shared<SparseMatrix<S>>();
+                p.second->allocate(
+                    this->find_site_op_info(op.q_label, this->orb_sym[m]));
+                // q_label is not used for comparison
+                this->opf->product(
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::A,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::D, SiteIndex({m}, {(uint8_t)(s >> 2)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *p.second);
+                p.second->info =
+                    this->find_site_op_info(op.q_label, this->orb_sym[m]);
+                break;
+            case OpNames::CDD:
+                s = op.site_index.ss();
+                p.second = make_shared<SparseMatrix<S>>();
+                p.second->allocate(
+                    this->find_site_op_info(op.q_label, this->orb_sym[m]));
+                // q_label is not used for comparison
+                this->opf->product(
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::B,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *this->find_site_norm_op(
+                        make_shared<OpElement<S>>(
+                            OpNames::D, SiteIndex({m}, {(uint8_t)(s >> 2)}),
+                            S(0, 0, 0)),
+                        this->orb_sym[m]),
+                    *p.second);
+                p.second->info =
+                    this->find_site_op_info(op.q_label, this->orb_sym[m]);
                 break;
             case OpNames::H:
                 p.second = make_shared<SparseMatrix<S>>();
@@ -389,8 +469,9 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             for (auto name : vector<OpNames>{OpNames::NN})
                 op_prims[s][name]->deallocate();
         for (int8_t s = 3; s >= 0; s--)
-            for (auto name : vector<OpNames>{OpNames::B, OpNames::AD,
-                                             OpNames::A, OpNames::NN})
+            for (auto name :
+                 vector<OpNames>{OpNames::BD, OpNames::B, OpNames::AD,
+                                 OpNames::A, OpNames::NN})
                 op_prims[s][name]->deallocate();
         for (int8_t s = 1; s >= 0; s--)
             for (auto name :
@@ -502,6 +583,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             this->opf->product(*op_prims[0][OpNames::C],
                                *op_prims[0][OpNames::D],
                                *op_prims[s][OpNames::B]);
+            op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>();
+            op_prims[s][OpNames::BD]->allocate(
+                this->find_site_op_info(S(0, s * 2, 0), 0));
+            this->opf->product(*op_prims[0][OpNames::D],
+                               *op_prims[0][OpNames::C],
+                               *op_prims[s][OpNames::BD]);
         }
         // NN[1] = sum_{sigma,tau} ad_{p,sigma} a_{p,tau} ad_{p,tau} a_{p,sigma}
         // = -sqrt(3) B1 x B1 + B0 x B0 where B0 x B0 == 0.5 NN
@@ -550,6 +637,8 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 ops[this->orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::B, SiteIndex(m, m, s), S(0, s * 2, 0))] = nullptr;
                 ops[this->orb_sym[m]][make_shared<OpElement<S>>(
+                    OpNames::BD, SiteIndex(m, m, s), S(0, s * 2, 0))] = nullptr;
+                ops[this->orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::NN, SiteIndex(m, m, s), this->vacuum)] = nullptr;
             }
         }
@@ -584,6 +673,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             case OpNames::A:
             case OpNames::AD:
             case OpNames::B:
+            case OpNames::BD:
                 p.second = this->find_site_norm_op(p.first, this->orb_sym[m]);
                 break;
             case OpNames::H:
@@ -701,12 +791,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     void deallocate() override {
         for (auto name : vector<OpNames>{OpNames::RD, OpNames::R})
             op_prims[0][name]->deallocate();
-        for (auto name :
-             vector<OpNames>{OpNames::NN, OpNames::B, OpNames::AD, OpNames::A})
+        for (auto name : vector<OpNames>{OpNames::NN, OpNames::BD, OpNames::B,
+                                         OpNames::AD, OpNames::A})
             op_prims[1][name]->deallocate();
-        for (auto name :
-             vector<OpNames>{OpNames::B, OpNames::AD, OpNames::A, OpNames::D,
-                             OpNames::C, OpNames::NN, OpNames::N, OpNames::I})
+        for (auto name : vector<OpNames>{OpNames::BD, OpNames::B, OpNames::AD,
+                                         OpNames::A, OpNames::D, OpNames::C,
+                                         OpNames::NN, OpNames::N, OpNames::I})
             op_prims[0][name]->deallocate();
         for (int i = this->n_syms - 1; i >= 0; i--)
             for (int j = this->site_op_infos[i].size() - 1; j >= 0; j--)

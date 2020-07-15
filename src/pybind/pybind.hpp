@@ -212,6 +212,9 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
         .def("__getitem__", &DeterminantTRIE<S>::operator[], py::arg("idx"))
         .def("evaluate", &DeterminantTRIE<S>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0);
+
+    py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
+        .def(py::init<const Hamiltonian<S> &>());
 }
 
 template <typename S> void bind_expr(py::module &m) {
@@ -1257,6 +1260,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("get_1pdm_spatial", &Expect<S>::get_1pdm_spatial,
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1pdm", &Expect<S>::get_1pdm,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_2pdm", &Expect<S>::get_2pdm,
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1npc_spatial", &Expect<S>::get_1npc_spatial, py::arg("s"),
              py::arg("n_physical_sites") = (uint16_t)0U)
