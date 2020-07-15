@@ -29,6 +29,8 @@ map<string, string> read_input(const string &filename) {
         abort();
     }
     ifstream ifs(filename.c_str());
+    if (!ifs.good())
+        throw runtime_error("reading on '" + filename + "' failed.");
     vector<string> lines = Parsing::readlines(&ifs);
     ifs.close();
     map<string, string> params;
