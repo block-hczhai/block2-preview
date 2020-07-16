@@ -381,6 +381,7 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
         .def("allocate",
              [](StateInfo<S> *self, int length) { self->allocate(length); })
         .def("deallocate", &StateInfo<S>::deallocate)
+        .def("reallocate", &StateInfo<S>::reallocate, py::arg("length"))
         .def("sort_states", &StateInfo<S>::sort_states)
         .def("copy_data_to", &StateInfo<S>::copy_data_to)
         .def("deep_copy", &StateInfo<S>::deep_copy)
