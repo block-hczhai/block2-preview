@@ -157,7 +157,28 @@ template <typename S>
 inline const shared_ptr<Symbolic<S>>
 operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
     assert(a->n == b->m);
-    if (a->get_type() == SymTypes::RVec && b->get_type() == SymTypes::Mat) {
+    if (a->get_type() == SymTypes::Mat && b->get_type() == SymTypes::Mat) {
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        shared_ptr<SymbolicMatrix<S>> r(
+            make_shared<SymbolicMatrix<S>>(a->m, b->n));
+        vector<pair<int, int>> &aidx =
+            dynamic_pointer_cast<SymbolicMatrix<S>>(a)->indices;
+        vector<pair<int, int>> &bidx =
+            dynamic_pointer_cast<SymbolicMatrix<S>>(b)->indices;
+        map<pair<int, int>, shared_ptr<OpExpr<S>>> mp;
+        for (size_t j = 0; j < a->data.size(); j++)
+            for (size_t k = 0; k < b->data.size(); k++)
+                if (aidx[j].second == bidx[k].first) {
+                    pair<int, int> p = make_pair(aidx[j].first, bidx[k].second);
+                    if (mp.count(p) == 0)
+                        mp[p] = zero;
+                    mp.at(p) += a->data[j] * b->data[k];
+                }
+        for (auto &p : mp)
+            (*r)[{p.first.first, p.first.second}] = p.second;
+        return r;
+    } else if (a->get_type() == SymTypes::RVec &&
+               b->get_type() == SymTypes::Mat) {
         shared_ptr<SymbolicRowVector<S>> r(
             make_shared<SymbolicRowVector<S>>(b->n));
         vector<pair<int, int>> &idx =

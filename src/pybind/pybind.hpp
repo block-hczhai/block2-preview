@@ -971,10 +971,38 @@ template <typename S> void bind_partition(py::module &m) {
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
              &MovingEnvironment<S>::right_contract_rotate)
-        .def("left_contract", &MovingEnvironment<S>::left_contract)
-        .def("right_contract", &MovingEnvironment<S>::right_contract)
-        .def("left_copy", &MovingEnvironment<S>::left_copy)
-        .def("right_copy", &MovingEnvironment<S>::right_copy)
+        .def(
+            "left_contract",
+            [](MovingEnvironment<S> *self, int iL,
+               vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_info) {
+                shared_ptr<OperatorTensor<S>> new_left = nullptr;
+                self->left_contract(iL, left_op_info, new_left);
+                return new_left;
+            })
+        .def("right_contract",
+             [](MovingEnvironment<S> *self, int iR,
+                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
+                    &right_op_infos) {
+                 shared_ptr<OperatorTensor<S>> new_right = nullptr;
+                 self->right_contract(iR, right_op_infos, new_right);
+                 return new_right;
+             })
+        .def(
+            "left_copy",
+            [](MovingEnvironment<S> *self, int iL,
+               vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_info) {
+                shared_ptr<OperatorTensor<S>> new_left = nullptr;
+                self->left_copy(iL, left_op_info, new_left);
+                return new_left;
+            })
+        .def("right_copy",
+             [](MovingEnvironment<S> *self, int iR,
+                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
+                    &right_op_infos) {
+                 shared_ptr<OperatorTensor<S>> new_right = nullptr;
+                 self->right_copy(iR, right_op_infos, new_right);
+                 return new_right;
+             })
         .def("init_environments", &MovingEnvironment<S>::init_environments,
              py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment<S>::prepare)
