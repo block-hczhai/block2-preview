@@ -333,7 +333,7 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
             //      / ccdd cdcd cddc dccd dcdc ddcc (all) (j > m, k > j)
             //   24*16*m*(n-m-2)*(n-m-1)/2 : imjk(:all)
             //      / ccdd cdcd cddc dccd dcdc ddcc (all) (i < m, j > m, k > j)
-            //   4*16*(n-m-1) : mjjj(jmjj:jjmj:jjjm) / ccdd cddc (j > m)
+            //   4*16*(n-m-1) : mjjj(jmjj:jjmj:jjjm) / ccdd dccd (j > m)
             //   1*16*1 : jjjj / ccdd (j > m) (last site only)
             if (m != n_sites - 1) {
                 int scount = 0;
@@ -725,7 +725,7 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                a_op[j][k][PIJ(SJ(s), SI(s))];
                                 p++;
                             }
-                    // 4*16*(n-m-1) : mjjj(-jmjj:+jjmj:-jjjm) / ccdd cddc (j >
+                    // 4*16*(n-m-1) : mjjj(-jmjj:+jjmj:-jjjm) / ccdd dccd (j >
                     // m)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
                         (*pmop)[p] = pdm2_op[m][j][j][j][s];
