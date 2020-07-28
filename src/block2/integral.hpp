@@ -331,7 +331,9 @@ struct FCIDUMP {
         vs.clear();
         vabs.clear();
         e = 0.0;
-        assert(Parsing::file_exists(filename));
+        if(not Parsing::file_exists(filename)){
+            throw std::invalid_argument("FCIDUMP: filename '"+filename+"' does not exist.");
+        }
         ifstream ifs(filename.c_str());
         vector<string> lines = Parsing::readlines(&ifs);
         ifs.close();

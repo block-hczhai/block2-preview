@@ -26,6 +26,7 @@
 #include <pybind11/stl_bind.h>
 
 namespace py = pybind11;
+using namespace pybind11::literals; //"i"_a instead of py::arg("i")
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
@@ -1726,6 +1727,17 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
+        .def("t_ij", py::overload_cast<uint16_t, uint16_t>(&FCIDUMP::t, py::const_),
+                "i"_a, "j"_a, "1El-Integral (RHF); i is spatial orbital")
+        .def("t_sij", py::overload_cast<uint8_t,uint16_t, uint16_t>(&FCIDUMP::t, py::const_),
+                 "s"_a, "i"_a, "j"_a, "1El-Integral (UHF) with Spin index; i is spatial orbital")
+        .def("v_ijkl", py::overload_cast<
+                uint16_t, uint16_t, uint16_t, uint16_t>(&FCIDUMP::v, py::const_),
+             "i"_a, "j"_a, "k"_a, "l"_a, "2El-Integral; i is spatial orbital")
+        .def("v_ssijkl", py::overload_cast<uint8_t,uint8_t,
+                uint16_t, uint16_t, uint16_t, uint16_t>(&FCIDUMP::v, py::const_),
+             "s_left"_a, "s_right"_a,
+             "i"_a, "j"_a, "k"_a, "l"_a, "2El-Integral (UHF) with spin index; i is spatial orbital")
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym)
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
         .def_property_readonly("twos", &FCIDUMP::twos)
