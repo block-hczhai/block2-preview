@@ -54,6 +54,9 @@
 #include "block2/symmetry.hpp"
 #include "block2/tensor_functions.hpp"
 #include "block2/utils.hpp"
+#include "block2/hamiltonian_SCI.hpp"
+#include "block2/qc_hamiltonian_SCI.hpp"
+#include "block2/qc_mpo_SCI.hpp"
 
 #ifdef _EXPLICIT_TEMPLATE
 #include "instantiation/instantiation.hpp"
