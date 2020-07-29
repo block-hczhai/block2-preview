@@ -26,7 +26,6 @@
 #include <pybind11/stl_bind.h>
 
 namespace py = pybind11;
-using namespace pybind11::literals; //"i"_a instead of py::arg("i")
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
@@ -1727,17 +1726,49 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
-        .def("t_ij", py::overload_cast<uint16_t, uint16_t>(&FCIDUMP::t, py::const_),
-                "i"_a, "j"_a, "1El-Integral (RHF); i is spatial orbital")
-        .def("t_sij", py::overload_cast<uint8_t,uint16_t, uint16_t>(&FCIDUMP::t, py::const_),
-                 "s"_a, "i"_a, "j"_a, "1El-Integral (UHF) with Spin index; i is spatial orbital")
-        .def("v_ijkl", py::overload_cast<
-                uint16_t, uint16_t, uint16_t, uint16_t>(&FCIDUMP::v, py::const_),
-             "i"_a, "j"_a, "k"_a, "l"_a, "2El-Integral; i is spatial orbital")
-        .def("v_ssijkl", py::overload_cast<uint8_t,uint8_t,
-                uint16_t, uint16_t, uint16_t, uint16_t>(&FCIDUMP::v, py::const_),
-             "s_left"_a, "s_right"_a,
-             "i"_a, "j"_a, "k"_a, "l"_a, "2El-Integral (UHF) with spin index; i is spatial orbital")
+        .def(
+            "t",
+            [](FCIDUMP *self, py::args &args) -> double {
+                assert(args.size() == 2 || args.size() == 3);
+                if (args.size() == 2)
+                    return self->t((uint16_t)args[0].cast<int>(),
+                                   (uint16_t)args[1].cast<int>());
+                else
+                    return self->t((uint8_t)args[0].cast<int>(),
+                                   (uint16_t)args[1].cast<int>(),
+                                   (uint16_t)args[2].cast<int>());
+            },
+            "1. (i: int, j: int) -> float\n"
+            "    One-electron integral element (SU(2));\n"
+            "2. (s: int, i: int, j: int) -> float\n"
+            "    One-electron integral element (SZ).\n\n"
+            "    Args:\n"
+            "        i, j : spatial indices\n"
+            "        s : spin index (0=alpha, 1=beta)")
+        .def(
+            "v",
+            [](FCIDUMP *self, py::args &args) -> double {
+                assert(args.size() == 4 || args.size() == 6);
+                if (args.size() == 4)
+                    return self->v((uint16_t)args[0].cast<int>(),
+                                   (uint16_t)args[1].cast<int>(),
+                                   (uint16_t)args[2].cast<int>(),
+                                   (uint16_t)args[3].cast<int>());
+                else
+                    return self->v((uint8_t)args[0].cast<int>(),
+                                   (uint8_t)args[1].cast<int>(),
+                                   (uint16_t)args[2].cast<int>(),
+                                   (uint16_t)args[3].cast<int>(),
+                                   (uint16_t)args[4].cast<int>(),
+                                   (uint16_t)args[5].cast<int>());
+            },
+            "1. (i: int, j: int, k: int, l: int) -> float\n"
+            "    Two-electron integral element (SU(2));\n"
+            "2. (sij: int, skl: int, i: int, j: int, k: int, l: int) -> float\n"
+            "    Two-electron integral element (SZ).\n\n"
+            "    Args:\n"
+            "        i, j, k, l : spatial indices\n"
+            "        sij, skl : spin indices (0=alpha, 1=beta)")
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym)
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
         .def_property_readonly("twos", &FCIDUMP::twos)
