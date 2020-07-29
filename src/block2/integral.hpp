@@ -27,9 +27,9 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <vector>
-#include <iomanip>
 
 using namespace std;
 
@@ -331,8 +331,9 @@ struct FCIDUMP {
         vs.clear();
         vabs.clear();
         e = 0.0;
-        assert(Parsing::file_exists(filename));
         ifstream ifs(filename.c_str());
+        if (!ifs.good())
+            throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
         vector<string> lines = Parsing::readlines(&ifs);
         ifs.close();
         bool ipar = true;
