@@ -217,6 +217,7 @@ class LTDMRG:
                                 self.targets, self.hamil.basis,
                                 self.hamil.orb_sym)
         mps_info.tag = "FINAL"
+        mps_info.load_mutable()
 
         # MultiMPS (final)
         mps = MultiMPS(mps_info)
@@ -226,39 +227,78 @@ class LTDMRG:
         pmpo = NPC1MPOQC(self.hamil)
         pmpo = SimplifiedMPO(pmpo, Rule())
 
-        # 1NPC
-        pme = MovingEnvironment(pmpo, mps, mps, "1NPC")
-        pme.init_environments(self.verbose >= 3)
-        expect = Expect(pme, self.bond_dim, self.bond_dim,
-                        beta, self.energies, self.multiplicities)
-        expect.iprint = self.verbose
-        expect.solve(True, mps.center == 0)
-        if SpinLabel == SU2:
-            dmr = expect.get_1npc_spatial(0, self.n_sites)
-            dm = np.array(dmr).copy()
-        else:
-            dmr = expect.get_1npc(0, self.n_sites)
-            dm = np.array(dmr).copy()
-            dm = dm.reshape((self.n_sites, 2, self.n_sites, 2))
-            dm = np.transpose(dm, (0, 2, 1, 3))
+        dms = []
 
-        if ridx is not None:
-            dm[:, :] = dm[ridx, :][:, ridx]
+        for iroot in range(mps.nroots):
+            if self.verbose >= 2:
+                print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
-        mps.save_data()
-        dmr.deallocate()
+            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
+                                     self.targets, self.hamil.basis,
+                                     self.hamil.orb_sym)
+            smps_info.tag = "1NPC"
+            for i in range(0, smps_info.n_sites + 1):
+                smps_info.left_dims[i] = mps_info.left_dims[i]
+                smps_info.right_dims[i] = mps_info.right_dims[i]
+            smps_info.save_mutable()
+
+            mps.load_mutable()
+
+            smps = MultiMPS(smps_info)
+            smps.n_sites = mps.n_sites
+            smps.center = mps.center
+            smps.dot = mps.dot
+            smps.canonical_form = '' + mps.canonical_form
+            smps.tensors = mps.tensors[:]
+            smps.wfns = mps.wfns[iroot:iroot+1]
+            smps.weights = mps.weights[iroot:iroot+1]
+            smps.nroots = 1
+            smps.save_mutable()
+
+            mps.deallocate()
+
+            # 1NPC
+            pme = MovingEnvironment(pmpo, smps, smps, "1NPC")
+            pme.init_environments(self.verbose >= 3)
+            expect = Expect(pme, self.bond_dim, self.bond_dim)
+            expect.iprint = self.verbose
+            expect.solve(True, smps.center == 0)
+
+            if SpinLabel == SU2:
+                dmr = expect.get_1npc_spatial(0, self.n_sites)
+                dm = np.array(dmr).copy()
+            else:
+                dmr = expect.get_1npc(0, self.n_sites)
+                dm = np.array(dmr).copy()
+                dm = dm.reshape((self.n_sites, 2, self.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+
+            dmr.deallocate()
+            smps_info.deallocate()
+
+            if ridx is not None:
+                dm[:, :] = dm[ridx, :][:, ridx]
+
+            if SpinLabel == SU2:
+                dm = dm[None, :, :]
+            else:
+                dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 0, 1],
+                                     dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
+
+            dms.append(dm)
+
         pmpo.deallocate()
+        mps_info.deallocate_mutable()
         mps_info.deallocate()
+
+        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
             print('>>> COMPLETE one-npc | Time = %.2f <<<' %
                   (time.perf_counter() - t))
 
-        if SpinLabel == SU2:
-            return dm[None, :, :]
-        else:
-            return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 0, 1],
-                                   dm[None, :, :, 1, 0], dm[None, :, :, 1, 1]], axis=0)
+        return dm
 
     # one-particle density matrix
     # return value:
@@ -277,6 +317,7 @@ class LTDMRG:
                                 self.targets, self.hamil.basis,
                                 self.hamil.orb_sym)
         mps_info.tag = "FINAL"
+        mps_info.load_mutable()
 
         # MultiMPS (final)
         mps = MultiMPS(mps_info)
@@ -286,38 +327,79 @@ class LTDMRG:
         pmpo = PDM1MPOQC(self.hamil)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 
-        # 1PDM
-        pme = MovingEnvironment(pmpo, mps, mps, "1PDM")
-        pme.init_environments(self.verbose >= 3)
-        expect = Expect(pme, self.bond_dim, self.bond_dim,
-                        beta, self.energies, self.multiplicities)
-        expect.iprint = self.verbose
-        expect.solve(True, mps.center == 0)
-        if SpinLabel == SU2:
-            dmr = expect.get_1pdm_spatial(self.n_sites)
-            dm = np.array(dmr).copy()
-        else:
-            dmr = expect.get_1pdm(self.n_sites)
-            dm = np.array(dmr).copy()
-            dm = dm.reshape((self.n_sites, 2, self.n_sites, 2))
-            dm = np.transpose(dm, (0, 2, 1, 3))
+        dms = []
 
-        if ridx is not None:
-            dm[:, :] = dm[ridx, :][:, ridx]
+        for iroot in range(mps.nroots):
+            if self.verbose >= 2:
+                print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
-        mps.save_data()
-        dmr.deallocate()
+            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
+                                     self.targets, self.hamil.basis,
+                                     self.hamil.orb_sym)
+            smps_info.tag = "1PDM"
+            for i in range(0, smps_info.n_sites + 1):
+                smps_info.left_dims[i] = mps_info.left_dims[i]
+                smps_info.right_dims[i] = mps_info.right_dims[i]
+            smps_info.save_mutable()
+
+            mps.load_mutable()
+
+            smps = MultiMPS(smps_info)
+            smps.n_sites = mps.n_sites
+            smps.center = mps.center
+            smps.dot = mps.dot
+            smps.canonical_form = '' + mps.canonical_form
+            smps.tensors = mps.tensors[:]
+            smps.wfns = mps.wfns[iroot:iroot+1]
+            smps.weights = mps.weights[iroot:iroot+1]
+            smps.nroots = 1
+            smps.save_mutable()
+
+            mps.deallocate()
+
+            # 1PDM
+            pme = MovingEnvironment(pmpo, smps, smps, "1PDM")
+            pme.init_environments(self.verbose >= 3)
+            expect = Expect(pme, self.bond_dim, self.bond_dim)
+            expect.iprint = self.verbose
+            expect.solve(True, smps.center == 0)
+
+            if SpinLabel == SU2:
+                dmr = expect.get_1pdm_spatial(self.n_sites)
+                dm = np.array(dmr).copy()
+            else:
+                dmr = expect.get_1pdm(self.n_sites)
+                dm = np.array(dmr).copy()
+                dm = dm.reshape((self.n_sites, 2, self.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+
+            dmr.deallocate()
+            smps_info.deallocate()
+
+            if ridx is not None:
+                dm[:, :] = dm[ridx, :][:, ridx]
+
+            if SpinLabel == SU2:
+                dm = np.concatenate(
+                    [dm[None, :, :], dm[None, :, :]], axis=0) / 2
+            else:
+                dm = np.concatenate(
+                    [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+
+            dms.append(dm)
+
         pmpo.deallocate()
+        mps_info.deallocate_mutable()
         mps_info.deallocate()
+
+        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
             print('>>> COMPLETE one-pdm | Time = %.2f <<<' %
                   (time.perf_counter() - t))
 
-        if SpinLabel == SU2:
-            return np.concatenate([dm[None, :, :], dm[None, :, :]], axis=0) / 2
-        else:
-            return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+        return dm
 
     # two-particle density matrix (SZ only)
     # return value:
@@ -341,6 +423,7 @@ class LTDMRG:
                                 self.targets, self.hamil.basis,
                                 self.hamil.orb_sym)
         mps_info.tag = "FINAL"
+        mps_info.load_mutable()
 
         # MultiMPS (final)
         mps = MultiMPS(mps_info)
@@ -350,34 +433,72 @@ class LTDMRG:
         pmpo = PDM2MPOQC(self.hamil, mask=PDM2MPOQC.s_minimal)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 
-        # 2PDM
-        pme = MovingEnvironment(pmpo, mps, mps, "2PDM")
-        pme.init_environments(self.verbose >= 3)
-        expect = Expect(pme, self.bond_dim, self.bond_dim,
-                        beta, self.energies, self.multiplicities)
-        expect.iprint = self.verbose
-        expect.solve(True, mps.center == 0)
+        dms = []
 
-        dmr = expect.get_2pdm(self.n_sites)
-        dm = np.array(dmr, copy=True)
-        dm = dm.reshape((self.n_sites, 2, self.n_sites, 2,
-                         self.n_sites, 2, self.n_sites, 2))
-        dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+        for iroot in range(mps.nroots):
+            if self.verbose >= 2:
+                print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
-        if ridx is not None:
-            dm[:, :, :, :] = dm[ridx, :, :, :][:, ridx,
-                                               :, :][:, :, ridx, :][:, :, :, ridx]
+            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
+                                     self.targets, self.hamil.basis,
+                                     self.hamil.orb_sym)
+            smps_info.tag = "2PDM"
+            for i in range(0, smps_info.n_sites + 1):
+                smps_info.left_dims[i] = mps_info.left_dims[i]
+                smps_info.right_dims[i] = mps_info.right_dims[i]
+            smps_info.save_mutable()
 
-        mps.save_data()
+            mps.load_mutable()
+
+            smps = MultiMPS(smps_info)
+            smps.n_sites = mps.n_sites
+            smps.center = mps.center
+            smps.dot = mps.dot
+            smps.canonical_form = '' + mps.canonical_form
+            smps.tensors = mps.tensors[:]
+            smps.wfns = mps.wfns[iroot:iroot+1]
+            smps.weights = mps.weights[iroot:iroot+1]
+            smps.nroots = 1
+            smps.save_mutable()
+
+            mps.deallocate()
+
+            # 2PDM
+            pme = MovingEnvironment(pmpo, smps, smps, "2PDM")
+            pme.init_environments(self.verbose >= 3)
+            expect = Expect(pme, self.bond_dim, self.bond_dim)
+            expect.iprint = self.verbose
+            expect.solve(True, smps.center == 0)
+
+            dmr = expect.get_2pdm(self.n_sites)
+            dm = np.array(dmr, copy=True)
+            dm = dm.reshape((self.n_sites, 2, self.n_sites, 2,
+                             self.n_sites, 2, self.n_sites, 2))
+            dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+
+            smps_info.deallocate()
+
+            if ridx is not None:
+                dm[:, :, :, :] = dm[ridx, :, :, :] \
+                    [:, ridx, :, :][:, :, ridx, :][:, :, :, ridx]
+
+            dm = np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
+                                 dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
+
+            dms.append(dm)
+
         pmpo.deallocate()
+        mps_info.deallocate_mutable()
         mps_info.deallocate()
+
+        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
             print('>>> COMPLETE two-pdm | Time = %.2f <<<' %
                   (time.perf_counter() - t))
 
-        return np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
-                               dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
+        return dm
 
     def __del__(self):
         if self.hamil is not None:
@@ -395,7 +516,7 @@ if __name__ == "__main__":
     sweep_tol = 1E-8
     max_dmrg_steps = 30
 
-    nroots = 60
+    nroots = 30
     beta = 20.0
     mu = -1.0
     n_threads = 8
@@ -511,8 +632,8 @@ if __name__ == "__main__":
     lt.targets = VectorSL([])
     pgs = list(set(list(lt.orb_sym)))
     for xpg in pgs:
-        for na in range(nelec // 2 - 2, nelec // 2 + 3):
-            for nb in range(nelec // 2 - 2, nelec // 2 + 3):
+        for na in range(nelec // 2 - 3, nelec // 2 + 4):
+            for nb in range(nelec // 2 - 3, nelec // 2 + 4):
                 xn = na + nb
                 xs2 = na - nb
                 if SpinLabel == SU2 and xs2 < 0:
