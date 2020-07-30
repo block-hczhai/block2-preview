@@ -122,8 +122,10 @@ namespace block2 {
             }
             const auto iSym = 0;
             for(int iQ = 0; iQ < qSize; ++iQ){
-                auto [N, Sz] = sciWrapper->quantumNumbers[iQ];
-                auto [o1,o2] = sciWrapper->offsets[iQ];
+                auto  N  = sciWrapper->quantumNumbers[iQ].first;
+                auto  Sz = sciWrapper->quantumNumbers[iQ].second;
+                auto o1 = sciWrapper->offsets[iQ].first;
+                auto o2 = sciWrapper->offsets[iQ].second;
                 bas.quanta[iQ] = S(N, Sz, iSym);
                 bas.n_states[iQ] = o2-o1;
             }
@@ -497,11 +499,10 @@ namespace block2 {
                 auto delta_N = op.q_label.n();
                 auto delta_twoS = op.q_label.twos();
                 auto dQnPair = std::pair<int,int>{delta_N,delta_twoS};
-                if constexpr (false and op.name == OpNames::R){ // DEBUG
+                if (false and op.name == OpNames::R){ // DEBUG
                     cout << "m == "<< (int)n_sites-1 << "allocate"<< op.name << "s" << (int)op.site_index[0] <<","
                          << (int)op.site_index[1] << "ss" << (int)op.site_index.s(0) << (int)op.site_index.s(1) << endl;
                     cout << "q_label:" << op.q_label << endl;
-
                 }
                 //cout << "m == "<< (int)n_sites-1 << "allocate"<< op.name << "s" << (int)op.site_index[0] <<","
                 //     << (int)op.site_index[1] << "ss" << (int)op.site_index.s(0) << (int)op.site_index.s(1) << endl;
