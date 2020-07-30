@@ -21,5 +21,5 @@
 #include "pybind.hpp"
 
 template void bind_hamiltonian<SZ>(py::module &m);
-template void bind_hamiltonianSCI<SZ>(py::module &m);
+template void bind_hamiltonian_sci<SZ>(py::module &m);
 template void bind_hamiltonian<SU2>(py::module &m);

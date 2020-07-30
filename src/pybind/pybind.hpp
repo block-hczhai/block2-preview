@@ -1137,7 +1137,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
 }
 
-template <typename S> void bind_hamiltonianSCI(py::module &m) {
+template <typename S> void bind_hamiltonian_sci(py::module &m) {
     py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(m, "HamiltonianSCI")
             .def(py::init<S, int, const vector<uint8_t> &>())
             .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
@@ -1433,7 +1433,7 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
 }
 
-template <typename S> void bind_mpoSCI(py::module &m) {
+template <typename S> void bind_mpo_sci(py::module &m) {
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
             .def_readwrite("mode", &MPOQCSCI<S>::mode)
@@ -1452,10 +1452,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_operator<S>(m);
     bind_partition<S>(m);
     bind_hamiltonian<S>(m);
-    bind_hamiltonianSCI<S>(m);
+    bind_hamiltonian_sci<S>(m);
     bind_algorithms<S>(m);
     bind_mpo<S>(m);
-    bind_mpoSCI<S>(m);
+    bind_mpo_sci<S>(m);
     bind_spin_specific<S>(m);
 }
 
@@ -1961,10 +1961,10 @@ extern template void bind_cg<SZ>(py::module &m);
 extern template void bind_operator<SZ>(py::module &m);
 extern template void bind_partition<SZ>(py::module &m);
 extern template void bind_hamiltonian<SZ>(py::module &m);
-extern template void bind_hamiltonianSCI<SZ>(py::module &m);
+extern template void bind_hamiltonian_sci<SZ>(py::module &m);
 extern template void bind_algorithms<SZ>(py::module &m);
 extern template void bind_mpo<SZ>(py::module &m);
-extern template void bind_mpoSCI<SZ>(py::module &m);
+extern template void bind_mpo_sci<SZ>(py::module &m);
 
 extern template void bind_expr<SU2>(py::module &m);
 extern template void bind_state_info<SU2>(py::module &m, const string &name);

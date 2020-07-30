@@ -24,7 +24,7 @@
 #include "expr.hpp"
 #include "integral.hpp"
 #include "sparse_matrix.hpp"
-#include "sciWrapperAbstract.hpp"
+#include "abstract_sci_wrapper.hpp"
 #ifdef HAS_SCI_CODE
 #include "../../../sci/sciWrapper.hpp"
 #endif
