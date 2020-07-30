@@ -21,5 +21,5 @@
 #include "pybind.hpp"
 
 template void bind_mpo<SZ>(py::module &m);
-template void bind_mpoSCI<SZ>(py::module &m);
+template void bind_mpo_sci<SZ>(py::module &m);
 template void bind_mpo<SU2>(py::module &m);
