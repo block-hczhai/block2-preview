@@ -1442,6 +1442,16 @@ template <typename S> void bind_mpo_sci(py::module &m) {
 
 }
 
+template <typename S>
+auto bind_spin_specific_sci(py::module &m) -> decltype(typename S::is_su2_t()) {}
+
+template <typename S>
+auto bind_spin_specific_sci(py::module &m) -> decltype(typename S::is_sz_t()) {
+    bind_hamiltonian_sci<S>(m);
+    bind_mpo_sci<S>(m);
+
+}
+
 template <typename S> void bind_class(py::module &m, const string &name) {
 
     bind_expr<S>(m);
@@ -1452,11 +1462,10 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_operator<S>(m);
     bind_partition<S>(m);
     bind_hamiltonian<S>(m);
-    bind_hamiltonian_sci<S>(m);
     bind_algorithms<S>(m);
     bind_mpo<S>(m);
-    bind_mpo_sci<S>(m);
     bind_spin_specific<S>(m);
+    bind_spin_specific_sci<S>(m);
 }
 
 template <typename S = void> void bind_data(py::module &m) {
@@ -1978,5 +1987,8 @@ extern template void bind_algorithms<SU2>(py::module &m);
 extern template void bind_mpo<SU2>(py::module &m);
 
 extern template auto bind_spin_specific<SZ>(py::module &m)
+    -> decltype(typename SZ::is_sz_t());
+
+extern template auto bind_spin_specific_sci<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
 #endif

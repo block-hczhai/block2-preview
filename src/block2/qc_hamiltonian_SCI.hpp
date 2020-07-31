@@ -564,38 +564,4 @@ namespace block2 {
         }
     };
 
-    template <typename S>
-    struct HamiltonianQCSCI<S, typename S::is_su2_t> : HamiltonianSCI<S> {
-        using HamiltonianSCI<S>::n_syms;
-        using HamiltonianSCI<S>::n_sites;
-        using HamiltonianSCI<S>::vacuum;
-        using HamiltonianSCI<S>::basis;
-        using HamiltonianSCI<S>::site_op_infos;
-        using HamiltonianSCI<S>::find_site_op_info;
-        using HamiltonianSCI<S>::find_site_norm_op;
-        using HamiltonianSCI<S>::site_norm_ops;
-        using HamiltonianSCI<S>::opf;
-        using HamiltonianSCI<S>::orb_sym;
-
-        shared_ptr<FCIDUMP> fcidump;
-        double mu = 0; //!> Chemical potential
-        int nOrbCas, nOrbExt;  //!> Number of spatial orbitals in CAS; External space. nSites=nOrbCas+1
-        HamiltonianQCSCI(S vacuum, int nOrbCAS, int nOrbExt,
-                         const vector<uint8_t> &orb_sym,
-                         const shared_ptr<FCIDUMP> &fcidump,
-                         const vector<vector<int>> &extOccs = {}):
-                HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump),nOrbCas{nOrbCAS}, nOrbExt{nOrbExt} {
-            throw std::runtime_error("not yet implemented");
-        }
-
-        double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
-            return fcidump->v(sl, sr, i, j, k, l);
-        }
-
-        double t(uint8_t s, uint16_t i, uint16_t j) const {
-            return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
-        }
-
-        double e() const { return fcidump->e; }
-    };
 } // namespace block2
