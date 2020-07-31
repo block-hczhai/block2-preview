@@ -582,14 +582,4 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     }
     };
 
-    template <typename S> struct MPOQCSCI<S, typename S::is_su2_t> : MPO<S> {
-        QCTypes mode;
-        bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
-        MPOQCSCI(const HamiltonianQCSCI<S> &hamil, QCTypes mode = QCTypes::NC,
-                 bool symmetrized_p = true):
-                MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
-            throw std::runtime_error("not yet implemented");
-        }
-    };
-
 } // namespace block2
