@@ -24,6 +24,9 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
+#ifdef HAS_SCI_CODE
+#include "../../../pybind_sci.hpp"
+#endif
 
 namespace py = pybind11;
 using namespace block2;
@@ -1137,7 +1140,36 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
 }
 
+template <typename S> void bind_sci_wrapper(py::module &m){
+    py::class_<sci::AbstractSciWrapper<S>, shared_ptr<sci::AbstractSciWrapper<S>>>
+                                                        (m, "AbstractSciWrapper")
+        .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
+                                   int, int, int>(),
+                           py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
+                           py::arg("nMaxAlphaEl"), py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
+                           "Initialization via generated CI space based on nMax*")
+        .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
+                     const vector<vector<int>>&>(),
+             py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
+             py::arg("occs"),
+             "Initialization via externally given determinants in `occs`")
+        .def_readonly("nOrbCas", &sci::AbstractSciWrapper<S>::nOrbCas)
+        .def_readonly("nOrbExt", &sci::AbstractSciWrapper<S>::nOrbExt)
+        .def_readonly("nOrb", &sci::AbstractSciWrapper<S>::nOrb)
+        .def_readonly("nMaxAlphaEl", &sci::AbstractSciWrapper<S>::nMaxAlphaEl)
+        .def_readonly("nMaxBetaEl", &sci::AbstractSciWrapper<S>::nMaxBetaEl)
+        .def_readonly("nMaxEl", &sci::AbstractSciWrapper<S>::nMaxEl)
+        .def_readonly("nDet", &sci::AbstractSciWrapper<S>::nDet)
+        .def_readonly("eps", &sci::AbstractSciWrapper<S>::eps);
+#ifdef HAS_SCI_CODE
+    bind_sci_wrapper2<S>(m);//'', AbstractSciWrapper);
+#endif
+};
+
+
 template <typename S> void bind_hamiltonian_sci(py::module &m) {
+    bind_sci_wrapper<S>(m);
+
     py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(m, "HamiltonianSCI")
             .def(py::init<S, int, const vector<uint8_t> &>())
             .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
@@ -1166,9 +1198,10 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
     py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>, HamiltonianSCI<S>>(
             m, "HamiltonianQCSCI")
             .def(py::init<S, int, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &>())
-            .def(py::init<S, int, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &, const vector<vector<int>>& >())
+                    const shared_ptr<FCIDUMP> &,
+                    const std::shared_ptr<sci::AbstractSciWrapper<S>> &>(),
+                    py::arg("vacuum"), py::arg("nOrbCas"), py::arg("nOrbExt"),
+                    py::arg("orb_Sym"), py::arg("fcidump"), py::arg("sciWrapper"))
             .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
             .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
             .def("v", &HamiltonianQCSCI<S>::v)

@@ -25,9 +25,6 @@
 #include "integral.hpp"
 #include "sparse_matrix.hpp"
 #include "abstract_sci_wrapper.hpp"
-#ifdef HAS_SCI_CODE
-#include "../../../sci/sciWrapper.hpp"
-#endif
 #include "hamiltonian_SCI.hpp"
 #include <map>
 #include <memory>
@@ -70,13 +67,14 @@ namespace block2 {
         //!! This is only used in get_site_ops
         shared_ptr<FCIDUMP> fcidump;
         double mu = 0; //!> Chemical potential
+        std::shared_ptr<sci::AbstractSciWrapper<S>> sciWrapper; //!< Wrapper class for the
+                                                            //!!  physical operators/determinants on the big site
         int nOrbCas, nOrbExt;  //!> Number of spatial orbitals in CAS; External space. nSites=nOrbCas+1
-        std::shared_ptr<sci::AbstractSciWrapper> sciWrapper;
         HamiltonianQCSCI(S vacuum, int nOrbCAS, int nOrbExt,
                          const vector<uint8_t> &orb_sym,
                          const shared_ptr<FCIDUMP> &fcidump,
-                         const vector<vector<int>>& extOccs = {})
-                : HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump),
+                         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapper)
+                : HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump), sciWrapper(sciWrapper),
                   nOrbCas{nOrbCAS}, nOrbExt{nOrbExt} {
             cout << " Hamiltonian: n_sites = " << (int)n_sites << ", nOrbCas = " << nOrbCas << ", nOrbExt =" << nOrbExt << endl;
             // CAS sites
@@ -102,16 +100,6 @@ namespace block2 {
                 throw std::runtime_error("mu needs to be 0 right now");
             }
             auto & bas = basis[iSite];
-            // TODO vv make this input
-            //sciWrapper = SciWrapper(nOrbCas, nOrbExt, std::min(nOrbExt,2),std::min(nOrbExt,2),2);
-#ifndef HAS_SCI_CODE
-            sciWrapper = std::make_shared<sci::AbstractSciWrapper>
-#else
-            sciWrapper = std::make_shared<sci::SciWrapper>
-#endif
-                    (nOrbCas, nOrbExt,
-                     std::min(nOrbExt,9),std::min(nOrbExt,9),std::min(nOrbExt*2,9),
-                     fcidump, extOccs);
             const auto qSize = static_cast<int>(sciWrapper->quantumNumbers.size());
             bas.allocate(qSize);
             for(int i = 0; i < nOrbCas + nOrbExt; ++i){

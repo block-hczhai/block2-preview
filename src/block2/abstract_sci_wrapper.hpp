@@ -26,9 +26,12 @@
 
 /** Interface to the SCI code for a big site.
  *
- * @ATTENTION This is still work in progress and some things definitiely will be changed.
+ * @ATTENTION This is still work in progress and some things definitely will be changed.
  *
- * @TODO: -[ ] Template symmetry type and use it (instead of intPair)
+ * @TODO: -[x] Template symmetry type
+ *        -[ ] Use symmetry type instead of intPair
+ *              - Also for actual SCI code?
+ *        -[ ] Enable point group symmetry
  *        -[ ] More flexible SCI interface; block2-alternative to occs?
  *             -[ ] Divide Ctors or separate Ctor and actual initialization (violates C++ principles but would ease life)
  */
@@ -45,7 +48,11 @@ namespace sci {
             }
         };
     }
-    class AbstractSciWrapper {
+
+    template <typename, typename = void> struct AbstractSciWrapper;
+
+    template <typename S>
+    class AbstractSciWrapper<S, typename S::is_sz_t> {
         // Actually I made this class not abstract (pure virtual fct) in order to ease life.
     public:
         using intPair = std::pair<int, int>; // For symmetry
@@ -55,7 +62,7 @@ namespace sci {
         int nMaxAlphaEl, nMaxBetaEl, nMaxEl; //!< Maximal number of alpha/beta electrons
         AbstractSciWrapper() : AbstractSciWrapper(1, 1, 1, 1, -1, nullptr) {}
 
-        /**
+        /** Initialization via generated CI space based on nMax*
          *
          * @param nOrbCas (Spatial) orbitals in the CAS space. This is handled by normal "small" MPS sites
          * @param nOrbExt Orbitals in external space. This is handled via SCI
@@ -63,14 +70,25 @@ namespace sci {
          * @param nMaxBetaEl Maximal number of beta electrons in external space
          * @param nMaxEl Maximal number of alpha+beta electrons in external space
          * @param fcidump block2 FCIDUMP file
-         * @param occs  Vector of occupations for filling determinants. If used, nMax* are ignored!
          */
-        AbstractSciWrapper(int nOrbCas, int nOrbExt, int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl,
-                   const std::shared_ptr<block2::FCIDUMP> fcidump,
-                           const vector<vector<int>>& occs = {}):
+        AbstractSciWrapper(int nOrbCas, int nOrbExt,
+                           const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl):
                 nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
                 nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}{
-
+        };
+        /** Initialization via externally given determinants in `occs`.
+         *
+         * @param nOrbCas (Spatial) orbitals in the CAS space. This is handled by normal "small" MPS sites
+         * @param nOrbExt Orbitals in external space. This is handled via SCI
+         * @param occs  Vector of occupations for filling determinants. If used, nMax* are ignored!
+         * @param fcidump block2 FCIDUMP file
+         */
+        AbstractSciWrapper(int nOrbCas, int nOrbExt,
+                           const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           const vector<vector<int>>& occs):
+                nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
+                nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}{
         };
         virtual ~AbstractSciWrapper() = default;
 
