@@ -1137,48 +1137,6 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
 }
 
-template <typename S> void bind_hamiltonian_sci(py::module &m) {
-    py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(m, "HamiltonianSCI")
-            .def(py::init<S, int, const vector<uint8_t> &>())
-            .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
-            .def_readwrite("opf", &HamiltonianSCI<S>::opf)
-            .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
-            .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
-            .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
-            .def_property_readonly("basis",
-                                   [](HamiltonianSCI<S> *self) {
-                                       return Array<StateInfo<S>>(self->basis,
-                                                                  self->n_syms);
-                                   });
-            //vv hrl: switched off as not really required (now protected)
-            /*.def_property_readonly(
-                    "site_op_infos",
-                    [](HamiltonianSCI<S> *self) {
-                        return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
-                                self->site_op_infos, self->n_syms);
-                    })
-            .def("get_site_ops", &HamiltonianSCI<S>::get_site_ops)
-            .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)
-            .def("find_site_op_info", &HamiltonianSCI<S>::find_site_op_info)
-            .def("find_site_norm_op", &HamiltonianSCI<S>::find_site_norm_op)
-            .def("deallocate", &HamiltonianSCI<S>::deallocate);*/
-
-    py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>, HamiltonianSCI<S>>(
-            m, "HamiltonianQCSCI")
-            .def(py::init<S, int, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &>())
-            .def(py::init<S, int, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &, const vector<vector<int>>& >())
-            .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
-            .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
-            .def("v", &HamiltonianQCSCI<S>::v)
-            .def("t", &HamiltonianQCSCI<S>::t)
-            .def("e", &HamiltonianQCSCI<S>::e);
-            //vv hrl: switched off as not really required (now protected)
-            //.def("init_site_ops", &HamiltonianQCSCI<S>::init_site_ops)
-            //.def("get_site_ops", &HamiltonianQCSCI<S>::get_site_ops);
-}
-
 template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename DMRG<S>::Iteration,
@@ -1433,15 +1391,6 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
 }
 
-template <typename S> void bind_mpo_sci(py::module &m) {
-
-    py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
-            .def_readwrite("mode", &MPOQCSCI<S>::mode)
-            .def(py::init<const HamiltonianQCSCI<S> &>())
-            .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
-
-}
-
 template <typename S> void bind_class(py::module &m, const string &name) {
 
     bind_expr<S>(m);
@@ -1452,10 +1401,8 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_operator<S>(m);
     bind_partition<S>(m);
     bind_hamiltonian<S>(m);
-    bind_hamiltonian_sci<S>(m);
     bind_algorithms<S>(m);
     bind_mpo<S>(m);
-    bind_mpo_sci<S>(m);
     bind_spin_specific<S>(m);
 }
 
@@ -1961,10 +1908,8 @@ extern template void bind_cg<SZ>(py::module &m);
 extern template void bind_operator<SZ>(py::module &m);
 extern template void bind_partition<SZ>(py::module &m);
 extern template void bind_hamiltonian<SZ>(py::module &m);
-extern template void bind_hamiltonian_sci<SZ>(py::module &m);
 extern template void bind_algorithms<SZ>(py::module &m);
 extern template void bind_mpo<SZ>(py::module &m);
-extern template void bind_mpo_sci<SZ>(py::module &m);
 
 extern template void bind_expr<SU2>(py::module &m);
 extern template void bind_state_info<SU2>(py::module &m, const string &name);
@@ -1979,4 +1924,5 @@ extern template void bind_mpo<SU2>(py::module &m);
 
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
+
 #endif

@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include "mpo.hpp"
-#include "operator_tensor.hpp"
-#include "qc_mpo.hpp"
-#include "qc_hamiltonian_SCI.hpp"
-#include "symbolic.hpp"
-#include "tensor_functions.hpp"
+#include "../block2/mpo.hpp"
+#include "../block2/operator_tensor.hpp"
+#include "../block2/qc_mpo.hpp"
+#include "qc_hamiltonian_sci.hpp"
+#include "../block2/symbolic.hpp"
+#include "../block2/tensor_functions.hpp"
 #include <cassert>
 #include <memory>
 #include <vector>
@@ -580,16 +580,6 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             }
         }
     }
-    };
-
-    template <typename S> struct MPOQCSCI<S, typename S::is_su2_t> : MPO<S> {
-        QCTypes mode;
-        bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
-        MPOQCSCI(const HamiltonianQCSCI<S> &hamil, QCTypes mode = QCTypes::NC,
-                 bool symmetrized_p = true):
-                MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
-            throw std::runtime_error("not yet implemented");
-        }
     };
 
 } // namespace block2
