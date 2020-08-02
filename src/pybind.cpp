@@ -20,6 +20,13 @@
 
 #include "pybind/pybind.hpp"
 
+#ifdef _USE_SCI
+#include "sci/pybind.hpp"
+#ifdef _SCI_WRAPPER2
+#include "pybind_sci.hpp"
+#endif
+#endif
+
 PYBIND11_MODULE(block2, m) {
 
     m.doc() = "python interface for block2.";
@@ -41,4 +48,14 @@ PYBIND11_MODULE(block2, m) {
 
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
     bind_class<SZ>(m_sz, "SZ");
+
+#ifdef _USE_SCI
+    bind_sci_wrapper<SZ>(m_sz);
+#ifdef _SCI_WRAPPER2
+    bind_sci_wrapper2<SZ>(m_sz);
+#endif
+    bind_hamiltonian_sci<SZ>(m_sz);
+    bind_mpo_sci<SZ>(m_sz);
+#endif
+
 }

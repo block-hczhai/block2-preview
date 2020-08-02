@@ -21,10 +21,10 @@
 
 #pragma once
 
-#include "expr.hpp"
-#include "sparse_matrix.hpp"
-#include "operator_functions.hpp"
-#include "symbolic.hpp"
+#include "../block2/expr.hpp"
+#include "../block2/sparse_matrix.hpp"
+#include "../block2/operator_functions.hpp"
+#include "../block2/symbolic.hpp"
 #include <map>
 #include <memory>
 #include <vector>

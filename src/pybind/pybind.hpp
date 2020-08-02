@@ -24,9 +24,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
-#ifdef HAS_SCI_CODE
-#include "../../../pybind_sci.hpp"
-#endif
 
 namespace py = pybind11;
 using namespace block2;
@@ -1140,78 +1137,6 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
 }
 
-template <typename S> void bind_sci_wrapper(py::module &m){
-    py::class_<sci::AbstractSciWrapper<S>, shared_ptr<sci::AbstractSciWrapper<S>>>
-                                                        (m, "AbstractSciWrapper")
-        .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
-                                   int, int, int>(),
-                           py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
-                           py::arg("nMaxAlphaEl"), py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
-                           "Initialization via generated CI space based on nMax*")
-        .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
-                     const vector<vector<int>>&>(),
-             py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
-             py::arg("occs"),
-             "Initialization via externally given determinants in `occs`")
-        .def_readonly("nOrbCas", &sci::AbstractSciWrapper<S>::nOrbCas)
-        .def_readonly("nOrbExt", &sci::AbstractSciWrapper<S>::nOrbExt)
-        .def_readonly("nOrb", &sci::AbstractSciWrapper<S>::nOrb)
-        .def_readonly("nMaxAlphaEl", &sci::AbstractSciWrapper<S>::nMaxAlphaEl)
-        .def_readonly("nMaxBetaEl", &sci::AbstractSciWrapper<S>::nMaxBetaEl)
-        .def_readonly("nMaxEl", &sci::AbstractSciWrapper<S>::nMaxEl)
-        .def_readonly("nDet", &sci::AbstractSciWrapper<S>::nDet)
-        .def_readonly("eps", &sci::AbstractSciWrapper<S>::eps);
-#ifdef HAS_SCI_CODE
-    bind_sci_wrapper2<S>(m);//'', AbstractSciWrapper);
-#endif
-};
-
-
-template <typename S> void bind_hamiltonian_sci(py::module &m) {
-    bind_sci_wrapper<S>(m);
-
-    py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(m, "HamiltonianSCI")
-            .def(py::init<S, int, const vector<uint8_t> &>())
-            .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
-            .def_readwrite("opf", &HamiltonianSCI<S>::opf)
-            .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
-            .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
-            .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
-            .def_property_readonly("basis",
-                                   [](HamiltonianSCI<S> *self) {
-                                       return Array<StateInfo<S>>(self->basis,
-                                                                  self->n_syms);
-                                   });
-            //vv hrl: switched off as not really required (now protected)
-            /*.def_property_readonly(
-                    "site_op_infos",
-                    [](HamiltonianSCI<S> *self) {
-                        return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
-                                self->site_op_infos, self->n_syms);
-                    })
-            .def("get_site_ops", &HamiltonianSCI<S>::get_site_ops)
-            .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)
-            .def("find_site_op_info", &HamiltonianSCI<S>::find_site_op_info)
-            .def("find_site_norm_op", &HamiltonianSCI<S>::find_site_norm_op)
-            .def("deallocate", &HamiltonianSCI<S>::deallocate);*/
-
-    py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>, HamiltonianSCI<S>>(
-            m, "HamiltonianQCSCI")
-            .def(py::init<S, int, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &,
-                    const std::shared_ptr<sci::AbstractSciWrapper<S>> &>(),
-                    py::arg("vacuum"), py::arg("nOrbCas"), py::arg("nOrbExt"),
-                    py::arg("orb_Sym"), py::arg("fcidump"), py::arg("sciWrapper"))
-            .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
-            .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
-            .def("v", &HamiltonianQCSCI<S>::v)
-            .def("t", &HamiltonianQCSCI<S>::t)
-            .def("e", &HamiltonianQCSCI<S>::e);
-            //vv hrl: switched off as not really required (now protected)
-            //.def("init_site_ops", &HamiltonianQCSCI<S>::init_site_ops)
-            //.def("get_site_ops", &HamiltonianQCSCI<S>::get_site_ops);
-}
-
 template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename DMRG<S>::Iteration,
@@ -1466,25 +1391,6 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
 }
 
-template <typename S> void bind_mpo_sci(py::module &m) {
-
-    py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
-            .def_readwrite("mode", &MPOQCSCI<S>::mode)
-            .def(py::init<const HamiltonianQCSCI<S> &>())
-            .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
-
-}
-
-template <typename S>
-auto bind_spin_specific_sci(py::module &m) -> decltype(typename S::is_su2_t()) {}
-
-template <typename S>
-auto bind_spin_specific_sci(py::module &m) -> decltype(typename S::is_sz_t()) {
-    bind_hamiltonian_sci<S>(m);
-    bind_mpo_sci<S>(m);
-
-}
-
 template <typename S> void bind_class(py::module &m, const string &name) {
 
     bind_expr<S>(m);
@@ -1498,7 +1404,6 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_algorithms<S>(m);
     bind_mpo<S>(m);
     bind_spin_specific<S>(m);
-    bind_spin_specific_sci<S>(m);
 }
 
 template <typename S = void> void bind_data(py::module &m) {
@@ -2003,10 +1908,8 @@ extern template void bind_cg<SZ>(py::module &m);
 extern template void bind_operator<SZ>(py::module &m);
 extern template void bind_partition<SZ>(py::module &m);
 extern template void bind_hamiltonian<SZ>(py::module &m);
-extern template void bind_hamiltonian_sci<SZ>(py::module &m);
 extern template void bind_algorithms<SZ>(py::module &m);
 extern template void bind_mpo<SZ>(py::module &m);
-extern template void bind_mpo_sci<SZ>(py::module &m);
 
 extern template void bind_expr<SU2>(py::module &m);
 extern template void bind_state_info<SU2>(py::module &m, const string &name);
@@ -2022,6 +1925,4 @@ extern template void bind_mpo<SU2>(py::module &m);
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
 
-extern template auto bind_spin_specific_sci<SZ>(py::module &m)
-    -> decltype(typename SZ::is_sz_t());
 #endif

@@ -21,12 +21,12 @@
 
 #pragma once
 
-#include "mpo.hpp"
-#include "operator_tensor.hpp"
-#include "qc_mpo.hpp"
-#include "qc_hamiltonian_SCI.hpp"
-#include "symbolic.hpp"
-#include "tensor_functions.hpp"
+#include "../block2/mpo.hpp"
+#include "../block2/operator_tensor.hpp"
+#include "../block2/qc_mpo.hpp"
+#include "qc_hamiltonian_sci.hpp"
+#include "../block2/symbolic.hpp"
+#include "../block2/tensor_functions.hpp"
 #include <cassert>
 #include <memory>
 #include <vector>

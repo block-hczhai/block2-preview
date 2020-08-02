@@ -22,6 +22,3 @@
 
 template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
-
-template auto bind_spin_specific_sci<SZ>(py::module &m)
--> decltype(typename SZ::is_sz_t());

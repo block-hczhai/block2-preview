@@ -20,9 +20,9 @@
 
 #include <limits>
 #include <unordered_map>
-#include "integral.hpp"
-#include "sparse_matrix.hpp"
-#include "symmetry.hpp"
+#include "../block2/integral.hpp"
+#include "../block2/sparse_matrix.hpp"
+#include "../block2/symmetry.hpp"
 
 /** Interface to the SCI code for a big site.
  *

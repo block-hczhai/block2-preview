@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include "expr.hpp"
-#include "integral.hpp"
-#include "sparse_matrix.hpp"
+#include "../block2/expr.hpp"
+#include "../block2/integral.hpp"
+#include "../block2/sparse_matrix.hpp"
 #include "abstract_sci_wrapper.hpp"
-#include "hamiltonian_SCI.hpp"
+#include "hamiltonian_sci.hpp"
 #include <map>
 #include <memory>
 #include <vector>
