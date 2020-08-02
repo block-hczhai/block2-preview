@@ -34,6 +34,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 // SZ
@@ -1414,6 +1415,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
+    py::bind_vector<vector<vector<int>>>(m, "VectorVectorInt");
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
         .def_property_readonly(
             "ptr",
@@ -1922,4 +1924,5 @@ extern template void bind_mpo<SU2>(py::module &m);
 
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
+
 #endif

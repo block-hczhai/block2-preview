@@ -55,6 +55,13 @@
 #include "block2/tensor_functions.hpp"
 #include "block2/utils.hpp"
 
+#ifdef _USE_SCI
+#include "sci/abstract_sci_wrapper.hpp"
+#include "sci/hamiltonian_sci.hpp"
+#include "sci/qc_hamiltonian_sci.hpp"
+#include "sci/qc_mpo_sci.hpp"
+#endif
+
 #ifdef _EXPLICIT_TEMPLATE
 #include "instantiation/instantiation.hpp"
 #endif
