@@ -25,9 +25,6 @@
 #include "integral.hpp"
 #include "sparse_matrix.hpp"
 #include "abstract_sci_wrapper.hpp"
-#ifdef HAS_SCI_CODE
-#include "../../../sci/sciWrapper.hpp"
-#endif
 #include "hamiltonian_SCI.hpp"
 #include <map>
 #include <memory>
@@ -70,13 +67,14 @@ namespace block2 {
         //!! This is only used in get_site_ops
         shared_ptr<FCIDUMP> fcidump;
         double mu = 0; //!> Chemical potential
+        std::shared_ptr<sci::AbstractSciWrapper<S>> sciWrapper; //!< Wrapper class for the
+                                                            //!!  physical operators/determinants on the big site
         int nOrbCas, nOrbExt;  //!> Number of spatial orbitals in CAS; External space. nSites=nOrbCas+1
-        std::shared_ptr<sci::AbstractSciWrapper> sciWrapper;
         HamiltonianQCSCI(S vacuum, int nOrbCAS, int nOrbExt,
                          const vector<uint8_t> &orb_sym,
                          const shared_ptr<FCIDUMP> &fcidump,
-                         const vector<vector<int>>& extOccs = {})
-                : HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump),
+                         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapper)
+                : HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump), sciWrapper(sciWrapper),
                   nOrbCas{nOrbCAS}, nOrbExt{nOrbExt} {
             cout << " Hamiltonian: n_sites = " << (int)n_sites << ", nOrbCas = " << nOrbCas << ", nOrbExt =" << nOrbExt << endl;
             // CAS sites
@@ -102,16 +100,6 @@ namespace block2 {
                 throw std::runtime_error("mu needs to be 0 right now");
             }
             auto & bas = basis[iSite];
-            // TODO vv make this input
-            //sciWrapper = SciWrapper(nOrbCas, nOrbExt, std::min(nOrbExt,2),std::min(nOrbExt,2),2);
-#ifndef HAS_SCI_CODE
-            sciWrapper = std::make_shared<sci::AbstractSciWrapper>
-#else
-            sciWrapper = std::make_shared<sci::SciWrapper>
-#endif
-                    (nOrbCas, nOrbExt,
-                     std::min(nOrbExt,9),std::min(nOrbExt,9),std::min(nOrbExt*2,9),
-                     fcidump, extOccs);
             const auto qSize = static_cast<int>(sciWrapper->quantumNumbers.size());
             bas.allocate(qSize);
             for(int i = 0; i < nOrbCas + nOrbExt; ++i){
@@ -564,38 +552,4 @@ namespace block2 {
         }
     };
 
-    template <typename S>
-    struct HamiltonianQCSCI<S, typename S::is_su2_t> : HamiltonianSCI<S> {
-        using HamiltonianSCI<S>::n_syms;
-        using HamiltonianSCI<S>::n_sites;
-        using HamiltonianSCI<S>::vacuum;
-        using HamiltonianSCI<S>::basis;
-        using HamiltonianSCI<S>::site_op_infos;
-        using HamiltonianSCI<S>::find_site_op_info;
-        using HamiltonianSCI<S>::find_site_norm_op;
-        using HamiltonianSCI<S>::site_norm_ops;
-        using HamiltonianSCI<S>::opf;
-        using HamiltonianSCI<S>::orb_sym;
-
-        shared_ptr<FCIDUMP> fcidump;
-        double mu = 0; //!> Chemical potential
-        int nOrbCas, nOrbExt;  //!> Number of spatial orbitals in CAS; External space. nSites=nOrbCas+1
-        HamiltonianQCSCI(S vacuum, int nOrbCAS, int nOrbExt,
-                         const vector<uint8_t> &orb_sym,
-                         const shared_ptr<FCIDUMP> &fcidump,
-                         const vector<vector<int>> &extOccs = {}):
-                HamiltonianSCI<S>(vacuum, nOrbCAS+1, orb_sym), fcidump(fcidump),nOrbCas{nOrbCAS}, nOrbExt{nOrbExt} {
-            throw std::runtime_error("not yet implemented");
-        }
-
-        double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
-            return fcidump->v(sl, sr, i, j, k, l);
-        }
-
-        double t(uint8_t s, uint16_t i, uint16_t j) const {
-            return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
-        }
-
-        double e() const { return fcidump->e; }
-    };
 } // namespace block2
