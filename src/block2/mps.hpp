@@ -686,6 +686,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
 template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::left_dims_fci; // Resolve names of template base class
     using MPSInfo<S>::right_dims_fci;
+    using MPSInfo<S>::left_dims;
+    using MPSInfo<S>::right_dims;
     using MPSInfo<S>::vacuum;
     using MPSInfo<S>::target;
     using MPSInfo<S>::n_sites;
@@ -701,6 +703,14 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         assert(n_ext < n_sites);
         if (init_fci)
             set_bond_dimension_fci();
+    }
+    void set_bond_dimension(uint16_t m) override {
+        MPSInfo<S>::set_bond_dimension(m);
+        // zero states may occur
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i].collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i].collect();
     }
     void set_bond_dimension_fci() override {
         // Same as in the base class: Create left/right fci dims w/o
