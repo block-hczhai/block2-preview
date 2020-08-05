@@ -497,6 +497,9 @@ struct SparseMatrixInfo<
             throw runtime_error("SparseMatrixInfo::load_data on '" + filename +
                                 "' failed.");
         load_data(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("SparseMatrixInfo::load_data on '" + filename +
+                                "' failed.");
         ifs.close();
     }
     void load_data(ifstream &ifs) {
@@ -514,7 +517,13 @@ struct SparseMatrixInfo<
     }
     void save_data(const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrixInfo::save_data on '" + filename +
+                                "' failed.");
         save_data(ofs);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrixInfo::save_data on '" + filename +
+                                "' failed.");
         ofs.close();
     }
     void save_data(ofstream &ofs) const {
@@ -773,15 +782,24 @@ template <typename S> struct SparseMatrix {
         ifs.read((char *)&total_memory, sizeof(total_memory));
         data = dalloc->allocate(total_memory);
         ifs.read((char *)data, sizeof(double) * total_memory);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("SparseMatrix:load_data on '" + filename +
+                                "' failed.");
         ifs.close();
     }
     void save_data(const string &filename, bool save_info = false) const {
         ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrix:save_data on '" + filename +
+                                "' failed.");
         if (save_info)
             info->save_data(ofs);
         ofs.write((char *)&factor, sizeof(factor));
         ofs.write((char *)&total_memory, sizeof(total_memory));
         ofs.write((char *)data, sizeof(double) * total_memory);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrix:save_data on '" + filename +
+                                "' failed.");
         ofs.close();
     }
     void copy_data_from(const SparseMatrix &other) {
@@ -1215,10 +1233,16 @@ template <typename S> struct SparseMatrixGroup {
         ifs.read((char *)&total_memory, sizeof(total_memory));
         data = dalloc->allocate(total_memory);
         ifs.read((char *)data, sizeof(double) * total_memory);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("SparseMatrixGroup::load_data on '" + filename +
+                                "' failed.");
         ifs.close();
     }
     void save_data(const string &filename, bool save_info = false) const {
         ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrixGroup::save_data on '" + filename +
+                                "' failed.");
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)&offsets[0], sizeof(size_t) * n);
         if (save_info)
@@ -1226,6 +1250,9 @@ template <typename S> struct SparseMatrixGroup {
                 infos[i]->save_data(ofs);
         ofs.write((char *)&total_memory, sizeof(total_memory));
         ofs.write((char *)data, sizeof(double) * total_memory);
+        if (!ofs.good())
+            throw runtime_error("SparseMatrixGroup::save_data on '" + filename +
+                                "' failed.");
         ofs.close();
     }
     void allocate(const vector<shared_ptr<SparseMatrixInfo<S>>> &infos,

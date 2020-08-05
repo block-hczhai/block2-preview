@@ -51,19 +51,31 @@ struct StateInfo<S, typename enable_if<integral_constant<
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("StateInfo::load_data on '" + filename +
+                                "' failed.");
         ifs.read((char *)&n_states_total, sizeof(n_states_total));
         ifs.read((char *)&n, sizeof(n));
         uint32_t *ptr = ialloc->allocate((n << 1) - (n >> 1));
         ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("StateInfo::load_data on '" + filename +
+                                "' failed.");
         ifs.close();
         quanta = (S *)ptr;
         n_states = (uint16_t *)(ptr + n);
     }
     void save_data(const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("StateInfo::save_data on '" + filename +
+                                "' failed.");
         ofs.write((char *)&n_states_total, sizeof(n_states_total));
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)quanta, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        if (!ofs.good())
+            throw runtime_error("StateInfo::save_data on '" + filename +
+                                "' failed.");
         ofs.close();
     }
     // need length * 2

@@ -42,6 +42,9 @@ inline vector<double> read_occ(const string &filename) {
     if (!ifs.good())
         throw runtime_error("read_occ on '" + filename + "' failed.");
     vector<string> lines = Parsing::readlines(&ifs);
+    if (ifs.bad())
+        throw runtime_error("read_occ on '" + filename + "' failed.");
+    ifs.close();
     assert(lines.size() >= 1);
     vector<string> vals = Parsing::split(lines[0], " ", true);
     vector<double> r;
@@ -52,10 +55,14 @@ inline vector<double> read_occ(const string &filename) {
 // Write occupation numbers to a file
 inline void write_occ(const string &filename, const vector<double> &occ) {
     ofstream ofs(filename.c_str());
+    if (!ofs.good())
+        throw runtime_error("write_occ on '" + filename + "' failed.");
     ofs << fixed << setprecision(8);
     for (auto x : occ)
         ofs << setw(12) << x;
     ofs << endl;
+    if (!ofs.good())
+        throw runtime_error("write_occ on '" + filename + "' failed.");
     ofs.close();
 }
 
@@ -1052,6 +1059,9 @@ template <typename S> struct MPS {
             throw runtime_error("MPS::load_data on '" + get_filename(-1) +
                                 "' failed.");
         load_data_from(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPS::load_data on '" + get_filename(-1) +
+                                "' failed.");
         ifs.close();
     }
     void save_data_to(ofstream &ofs) const {
@@ -1066,7 +1076,13 @@ template <typename S> struct MPS {
     }
     virtual void save_data() const {
         ofstream ofs(get_filename(-1).c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("MPS::save_data on '" + get_filename(-1) +
+                                "' failed.");
         save_data_to(ofs);
+        if (!ofs.good())
+            throw runtime_error("MPS::save_data on '" + get_filename(-1) +
+                                "' failed.");
         ofs.close();
     }
     void load_mutable_left() const {

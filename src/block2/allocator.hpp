@@ -142,15 +142,22 @@ struct DataFrame {
         ifs.read((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
         ifs.read((char *)&iallocs[i].used, sizeof(iallocs[i].used));
         ifs.read((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("DataFrame::load_data on '" + filename +
+                                "' failed.");
         ifs.close();
     }
     // Save one data frame to disk
     void save_data(uint16_t i, const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("DataFrame::save_data on '" + filename + "' failed.");
         ofs.write((char *)&dallocs[i].used, sizeof(dallocs[i].used));
         ofs.write((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
         ofs.write((char *)&iallocs[i].used, sizeof(iallocs[i].used));
         ofs.write((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+        if (!ofs.good())
+            throw runtime_error("DataFrame::save_data on '" + filename + "' failed.");
         ofs.close();
     }
     void deallocate() {

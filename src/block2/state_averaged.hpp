@@ -180,14 +180,23 @@ template <typename S> struct MultiMPS : MPS<S> {
         ifs.read((char *)&weights[0], sizeof(double) * nroots);
         for (int i = 0; i < nroots; i++)
             wfns[i] = make_shared<SparseMatrixGroup<S>>();
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MultiMPS::load_data on '" + get_filename(-1) +
+                                "' failed.");
         ifs.close();
     }
     void save_data() const override {
         ofstream ofs(get_filename(-1).c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("MultiMPS::save_data on '" + get_filename(-1) +
+                                "' failed.");
         MPS<S>::save_data_to(ofs);
         ofs.write((char *)&nroots, sizeof(nroots));
         assert(weights.size() == nroots);
         ofs.write((char *)&weights[0], sizeof(double) * nroots);
+        if (!ofs.good())
+            throw runtime_error("MultiMPS::save_data on '" + get_filename(-1) +
+                                "' failed.");
         ofs.close();
     }
     void load_mutable() const override {

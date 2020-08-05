@@ -286,6 +286,8 @@ struct FCIDUMP {
     // Writing FCIDUMP file to disk
     void write(const string &filename) const {
         ofstream ofs(filename.c_str());
+        if (!ofs.good())
+            throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
         ofs << " &FCI NORB=" << setw(4) << (int)n_sites()
             << ",NELEC=" << setw(4) << (int)n_elec() << ",MS2=" << setw(4)
             << (int)twos() << "," << endl;
@@ -322,6 +324,8 @@ struct FCIDUMP {
                 ofs << ts[i], write_const(ofs, 0.0);
             write_const(ofs, this->e);
         }
+        if (!ofs.good())
+            throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
         ofs.close();
     }
     // Parsing a FCIDUMP file
@@ -335,6 +339,8 @@ struct FCIDUMP {
         if (!ifs.good())
             throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
         vector<string> lines = Parsing::readlines(&ifs);
+        if (ifs.bad())
+            throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
         ifs.close();
         bool ipar = true;
         vector<string> pars, ints;
