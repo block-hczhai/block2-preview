@@ -287,11 +287,11 @@ template <typename S> struct OpSumProd : OpString<S> {
         if (OpString<S>::a == nullptr)
             return OpSumProd(ops, OpString<S>::b, conjs,
                              OpString<S>::factor * d, OpString<S>::conj);
-        else if (OpString<S>::b == nullptr)
+        else {
+            assert(OpString<S>::b == nullptr);
             return OpSumProd(OpString<S>::a, ops, conjs,
                              OpString<S>::factor * d, OpString<S>::conj);
-        else
-            assert(false);
+        }
     }
     bool operator==(const OpSumProd &other) const {
         if (ops.size() != other.ops.size() ||
@@ -387,11 +387,11 @@ inline shared_ptr<OpExpr<S>> abs_value(const shared_ptr<OpExpr<S>> &x) {
     else if (x->get_type() == OpTypes::Elem) {
         shared_ptr<OpElement<S>> op = dynamic_pointer_cast<OpElement<S>>(x);
         return op->factor == 1.0 ? x : make_shared<OpElement<S>>(op->abs());
-    } else if (x->get_type() == OpTypes::Prod) {
+    } else {
+        assert(x->get_type() == OpTypes::Prod);
         shared_ptr<OpString<S>> op = dynamic_pointer_cast<OpString<S>>(x);
         return op->factor == 1.0 ? x : make_shared<OpString<S>>(op->abs());
     }
-    assert(false);
 }
 
 // String representation
@@ -519,6 +519,7 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
         }
     }
     assert(false);
+    return nullptr;
 }
 
 template <typename S>
@@ -546,6 +547,7 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
     else if (x->get_type() == OpTypes::Sum)
         return make_shared<OpSum<S>>(*dynamic_pointer_cast<OpSum<S>>(x) * d);
     assert(false);
+    return nullptr;
 }
 
 // A scalar multiply a symbolic expression
@@ -613,6 +615,7 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &a,
         }
     }
     assert(false);
+    return nullptr;
 }
 
 // Sum of several symbolic expressions

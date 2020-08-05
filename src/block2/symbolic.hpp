@@ -213,6 +213,7 @@ operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
         return r;
     }
     assert(false);
+    return nullptr;
 }
 
 } // namespace block2

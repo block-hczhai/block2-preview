@@ -247,7 +247,7 @@ template <typename S> struct DMRG {
                 return update_two_dot(i, forward, bond_dim, noise,
                                       davidson_conv_thrd);
         } else
-            assert(false);
+            throw runtime_error("1 site not yet implemented");
     }
     pair<vector<double>, vector<vector<pair<S, double>>>>
     sweep(bool forward, uint16_t bond_dim, double noise,
@@ -531,7 +531,7 @@ template <typename S> struct ImaginaryTE {
         if (me->dot == 2)
             return update_two_dot(i, forward, advance, beta, bond_dim, noise);
         else
-            assert(false);
+            throw runtime_error("1 site not yet implemented");
     }
     tuple<double, double, double> sweep(bool forward, bool advance, double beta,
                                         uint16_t bond_dim, double noise) {
@@ -730,7 +730,7 @@ template <typename S> struct Compress {
             return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim,
                                   noise);
         else
-            assert(false);
+            throw runtime_error("1 site not yet implemented");
     }
     double sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim,
                  double noise) {
@@ -1059,7 +1059,7 @@ template <typename S> struct Expect {
                 return update_two_dot(i, forward, propagate, bra_bond_dim,
                                       ket_bond_dim);
         } else
-            assert(false);
+            throw runtime_error("1 site not yet implemented");
     }
     void sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         me->prepare();
