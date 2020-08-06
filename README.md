@@ -72,6 +72,17 @@ The following will use sequential mkl library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=SEQ
 
+The release mode is controlled by CMAKE_BUILD_TYPE:
+
+    cmake .. -DCMAKE_BUILD_TYPE=Release 
+
+will use optimization flags such as -O3 (default).
+
+    cmake .. -DCMAKE_BUILD_TYPE=Debug 
+
+enables debug flags.
+
+
 FT-DMRG
 -------
 
