@@ -64,8 +64,9 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
                                    [](HamiltonianSCI<S> *self) {
                                        return Array<StateInfo<S>>(self->basis,
                                                                   self->n_syms);
-                                   });
-            //vv hrl: switched off as not really required (now protected)
+                                   })
+            .def("deallocate", &HamiltonianSCI<S>::deallocate);
+           //vv hrl: switched off as not really required (now protected)
             /*.def_property_readonly(
                     "site_op_infos",
                     [](HamiltonianSCI<S> *self) {
@@ -76,7 +77,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
             .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)
             .def("find_site_op_info", &HamiltonianSCI<S>::find_site_op_info)
             .def("find_site_norm_op", &HamiltonianSCI<S>::find_site_norm_op)
-            .def("deallocate", &HamiltonianSCI<S>::deallocate);*/
+            */
 
     py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>, HamiltonianSCI<S>>(
             m, "HamiltonianQCSCI")
