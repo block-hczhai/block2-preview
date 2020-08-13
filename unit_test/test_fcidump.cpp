@@ -1,22 +1,21 @@
 
-#include "quantum.hpp"
+#include "block2.hpp"
 #include "gtest/gtest.h"
 
 using namespace block2;
 
 class TestFCIDUMP : public ::testing::Test {
   protected:
-    size_t isize = 1E7;
-    size_t dsize = 1E7;
+    size_t isize = 1L << 30;
+    size_t dsize = 1L << 34;
     void SetUp() override {
         Random::rand_seed(0);
-        ialloc = new StackAllocator<uint32_t>(new uint32_t[isize], isize);
-        dalloc = new StackAllocator<double>(new double[dsize], dsize);
+        frame_() = new DataFrame(isize, dsize, "nodex");
     }
     void TearDown() override {
-        assert(ialloc->used == 0 && dalloc->used == 0);
-        delete[] ialloc->data;
-        delete[] dalloc->data;
+        frame_()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
+        delete frame_();
     }
 };
 
