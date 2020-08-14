@@ -14,8 +14,8 @@ class TestMatrix : public ::testing::Test {
             MatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 20;
+    size_t dsize = 1L << 28;
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = new DataFrame(isize, dsize, "nodex");
@@ -80,8 +80,8 @@ TEST_F(TestMatrix, TestTensorProduct) {
         if (conjb) {
             tb = MatrixRef(dalloc_()->allocate(mb * nb), nb, mb);
             for (int ib = 0; ib < mb; ib++)
-                    for (int jb = 0; jb < nb; jb++)
-                        tb(jb, ib) = b(ib, jb);
+                for (int jb = 0; jb < nb; jb++)
+                    tb(jb, ib) = b(ib, jb);
         }
         if (Random::rand_int(0, 2) || ii == 2)
             MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
@@ -126,8 +126,8 @@ TEST_F(TestMatrix, TestExponential) {
         }
         double anorm = MatrixFunctions::norm(aa);
         MatMul mop(a);
-        int nmult = MatrixFunctions::expo_apply(
-            mop, t, anorm, w, consta, false, 1E-8);
+        int nmult =
+            MatrixFunctions::expo_apply(mop, t, anorm, w, consta, false, 1E-8);
         DiagonalMatrix ww(dalloc_()->allocate(n), n);
         MatrixFunctions::eigs(a, ww);
         MatrixFunctions::multiply(a, false, v, false, u, 1.0, 0.0);
@@ -208,6 +208,55 @@ TEST_F(TestMatrix, TestEigs) {
         ag.deallocate();
         ap.deallocate();
         a.deallocate();
+    }
+}
+
+TEST_F(TestMatrix, TestSVD) {
+    for (int i = 0; i < n_tests; i++) {
+        int m = Random::rand_int(1, 200);
+        int n = Random::rand_int(1, 200);
+        int k = min(m, n);
+        shared_ptr<Tensor> a = make_shared<Tensor>(vector<int>{m, n});
+        shared_ptr<Tensor> l = make_shared<Tensor>(vector<int>{m, k});
+        shared_ptr<Tensor> s = make_shared<Tensor>(vector<int>{k});
+        shared_ptr<Tensor> r = make_shared<Tensor>(vector<int>{k, n});
+        shared_ptr<Tensor> aa = make_shared<Tensor>(vector<int>{m, n});
+        shared_ptr<Tensor> kk = make_shared<Tensor>(vector<int>{k, k});
+        shared_ptr<Tensor> ll = make_shared<Tensor>(vector<int>{m, m});
+        shared_ptr<Tensor> rr = make_shared<Tensor>(vector<int>{n, n});
+        Random::fill_rand_double(a->data.data(), a->size());
+        MatrixFunctions::copy(aa->ref(), a->ref());
+        MatrixFunctions::svd(a->ref(), l->ref(), s->ref().flip_dims(),
+                             r->ref());
+        MatrixFunctions::multiply(l->ref(), true, l->ref(), false, kk->ref(),
+                                  1.0, 0.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(kk->ref(), IdentityMatrix(k),
+                                               1E-12, 0.0));
+        MatrixFunctions::multiply(r->ref(), false, r->ref(), true, kk->ref(),
+                                  1.0, 0.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(kk->ref(), IdentityMatrix(k),
+                                               1E-12, 0.0));
+        if (m <= n) {
+            MatrixFunctions::multiply(l->ref(), false, l->ref(), true,
+                                      ll->ref(), 1.0, 0.0);
+            ASSERT_TRUE(MatrixFunctions::all_close(ll->ref(), IdentityMatrix(m),
+                                                   1E-12, 0.0));
+        }
+        if (n <= m) {
+            MatrixFunctions::multiply(r->ref(), true, r->ref(), false,
+                                      rr->ref(), 1.0, 0.0);
+            ASSERT_TRUE(MatrixFunctions::all_close(rr->ref(), IdentityMatrix(n),
+                                                   1E-12, 0.0));
+        }
+        MatrixRef x(r->data.data(), 1, n);
+        for (int i = 0; i < k; i++) {
+            ASSERT_GE((*s)({i}), 0.0);
+            MatrixFunctions::iscale(x.shift_ptr(i * n), (*s)({i}));
+        }
+        MatrixFunctions::multiply(l->ref(), false, r->ref(), false, a->ref(),
+                                  1.0, 0.0);
+        ASSERT_TRUE(
+            MatrixFunctions::all_close(aa->ref(), a->ref(), 1E-12, 0.0));
     }
 }
 

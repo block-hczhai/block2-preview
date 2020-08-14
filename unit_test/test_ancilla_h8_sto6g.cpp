@@ -4,7 +4,7 @@
 
 using namespace block2;
 
-class TestAncillaN2STO3G : public ::testing::Test {
+class TestAncillaH8STO6G : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -19,7 +19,7 @@ class TestAncillaN2STO3G : public ::testing::Test {
     }
 };
 
-TEST_F(TestAncillaN2STO3G, TestSU2) {
+TEST_F(TestAncillaH8STO6G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";
@@ -142,7 +142,7 @@ TEST_F(TestAncillaN2STO3G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestAncillaN2STO3G, TestSZ) {
+TEST_F(TestAncillaH8STO6G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";

@@ -99,6 +99,13 @@ extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
                   const int *lda, double *w, double *work, const int *lwork,
                   int *info);
 
+// SVD
+// mat [a] = mat [u] * vector [sigma] * mat [vt]
+extern void dgesvd(const char *jobu, const char *jobvt, const int *m,
+                   const int *n, double *a, const int *lda, double *s,
+                   double *u, const int *ldu, double *vt, const int *ldvt,
+                   double *work, const int *lwork, int *info);
+
 #endif
 }
 
@@ -111,8 +118,8 @@ struct MatrixFunctions {
         const int n = a.m * a.n;
         dcopy(&n, b.data, &incb, a.data, &inca);
     }
-    static void iscale(const MatrixRef &a, double scale) {
-        int n = a.m * a.n, inc = 1;
+    static void iscale(const MatrixRef &a, double scale, const int inc = 1) {
+        int n = a.m * a.n;
         dscal(&n, &scale, a.data, &inc);
     }
     static void iadd(const MatrixRef &a, const MatrixRef &b, double scale,
@@ -305,6 +312,16 @@ struct MatrixFunctions {
         default:
             assert(false);
         }
+    }
+    // SVD; original matrix will be destroyed
+    static void svd(const MatrixRef &a, const MatrixRef &l, const MatrixRef &s,
+                    const MatrixRef &r) {
+        int k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
+        double work[lwork];
+        assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
+        dgesvd("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n, l.data,
+               &k, work, &lwork, &info);
+        assert(info == 0);
     }
     // LQ factorization
     static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {

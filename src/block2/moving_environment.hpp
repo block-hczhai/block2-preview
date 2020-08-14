@@ -1263,6 +1263,21 @@ template <typename S> struct MovingEnvironment {
                                             noise_type);
         return dm;
     }
+    // Direct add noise to wavefunction (before svd)
+    static void wavefunction_add_noise(const shared_ptr<SparseMatrix<S>> &psi,
+                                       double noise) {
+        assert(psi->factor == 1.0);
+        if (abs(noise) < TINY && noise == 0.0)
+            return;
+        shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
+        tmp->allocate(psi->info);
+        tmp->randomize(-0.5, 0.5);
+        double noise_scale = noise / tmp->norm();
+        MatrixFunctions::iadd(MatrixRef(psi->data, psi->total_memory, 1),
+                              MatrixRef(tmp->data, tmp->total_memory, 1),
+                              noise_scale);
+        tmp->deallocate();
+    }
     // Density matrix of a MultiMPS tensor
     static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
         S opdq, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
@@ -1386,6 +1401,131 @@ template <typename S> struct MovingEnvironment {
         }
         return error;
     }
+    // Truncate and keep k singular values
+    static double truncate_singular_values(const vector<S> &qs,
+                                           const vector<shared_ptr<Tensor>> &s,
+                                           vector<pair<int, int>> &ss, int k,
+                                           double cutoff,
+                                           TruncationTypes trunc_type) {
+        vector<shared_ptr<Tensor>> s_reduced;
+        cutoff = sqrt(cutoff);
+        int k_total = 0;
+        for (int i = 0; i < (int)s.size(); i++) {
+            shared_ptr<Tensor> wr = make_shared<Tensor>(s[i]->shape);
+            MatrixFunctions::copy(wr->ref(), s[i]->ref());
+            if (trunc_type == TruncationTypes::Reduced)
+                MatrixFunctions::iscale(wr->ref(),
+                                        sqrt(1.0 / qs[i].multiplicity()));
+            else if (trunc_type == TruncationTypes::ReducedInversed)
+                MatrixFunctions::iscale(wr->ref(), sqrt(qs[i].multiplicity()));
+            s_reduced.push_back(wr);
+            k_total += wr->shape[0];
+        }
+        double error = 0.0;
+        ss.reserve(k_total);
+        for (int i = 0; i < (int)s.size(); i++)
+            for (int j = 0; j < s[i]->shape[0]; j++)
+                ss.push_back(make_pair(i, j));
+        if (k != -1) {
+            sort(
+                ss.begin(), ss.end(),
+                [&s_reduced](const pair<int, int> &a, const pair<int, int> &b) {
+                    return s_reduced[a.first]->data[a.second] >
+                           s_reduced[b.first]->data[b.second];
+                });
+            for (int i = k; i < k_total; i++) {
+                double x = s[ss[i].first]->data[ss[i].second];
+                if (x > 0)
+                    error += x * x;
+            }
+            for (k = min(k, (int)ss.size());
+                 k > 1 &&
+                 s_reduced[ss[k - 1].first]->data[ss[k - 1].second] < cutoff;
+                 k--) {
+                double x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                if (x > 0)
+                    error += x * x;
+            }
+            if (k < (int)ss.size())
+                ss.resize(k);
+            sort(ss.begin(), ss.end(),
+                 [](const pair<int, int> &a, const pair<int, int> &b) {
+                     return a.first != b.first ? a.first < b.first
+                                               : a.second < b.second;
+                 });
+        }
+        return error;
+    }
+    // Get rotation matrix info from svd info
+    static shared_ptr<SparseMatrixInfo<S>>
+    rotation_matrix_info_from_svd(S opdq, const vector<S> &qs,
+                                  const vector<shared_ptr<Tensor>> &ts,
+                                  bool trace_right, const vector<uint16_t> &ilr,
+                                  const vector<uint16_t> &im) {
+        shared_ptr<SparseMatrixInfo<S>> rinfo =
+            make_shared<SparseMatrixInfo<S>>();
+        rinfo->is_fermion = false;
+        rinfo->is_wavefunction = false;
+        rinfo->delta_quantum = opdq;
+        int kk = ilr.size();
+        rinfo->allocate(kk);
+        for (int i = 0; i < kk; i++) {
+            rinfo->quanta[i] = qs[ilr[i]];
+            rinfo->n_states_bra[i] = trace_right ? ts[ilr[i]]->shape[0] : im[i];
+            rinfo->n_states_ket[i] = trace_right ? im[i] : ts[ilr[i]]->shape[1];
+        }
+        rinfo->n_states_total[0] = 0;
+        for (int i = 0; i < kk - 1; i++)
+            rinfo->n_states_total[i + 1] =
+                rinfo->n_states_total[i] +
+                (uint32_t)rinfo->n_states_bra[i] * rinfo->n_states_ket[i];
+        return rinfo;
+    }
+    // Get wavefunction matrix info from svd info
+    static shared_ptr<SparseMatrixInfo<S>> wavefunction_info_from_svd(
+        const vector<S> &qs, const shared_ptr<SparseMatrixInfo<S>> &wfninfo,
+        bool trace_right, const vector<uint16_t> &ilr,
+        const vector<uint16_t> &im, vector<vector<uint16_t>> &idx_dm_to_wfn) {
+        shared_ptr<SparseMatrixInfo<S>> winfo =
+            make_shared<SparseMatrixInfo<S>>();
+        winfo->is_fermion = false;
+        winfo->is_wavefunction = true;
+        winfo->delta_quantum = wfninfo->delta_quantum;
+        idx_dm_to_wfn.resize(qs.size());
+        if (trace_right)
+            for (int i = 0; i < wfninfo->n; i++) {
+                S pb = wfninfo->quanta[i].get_bra(wfninfo->delta_quantum);
+                int iq = lower_bound(qs.begin(), qs.end(), pb) - qs.begin();
+                idx_dm_to_wfn[iq].push_back(i);
+            }
+        else
+            for (int i = 0; i < wfninfo->n; i++) {
+                S pk = -wfninfo->quanta[i].get_ket();
+                int iq = lower_bound(qs.begin(), qs.end(), pk) - qs.begin();
+                idx_dm_to_wfn[iq].push_back(i);
+            }
+        int kkw = 0, kk = (int)ilr.size();
+        for (int i = 0; i < kk; i++)
+            kkw += idx_dm_to_wfn[ilr[i]].size();
+        winfo->allocate(kkw);
+        for (int i = 0, j = 0; i < kk; i++) {
+            for (int iw = 0; iw < (int)idx_dm_to_wfn[ilr[i]].size(); iw++) {
+                winfo->quanta[j + iw] =
+                    wfninfo->quanta[idx_dm_to_wfn[ilr[i]][iw]];
+                winfo->n_states_bra[j + iw] =
+                    trace_right
+                        ? im[i]
+                        : wfninfo->n_states_bra[idx_dm_to_wfn[ilr[i]][iw]];
+                winfo->n_states_ket[j + iw] =
+                    trace_right
+                        ? wfninfo->n_states_ket[idx_dm_to_wfn[ilr[i]][iw]]
+                        : im[i];
+            }
+            j += (int)idx_dm_to_wfn[ilr[i]].size();
+        }
+        winfo->sort_states();
+        return winfo;
+    }
     // Get rotation matrix info from density matrix info
     static shared_ptr<SparseMatrixInfo<S>>
     rotation_matrix_info_from_density_matrix(
@@ -1457,7 +1597,126 @@ template <typename S> struct MovingEnvironment {
         winfo->sort_states();
         return winfo;
     }
-    // Split density matrix to two MPS tensors by solving eigenvalue problem
+    // Split wavefunction to two MPS tensors using svd
+    static double split_wavefunction_svd(
+        S opdq, const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
+        bool normalize, shared_ptr<SparseMatrix<S>> &left,
+        shared_ptr<SparseMatrix<S>> &right, double cutoff,
+        TruncationTypes trunc_type = TruncationTypes::Physical) {
+        vector<shared_ptr<Tensor>> l, s, r;
+        vector<S> qs;
+        if (trace_right)
+            wfn->right_svd(qs, l, s, r);
+        else
+            wfn->left_svd(qs, l, s, r);
+        // ss: pair<quantum index in dm, reduced matrix index in dm>
+        vector<pair<int, int>> ss;
+        double error = MovingEnvironment<S>::truncate_singular_values(
+            qs, s, ss, k, cutoff, trunc_type);
+        // ilr: row index in singular values list
+        // im: number of states
+        vector<uint16_t> ilr, im;
+        ilr.reserve(ss.size());
+        im.reserve(ss.size());
+        if (k != 0)
+            ilr.push_back(ss[0].first), im.push_back(1);
+        for (int i = 1; i < (int)ss.size(); i++)
+            if (ss[i].first != ilr.back())
+                ilr.push_back(ss[i].first), im.push_back(1);
+            else
+                ++im.back();
+        shared_ptr<SparseMatrixInfo<S>> linfo, rinfo;
+        vector<vector<uint16_t>> idx_dm_to_wfn;
+        if (trace_right) {
+            linfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
+                opdq, qs, l, true, ilr, im);
+            rinfo = MovingEnvironment<S>::wavefunction_info_from_svd(
+                qs, wfn->info, true, ilr, im, idx_dm_to_wfn);
+        } else {
+            linfo = MovingEnvironment<S>::wavefunction_info_from_svd(
+                qs, wfn->info, false, ilr, im, idx_dm_to_wfn);
+            rinfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
+                opdq, qs, r, false, ilr, im);
+        }
+        int kk = ilr.size();
+        left = make_shared<SparseMatrix<S>>();
+        right = make_shared<SparseMatrix<S>>();
+        left->allocate(linfo);
+        right->allocate(rinfo);
+        int iss = 0;
+        if (trace_right) {
+            for (int i = 0; i < kk; i++) {
+                for (int j = 0; j < im[i]; j++)
+                    MatrixFunctions::copy(
+                        MatrixRef(left->data + linfo->n_states_total[i] + j,
+                                  linfo->n_states_bra[i], 1),
+                        MatrixRef(
+                            &l[ss[iss + j].first]->ref()(0, ss[iss + j].second),
+                            linfo->n_states_bra[i], 1),
+                        linfo->n_states_ket[i], l[ss[iss + j].first]->shape[1]);
+                for (int iww = 0;
+                     iww < (int)idx_dm_to_wfn[ss[iss].first].size(); iww++) {
+                    int iw = idx_dm_to_wfn[ss[iss].first][iww];
+                    int ir = rinfo->find_state(wfn->info->quanta[iw]);
+                    assert(ir != -1);
+                    for (int j = 0; j < im[i]; j++) {
+                        MatrixFunctions::copy(
+                            MatrixRef(right->data + rinfo->n_states_total[ir] +
+                                          j * r[iw]->shape[1],
+                                      1, r[iw]->shape[1]),
+                            MatrixRef(&r[iw]->ref()(ss[iss + j].second, 0), 1,
+                                      r[iw]->shape[1]));
+                        MatrixFunctions::iscale(
+                            MatrixRef(right->data + rinfo->n_states_total[ir] +
+                                          j * r[iw]->shape[1],
+                                      1, r[iw]->shape[1]),
+                            s[ss[iss + j].first]->data[ss[iss + j].second]);
+                    }
+                }
+                iss += im[i];
+            }
+            if (normalize)
+                right->normalize();
+        } else {
+            for (int i = 0; i < kk; i++) {
+                for (int j = 0; j < im[i]; j++)
+                    MatrixFunctions::copy(
+                        MatrixRef(right->data + rinfo->n_states_total[i] +
+                                      j * r[ss[iss + j].first]->shape[1],
+                                  1, r[ss[iss + j].first]->shape[1]),
+                        MatrixRef(
+                            &r[ss[iss + j].first]->ref()(ss[iss + j].second, 0),
+                            1, r[ss[iss + j].first]->shape[1]));
+                for (int iww = 0;
+                     iww < (int)idx_dm_to_wfn[ss[iss].first].size(); iww++) {
+                    int iw = idx_dm_to_wfn[ss[iss].first][iww];
+                    int il = linfo->find_state(wfn->info->quanta[iw]);
+                    assert(il != -1);
+                    for (int j = 0; j < im[i]; j++) {
+                        MatrixFunctions::copy(
+                            MatrixRef(left->data + linfo->n_states_total[il] +
+                                          j,
+                                      linfo->n_states_bra[il], 1),
+                            MatrixRef(&l[iw]->ref()(0, ss[iss + j].second),
+                                      linfo->n_states_bra[il], 1),
+                            linfo->n_states_ket[il], l[iw]->shape[1]);
+                        MatrixFunctions::iscale(
+                            MatrixRef(left->data + linfo->n_states_total[il] +
+                                          j,
+                                      linfo->n_states_bra[il], 1),
+                            s[ss[iss + j].first]->data[ss[iss + j].second],
+                            linfo->n_states_ket[il]);
+                    }
+                }
+                iss += im[i];
+            }
+            if (normalize)
+                left->normalize();
+        }
+        assert(iss == ss.size());
+        return error;
+    }
+    // Split wavefunction to two MPS tensors by solving eigenvalue problem
     static double split_density_matrix(
         const shared_ptr<SparseMatrix<S>> &dm,
         const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,

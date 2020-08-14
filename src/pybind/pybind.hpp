@@ -37,6 +37,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Tensor>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
@@ -508,6 +509,20 @@ template <typename S> void bind_sparse(py::module &m) {
              [](SparseMatrix<S> *self, int idx, const py::array_t<double> &v) {
                  assert(v.size() == (*self)[idx].size());
                  memcpy((*self)[idx].data, v.data(), sizeof(double) * v.size());
+             })
+        .def("left_svd",
+             [](SparseMatrix<S> *self) {
+                 vector<S> qs;
+                 vector<shared_ptr<Tensor>> l, s, r;
+                 self->left_svd(qs, l, s, r);
+                 return make_tuple(qs, l, s, r);
+             })
+        .def("right_svd",
+             [](SparseMatrix<S> *self) {
+                 vector<S> qs;
+                 vector<shared_ptr<Tensor>> l, s, r;
+                 self->right_svd(qs, l, s, r);
+                 return make_tuple(qs, l, s, r);
              })
         .def("left_canonicalize", &SparseMatrix<S>::left_canonicalize,
              py::arg("rmat"))
@@ -1018,6 +1033,9 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("fuse_type"), py::arg("compute_diag"))
         .def_static("contract_two_dot", &MovingEnvironment<S>::contract_two_dot,
                     py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
+        .def_static("wavefunction_add_noise",
+                    &MovingEnvironment<S>::wavefunction_add_noise,
+                    py::arg("psi"), py::arg("noise"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
@@ -1035,6 +1053,30 @@ template <typename S> void bind_partition(py::module &m) {
                                 dm, ss, k, cutoff, trunc_type);
                         return make_pair(error, ss);
                     })
+        .def_static("truncate_singular_values",
+                    [](const vector<S> &qs, const vector<shared_ptr<Tensor>> &s,
+                       int k, double cutoff, TruncationTypes trunc_type) {
+                        vector<pair<int, int>> ss;
+                        double error =
+                            MovingEnvironment<S>::truncate_singular_values(
+                                qs, s, ss, k, cutoff, trunc_type);
+                        return make_pair(error, ss);
+                    })
+        .def_static("rotation_matrix_info_from_svd",
+                    &MovingEnvironment<S>::rotation_matrix_info_from_svd,
+                    py::arg("opdq"), py::arg("qs"), py::arg("ts"),
+                    py::arg("trace_right"), py::arg("ilr"), py::arg("im"))
+        .def_static(
+            "wavefunction_info_from_svd",
+            [](const vector<S> &qs,
+               const shared_ptr<SparseMatrixInfo<S>> &wfninfo, bool trace_right,
+               const vector<uint16_t> &ilr, const vector<uint16_t> &im) {
+                vector<vector<uint16_t>> idx_dm_to_wfn;
+                shared_ptr<SparseMatrixInfo<S>> r =
+                    MovingEnvironment<S>::wavefunction_info_from_svd(
+                        qs, wfninfo, trace_right, ilr, im, idx_dm_to_wfn);
+                return make_pair(r, idx_dm_to_wfn);
+            })
         .def_static(
             "rotation_matrix_info_from_density_matrix",
             &MovingEnvironment<S>::rotation_matrix_info_from_density_matrix,
@@ -1064,6 +1106,20 @@ template <typename S> void bind_partition(py::module &m) {
             },
             py::arg("dm"), py::arg("wfn"), py::arg("k"), py::arg("trace_right"),
             py::arg("normalize"), py::arg("cutoff"),
+            py::arg("trunc_type") = TruncationTypes::Physical)
+        .def_static(
+            "split_wavefunction_svd",
+            [](S opdq, const shared_ptr<SparseMatrix<S>> &wfn, int k,
+               bool trace_right, bool normalize, double cutoff,
+               TruncationTypes trunc_type) {
+                shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
+                double error = MovingEnvironment<S>::split_wavefunction_svd(
+                    opdq, wfn, k, trace_right, normalize, left, right, cutoff,
+                    trunc_type);
+                return make_tuple(error, left, right);
+            },
+            py::arg("opdq"), py::arg("wfn"), py::arg("k"),
+            py::arg("trace_right"), py::arg("normalize"), py::arg("cutoff"),
             py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
@@ -1169,6 +1225,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("forward", &DMRG<S>::forward)
         .def_readwrite("noise_type", &DMRG<S>::noise_type)
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
+        .def_readwrite("decomp_type", &DMRG<S>::decomp_type)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
         .def("blocking", &DMRG<S>::blocking)
@@ -1514,6 +1571,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Reduced", TruncationTypes::Reduced)
         .value("ReducedInversed", TruncationTypes::ReducedInversed);
 
+    py::enum_<DecompositionTypes>(m, "DecompositionTypes", py::arithmetic())
+        .value("DensityMatrix", DecompositionTypes::DensityMatrix)
+        .value("SVD", DecompositionTypes::SVD);
+
     py::enum_<SymTypes>(m, "SymTypes", py::arithmetic())
         .value("RVec", SymTypes::RVec)
         .value("CVec", SymTypes::CVec)
@@ -1685,6 +1746,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
             ss << *self;
             return ss.str();
         });
+
+    py::bind_vector<vector<shared_ptr<Tensor>>>(m, "VectorTensor");
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
         .def_static(

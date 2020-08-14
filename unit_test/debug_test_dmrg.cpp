@@ -158,6 +158,8 @@ TEST_F(TestDMRG, Test) {
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->iprint = 2;
+    dmrg->noise_type = NoiseTypes::Wavefunction;
+    dmrg->decomp_type = DecompositionTypes::SVD;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->solve(50, true, 0.0);
 
