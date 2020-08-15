@@ -58,15 +58,13 @@ typedef enum {
     CblasConjTrans = 113
 } CBLAS_TRANSPOSE;
 
-inline void cblas_dgemm_batch(const CBLAS_LAYOUT Layout,
-                       const CBLAS_TRANSPOSE *TransA_Array,
-                       const CBLAS_TRANSPOSE *TransB_Array, const int *M_Array,
-                       const int *N_Array, const int *K_Array,
-                       const double *alpha_Array, const double **A_Array,
-                       const int *lda_Array, const double **B_Array,
-                       const int *ldb_Array, const double *beta_Array,
-                       double **C_Array, const int *ldc_Array,
-                       const int group_count, const int *group_size) {
+inline void cblas_dgemm_batch(
+    const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
+    const CBLAS_TRANSPOSE *TransB_Array, const int *M_Array, const int *N_Array,
+    const int *K_Array, const double *alpha_Array, const double **A_Array,
+    const int *lda_Array, const double **B_Array, const int *ldb_Array,
+    const double *beta_Array, double **C_Array, const int *ldc_Array,
+    const int group_count, const int *group_size) {
     assert(Layout == CblasRowMajor);
     for (int ig = 0, i = 0; ig < group_count; ig++) {
         const char *tra = TransA_Array[ig] == CblasNoTrans ? "n" : "t";
@@ -368,14 +366,17 @@ struct BatchGEMMSeq {
     }
     // Check whether there are conflicts in output arrays
     bool check() {
+        int max_nk = 0, db = batch[0]->gp.size() == 0 ? 1 : 2;
+        for (int ib = !!batch[0]->gp.size(); ib < refs.size(); ib += db)
+            max_nk = max(max_nk, refs[ib].nk);
+        vector<double *> ptr(max_nk);
+        vector<uint32_t> len(max_nk), idx(max_nk);
         for (int ib = !!batch[0]->gp.size(),
                  db = batch[0]->gp.size() == 0 ? 1 : 2;
              ib < refs.size(); ib += db) {
             shared_ptr<BatchGEMM> b = refs[ib].batch;
             if (refs[ib].nk == 0)
                 continue;
-            vector<double *> ptr(refs[ib].nk);
-            vector<uint32_t> len(refs[ib].nk), idx(refs[ib].nk);
             int xi = refs[ib].i, xk = refs[ib].k;
             for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
                 for (int kk = k; kk < k + b->gp[xi + i]; kk++)
@@ -384,8 +385,8 @@ struct BatchGEMMSeq {
             }
             for (int kk = 0; kk < refs[ib].nk; kk++)
                 idx[kk] = kk;
-            sort(idx.begin(), idx.end(),
-                 [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
+            sort(idx.begin(), idx.begin() + refs[ib].nk,
+                 [&ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
             for (int kk = 1; kk < refs[ib].nk; kk++)
                 if (!(ptr[idx[kk]] >= ptr[idx[kk - 1]] + len[idx[kk - 1]]))
                     return false;
@@ -396,13 +397,17 @@ struct BatchGEMMSeq {
     // by introducing temporary work arrays
     void prepare() {
         divide_batch();
-        for (int ib = !!batch[0]->gp.size(),
-                 db = batch[0]->gp.size() == 0 ? 1 : 2;
-             ib < refs.size(); ib += db) {
+        int max_nk = 0, db = batch[0]->gp.size() == 0 ? 1 : 2;
+        for (int ib = !!batch[0]->gp.size(); ib < refs.size(); ib += db)
+            max_nk = max(max_nk, refs[ib].nk);
+        vector<double *> ptr(max_nk);
+        vector<uint32_t> len(max_nk), pos(max_nk), idx(max_nk);
+        vector<double *> ptrs;
+        vector<uint32_t> lens;
+        vector<map<pair<uint32_t, uint32_t>, vector<int>>> shifts;
+        vector<size_t> pwork;
+        for (int ib = !!batch[0]->gp.size(); ib < refs.size(); ib += db) {
             shared_ptr<BatchGEMM> b = refs[ib].batch;
-            vector<double *> ptr(refs[ib].nk);
-            vector<uint32_t> len(refs[ib].nk), pos(refs[ib].nk),
-                idx(refs[ib].nk);
             int xi = refs[ib].i, xk = refs[ib].k;
             for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
                 for (int kk = k; kk < k + b->gp[xi + i]; kk++)
@@ -411,11 +416,9 @@ struct BatchGEMMSeq {
             }
             for (int kk = 0; kk < refs[ib].nk; kk++)
                 idx[kk] = kk;
-            sort(idx.begin(), idx.end(),
-                 [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
-            vector<double *> ptrs;
-            vector<uint32_t> lens;
-            vector<map<pair<uint32_t, uint32_t>, vector<int>>> shifts;
+            sort(idx.begin(), idx.begin() + refs[ib].nk,
+                 [&ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
+            ptrs.clear(), lens.clear(), shifts.clear();
             for (int kk = 0; kk < refs[ib].nk; kk++) {
                 if (ptrs.size() == 0) {
                     ptrs.push_back(ptr[idx[kk]]);
@@ -447,7 +450,7 @@ struct BatchGEMMSeq {
                         pos[idx[kk]]);
                 }
             }
-            vector<size_t> pwork;
+            pwork.clear();
             pwork.reserve(ptrs.size());
             vector<vector<pair<uint32_t, vector<int>>>> rshifts;
             for (size_t p = 0; p < ptrs.size(); p++) {
