@@ -762,13 +762,18 @@ struct SparseMatrixInfo<
 // Block-sparse Matrix
 // Representing operator, wavefunction, density matrix and MPS tensors
 template <typename S> struct SparseMatrix {
+    shared_ptr<Allocator<double>> alloc;
     shared_ptr<SparseMatrixInfo<S>> info;
     double *data;
     double factor;
     size_t total_memory;
-    SparseMatrix()
-        : info(nullptr), data(nullptr), factor(1.0), total_memory(0) {}
-    void load_data(const string &filename, bool load_info = false) {
+    SparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
+        : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
+          alloc(alloc) {}
+    void load_data(
+        const string &filename, bool load_info = false) {
+        if (alloc == nullptr)
+            alloc = dalloc;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("SparseMatrix:load_data on '" + filename +
@@ -780,7 +785,7 @@ template <typename S> struct SparseMatrix {
             info = nullptr;
         ifs.read((char *)&factor, sizeof(factor));
         ifs.read((char *)&total_memory, sizeof(total_memory));
-        data = dalloc->allocate(total_memory);
+        data = alloc->allocate(total_memory);
         ifs.read((char *)data, sizeof(double) * total_memory);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("SparseMatrix:load_data on '" + filename +
@@ -822,22 +827,33 @@ template <typename S> struct SparseMatrix {
         if (total_memory == 0)
             return;
         if (ptr == 0) {
-            data = dalloc->allocate(total_memory);
+            if (alloc == nullptr)
+                alloc = dalloc;
+            data = alloc->allocate(total_memory);
             memset(data, 0, sizeof(double) * total_memory);
         } else
             data = ptr;
     }
     void deallocate() {
+        if (alloc == nullptr) {
+            // this is the case when this sparse matrix data pointer
+            // is an external pointer, shared by many matrices
+            total_memory = 0;
+            data = nullptr;
+            return;
+        }
         if (total_memory == 0) {
             assert(data == nullptr);
             return;
         }
-        dalloc->deallocate(data, total_memory);
+        alloc->deallocate(data, total_memory);
+        alloc = nullptr;
         total_memory = 0;
         data = nullptr;
     }
     void reallocate(int length) {
-        double *ptr = dalloc->reallocate(data, total_memory, length);
+        assert(alloc != nullptr);
+        double *ptr = alloc->reallocate(data, total_memory, length);
         if (ptr != data && length != 0)
             memmove(ptr, data, length * sizeof(double));
         total_memory = length;

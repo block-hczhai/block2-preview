@@ -1627,7 +1627,7 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def(
         "init_memory",
         [](size_t isize, size_t dsize, const string &save_dir) {
-            frame_() = new DataFrame(isize, dsize, save_dir);
+            frame_() = make_shared<DataFrame>(isize, dsize, save_dir);
         },
         py::arg("isize") = size_t(1L << 28),
         py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex");
@@ -1635,7 +1635,7 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def("release_memory", []() {
         frame_()->activate(0);
         assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        delete frame_();
+        frame_() = nullptr;
     });
 
     m.def("set_mkl_num_threads", [](int n) {

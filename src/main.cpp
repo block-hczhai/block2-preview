@@ -63,7 +63,7 @@ template <typename S> void run(const map<string, string> &params) {
         scratch = params.at("scratch");
 
     frame_() =
-        new DataFrame((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
+        make_shared<DataFrame>((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
 
     // random scratch file prefix to avoid conflicts
     if (params.count("prefix") != 0 && params.at("prefix") != "auto")
@@ -373,7 +373,7 @@ template <typename S> void run(const map<string, string> &params) {
 
     frame_()->activate(0);
     assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-    delete frame_();
+    frame_() = nullptr;
 }
 
 int main(int argc, char *argv[]) {

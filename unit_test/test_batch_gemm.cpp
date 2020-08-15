@@ -11,12 +11,12 @@ class TestBatchGEMM : public ::testing::Test {
     static const int n_tests = 200;
     void SetUp() override {
         Random::rand_seed(1969);
-        frame_() = new DataFrame(isize, dsize, "nodex");
+        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
     }
     void TearDown() override {
         frame_()->activate(0);
         assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        delete frame_();
+        frame_() = nullptr;
     }
 };
 

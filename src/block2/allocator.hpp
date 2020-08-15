@@ -21,9 +21,11 @@
 #pragma once
 
 #include "utils.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,14 +33,26 @@ using namespace std;
 
 namespace block2 {
 
+// Abstract memory allocator
+template <typename T> struct Allocator {
+    Allocator() {}
+    virtual T *allocate(size_t n) { return nullptr; }
+    virtual void deallocate(void *ptr, size_t n) {}
+    virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
+    virtual shared_ptr<Allocator<T>>
+    copy(const shared_ptr<Allocator<T>> &alloc) const {
+        return alloc;
+    }
+};
+
 // Stack memory allocator
-template <typename T> struct StackAllocator {
+template <typename T> struct StackAllocator : Allocator<T> {
     size_t size, used, shift;
     T *data;
     StackAllocator(T *ptr, size_t max_size)
         : size(max_size), used(0), shift(0), data(ptr) {}
     StackAllocator() : size(0), used(0), shift(0), data(0) {}
-    T *allocate(size_t n) {
+    T *allocate(size_t n) override {
         assert(shift == 0);
         if (used + n >= size) {
             cout << "exceeding allowed memory"
@@ -48,7 +62,7 @@ template <typename T> struct StackAllocator {
         } else
             return data + (used += n) - n;
     }
-    void deallocate(void *ptr, size_t n) {
+    void deallocate(void *ptr, size_t n) override {
         if (n == 0)
             return;
         if (used < n || ptr != data + used - n) {
@@ -59,7 +73,7 @@ template <typename T> struct StackAllocator {
     }
     // Change the allocated size in middle of stack memory
     // and introduce a shift for moving memory after it
-    T *reallocate(T *ptr, size_t n, size_t new_n) {
+    T *reallocate(T *ptr, size_t n, size_t new_n) override {
         ptr += shift;
         shift += new_n - n;
         used = used + new_n - n;
@@ -74,15 +88,63 @@ template <typename T> struct StackAllocator {
     }
 };
 
+// Vector memory allocator (with automatic deallocation)
+template <typename T> struct VectorAllocator : Allocator<T> {
+    vector<vector<T>> data;
+    VectorAllocator() {}
+    T *allocate(size_t n) override {
+        data.push_back(vector<T>());
+        data.back().resize(n);
+        return &data.back()[0];
+    }
+    // explicit deallocation is not required for vector allocator
+    // can be in arbitrary order
+    void deallocate(void *ptr, size_t n) override {
+        for (int i = (int)data.size() - 1; i >= 0; i--)
+            if (&data[i][0] == ptr) {
+                assert(data[i].size() == n);
+                data.erase(data.begin() + i);
+                return;
+            }
+        cout << "deallocation of unallocated address" << endl;
+        abort();
+    }
+    // Change the allocated size for one allocated block
+    T *reallocate(T *ptr, size_t n, size_t new_n) override {
+        for (int i = (int)data.size() - 1; i >= 0; i--)
+            if (&data[i][0] == ptr) {
+                assert(data[i].size() == n);
+                data[i].resize(new_n);
+                return &data[i][0];
+            }
+        cout << "reallocation of unallocated address" << endl;
+        abort();
+    }
+    // When deep-copying objects using VectorAllocator, the other object
+    // should have an independent allocator, since VectorAllocator is not global
+    shared_ptr<Allocator<T>>
+    copy(const shared_ptr<Allocator<T>> &alloc) const override {
+        return make_shared<VectorAllocator<T>>();
+    }
+    friend ostream &operator<<(ostream &os, const VectorAllocator &c) {
+        os << "N-ALLOCATED=" << c.data.size << " USED="
+           << accumulate(
+                  c.data.begin(), c.data.end(), 0,
+                  [](size_t i, const vector<T> &j) { return i + j.size(); })
+           << endl;
+        return os;
+    }
+};
+
 // Integer stack memory pointer
-inline StackAllocator<uint32_t> *&ialloc_() {
-    static StackAllocator<uint32_t> *ialloc;
+inline shared_ptr<StackAllocator<uint32_t>> &ialloc_() {
+    static shared_ptr<StackAllocator<uint32_t>> ialloc;
     return ialloc;
 }
 
 // Double stack memory pointer
-inline StackAllocator<double> *&dalloc_() {
-    static StackAllocator<double> *dalloc;
+inline shared_ptr<StackAllocator<double>> &dalloc_() {
+    static shared_ptr<StackAllocator<double>> dalloc;
     return dalloc;
 }
 
@@ -97,8 +159,8 @@ struct DataFrame {
     string save_dir, prefix = "F0";
     size_t isize, dsize;
     uint16_t n_frames, i_frame;
-    vector<StackAllocator<uint32_t>> iallocs;
-    vector<StackAllocator<double>> dallocs;
+    vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
+    vector<shared_ptr<StackAllocator<double>>> dallocs;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double main_ratio = 0.7,
@@ -112,25 +174,25 @@ struct DataFrame {
         size_t dr = (this->dsize - dmain) / (n_frames - 1);
         double *dptr = new double[this->dsize];
         uint32_t *iptr = new uint32_t[this->isize];
-        iallocs.push_back(StackAllocator<uint32_t>(iptr, imain));
-        dallocs.push_back(StackAllocator<double>(dptr, dmain));
+        iallocs.push_back(make_shared<StackAllocator<uint32_t>>(iptr, imain));
+        dallocs.push_back(make_shared<StackAllocator<double>>(dptr, dmain));
         iptr += imain;
         dptr += dmain;
         for (uint16_t i = 0; i < n_frames - 1; i++) {
-            iallocs.push_back(StackAllocator<uint32_t>(iptr + i * ir, ir));
-            dallocs.push_back(StackAllocator<double>(dptr + i * dr, dr));
+            iallocs.push_back(make_shared<StackAllocator<uint32_t>>(iptr + i * ir, ir));
+            dallocs.push_back(make_shared<StackAllocator<double>>(dptr + i * dr, dr));
         }
         activate(0);
         if (!Parsing::path_exists(save_dir))
             Parsing::mkdir(save_dir);
     }
     void activate(uint16_t i) {
-        ialloc = &iallocs[i_frame = i];
-        dalloc = &dallocs[i_frame];
+        ialloc_() = iallocs[i_frame = i];
+        dalloc_() = dallocs[i_frame];
     }
     void reset(uint16_t i) {
-        iallocs[i].used = 0;
-        dallocs[i].used = 0;
+        iallocs[i]->used = 0;
+        dallocs[i]->used = 0;
     }
     // Load one data frame from disk
     void load_data(uint16_t i, const string &filename) const {
@@ -138,10 +200,10 @@ struct DataFrame {
         if (!ifs.good())
             throw runtime_error("DataFrame::load_data on '" + filename +
                                 "' failed.");
-        ifs.read((char *)&dallocs[i].used, sizeof(dallocs[i].used));
-        ifs.read((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
-        ifs.read((char *)&iallocs[i].used, sizeof(iallocs[i].used));
-        ifs.read((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+        ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
+        ifs.read((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
+        ifs.read((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
+        ifs.read((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("DataFrame::load_data on '" + filename +
                                 "' failed.");
@@ -151,36 +213,38 @@ struct DataFrame {
     void save_data(uint16_t i, const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
-            throw runtime_error("DataFrame::save_data on '" + filename + "' failed.");
-        ofs.write((char *)&dallocs[i].used, sizeof(dallocs[i].used));
-        ofs.write((char *)dallocs[i].data, sizeof(double) * dallocs[i].used);
-        ofs.write((char *)&iallocs[i].used, sizeof(iallocs[i].used));
-        ofs.write((char *)iallocs[i].data, sizeof(uint32_t) * iallocs[i].used);
+            throw runtime_error("DataFrame::save_data on '" + filename +
+                                "' failed.");
+        ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
+        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
+        ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
+        ofs.write((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
         if (!ofs.good())
-            throw runtime_error("DataFrame::save_data on '" + filename + "' failed.");
+            throw runtime_error("DataFrame::save_data on '" + filename +
+                                "' failed.");
         ofs.close();
     }
     void deallocate() {
-        delete[] iallocs[0].data;
-        delete[] dallocs[0].data;
+        delete[] iallocs[0]->data;
+        delete[] dallocs[0]->data;
         iallocs.clear();
         dallocs.clear();
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
-        os << "persistent memory used :: I = " << df.iallocs[0].used << "("
-           << (df.iallocs[0].used * 100 / df.iallocs[0].size) << "%)"
-           << " D = " << df.dallocs[0].used << "("
-           << (df.dallocs[0].used * 100 / df.dallocs[0].size) << "%)" << endl;
-        os << "exclusive  memory used :: I = " << df.iallocs[1].used << "("
-           << (df.iallocs[1].used * 100 / df.iallocs[1].size) << "%)"
-           << " D = " << df.dallocs[1].used << "("
-           << (df.dallocs[1].used * 100 / df.dallocs[1].size) << "%)" << endl;
+        os << "persistent memory used :: I = " << df.iallocs[0]->used << "("
+           << (df.iallocs[0]->used * 100 / df.iallocs[0]->size) << "%)"
+           << " D = " << df.dallocs[0]->used << "("
+           << (df.dallocs[0]->used * 100 / df.dallocs[0]->size) << "%)" << endl;
+        os << "exclusive  memory used :: I = " << df.iallocs[1]->used << "("
+           << (df.iallocs[1]->used * 100 / df.iallocs[1]->size) << "%)"
+           << " D = " << df.dallocs[1]->used << "("
+           << (df.dallocs[1]->used * 100 / df.dallocs[1]->size) << "%)" << endl;
         return os;
     }
 };
 
-inline DataFrame *&frame_() {
-    static DataFrame *frame;
+inline shared_ptr<DataFrame> &frame_() {
+    static shared_ptr<DataFrame> frame;
     return frame;
 }
 
