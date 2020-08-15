@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "allocator.hpp"
 #include <cmath>
+#include <memory>
 
 using namespace std;
 
@@ -54,14 +54,17 @@ template <typename S> struct CG<S, typename S::is_sz_t> {
 
 // CG factors for SU(2) symmetry
 template <typename S> struct CG<S, typename S::is_su2_t> {
+    shared_ptr<vector<double>> vdata;
     long double *sqrt_fact;
     int n_sf;
-    CG() : n_sf(0), sqrt_fact(nullptr) {}
+    CG() : n_sf(0), sqrt_fact(nullptr), vdata(nullptr) {}
     CG(int n_sqrt_fact) : n_sf(n_sqrt_fact) {}
     void initialize(double *ptr = 0) {
         assert(n_sf != 0);
-        if (ptr == 0)
-            ptr = dalloc->allocate(n_sf * 2);
+        if (ptr == 0) {
+            vdata = make_shared<vector<double>>(n_sf * 2);
+            ptr = vdata->data();
+        }
         sqrt_fact = (long double *)ptr;
         sqrt_fact[0] = 1;
         for (int i = 1; i < n_sf; i++)
@@ -69,7 +72,7 @@ template <typename S> struct CG<S, typename S::is_su2_t> {
     }
     void deallocate() {
         assert(n_sf != 0);
-        dalloc->deallocate(sqrt_fact, n_sf * 2);
+        vdata = nullptr;
         sqrt_fact = nullptr;
     }
     static bool triangle(int tja, int tjb, int tjc) {

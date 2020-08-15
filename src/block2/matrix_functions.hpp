@@ -63,8 +63,8 @@ extern double dnrm2(const int *n, const double *x, const int *incx) noexcept;
 
 // matrix multiplication
 // mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
-extern void dgemm(const char *transa, const char *transb, const int *n,
-                  const int *m, const int *k, const double *alpha,
+extern void dgemm(const char *transa, const char *transb, const int *m,
+                  const int *n, const int *k, const double *alpha,
                   const double *a, const int *lda, const double *b,
                   const int *ldb, const double *beta, double *c,
                   const int *ldc) noexcept;
@@ -775,9 +775,8 @@ struct MatrixFunctions {
         int vm = v.m, vn = v.n, n = vm * vn;
         if (n < 4) {
             const int lwork = 4 * n * n + 7;
-            MatrixRef e = MatrixRef(dalloc->allocate(n), vm, vn);
-            double *h = dalloc->allocate(n * n);
-            double *work = dalloc->allocate(lwork);
+            double te[n], h[n * n], work[lwork];
+            MatrixRef e = MatrixRef(&te[0], vm, vn);
             memset(e.data, 0, sizeof(double) * n);
             memset(h, 0, sizeof(double) * n * n);
             for (int i = 0; i < n; i++) {
@@ -790,9 +789,6 @@ struct MatrixFunctions {
             MatrixFunctions::multiply(MatrixRef(work + iptr, n, n), true, v,
                                       false, e, 1.0, 0.0);
             memcpy(v.data, e.data, sizeof(double) * n);
-            dalloc->deallocate(work, lwork);
-            dalloc->deallocate(h, n * n);
-            e.deallocate();
             return n;
         }
         auto lop = [&op, consta, n, vm, vn](double *a, double *b) -> void {
@@ -803,15 +799,12 @@ struct MatrixFunctions {
         };
         int m = min(deflation_max_size, n - 1);
         int lwork = n * (m + 2) + 5 * (m + 2) * (m + 2) + 7;
-        double *w = dalloc->allocate(n);
-        double *work = dalloc->allocate(lwork);
+        double w[n], work[lwork];
         if (anorm < 1E-10)
             anorm = 1.0;
         int nmult = MatrixFunctions::expo_krylov(
             lop, n, m, t, v.data, w, conv_thrd, anorm, work, lwork, iprint);
         memcpy(v.data, w, sizeof(double) * n);
-        dalloc->deallocate(work, lwork);
-        dalloc->deallocate(w, n);
         return nmult;
     }
 };

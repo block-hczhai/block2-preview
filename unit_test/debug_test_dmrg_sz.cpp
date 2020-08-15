@@ -38,8 +38,10 @@ TEST_F(TestDMRG, Test) {
 
     // abort();
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(2);
     mkl_set_dynamic(0);
+#endif
 
     Timer t;
     t.get_time();

@@ -133,10 +133,14 @@ template <typename S> void run(const map<string, string> &params) {
         fcidump->params["isym"] = params.at("ipg");
 
     if (params.count("mkl_threads") != 0) {
+#ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(Parsing::to_int(params.at("mkl_threads")));
         mkl_set_dynamic(1);
         cout << "using " << Parsing::to_int(params.at("mkl_threads"))
              << " mkl threads" << endl;
+#else
+        throw runtime_error("cannot set number of mkl threads.");
+#endif
     }
 
     vector<uint8_t> orbsym = fcidump->orb_sym();

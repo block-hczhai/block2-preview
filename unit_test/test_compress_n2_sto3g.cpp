@@ -28,8 +28,10 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
@@ -180,8 +182,10 @@ TEST_F(TestCompressN2STO3G, TestSZ) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),

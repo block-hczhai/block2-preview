@@ -87,8 +87,13 @@ TEST_F(TestBatchGEMM, TestTensorProduct) {
             mb = Random::rand_int(1, 20), nb = Random::rand_int(1, 20);
         }
         int mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
+#ifdef _HAS_INTEL_MKL
         int ncbatch = Random::rand_int(1, 20);
         int nbatch = Random::rand_int(1, 20);
+#else
+        int ncbatch = Random::rand_int(1, 5);
+        int nbatch = Random::rand_int(1, 5);
+#endif
         MatrixRef a(dalloc_()->allocate(ma * na * nbatch), ma, na);
         MatrixRef b(dalloc_()->allocate(mb * nb * nbatch), mb, nb);
         MatrixRef c(dalloc_()->allocate(mc * nc * ncbatch), mc, nc);

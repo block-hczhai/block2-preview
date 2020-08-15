@@ -1639,8 +1639,12 @@ template <typename S = void> void bind_io(py::module &m) {
     });
 
     m.def("set_mkl_num_threads", [](int n) {
+#ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n);
         mkl_set_dynamic(0);
+#else
+        throw runtime_error("cannot set number of mkl threads.");
+#endif
     });
 
     m.def("read_occ", &read_occ);

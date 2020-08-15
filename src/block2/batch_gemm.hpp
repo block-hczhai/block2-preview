@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include "allocator.hpp"
 #include "matrix.hpp"
 #include "matrix_functions.hpp"
 #ifdef _HAS_INTEL_MKL
@@ -38,6 +37,51 @@
 using namespace std;
 
 namespace block2 {
+
+#ifndef _HAS_INTEL_MKL
+
+extern "C" {
+
+// matrix multiplication
+// mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
+extern void dgemm(const char *transa, const char *transb, const int *m,
+                  const int *n, const int *k, const double *alpha,
+                  const double *a, const int *lda, const double *b,
+                  const int *ldb, const double *beta, double *c,
+                  const int *ldc) noexcept;
+}
+
+typedef enum { CblasRowMajor = 101, CblasColMajor = 102 } CBLAS_LAYOUT;
+typedef enum {
+    CblasNoTrans = 111,
+    CblasTrans = 112,
+    CblasConjTrans = 113
+} CBLAS_TRANSPOSE;
+
+inline void cblas_dgemm_batch(const CBLAS_LAYOUT Layout,
+                       const CBLAS_TRANSPOSE *TransA_Array,
+                       const CBLAS_TRANSPOSE *TransB_Array, const int *M_Array,
+                       const int *N_Array, const int *K_Array,
+                       const double *alpha_Array, const double **A_Array,
+                       const int *lda_Array, const double **B_Array,
+                       const int *ldb_Array, const double *beta_Array,
+                       double **C_Array, const int *ldc_Array,
+                       const int group_count, const int *group_size) {
+    assert(Layout == CblasRowMajor);
+    for (int ig = 0, i = 0; ig < group_count; ig++) {
+        const char *tra = TransA_Array[ig] == CblasNoTrans ? "n" : "t";
+        const char *trb = TransB_Array[ig] == CblasNoTrans ? "n" : "t";
+        const int m = M_Array[ig], n = N_Array[ig], k = K_Array[ig];
+        const double alpha = alpha_Array[ig], beta = beta_Array[ig];
+        const int lda = lda_Array[ig], ldb = ldb_Array[ig], ldc = ldc_Array[ig];
+        const int gsize = group_size[ig];
+        for (int j = 0; j < gsize; j++, i++)
+            dgemm(trb, tra, &n, &m, &k, &alpha, B_Array[i], &ldb, A_Array[i],
+                  &lda, &beta, C_Array[i], &ldc);
+    }
+}
+
+#endif
 
 // The parameters for a series of DGEMM operations
 struct BatchGEMM {
@@ -227,6 +271,7 @@ enum struct SeqTypes : uint8_t { None, Simple, Auto };
 
 // Batched DGEMM analyzer
 struct BatchGEMMSeq {
+    shared_ptr<vector<double>> vdata;
     vector<shared_ptr<BatchGEMM>> batch;
     vector<shared_ptr<BatchGEMM>> post_batch;
     vector<BatchGEMMRef> refs;
@@ -237,7 +282,7 @@ struct BatchGEMMSeq {
     SeqTypes mode;
     BatchGEMMSeq(size_t max_batch_flops = 1LU << 30,
                  SeqTypes mode = SeqTypes::None)
-        : max_batch_flops(max_batch_flops), mode(mode) {
+        : max_batch_flops(max_batch_flops), mode(mode), vdata(nullptr) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
     }
@@ -329,9 +374,8 @@ struct BatchGEMMSeq {
             shared_ptr<BatchGEMM> b = refs[ib].batch;
             if (refs[ib].nk == 0)
                 continue;
-            double **ptr = (double **)dalloc->allocate(refs[ib].nk);
-            uint32_t *len = (uint32_t *)ialloc->allocate(refs[ib].nk);
-            uint32_t *idx = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            vector<double *> ptr(refs[ib].nk);
+            vector<uint32_t> len(refs[ib].nk), idx(refs[ib].nk);
             int xi = refs[ib].i, xk = refs[ib].k;
             for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
                 for (int kk = k; kk < k + b->gp[xi + i]; kk++)
@@ -340,14 +384,11 @@ struct BatchGEMMSeq {
             }
             for (int kk = 0; kk < refs[ib].nk; kk++)
                 idx[kk] = kk;
-            sort(idx, idx + refs[ib].nk,
+            sort(idx.begin(), idx.end(),
                  [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
             for (int kk = 1; kk < refs[ib].nk; kk++)
                 if (!(ptr[idx[kk]] >= ptr[idx[kk - 1]] + len[idx[kk - 1]]))
                     return false;
-            ialloc->deallocate(idx, refs[ib].nk);
-            ialloc->deallocate(len, refs[ib].nk);
-            dalloc->deallocate((double *)ptr, refs[ib].nk);
         }
         return true;
     }
@@ -359,10 +400,9 @@ struct BatchGEMMSeq {
                  db = batch[0]->gp.size() == 0 ? 1 : 2;
              ib < refs.size(); ib += db) {
             shared_ptr<BatchGEMM> b = refs[ib].batch;
-            double **ptr = (double **)dalloc->allocate(refs[ib].nk);
-            uint32_t *len = (uint32_t *)ialloc->allocate(refs[ib].nk);
-            uint32_t *pos = (uint32_t *)ialloc->allocate(refs[ib].nk);
-            uint32_t *idx = (uint32_t *)ialloc->allocate(refs[ib].nk);
+            vector<double *> ptr(refs[ib].nk);
+            vector<uint32_t> len(refs[ib].nk), pos(refs[ib].nk),
+                idx(refs[ib].nk);
             int xi = refs[ib].i, xk = refs[ib].k;
             for (int i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
                 for (int kk = k; kk < k + b->gp[xi + i]; kk++)
@@ -371,7 +411,7 @@ struct BatchGEMMSeq {
             }
             for (int kk = 0; kk < refs[ib].nk; kk++)
                 idx[kk] = kk;
-            sort(idx, idx + refs[ib].nk,
+            sort(idx.begin(), idx.end(),
                  [ptr](uint32_t a, uint32_t b) { return ptr[a] < ptr[b]; });
             vector<double *> ptrs;
             vector<uint32_t> lens;
@@ -407,10 +447,6 @@ struct BatchGEMMSeq {
                         pos[idx[kk]]);
                 }
             }
-            ialloc->deallocate(idx, refs[ib].nk);
-            ialloc->deallocate(pos, refs[ib].nk);
-            ialloc->deallocate(len, refs[ib].nk);
-            dalloc->deallocate((double *)ptr, refs[ib].nk);
             vector<size_t> pwork;
             pwork.reserve(ptrs.size());
             vector<vector<pair<uint32_t, vector<int>>>> rshifts;
@@ -483,8 +519,9 @@ struct BatchGEMMSeq {
             max_work = max(max_work, refs[ib].work);
             max_rwork = max(max_rwork, refs[ib].rwork);
         }
+        vdata = make_shared<vector<double>>(max_work + max_rwork);
         if (max_work != 0) {
-            work = dalloc->allocate(max_work);
+            work = vdata->data();
             size_t shift = work - (double *)0;
             for (size_t i = 0; i < batch[0]->c.size(); i++)
                 batch[0]->c[i] += shift;
@@ -492,7 +529,7 @@ struct BatchGEMMSeq {
                 batch[1]->b[i] += shift;
         }
         if (max_rwork != 0) {
-            rwork = dalloc->allocate(max_rwork);
+            rwork = vdata->data() + max_work;
             size_t shift = rwork - (double *)0;
             size_t ipost = 0;
             for (size_t i = 0; i < batch[1]->c.size(); i++)
@@ -513,12 +550,7 @@ struct BatchGEMMSeq {
         }
     }
     // Deallocate work arrays
-    void deallocate() {
-        if (max_rwork != 0)
-            dalloc->deallocate(rwork, max_rwork);
-        if (max_work != 0)
-            dalloc->deallocate(work, max_work);
-    }
+    void deallocate() { vdata = nullptr; }
     // Perform non-confliciting batched DGEMM
     void simple_perform() {
         divide_batch();

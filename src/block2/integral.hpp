@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include "allocator.hpp"
 #include "utils.hpp"
 #include <array>
 #include <cassert>
@@ -29,6 +28,7 @@
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <vector>
 
 using namespace std;
@@ -169,6 +169,7 @@ struct V8Int {
 
 // One- and two-electron integrals
 struct FCIDUMP {
+    shared_ptr<vector<double>> vdata;
     map<string, string> params;
     vector<TInt> ts;
     vector<V8Int> vs;
@@ -178,7 +179,7 @@ struct FCIDUMP {
     double *data;
     size_t total_memory;
     bool uhf, general;
-    FCIDUMP() : e(0.0), uhf(false), total_memory(0) {}
+    FCIDUMP() : e(0.0), uhf(false), total_memory(0), vdata(nullptr) {}
     // Initialize integrals: U(1) case
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
@@ -209,7 +210,8 @@ struct FCIDUMP {
             assert(vabs[0].size() == lvab);
             general = false;
             total_memory = lta + ltb + lva + lvb + lvab;
-            data = dalloc->allocate(total_memory);
+            vdata = make_shared<vector<double>>(total_memory);
+            data = vdata->data();
             ts[0].data = data;
             ts[1].data = data + lta;
             vs[0].data = data + lta + ltb;
@@ -229,7 +231,8 @@ struct FCIDUMP {
             assert(vgs[1].size() == lvb);
             assert(vgs[2].size() == lvab);
             total_memory = lta + ltb + lva + lvb + lvab;
-            data = dalloc->allocate(total_memory);
+            vdata = make_shared<vector<double>>(total_memory);
+            data = vdata->data();
             ts[0].data = data;
             ts[1].data = data + lta;
             vgs[0].data = data + lta + ltb;
@@ -265,7 +268,8 @@ struct FCIDUMP {
         if (vs[0].size() == lv) {
             general = false;
             total_memory = ts[0].size() + vs[0].size();
-            data = dalloc->allocate(total_memory);
+            vdata = make_shared<vector<double>>(total_memory);
+            data = vdata->data();
             ts[0].data = data;
             vs[0].data = data + ts[0].size();
             memcpy(vs[0].data, v, sizeof(double) * lv);
@@ -275,7 +279,8 @@ struct FCIDUMP {
             vgs.push_back(V1Int(n_sites));
             assert(lv == vgs[0].size());
             total_memory = ts[0].size() + vgs[0].size();
-            data = dalloc->allocate(total_memory);
+            vdata = make_shared<vector<double>>(total_memory);
+            data = vdata->data();
             ts[0].data = data;
             vgs[0].data = data + ts[0].size();
             memcpy(vgs[0].data, v, sizeof(double) * lv);
@@ -397,7 +402,8 @@ struct FCIDUMP {
             if (!general) {
                 vs.push_back(V8Int(n));
                 total_memory = ts[0].size() + vs[0].size();
-                data = dalloc->allocate(total_memory);
+                vdata = make_shared<vector<double>>(total_memory);
+                data = vdata->data();
                 ts[0].data = data;
                 vs[0].data = data + ts[0].size();
                 ts[0].clear();
@@ -405,7 +411,8 @@ struct FCIDUMP {
             } else {
                 vgs.push_back(V1Int(n));
                 total_memory = ts[0].size() + vgs[0].size();
-                data = dalloc->allocate(total_memory);
+                vdata = make_shared<vector<double>>(total_memory);
+                data = vdata->data();
                 ts[0].data = data;
                 vgs[0].data = data + ts[0].size();
                 ts[0].clear();
@@ -434,7 +441,8 @@ struct FCIDUMP {
                 vabs.push_back(V4Int(n));
                 total_memory =
                     ((ts[0].size() + vs[0].size()) << 1) + vabs[0].size();
-                data = dalloc->allocate(total_memory);
+                vdata = make_shared<vector<double>>(total_memory);
+                data = vdata->data();
                 ts[0].data = data;
                 ts[1].data = data + ts[0].size();
                 vs[0].data = data + (ts[0].size() << 1);
@@ -446,7 +454,8 @@ struct FCIDUMP {
                 for (int i = 0; i < 3; i++)
                     vgs.push_back(V1Int(n));
                 total_memory = ts[0].size() * 2 + vgs[0].size() * 3;
-                data = dalloc->allocate(total_memory);
+                vdata = make_shared<vector<double>>(total_memory);
+                data = vdata->data();
                 ts[0].data = data;
                 ts[1].data = data + ts[0].size();
                 vgs[0].data = data + (ts[0].size() << 1);
@@ -584,7 +593,7 @@ struct FCIDUMP {
     }
     void deallocate() {
         assert(total_memory != 0);
-        dalloc->deallocate(data, total_memory);
+        vdata = nullptr;
         data = nullptr;
         ts.clear();
         vs.clear();

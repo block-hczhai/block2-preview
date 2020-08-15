@@ -27,8 +27,10 @@ void test_dmrg(const vector<vector<S>> &targets,
 
     hamil.opf->seq->mode = SeqTypes::Simple;
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     Timer t;
     t.get_time();

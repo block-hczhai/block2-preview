@@ -32,8 +32,10 @@ TEST_F(TestNPDM, TestSU2) {
     int norb = fcidump->n_sites();
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -322,8 +324,10 @@ TEST_F(TestNPDM, TestSZ) {
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {

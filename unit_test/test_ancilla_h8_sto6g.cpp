@@ -28,8 +28,10 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     vector<double> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,
@@ -133,7 +135,7 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_m500[i]) << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-10);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
     }
 
     mps_info_thermal->deallocate();
@@ -151,8 +153,10 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     vector<double> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,
@@ -254,7 +258,7 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_m500[i]) << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-10);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
     }
 
     mps_info_thermal->deallocate();

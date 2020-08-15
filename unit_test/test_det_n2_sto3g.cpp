@@ -28,8 +28,10 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
-    mkl_set_num_threads(1);
+#ifdef _HAS_INTEL_MKL
+    mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     vector<double> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,

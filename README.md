@@ -37,7 +37,7 @@ Features
 Installation
 ------------
 
-Dependence: `pybind11`, `python3`, and `mkl`. For unit tests, `googletest` is required.
+Dependence: `pybind11`, `python3`, and `mkl` (or `blas + lapack`). For unit tests, `googletest` is required.
 
 `cmake` (version >= 3.0) can be used to compile C++ part of the code, as follows:
 
@@ -47,6 +47,8 @@ Dependence: `pybind11`, `python3`, and `mkl`. For unit tests, `googletest` is re
     make -j 10
 
 This will build the python extension (using 10 CPU cores).
+
+If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required (with limited support for multi-threading).
 
 By default, the C++ templates will be explicitly instantiated in different compilation units, so that parallel
 compilation is possible.

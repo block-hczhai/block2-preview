@@ -55,8 +55,10 @@ TEST_F(TestDMRG, Test) {
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     Timer t;
     t.get_time();

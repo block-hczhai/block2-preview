@@ -28,8 +28,10 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     SU2 vacuum(0);
 
@@ -135,8 +137,10 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
+#ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
+#endif
 
     SZ vacuum(0);
 
