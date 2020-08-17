@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include "allocator.hpp"
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -39,13 +38,15 @@ template <typename, typename = void> struct StateInfo;
 template <typename S>
 struct StateInfo<S, typename enable_if<integral_constant<
                         bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+    shared_ptr<vector<uint32_t>> vdata;
     // Array for symmetry labels
     S *quanta;
     // Array for number of states
     uint16_t *n_states;
     int n_states_total, n;
-    StateInfo() : quanta(0), n_states(0), n_states_total(0), n(0) {}
-    StateInfo(S q) {
+    StateInfo()
+        : quanta(0), n_states(0), n_states_total(0), n(0), vdata(nullptr) {}
+    StateInfo(S q) : vdata(nullptr) {
         allocate(1);
         quanta[0] = q, n_states[0] = 1, n_states_total = 1;
     }
@@ -56,7 +57,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
                                 "' failed.");
         ifs.read((char *)&n_states_total, sizeof(n_states_total));
         ifs.read((char *)&n, sizeof(n));
-        uint32_t *ptr = ialloc->allocate((n << 1) - (n >> 1));
+        vdata = make_shared<vector<uint32_t>>((n << 1) - (n >> 1));
+        uint32_t *ptr = vdata->data();
         ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
         if (ifs.fail() || ifs.bad())
             throw runtime_error("StateInfo::load_data on '" + filename +
@@ -80,31 +82,33 @@ struct StateInfo<S, typename enable_if<integral_constant<
     }
     // need length * 2
     void allocate(int length, uint32_t *ptr = 0) {
-        if (ptr == 0)
-            ptr = ialloc->allocate((length << 1) - (length >> 1));
+        if (ptr == 0) {
+            vdata =
+                make_shared<vector<uint32_t>>((length << 1) - (length >> 1));
+            ptr = vdata->data();
+        }
         n = length;
         quanta = (S *)ptr;
         n_states = (uint16_t *)(ptr + length);
     }
     void reallocate(int length) {
-        uint32_t *ptr =
-            ialloc->reallocate((uint32_t *)quanta, (n << 1) - (n >> 1),
-                               (length << 1) - (length >> 1));
-        if (ptr == (uint32_t *)quanta) {
-            memmove(ptr + length, n_states, length * sizeof(uint16_t));
+        if (length < n) {
+            memmove(quanta + length, n_states, length * sizeof(uint16_t));
+            vdata->resize((length << 1) - (length >> 1));
+            quanta = (S *)vdata->data();
             n_states = (uint16_t *)(quanta + length);
-        } else {
-            memmove(ptr, quanta, length * sizeof(uint32_t));
-            memmove(ptr + length, n_states, length * sizeof(uint16_t));
-            quanta = (S *)ptr;
+        } else if (length > n) {
+            vdata->resize((length << 1) - (length >> 1));
+            quanta = (S *)vdata->data();
+            memmove(quanta + length, n_states, length * sizeof(uint16_t));
             n_states = (uint16_t *)(quanta + length);
         }
         n = length;
     }
     void deallocate() {
-        ialloc->deallocate((uint32_t *)quanta, (n << 1) - (n >> 1));
-        quanta = 0;
-        n_states = 0;
+        vdata = nullptr;
+        quanta = nullptr;
+        n_states = nullptr;
     }
     StateInfo deep_copy() const {
         StateInfo other;
@@ -295,6 +299,7 @@ template <typename S>
 struct StateProbability<
     S, typename enable_if<integral_constant<
            bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+    shared_ptr<vector<uint32_t>> vdata;
     S *quanta;
     double *probs;
     int n;
@@ -304,35 +309,37 @@ struct StateProbability<
         quanta[0] = q, probs[0] = 1;
     }
     void allocate(int length, uint32_t *ptr = 0) {
-        if (ptr == 0)
-            ptr = ialloc->allocate((length << 1) + length + 1);
+        if (ptr == 0) {
+            vdata = make_shared<vector<uint32_t>>((length << 1) + length + 1);
+            ptr = vdata->data();
+        }
         n = length;
         quanta = (S *)ptr;
         // double must be 8-aligned
         probs = (double *)(ptr + length + !!((size_t)(ptr + length) & 7));
     }
     void reallocate(int length) {
-        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n + 1,
-                                           (length << 1) + length + 1);
-        if (ptr == (uint32_t *)quanta) {
-            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs,
+        if (length < n) {
+            memmove(quanta + length + !!((size_t)(quanta + length) & 7), probs,
+                    length * sizeof(double));
+            vdata->resize((length << 1) + length + 1);
+            quanta = (S *)vdata->data();
+            probs =
+                (double *)(quanta + length + !!((size_t)(quanta + length) & 7));
+        } else if (length > n) {
+            vdata->resize((length << 1) + length + 1);
+            quanta = (S *)vdata->data();
+            memmove(quanta + length + !!((size_t)(quanta + length) & 7), probs,
                     length * sizeof(double));
             probs = (double *)(quanta + length);
-        } else {
-            memmove(ptr, quanta, length * sizeof(uint32_t));
-            memmove(ptr + length + !!((size_t)(ptr + length) & 7), probs,
-                    length * sizeof(double));
-            quanta = (S *)ptr;
-            probs =
-                (double *)(quanta + length + !!((size_t)(ptr + length) & 7));
         }
         n = length;
     }
     void deallocate() {
         assert(n != 0);
-        ialloc->deallocate((uint32_t *)quanta, (n << 1) + n + 1);
-        quanta = 0;
-        probs = 0;
+        vdata = nullptr;
+        quanta = nullptr;
+        probs = nullptr;
     }
     void collect(S target = S(S::invalid)) {
         int k = -1;

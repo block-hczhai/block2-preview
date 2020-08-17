@@ -22,10 +22,10 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    // string occ_filename = "data/CR2.SVP.OCC";
-    // occs = read_occ(occ_filename);
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    string occ_filename = "data/CR2.SVP.OCC";
+    occs = read_occ(occ_filename);
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
@@ -61,7 +61,7 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -88,11 +88,11 @@ TEST_F(TestDMRG, Test) {
     // cout << endl;
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
-        cout << mps_info->left_dims[i].n_states_total << " ";
+        cout << mps_info->left_dims[i]->n_states_total << " ";
     cout << endl;
     cout << "right dims = ";
     for (int i = 0; i <= norb; i++)
-        cout << mps_info->right_dims[i].n_states_total << " ";
+        cout << mps_info->right_dims[i]->n_states_total << " ";
     cout << endl;
     // abort();
 

@@ -243,83 +243,87 @@ template <typename S> struct DeterminantQC {
 // Quantum number infomation in a MPS
 // Generated from determinant, used for warm-up sweep
 template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
+    using MPSInfo<S>::basis;
     shared_ptr<FCIDUMP> fcidump;
     shared_ptr<DeterminantQC<S>> det;
     vector<uint8_t> iocc;
     uint16_t n_det_states = 2; // number of states for each determinant
-    DeterminantMPSInfo(int n_sites, S vacuum, S target, StateInfo<S> *basis,
-                       const vector<uint8_t> orbsym, uint8_t n_syms,
+    DeterminantMPSInfo(int n_sites, S vacuum, S target,
+                       const vector<shared_ptr<StateInfo<S>>> &basis,
+                       const vector<uint8_t> &orb_sym, uint8_t n_syms,
                        const vector<uint8_t> &iocc,
                        const shared_ptr<FCIDUMP> &fcidump)
         : iocc(iocc), fcidump(fcidump),
-          det(make_shared<DeterminantQC<S>>(iocc, orbsym,
+          det(make_shared<DeterminantQC<S>>(iocc, orb_sym,
                                             fcidump->h1e_energy())),
-          MPSInfo<S>(n_sites, vacuum, target, basis, orbsym, n_syms) {}
+          MPSInfo<S>(n_sites, vacuum, target, basis, n_syms) {}
     void set_bond_dimension(uint16_t m) override {
         this->bond_dim = m;
-        this->left_dims[0] = StateInfo<S>(this->vacuum);
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
+        this->left_dims[0] = make_shared<StateInfo<S>>(this->vacuum);
+        this->right_dims[this->n_sites] =
+            make_shared<StateInfo<S>>(this->vacuum);
     }
     WarmUpTypes get_warm_up_type() const override {
         return WarmUpTypes::Determinant;
     }
     void set_left_bond_dimension(int i,
                                  const vector<vector<vector<uint8_t>>> &dets) {
-        this->left_dims[0] = StateInfo<S>(this->vacuum);
+        this->left_dims[0] = make_shared<StateInfo<S>>(this->vacuum);
         for (int j = 0; j < i; j++) {
             set<vector<uint8_t>, typename DeterminantQC<S>::det_less> mp;
             for (auto &idets : dets)
                 for (auto &jdet : idets)
                     mp.insert(
                         vector<uint8_t>(jdet.begin(), jdet.begin() + j + 1));
-            this->left_dims[j + 1].allocate(mp.size());
+            this->left_dims[j + 1]->allocate(mp.size());
             auto it = mp.begin();
-            for (int k = 0; k < this->left_dims[j + 1].n; k++, it++) {
-                this->left_dims[j + 1].quanta[k] =
+            for (int k = 0; k < this->left_dims[j + 1]->n; k++, it++) {
+                this->left_dims[j + 1]->quanta[k] =
                     det->det_quantum(*it, 0, j + 1);
-                this->left_dims[j + 1].n_states[k] = 1;
+                this->left_dims[j + 1]->n_states[k] = 1;
             }
-            this->left_dims[j + 1].sort_states();
-            this->left_dims[j + 1].collect();
+            this->left_dims[j + 1]->sort_states();
+            this->left_dims[j + 1]->collect();
         }
-        this->left_dims[i + 1].allocate(dets.size());
-        for (int k = 0; k < this->left_dims[i + 1].n; k++) {
-            this->left_dims[i + 1].quanta[k] =
+        this->left_dims[i + 1]->allocate(dets.size());
+        for (int k = 0; k < this->left_dims[i + 1]->n; k++) {
+            this->left_dims[i + 1]->quanta[k] =
                 det->det_quantum(dets[k][0], 0, i + 1);
-            this->left_dims[i + 1].n_states[k] = dets[k].size();
+            this->left_dims[i + 1]->n_states[k] = dets[k].size();
         }
-        this->left_dims[i + 1].sort_states();
+        this->left_dims[i + 1]->sort_states();
         for (int k = i + 1; k < this->n_sites; k++)
-            this->left_dims[k + 1].n = 0;
+            this->left_dims[k + 1]->n = 0;
     }
     void set_right_bond_dimension(int i,
                                   const vector<vector<vector<uint8_t>>> &dets) {
-        this->right_dims[this->n_sites] = StateInfo<S>(this->vacuum);
+        this->right_dims[this->n_sites] =
+            make_shared<StateInfo<S>>(this->vacuum);
         for (int j = this->n_sites - 1; j > i; j--) {
             set<vector<uint8_t>, typename DeterminantQC<S>::det_less> mp;
             for (auto &idets : dets)
                 for (auto &jdet : idets)
                     mp.insert(
                         vector<uint8_t>(jdet.begin() + (j - i), jdet.end()));
-            this->right_dims[j].allocate(mp.size());
+            this->right_dims[j]->allocate(mp.size());
             auto it = mp.begin();
-            for (int k = 0; k < this->right_dims[j].n; k++, it++) {
-                this->right_dims[j].quanta[k] =
+            for (int k = 0; k < this->right_dims[j]->n; k++, it++) {
+                this->right_dims[j]->quanta[k] =
                     det->det_quantum(*it, j, this->n_sites);
-                this->right_dims[j].n_states[k] = 1;
+                this->right_dims[j]->n_states[k] = 1;
             }
-            this->right_dims[j].sort_states();
-            this->right_dims[j].collect();
+            this->right_dims[j]->sort_states();
+            this->right_dims[j]->collect();
         }
-        this->right_dims[i].allocate(dets.size());
-        for (int k = 0; k < this->right_dims[i].n; k++) {
-            this->right_dims[i].quanta[k] =
+        this->right_dims[i]->allocate(dets.size());
+        for (int k = 0; k < this->right_dims[i]->n; k++) {
+            this->right_dims[i]->quanta[k] =
                 det->det_quantum(dets[k][0], i, this->n_sites);
-            this->right_dims[i].n_states[k] = dets[k].size();
+            this->right_dims[i]->n_states[k] = dets[k].size();
         }
-        this->right_dims[i].sort_states();
+        this->right_dims[i]->sort_states();
         for (int k = i - 1; k >= 0; k--)
-            this->right_dims[k].n = 0;
+            this->right_dims[k]->n = 0;
     }
     vector<vector<vector<uint8_t>>> get_determinants(StateInfo<S> &st,
                                                      int i_begin, int i_end) {
@@ -351,12 +355,10 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     StateInfo<S> get_complementary_left_dims(int i, int i_right_ref,
                                              bool match_prev = false) {
         this->load_right_dims(i_right_ref);
-        StateInfo<S> rref = this->right_dims[i_right_ref];
+        StateInfo<S> rref = *this->right_dims[i_right_ref];
         for (int k = i_right_ref - 1; k >= i + 1; k--) {
             StateInfo<S> rr = StateInfo<S>::tensor_product(
-                this->get_basis(k), rref, this->right_dims_fci[k]);
-            rref.reallocate(0);
-            rr.reallocate(rr.n);
+                *basis[k], rref, *this->right_dims_fci[k]);
             rref = rr;
         }
         // get complementary quantum numbers
@@ -369,14 +371,14 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
         rref.deallocate();
         if (match_prev) {
             this->load_left_dims(i + 1);
-            for (int l = 0; l < this->left_dims[i + 1].n; l++) {
-                S q = this->left_dims[i + 1].quanta[l];
+            for (int l = 0; l < this->left_dims[i + 1]->n; l++) {
+                S q = this->left_dims[i + 1]->quanta[l];
                 if (qs.count(q) == 0)
-                    qs[q] = this->left_dims[i + 1].n_states[l];
+                    qs[q] = this->left_dims[i + 1]->n_states[l];
                 else
-                    qs[q] = max(qs[q], this->left_dims[i + 1].n_states[l]);
+                    qs[q] = max(qs[q], this->left_dims[i + 1]->n_states[l]);
             }
-            this->left_dims[i + 1].deallocate();
+            this->left_dims[i + 1]->deallocate();
         }
         StateInfo<S> lref;
         lref.allocate(qs.size());
@@ -394,12 +396,10 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     StateInfo<S> get_complementary_right_dims(int i, int i_left_ref,
                                               bool match_prev = false) {
         this->load_left_dims(i_left_ref + 1);
-        StateInfo<S> lref = this->left_dims[i_left_ref + 1];
+        StateInfo<S> lref = *this->left_dims[i_left_ref + 1];
         for (int k = i_left_ref + 1; k < i; k++) {
             StateInfo<S> ll = StateInfo<S>::tensor_product(
-                lref, this->get_basis(k), this->left_dims_fci[k + 1]);
-            lref.reallocate(0);
-            ll.reallocate(ll.n);
+                lref, *basis[k], *this->left_dims_fci[k + 1]);
             lref = ll;
         }
         // get complementary quantum numbers
@@ -412,14 +412,14 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
         lref.deallocate();
         if (match_prev) {
             this->load_right_dims(i);
-            for (int l = 0; l < this->right_dims[i].n; l++) {
-                S q = this->right_dims[i].quanta[l];
+            for (int l = 0; l < this->right_dims[i]->n; l++) {
+                S q = this->right_dims[i]->quanta[l];
                 if (qs.count(q) == 0)
-                    qs[q] = this->right_dims[i].n_states[l];
+                    qs[q] = this->right_dims[i]->n_states[l];
                 else
-                    qs[q] = max(qs[q], this->right_dims[i].n_states[l]);
+                    qs[q] = max(qs[q], this->right_dims[i]->n_states[l]);
             }
-            this->right_dims[i].deallocate();
+            this->right_dims[i]->deallocate();
         }
         StateInfo<S> rref;
         rref.allocate(qs.size());

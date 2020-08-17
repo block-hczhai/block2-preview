@@ -129,10 +129,8 @@ template <typename S> struct DMRG {
                                                                h_eff->ket,
                                                                forward, noise,
                                                                pket);
-                frame->activate(1);
                 pket->deallocate();
                 pket->deallocate_infos();
-                frame->activate(0);
             } else {
                 h_eff->deallocate();
                 dm = MovingEnvironment<S>::density_matrix(
@@ -157,13 +155,13 @@ template <typename S> struct DMRG {
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
-            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'C';
         } else {
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
-            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'C';
             me->ket->canonical_form[i + 1] = 'R';
@@ -223,13 +221,13 @@ template <typename S> struct DMRG {
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
-            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'M';
         } else {
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
-            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'M';
             me->ket->canonical_form[i + 1] = 'R';
@@ -495,7 +493,7 @@ template <typename S> struct ImaginaryTE {
             if (mode == TETypes::RK4 && (i + 1 != me->n_sites - 1 || !advance))
                 me->ket->tensors[i + 1]->normalize();
             info = me->ket->tensors[i]->info->extract_state_info(forward);
-            me->ket->info->left_dims[i + 1] = *info;
+            me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'C';
@@ -503,7 +501,7 @@ template <typename S> struct ImaginaryTE {
             if (mode == TETypes::RK4 && (i != 0 || !advance))
                 me->ket->tensors[i]->normalize();
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
-            me->ket->info->right_dims[i + 1] = *info;
+            me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'C';
             me->ket->canonical_form[i + 1] = 'R';
@@ -721,13 +719,13 @@ template <typename S> struct Compress {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
                 info = mps->tensors[i]->info->extract_state_info(forward);
-                mps->info->left_dims[i + 1] = *info;
+                mps->info->left_dims[i + 1] = info;
                 mps->info->save_left_dims(i + 1);
                 mps->canonical_form[i] = 'L';
                 mps->canonical_form[i + 1] = 'C';
             } else {
                 info = mps->tensors[i + 1]->info->extract_state_info(forward);
-                mps->info->right_dims[i + 1] = *info;
+                mps->info->right_dims[i + 1] = info;
                 mps->info->save_right_dims(i + 1);
                 mps->canonical_form[i] = 'C';
                 mps->canonical_form[i + 1] = 'R';
@@ -945,14 +943,14 @@ template <typename S> struct Expect {
                 shared_ptr<StateInfo<S>> info = nullptr;
                 if (forward) {
                     info = mps->tensors[i]->info->extract_state_info(forward);
-                    mps->info->left_dims[i + 1] = *info;
+                    mps->info->left_dims[i + 1] = info;
                     mps->info->save_left_dims(i + 1);
                     mps->canonical_form[i] = 'L';
                     mps->canonical_form[i + 1] = 'C';
                 } else {
                     info =
                         mps->tensors[i + 1]->info->extract_state_info(forward);
-                    mps->info->right_dims[i + 1] = *info;
+                    mps->info->right_dims[i + 1] = info;
                     mps->info->save_right_dims(i + 1);
                     mps->canonical_form[i] = 'C';
                     mps->canonical_form[i + 1] = 'R';
@@ -1026,14 +1024,14 @@ template <typename S> struct Expect {
                 shared_ptr<StateInfo<S>> info = nullptr;
                 if (forward) {
                     info = mps->tensors[i]->info->extract_state_info(forward);
-                    mps->info->left_dims[i + 1] = *info;
+                    mps->info->left_dims[i + 1] = info;
                     mps->info->save_left_dims(i + 1);
                     mps->canonical_form[i] = 'L';
                     mps->canonical_form[i + 1] = 'M';
                 } else {
                     info =
                         mps->tensors[i + 1]->info->extract_state_info(forward);
-                    mps->info->right_dims[i + 1] = *info;
+                    mps->info->right_dims[i + 1] = info;
                     mps->info->save_right_dims(i + 1);
                     mps->canonical_form[i] = 'M';
                     mps->canonical_form[i + 1] = 'R';

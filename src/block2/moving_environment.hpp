@@ -114,6 +114,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     shared_ptr<SparseMatrixGroup<S>>
     perturbative_noise_two_dot(bool trace_right, int i,
                                const shared_ptr<MPSInfo<S>> &mps_info) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
         vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
@@ -130,34 +134,30 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             perturb_ket_labels.begin(),
             unique(perturb_ket_labels.begin(), perturb_ket_labels.end())));
         // perturbed wavefunctions infos
-        frame->activate(0);
         mps_info->load_left_dims(i);
         mps_info->load_right_dims(i + 2);
-        StateInfo<S> l = mps_info->left_dims[i], ml = mps_info->get_basis(i),
-                     mr = mps_info->get_basis(i + 1),
-                     r = mps_info->right_dims[i + 2];
-        StateInfo<S> ll =
-            StateInfo<S>::tensor_product(l, ml, mps_info->left_dims_fci[i + 1]);
+        StateInfo<S> l = *mps_info->left_dims[i], ml = *mps_info->basis[i],
+                     mr = *mps_info->basis[i + 1],
+                     r = *mps_info->right_dims[i + 2];
+        StateInfo<S> ll = StateInfo<S>::tensor_product(
+            l, ml, *mps_info->left_dims_fci[i + 1]);
         StateInfo<S> rr = StateInfo<S>::tensor_product(
-            mr, r, mps_info->right_dims_fci[i + 1]);
-        frame->activate(1);
+            mr, r, *mps_info->right_dims_fci[i + 1]);
         vector<shared_ptr<SparseMatrixInfo<S>>> infos;
         infos.reserve(perturb_ket_labels.size());
         for (size_t j = 0; j < perturb_ket_labels.size(); j++) {
             shared_ptr<SparseMatrixInfo<S>> info =
-                make_shared<SparseMatrixInfo<S>>();
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
             info->initialize(ll, rr, perturb_ket_labels[j], false, true);
             infos.push_back(info);
         }
-        frame->activate(0);
         rr.deallocate();
         ll.deallocate();
         r.deallocate();
         l.deallocate();
-        frame->activate(1);
         // perturbed wavefunctions
         shared_ptr<SparseMatrixGroup<S>> perturb_ket =
-            make_shared<SparseMatrixGroup<S>>();
+            make_shared<SparseMatrixGroup<S>>(d_alloc);
         perturb_ket->allocate(infos);
         // connection infos
         frame->activate(0);
@@ -618,10 +618,7 @@ template <typename S> struct MovingEnvironment {
                 exprs, mpo->left_operator_names[i - 1], sl);
         Partition<S>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
-            mpo->site_op_infos[bra->info->orbsym.size() == 0
-                                   ? i - 1
-                                   : bra->info->orbsym[i - 1]],
-            left_op_infos_notrunc, mpo->tf->opf->cg);
+            mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_left = Partition<S>::build_left(
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc);
@@ -672,10 +669,7 @@ template <typename S> struct MovingEnvironment {
                 exprs, mpo->right_operator_names[i + dot], sl);
         Partition<S>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
-            envs[i + 1]->right_op_infos,
-            mpo->site_op_infos[bra->info->orbsym.size() == 0
-                                   ? i + dot
-                                   : bra->info->orbsym[i + dot]],
+            envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
             right_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_right = Partition<S>::build_right(
@@ -944,10 +938,7 @@ template <typename S> struct MovingEnvironment {
             frame->load_data(1, get_left_partition_filename(iL));
         Partition<S>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
-            mpo->site_op_infos[bra->info->orbsym.size() == 0
-                                   ? iL
-                                   : bra->info->orbsym[iL]],
-            left_op_infos, mpo->tf->opf->cg);
+            mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
         // left contract
         frame->activate(0);
         new_left = Partition<S>::build_left(lmats, left_op_infos);
@@ -982,10 +973,7 @@ template <typename S> struct MovingEnvironment {
             frame->load_data(1, get_right_partition_filename(iR - 1));
         Partition<S>::init_right_op_infos_notrunc(
             iR, bra->info, ket->info, rsl, rsubsl, envs[iR - 1]->right_op_infos,
-            mpo->site_op_infos[bra->info->orbsym.size() == 0
-                                   ? iR
-                                   : bra->info->orbsym[iR]],
-            right_op_infos, mpo->tf->opf->cg);
+            mpo->site_op_infos[iR], right_op_infos, mpo->tf->opf->cg);
         // right contract
         frame->activate(0);
         new_right = Partition<S>::build_right(rmats, right_op_infos);
@@ -1142,14 +1130,14 @@ template <typename S> struct MovingEnvironment {
             frame->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 2);
-            StateInfo<S> l = mps->info->left_dims[i],
-                         ml = mps->info->get_basis(i),
-                         mr = mps->info->get_basis(i + 1),
-                         r = mps->info->right_dims[i + 2];
+            StateInfo<S> l = *mps->info->left_dims[i],
+                         ml = *mps->info->basis[i],
+                         mr = *mps->info->basis[i + 1],
+                         r = *mps->info->right_dims[i + 2];
             StateInfo<S> ll = StateInfo<S>::tensor_product(
-                l, ml, mps->info->left_dims_fci[i + 1]);
+                l, ml, *mps->info->left_dims_fci[i + 1]);
             StateInfo<S> rr = StateInfo<S>::tensor_product(
-                mr, r, mps->info->right_dims_fci[i + 1]);
+                mr, r, *mps->info->right_dims_fci[i + 1]);
             frame->activate(0);
             old_wfn_info->initialize(ll, rr, mps->info->target, false, true);
             frame->activate(1);
@@ -1202,14 +1190,14 @@ template <typename S> struct MovingEnvironment {
             frame->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 2);
-            StateInfo<S> l = mps->info->left_dims[i],
-                         ml = mps->info->get_basis(i),
-                         mr = mps->info->get_basis(i + 1),
-                         r = mps->info->right_dims[i + 2];
+            StateInfo<S> l = *mps->info->left_dims[i],
+                         ml = *mps->info->basis[i],
+                         mr = *mps->info->basis[i + 1],
+                         r = *mps->info->right_dims[i + 2];
             StateInfo<S> ll = StateInfo<S>::tensor_product(
-                l, ml, mps->info->left_dims_fci[i + 1]);
+                l, ml, *mps->info->left_dims_fci[i + 1]);
             StateInfo<S> rr = StateInfo<S>::tensor_product(
-                mr, r, mps->info->right_dims_fci[i + 1]);
+                mr, r, *mps->info->right_dims_fci[i + 1]);
             frame->activate(0);
             for (int j = 0; j < mps->wfns[0]->n; j++) {
                 old_wfn_infos[j] = make_shared<SparseMatrixInfo<S>>();
@@ -1939,13 +1927,13 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i + 1 != n_sites - 1)) {
                 mps_info->load_left_dims(i + 1);
                 mps_info->load_right_dims(i + 2);
-                l = mps_info->left_dims[i + 1], m = mps_info->get_basis(i + 1),
-                r = mps_info->right_dims[i + 2];
+                l = *mps_info->left_dims[i + 1], m = *mps_info->basis[i + 1],
+                r = *mps_info->right_dims[i + 2];
                 lm = StateInfo<S>::tensor_product(
-                    l, m, mps_info->left_dims_fci[i + 2]);
+                    l, m, *mps_info->left_dims_fci[i + 2]);
                 lmc = StateInfo<S>::get_connection_info(l, m, lm);
                 mr = StateInfo<S>::tensor_product(
-                    m, r, mps_info->right_dims_fci[i + 1]);
+                    m, r, *mps_info->right_dims_fci[i + 1]);
                 mrc = StateInfo<S>::get_connection_info(m, r, mr);
                 shared_ptr<SparseMatrixInfo<S>> owinfo =
                     mps->tensors[i + 1]->info;
@@ -1965,13 +1953,13 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i != 0)) {
                 mps_info->load_left_dims(i);
                 mps_info->load_right_dims(i + 1);
-                l = mps_info->left_dims[i], m = mps_info->get_basis(i),
-                r = mps_info->right_dims[i + 1];
+                l = *mps_info->left_dims[i], m = *mps_info->basis[i],
+                r = *mps_info->right_dims[i + 1];
                 lm = StateInfo<S>::tensor_product(
-                    l, m, mps_info->left_dims_fci[i + 1]);
+                    l, m, *mps_info->left_dims_fci[i + 1]);
                 lmc = StateInfo<S>::get_connection_info(l, m, lm);
                 mr = StateInfo<S>::tensor_product(m, r,
-                                                  mps_info->right_dims_fci[i]);
+                                                  *mps_info->right_dims_fci[i]);
                 mrc = StateInfo<S>::get_connection_info(m, r, mr);
                 shared_ptr<SparseMatrixInfo<S>> owinfo = mps->tensors[i]->info;
                 wfn_info->initialize(l, mr, owinfo->delta_quantum,
@@ -2011,13 +1999,13 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i + 1 != n_sites - 1)) {
                 mps_info->load_left_dims(i + 1);
                 mps_info->load_right_dims(i + 2);
-                l = mps_info->left_dims[i + 1], m = mps_info->get_basis(i + 1),
-                r = mps_info->right_dims[i + 2];
+                l = *mps_info->left_dims[i + 1], m = *mps_info->basis[i + 1],
+                r = *mps_info->right_dims[i + 2];
                 lm = StateInfo<S>::tensor_product(
-                    l, m, mps_info->left_dims_fci[i + 2]);
+                    l, m, *mps_info->left_dims_fci[i + 2]);
                 lmc = StateInfo<S>::get_connection_info(l, m, lm);
                 mr = StateInfo<S>::tensor_product(
-                    m, r, mps_info->right_dims_fci[i + 1]);
+                    m, r, *mps_info->right_dims_fci[i + 1]);
                 mrc = StateInfo<S>::get_connection_info(m, r, mr);
                 assert(mps->tensors[i + 1] == nullptr);
                 vector<shared_ptr<SparseMatrixInfo<S>>> owinfos =
@@ -2048,13 +2036,13 @@ template <typename S> struct MovingEnvironment {
             if ((swapped = i != 0)) {
                 mps_info->load_left_dims(i);
                 mps_info->load_right_dims(i + 1);
-                l = mps_info->left_dims[i], m = mps_info->get_basis(i),
-                r = mps_info->right_dims[i + 1];
+                l = *mps_info->left_dims[i], m = *mps_info->basis[i],
+                r = *mps_info->right_dims[i + 1];
                 lm = StateInfo<S>::tensor_product(
-                    l, m, mps_info->left_dims_fci[i + 1]);
+                    l, m, *mps_info->left_dims_fci[i + 1]);
                 lmc = StateInfo<S>::get_connection_info(l, m, lm);
                 mr = StateInfo<S>::tensor_product(m, r,
-                                                  mps_info->right_dims_fci[i]);
+                                                  *mps_info->right_dims_fci[i]);
                 mrc = StateInfo<S>::get_connection_info(m, r, mr);
                 assert(mps->tensors[i] == nullptr);
                 vector<shared_ptr<SparseMatrixInfo<S>>> owinfos =

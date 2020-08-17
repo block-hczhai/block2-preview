@@ -26,8 +26,8 @@ init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 set_mkl_num_threads(n_threads)
 
 fcidump = FCIDUMP()
-occs = read_occ('../data/CR2.SVP.OCC')
-fcidump.read('../data/CR2.SVP.FCIDUMP')
+occs = read_occ('../../data/CR2.SVP.OCC')
+fcidump.read('../../data/CR2.SVP.FCIDUMP')
 
 vacuum = SU2(0)
 target = SU2(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
@@ -40,7 +40,7 @@ mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
 bond_dim = 250
-mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
 mps_info.tag = "KET"
 mps_info.set_bond_dimension_using_occ(bond_dim, occs)
 mps = MPS(n_sites, 5, 2)

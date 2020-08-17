@@ -62,8 +62,8 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("scratch") != 0)
         scratch = params.at("scratch");
 
-    frame_() =
-        make_shared<DataFrame>((size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch);
+    frame_() = make_shared<DataFrame>((size_t)(0.1 * memory),
+                                      (size_t)(0.9 * memory), scratch);
 
     // random scratch file prefix to avoid conflicts
     if (params.count("prefix") != 0 && params.at("prefix") != "auto")
@@ -243,11 +243,10 @@ template <typename S> void run(const map<string, string> &params) {
         // active sites, active electrons
         vector<string> xcasci = Parsing::split(params.at("casci"), " ", true);
         mps_info = make_shared<CASCIMPSInfo<S>>(
-            norb, vacuum, target, hamil.basis, hamil.orb_sym,
-            Parsing::to_int(xcasci[0]), Parsing::to_int(xcasci[1]));
+            norb, vacuum, target, hamil.basis, Parsing::to_int(xcasci[0]),
+            Parsing::to_int(xcasci[1]));
     } else
-        mps_info = make_shared<MPSInfo<S>>(norb, vacuum, target, hamil.basis,
-                                           hamil.orb_sym);
+        mps_info = make_shared<MPSInfo<S>>(norb, vacuum, target, hamil.basis);
     double bias = 1.0;
 
     if (params.count("occ_bias") != 0)
@@ -266,22 +265,22 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("print_fci_dims") != 0) {
         cout << "left fci dims = ";
         for (int i = 0; i <= norb; i++)
-            cout << mps_info->left_dims_fci[i].n_states_total << " ";
+            cout << mps_info->left_dims_fci[i]->n_states_total << " ";
         cout << endl;
         cout << "right fci dims = ";
         for (int i = 0; i <= norb; i++)
-            cout << mps_info->right_dims_fci[i].n_states_total << " ";
+            cout << mps_info->right_dims_fci[i]->n_states_total << " ";
         cout << endl;
     }
 
     if (params.count("print_mps_dims") != 0) {
         cout << "left mps dims = ";
         for (int i = 0; i <= norb; i++)
-            cout << mps_info->left_dims[i].n_states_total << " ";
+            cout << mps_info->left_dims[i]->n_states_total << " ";
         cout << endl;
         cout << "right mps dims = ";
         for (int i = 0; i <= norb; i++)
-            cout << mps_info->right_dims[i].n_states_total << " ";
+            cout << mps_info->right_dims[i]->n_states_total << " ";
         cout << endl;
     }
 

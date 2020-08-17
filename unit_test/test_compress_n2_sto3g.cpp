@@ -84,7 +84,7 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     t.get_time();
 
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "KET";
 
@@ -119,7 +119,7 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     EXPECT_LT(abs(energy - energy_std), 1E-7);
 
     shared_ptr<MPSInfo<SU2>> imps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     imps_info->set_bond_dimension(bra_bond_dim);
     imps_info->tag = "BRA";
 
@@ -238,7 +238,7 @@ TEST_F(TestCompressN2STO3G, TestSZ) {
     t.get_time();
 
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "KET";
 
@@ -273,7 +273,7 @@ TEST_F(TestCompressN2STO3G, TestSZ) {
     EXPECT_LT(abs(energy - energy_std), 1E-7);
 
     shared_ptr<MPSInfo<SZ>> imps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     imps_info->set_bond_dimension(bra_bond_dim);
     imps_info->tag = "BRA";
 

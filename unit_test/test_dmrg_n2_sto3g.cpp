@@ -52,13 +52,12 @@ void test_dmrg(const vector<vector<S>> &targets,
     t.get_time();
 
     for (int i = 0; i < (int)targets.size(); i++)
-        for (int j = 0; j < 3; j++) {
+        for (int j = 0; j < (int)targets[i].size(); j++) {
 
             S target = targets[i][j];
 
-            shared_ptr<MPSInfo<S>> mps_info =
-                make_shared<MPSInfo<S>>(hamil.n_sites, hamil.vacuum, target,
-                                        hamil.basis, hamil.orb_sym);
+            shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
+                hamil.n_sites, hamil.vacuum, target, hamil.basis);
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
@@ -161,7 +160,7 @@ TEST_F(TestDMRGN2STO3G, TestSZ) {
 
     vector<vector<SZ>> targets(8);
     for (int i = 0; i < 8; i++) {
-        targets[i].resize(3);
+        targets[i].resize(5);
         for (int j = 0; j < 5; j++)
             targets[i][j] = SZ(fcidump->n_elec(), (j - 2) * 2, i);
     }

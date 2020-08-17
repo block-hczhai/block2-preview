@@ -92,7 +92,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS

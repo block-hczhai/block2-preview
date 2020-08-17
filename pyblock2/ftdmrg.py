@@ -144,8 +144,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                          self.target, self.hamil.basis,
-                                          self.hamil.orb_sym)
+                                          self.target, self.hamil.basis)
         mps_info_thermal.set_thermal_limit()
         mps_info_thermal.tag = "INIT"
         mps_info_thermal.save_mutable()
@@ -185,8 +184,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.target, self.hamil.basis,
-                                  self.hamil.orb_sym)
+                                  self.target, self.hamil.basis)
         mps_info.tag = "INIT" if not cont else "FINAL"
         mps_info.load_mutable()
 
@@ -236,13 +234,12 @@ class FTDMRG:
 
         # Ancilla MPSInfo (thermal)
         mps_info_thermal = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                          self.target, self.hamil.basis,
-                                          self.hamil.orb_sym)
+                                          self.target, self.hamil.basis)
         mps_info_thermal.tag = "INIT"
 
         # Ancilla MPSInfo (initial)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.target,
-                                  self.hamil.basis, self.hamil.orb_sym)
+                                  self.hamil.basis)
         mps_info.set_bond_dimension(bond_dim)
         mps_info.tag = "INIT2"
         mps_info.save_mutable()
@@ -315,8 +312,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.target, self.hamil.basis,
-                                  self.hamil.orb_sym)
+                                  self.target, self.hamil.basis)
         mps_info.tag = "FINAL"
 
         # Ancilla MPS (final)
@@ -375,8 +371,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.target, self.hamil.basis,
-                                  self.hamil.orb_sym)
+                                  self.target, self.hamil.basis)
         mps_info.tag = "FINAL"
 
         # Ancilla MPS (final)
@@ -438,8 +433,7 @@ class FTDMRG:
 
         # Ancilla MPSInfo (final)
         mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
-                                  self.target, self.hamil.basis,
-                                  self.hamil.orb_sym)
+                                  self.target, self.hamil.basis)
         mps_info.tag = "FINAL"
 
         # Ancilla MPS (final)

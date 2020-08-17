@@ -33,6 +33,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
+PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
@@ -43,8 +44,11 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ>>>);
@@ -53,6 +57,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SZ>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
                          op_expr_less<SZ>>);
@@ -63,8 +68,11 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrixInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2>>>);
@@ -73,6 +81,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SU2>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
                          op_expr_less<SU2>>);
@@ -362,6 +371,7 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
     bind_array<S>(m, ("Array" + name).c_str());
     bind_array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
         m, "ArrayVectorPLMatInfo");
+    py::bind_vector<vector<shared_ptr<StateInfo<S>>>>(m, "VectorStateInfo");
     py::bind_vector<vector<pair<S, double>>>(m, "VectorPSDouble");
     py::bind_vector<vector<vector<pair<S, double>>>>(m, "VectorVectorPSDouble");
     py::bind_vector<vector<vector<vector<pair<S, double>>>>>(
@@ -490,7 +500,7 @@ template <typename S> void bind_sparse(py::module &m) {
             })
         .def("clear", &SparseMatrix<S>::clear)
         .def("load_data", &SparseMatrix<S>::load_data, py::arg("filename"),
-             py::arg("load_info") = false)
+             py::arg("load_info") = false, py::arg("i_alloc") = nullptr)
         .def("save_data", &SparseMatrix<S>::save_data, py::arg("filename"),
              py::arg("save_info") = false)
         .def("copy_data_from", &SparseMatrix<S>::copy_data_from)
@@ -558,9 +568,13 @@ template <typename S> void bind_sparse(py::module &m) {
 
     py::bind_vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
         m, "VectorPLMatInfo");
+    py::bind_vector<vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>>(
+        m, "VectorVectorPLMatInfo");
     py::bind_vector<vector<shared_ptr<SparseMatrixInfo<S>>>>(m,
                                                              "VectorSpMatInfo");
     py::bind_vector<vector<shared_ptr<SparseMatrix<S>>>>(m, "VectorSpMat");
+    py::bind_vector<vector<map<OpNames, shared_ptr<SparseMatrix<S>>>>>(
+        m, "VectorMapOpNamesSpMat");
     py::bind_map<map<OpNames, shared_ptr<SparseMatrix<S>>>>(m,
                                                             "MapOpNamesSpMat");
     py::bind_map<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
@@ -590,7 +604,7 @@ template <typename S> void bind_sparse(py::module &m) {
                        sizeof(double) * self->total_memory);
             })
         .def("load_data", &SparseMatrixGroup<S>::load_data, py::arg("filename"),
-             py::arg("load_info") = false)
+             py::arg("load_info") = false, py::arg("i_alloc") = nullptr)
         .def("save_data", &SparseMatrixGroup<S>::save_data, py::arg("filename"),
              py::arg("save_info") = false)
         .def("allocate",
@@ -618,46 +632,17 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("n_sites", &MPSInfo<S>::n_sites)
         .def_readwrite("vacuum", &MPSInfo<S>::vacuum)
         .def_readwrite("target", &MPSInfo<S>::target)
-        .def_readwrite("orbsym", &MPSInfo<S>::orbsym)
         .def_readwrite("bond_dim", &MPSInfo<S>::bond_dim)
+        .def_readwrite("basis", &MPSInfo<S>::basis)
+        .def_readwrite("left_dims_fci", &MPSInfo<S>::left_dims_fci)
+        .def_readwrite("right_dims_fci", &MPSInfo<S>::right_dims_fci)
+        .def_readwrite("left_dims", &MPSInfo<S>::left_dims)
+        .def_readwrite("right_dims", &MPSInfo<S>::right_dims)
         .def_readwrite("tag", &MPSInfo<S>::tag)
         .def(py::init([](int n_sites, S vacuum, S target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym) {
-            return make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis.data,
-                                           orbsym);
+                         const vector<shared_ptr<StateInfo<S>>> &basis) {
+            return make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis);
         }))
-        .def_property_readonly("basis",
-                               [](MPSInfo<S> *self) {
-                                   Array<StateInfo<S>>(
-                                       self->basis,
-                                       self->orbsym.empty()
-                                           ? self->n_sites
-                                           : *max_element(self->orbsym.begin(),
-                                                          self->orbsym.end()) +
-                                                 1);
-                               })
-        .def_property_readonly("left_dims_fci",
-                               [](MPSInfo<S> *self) {
-                                   return Array<StateInfo<S>>(
-                                       self->left_dims_fci, self->n_sites + 1);
-                               })
-        .def_property_readonly("right_dims_fci",
-                               [](MPSInfo<S> *self) {
-                                   return Array<StateInfo<S>>(
-                                       self->right_dims_fci, self->n_sites + 1);
-                               })
-        .def_property_readonly("left_dims",
-                               [](MPSInfo<S> *self) {
-                                   return Array<StateInfo<S>>(
-                                       self->left_dims, self->n_sites + 1);
-                               })
-        .def_property_readonly("right_dims",
-                               [](MPSInfo<S> *self) {
-                                   return Array<StateInfo<S>>(
-                                       self->right_dims, self->n_sites + 1);
-                               })
-        .def("get_basis", &MPSInfo<S>::get_basis)
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
         .def("get_multi_type", &MPSInfo<S>::get_multi_type)
         .def("set_bond_dimension_using_occ",
@@ -681,12 +666,12 @@ template <typename S> void bind_mps(py::module &m) {
         m, "DynamicMPSInfo")
         .def_readwrite("iocc", &DynamicMPSInfo<S>::iocc)
         .def_readwrite("n_local", &DynamicMPSInfo<S>::n_local)
-        .def(py::init(
-            [](int n_sites, S vacuum, S target, Array<StateInfo<S>> &basis,
-               const vector<uint8_t> &orbsym, const vector<uint8_t> &iocc) {
-                return make_shared<DynamicMPSInfo<S>>(n_sites, vacuum, target,
-                                                      basis.data, orbsym, iocc);
-            }))
+        .def(py::init([](int n_sites, S vacuum, S target,
+                         const vector<shared_ptr<StateInfo<S>>> &basis,
+                         const vector<uint8_t> &iocc) {
+            return make_shared<DynamicMPSInfo<S>>(n_sites, vacuum, target,
+                                                  basis, iocc);
+        }))
         .def("set_left_bond_dimension_local",
              &DynamicMPSInfo<S>::set_left_bond_dimension_local, py::arg("i"),
              py::arg("match_prev") = false)
@@ -698,19 +683,17 @@ template <typename S> void bind_mps(py::module &m) {
         m, "CASCIMPSInfo")
         .def_readwrite("casci_mask", &CASCIMPSInfo<S>::casci_mask)
         .def(py::init([](int n_sites, S vacuum, S target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym,
+                         const vector<shared_ptr<StateInfo<S>>> &basis,
                          const vector<ActiveTypes> &casci_mask) {
-            return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target,
-                                                basis.data, orbsym, casci_mask);
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target, basis,
+                                                casci_mask);
         }))
         .def(py::init([](int n_sites, S vacuum, S target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym, int n_active_sites,
-                         int n_active_electrons) {
-            return make_shared<CASCIMPSInfo<S>>(
-                n_sites, vacuum, target, basis.data, orbsym, n_active_sites,
-                n_active_electrons);
+                         const vector<shared_ptr<StateInfo<S>>> &basis,
+                         int n_active_sites, int n_active_electrons) {
+            return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target, basis,
+                                                n_active_sites,
+                                                n_active_electrons);
         }));
 
     py::class_<MRCIMPSInfo<S>, shared_ptr<MRCIMPSInfo<S>>, MPSInfo<S>>(
@@ -721,32 +704,29 @@ template <typename S> void bind_mps(py::module &m) {
                       "Up to how many electrons are allowed in ext. orbitals: "
                       "2 gives MR-CISD")
         .def(py::init([](int n_sites, int n_ext, int ci_order, S vacuum,
-                         S target, Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym) {
+                         S target,
+                         const vector<shared_ptr<StateInfo<S>>> &basis) {
             return make_shared<MRCIMPSInfo<S>>(n_sites, n_ext, ci_order, vacuum,
-                                               target, basis.data, orbsym);
+                                               target, basis);
         }));
 
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)
         .def(py::init([](int n_sites, S vacuum, S target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym) {
+                         const vector<shared_ptr<StateInfo<S>>> &basis) {
             return make_shared<AncillaMPSInfo<S>>(n_sites, vacuum, target,
-                                                  basis.data, orbsym);
+                                                  basis);
         }))
-        .def_static("trans_orbsym", &AncillaMPSInfo<S>::trans_orbsym)
+        .def_static("trans_basis", &AncillaMPSInfo<S>::trans_basis)
         .def("set_thermal_limit", &AncillaMPSInfo<S>::set_thermal_limit);
 
     py::class_<MultiMPSInfo<S>, shared_ptr<MultiMPSInfo<S>>, MPSInfo<S>>(
         m, "MultiMPSInfo")
         .def_readwrite("targets", &MultiMPSInfo<S>::targets)
         .def(py::init([](int n_sites, S vacuum, const vector<S> &target,
-                         Array<StateInfo<S>> &basis,
-                         const vector<uint8_t> &orbsym) {
-            return make_shared<MultiMPSInfo<S>>(n_sites, vacuum, target,
-                                                basis.data, orbsym);
+                         const vector<shared_ptr<StateInfo<S>>> &basis) {
+            return make_shared<MultiMPSInfo<S>>(n_sites, vacuum, target, basis);
         }));
 
     py::class_<MPS<S>, shared_ptr<MPS<S>>>(m, "MPS")
@@ -1161,21 +1141,11 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("n_sites", &Hamiltonian<S>::n_sites)
         .def_readwrite("orb_sym", &Hamiltonian<S>::orb_sym)
         .def_readwrite("vacuum", &Hamiltonian<S>::vacuum)
-        .def_property_readonly("basis",
-                               [](Hamiltonian<S> *self) {
-                                   return Array<StateInfo<S>>(self->basis,
-                                                              self->n_syms);
-                               })
-        .def_property_readonly(
-            "site_op_infos",
-            [](Hamiltonian<S> *self) {
-                return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
-                    self->site_op_infos, self->n_syms);
-            })
+        .def_readwrite("basis", &Hamiltonian<S>::basis)
+        .def_readwrite("site_op_infos", &Hamiltonian<S>::site_op_infos)
         .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
         .def("filter_site_ops", &Hamiltonian<S>::filter_site_ops)
         .def("find_site_op_info", &Hamiltonian<S>::find_site_op_info)
-        .def("find_site_norm_op", &Hamiltonian<S>::find_site_norm_op)
         .def("deallocate", &Hamiltonian<S>::deallocate);
 
     py::class_<HamiltonianQC<S>, shared_ptr<HamiltonianQC<S>>, Hamiltonian<S>>(
@@ -1184,8 +1154,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQC<S>::mu)
-        .def("op_prims", [](HamiltonianQC<S> *self,
-                            int idx) { return self->op_prims[idx]; })
+        .def_readwrite("op_prims", &HamiltonianQC<S>::op_prims)
         .def("v", &HamiltonianQC<S>::v)
         .def("t", &HamiltonianQC<S>::t)
         .def("e", &HamiltonianQC<S>::e)
@@ -1471,6 +1440,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
+    py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
     py::bind_vector<vector<vector<int>>>(m, "VectorVectorInt");
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
@@ -1653,13 +1623,33 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def("get_partition_weights", &get_partition_weights, py::arg("beta"),
           py::arg("energies"), py::arg("multiplicities"));
 
-    py::class_<StackAllocator<uint32_t>>(m, "IntAllocator")
+    py::class_<Allocator<uint32_t>, shared_ptr<Allocator<uint32_t>>>(
+        m, "IntAllocator")
+        .def(py::init<>());
+
+    py::class_<Allocator<double>, shared_ptr<Allocator<double>>>(
+        m, "DoubleAllocator")
+        .def(py::init<>());
+
+    py::class_<VectorAllocator<uint32_t>, shared_ptr<VectorAllocator<uint32_t>>,
+               Allocator<uint32_t>>(m, "IntVectorAllocator")
+        .def_readwrite("data", &VectorAllocator<uint32_t>::data)
+        .def(py::init<>());
+
+    py::class_<VectorAllocator<double>, shared_ptr<VectorAllocator<double>>,
+               Allocator<double>>(m, "DoubleVectorAllocator")
+        .def_readwrite("data", &VectorAllocator<double>::data)
+        .def(py::init<>());
+
+    py::class_<StackAllocator<uint32_t>, shared_ptr<StackAllocator<uint32_t>>,
+               Allocator<uint32_t>>(m, "IntStackAllocator")
         .def(py::init<>())
         .def_readwrite("size", &StackAllocator<uint32_t>::size)
         .def_readwrite("used", &StackAllocator<uint32_t>::used)
         .def_readwrite("shift", &StackAllocator<uint32_t>::shift);
 
-    py::class_<StackAllocator<double>>(m, "DoubleAllocator")
+    py::class_<StackAllocator<double>, shared_ptr<StackAllocator<double>>,
+               Allocator<double>>(m, "DoubleStackAllocator")
         .def(py::init<>())
         .def_readwrite("size", &StackAllocator<double>::size)
         .def_readwrite("used", &StackAllocator<double>::used)
@@ -1687,13 +1677,17 @@ template <typename S = void> void bind_io(py::module &m) {
     py::class_<Global>(m, "Global")
         .def_property_static(
             "ialloc", [](py::object) { return ialloc_(); },
-            [](py::object, StackAllocator<uint32_t> *ia) { ialloc_() = ia; })
+            [](py::object, shared_ptr<StackAllocator<uint32_t>> ia) {
+                ialloc_() = ia;
+            })
         .def_property_static(
             "dalloc", [](py::object) { return dalloc_(); },
-            [](py::object, StackAllocator<double> *da) { dalloc_() = da; })
+            [](py::object, shared_ptr<StackAllocator<double>> da) {
+                dalloc_() = da;
+            })
         .def_property_static(
             "frame", [](py::object) { return frame_(); },
-            [](py::object, DataFrame *fr) { frame_() = fr; });
+            [](py::object, shared_ptr<DataFrame> fr) { frame_() = fr; });
 
     py::class_<Random, shared_ptr<Random>>(m, "Random")
         .def_static("rand_seed", &Random::rand_seed, py::arg("i") = 0U)

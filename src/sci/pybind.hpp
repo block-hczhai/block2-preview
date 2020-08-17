@@ -60,11 +60,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
             .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
             .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
             .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
-            .def_property_readonly("basis",
-                                   [](HamiltonianSCI<S> *self) {
-                                       return Array<StateInfo<S>>(self->basis,
-                                                                  self->n_syms);
-                                   })
+            .def_readwrite("basis", &HamiltonianSCI<S>::basis)
             .def("deallocate", &HamiltonianSCI<S>::deallocate);
            //vv hrl: switched off as not really required (now protected)
             /*.def_property_readonly(

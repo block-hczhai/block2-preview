@@ -243,10 +243,10 @@ template <typename S> struct Partition {
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos) {
         frame->activate(0);
         bra_info->load_left_dims(m + 1);
-        StateInfo<S> ibra = bra_info->left_dims[m + 1], iket = ibra;
+        StateInfo<S> ibra = *bra_info->left_dims[m + 1], iket = ibra;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m + 1);
-            iket = ket_info->left_dims[m + 1];
+            iket = *ket_info->left_dims[m + 1];
         }
         frame->activate(1);
         assert(left_op_infos.size() == 0);
@@ -274,22 +274,22 @@ template <typename S> struct Partition {
         const shared_ptr<CG<S>> &cg) {
         frame->activate(1);
         bra_info->load_left_dims(m);
-        StateInfo<S> ibra_prev = bra_info->left_dims[m], iket_prev = ibra_prev;
+        StateInfo<S> ibra_prev = *bra_info->left_dims[m], iket_prev = ibra_prev;
         StateInfo<S> ibra_notrunc = StateInfo<S>::tensor_product(
-                         ibra_prev, bra_info->get_basis(m),
-                         bra_info->left_dims_fci[m + 1]),
+                         ibra_prev, *bra_info->basis[m],
+                         *bra_info->left_dims_fci[m + 1]),
                      iket_notrunc = ibra_notrunc;
         StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         ibra_prev, bra_info->get_basis(m), ibra_notrunc),
+                         ibra_prev, *bra_info->basis[m], ibra_notrunc),
                      iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m);
-            iket_prev = ket_info->left_dims[m];
+            iket_prev = *ket_info->left_dims[m];
             iket_notrunc =
-                StateInfo<S>::tensor_product(iket_prev, ket_info->get_basis(m),
-                                             ket_info->left_dims_fci[m + 1]);
+                StateInfo<S>::tensor_product(iket_prev, *ket_info->basis[m],
+                                             *ket_info->left_dims_fci[m + 1]);
             iket_cinfo = StateInfo<S>::get_connection_info(
-                iket_prev, ket_info->get_basis(m), iket_notrunc);
+                iket_prev, *ket_info->basis[m], iket_notrunc);
         }
         frame->activate(0);
         assert(left_op_infos_notrunc.size() == 0);
@@ -302,8 +302,8 @@ template <typename S> struct Partition {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
             cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                                 ibra_prev, bra_info->get_basis(m), iket_prev,
-                                 ket_info->get_basis(m), ibra_cinfo, iket_cinfo,
+                                 ibra_prev, *bra_info->basis[m], iket_prev,
+                                 *ket_info->basis[m], ibra_cinfo, iket_cinfo,
                                  prev_left_op_infos, site_op_infos, lop_notrunc,
                                  cg);
             lop_notrunc->cinfo = cinfo;
@@ -326,10 +326,10 @@ template <typename S> struct Partition {
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos) {
         frame->activate(0);
         bra_info->load_right_dims(m);
-        StateInfo<S> ibra = bra_info->right_dims[m], iket = ibra;
+        StateInfo<S> ibra = *bra_info->right_dims[m], iket = ibra;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m);
-            iket = ket_info->right_dims[m];
+            iket = *ket_info->right_dims[m];
         }
         frame->activate(1);
         assert(right_op_infos.size() == 0);
@@ -358,22 +358,22 @@ template <typename S> struct Partition {
         const shared_ptr<CG<S>> &cg) {
         frame->activate(1);
         bra_info->load_right_dims(m + 1);
-        StateInfo<S> ibra_prev = bra_info->right_dims[m + 1],
+        StateInfo<S> ibra_prev = *bra_info->right_dims[m + 1],
                      iket_prev = ibra_prev;
         StateInfo<S> ibra_notrunc = StateInfo<S>::tensor_product(
-                         bra_info->get_basis(m), ibra_prev,
-                         bra_info->right_dims_fci[m]),
+                         *bra_info->basis[m], ibra_prev,
+                         *bra_info->right_dims_fci[m]),
                      iket_notrunc = ibra_notrunc;
         StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         bra_info->get_basis(m), ibra_prev, ibra_notrunc),
+                         *bra_info->basis[m], ibra_prev, ibra_notrunc),
                      iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m + 1);
-            iket_prev = ket_info->right_dims[m + 1];
+            iket_prev = *ket_info->right_dims[m + 1];
             iket_notrunc = StateInfo<S>::tensor_product(
-                ket_info->get_basis(m), iket_prev, ket_info->right_dims_fci[m]);
+                *ket_info->basis[m], iket_prev, *ket_info->right_dims_fci[m]);
             iket_cinfo = StateInfo<S>::get_connection_info(
-                ket_info->get_basis(m), iket_prev, iket_notrunc);
+                *ket_info->basis[m], iket_prev, iket_notrunc);
         }
         frame->activate(0);
         assert(right_op_infos_notrunc.size() == 0);
@@ -386,8 +386,8 @@ template <typename S> struct Partition {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
             cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                                 bra_info->get_basis(m), ibra_prev,
-                                 ket_info->get_basis(m), iket_prev, ibra_cinfo,
+                                 *bra_info->basis[m], ibra_prev,
+                                 *ket_info->basis[m], iket_prev, ibra_cinfo,
                                  iket_cinfo, site_op_infos, prev_right_op_infos,
                                  rop_notrunc, cg);
             rop_notrunc->cinfo = cinfo;

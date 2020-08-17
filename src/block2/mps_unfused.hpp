@@ -66,12 +66,12 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
     static shared_ptr<SparseTensor<S>>
     transform_left_fused(int i, const shared_ptr<MPS<S>> &mps, bool wfn) {
         shared_ptr<SparseTensor<S>> ts = make_shared<SparseTensor<S>>();
-        StateInfo<S> m = mps->info->get_basis(i);
+        StateInfo<S> m = *mps->info->basis[i];
         ts->data.resize(m.n);
         mps->info->load_left_dims(i);
-        StateInfo<S> l = mps->info->left_dims[i];
+        StateInfo<S> l = *mps->info->left_dims[i];
         StateInfo<S> lm =
-            StateInfo<S>::tensor_product(l, m, mps->info->left_dims_fci[i + 1]);
+            StateInfo<S>::tensor_product(l, m, *mps->info->left_dims_fci[i + 1]);
         StateInfo<S> clm = StateInfo<S>::get_connection_info(l, m, lm);
         shared_ptr<SparseMatrix<S>> mat = mps->tensors[i];
         assert(wfn == mat->info->is_wavefunction);
@@ -109,12 +109,12 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
     static shared_ptr<SparseTensor<S>>
     transform_right_fused(int i, const shared_ptr<MPS<S>> &mps, bool wfn) {
         shared_ptr<SparseTensor<S>> ts = make_shared<SparseTensor<S>>();
-        StateInfo<S> m = mps->info->get_basis(i);
+        StateInfo<S> m = *mps->info->basis[i];
         ts->data.resize(m.n);
         mps->info->load_right_dims(i + 1);
-        StateInfo<S> r = mps->info->right_dims[i + 1];
+        StateInfo<S> r = *mps->info->right_dims[i + 1];
         StateInfo<S> mr =
-            StateInfo<S>::tensor_product(m, r, mps->info->right_dims_fci[i]);
+            StateInfo<S>::tensor_product(m, r, *mps->info->right_dims_fci[i]);
         StateInfo<S> cmr = StateInfo<S>::get_connection_info(m, r, mr);
         shared_ptr<SparseMatrix<S>> mat = mps->tensors[i];
         assert(wfn == mat->info->is_wavefunction);

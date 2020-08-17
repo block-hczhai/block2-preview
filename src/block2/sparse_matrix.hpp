@@ -46,6 +46,7 @@ template <typename S>
 struct SparseMatrixInfo<
     S, typename enable_if<integral_constant<
            bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+    shared_ptr<Allocator<uint32_t>> alloc;
     // Composite quantum number for row and column quanta
     S *quanta;
     uint16_t *n_states_bra, *n_states_ket;
@@ -477,9 +478,15 @@ struct SparseMatrixInfo<
         }
     };
     shared_ptr<ConnectionInfo> cinfo;
-    SparseMatrixInfo() : n(-1), cinfo(nullptr) {}
-    SparseMatrixInfo deep_copy() const {
+    SparseMatrixInfo(const shared_ptr<Allocator<uint32_t>> &alloc = nullptr)
+        : n(-1), cinfo(nullptr), alloc(alloc) {}
+    SparseMatrixInfo
+    deep_copy(const shared_ptr<Allocator<uint32_t>> &alloc = nullptr) const {
         SparseMatrixInfo other;
+        if (alloc == nullptr)
+            other.alloc = this->alloc->copy(this->alloc);
+        else
+            other.alloc = alloc;
         other.allocate(n);
         copy_data_to(other);
         other.delta_quantum = delta_quantum;
@@ -505,7 +512,9 @@ struct SparseMatrixInfo<
     void load_data(ifstream &ifs) {
         ifs.read((char *)&delta_quantum, sizeof(delta_quantum));
         ifs.read((char *)&n, sizeof(n));
-        uint32_t *ptr = ialloc->allocate((n << 1) + n);
+        if (alloc == nullptr)
+            alloc = ialloc;
+        uint32_t *ptr = alloc->allocate((n << 1) + n);
         ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) + n));
         ifs.read((char *)&is_fermion, sizeof(is_fermion));
         ifs.read((char *)&is_wavefunction, sizeof(is_wavefunction));
@@ -716,8 +725,11 @@ struct SparseMatrixInfo<
                             (uint32_t)n_states_bra[n - 1] * n_states_ket[n - 1];
     }
     void allocate(int length, uint32_t *ptr = 0) {
-        if (ptr == 0)
-            ptr = ialloc->allocate((length << 1) + length);
+        if (ptr == 0) {
+            if (alloc == nullptr)
+                alloc = ialloc;
+            ptr = alloc->allocate((length << 1) + length);
+        }
         quanta = (S *)ptr;
         n_states_bra = (uint16_t *)(ptr + length);
         n_states_ket = (uint16_t *)(ptr + length) + length;
@@ -726,7 +738,8 @@ struct SparseMatrixInfo<
     }
     void deallocate() {
         assert(n != -1);
-        ialloc->deallocate((uint32_t *)quanta, (n << 1) + n);
+        alloc->deallocate((uint32_t *)quanta, (n << 1) + n);
+        alloc = nullptr;
         quanta = nullptr;
         n_states_bra = nullptr;
         n_states_ket = nullptr;
@@ -734,8 +747,8 @@ struct SparseMatrixInfo<
         n = -1;
     }
     void reallocate(int length) {
-        uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, (n << 1) + n,
-                                           (length << 1) + length);
+        uint32_t *ptr = alloc->reallocate((uint32_t *)quanta, (n << 1) + n,
+                                          (length << 1) + length);
         if (ptr == (uint32_t *)quanta)
             memmove(ptr + length, n_states_bra,
                     (length << 1) * sizeof(uint32_t));
@@ -770,8 +783,8 @@ template <typename S> struct SparseMatrix {
     SparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
-    void load_data(
-        const string &filename, bool load_info = false) {
+    void load_data(const string &filename, bool load_info = false,
+                   const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
         if (alloc == nullptr)
             alloc = dalloc;
         ifstream ifs(filename.c_str(), ios::binary);
@@ -779,7 +792,7 @@ template <typename S> struct SparseMatrix {
             throw runtime_error("SparseMatrix:load_data on '" + filename +
                                 "' failed.");
         if (load_info) {
-            info = make_shared<SparseMatrixInfo<S>>();
+            info = make_shared<SparseMatrixInfo<S>>(i_alloc);
             info->load_data(ifs);
         } else
             info = nullptr;
@@ -835,13 +848,10 @@ template <typename S> struct SparseMatrix {
             data = ptr;
     }
     void deallocate() {
-        if (alloc == nullptr) {
+        if (alloc == nullptr)
             // this is the case when this sparse matrix data pointer
             // is an external pointer, shared by many matrices
-            total_memory = 0;
-            data = nullptr;
             return;
-        }
         if (total_memory == 0) {
             assert(data == nullptr);
             return;
@@ -1357,13 +1367,16 @@ template <typename S> struct SparseMatrix {
 };
 
 template <typename S> struct SparseMatrixGroup {
+    shared_ptr<Allocator<double>> alloc;
     vector<shared_ptr<SparseMatrixInfo<S>>> infos;
     vector<size_t> offsets;
     double *data;
     size_t total_memory;
     int n;
-    SparseMatrixGroup() : infos(), offsets(), data(nullptr), total_memory() {}
-    void load_data(const string &filename, bool load_info = false) {
+    SparseMatrixGroup(const shared_ptr<Allocator<double>> &alloc = nullptr)
+        : infos(), offsets(), data(nullptr), total_memory(), alloc(alloc) {}
+    void load_data(const string &filename, bool load_info = false,
+                   const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("SparseMatrixGroup::load_data on '" + filename +
@@ -1374,11 +1387,13 @@ template <typename S> struct SparseMatrixGroup {
         ifs.read((char *)&offsets[0], sizeof(size_t) * n);
         if (load_info)
             for (int i = 0; i < n; i++) {
-                infos[i] = make_shared<SparseMatrixInfo<S>>();
+                infos[i] = make_shared<SparseMatrixInfo<S>>(i_alloc);
                 infos[i]->load_data(ifs);
             }
         ifs.read((char *)&total_memory, sizeof(total_memory));
-        data = dalloc->allocate(total_memory);
+        if (alloc == nullptr)
+            alloc = dalloc;
+        data = alloc->allocate(total_memory);
         ifs.read((char *)data, sizeof(double) * total_memory);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("SparseMatrixGroup::load_data on '" + filename +
@@ -1418,17 +1433,24 @@ template <typename S> struct SparseMatrixGroup {
             return;
         }
         if (ptr == 0) {
-            data = dalloc->allocate(total_memory);
+            if (alloc == nullptr)
+                alloc = dalloc;
+            data = alloc->allocate(total_memory);
             memset(data, 0, sizeof(double) * total_memory);
         } else
             data = ptr;
     }
     void deallocate() {
+        if (alloc == nullptr)
+            // this is the case when this sparse matrix data pointer
+            // is an external pointer, shared by many matrices
+            return;
         if (total_memory == 0) {
             assert(data == nullptr);
             return;
         }
-        dalloc->deallocate(data, total_memory);
+        alloc->deallocate(data, total_memory);
+        alloc = nullptr;
         total_memory = 0;
         data = nullptr;
     }

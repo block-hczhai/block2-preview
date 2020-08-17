@@ -83,7 +83,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
     t.get_time();
 
     shared_ptr<MultiMPSInfo<SU2>> mps_info = make_shared<MultiMPSInfo<SU2>>(
-        norb, vacuum, targets, hamil.basis, hamil.orb_sym);
+        norb, vacuum, targets, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
@@ -196,7 +196,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
     t.get_time();
 
     shared_ptr<MultiMPSInfo<SZ>> mps_info = make_shared<MultiMPSInfo<SZ>>(
-        norb, vacuum, targets, hamil.basis, hamil.orb_sym);
+        norb, vacuum, targets, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS

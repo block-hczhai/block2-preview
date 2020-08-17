@@ -103,7 +103,7 @@ if pg_reorder:
 mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
-mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
 mps_info.set_bond_dimension_using_occ(bond_dims[0], VectorDouble(occ))
 mps = MPS(n_sites, 0, 2)
 mps.initialize(mps_info)

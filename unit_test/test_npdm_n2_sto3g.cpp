@@ -181,7 +181,7 @@ TEST_F(TestNPDM, TestSU2) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
@@ -739,7 +739,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS

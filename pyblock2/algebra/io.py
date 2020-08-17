@@ -176,7 +176,7 @@ class MPSTools:
                     i == bmps.center and bmps.dot == 1):
                 bmps.info.load_left_dims(i)
                 l = bmps.info.left_dims[i]
-                m = bmps.info.get_basis(i)
+                m = bmps.info.basis[i]
                 lm = StateInfo.tensor_product_ref(
                     l, m, bmps.info.left_dims_fci[i + 1])
                 clm = StateInfo.get_connection_info(l, m, lm)
@@ -200,13 +200,13 @@ class MPSTools:
                     i == bmps.center and i == 0 and bmps.dot == 2):
                 if i >= bmps.center + bmps.dot:
                     bmps.info.load_right_dims(i + 1)
-                    m = bmps.info.get_basis(i)
+                    m = bmps.info.basis[i]
                     r = bmps.info.right_dims[i + 1]
                     mr = StateInfo.tensor_product_ref(
                         m, r, bmps.info.right_dims_fci[i])
                 else:
                     bmps.info.load_right_dims(i + 2)
-                    m = bmps.info.get_basis(i + 1)
+                    m = bmps.info.basis[i + 1]
                     r = bmps.info.right_dims[i + 2]
                     mr = StateInfo.tensor_product_ref(
                         m, r, bmps.info.right_dims_fci[i + 1])
@@ -222,8 +222,8 @@ class MPSTools:
                 bmps.info.load_left_dims(i)
                 bmps.info.load_right_dims(i + 2)
                 l = bmps.info.left_dims[i]
-                ma = bmps.info.get_basis(i)
-                mb = bmps.info.get_basis(i + 1)
+                ma = bmps.info.basis[i]
+                mb = bmps.info.basis[i + 1]
                 r = bmps.info.right_dims[i + 2]
                 lm = StateInfo.tensor_product_ref(
                     l, ma, bmps.info.left_dims_fci[i + 1])

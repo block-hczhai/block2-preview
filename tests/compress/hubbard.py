@@ -33,7 +33,7 @@ hamil.opf.seq.mode = SeqTypes.Simple
 mpo = MPOQC(hamil, QCTypes.Conventional)
 mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
-mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
 mps_info.tag = 'KET'
 mps_info.set_bond_dimension(bond_dims[0])
 mps = MPS(n_sites, 0, 2)
@@ -51,7 +51,7 @@ dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
 dmrg.noise_type = NoiseTypes.DensityMatrix
 dmrg.solve(10, mps.center == 0)
 
-bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis, hamil.orb_sym)
+bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
 bra_info.tag = 'BRA'
 bra_info.set_bond_dimension(bond_dims[0] // 2)
 bra = MPS(n_sites, mps.center, 2)

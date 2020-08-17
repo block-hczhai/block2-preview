@@ -80,11 +80,11 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    //     norb, vacuum, target, hamil.basis, hamil.orb_sym);
+    //     norb, vacuum, target, hamil.basis);
 
     // CCSD init
     shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis, hamil.orb_sym);
+        norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -110,11 +110,11 @@ TEST_F(TestDMRG, Test) {
 
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)
-        cout << mps_info->left_dims[i].n_states_total << " ";
+        cout << mps_info->left_dims[i]->n_states_total << " ";
     cout << endl;
     cout << "right dims = ";
     for (int i = 0; i <= norb; i++)
-        cout << mps_info->right_dims[i].n_states_total << " ";
+        cout << mps_info->right_dims[i]->n_states_total << " ";
     cout << endl;
     // abort();
 

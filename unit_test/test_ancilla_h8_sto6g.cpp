@@ -84,7 +84,7 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
 
     shared_ptr<AncillaMPSInfo<SU2>> mps_info_thermal =
         make_shared<AncillaMPSInfo<SU2>>(n_physical_sites, vacuum, target,
-                                         hamil.basis, hamil.orb_sym);
+                                         hamil.basis);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
 
@@ -208,7 +208,7 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
 
     shared_ptr<AncillaMPSInfo<SZ>> mps_info_thermal =
         make_shared<AncillaMPSInfo<SZ>>(n_physical_sites, vacuum, target,
-                                        hamil.basis, hamil.orb_sym);
+                                        hamil.basis);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
 

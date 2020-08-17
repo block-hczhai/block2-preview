@@ -36,13 +36,14 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::right_dims_fci;
     using MPSInfo<S>::vacuum;
     using MPSInfo<S>::n_sites;
-    using MPSInfo<S>::get_basis;
+    using MPSInfo<S>::basis;
     vector<S> targets;
     MultiMPSInfo(int n_sites, S vacuum, const vector<S> &targets,
-                 StateInfo<S> *basis, const vector<uint8_t> orbsym,
+                 const vector<shared_ptr<StateInfo<S>>> &basis,
                  bool init_fci = true)
-        : targets(targets), MPSInfo<S>(n_sites, vacuum, vacuum, basis, orbsym,
+        : targets(targets), MPSInfo<S>(n_sites, vacuum, vacuum, basis,
                                        false) {
+                    if (init_fci)
         set_bond_dimension_fci();
     }
     MultiTypes get_multi_type() const override { return MultiTypes::Multi; }
@@ -59,24 +60,24 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     }
     void set_bond_dimension_fci() override {
         S max_target = *max_element(targets.begin(), targets.end());
-        left_dims_fci[0] = StateInfo<S>(vacuum);
+        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0; i < n_sites; i++)
-            left_dims_fci[i + 1] = StateInfo<S>::tensor_product(
-                left_dims_fci[i], get_basis(i), max_target);
-        right_dims_fci[n_sites] = StateInfo<S>(vacuum);
+            left_dims_fci[i + 1] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                *left_dims_fci[i], *basis[i], max_target));
+        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_fci[i] = StateInfo<S>::tensor_product(
-                get_basis(i), right_dims_fci[i + 1], max_target);
+            right_dims_fci[i] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                *basis[i], *right_dims_fci[i + 1], max_target));
         for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::multi_target_filter(left_dims_fci[i],
-                                              right_dims_fci[i], targets);
-            StateInfo<S>::multi_target_filter(right_dims_fci[i],
-                                              left_dims_fci[i], targets);
+            StateInfo<S>::multi_target_filter(*left_dims_fci[i],
+                                              *right_dims_fci[i], targets);
+            StateInfo<S>::multi_target_filter(*right_dims_fci[i],
+                                              *left_dims_fci[i], targets);
         }
         for (int i = 0; i <= n_sites; i++)
-            left_dims_fci[i].collect();
+            left_dims_fci[i]->collect();
         for (int i = n_sites; i >= 0; i--)
-            right_dims_fci[i].collect();
+            right_dims_fci[i]->collect();
     }
 };
 
@@ -104,6 +105,10 @@ template <typename S> struct MultiMPS : MPS<S> {
     }
     void initialize(const shared_ptr<MPSInfo<S>> &info, bool init_left = true,
                     bool init_right = true) override {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         this->info = info;
         assert(info->get_multi_type() == MultiTypes::Multi);
         shared_ptr<MultiMPSInfo<S>> minfo =
@@ -116,34 +121,27 @@ template <typename S> struct MultiMPS : MPS<S> {
             MPS<S>::initialize_left(info, center - 1);
         if (center >= 0 && center < n_sites && (init_left || init_right)) {
             for (size_t i = 0; i < minfo->targets.size(); i++)
-                wfn_infos[i] = make_shared<SparseMatrixInfo<S>>();
+                wfn_infos[i] = make_shared<SparseMatrixInfo<S>>(i_alloc);
             if (dot == 1) {
                 StateInfo<S> t = StateInfo<S>::tensor_product(
-                    info->left_dims[center], info->get_basis(center),
-                    info->left_dims_fci[center + dot]);
+                    *info->left_dims[center], *info->basis[center],
+                    *info->left_dims_fci[center + dot]);
                 for (size_t i = 0; i < minfo->targets.size(); i++)
-                    wfn_infos[i]->initialize(t, info->right_dims[center + dot],
+                    wfn_infos[i]->initialize(t, *info->right_dims[center + dot],
                                              minfo->targets[i], false, true);
-                t.reallocate(0);
-                for (size_t i = 0; i < minfo->targets.size(); i++)
-                    wfn_infos[i]->reallocate(wfn_infos[i]->n);
             } else {
                 StateInfo<S> tl = StateInfo<S>::tensor_product(
-                    info->left_dims[center], info->get_basis(center),
-                    info->left_dims_fci[center + 1]);
+                    *info->left_dims[center], *info->basis[center],
+                    *info->left_dims_fci[center + 1]);
                 StateInfo<S> tr = StateInfo<S>::tensor_product(
-                    info->get_basis(center + 1), info->right_dims[center + dot],
-                    info->right_dims_fci[center + 1]);
+                    *info->basis[center + 1], *info->right_dims[center + dot],
+                    *info->right_dims_fci[center + 1]);
                 for (size_t i = 0; i < minfo->targets.size(); i++)
                     wfn_infos[i]->initialize(tl, tr, minfo->targets[i], false,
                                              true);
-                tl.reallocate(0);
-                tr.reallocate(0);
-                for (size_t i = 0; i < minfo->targets.size(); i++)
-                    wfn_infos[i]->reallocate(wfn_infos[i]->n);
             }
             for (int j = 0; j < nroots; j++) {
-                wfns[j] = make_shared<SparseMatrixGroup<S>>();
+                wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
                 wfns[j]->allocate(wfn_infos);
             }
         }
@@ -169,6 +167,8 @@ template <typename S> struct MultiMPS : MPS<S> {
         return ss.str();
     }
     void load_data() override {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MultiMPS::load_data on '" + get_filename(-1) +
@@ -179,7 +179,7 @@ template <typename S> struct MultiMPS : MPS<S> {
         wfns.resize(nroots);
         ifs.read((char *)&weights[0], sizeof(double) * nroots);
         for (int i = 0; i < nroots; i++)
-            wfns[i] = make_shared<SparseMatrixGroup<S>>();
+            wfns[i] = make_shared<SparseMatrixGroup<S>>(d_alloc);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MultiMPS::load_data on '" + get_filename(-1) +
                                 "' failed.");
@@ -200,12 +200,14 @@ template <typename S> struct MultiMPS : MPS<S> {
         ofs.close();
     }
     void load_mutable() const override {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr)
-                tensors[i]->load_data(get_filename(i), true);
+                tensors[i]->load_data(get_filename(i), true, i_alloc);
             else if (i == center)
                 for (int j = 0; j < nroots; j++) {
-                    wfns[j]->load_data(get_wfn_filename(j), j == 0);
+                    wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
                     wfns[j]->infos = wfns[0]->infos;
                 }
     }
@@ -223,9 +225,11 @@ template <typename S> struct MultiMPS : MPS<S> {
             wfns[j]->save_data(get_wfn_filename(j), j == 0);
     }
     void load_wavefunction(int i) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
         assert(tensors[i] == nullptr);
         for (int j = 0; j < nroots; j++) {
-            wfns[j]->load_data(get_wfn_filename(j), j == 0);
+            wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
             wfns[j]->infos = wfns[0]->infos;
         }
     }
@@ -245,12 +249,14 @@ template <typename S> struct MultiMPS : MPS<S> {
                 wfns[j]->save_data(get_wfn_filename(j), j == 0);
     }
     void load_tensor(int i) override {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
         assert(tensors[i] != nullptr || i == center);
         if (tensors[i] != nullptr)
-            tensors[i]->load_data(get_filename(i), true);
+            tensors[i]->load_data(get_filename(i), true, i_alloc);
         else
             for (int j = 0; j < nroots; j++) {
-                wfns[j]->load_data(get_wfn_filename(j), j == 0);
+                wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
                 wfns[j]->infos = wfns[0]->infos;
             }
     }

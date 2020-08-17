@@ -113,6 +113,9 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     T *reallocate(T *ptr, size_t n, size_t new_n) override {
         for (int i = (int)data.size() - 1; i >= 0; i--)
             if (&data[i][0] == ptr) {
+                cout << "warning: reallocation in vector allocator may cause "
+                        "undefined behavior!"
+                     << endl;
                 assert(data[i].size() == n);
                 data[i].resize(new_n);
                 return &data[i][0];
@@ -179,8 +182,10 @@ struct DataFrame {
         iptr += imain;
         dptr += dmain;
         for (uint16_t i = 0; i < n_frames - 1; i++) {
-            iallocs.push_back(make_shared<StackAllocator<uint32_t>>(iptr + i * ir, ir));
-            dallocs.push_back(make_shared<StackAllocator<double>>(dptr + i * dr, dr));
+            iallocs.push_back(
+                make_shared<StackAllocator<uint32_t>>(iptr + i * ir, ir));
+            dallocs.push_back(
+                make_shared<StackAllocator<double>>(dptr + i * dr, dr));
         }
         activate(0);
         if (!Parsing::path_exists(save_dir))
@@ -218,7 +223,8 @@ struct DataFrame {
         ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
         ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
-        ofs.write((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
+        ofs.write((char *)iallocs[i]->data,
+                  sizeof(uint32_t) * iallocs[i]->used);
         if (!ofs.good())
             throw runtime_error("DataFrame::save_data on '" + filename +
                                 "' failed.");

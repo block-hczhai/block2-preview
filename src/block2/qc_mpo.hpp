@@ -1130,17 +1130,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {
-        for (uint16_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
-            for (auto it = this->tensors[m]->ops.crbegin();
-                 it != this->tensors[m]->ops.crend(); ++it) {
-                OpElement<S> &op =
-                    *dynamic_pointer_cast<OpElement<S>>(it->first);
-                if (op.name == OpNames::R || op.name == OpNames::RD ||
-                    op.name == OpNames::H ||
-                    (op.name == OpNames::Q &&
-                     op.site_index.s(0) == op.site_index.s(1)))
-                    it->second->deallocate();
-            }
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            this->tensors[m]->deallocate();
     }
 };
 
@@ -2027,15 +2018,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
     }
     void deallocate() override {
-        for (uint16_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
-            for (auto it = this->tensors[m]->ops.crbegin();
-                 it != this->tensors[m]->ops.crend(); ++it) {
-                OpElement<S> &op =
-                    *dynamic_pointer_cast<OpElement<S>>(it->first);
-                if (op.name == OpNames::R || op.name == OpNames::RD ||
-                    op.name == OpNames::H)
-                    it->second->deallocate();
-            }
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            this->tensors[m]->deallocate();
     }
 };
 

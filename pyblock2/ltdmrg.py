@@ -149,8 +149,7 @@ class LTDMRG:
 
         # MultiMPSInfo
         mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                self.targets, self.hamil.basis,
-                                self.hamil.orb_sym)
+                                self.targets, self.hamil.basis)
         mps_info.tag = "FINAL"
         mps_info.set_bond_dimension(bond_dims[0])
 
@@ -214,8 +213,7 @@ class LTDMRG:
 
         # MultiMPSInfo
         mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                self.targets, self.hamil.basis,
-                                self.hamil.orb_sym)
+                                self.targets, self.hamil.basis)
         mps_info.tag = "FINAL"
         mps_info.load_mutable()
 
@@ -234,8 +232,7 @@ class LTDMRG:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
             smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis,
-                                     self.hamil.orb_sym)
+                                     self.targets, self.hamil.basis)
             smps_info.tag = "1NPC"
             for i in range(0, smps_info.n_sites + 1):
                 smps_info.left_dims[i] = mps_info.left_dims[i]
@@ -314,8 +311,7 @@ class LTDMRG:
 
         # MultiMPSInfo
         mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                self.targets, self.hamil.basis,
-                                self.hamil.orb_sym)
+                                self.targets, self.hamil.basis)
         mps_info.tag = "FINAL"
         mps_info.load_mutable()
 
@@ -334,8 +330,7 @@ class LTDMRG:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
             smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis,
-                                     self.hamil.orb_sym)
+                                     self.targets, self.hamil.basis)
             smps_info.tag = "1PDM"
             for i in range(0, smps_info.n_sites + 1):
                 smps_info.left_dims[i] = mps_info.left_dims[i]
@@ -420,8 +415,7 @@ class LTDMRG:
 
         # MultiMPSInfo
         mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                self.targets, self.hamil.basis,
-                                self.hamil.orb_sym)
+                                self.targets, self.hamil.basis)
         mps_info.tag = "FINAL"
         mps_info.load_mutable()
 
@@ -440,8 +434,7 @@ class LTDMRG:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
             smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis,
-                                     self.hamil.orb_sym)
+                                     self.targets, self.hamil.basis)
             smps_info.tag = "2PDM"
             for i in range(0, smps_info.n_sites + 1):
                 smps_info.left_dims[i] = mps_info.left_dims[i]
