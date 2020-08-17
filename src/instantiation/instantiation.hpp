@@ -27,6 +27,7 @@
 #include "../block2/hamiltonian.hpp"
 #include "../block2/moving_environment.hpp"
 #include "../block2/mpo.hpp"
+#include "../block2/mpo_fusing.hpp"
 #include "../block2/mpo_simplification.hpp"
 #include "../block2/mps.hpp"
 #include "../block2/mps_unfused.hpp"
@@ -106,6 +107,10 @@ extern template struct block2::AncillaMPO<block2::SZ>;
 extern template struct block2::MPOSchemer<block2::SU2>;
 extern template struct block2::MPO<block2::SU2>;
 extern template struct block2::AncillaMPO<block2::SU2>;
+
+// mpo_fusing.hpp
+extern template struct block2::FusedMPO<block2::SZ>;
+extern template struct block2::FusedMPO<block2::SU2>;
 
 // mpo_simplification.hpp
 extern template struct block2::SimplifiedMPO<block2::SZ>;

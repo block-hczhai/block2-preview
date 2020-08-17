@@ -32,6 +32,7 @@
 #include "block2/matrix_functions.hpp"
 #include "block2/moving_environment.hpp"
 #include "block2/mpo.hpp"
+#include "block2/mpo_fusing.hpp"
 #include "block2/mpo_simplification.hpp"
 #include "block2/mps.hpp"
 #include "block2/mps_unfused.hpp"

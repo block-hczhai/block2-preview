@@ -884,6 +884,13 @@ template <typename S> struct SparseMatrix {
     double norm() const {
         return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
     }
+    // ratio of zero elements to total size
+    double sparsity() const {
+        size_t nnz = 0;
+        for (size_t i = 0; i < total_memory; i++)
+            nnz += abs(this->data[i]) > TINY;
+        return 1.0 - (double) nnz / total_memory;
+    }
     void iscale(double d) const {
         assert(factor == 1.0);
         MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), d);

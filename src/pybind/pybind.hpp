@@ -1394,6 +1394,12 @@ template <typename S> void bind_mpo(py::module &m) {
         .def("simplify_symbolic", &SimplifiedMPO<S>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S>::simplify);
 
+    py::class_<FusedMPO<S>, shared_ptr<FusedMPO<S>>, MPO<S>>(m, "FusedMPO")
+        .def_readwrite("basis", &FusedMPO<S>::basis)
+        .def(py::init<const shared_ptr<MPO<S>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
+                      uint16_t>());
+
     py::class_<IdentityMPO<S>, shared_ptr<IdentityMPO<S>>, MPO<S>>(
         m, "IdentityMPO")
         .def(py::init<const Hamiltonian<S> &>());
