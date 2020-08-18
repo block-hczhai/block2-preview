@@ -27,6 +27,59 @@ class TestMatrix : public ::testing::Test {
     }
 };
 
+TEST_F(TestMatrix, TestRotate) {
+    for (int i = 0; i < n_tests; i++) {
+        int mk = Random::rand_int(1, 200), nk = Random::rand_int(1, 200);
+        int mb = Random::rand_int(1, 200), nb = Random::rand_int(1, 200);
+        MatrixRef k(dalloc_()->allocate(mk * nk), mk, nk);
+        MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
+        MatrixRef a(dalloc_()->allocate(nb * mk), nb, mk);
+        MatrixRef c(dalloc_()->allocate(mb * nk), mb, nk);
+        MatrixRef ba(dalloc_()->allocate(mb * mk), mb, mk);
+        Random::fill_rand_double(k.data, k.size());
+        Random::fill_rand_double(b.data, b.size());
+        Random::fill_rand_double(a.data, a.size());
+        bool conjk = Random::rand_int(0, 2);
+        bool conjb = Random::rand_int(0, 2);
+        MatrixRef tk = k, tb = b;
+        if (conjk) {
+            tk = MatrixRef(dalloc_()->allocate(mk * nk), nk, mk);
+            for (int ik = 0; ik < mk; ik++)
+                for (int jk = 0; jk < nk; jk++)
+                    tk(jk, ik) = k(ik, jk);
+        }
+        if (conjb) {
+            tb = MatrixRef(dalloc_()->allocate(mb * nb), nb, mb);
+            for (int ib = 0; ib < mb; ib++)
+                for (int jb = 0; jb < nb; jb++)
+                    tb(jb, ib) = b(ib, jb);
+        }
+        c.clear();
+        MatrixFunctions::rotate(a, c, tb, conjb, tk, conjk, 2.0);
+        ba.clear();
+        for (int jb = 0; jb < nb; jb++)
+            for (int ib = 0; ib < mb; ib++)
+                for (int ja = 0; ja < mk; ja++)
+                    ba(ib, ja) += b(ib, jb) * a(jb, ja) * 2.0;
+        for (int ib = 0; ib < mb; ib++)
+            for (int jk = 0; jk < nk; jk++) {
+                double x = 0;
+                for (int ik = 0; ik < mk; ik++)
+                    x += ba(ib, ik) * k(ik, jk);
+                ASSERT_LT(abs(x - c(ib, jk)), 1E-10);
+            }
+        if (conjb)
+            tb.deallocate();
+        if (conjk)
+            tk.deallocate();
+        ba.deallocate();
+        c.deallocate();
+        a.deallocate();
+        b.deallocate();
+        k.deallocate();
+    }
+}
+
 TEST_F(TestMatrix, TestTensorProductDiagonal) {
     for (int i = 0; i < n_tests; i++) {
         int ma = Random::rand_int(1, 200), na = ma;
@@ -50,7 +103,7 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
 TEST_F(TestMatrix, TestTensorProduct) {
     shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
     for (int i = 0; i < n_tests; i++) {
-        int ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
+        int ii = Random::rand_int(0, 3), jj = Random::rand_int(0, 2);
         int ma = Random::rand_int(1, 700), na = Random::rand_int(1, 700);
         int mb = Random::rand_int(1, 700), nb = Random::rand_int(1, 700);
         if (ii == 0)
@@ -83,10 +136,14 @@ TEST_F(TestMatrix, TestTensorProduct) {
                 for (int jb = 0; jb < nb; jb++)
                     tb(jb, ib) = b(ib, jb);
         }
+        int cm_stride = Random::rand_int(0, mc - ma * mb + 1);
+        int cn_stride = Random::rand_int(0, nc - na * nb + 1);
+        int c_stride = cm_stride * c.n + cn_stride;
         if (Random::rand_int(0, 2) || ii == 2)
-            MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
+            MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0,
+                                            c_stride);
         else {
-            batch->tensor_product(ta, conja, tb, conjb, c, 2.0, 0);
+            batch->tensor_product(ta, conja, tb, conjb, c, 2.0, c_stride);
             batch->perform();
             batch->clear();
         }
@@ -95,7 +152,8 @@ TEST_F(TestMatrix, TestTensorProduct) {
                 for (int ib = 0; ib < mb; ib++)
                     for (int jb = 0; jb < nb; jb++)
                         ASSERT_EQ(2.0 * a(ia, ja) * b(ib, jb),
-                                  c(ia * mb + ib, ja * nb + jb));
+                                  c(ia * mb + ib + cm_stride,
+                                    ja * nb + jb + cn_stride));
         if (conjb)
             tb.deallocate();
         if (conja)

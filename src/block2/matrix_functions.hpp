@@ -122,6 +122,7 @@ struct MatrixFunctions {
         int n = a.m * a.n;
         dscal(&n, &scale, a.data, &inc);
     }
+    // a = a + scale * op(b)
     static void iadd(const MatrixRef &a, const MatrixRef &b, double scale,
                      bool conj = false) {
         if (!conj) {
@@ -174,7 +175,7 @@ struct MatrixFunctions {
                   &a.n, &cfactor, c.data, &c.n);
         }
     }
-    // c = bra * a * ket.T
+    // c = bra * a * ket(.T)
     static void rotate(const MatrixRef &a, const MatrixRef &c,
                        const MatrixRef &bra, bool conj_bra,
                        const MatrixRef &ket, bool conj_ket, double scale) {

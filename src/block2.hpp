@@ -24,6 +24,8 @@
 #include "block2/ancilla.hpp"
 #include "block2/batch_gemm.hpp"
 #include "block2/cg.hpp"
+#include "block2/csr_matrix.hpp"
+#include "block2/csr_matrix_functions.hpp"
 #include "block2/determinant.hpp"
 #include "block2/expr.hpp"
 #include "block2/hamiltonian.hpp"
