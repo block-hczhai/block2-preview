@@ -132,57 +132,53 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             op_prims[s][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::NN]->allocate(
                 find_site_op_info(0, S(0, 0, 0)));
-            opf->product(*op_prims[s & 1][OpNames::N],
-                         *op_prims[s >> 1][OpNames::N],
-                         *op_prims[s][OpNames::NN]);
+            opf->product(op_prims[s & 1][OpNames::N],
+                         op_prims[s >> 1][OpNames::N],
+                         op_prims[s][OpNames::NN]);
             op_prims[s][OpNames::A] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::A]->allocate(
                 find_site_op_info(0, S(2, sz_plus[s], 0)));
-            opf->product(*op_prims[s & 1][OpNames::C],
-                         *op_prims[s >> 1][OpNames::C],
-                         *op_prims[s][OpNames::A]);
+            opf->product(op_prims[s & 1][OpNames::C],
+                         op_prims[s >> 1][OpNames::C], op_prims[s][OpNames::A]);
             op_prims[s][OpNames::AD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::AD]->allocate(
                 find_site_op_info(0, S(-2, -sz_plus[s], 0)));
-            opf->product(*op_prims[s >> 1][OpNames::D],
-                         *op_prims[s & 1][OpNames::D],
-                         *op_prims[s][OpNames::AD]);
+            opf->product(op_prims[s >> 1][OpNames::D],
+                         op_prims[s & 1][OpNames::D], op_prims[s][OpNames::AD]);
             op_prims[s][OpNames::B] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::B]->allocate(
                 find_site_op_info(0, S(0, sz_minus[s], 0)));
-            opf->product(*op_prims[s & 1][OpNames::C],
-                         *op_prims[s >> 1][OpNames::D],
-                         *op_prims[s][OpNames::B]);
+            opf->product(op_prims[s & 1][OpNames::C],
+                         op_prims[s >> 1][OpNames::D], op_prims[s][OpNames::B]);
             op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::BD]->allocate(
                 find_site_op_info(0, S(0, -sz_minus[s], 0)));
-            opf->product(*op_prims[s & 1][OpNames::D],
-                         *op_prims[s >> 1][OpNames::C],
-                         *op_prims[s][OpNames::BD]);
+            opf->product(op_prims[s & 1][OpNames::D],
+                         op_prims[s >> 1][OpNames::C],
+                         op_prims[s][OpNames::BD]);
         }
         for (uint8_t s = 0; s < 2; s++) {
             op_prims[s + 4][OpNames::NN] =
                 make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s + 4][OpNames::NN]->allocate(
                 find_site_op_info(0, S(0, 0, 0)));
-            opf->product(*op_prims[s | ((!s) << 1)][OpNames::B],
-                         *op_prims[(!s) | (s << 1)][OpNames::B],
-                         *op_prims[s + 4][OpNames::NN]);
+            opf->product(op_prims[s | ((!s) << 1)][OpNames::B],
+                         op_prims[(!s) | (s << 1)][OpNames::B],
+                         op_prims[s + 4][OpNames::NN]);
         }
         // low (&1): R index, high (>>1): B index
         for (uint8_t s = 0; s < 4; s++) {
             op_prims[s][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::R]->allocate(
                 find_site_op_info(0, S(-1, -sz[s & 1], 0)));
-            opf->product(*op_prims[(s >> 1) | (s & 2)][OpNames::B],
-                         *op_prims[s & 1][OpNames::D],
-                         *op_prims[s][OpNames::R]);
+            opf->product(op_prims[(s >> 1) | (s & 2)][OpNames::B],
+                         op_prims[s & 1][OpNames::D], op_prims[s][OpNames::R]);
             op_prims[s][OpNames::RD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::RD]->allocate(
                 find_site_op_info(0, S(1, sz[s & 1], 0)));
-            opf->product(*op_prims[s & 1][OpNames::C],
-                         *op_prims[(s >> 1) | (s & 2)][OpNames::B],
-                         *op_prims[s][OpNames::RD]);
+            opf->product(op_prims[s & 1][OpNames::C],
+                         op_prims[(s >> 1) | (s & 2)][OpNames::B],
+                         op_prims[s][OpNames::RD]);
         }
         // site norm operators
         const shared_ptr<OpElement<S>> i_op =
@@ -270,47 +266,47 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(*site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::A,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
                                  vacuum)),
-                             *site_norm_ops[m].at(make_shared<OpElement<S>>(
+                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::AD,
                                  SiteIndex({m, m}, {(uint8_t)((s & 8) >> 3),
                                                     (uint8_t)((s & 4) >> 2)}),
                                  vacuum)),
-                             *p.second);
+                             p.second);
                 break;
             case OpNames::CCD:
                 s = op.site_index.ss();
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(*site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::A,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
                                  vacuum)),
-                             *site_norm_ops[m].at(make_shared<OpElement<S>>(
+                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::D,
                                  SiteIndex({m}, {(uint8_t)(s >> 2)}), vacuum)),
-                             *p.second);
+                             p.second);
                 break;
             case OpNames::CDD:
                 s = op.site_index.ss();
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(*site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::B,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
                                  vacuum)),
-                             *site_norm_ops[m].at(make_shared<OpElement<S>>(
+                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::D,
                                  SiteIndex({m}, {(uint8_t)(s >> 2)}), vacuum)),
-                             *p.second);
+                             p.second);
                 break;
             case OpNames::H:
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
@@ -333,14 +329,14 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
-                    p.second->copy_data_from(*op_prims[s].at(OpNames::D));
+                    p.second->copy_data_from(op_prims[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
-                            *op_prims[s + (sp << 1)].at(OpNames::R));
+                            op_prims[s + (sp << 1)].at(OpNames::R));
                         tmp->factor = v(s, sp, i, m, m, m);
-                        opf->iadd(*p.second, *tmp);
+                        opf->iadd(p.second, tmp);
                         if (opf->seq->mode != SeqTypes::None)
                             opf->seq->simple_perform();
                     }
@@ -358,14 +354,14 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
-                    p.second->copy_data_from(*op_prims[s].at(OpNames::C));
+                    p.second->copy_data_from(op_prims[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
-                            *op_prims[s + (sp << 1)].at(OpNames::RD));
+                            op_prims[s + (sp << 1)].at(OpNames::RD));
                         tmp->factor = v(s, sp, i, m, m, m);
-                        opf->iadd(*p.second, *tmp);
+                        opf->iadd(p.second, tmp);
                         if (opf->seq->mode != SeqTypes::None)
                             opf->seq->simple_perform();
                     }
@@ -411,15 +407,14 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                         p.second = make_shared<SparseMatrix<S>>(d_alloc);
                         p.second->allocate(info);
                         p.second->copy_data_from(
-                            *op_prims[(s >> 1) | ((s & 1) << 1)].at(
-                                OpNames::B));
+                            op_prims[(s >> 1) | ((s & 1) << 1)].at(OpNames::B));
                         p.second->factor *= -v(s & 1, s >> 1, i, m, m, j);
                         tmp->allocate(info);
                         for (uint8_t sp = 0; sp < 2; sp++) {
                             tmp->copy_data_from(
-                                *op_prims[sp | (sp << 1)].at(OpNames::B));
+                                op_prims[sp | (sp << 1)].at(OpNames::B));
                             tmp->factor = v(s & 1, sp, i, j, m, m);
-                            opf->iadd(*p.second, *tmp);
+                            opf->iadd(p.second, tmp);
                             if (opf->seq->mode != SeqTypes::None)
                                 opf->seq->simple_perform();
                         }
@@ -562,46 +557,41 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             op_prims[s][OpNames::A] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::A]->allocate(
                 find_site_op_info(0, S(2, s * 2, 0)));
-            this->opf->product(*op_prims[0][OpNames::C],
-                               *op_prims[0][OpNames::C],
-                               *op_prims[s][OpNames::A]);
+            opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::C],
+                         op_prims[s][OpNames::A]);
             op_prims[s][OpNames::AD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::AD]->allocate(
                 find_site_op_info(0, S(-2, s * 2, 0)));
-            this->opf->product(*op_prims[0][OpNames::D],
-                               *op_prims[0][OpNames::D],
-                               *op_prims[s][OpNames::AD]);
+            opf->product(op_prims[0][OpNames::D], op_prims[0][OpNames::D],
+                         op_prims[s][OpNames::AD]);
             op_prims[s][OpNames::B] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::B]->allocate(
                 find_site_op_info(0, S(0, s * 2, 0)));
-            this->opf->product(*op_prims[0][OpNames::C],
-                               *op_prims[0][OpNames::D],
-                               *op_prims[s][OpNames::B]);
+            opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::D],
+                         op_prims[s][OpNames::B]);
             op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::BD]->allocate(
                 find_site_op_info(0, S(0, s * 2, 0)));
-            this->opf->product(*op_prims[0][OpNames::D],
-                               *op_prims[0][OpNames::C],
-                               *op_prims[s][OpNames::BD]);
+            opf->product(op_prims[0][OpNames::D], op_prims[0][OpNames::C],
+                         op_prims[s][OpNames::BD]);
         }
         // NN[1] = sum_{sigma,tau} ad_{p,sigma} a_{p,tau} ad_{p,tau} a_{p,sigma}
         // = -sqrt(3) B1 x B1 + B0 x B0 where B0 x B0 == 0.5 NN
         op_prims[1][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[1][OpNames::NN]->allocate(find_site_op_info(0, S(0, 0, 0)));
-        this->opf->product(*op_prims[1][OpNames::B], *op_prims[1][OpNames::B],
-                           *op_prims[1][OpNames::NN], -sqrt(3.0));
-        this->opf->iadd(*op_prims[1][OpNames::NN], *op_prims[0][OpNames::NN],
-                        0.5);
-        if (this->opf->seq->mode != SeqTypes::None)
-            this->opf->seq->simple_perform();
+        opf->product(op_prims[1][OpNames::B], op_prims[1][OpNames::B],
+                     op_prims[1][OpNames::NN], -sqrt(3.0));
+        opf->iadd(op_prims[1][OpNames::NN], op_prims[0][OpNames::NN], 0.5);
+        if (opf->seq->mode != SeqTypes::None)
+            opf->seq->simple_perform();
         op_prims[0][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[0][OpNames::R]->allocate(find_site_op_info(0, S(-1, 1, 0)));
-        this->opf->product(*op_prims[0][OpNames::B], *op_prims[0][OpNames::D],
-                           *op_prims[0][OpNames::R]);
+        opf->product(op_prims[0][OpNames::B], op_prims[0][OpNames::D],
+                     op_prims[0][OpNames::R]);
         op_prims[0][OpNames::RD] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[0][OpNames::RD]->allocate(find_site_op_info(0, S(1, 1, 0)));
-        this->opf->product(*op_prims[0][OpNames::C], *op_prims[0][OpNames::B],
-                           *op_prims[0][OpNames::RD]);
+        opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::B],
+                     op_prims[0][OpNames::RD]);
         // site norm operators
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
@@ -680,12 +670,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
-                    p.second->copy_data_from(*op_prims[0].at(OpNames::D));
+                    p.second->copy_data_from(op_prims[0].at(OpNames::D));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(info);
-                    tmp->copy_data_from(*op_prims[0].at(OpNames::R));
+                    tmp->copy_data_from(op_prims[0].at(OpNames::R));
                     tmp->factor = v(i, m, m, m);
-                    opf->iadd(*p.second, *tmp);
+                    opf->iadd(p.second, tmp);
                     if (opf->seq->mode != SeqTypes::None)
                         opf->seq->simple_perform();
                     tmp->deallocate();
@@ -699,12 +689,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
-                    p.second->copy_data_from(*op_prims[0].at(OpNames::C));
+                    p.second->copy_data_from(op_prims[0].at(OpNames::C));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
                     tmp->allocate(info);
-                    tmp->copy_data_from(*op_prims[0].at(OpNames::RD));
+                    tmp->copy_data_from(op_prims[0].at(OpNames::RD));
                     tmp->factor = v(i, m, m, m);
-                    opf->iadd(*p.second, *tmp);
+                    opf->iadd(p.second, tmp);
                     if (opf->seq->mode != SeqTypes::None)
                         opf->seq->simple_perform();
                     tmp->deallocate();

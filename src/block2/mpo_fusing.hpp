@@ -65,6 +65,9 @@ template <typename S> struct FusedMPO : MPO<S> {
         MPO<S>::schemer = mpo->schemer->copy();
         MPO<S>::tf = mpo->tf;
         ancilla_type = mpo->get_ancilla_type();
+        char fused_sparse_form =
+            mpo->sparse_form[a] == 'N' && mpo->sparse_form[b] == 'N' ? 'N'
+                                                                     : 'S';
         shared_ptr<Symbolic<S>> fused_mat =
             mpo->tensors[a]->lmat * mpo->tensors[b]->lmat;
         assert(fused_mat->m == 1 || fused_mat->n == 1);
@@ -116,7 +119,9 @@ template <typename S> struct FusedMPO : MPO<S> {
             for (size_t i = 0; i < mat->data.size(); i++)
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = make_shared<SparseMatrix<S>>(d_alloc);
+                    opt->ops[op] = fused_sparse_form == 'N'
+                                       ? make_shared<SparseMatrix<S>>(d_alloc)
+                                       : make_shared<CSRSparseMatrix<S>>();
                 }
         }
         for (auto &p : opt->ops) {
@@ -135,18 +140,21 @@ template <typename S> struct FusedMPO : MPO<S> {
         for (int i = fused_op_infos.size() - 1; i >= 0; i--)
             if (fused_op_infos[i].second->cinfo != nullptr)
                 fused_op_infos[i].second->cinfo->deallocate();
+        this->sparse_form = "";
         for (uint16_t m = 0; m < mpo->n_sites; m++)
             if (m == a) {
                 site_op_infos.push_back(fused_op_infos);
                 tensors.push_back(opt);
                 this->basis.push_back(fused_basis);
                 right_operator_names.push_back(mpo->right_operator_names[m]);
+                this->sparse_form.push_back(fused_sparse_form);
             } else if (m != b) {
                 site_op_infos.push_back(mpo->site_op_infos[m]);
                 tensors.push_back(mpo->tensors[m]);
                 this->basis.push_back(basis[m]);
                 left_operator_names.push_back(mpo->left_operator_names[m]);
                 right_operator_names.push_back(mpo->right_operator_names[m]);
+                this->sparse_form.push_back(mpo->sparse_form[m]);
             } else
                 left_operator_names.push_back(mpo->left_operator_names[m]);
         if (this->schemer != nullptr && this->schemer->left_trans_site >= b)

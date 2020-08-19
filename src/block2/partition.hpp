@@ -21,6 +21,7 @@
 #pragma once
 
 #include "cg.hpp"
+#include "csr_sparse_matrix.hpp"
 #include "mps.hpp"
 #include "operator_tensor.hpp"
 #include "sparse_matrix.hpp"
@@ -67,7 +68,8 @@ template <typename S> struct Partition {
     // Build the shell of contracted left block operators
     static shared_ptr<OperatorTensor<S>> build_left(
         const vector<shared_ptr<Symbolic<S>>> &mats,
-        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos) {
+        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
+        bool csr = false) {
         shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::RVec);
@@ -77,7 +79,8 @@ template <typename S> struct Partition {
             for (size_t i = 0; i < mat->data.size(); i++)
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = make_shared<SparseMatrix<S>>();
+                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S>>()
+                                       : make_shared<SparseMatrix<S>>();
                 }
         }
         for (auto &p : opt->ops) {
@@ -88,10 +91,10 @@ template <typename S> struct Partition {
         return opt;
     }
     // Build the shell of contracted right block operators
-    static shared_ptr<OperatorTensor<S>>
-    build_right(const vector<shared_ptr<Symbolic<S>>> &mats,
-                const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
-                    &right_op_infos) {
+    static shared_ptr<OperatorTensor<S>> build_right(
+        const vector<shared_ptr<Symbolic<S>>> &mats,
+        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
+        bool csr = false) {
         shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::CVec);
@@ -101,7 +104,8 @@ template <typename S> struct Partition {
             for (size_t i = 0; i < mat->data.size(); i++)
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = make_shared<SparseMatrix<S>>();
+                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S>>()
+                                       : make_shared<SparseMatrix<S>>();
                 }
         }
         for (auto &p : opt->ops) {
@@ -301,11 +305,10 @@ template <typename S> struct Partition {
                                     sl[i].is_fermion());
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-            cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,
-                                 ibra_prev, *bra_info->basis[m], iket_prev,
-                                 *ket_info->basis[m], ibra_cinfo, iket_cinfo,
-                                 prev_left_op_infos, site_op_infos, lop_notrunc,
-                                 cg);
+            cinfo->initialize_tp(
+                sl[i], subsl[i], ibra_notrunc, iket_notrunc, ibra_prev,
+                *bra_info->basis[m], iket_prev, *ket_info->basis[m], ibra_cinfo,
+                iket_cinfo, prev_left_op_infos, site_op_infos, lop_notrunc, cg);
             lop_notrunc->cinfo = cinfo;
         }
         frame->activate(1);

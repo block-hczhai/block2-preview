@@ -772,6 +772,8 @@ struct SparseMatrixInfo<
     }
 };
 
+enum struct SparseMatrixTypes : uint8_t { Normal = 0, CSR = 1 };
+
 // Block-sparse Matrix
 // Representing operator, wavefunction, density matrix and MPS tensors
 template <typename S> struct SparseMatrix {
@@ -783,6 +785,9 @@ template <typename S> struct SparseMatrix {
     SparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
+    virtual const SparseMatrixTypes get_type() const {
+        return SparseMatrixTypes::Normal;
+    }
     void load_data(const string &filename, bool load_info = false,
                    const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
         if (alloc == nullptr)
@@ -820,21 +825,21 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         ofs.close();
     }
-    void copy_data_from(const SparseMatrix &other) {
-        assert(total_memory == other.total_memory);
-        memcpy(data, other.data, sizeof(double) * total_memory);
+    virtual void copy_data_from(const shared_ptr<SparseMatrix> &other) {
+        assert(total_memory == other->total_memory);
+        memcpy(data, other->data, sizeof(double) * total_memory);
     }
-    void selective_copy_from(const SparseMatrix &other) {
-        for (int i = 0, k; i < other.info->n; i++)
-            if ((k = info->find_state(other.info->quanta[i])) != -1)
+    virtual void selective_copy_from(const shared_ptr<SparseMatrix> &other) {
+        for (int i = 0, k; i < other->info->n; i++)
+            if ((k = info->find_state(other->info->quanta[i])) != -1)
                 memcpy(data + info->n_states_total[k],
-                       other.data + other.info->n_states_total[i],
+                       other->data + other->info->n_states_total[i],
                        sizeof(double) * ((size_t)info->n_states_bra[k] *
                                          info->n_states_ket[k]));
     }
-    void clear() { memset(data, 0, sizeof(double) * total_memory); }
-    void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
-                  double *ptr = 0) {
+    virtual void clear() { memset(data, 0, sizeof(double) * total_memory); }
+    virtual void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
+                          double *ptr = 0) {
         this->info = info;
         total_memory = info->get_total_memory();
         if (total_memory == 0)
@@ -847,7 +852,7 @@ template <typename S> struct SparseMatrix {
         } else
             data = ptr;
     }
-    void deallocate() {
+    virtual void deallocate() {
         if (alloc == nullptr)
             // this is the case when this sparse matrix data pointer
             // is an external pointer, shared by many matrices
@@ -881,15 +886,15 @@ template <typename S> struct SparseMatrix {
             r += this->operator[](i).trace();
         return r;
     }
-    double norm() const {
+    virtual double norm() const {
         return MatrixFunctions::norm(MatrixRef(data, total_memory, 1));
     }
     // ratio of zero elements to total size
-    double sparsity() const {
+    virtual double sparsity() const {
         size_t nnz = 0;
         for (size_t i = 0; i < total_memory; i++)
             nnz += abs(this->data[i]) > TINY;
-        return 1.0 - (double) nnz / total_memory;
+        return 1.0 - (double)nnz / total_memory;
     }
     void iscale(double d) const {
         assert(factor == 1.0);

@@ -963,7 +963,7 @@ template <typename S> struct MPS {
                 shared_ptr<SparseMatrix<S>> tmp =
                     make_shared<SparseMatrix<S>>(d_alloc);
                 tmp->allocate(tensors[i - 1]->info);
-                tmp->copy_data_from(*tensors[i - 1]);
+                tmp->copy_data_from(tensors[i - 1]);
                 assert(tensors[i - 1] != nullptr);
                 tensors[i - 1]->contract(tmp, tmat);
                 tmp->deallocate();

@@ -52,9 +52,9 @@ template <typename S> struct TensorFunctions {
                 auto pa = abs_value(a->lmat->data[i]),
                      pc = abs_value(c->lmat->data[i]);
                 if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                    c->ops[pc]->copy_data_from(*a->ops[pa]);
+                    c->ops[pc]->copy_data_from(a->ops[pa]);
                 else
-                    c->ops[pc]->selective_copy_from(*a->ops[pa]);
+                    c->ops[pc]->selective_copy_from(a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
@@ -75,9 +75,9 @@ template <typename S> struct TensorFunctions {
                 auto pa = abs_value(a->rmat->data[i]),
                      pc = abs_value(c->rmat->data[i]);
                 if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                    c->ops[pc]->copy_data_from(*a->ops[pa]);
+                    c->ops[pc]->copy_data_from(a->ops[pa]);
                 else
-                    c->ops[pc]->selective_copy_from(*a->ops[pa]);
+                    c->ops[pc]->selective_copy_from(a->ops[pa]);
                 c->ops[pc]->factor = a->ops[pa]->factor;
             }
         }
@@ -120,9 +120,8 @@ template <typename S> struct TensorFunctions {
                              vdqs.begin();
                     shared_ptr<SparseMatrix<S>> vmat = (*vmats)[iv];
                     cmat->info->cinfo = cinfos[ij][k];
-                    opf->tensor_product_multiply(op->conj & 1, *lmat, *rmat,
-                                                 *cmat, *vmat, opdq,
-                                                 op->factor);
+                    opf->tensor_product_multiply(op->conj & 1, lmat, rmat, cmat,
+                                                 vmat, opdq, op->factor);
                 }
             } else {
                 assert(lop.count(i_op) != 0 && rop.count(op->b) != 0);
@@ -140,9 +139,8 @@ template <typename S> struct TensorFunctions {
                              vdqs.begin();
                     shared_ptr<SparseMatrix<S>> vmat = (*vmats)[iv];
                     cmat->info->cinfo = cinfos[ij][k];
-                    opf->tensor_product_multiply(op->conj & 2, *lmat, *rmat,
-                                                 *cmat, *vmat, opdq,
-                                                 op->factor);
+                    opf->tensor_product_multiply(op->conj & 2, lmat, rmat, cmat,
+                                                 vmat, opdq, op->factor);
                 }
             }
             cmat->info->cinfo = old_cinfo;
@@ -177,8 +175,8 @@ template <typename S> struct TensorFunctions {
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix<S>> rmat = rop.at(op->b);
-            opf->tensor_product_multiply(op->conj, *lmat, *rmat, *cmat, *vmat,
-                                         opdq, op->factor);
+            opf->tensor_product_multiply(op->conj, lmat, rmat, cmat, vmat, opdq,
+                                         op->factor);
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
@@ -208,7 +206,7 @@ template <typename S> struct TensorFunctions {
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix<S>> rmat = rop.at(op->b);
-            opf->tensor_product_diagonal(op->conj, *lmat, *rmat, *mat, opdq,
+            opf->tensor_product_diagonal(op->conj, lmat, rmat, mat, opdq,
                                          op->factor);
         } break;
         case OpTypes::Sum: {
@@ -239,7 +237,7 @@ template <typename S> struct TensorFunctions {
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix<S>> rmat = rop.at(op->b);
-            opf->tensor_product(op->conj, *lmat, *rmat, *mat, op->factor);
+            opf->tensor_product(op->conj, lmat, rmat, mat, op->factor);
         } break;
         case OpTypes::SumProd: {
             shared_ptr<OpSumProd<S>> op =
@@ -254,8 +252,8 @@ template <typename S> struct TensorFunctions {
                 tmp->allocate(rop.at(opb)->info);
                 for (size_t i = 0; i < op->ops.size(); i++) {
                     opf->iadd(
-                        *tmp,
-                        *rop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
+                        tmp,
+                        rop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
                         op->factor * op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
@@ -267,17 +265,17 @@ template <typename S> struct TensorFunctions {
                 tmp->allocate(lop.at(opa)->info);
                 for (size_t i = 0; i < op->ops.size(); i++) {
                     opf->iadd(
-                        *tmp,
-                        *lop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
+                        tmp,
+                        lop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
                         op->factor * op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                 }
             }
             if (op->b == nullptr)
-                opf->tensor_product(op->conj, *lop.at(op->a), *tmp, *mat, 1.0);
+                opf->tensor_product(op->conj, lop.at(op->a), tmp, mat, 1.0);
             else
-                opf->tensor_product(op->conj, *tmp, *rop.at(op->b), *mat, 1.0);
+                opf->tensor_product(op->conj, tmp, rop.at(op->b), mat, 1.0);
             tmp->deallocate();
         } break;
         case OpTypes::Sum: {
@@ -300,8 +298,8 @@ template <typename S> struct TensorFunctions {
         for (size_t i = 0; i < a->lmat->data.size(); i++)
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
-                opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
-                                   *mpst_ket, false);
+                opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa), mpst_bra,
+                                   mpst_ket, false);
             }
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
@@ -314,8 +312,8 @@ template <typename S> struct TensorFunctions {
         for (size_t i = 0; i < a->rmat->data.size(); i++)
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
-                opf->tensor_rotate(*a->ops.at(pa), *c->ops.at(pa), *mpst_bra,
-                                   *mpst_ket, true);
+                opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa), mpst_bra,
+                                   mpst_ket, true);
             }
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
@@ -351,7 +349,7 @@ template <typename S> struct TensorFunctions {
                         shared_ptr<OpElement<S>> nexpr =
                             op->strings[i]->get_op();
                         assert(a->ops.count(nexpr) != 0);
-                        opf->iadd(*a->ops.at(nop), *a->ops.at(nexpr),
+                        opf->iadd(a->ops.at(nop), a->ops.at(nexpr),
                                   nexpr->factor * op->strings[i]->factor,
                                   op->strings[i]->conj != 0);
                     }

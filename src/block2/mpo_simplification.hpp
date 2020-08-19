@@ -56,6 +56,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         MPO<S>::tf = mpo->tf;
         MPO<S>::site_op_infos = mpo->site_op_infos;
         MPO<S>::left_operator_names = mpo->left_operator_names;
+        MPO<S>::sparse_form = mpo->sparse_form;
         for (auto &x : MPO<S>::left_operator_names)
             x = x->copy();
         MPO<S>::right_operator_names = mpo->right_operator_names;

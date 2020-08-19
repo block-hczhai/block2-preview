@@ -59,7 +59,7 @@ template <typename S> struct OperatorTensor {
         for (auto &p : ops) {
             shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>();
             mat->allocate(p.second->info);
-            mat->copy_data_from(*p.second);
+            mat->copy_data_from(p.second);
             mat->factor = p.second->factor;
             r->ops[p.first] = mat;
         }

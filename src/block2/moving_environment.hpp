@@ -621,7 +621,8 @@ template <typename S> struct MovingEnvironment {
             mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_left = Partition<S>::build_left(
-            {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc);
+            {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
+            mpo->sparse_form[i - 1] == 'S');
         mpo->tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                                new_left,
                                mpo->left_operator_exprs.size() != 0
@@ -673,7 +674,8 @@ template <typename S> struct MovingEnvironment {
             right_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
         shared_ptr<OperatorTensor<S>> new_right = Partition<S>::build_right(
-            {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc);
+            {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
+            mpo->sparse_form[i + dot] == 'S');
         mpo->tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                                 new_right,
                                 mpo->right_operator_exprs.size() != 0
@@ -941,7 +943,8 @@ template <typename S> struct MovingEnvironment {
             mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
         // left contract
         frame->activate(0);
-        new_left = Partition<S>::build_left(lmats, left_op_infos);
+        new_left = Partition<S>::build_left(lmats, left_op_infos,
+                                            mpo->sparse_form[iL] == 'S');
         mpo->tf->left_contract(
             envs[iL]->left, envs[iL]->middle.front(), new_left,
             mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
@@ -976,7 +979,8 @@ template <typename S> struct MovingEnvironment {
             mpo->site_op_infos[iR], right_op_infos, mpo->tf->opf->cg);
         // right contract
         frame->activate(0);
-        new_right = Partition<S>::build_right(rmats, right_op_infos);
+        new_right = Partition<S>::build_right(rmats, right_op_infos,
+                                              mpo->sparse_form[iR] == 'S');
         mpo->tf->right_contract(envs[iR - 1]->right,
                                 envs[iR - 1]->middle.back(), new_right,
                                 mpo->right_operator_exprs.size() != 0
@@ -1247,7 +1251,7 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
-        OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, noise,
+        OperatorFunctions<S>::trans_product(psi, dm, trace_right, noise,
                                             noise_type);
         return dm;
     }
@@ -1281,8 +1285,8 @@ template <typename S> struct MovingEnvironment {
             for (int j = 0; j < psi[i]->n; j++) {
                 shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
                 wfn->factor = weights[i];
-                OperatorFunctions<S>::trans_product(*wfn, *dm, trace_right,
-                                                    noise, noise_type);
+                OperatorFunctions<S>::trans_product(wfn, dm, trace_right, noise,
+                                                    noise_type);
             }
         return dm;
     }
@@ -1298,11 +1302,11 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
         for (int i = 1; i < mats->n; i++)
-            OperatorFunctions<S>::trans_product(*(*mats)[i], *dm, trace_right,
+            OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);
         double norm = dm->norm();
         dm->iscale(noise / norm);
-        OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, 0.0,
+        OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
                                             NoiseTypes::None);
         return dm;
     }
@@ -1320,7 +1324,7 @@ template <typename S> struct MovingEnvironment {
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
             psi->factor = sqrt(weights[i]);
-            OperatorFunctions<S>::trans_product(*psi, *dm, trace_right, 0.0);
+            OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0);
         }
         psi->data = ptr, psi->factor = 1.0;
         return dm;

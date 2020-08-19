@@ -31,6 +31,9 @@ Features
     * Conventional scheme (switch between NC and CN near the middle site)
 * Symbolic MPO simplification
 * MPS initialization using occupation number
+* Supported matrix representation of site operators
+    * Block-sparse (outer) / dense (inner)
+    * Block-sparse (outer) / elementwise-sparse (CSR, inner)
 * Fermionic MPS algebra (non-spin-adapted only)
 * Determinant overlap (non-spin-adapted only)
 

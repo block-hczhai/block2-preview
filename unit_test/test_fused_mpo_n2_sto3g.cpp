@@ -40,17 +40,33 @@ void test_dmrg(const vector<vector<S>> &targets,
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         mpo = make_shared<FusedMPO<S>>(mpo, hamil.basis, 0, 1);
         hamil.basis = dynamic_pointer_cast<FusedMPO<S>>(mpo)->basis;
         hamil.n_sites = mpo->n_sites;
     }
-    for (int i = 0; i < 3; i++) {
-        mpo = make_shared<FusedMPO<S>>(mpo, hamil.basis, mpo->n_sites - 2, mpo->n_sites - 1);
+    for (int i = 0; i < 2; i++) {
+        mpo = make_shared<FusedMPO<S>>(mpo, hamil.basis, mpo->n_sites - 2,
+                                       mpo->n_sites - 1);
         hamil.basis = dynamic_pointer_cast<FusedMPO<S>>(mpo)->basis;
         hamil.n_sites = mpo->n_sites;
     }
     cout << "MPO fusing end .. T = " << t.get_time() << endl;
+
+    cout << "MPO sparsification start" << endl;
+    for (int idx : vector<int>{0, mpo->n_sites - 1}) {
+        for (auto &op : mpo->tensors[idx]->ops) {
+            shared_ptr<CSRSparseMatrix<S>> smat =
+                make_shared<CSRSparseMatrix<S>>();
+            smat->from_dense(op.second);
+            op.second->deallocate();
+            op.second = smat;
+        }
+        mpo->sparse_form[idx] = 'S';
+    }
+    mpo->tf = make_shared<TensorFunctions<S>>(
+        make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+    cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;

@@ -39,6 +39,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Tensor>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<CSRMatrixRef>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
@@ -488,6 +489,7 @@ template <typename S> void bind_sparse(py::module &m) {
         .def_readwrite("info", &SparseMatrix<S>::info)
         .def_readwrite("factor", &SparseMatrix<S>::factor)
         .def_readwrite("total_memory", &SparseMatrix<S>::total_memory)
+        .def("get_type", &SparseMatrix<S>::get_type)
         .def_property(
             "data",
             [](SparseMatrix<S> *self) {
@@ -504,6 +506,8 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("save_data", &SparseMatrix<S>::save_data, py::arg("filename"),
              py::arg("save_info") = false)
         .def("copy_data_from", &SparseMatrix<S>::copy_data_from)
+        .def("selective_copy_from", &SparseMatrix<S>::selective_copy_from)
+        .def("sparsity", &SparseMatrix<S>::sparsity)
         .def("allocate",
              [](SparseMatrix<S> *self,
                 const shared_ptr<SparseMatrixInfo<S>> &info) {
@@ -554,6 +558,20 @@ template <typename S> void bind_sparse(py::module &m) {
             ss << *self;
             return ss.str();
         });
+
+    py::class_<CSRSparseMatrix<S>, shared_ptr<CSRSparseMatrix<S>>,
+               SparseMatrix<S>>(m, "CSRSparseMatrix")
+        .def(py::init<>())
+        .def_readwrite("csr_data", &CSRSparseMatrix<S>::csr_data)
+        .def("__getitem__",
+             [](CSRSparseMatrix<S> *self, int idx) { return (*self)[idx]; })
+        .def("__setitem__",
+             [](CSRSparseMatrix<S> *self, int idx, const CSRMatrixRef &v) {
+                 (*self)[idx].deallocate();
+                 (*self)[idx] = v;
+             })
+        .def("from_dense", &CSRSparseMatrix<S>::from_dense)
+        .def("to_dense", &CSRSparseMatrix<S>::to_dense);
 
     py::class_<SparseTensor<S>, shared_ptr<SparseTensor<S>>>(m, "SparseTensor")
         .def(py::init<>())
@@ -793,6 +811,10 @@ template <typename S> void bind_operator(py::module &m) {
                     py::arg("a"), py::arg("b"), py::arg("trace_right"),
                     py::arg("noise") = 0.0,
                     py::arg("noise_type") = NoiseTypes::DensityMatrix);
+
+    py::class_<CSROperatorFunctions<S>, shared_ptr<CSROperatorFunctions<S>>,
+               OperatorFunctions<S>>(m, "CSROperatorFunctions")
+        .def(py::init<const shared_ptr<CG<S>> &>());
 
     py::class_<OperatorTensor<S>, shared_ptr<OperatorTensor<S>>>(
         m, "OperatorTensor")
@@ -1353,6 +1375,7 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("n_sites", &MPO<S>::n_sites)
         .def_readwrite("const_e", &MPO<S>::const_e)
         .def_readwrite("tensors", &MPO<S>::tensors)
+        .def_readwrite("sparse_form", &MPO<S>::sparse_form)
         .def_readwrite("left_operator_names", &MPO<S>::left_operator_names)
         .def_readwrite("right_operator_names", &MPO<S>::right_operator_names)
         .def_readwrite("middle_operator_names", &MPO<S>::middle_operator_names)
@@ -1596,6 +1619,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("CN", QCTypes::CN)
         .value("NCCN", QCTypes(QCTypes::NC | QCTypes::CN))
         .value("Conventional", QCTypes::Conventional);
+
+    py::enum_<SparseMatrixTypes>(m, "SparseMatrixTypes", py::arithmetic())
+        .value("Normal", SparseMatrixTypes::Normal)
+        .value("CSR", SparseMatrixTypes::CSR);
 }
 
 template <typename S = void> void bind_io(py::module &m) {
@@ -1727,6 +1754,59 @@ template <typename S = void> void bind_matrix(py::module &m) {
              })
         .def("deallocate", &MatrixRef::deallocate);
 
+    py::class_<CSRMatrixRef, shared_ptr<CSRMatrixRef>>(m, "CSRMatrix")
+        .def(py::init<>())
+        .def(py::init<int, int>())
+        .def_readwrite("m", &CSRMatrixRef::m)
+        .def_readwrite("n", &CSRMatrixRef::n)
+        .def_readwrite("nnz", &CSRMatrixRef::nnz)
+        .def_property(
+            "data",
+            [](CSRMatrixRef *self) {
+                return py::array_t<double>(self->nnz, self->data);
+            },
+            [](CSRMatrixRef *self, const py::array_t<double> &v) {
+                assert(v.size() == self->nnz);
+                memcpy(self->data, v.data(), sizeof(double) * self->nnz);
+            })
+        .def_property(
+            "rows",
+            [](CSRMatrixRef *self) {
+                return py::array_t<int>(self->m + 1, self->rows);
+            },
+            [](CSRMatrixRef *self, const py::array_t<int> &v) {
+                assert(v.size() == self->m + 1);
+                memcpy(self->rows, v.data(), sizeof(int) * (self->m + 1));
+            })
+        .def_property(
+            "cols",
+            [](CSRMatrixRef *self) {
+                return py::array_t<int>(self->nnz, self->cols);
+            },
+            [](CSRMatrixRef *self, const py::array_t<int> &v) {
+                assert(v.size() == self->nnz);
+                memcpy(self->cols, v.data(), sizeof(int) * self->nnz);
+            })
+        .def("__repr__",
+             [](CSRMatrixRef *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("size", &CSRMatrixRef::size)
+        .def("memory_size", &CSRMatrixRef::memory_size)
+        .def("transpose", &CSRMatrixRef::transpose)
+        .def("sparsity", &CSRMatrixRef::sparsity)
+        .def("deep_copy", &CSRMatrixRef::deep_copy)
+        .def("from_dense", &CSRMatrixRef::from_dense)
+        .def("to_dense", &CSRMatrixRef::to_dense)
+        .def("diag", &CSRMatrixRef::diag)
+        .def("trace", &CSRMatrixRef::trace)
+        .def("allocate", &CSRMatrixRef::allocate)
+        .def("deallocate", &CSRMatrixRef::deallocate);
+
+    py::bind_vector<vector<shared_ptr<CSRMatrixRef>>>(m, "VectorCSRMatrix");
+
     py::class_<Tensor, shared_ptr<Tensor>>(m, "Tensor", py::buffer_protocol())
         .def(py::init<int, int, int>())
         .def(py::init<const vector<int> &>())
@@ -1759,6 +1839,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
                 MatrixFunctions::eigs(MatrixRef(a.mutable_data(), n, n),
                                       DiagonalMatrix(w.mutable_data(), n));
             });
+
+    py::class_<CSRMatrixFunctions>(m, "CSRMatrixFunctions");
 
     py::class_<DiagonalMatrix, shared_ptr<DiagonalMatrix>>(
         m, "DiagonalMatrix", py::buffer_protocol())

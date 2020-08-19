@@ -27,13 +27,54 @@ class TestCSRMatrix : public ::testing::Test {
     }
 };
 
-/*
+TEST_F(TestCSRMatrix, TestIadd) {
+    Timer t;
+    double dst = 0.0, spt = 0.0;
+    for (int i = 0; i < n_tests; i++) {
+        int ma = Random::rand_int(1, 200), na = Random::rand_int(1, 200);
+        MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc_()->allocate(ma * na), ma, na);
+        MatrixRef stda(dalloc_()->allocate(ma * na), ma, na);
+        fill_sparse_double(a.data, a.size());
+        fill_sparse_double(b.data, b.size());
+        fill_sparse_double(stda.data, stda.size());
+        bool conj = Random::rand_int(0, 2);
+        MatrixRef tb = b;
+        if (conj) {
+            tb = MatrixRef(dalloc_()->allocate(ma * na), na, ma);
+            for (int ib = 0; ib < ma; ib++)
+                for (int jb = 0; jb < na; jb++)
+                    tb(jb, ib) = b(ib, jb);
+        }
+        double alpha = Random::rand_double();
+        MatrixFunctions::copy(a, stda);
+        t.get_time();
+        MatrixFunctions::iadd(a, tb, alpha, conj);
+        dst += t.get_time();
+        CSRMatrixRef ca, cb;
+        ca.from_dense(stda);
+        cb.from_dense(tb);
+        memset(dalloc_()->data + dalloc_()->used, 0, a.size() * sizeof(double));
+        t.get_time();
+        CSRMatrixFunctions::iadd(ca, cb, alpha, conj);
+        spt += t.get_time();
+        ca.to_dense(stda);
+        ASSERT_TRUE(MatrixFunctions::all_close(stda, a, 1E-10, 0.0));
+        if (conj)
+            tb.deallocate();
+        stda.deallocate();
+        b.deallocate();
+        a.deallocate();
+    }
+    cout << "IADD dense T = " << dst << " csr T = " << spt << endl;
+}
+
 TEST_F(TestCSRMatrix, TestMultiply) {
     Timer t;
     double dst = 0.0, spt = 0.0;
     for (int i = 0; i < n_tests; i++) {
-        int ma = Random::rand_int(1, 400), na = Random::rand_int(1, 400);
-        int mb = na, nb = Random::rand_int(1, 400);
+        int ma = Random::rand_int(1, 200), na = Random::rand_int(1, 200);
+        int mb = na, nb = Random::rand_int(1, 200);
         MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
         MatrixRef c(dalloc_()->allocate(ma * nb), ma, nb);
@@ -83,7 +124,6 @@ TEST_F(TestCSRMatrix, TestMultiply) {
     }
     cout << "MULTI dense T = " << dst << " csr T = " << spt << endl;
 }
-*/
 
 TEST_F(TestCSRMatrix, TestRotate) {
     Timer t;
@@ -123,14 +163,34 @@ TEST_F(TestCSRMatrix, TestRotate) {
         ca.from_dense(a);
         cb.from_dense(tb);
         ck.from_dense(tk);
+        // spket * a * spbra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0, cc.size() * sizeof(double));
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
         t.get_time();
         CSRMatrixFunctions::rotate(a, cc, cb, conjb, ck, conjk, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
+        // spket * a * bra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0, cc.size() * sizeof(double));
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
+        t.get_time();
+        CSRMatrixFunctions::rotate(a, cc, tb, conjb, ck, conjk, alpha);
+        spt += t.get_time();
+        ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
+        // ket * a * spbra
+        cc.clear();
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
+        t.get_time();
+        CSRMatrixFunctions::rotate(a, cc, cb, conjb, tk, conjk, alpha);
+        spt += t.get_time();
+        ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
+        // ket * spa * bra
+        cc.clear();
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
         t.get_time();
         CSRMatrixFunctions::rotate(ca, cc, tb, conjb, tk, conjk, alpha);
         spt += t.get_time();
@@ -145,7 +205,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         b.deallocate();
         k.deallocate();
     }
-    cout << "ROTATE dense T = " << dst << " csr T = " << spt / 2 << endl;
+    cout << "ROTATE dense T = " << dst << " csr T = " << spt / 4 << endl;
 }
 
 TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
@@ -169,19 +229,22 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         ca.from_dense(a);
         cb.from_dense(b);
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0, cc.size() * sizeof(double));
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
         t.get_time();
         CSRMatrixFunctions::tensor_product_diagonal(ca, b, cc, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0, cc.size() * sizeof(double));
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
         t.get_time();
         CSRMatrixFunctions::tensor_product_diagonal(a, cb, cc, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0, cc.size() * sizeof(double));
+        memset(dalloc_()->data + dalloc_()->used, 0,
+               cc.size() * sizeof(double));
         t.get_time();
         CSRMatrixFunctions::tensor_product_diagonal(ca, cb, cc, alpha);
         spt += t.get_time();
@@ -241,13 +304,33 @@ TEST_F(TestCSRMatrix, TestTensorProduct) {
                                         c_stride);
         dst += t.get_time();
         CSRMatrixRef ca, cb, cc(c.m, c.n);
-        ca.from_dense(a);
-        cb.from_dense(b);
+        ca.from_dense(ta);
+        cb.from_dense(tb);
+        // sp x sp
         t.get_time();
         CSRMatrixFunctions::tensor_product(ca, conja, cb, conjb, cc, alpha,
                                            c_stride);
         spt += t.get_time();
         cc.to_dense(xc);
+        cc.deallocate();
+        ASSERT_TRUE(MatrixFunctions::all_close(xc, c, 1E-15, 0.0));
+        // sp x ds
+        cc = CSRMatrixRef(c.m, c.n);
+        t.get_time();
+        CSRMatrixFunctions::tensor_product(ca, conja, tb, conjb, cc, alpha,
+                                           c_stride);
+        spt += t.get_time();
+        cc.to_dense(xc);
+        cc.deallocate();
+        ASSERT_TRUE(MatrixFunctions::all_close(xc, c, 1E-15, 0.0));
+        // ds x sp
+        cc = CSRMatrixRef(c.m, c.n);
+        t.get_time();
+        CSRMatrixFunctions::tensor_product(ta, conja, cb, conjb, cc, alpha,
+                                           c_stride);
+        spt += t.get_time();
+        cc.to_dense(xc);
+        cc.deallocate();
         ASSERT_TRUE(MatrixFunctions::all_close(xc, c, 1E-15, 0.0));
         if (conjb)
             tb.deallocate();
@@ -258,5 +341,5 @@ TEST_F(TestCSRMatrix, TestTensorProduct) {
         b.deallocate();
         a.deallocate();
     }
-    cout << "TP dense T = " << dst << " csr T = " << spt << endl;
+    cout << "TP dense T = " << dst << " csr T = " << spt / 3 << endl;
 }

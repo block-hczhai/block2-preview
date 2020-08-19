@@ -50,6 +50,29 @@ struct CSRMatrixRef {
         : m(m), n(n), nnz(nnz), data(data), rows(rows), cols(cols) {}
     size_t size() const { return (size_t)m * n; }
     int memory_size() const { return nnz + ((nnz + m + 2) >> 1); }
+    CSRMatrixRef
+    transpose(const shared_ptr<Allocator<double>> &alloc = nullptr) const {
+        CSRMatrixRef r(n, m, nnz, nullptr, nullptr, nullptr);
+        r.alloc = alloc;
+        r.allocate();
+        memset(r.rows, 0, sizeof(int) * (n + 1));
+        for (int ia = 0; ia < nnz; ia++)
+            r.rows[cols[ia] + 1]++;
+        for (int ia = 0; ia < n; ia++)
+            r.rows[ia + 1] += r.rows[ia];
+        for (int ia = 0; ia < m; ia++) {
+            int jap = rows[ia], jar = ia == m - 1 ? nnz : rows[ia + 1];
+            for (int ja = jap; ja < jar; ja++) {
+                r.cols[r.rows[cols[ja]]] = ia;
+                r.data[r.rows[cols[ja]]] = data[ja];
+                r.rows[cols[ja]]++;
+            }
+        }
+        for (int ia = n - 1; ia >= 0; ia--)
+            r.rows[ia] -= r.rows[ia] - (ia == 0 ? 0 : r.rows[ia - 1]);
+        return r;
+    }
+    double sparsity() const { return 1.0 - (double)nnz / (m * n); }
     void allocate() {
         if (alloc == nullptr)
             alloc = dalloc;
@@ -60,6 +83,7 @@ struct CSRMatrixRef {
     void deallocate() {
         assert(alloc != nullptr);
         alloc->deallocate(data, memory_size());
+        alloc = nullptr;
         data = nullptr;
         cols = rows = nullptr;
     }
@@ -101,7 +125,7 @@ struct CSRMatrixRef {
         }
         rows[m] = nnz;
     }
-    void to_dense(MatrixRef &mat) {
+    void to_dense(MatrixRef mat) {
         mat.clear();
         for (int i = 0; i < m; i++) {
             int rows_end = i == m - 1 ? nnz : rows[i + 1];
@@ -109,7 +133,7 @@ struct CSRMatrixRef {
                 mat(i, cols[j]) = data[j];
         }
     }
-    void diag(MatrixRef &x) const {
+    void diag(MatrixRef x) const {
         assert(m == n);
         x.clear();
         for (int i = 0; i < m; i++) {

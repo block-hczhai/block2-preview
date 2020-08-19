@@ -98,9 +98,11 @@ template <typename S> struct MPO {
     double const_e;
     shared_ptr<TensorFunctions<S>> tf;
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
+    // N = Normal, S = CSR
+    string sparse_form;
     MPO(int n_sites)
-        : n_sites(n_sites), const_e(0.0), op(nullptr), schemer(nullptr),
-          tf(nullptr) {}
+        : n_sites(n_sites), sparse_form(n_sites, 'N'), const_e(0.0),
+          op(nullptr), schemer(nullptr), tf(nullptr) {}
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual void deallocate() {}
     string get_blocking_formulas() const {
@@ -161,7 +163,9 @@ template <typename S> struct AncillaMPO : MPO<S> {
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::op = mpo->op;
         MPO<S>::tf = mpo->tf;
-        MPO<S>::site_op_infos = vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
+        MPO<S>::site_op_infos =
+            vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
+        MPO<S>::sparse_form = mpo->sparse_form;
         for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
             MPO<S>::site_op_infos[j] = mpo->site_op_infos[i];
             MPO<S>::site_op_infos[j + 1] = mpo->site_op_infos[i];

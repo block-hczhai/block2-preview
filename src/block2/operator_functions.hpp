@@ -46,89 +46,103 @@ template <typename S> struct OperatorFunctions {
         seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
     }
     // a += b * scale
-    void iadd(SparseMatrix<S> &a, const SparseMatrix<S> &b, double scale = 1.0,
-              bool conj = false) const {
-        if (a.info == b.info && !conj) {
+    virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
+                      const shared_ptr<SparseMatrix<S>> &b, double scale = 1.0,
+                      bool conj = false) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal);
+        if (a->info == b->info && !conj) {
             if (seq->mode != SeqTypes::None) {
-                seq->iadd(MatrixRef(a.data, 1, a.total_memory),
-                          MatrixRef(b.data, 1, b.total_memory),
-                          scale * b.factor, a.factor);
-                a.factor = 1.0;
+                seq->iadd(MatrixRef(a->data, 1, a->total_memory),
+                          MatrixRef(b->data, 1, b->total_memory),
+                          scale * b->factor, a->factor);
+                a->factor = 1.0;
             } else {
-                if (a.factor != 1.0) {
+                if (a->factor != 1.0) {
                     MatrixFunctions::iscale(
-                        MatrixRef(a.data, 1, a.total_memory), a.factor);
-                    a.factor = 1.0;
+                        MatrixRef(a->data, 1, a->total_memory), a->factor);
+                    a->factor = 1.0;
                 }
                 if (scale != 0.0)
-                    MatrixFunctions::iadd(MatrixRef(a.data, 1, a.total_memory),
-                                          MatrixRef(b.data, 1, b.total_memory),
-                                          scale * b.factor);
+                    MatrixFunctions::iadd(
+                        MatrixRef(a->data, 1, a->total_memory),
+                        MatrixRef(b->data, 1, b->total_memory),
+                        scale * b->factor);
             }
         } else {
-            S bdq = b.info->delta_quantum;
-            for (int ia = 0, ib; ia < a.info->n; ia++) {
-                S bra = a.info->quanta[ia].get_bra(a.info->delta_quantum);
-                S ket = a.info->quanta[ia].get_ket();
+            S bdq = b->info->delta_quantum;
+            for (int ia = 0, ib; ia < a->info->n; ia++) {
+                S bra = a->info->quanta[ia].get_bra(a->info->delta_quantum);
+                S ket = a->info->quanta[ia].get_ket();
                 S bq = conj ? bdq.combine(ket, bra) : bdq.combine(bra, ket);
                 if (bq != S(S::invalid) &&
-                    ((ib = b.info->find_state(bq)) != -1)) {
-                    double factor = scale * b.factor;
+                    ((ib = b->info->find_state(bq)) != -1)) {
+                    double factor = scale * b->factor;
                     if (conj)
                         factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
                                                    ket.twos());
                     if (seq->mode != SeqTypes::None)
-                        seq->iadd(a[ia], b[ib], factor, a.factor, conj);
+                        seq->iadd((*a)[ia], (*b)[ib], factor, a->factor, conj);
                     else {
-                        if (a.factor != 1.0)
-                            MatrixFunctions::iscale(a[ia], a.factor);
+                        if (a->factor != 1.0)
+                            MatrixFunctions::iscale((*a)[ia], a->factor);
                         if (factor != 0.0)
-                            MatrixFunctions::iadd(a[ia], b[ib], factor, conj);
+                            MatrixFunctions::iadd((*a)[ia], (*b)[ib], factor,
+                                                  conj);
                     }
                 }
             }
-            a.factor = 1;
+            a->factor = 1;
         }
     }
-    void tensor_rotate(const SparseMatrix<S> &a, const SparseMatrix<S> &c,
-                       const SparseMatrix<S> &rot_bra,
-                       const SparseMatrix<S> &rot_ket, bool trans,
-                       double scale = 1.0) const {
-        scale = scale * a.factor * rot_bra.factor * rot_ket.factor;
-        assert(c.factor == 1.0);
+    virtual void tensor_rotate(const shared_ptr<SparseMatrix<S>> &a,
+                               const shared_ptr<SparseMatrix<S>> &c,
+                               const shared_ptr<SparseMatrix<S>> &rot_bra,
+                               const shared_ptr<SparseMatrix<S>> &rot_ket,
+                               bool trans, double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal &&
+               rot_bra->get_type() == SparseMatrixTypes::Normal &&
+               rot_ket->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * rot_bra->factor * rot_ket->factor;
+        assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        S adq = a.info->delta_quantum, cdq = c.info->delta_quantum;
-        assert(adq == cdq && a.info->n >= c.info->n);
-        for (int ic = 0, ia = 0; ic < c.info->n; ia++, ic++) {
-            while (a.info->quanta[ia] != c.info->quanta[ic])
+        S adq = a->info->delta_quantum, cdq = c->info->delta_quantum;
+        assert(adq == cdq && a->info->n >= c->info->n);
+        for (int ic = 0, ia = 0; ic < c->info->n; ia++, ic++) {
+            while (a->info->quanta[ia] != c->info->quanta[ic])
                 ia++;
-            S cq = c.info->quanta[ic].get_bra(cdq);
-            S cqprime = c.info->quanta[ic].get_ket();
-            int ibra = rot_bra.info->find_state(cq);
-            int iket = rot_ket.info->find_state(cqprime);
+            S cq = c->info->quanta[ic].get_bra(cdq);
+            S cqprime = c->info->quanta[ic].get_ket();
+            int ibra = rot_bra->info->find_state(cq);
+            int iket = rot_ket->info->find_state(cqprime);
             if (seq->mode != SeqTypes::None)
-                seq->rotate(a[ia], c[ic], rot_bra[ibra], !trans, rot_ket[iket],
-                            trans, scale);
+                seq->rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra], !trans,
+                            (*rot_ket)[iket], trans, scale);
             else
-                MatrixFunctions::rotate(a[ia], c[ic], rot_bra[ibra], !trans,
-                                        rot_ket[iket], trans, scale);
+                MatrixFunctions::rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra],
+                                        !trans, (*rot_ket)[iket], trans, scale);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
-    void tensor_product_diagonal(uint8_t conj, const SparseMatrix<S> &a,
-                                 const SparseMatrix<S> &b,
-                                 const SparseMatrix<S> &c, S opdq,
-                                 double scale = 1.0) const {
-        scale = scale * a.factor * b.factor;
-        assert(c.factor == 1.0);
+    virtual void tensor_product_diagonal(uint8_t conj,
+                                         const shared_ptr<SparseMatrix<S>> &a,
+                                         const shared_ptr<SparseMatrix<S>> &b,
+                                         const shared_ptr<SparseMatrix<S>> &c,
+                                         S opdq, double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * b->factor;
+        assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        S adq = a.info->delta_quantum, bdq = b.info->delta_quantum;
-        assert(c.info->cinfo != nullptr);
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
-            c.info->cinfo;
+            c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
@@ -140,28 +154,33 @@ template <typename S> struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
-                seq->tensor_product_diagonal(a[ia], b[ib], c[ic],
+                seq->tensor_product_diagonal((*a)[ia], (*b)[ib], (*c)[ic],
                                              scale * factor);
             else
-                MatrixFunctions::tensor_product_diagonal(a[ia], b[ib], c[ic],
-                                                         scale * factor);
+                MatrixFunctions::tensor_product_diagonal(
+                    (*a)[ia], (*b)[ib], (*c)[ic], scale * factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
-    void tensor_product_multiply(uint8_t conj, const SparseMatrix<S> &a,
-                                 const SparseMatrix<S> &b,
-                                 const SparseMatrix<S> &c,
-                                 const SparseMatrix<S> &v, S opdq,
-                                 double scale = 1.0) const {
-        scale = scale * a.factor * b.factor * c.factor;
-        assert(v.factor == 1.0);
+    virtual void tensor_product_multiply(uint8_t conj,
+                                         const shared_ptr<SparseMatrix<S>> &a,
+                                         const shared_ptr<SparseMatrix<S>> &b,
+                                         const shared_ptr<SparseMatrix<S>> &c,
+                                         const shared_ptr<SparseMatrix<S>> &v,
+                                         S opdq, double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal &&
+               v->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * b->factor * c->factor;
+        assert(v->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        S adq = a.info->delta_quantum, bdq = b.info->delta_quantum;
-        assert(c.info->cinfo != nullptr);
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
-            c.info->cinfo;
+            c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
@@ -177,32 +196,38 @@ template <typename S> struct OperatorFunctions {
                 seq->simple_perform();
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
-                seq->rotate(c[ic], v[iv], a[ia], conj & 1, b[ib], !(conj & 2),
-                            scale * factor);
+                seq->rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
+                            !(conj & 2), scale * factor);
             else {
-                seq->cumulative_nflop += (size_t)c[ic].m * c[ic].n *
-                                             ((conj & 2) ? b[ib].n : b[ib].n) +
-                                         (size_t)a[ia].m * a[ia].n *
-                                             ((conj & 2) ? b[ib].n : b[ib].n);
-                MatrixFunctions::rotate(c[ic], v[iv], a[ia], conj & 1, b[ib],
-                                        !(conj & 2), scale * factor);
+                seq->cumulative_nflop +=
+                    (size_t)(*c)[ic].m * (*c)[ic].n *
+                        ((conj & 2) ? (*b)[ib].n : (*b)[ib].n) +
+                    (size_t)(*a)[ia].m * (*a)[ia].n *
+                        ((conj & 2) ? (*b)[ib].n : (*b)[ib].n);
+                MatrixFunctions::rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                        (*b)[ib], !(conj & 2), scale * factor);
             }
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
-    void tensor_product(uint8_t conj, const SparseMatrix<S> &a,
-                        const SparseMatrix<S> &b, SparseMatrix<S> &c,
-                        double scale = 1.0) const {
-        scale = scale * a.factor * b.factor;
-        assert(c.factor == 1.0);
+    virtual void tensor_product(uint8_t conj,
+                                const shared_ptr<SparseMatrix<S>> &a,
+                                const shared_ptr<SparseMatrix<S>> &b,
+                                const shared_ptr<SparseMatrix<S>> &c,
+                                double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * b->factor;
+        assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        S adq = a.info->delta_quantum, bdq = b.info->delta_quantum,
-          cdq = c.info->delta_quantum;
-        assert(c.info->cinfo != nullptr);
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum,
+          cdq = c->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
-            c.info->cinfo;
+            c->info->cinfo;
         S abdq = cdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
@@ -215,38 +240,44 @@ template <typename S> struct OperatorFunctions {
             uint32_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
-                seq->tensor_product(a[ia], conj & 1, b[ib], (conj & 2) >> 1,
-                                    c[ic], scale * factor, stride);
+                seq->tensor_product((*a)[ia], conj & 1, (*b)[ib],
+                                    (conj & 2) >> 1, (*c)[ic], scale * factor,
+                                    stride);
             else
-                MatrixFunctions::tensor_product(a[ia], conj & 1, b[ib],
-                                                (conj & 2) >> 1, c[ic],
+                MatrixFunctions::tensor_product((*a)[ia], conj & 1, (*b)[ib],
+                                                (conj & 2) >> 1, (*c)[ic],
                                                 scale * factor, stride);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
     // c = a * b * scale
-    void product(const SparseMatrix<S> &a, const SparseMatrix<S> &b,
-                 const SparseMatrix<S> &c, double scale = 1.0) const {
-        scale = scale * a.factor * b.factor;
-        assert(c.factor == 1.0);
+    void product(const shared_ptr<SparseMatrix<S>> &a,
+                 const shared_ptr<SparseMatrix<S>> &b,
+                 const shared_ptr<SparseMatrix<S>> &c,
+                 double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * b->factor;
+        assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        int adq = a.info->delta_quantum.multiplicity() - 1,
-            bdq = b.info->delta_quantum.multiplicity() - 1,
-            cdq = c.info->delta_quantum.multiplicity() - 1;
-        for (int ic = 0; ic < c.info->n; ic++) {
-            S cq = c.info->quanta[ic].get_bra(c.info->delta_quantum);
-            S cqprime = c.info->quanta[ic].get_ket();
-            S aps = cq - a.info->delta_quantum;
+        int adq = a->info->delta_quantum.multiplicity() - 1,
+            bdq = b->info->delta_quantum.multiplicity() - 1,
+            cdq = c->info->delta_quantum.multiplicity() - 1;
+        for (int ic = 0; ic < c->info->n; ic++) {
+            S cq = c->info->quanta[ic].get_bra(c->info->delta_quantum);
+            S cqprime = c->info->quanta[ic].get_ket();
+            S aps = cq - a->info->delta_quantum;
             for (int k = 0; k < aps.count(); k++) {
                 S aqprime = aps[k];
-                int ia = a.info->find_state(
-                    a.info->delta_quantum.combine(cq, aps[k]));
+                int ia = a->info->find_state(
+                    a->info->delta_quantum.combine(cq, aps[k]));
                 if (ia != -1) {
-                    S bl = b.info->delta_quantum.combine(aqprime, cqprime);
+                    S bl = b->info->delta_quantum.combine(aqprime, cqprime);
                     if (bl != S(S::invalid)) {
-                        int ib = b.info->find_state(bl);
+                        int ib = b->info->find_state(bl);
                         if (ib != -1) {
                             int aqpj = aqprime.multiplicity() - 1,
                                 cqj = cq.multiplicity() - 1,
@@ -255,8 +286,8 @@ template <typename S> struct OperatorFunctions {
                                 cg->racah(cqpj, bdq, cqj, adq, aqpj, cdq);
                             factor *= sqrt((cdq + 1) * (aqpj + 1)) *
                                       (((adq + bdq - cdq) & 2) ? -1 : 1);
-                            MatrixFunctions::multiply(a[ia], false, b[ib],
-                                                      false, c[ic],
+                            MatrixFunctions::multiply((*a)[ia], false, (*b)[ib],
+                                                      false, (*c)[ic],
                                                       scale * factor, 1.0);
                         }
                     }
@@ -266,53 +297,56 @@ template <typename S> struct OperatorFunctions {
     }
     // Product with transposed tensor: [a] x [b]^T or [a]^T x [b]
     static void
-    trans_product(const SparseMatrix<S> &a, const SparseMatrix<S> &b,
-                  bool trace_right, double noise = 0.0,
+    trans_product(const shared_ptr<SparseMatrix<S>> &a,
+                  const shared_ptr<SparseMatrix<S>> &b, bool trace_right,
+                  double noise = 0.0,
                   NoiseTypes noise_type = NoiseTypes::DensityMatrix) {
-        double scale = a.factor * a.factor, noise_scale = 0;
-        assert(b.factor == 1.0);
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal);
+        double scale = a->factor * a->factor, noise_scale = 0;
+        assert(b->factor == 1.0);
         if (abs(scale) < TINY && noise == 0.0)
             return;
         SparseMatrix<S> tmp;
         if (noise != 0 && noise_type == NoiseTypes::Wavefunction) {
-            tmp.allocate(a.info);
+            tmp.allocate(a->info);
             tmp.randomize(-0.5, 0.5);
             noise_scale = noise / tmp.norm();
             noise_scale *= noise_scale;
         } else if (noise != 0 && noise_type == NoiseTypes::DensityMatrix) {
-            tmp.allocate(b.info);
+            tmp.allocate(b->info);
             tmp.randomize(0.0, 1.0);
             noise_scale = noise * noise / tmp.norm();
         }
         if (trace_right)
-            for (int ia = 0; ia < a.info->n; ia++) {
-                S qb = a.info->quanta[ia].get_bra(a.info->delta_quantum);
-                int ib = b.info->find_state(qb);
+            for (int ia = 0; ia < a->info->n; ia++) {
+                S qb = a->info->quanta[ia].get_bra(a->info->delta_quantum);
+                int ib = b->info->find_state(qb);
                 if (ib == -1)
                     continue;
-                MatrixFunctions::multiply(a[ia], false, a[ia], true, b[ib],
-                                          scale, 1.0);
+                MatrixFunctions::multiply((*a)[ia], false, (*a)[ia], true,
+                                          (*b)[ib], scale, 1.0);
                 if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
                     MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
-                                              b[ib], noise_scale, 1.0);
+                                              (*b)[ib], noise_scale, 1.0);
                 else if (noise_scale != 0 &&
                          noise_type == NoiseTypes::DensityMatrix)
-                    MatrixFunctions::iadd(b[ib], tmp[ib], noise_scale);
+                    MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         else
-            for (int ia = 0; ia < a.info->n; ia++) {
-                S qb = -a.info->quanta[ia].get_ket();
-                int ib = b.info->find_state(qb);
+            for (int ia = 0; ia < a->info->n; ia++) {
+                S qb = -a->info->quanta[ia].get_ket();
+                int ib = b->info->find_state(qb);
                 if (ib == -1)
                     continue;
-                MatrixFunctions::multiply(a[ia], true, a[ia], false, b[ib],
-                                          scale, 1.0);
+                MatrixFunctions::multiply((*a)[ia], true, (*a)[ia], false,
+                                          (*b)[ib], scale, 1.0);
                 if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
                     MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
-                                              b[ib], noise_scale, 1.0);
+                                              (*b)[ib], noise_scale, 1.0);
                 else if (noise_scale != 0 &&
                          noise_type == NoiseTypes::DensityMatrix)
-                    MatrixFunctions::iadd(b[ib], tmp[ib], noise_scale);
+                    MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         if (noise != 0)
             tmp.deallocate();

@@ -22,6 +22,8 @@
 
 #include "../block2/allocator.hpp"
 #include "../block2/cg.hpp"
+#include "../block2/csr_operator_functions.hpp"
+#include "../block2/csr_sparse_matrix.hpp"
 #include "../block2/determinant.hpp"
 #include "../block2/expr.hpp"
 #include "../block2/hamiltonian.hpp"
@@ -58,6 +60,14 @@ extern template struct block2::StackAllocator<double>;
 // cg.hpp
 extern template struct block2::CG<block2::SZ>;
 extern template struct block2::CG<block2::SU2>;
+
+// csr_operator_functions.hpp
+extern template struct block2::CSROperatorFunctions<block2::SZ>;
+extern template struct block2::CSROperatorFunctions<block2::SU2>;
+
+// csr_sparse_matrix.hpp
+extern template struct block2::CSRSparseMatrix<block2::SZ>;
+extern template struct block2::CSRSparseMatrix<block2::SU2>;
 
 // determinant.hpp
 extern template struct block2::DeterminantTRIE<block2::SZ>;

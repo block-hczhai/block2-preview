@@ -70,7 +70,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         sciWrapper;       //!< Wrapper class for the
                           //!!  physical operators/determinants on the big site
     int nOrbCas, nOrbExt; //!> Number of spatial orbitals in CAS; External
-                          //!space. nSites=nOrbCas+1
+                          //! space. nSites=nOrbCas+1
     HamiltonianQCSCI(
         S vacuum, int nOrbCAS, int nOrbExt, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
@@ -210,15 +210,14 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
                     p.second->allocate(find_site_op_info(op.q_label, m));
-                    p.second->copy_data_from(
-                        *op_prims_normal[s].at(OpNames::D));
+                    p.second->copy_data_from(op_prims_normal[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
                     tmp->allocate(find_site_op_info(op.q_label, m));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
-                            *op_prims_normal[s + (sp << 1)].at(OpNames::R));
+                            op_prims_normal[s + (sp << 1)].at(OpNames::R));
                         tmp->factor = v(s, sp, i, m, m, m);
-                        opf->iadd(*p.second, *tmp);
+                        opf->iadd(p.second, tmp);
                         if (opf->seq->mode != SeqTypes::None)
                             opf->seq->simple_perform();
                     }
@@ -236,15 +235,14 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
                     p.second->allocate(find_site_op_info(op.q_label, m));
-                    p.second->copy_data_from(
-                        *op_prims_normal[s].at(OpNames::C));
+                    p.second->copy_data_from(op_prims_normal[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
                     tmp->allocate(find_site_op_info(op.q_label, m));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
-                            *op_prims_normal[s + (sp << 1)].at(OpNames::RD));
+                            op_prims_normal[s + (sp << 1)].at(OpNames::RD));
                         tmp->factor = v(s, sp, i, m, m, m);
-                        opf->iadd(*p.second, *tmp);
+                        opf->iadd(p.second, tmp);
                         if (opf->seq->mode != SeqTypes::None)
                             opf->seq->simple_perform();
                     }
@@ -293,16 +291,15 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                         p.second = make_shared<SparseMatrix<S>>();
                         p.second->allocate(find_site_op_info(op.q_label, m));
                         p.second->copy_data_from(
-                            *op_prims_normal[(s >> 1) | ((s & 1) << 1)].at(
+                            op_prims_normal[(s >> 1) | ((s & 1) << 1)].at(
                                 OpNames::B));
                         p.second->factor *= -v(s & 1, s >> 1, i, m, m, j);
                         tmp->allocate(find_site_op_info(op.q_label, m));
                         for (uint8_t sp = 0; sp < 2; sp++) {
                             tmp->copy_data_from(
-                                *op_prims_normal[sp | (sp << 1)].at(
-                                    OpNames::B));
+                                op_prims_normal[sp | (sp << 1)].at(OpNames::B));
                             tmp->factor = v(s & 1, sp, i, j, m, m);
-                            opf->iadd(*p.second, *tmp);
+                            opf->iadd(p.second, tmp);
                             if (opf->seq->mode != SeqTypes::None)
                                 opf->seq->simple_perform();
                         }
@@ -374,42 +371,42 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 find_site_op_info(S(0, 0, 0), 0));
             // hrl: s & 1 : 0 => 0; 1 => 1; 2 => 0; 3 => 1 (first index)
             // hrl: s >> 1: 0 => 0; 1 => 0; 2 => 1; 3 => 1  (second index)
-            opf->product(*op_prims_normal[s & 1][OpNames::N],
-                         *op_prims_normal[s >> 1][OpNames::N],
-                         *op_prims_normal[s][OpNames::NN]);
+            opf->product(op_prims_normal[s & 1][OpNames::N],
+                         op_prims_normal[s >> 1][OpNames::N],
+                         op_prims_normal[s][OpNames::NN]);
             op_prims_normal[s][OpNames::A] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::A]->allocate(
                 find_site_op_info(S(2, sz_plus[s], 0), 0));
-            opf->product(*op_prims_normal[s & 1][OpNames::C],
-                         *op_prims_normal[s >> 1][OpNames::C],
-                         *op_prims_normal[s][OpNames::A]);
+            opf->product(op_prims_normal[s & 1][OpNames::C],
+                         op_prims_normal[s >> 1][OpNames::C],
+                         op_prims_normal[s][OpNames::A]);
             op_prims_normal[s][OpNames::AD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::AD]->allocate(
                 find_site_op_info(S(-2, -sz_plus[s], 0), 0));
-            opf->product(*op_prims_normal[s >> 1][OpNames::D],
-                         *op_prims_normal[s & 1][OpNames::D],
-                         *op_prims_normal[s][OpNames::AD]);
+            opf->product(op_prims_normal[s >> 1][OpNames::D],
+                         op_prims_normal[s & 1][OpNames::D],
+                         op_prims_normal[s][OpNames::AD]);
             op_prims_normal[s][OpNames::B] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::B]->allocate(
                 find_site_op_info(S(0, sz_minus[s], 0), 0));
-            opf->product(*op_prims_normal[s & 1][OpNames::C],
-                         *op_prims_normal[s >> 1][OpNames::D],
-                         *op_prims_normal[s][OpNames::B]);
+            opf->product(op_prims_normal[s & 1][OpNames::C],
+                         op_prims_normal[s >> 1][OpNames::D],
+                         op_prims_normal[s][OpNames::B]);
         }
         // low (&1): R index, high (>>1): B index
         for (uint8_t s = 0; s < 4; s++) {
             op_prims_normal[s][OpNames::R] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::R]->allocate(
                 find_site_op_info(S(-1, -sz[s & 1], 0), 0));
-            opf->product(*op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
-                         *op_prims_normal[s & 1][OpNames::D],
-                         *op_prims_normal[s][OpNames::R]);
+            opf->product(op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
+                         op_prims_normal[s & 1][OpNames::D],
+                         op_prims_normal[s][OpNames::R]);
             op_prims_normal[s][OpNames::RD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::RD]->allocate(
                 find_site_op_info(S(1, sz[s & 1], 0), 0));
-            opf->product(*op_prims_normal[s & 1][OpNames::C],
-                         *op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
-                         *op_prims_normal[s][OpNames::RD]);
+            opf->product(op_prims_normal[s & 1][OpNames::C],
+                         op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
+                         op_prims_normal[s][OpNames::RD]);
         }
         // site norm operators
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
