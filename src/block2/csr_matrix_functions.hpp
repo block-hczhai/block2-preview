@@ -120,6 +120,26 @@ struct CSRMatrixFunctions {
     // a = a + scale * op(b)
     static void iadd(CSRMatrixRef &a, const CSRMatrixRef &b, double scale,
                      bool conj = false) {
+        if (a.nnz == a.size()) {
+            if (b.nnz == b.size())
+                MatrixFunctions::iadd(a.dense_ref(), b.dense_ref(), scale,
+                                      conj);
+            else {
+                MatrixRef bd(dalloc->allocate(b.size()), b.m, b.n);
+                b.to_dense(bd);
+                MatrixFunctions::iadd(a.dense_ref(), bd, scale, conj);
+                bd.deallocate();
+            }
+            return;
+        } else if (b.nnz == b.size()) {
+            MatrixRef ad(dalloc->allocate(a.size()), a.m, a.n);
+            a.to_dense(ad);
+            MatrixFunctions::iadd(ad, b.dense_ref(), scale, conj);
+            a.deallocate();
+            a.from_dense(ad);
+            ad.deallocate();
+            return;
+        }
 #ifdef _HAS_INTEL_MKL
         shared_ptr<sparse_matrix_t> spa =
             MKLSparseAllocator::to_mkl_sparse_matrix(a);
@@ -173,8 +193,10 @@ struct CSRMatrixFunctions {
         CSRMatrixRef r(am, an, k, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
-        memcpy(r.rows, rrows, (r.m + 1) * sizeof(int));
-        memcpy(r.cols, rcols, r.nnz * sizeof(int));
+        if (r.nnz != r.size()) {
+            memcpy(r.rows, rrows, (r.m + 1) * sizeof(int));
+            memcpy(r.cols, rcols, r.nnz * sizeof(int));
+        }
         memcpy(r.data, rdata, r.nnz * sizeof(double));
         dalloc->deallocate(rdata, a.nnz + b.nnz);
         ialloc->deallocate(rcols, a.nnz + b.nnz);
@@ -188,6 +210,43 @@ struct CSRMatrixFunctions {
     static void multiply(const CSRMatrixRef &a, bool conja,
                          const CSRMatrixRef &b, bool conjb, CSRMatrixRef &c,
                          double scale, double cfactor) {
+        if (a.nnz == a.size() || b.nnz == b.size()) {
+            if (c.nnz == c.size()) {
+                if (a.nnz == a.size() && b.nnz == b.size())
+                    MatrixFunctions::multiply(a.dense_ref(), conja,
+                                              b.dense_ref(), conjb,
+                                              c.dense_ref(), scale, cfactor);
+                else if (a.nnz == a.size())
+                    multiply(a.dense_ref(), conja, b, conjb, c.dense_ref(),
+                             scale, cfactor);
+                else
+                    multiply(a, conja, b.dense_ref(), conjb, c.dense_ref(),
+                             scale, cfactor);
+            } else {
+                MatrixRef cd(dalloc->allocate(c.size()), c.m, c.n);
+                c.to_dense(cd);
+                if (a.nnz == a.size() && b.nnz == b.size())
+                    MatrixFunctions::multiply(a.dense_ref(), conja,
+                                              b.dense_ref(), conjb, cd, scale,
+                                              cfactor);
+                else if (a.nnz == a.size())
+                    multiply(a.dense_ref(), conja, b, conjb, cd, scale,
+                             cfactor);
+                else
+                    multiply(a, conja, b.dense_ref(), conjb, cd, scale,
+                             cfactor);
+                c.deallocate();
+                c.from_dense(cd);
+                cd.deallocate();
+            }
+            return;
+        } else if (c.nnz == c.size()) {
+            MatrixRef bd(dalloc->allocate(b.size()), b.m, b.n);
+            b.to_dense(bd);
+            multiply(a, conja, bd, conjb, c.dense_ref(), scale, cfactor);
+            bd.deallocate();
+            return;
+        }
         vector<CSRMatrixRef> tmps;
         int *arows = a.rows, *acols = a.cols, *brows = b.rows, *bcols = b.cols;
         double *adata = a.data, *bdata = b.data;
@@ -250,8 +309,10 @@ struct CSRMatrixFunctions {
         CSRMatrixRef r(c.m, c.n, r_idx[am], nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
-        memcpy(r.rows, r_idx, (r.m + 1) * sizeof(int));
-        memcpy(r.cols, rcols.data(), r.nnz * sizeof(int));
+        if (r.nnz != r.size()) {
+            memcpy(r.rows, r_idx, (r.m + 1) * sizeof(int));
+            memcpy(r.cols, rcols.data(), r.nnz * sizeof(int));
+        }
         memcpy(r.data, rdata.data(), r.nnz * sizeof(double));
         c.deallocate();
         c = r;
@@ -262,6 +323,9 @@ struct CSRMatrixFunctions {
     static void multiply(const MatrixRef &a, bool conja, const CSRMatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
+        if (b.nnz == b.size())
+            return MatrixFunctions::multiply(a, conja, b.dense_ref(), conjb, c,
+                                             scale, cfactor);
 #ifdef _HAS_INTEL_MKL
         struct matrix_descr mt;
         mt.type = SPARSE_MATRIX_TYPE_GENERAL;
@@ -340,6 +404,9 @@ struct CSRMatrixFunctions {
     static void multiply(const CSRMatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
+        if (a.nnz == a.size())
+            return MatrixFunctions::multiply(a.dense_ref(), conja, b, conjb, c,
+                                             scale, cfactor);
 #ifdef _HAS_INTEL_MKL
         const struct matrix_descr mt {
             SPARSE_MATRIX_TYPE_GENERAL, SPARSE_FILL_MODE_LOWER,
@@ -498,6 +565,25 @@ struct CSRMatrixFunctions {
     static void tensor_product(const CSRMatrixRef &a, bool conja,
                                const CSRMatrixRef &b, bool conjb,
                                CSRMatrixRef &c, double scale, uint32_t stride) {
+        if (a.nnz == a.size() || b.nnz == b.size()) {
+            if (a.nnz == a.size())
+                tensor_product(a.dense_ref(), conja, b, conjb, c, scale,
+                               stride);
+            else
+                tensor_product(a, conja, b.dense_ref(), conjb, c, scale,
+                               stride);
+            return;
+        } else if (c.nnz == c.size()) {
+            MatrixRef ad = MatrixRef(dalloc->allocate(a.size()), a.m, a.n);
+            a.to_dense(ad);
+            MatrixRef bd = MatrixRef(dalloc->allocate(b.size()), b.m, b.n);
+            b.to_dense(bd);
+            MatrixFunctions::tensor_product(ad, conja, bd, conjb, c.dense_ref(),
+                                            scale, stride);
+            ad.deallocate();
+            bd.deallocate();
+            return;
+        }
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.nnz * b.nnz, nullptr, nullptr, nullptr);
@@ -547,6 +633,30 @@ struct CSRMatrixFunctions {
     static void tensor_product(const CSRMatrixRef &a, bool conja,
                                const MatrixRef &b, bool conjb, CSRMatrixRef &c,
                                double scale, uint32_t stride) {
+        if (a.nnz == a.size() || c.nnz == c.size()) {
+            MatrixRef ad =
+                a.nnz == a.size()
+                    ? a.dense_ref()
+                    : MatrixRef(dalloc->allocate(a.size()), a.m, a.n);
+            if (a.nnz != a.size())
+                a.to_dense(ad);
+            MatrixRef cd =
+                c.nnz == c.size()
+                    ? c.dense_ref()
+                    : MatrixRef(dalloc->allocate(c.size()), c.m, c.n);
+            if (c.nnz != c.size())
+                c.to_dense(cd);
+            MatrixFunctions::tensor_product(ad, conja, b, conjb, cd, scale,
+                                            stride);
+            if (a.nnz != a.size())
+                ad.deallocate();
+            if (c.nnz != c.size()) {
+                c.deallocate();
+                c.from_dense(cd);
+                cd.deallocate();
+            }
+            return;
+        }
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.nnz * b.m * b.n, nullptr, nullptr, nullptr);
@@ -599,6 +709,30 @@ struct CSRMatrixFunctions {
     static void tensor_product(const MatrixRef &a, bool conja,
                                const CSRMatrixRef &b, bool conjb,
                                CSRMatrixRef &c, double scale, uint32_t stride) {
+        if (b.nnz == b.size() || c.nnz == c.size()) {
+            MatrixRef bd =
+                b.nnz == b.size()
+                    ? b.dense_ref()
+                    : MatrixRef(dalloc->allocate(b.size()), b.m, b.n);
+            if (b.nnz != b.size())
+                b.to_dense(bd);
+            MatrixRef cd =
+                c.nnz == c.size()
+                    ? c.dense_ref()
+                    : MatrixRef(dalloc->allocate(c.size()), c.m, c.n);
+            if (c.nnz != c.size())
+                c.to_dense(cd);
+            MatrixFunctions::tensor_product(a, conja, bd, conjb, cd, scale,
+                                            stride);
+            if (b.nnz != b.size())
+                bd.deallocate();
+            if (c.nnz != c.size()) {
+                c.deallocate();
+                c.from_dense(cd);
+                cd.deallocate();
+            }
+            return;
+        }
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.m * a.n * b.nnz, nullptr, nullptr, nullptr);

@@ -43,6 +43,10 @@ namespace block2 {
 // CSR Block-sparse Matrix
 // Representing sparse operator
 template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
+    using SparseMatrix<S>::alloc;
+    using SparseMatrix<S>::info;
+    using SparseMatrix<S>::data;
+    using SparseMatrix<S>::total_memory;
     vector<shared_ptr<CSRMatrixRef>> csr_data;
     CSRSparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : SparseMatrix<S>(alloc) {}
@@ -59,15 +63,20 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
                                                     info->n_states_ket[i]);
     }
     void deallocate() override {
-        for (int i = this->info->n - 1; i >= 0; i--)
+        for (int i = info->n - 1; i >= 0; i--)
             csr_data[i]->deallocate();
         csr_data.clear();
-        this->total_memory = 0;
-        this->data = nullptr;
+        if (alloc != nullptr) {
+            if (total_memory == 0)
+                assert(data == nullptr);
+            else
+                alloc->deallocate(data, total_memory);
+            alloc = nullptr;
+        }
+        total_memory = 0;
+        data = nullptr;
     }
-    CSRMatrixRef &operator[](S q) const {
-        return (*this)[this->info->find_state(q)];
-    }
+    CSRMatrixRef &operator[](S q) const { return (*this)[info->find_state(q)]; }
     CSRMatrixRef &operator[](int idx) {
         assert(idx != -1);
         return *csr_data[idx];
@@ -76,10 +85,10 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         assert(other->get_type() == SparseMatrixTypes::CSR);
         shared_ptr<CSRSparseMatrix<S>> cother =
             dynamic_pointer_cast<CSRSparseMatrix<S>>(other);
-        assert(this->info->n == other->info->n);
+        assert(info->n == other->info->n);
         deallocate();
-        csr_data.resize(this->info->n);
-        for (int i = 0; i < this->info->n; i++)
+        csr_data.resize(info->n);
+        for (int i = 0; i < info->n; i++)
             csr_data[i] =
                 make_shared<CSRMatrixRef>(cother->csr_data[i]->deep_copy());
     }
@@ -89,19 +98,19 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         shared_ptr<CSRSparseMatrix<S>> cother =
             dynamic_pointer_cast<CSRSparseMatrix<S>>(other);
         deallocate();
-        csr_data.resize(this->info->n);
+        csr_data.resize(info->n);
         for (int i = 0, k; i < other->info->n; i++)
-            if ((k = this->info->find_state(other->info->quanta[i])) != -1)
+            if ((k = info->find_state(other->info->quanta[i])) != -1)
                 csr_data[k] =
                     make_shared<CSRMatrixRef>(cother->csr_data[i]->deep_copy());
     }
     void clear() override {
         deallocate();
-        allocate(this->info);
+        allocate(info);
     }
     double norm() const override {
         double r = 0;
-        for (int i = 0; i < this->info->n; i++) {
+        for (int i = 0; i < info->n; i++) {
             double rn = CSRMatrixFunctions::norm(*csr_data[i]);
             r += rn * rn;
         }
@@ -110,26 +119,45 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
     // ratio of zero elements to total size
     double sparsity() const override {
         size_t nnz = 0, size = 0;
-        for (int i = 0; i < this->info->n; i++)
+        for (int i = 0; i < info->n; i++)
             nnz += csr_data[i]->nnz, size += csr_data[i]->size();
         return 1.0 - (double)nnz / size;
     }
-    // this will allocate csr matrix
+    // set "csr" sparse matrix as a wrapper for dense sparse mat
+    // this will ref memory allocated in mat
+    // mat should not be deallocated afterwards
+    void wrap_dense(const shared_ptr<SparseMatrix<S>> &mat) {
+        alloc = mat->alloc;
+        total_memory = mat->total_memory;
+        data = mat->data;
+        info = mat->info;
+        assert(csr_data.size() == 0);
+        csr_data.resize(info->n);
+        for (int i = 0; i < info->n; i++) {
+            MatrixRef dmat = (*mat)[i];
+            csr_data[i] = make_shared<CSRMatrixRef>(
+                dmat.m, dmat.n, dmat.size(), dmat.data, nullptr, nullptr);
+        }
+    }
+    // construct real csr sparse matrix from dense sparse mat
+    // this will allocate memory for csr matrix
+    // mat should be deallocated afterwards
     void from_dense(const shared_ptr<SparseMatrix<S>> &mat) {
         assert(csr_data.size() == 0);
-        this->info = mat->info;
-        csr_data.resize(this->info->n);
-        for (int i = 0; i < this->info->n; i++) {
+        info = mat->info;
+        csr_data.resize(info->n);
+        for (int i = 0; i < info->n; i++) {
             csr_data[i] = make_shared<CSRMatrixRef>();
             csr_data[i]->from_dense((*mat)[i]);
         }
     }
-    // this will not allocate sparse matrix
+    // this will not allocate dense matrix
+    // mat must be pre-allocated
     void to_dense(const shared_ptr<SparseMatrix<S>> &mat) {
         assert(mat->data != nullptr);
-        assert(mat->info == this->info);
-        assert(csr_data.size() == this->info->n);
-        for (int i = 0; i < this->info->n; i++)
+        assert(mat->info == info);
+        assert(csr_data.size() == info->n);
+        for (int i = 0; i < info->n; i++)
             csr_data[i]->to_dense((*mat)[i]);
     }
 };

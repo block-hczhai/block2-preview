@@ -49,8 +49,13 @@ class TestFusedMPON2STO3G : public ::testing::Test {
             for (auto &op : mpo->tensors[idx]->ops) {
                 shared_ptr<CSRSparseMatrix<S>> smat =
                     make_shared<CSRSparseMatrix<S>>();
-                smat->from_dense(op.second);
-                op.second->deallocate();
+                if (op.second->sparsity() > 0.75) {
+                    smat->from_dense(op.second);
+                    // this requires random deallocatable allocator for
+                    // SparseMatrix
+                    op.second->deallocate();
+                } else
+                    smat->wrap_dense(op.second);
                 op.second = smat;
             }
             mpo->sparse_form[idx] = 'S';

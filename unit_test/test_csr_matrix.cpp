@@ -12,9 +12,11 @@ class TestCSRMatrix : public ::testing::Test {
     double sparsity = 0.5;
     void fill_sparse_double(double *data, size_t n) {
         Random::fill_rand_double(data, n);
-        for (size_t i = 0; i < n; i++)
-            if (Random::rand_double() < sparsity)
-                data[i] = 0;
+        if (Random::rand_double() > 0.2) {
+            for (size_t i = 0; i < n; i++)
+                if (Random::rand_double() < sparsity)
+                    data[i] = 0;
+        }
     }
     void SetUp() override {
         Random::rand_seed(0);
@@ -85,7 +87,7 @@ TEST_F(TestCSRMatrix, TestMultiply) {
         bool conja = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
         MatrixRef ta = a, tb = b;
-       if (conja) {
+        if (conja) {
             ta = MatrixRef(dalloc_()->allocate(ma * na), na, ma);
             for (int ia = 0; ia < ma; ia++)
                 for (int ja = 0; ja < na; ja++)
