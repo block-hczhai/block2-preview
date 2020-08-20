@@ -97,9 +97,9 @@ ELSE()
 ENDIF()
 
 IF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    SET(OPT_FLAG -O0 -g -fstack-check -fno-omit-frame-pointer -fno-optimize-sibling-calls -Werror)
+    SET(OPT_FLAG -O0 -g -fstack-check -fno-omit-frame-pointer -fno-optimize-sibling-calls -Werror -Werror=return-type)
 ELSE()
-    SET(OPT_FLAG -O3 -funroll-loops -openmp -Werror)
+    SET(OPT_FLAG -O3 -funroll-loops -openmp -Werror -Werror=return-type)
 ENDIF()
 
 

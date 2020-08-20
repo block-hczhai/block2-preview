@@ -179,131 +179,140 @@ TEST_F(TestNPDM, TestSU2) {
 
     uint16_t bond_dim = 200;
 
-    // MPSInfo
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis);
-    mps_info->set_bond_dimension(bond_dim);
+    for (int dot = 1; dot <= 2; dot++) {
 
-    // MPS
-    Random::rand_seed(0);
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
-    mps->initialize(mps_info);
-    mps->random_canonicalize();
+        // MPSInfo
+        shared_ptr<MPSInfo<SU2>> mps_info =
+            make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
+        mps_info->set_bond_dimension(bond_dim);
 
-    // MPS/MPSInfo save mutable
-    mps->save_mutable();
-    mps->deallocate();
-    mps_info->save_mutable();
-    mps_info->deallocate_mutable();
+        // MPS
+        Random::rand_seed(0);
+        shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, dot);
+        mps->initialize(mps_info);
+        mps->random_canonicalize();
 
-    // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
-    shared_ptr<MovingEnvironment<SU2>> me =
-        make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
-    t.get_time();
-    cout << "INIT start" << endl;
-    me->init_environments(false);
-    cout << "INIT end .. T = " << t.get_time() << endl;
+        // MPS/MPSInfo save mutable
+        mps->save_mutable();
+        mps->deallocate();
+        mps_info->save_mutable();
+        mps_info->deallocate_mutable();
 
-    // DMRG
-    vector<uint16_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 0};
-    shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
-    dmrg->iprint = 2;
-    dmrg->solve(10, true, 1E-12);
+        // ME
+        hamil.opf->seq->mode = SeqTypes::Simple;
+        shared_ptr<MovingEnvironment<SU2>> me =
+            make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+        t.get_time();
+        cout << "INIT start" << endl;
+        me->init_environments(false);
+        cout << "INIT end .. T = " << t.get_time() << endl;
 
-    // 1PDM ME
-    shared_ptr<MovingEnvironment<SU2>> pme =
-        make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
-    t.get_time();
-    cout << "1PDM INIT start" << endl;
-    pme->init_environments(false);
-    cout << "1PDM INIT end .. T = " << t.get_time() << endl;
+        // DMRG
+        vector<uint16_t> bdims = {bond_dim};
+        vector<double> noises = {1E-6, 0};
+        shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+        dmrg->iprint = 2;
+        dmrg->noise_type = NoiseTypes::Perturbative;
+        dmrg->solve(10, true, 1E-12);
 
-    // 1PDM
-    shared_ptr<Expect<SU2>> expect =
-        make_shared<Expect<SU2>>(pme, bond_dim, bond_dim);
-    expect->solve(true, dmrg->forward);
+        // 1PDM ME
+        shared_ptr<MovingEnvironment<SU2>> pme =
+            make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
+        t.get_time();
+        cout << "1PDM INIT start" << endl;
+        pme->init_environments(false);
+        cout << "1PDM INIT end .. T = " << t.get_time() << endl;
 
-    MatrixRef dm = expect->get_1pdm_spatial();
-    int k = 0;
-    for (int i = 0; i < dm.m; i++)
-        for (int j = 0; j < dm.n; j++)
-            if (abs(dm(i, j)) > TINY) {
-                cout << "== SU2 1PDM ==" << setw(5) << i << setw(5) << j
-                     << fixed << setw(22) << fixed << setprecision(12)
-                     << dm(i, j) << " error = " << scientific << setprecision(3)
-                     << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k])) << endl;
+        // 1PDM
+        shared_ptr<Expect<SU2>> expect =
+            make_shared<Expect<SU2>>(pme, bond_dim, bond_dim);
+        expect->solve(true, dmrg->forward);
 
-                EXPECT_EQ(i, get<0>(one_pdm[k]));
-                EXPECT_EQ(j, get<1>(one_pdm[k]));
-                EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
+        MatrixRef dm = expect->get_1pdm_spatial();
+        int k = 0;
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (abs(dm(i, j)) > TINY) {
+                    cout << "== SU2 1PDM / " << dot << "-site ==" << setw(5)
+                         << i << setw(5) << j << fixed << setw(22) << fixed
+                         << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k]))
+                         << endl;
 
-                k++;
-            }
+                    EXPECT_EQ(i, get<0>(one_pdm[k]));
+                    EXPECT_EQ(j, get<1>(one_pdm[k]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
 
-    EXPECT_EQ(k, (int)one_pdm.size());
+                    k++;
+                }
 
-    dm.deallocate();
+        EXPECT_EQ(k, (int)one_pdm.size());
 
-    // 1NPC ME
-    shared_ptr<MovingEnvironment<SU2>> nme =
-        make_shared<MovingEnvironment<SU2>>(nmpo, mps, mps, "1NPC");
-    t.get_time();
-    cout << "1NPC INIT start" << endl;
-    nme->init_environments(false);
-    cout << "1NPC INIT end .. T = " << t.get_time() << endl;
+        dm.deallocate();
 
-    // 1NPC
-    expect = make_shared<Expect<SU2>>(nme, bond_dim, bond_dim);
-    expect->solve(true, mps->center == 0);
+        // 1NPC ME
+        shared_ptr<MovingEnvironment<SU2>> nme =
+            make_shared<MovingEnvironment<SU2>>(nmpo, mps, mps, "1NPC");
+        t.get_time();
+        cout << "1NPC INIT start" << endl;
+        nme->init_environments(false);
+        cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
-    MatrixRef dmx = expect->get_1npc_spatial(0);
-    k = 0;
-    for (int i = 0; i < dmx.m; i++)
-        for (int j = 0; j < dmx.n; j++)
-            if (abs(dmx(i, j)) > TINY) {
-                cout << "== SU2 1NPC  PURE ==" << setw(5) << i << setw(5) << j
-                     << fixed << setw(22) << fixed << setprecision(12)
-                     << dmx(i, j) << " error = " << scientific
-                     << setprecision(3) << setw(10)
-                     << abs(dmx(i, j) - get<2>(one_npc_pure[k])) << endl;
+        // 1NPC
+        expect = make_shared<Expect<SU2>>(nme, bond_dim, bond_dim);
+        expect->solve(true, mps->center == 0);
 
-                EXPECT_EQ(i, get<0>(one_npc_pure[k]));
-                EXPECT_EQ(j, get<1>(one_npc_pure[k]));
-                EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[k])), 1E-6);
+        MatrixRef dmx = expect->get_1npc_spatial(0);
+        k = 0;
+        for (int i = 0; i < dmx.m; i++)
+            for (int j = 0; j < dmx.n; j++)
+                if (abs(dmx(i, j)) > TINY) {
+                    cout << "== SU2 1NPC  PURE / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dmx(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10) << abs(dmx(i, j) - get<2>(one_npc_pure[k]))
+                         << endl;
 
-                k++;
-            }
+                    EXPECT_EQ(i, get<0>(one_npc_pure[k]));
+                    EXPECT_EQ(j, get<1>(one_npc_pure[k]));
+                    EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[k])), 1E-6);
 
-    EXPECT_EQ(k, (int)one_npc_pure.size());
+                    k++;
+                }
 
-    dmx.deallocate();
+        EXPECT_EQ(k, (int)one_npc_pure.size());
 
-    MatrixRef dmy = expect->get_1npc_spatial(1);
-    k = 0;
-    for (int i = 0; i < dmy.m; i++)
-        for (int j = 0; j < dmy.n; j++)
-            if (abs(dmy(i, j)) > TINY) {
-                cout << "== SU2 1NPC MIXED ==" << setw(5) << i << setw(5) << j
-                     << fixed << setw(22) << fixed << setprecision(12)
-                     << dmy(i, j) << " error = " << scientific
-                     << setprecision(3) << setw(10)
-                     << abs(dmy(i, j) - get<2>(one_npc_mixed[k])) << endl;
+        dmx.deallocate();
 
-                EXPECT_EQ(i, get<0>(one_npc_mixed[k]));
-                EXPECT_EQ(j, get<1>(one_npc_mixed[k]));
-                EXPECT_LT(abs(dmy(i, j) - get<2>(one_npc_mixed[k])), 1E-6);
+        MatrixRef dmy = expect->get_1npc_spatial(1);
+        k = 0;
+        for (int i = 0; i < dmy.m; i++)
+            for (int j = 0; j < dmy.n; j++)
+                if (abs(dmy(i, j)) > TINY) {
+                    cout << "== SU2 1NPC MIXED / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dmy(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10)
+                         << abs(dmy(i, j) - get<2>(one_npc_mixed[k])) << endl;
 
-                k++;
-            }
+                    EXPECT_EQ(i, get<0>(one_npc_mixed[k]));
+                    EXPECT_EQ(j, get<1>(one_npc_mixed[k]));
+                    EXPECT_LT(abs(dmy(i, j) - get<2>(one_npc_mixed[k])), 1E-6);
 
-    EXPECT_EQ(k, (int)one_npc_mixed.size());
+                    k++;
+                }
 
-    dmy.deallocate();
+        EXPECT_EQ(k, (int)one_npc_mixed.size());
 
-    // deallocate persistent stack memory
-    mps_info->deallocate();
+        dmy.deallocate();
+
+        // deallocate persistent stack memory
+        mps_info->deallocate();
+    }
+
     nmpo->deallocate();
     pmpo->deallocate();
     mpo->deallocate();
@@ -737,210 +746,218 @@ TEST_F(TestNPDM, TestSZ) {
 
     uint16_t bond_dim = 200;
 
-    // MPSInfo
-    shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis);
-    mps_info->set_bond_dimension(bond_dim);
+    for (int dot = 1; dot <= 2; dot++) {
 
-    // MPS
-    Random::rand_seed(0);
-    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, 2);
-    mps->initialize(mps_info);
-    mps->random_canonicalize();
+        // MPSInfo
+        shared_ptr<MPSInfo<SZ>> mps_info =
+            make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
+        mps_info->set_bond_dimension(bond_dim);
 
-    // MPS/MPSInfo save mutable
-    mps->save_mutable();
-    mps->deallocate();
-    mps_info->save_mutable();
-    mps_info->deallocate_mutable();
+        // MPS
+        Random::rand_seed(0);
+        shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, dot);
+        mps->initialize(mps_info);
+        mps->random_canonicalize();
 
-    // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
-    shared_ptr<MovingEnvironment<SZ>> me =
-        make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
-    t.get_time();
-    cout << "INIT start" << endl;
-    me->init_environments(false);
-    cout << "INIT end .. T = " << t.get_time() << endl;
+        // MPS/MPSInfo save mutable
+        mps->save_mutable();
+        mps->deallocate();
+        mps_info->save_mutable();
+        mps_info->deallocate_mutable();
 
-    // DMRG
-    vector<uint16_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 0};
-    shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
-    dmrg->iprint = 2;
-    dmrg->solve(10, true, 1E-12);
+        // ME
+        hamil.opf->seq->mode = SeqTypes::Simple;
+        shared_ptr<MovingEnvironment<SZ>> me =
+            make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
+        t.get_time();
+        cout << "INIT start" << endl;
+        me->init_environments(false);
+        cout << "INIT end .. T = " << t.get_time() << endl;
 
-    // 1PDM ME
-    shared_ptr<MovingEnvironment<SZ>> pme =
-        make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
-    t.get_time();
-    cout << "1PDM INIT start" << endl;
-    pme->init_environments(false);
-    cout << "1PDM INIT end .. T = " << t.get_time() << endl;
+        // DMRG
+        vector<uint16_t> bdims = {bond_dim};
+        vector<double> noises = {1E-6, 0};
+        shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+        dmrg->iprint = 2;
+        dmrg->noise_type = NoiseTypes::Perturbative;
+        dmrg->solve(10, true, 1E-12);
 
-    // 1PDM
-    shared_ptr<Expect<SZ>> expect =
-        make_shared<Expect<SZ>>(pme, bond_dim, bond_dim);
-    expect->solve(true, mps->center == 0);
+        // 1PDM ME
+        shared_ptr<MovingEnvironment<SZ>> pme =
+            make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
+        t.get_time();
+        cout << "1PDM INIT start" << endl;
+        pme->init_environments(false);
+        cout << "1PDM INIT end .. T = " << t.get_time() << endl;
 
-    MatrixRef dm = expect->get_1pdm();
-    int k[2] = {0, 0};
-    for (int i = 0; i < dm.m; i++)
-        for (int j = 0; j < dm.n; j++)
-            if (abs(dm(i, j)) > TINY) {
-                EXPECT_EQ(i % 2, j % 2);
-                int ii = i / 2, jj = j / 2, p = i % 2;
+        // 1PDM
+        shared_ptr<Expect<SZ>> expect =
+            make_shared<Expect<SZ>>(pme, bond_dim, bond_dim);
+        expect->solve(true, mps->center == 0);
 
-                cout << "== SZ 1PDM ==" << setw(6)
-                     << (p == 0 ? "alpha" : "beta") << setw(5) << ii << setw(5)
-                     << jj << fixed << setw(22) << fixed << setprecision(12)
-                     << dm(i, j) << " error = " << scientific << setprecision(3)
-                     << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k[p]]))
-                     << endl;
+        MatrixRef dm = expect->get_1pdm();
+        int k[2] = {0, 0};
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (abs(dm(i, j)) > TINY) {
+                    EXPECT_EQ(i % 2, j % 2);
+                    int ii = i / 2, jj = j / 2, p = i % 2;
 
-                EXPECT_EQ(ii, get<0>(one_pdm[k[p]]));
-                EXPECT_EQ(jj, get<1>(one_pdm[k[p]]));
-                EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k[p]])), 1E-6);
+                    cout << "== SZ 1PDM / " << dot << "-site ==" << setw(6)
+                         << (p == 0 ? "alpha" : "beta") << setw(5) << ii
+                         << setw(5) << jj << fixed << setw(22) << fixed
+                         << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k[p]]))
+                         << endl;
 
-                k[p]++;
-            }
+                    EXPECT_EQ(ii, get<0>(one_pdm[k[p]]));
+                    EXPECT_EQ(jj, get<1>(one_pdm[k[p]]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k[p]])), 1E-6);
 
-    EXPECT_EQ(k[0], (int)one_pdm.size());
-    EXPECT_EQ(k[1], (int)one_pdm.size());
+                    k[p]++;
+                }
 
-    dm.deallocate();
+        EXPECT_EQ(k[0], (int)one_pdm.size());
+        EXPECT_EQ(k[1], (int)one_pdm.size());
 
-    // 2PDM ME
-    shared_ptr<MovingEnvironment<SZ>> p2me =
-        make_shared<MovingEnvironment<SZ>>(p2mpo, mps, mps, "2PDM");
-    t.get_time();
-    cout << "2PDM INIT start" << endl;
-    p2me->init_environments(false);
-    cout << "2PDM INIT end .. T = " << t.get_time() << endl;
+        dm.deallocate();
 
-    // 2PDM
-    expect = make_shared<Expect<SZ>>(p2me, bond_dim, bond_dim);
-    expect->solve(true, mps->center == 0);
+        // 2PDM ME
+        shared_ptr<MovingEnvironment<SZ>> p2me =
+            make_shared<MovingEnvironment<SZ>>(p2mpo, mps, mps, "2PDM");
+        t.get_time();
+        cout << "2PDM INIT start" << endl;
+        p2me->init_environments(false);
+        cout << "2PDM INIT end .. T = " << t.get_time() << endl;
 
-    int m[6] = {0, 0, 0, 0, 0, 0};
-    double max_error = 0.0;
-    shared_ptr<Tensor> dm2 = expect->get_2pdm();
-    for (int i = 0; i < dm2->shape[0]; i++)
-        for (int j = 0; j < dm2->shape[1]; j++)
-            for (int k = 0; k < dm2->shape[2]; k++)
-                for (int l = 0; l < dm2->shape[3]; l++)
-                    if (abs((*dm2)({i, j, k, l})) > TINY) {
+        // 2PDM
+        expect = make_shared<Expect<SZ>>(p2me, bond_dim, bond_dim);
+        expect->solve(true, mps->center == 0);
 
-                        int p = -1;
-                        double f = 1.0;
+        int m[6] = {0, 0, 0, 0, 0, 0};
+        double max_error = 0.0;
+        shared_ptr<Tensor> dm2 = expect->get_2pdm();
+        for (int i = 0; i < dm2->shape[0]; i++)
+            for (int j = 0; j < dm2->shape[1]; j++)
+                for (int k = 0; k < dm2->shape[2]; k++)
+                    for (int l = 0; l < dm2->shape[3]; l++)
+                        if (abs((*dm2)({i, j, k, l})) > TINY) {
 
-                        int ii = i / 2, jj = j / 2, kk = k / 2, ll = l / 2;
+                            int p = -1;
+                            double f = 1.0;
 
-                        if (i % 2 == 0 && j % 2 == 0 && k % 2 == 0 &&
-                            l % 2 == 0)
-                            p = 0, f = 1.0;
-                        else if (i % 2 == 1 && j % 2 == 1 && k % 2 == 1 &&
-                                 l % 2 == 1)
-                            p = 1, f = 1.0;
-                        else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 1 &&
-                                 l % 2 == 0)
-                            p = 2, f = 1.0;
-                        else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 0 &&
-                                 l % 2 == 1)
-                            p = 3, f = -1.0, swap(kk, ll);
-                        else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 1 &&
-                                 l % 2 == 0)
-                            p = 4, f = -1.0, swap(ii, jj);
-                        else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 0 &&
-                                 l % 2 == 1)
-                            p = 5, f = 1.0, swap(ii, jj), swap(kk, ll);
+                            int ii = i / 2, jj = j / 2, kk = k / 2, ll = l / 2;
 
-                        EXPECT_NE(p, -1);
+                            if (i % 2 == 0 && j % 2 == 0 && k % 2 == 0 &&
+                                l % 2 == 0)
+                                p = 0, f = 1.0;
+                            else if (i % 2 == 1 && j % 2 == 1 && k % 2 == 1 &&
+                                     l % 2 == 1)
+                                p = 1, f = 1.0;
+                            else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 1 &&
+                                     l % 2 == 0)
+                                p = 2, f = 1.0;
+                            else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 0 &&
+                                     l % 2 == 1)
+                                p = 3, f = -1.0, swap(kk, ll);
+                            else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 1 &&
+                                     l % 2 == 0)
+                                p = 4, f = -1.0, swap(ii, jj);
+                            else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 0 &&
+                                     l % 2 == 1)
+                                p = 5, f = 1.0, swap(ii, jj), swap(kk, ll);
 
-                        EXPECT_EQ(ii, get<0>(two_pdm[p][m[p]]));
-                        EXPECT_EQ(jj, get<1>(two_pdm[p][m[p]]));
-                        EXPECT_EQ(kk, get<2>(two_pdm[p][m[p]]));
-                        EXPECT_EQ(ll, get<3>(two_pdm[p][m[p]]));
-                        EXPECT_LT(abs((*dm2)({i, j, k, l}) -
-                                      f * get<4>(two_pdm[p][m[p]])),
-                                  1E-6);
+                            EXPECT_NE(p, -1);
 
-                        max_error =
-                            max(max_error, abs((*dm2)({i, j, k, l}) -
-                                               f * get<4>(two_pdm[p][m[p]])));
+                            EXPECT_EQ(ii, get<0>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(jj, get<1>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(kk, get<2>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(ll, get<3>(two_pdm[p][m[p]]));
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) -
+                                          f * get<4>(two_pdm[p][m[p]])),
+                                      1E-6);
 
-                        m[p]++;
-                    }
+                            max_error = max(max_error,
+                                            abs((*dm2)({i, j, k, l}) -
+                                                f * get<4>(two_pdm[p][m[p]])));
 
-    for (int p = 0; p < 6; p++)
-        EXPECT_EQ(m[p], (int)two_pdm[p].size());
+                            m[p]++;
+                        }
 
-    cout << "== SZ 2PDM =="
-         << " max error = " << scientific << setprecision(3) << setw(10)
-         << max_error << endl;
+        for (int p = 0; p < 6; p++)
+            EXPECT_EQ(m[p], (int)two_pdm[p].size());
 
-    // 1NPC ME
-    shared_ptr<MovingEnvironment<SZ>> nme =
-        make_shared<MovingEnvironment<SZ>>(nmpo, mps, mps, "1NPC");
-    t.get_time();
-    cout << "1NPC INIT start" << endl;
-    nme->init_environments(false);
-    cout << "1NPC INIT end .. T = " << t.get_time() << endl;
+        cout << "== SZ 2PDM / " << dot << "-site =="
+             << " max error = " << scientific << setprecision(3) << setw(10)
+             << max_error << endl;
 
-    // 1NPC
-    expect = make_shared<Expect<SZ>>(nme, bond_dim, bond_dim);
-    expect->solve(true, mps->center == 0);
+        // 1NPC ME
+        shared_ptr<MovingEnvironment<SZ>> nme =
+            make_shared<MovingEnvironment<SZ>>(nmpo, mps, mps, "1NPC");
+        t.get_time();
+        cout << "1NPC INIT start" << endl;
+        nme->init_environments(false);
+        cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
-    MatrixRef dmx = expect->get_1npc(0);
+        // 1NPC
+        expect = make_shared<Expect<SZ>>(nme, bond_dim, bond_dim);
+        expect->solve(true, mps->center == 0);
 
-    int kx = 0;
-    for (int i = 0; i < dmx.m; i++)
-        for (int j = 0; j < dmx.n; j++)
-            if (abs(dmx(i, j)) > TINY) {
+        MatrixRef dmx = expect->get_1npc(0);
 
-                cout << "== SZ 1NPC  PURE ==" << setw(5) << i << setw(5) << j
-                     << fixed << setw(22) << fixed << setprecision(12)
-                     << dmx(i, j) << " error = " << scientific
-                     << setprecision(3) << setw(10)
-                     << abs(dmx(i, j) - get<2>(one_npc_pure[kx])) << endl;
+        int kx = 0;
+        for (int i = 0; i < dmx.m; i++)
+            for (int j = 0; j < dmx.n; j++)
+                if (abs(dmx(i, j)) > TINY) {
 
-                EXPECT_EQ(i, get<0>(one_npc_pure[kx]));
-                EXPECT_EQ(j, get<1>(one_npc_pure[kx]));
-                EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[kx])), 1E-6);
+                    cout << "== SZ 1NPC  PURE / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dmx(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10)
+                         << abs(dmx(i, j) - get<2>(one_npc_pure[kx])) << endl;
 
-                kx++;
-            }
+                    EXPECT_EQ(i, get<0>(one_npc_pure[kx]));
+                    EXPECT_EQ(j, get<1>(one_npc_pure[kx]));
+                    EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[kx])), 1E-6);
 
-    EXPECT_EQ(kx, (int)one_npc_pure.size());
+                    kx++;
+                }
 
-    dmx.deallocate();
+        EXPECT_EQ(kx, (int)one_npc_pure.size());
 
-    MatrixRef dmy = expect->get_1npc(1);
+        dmx.deallocate();
 
-    int ky = 0;
-    for (int i = 0; i < dmy.m; i++)
-        for (int j = 0; j < dmy.n; j++)
-            if (abs(dmy(i, j)) > TINY) {
+        MatrixRef dmy = expect->get_1npc(1);
 
-                cout << "== SZ 1NPC MIXED ==" << setw(5) << i << setw(5) << j
-                     << fixed << setw(22) << fixed << setprecision(12)
-                     << dmy(i, j) << " error = " << scientific
-                     << setprecision(3) << setw(10)
-                     << abs(dmy(i, j) - get<2>(one_npc_mixed[ky])) << endl;
+        int ky = 0;
+        for (int i = 0; i < dmy.m; i++)
+            for (int j = 0; j < dmy.n; j++)
+                if (abs(dmy(i, j)) > TINY) {
 
-                EXPECT_EQ(i, get<0>(one_npc_mixed[ky]));
-                EXPECT_EQ(j, get<1>(one_npc_mixed[ky]));
-                EXPECT_LT(abs(dmy(i, j) - get<2>(one_npc_mixed[ky])), 1E-6);
+                    cout << "== SZ 1NPC MIXED / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dmy(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10)
+                         << abs(dmy(i, j) - get<2>(one_npc_mixed[ky])) << endl;
 
-                ky++;
-            }
+                    EXPECT_EQ(i, get<0>(one_npc_mixed[ky]));
+                    EXPECT_EQ(j, get<1>(one_npc_mixed[ky]));
+                    EXPECT_LT(abs(dmy(i, j) - get<2>(one_npc_mixed[ky])), 1E-6);
 
-    EXPECT_EQ(ky, (int)one_npc_mixed.size());
+                    ky++;
+                }
 
-    dmy.deallocate();
+        EXPECT_EQ(ky, (int)one_npc_mixed.size());
 
-    // deallocate persistent stack memory
-    mps_info->deallocate();
+        dmy.deallocate();
+
+        // deallocate persistent stack memory
+        mps_info->deallocate();
+    }
+
     nmpo->deallocate();
     p2mpo->deallocate();
     pmpo->deallocate();

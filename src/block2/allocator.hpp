@@ -39,10 +39,7 @@ template <typename T> struct Allocator {
     virtual T *allocate(size_t n) { return nullptr; }
     virtual void deallocate(void *ptr, size_t n) {}
     virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
-    virtual shared_ptr<Allocator<T>>
-    copy(const shared_ptr<Allocator<T>> &alloc) const {
-        return alloc;
-    }
+    virtual shared_ptr<Allocator<T>> copy() const { return nullptr; }
 };
 
 // Stack memory allocator
@@ -125,8 +122,7 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     }
     // When deep-copying objects using VectorAllocator, the other object
     // should have an independent allocator, since VectorAllocator is not global
-    shared_ptr<Allocator<T>>
-    copy(const shared_ptr<Allocator<T>> &alloc) const override {
+    shared_ptr<Allocator<T>> copy() const override {
         return make_shared<VectorAllocator<T>>();
     }
     friend ostream &operator<<(ostream &os, const VectorAllocator &c) {
@@ -198,6 +194,12 @@ struct DataFrame {
     void reset(uint16_t i) {
         iallocs[i]->used = 0;
         dallocs[i]->used = 0;
+    }
+    void rename_data(const string &old_filename,
+                     const string &new_filename) const {
+        if (!Parsing::rename_file(old_filename, new_filename))
+            throw runtime_error("Renaming '" + old_filename + "' to '" +
+                                new_filename + "' failed.");
     }
     // Load one data frame from disk
     void load_data(uint16_t i, const string &filename) const {

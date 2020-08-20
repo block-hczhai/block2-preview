@@ -484,7 +484,7 @@ struct SparseMatrixInfo<
     deep_copy(const shared_ptr<Allocator<uint32_t>> &alloc = nullptr) const {
         SparseMatrixInfo other;
         if (alloc == nullptr)
-            other.alloc = this->alloc->copy(this->alloc);
+            other.alloc = this->alloc->copy();
         else
             other.alloc = alloc;
         other.allocate(n);

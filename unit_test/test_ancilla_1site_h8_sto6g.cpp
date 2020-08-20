@@ -4,7 +4,7 @@
 
 using namespace block2;
 
-class TestAncillaH8STO6G : public ::testing::Test {
+class TestOneSiteAncillaH8STO6G : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -41,10 +41,17 @@ class TestAncillaH8STO6G : public ::testing::Test {
             make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
         cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
+        // Identity MPO
+        cout << "Identity MPO start" << endl;
+        shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
+        impo = make_shared<AncillaMPO<S>>(impo);
+        impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
+        cout << "Identity MPO end .. T = " << t.get_time() << endl;
+
         uint16_t bond_dim = 500;
         double beta = 0.05;
         vector<uint16_t> bdims = {bond_dim};
-        vector<double> te_energies;
+        vector<double> te_energies, noises = {0.0};
 
         // Ancilla MPSInfo (thermal)
         Random::rand_seed(0);
@@ -61,15 +68,46 @@ class TestAncillaH8STO6G : public ::testing::Test {
         mps_thermal->initialize(mps_info_thermal);
         mps_thermal->fill_thermal_limit();
 
-        // MPS/MPSInfo save mutable
+        // MPS/MPSInfo save mutable (thermal)
         mps_thermal->save_mutable();
         mps_thermal->deallocate();
         mps_info_thermal->save_mutable();
         mps_info_thermal->deallocate_mutable();
 
+        // Ancilla MPSInfo (fitting)
+        shared_ptr<AncillaMPSInfo<S>> imps_info =
+            make_shared<AncillaMPSInfo<S>>(n_physical_sites, hamil.vacuum,
+                                           target, hamil.basis);
+        imps_info->set_bond_dimension(bond_dim);
+        imps_info->tag = "BRA";
+
+        // Ancilla MPS (fitting)
+        shared_ptr<MPS<S>> imps = make_shared<MPS<S>>(n_sites, n_sites - 2, 2);
+        imps->initialize(imps_info);
+        imps->random_canonicalize();
+
+        // MPS/MPSInfo save mutable (fitting)
+        imps->save_mutable();
+        imps->deallocate();
+        imps_info->save_mutable();
+        imps_info->deallocate_mutable();
+
+        // Identity ME
+        shared_ptr<MovingEnvironment<S>> ime =
+            make_shared<MovingEnvironment<S>>(impo, imps, mps_thermal,
+                                              "COMPRESS");
+        ime->init_environments(false);
+
+        // Compress
+        shared_ptr<Compress<S>> cps =
+            make_shared<Compress<S>>(ime, bdims, bdims, noises);
+        double norm = cps->solve(10, imps->center == 0);
+
+        EXPECT_LT(abs(norm - 1.0), 1E-7);
+
         // TE ME
-        shared_ptr<MovingEnvironment<S>> me = make_shared<MovingEnvironment<S>>(
-            mpo, mps_thermal, mps_thermal, "TE");
+        shared_ptr<MovingEnvironment<S>> me =
+            make_shared<MovingEnvironment<S>>(mpo, imps, imps, "TE");
         me->init_environments(false);
 
         shared_ptr<Expect<S>> ex =
@@ -81,13 +119,16 @@ class TestAncillaH8STO6G : public ::testing::Test {
             make_shared<ImaginaryTE<S>>(me, bdims, TETypes::RK4);
         te->iprint = 2;
         te->n_sub_sweeps = 6;
-        te->solve(1, beta / 2, mps_thermal->center == 0);
+        te->solve(1, beta / 2, imps->center == 0);
 
         te_energies.insert(te_energies.end(), te->energies.begin(),
                            te->energies.end());
 
+        // two-site to one-site transition
+        me->dot = 1;
+
         te->n_sub_sweeps = 2;
-        te->solve(9, beta / 2, mps_thermal->center == 0);
+        te->solve(9, beta / 2, imps->center == 0);
 
         te_energies.insert(te_energies.end(), te->energies.begin(),
                            te->energies.end());
@@ -102,10 +143,12 @@ class TestAncillaH8STO6G : public ::testing::Test {
                  << " error-m500 = " << scientific << setprecision(3)
                  << setw(10) << (te_energies[i] - energies_m500[i]) << endl;
 
-            EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
+            EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-4);
         }
 
+        imps_info->deallocate();
         mps_info_thermal->deallocate();
+        impo->deallocate();
         mpo->deallocate();
     }
     void SetUp() override {
@@ -119,7 +162,7 @@ class TestAncillaH8STO6G : public ::testing::Test {
     }
 };
 
-TEST_F(TestAncillaH8STO6G, TestSU2) {
+TEST_F(TestOneSiteAncillaH8STO6G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";
@@ -156,7 +199,7 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestAncillaH8STO6G, TestSZ) {
+TEST_F(TestOneSiteAncillaH8STO6G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";

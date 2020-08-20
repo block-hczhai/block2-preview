@@ -129,6 +129,7 @@ template <typename S> struct MultiMPS : MPS<S> {
                 for (size_t i = 0; i < minfo->targets.size(); i++)
                     wfn_infos[i]->initialize(t, *info->right_dims[center + dot],
                                              minfo->targets[i], false, true);
+                canonical_form[center] = 'J';
             } else {
                 StateInfo<S> tl = StateInfo<S>::tensor_product(
                     *info->left_dims[center], *info->basis[center],

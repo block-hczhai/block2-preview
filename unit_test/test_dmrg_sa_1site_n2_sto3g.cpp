@@ -4,7 +4,7 @@
 
 using namespace block2;
 
-class TestDMRGN2STO3GSA : public ::testing::Test {
+class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -49,7 +49,7 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
         Random::rand_seed(0);
 
         shared_ptr<MultiMPS<S>> mps =
-            make_shared<MultiMPS<S>>(hamil.n_sites, 0, 2, nroots);
+            make_shared<MultiMPS<S>>(hamil.n_sites, 0, 1, nroots);
         mps->initialize(mps_info);
         mps->random_canonicalize();
 
@@ -95,7 +95,7 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
     }
 };
 
-TEST_F(TestDMRGN2STO3GSA, TestSU2) {
+TEST_F(TestOneSiteDMRGN2STO3GSA, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
@@ -136,7 +136,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestDMRGN2STO3GSA, TestSZ) {
+TEST_F(TestOneSiteDMRGN2STO3GSA, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";

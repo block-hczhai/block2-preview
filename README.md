@@ -13,18 +13,20 @@ Features
     * U(1) particle number symmetry
     * SU(2) or U(1) spin symmetry
     * Abelian point group symmetry
-* Sweep algorithms (2-site algorithm)
+* Sweep algorithms (1-site / 2-site / 2-site to 1-site transition)
     * Ground-State DMRG
+        * Decomposition types: density matrix / SVD
+        * Noise types: wavefunction / density matrix / perturbative
     * Multi-Target State-Averaged Excited-State DMRG
     * MPS compression
     * Expectation
-    * Imaginary time evolution (tangent space and RK4 method)
+    * Imaginary time evolution (tangent space / RK4)
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
-* Particle Density Matrix
+* Particle Density Matrix (1-site / 2-site)
     * 1PDM
     * 2PDM (non-spin-adapted only)
-    * Spin/charge correlation
+    * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
     * Complementary-Normal (CN) partition

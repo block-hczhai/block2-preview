@@ -63,30 +63,28 @@ template <typename S> struct DMRG {
     struct Iteration {
         vector<double> energies;
         vector<vector<pair<S, double>>> quanta;
-        double error;
-        int ndav;
-        double tdav;
+        double error, tdav;
+        int ndav, mmps;
         size_t nflop;
-        Iteration(const vector<double> &energies, double error, int ndav,
-                  size_t nflop = 0, double tdav = 1.0,
-                  const vector<vector<pair<S, double>>> &quanta =
-                      vector<vector<pair<S, double>>>())
-            : energies(energies), error(error), ndav(ndav), nflop(nflop),
-              tdav(tdav) {}
+        Iteration(const vector<double> &energies, double error, int mmps,
+                  int ndav, size_t nflop = 0, double tdav = 1.0)
+            : energies(energies), error(error), mmps(mmps), ndav(ndav),
+              nflop(nflop), tdav(tdav) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
-            os << "Ndav = " << setw(4) << r.ndav;
+            os << "Mmps =" << setw(5) << r.mmps;
+            os << " Ndav =" << setw(4) << r.ndav;
             if (r.energies.size() == 1)
-                os << " E = " << setw(15) << r.energies[0];
+                os << " E = " << setw(17) << setprecision(10) << r.energies[0];
             else if (r.quanta.size() == 0) {
                 os << " E = ";
                 for (auto x : r.energies)
-                    os << setw(15) << setprecision(8) << x;
+                    os << setw(17) << setprecision(10) << x;
             }
-            os << " Error = " << setw(15) << setprecision(12) << r.error
-               << " FLOPS = " << scientific << setw(8) << setprecision(2)
-               << (double)r.nflop / r.tdav << " Tdav = " << fixed
-               << setprecision(2) << r.tdav;
+            os << " Error = " << scientific << setw(8) << setprecision(2)
+               << r.error << " FLOPS = " << scientific << setw(8)
+               << setprecision(2) << (double)r.nflop / r.tdav
+               << " Tdav = " << fixed << setprecision(2) << r.tdav;
             if (r.energies.size() != 1 && r.quanta.size() != 0) {
                 for (size_t i = 0; i < r.energies.size(); i++) {
                     os << endl;
@@ -101,6 +99,171 @@ template <typename S> struct DMRG {
             return os;
         }
     };
+    // one-site single-state dmrg algorithm
+    // canonical form for wavefunction: K = left-fused, S = right-fused
+    Iteration update_one_dot(int i, bool forward, uint16_t bond_dim,
+                             double noise, double davidson_conv_thrd) {
+        frame->activate(0);
+        bool fuse_left = i <= me->n_sites / 2;
+        if (me->ket->canonical_form[i] == 'C') {
+            if (i == 0)
+                me->ket->canonical_form[i] = 'K';
+            else if (i == me->n_sites - 1)
+                me->ket->canonical_form[i] = 'S';
+            else
+                assert(false);
+        }
+        // guess wavefunction
+        // change to fused form for super-block hamiltonian
+        // note that this switch exactly matches two-site conventional mpo
+        // middle-site switch, so two-site conventional mpo can work
+        me->ket->load_tensor(i);
+        if ((fuse_left && me->ket->canonical_form[i] == 'S') ||
+            (!fuse_left && me->ket->canonical_form[i] == 'K')) {
+            shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+            if (fuse_left && me->ket->canonical_form[i] == 'S')
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            else if (!fuse_left && me->ket->canonical_form[i] == 'K')
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            prev_wfn->info->deallocate();
+            prev_wfn->deallocate();
+        }
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                        me->bra->tensors[i], me->ket->tensors[i]);
+        int mmps = 0;
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
+        shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
+        if (decomp_type == DecompositionTypes::DensityMatrix &&
+            noise_type == NoiseTypes::Perturbative && noise != 0)
+            pket = h_eff->perturbative_noise(
+                forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                me->ket->info);
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+            if (!fuse_left && forward)
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            else if (fuse_left && !forward)
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            prev_wfn->info->deallocate();
+            prev_wfn->deallocate();
+            if (pket != nullptr) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> prev_pkets = {pket};
+                if (!fuse_left && forward)
+                    pket = MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                        i, me->ket->info, prev_pkets, me->mpo->tf->opf->cg)[0];
+                else if (fuse_left && !forward)
+                    pket = MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                        i, me->ket->info, prev_pkets, me->mpo->tf->opf->cg)[0];
+                prev_pkets[0]->deallocate_infos();
+                prev_pkets[0]->deallocate();
+            }
+        }
+        // splitting of wavefunction
+        shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
+        shared_ptr<SparseMatrix<S>> dm, left, right;
+        double error = 0.0;
+        if (decomp_type == DecompositionTypes::DensityMatrix) {
+            if (noise_type == NoiseTypes::Perturbative && noise != 0) {
+                dm = MovingEnvironment<S>::
+                    density_matrix_with_perturbative_noise(
+                        h_eff->opdq, me->ket->tensors[i], forward, noise, pket);
+                pket->deallocate_infos();
+                pket->deallocate();
+            } else
+                dm = MovingEnvironment<S>::density_matrix(
+                    h_eff->opdq, me->ket->tensors[i], forward, noise,
+                    noise_type);
+            error = MovingEnvironment<S>::split_density_matrix(
+                dm, me->ket->tensors[i], (int)bond_dim, forward, true, left,
+                right, cutoff, trunc_type);
+        } else if (decomp_type == DecompositionTypes::SVD) {
+            assert(noise_type == NoiseTypes::None ||
+                   noise_type == NoiseTypes::Wavefunction);
+            if (noise_type == NoiseTypes::Wavefunction && noise != 0)
+                MovingEnvironment<S>::wavefunction_add_noise(
+                    me->ket->tensors[i], noise);
+            error = MovingEnvironment<S>::split_wavefunction_svd(
+                h_eff->opdq, me->ket->tensors[i], (int)bond_dim, forward, true,
+                left, right, cutoff, trunc_type);
+        } else
+            assert(false);
+        shared_ptr<StateInfo<S>> info = nullptr;
+        // propagation
+        if (forward) {
+            me->ket->tensors[i] = left;
+            me->ket->save_tensor(i);
+            info = left->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            me->ket->info->left_dims[i + 1] = info;
+            me->ket->info->save_left_dims(i + 1);
+            info->deallocate();
+            if (i != me->n_sites - 1) {
+                MovingEnvironment<S>::contract_one_dot(i + 1, right, me->ket,
+                                                       forward);
+                me->ket->save_tensor(i + 1);
+                me->ket->unload_tensor(i + 1);
+                me->ket->canonical_form[i] = 'L';
+                me->ket->canonical_form[i + 1] = 'S';
+            } else {
+                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_one_dot(i, right, me->ket,
+                                                       !forward);
+                me->ket->save_tensor(i);
+                me->ket->unload_tensor(i);
+                me->ket->canonical_form[i] = 'K';
+            }
+        } else {
+            me->ket->tensors[i] = right;
+            me->ket->save_tensor(i);
+            info = right->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            me->ket->info->right_dims[i] = info;
+            me->ket->info->save_right_dims(i);
+            info->deallocate();
+            if (i > 0) {
+                MovingEnvironment<S>::contract_one_dot(i - 1, left, me->ket,
+                                                       forward);
+                me->ket->save_tensor(i - 1);
+                me->ket->unload_tensor(i - 1);
+                me->ket->canonical_form[i - 1] = 'K';
+                me->ket->canonical_form[i] = 'R';
+            } else {
+                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_one_dot(i, left, me->ket,
+                                                       !forward);
+                me->ket->save_tensor(i);
+                me->ket->unload_tensor(i);
+                me->ket->canonical_form[i] = 'S';
+            }
+        }
+        right->info->deallocate();
+        right->deallocate();
+        left->info->deallocate();
+        left->deallocate();
+        if (dm != nullptr) {
+            dm->info->deallocate();
+            dm->deallocate();
+        }
+        old_wfn->info->deallocate();
+        old_wfn->deallocate();
+        return Iteration(vector<double>{get<0>(pdi) + me->mpo->const_e}, error,
+                         mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+    }
+    // two-site single-state dmrg algorithm
+    // canonical form for wavefunction: C = center
     Iteration update_two_dot(int i, bool forward, uint16_t bond_dim,
                              double noise, double davidson_conv_thrd) {
         frame->activate(0);
@@ -112,8 +275,9 @@ template <typename S> struct DMRG {
             me->ket->tensors[i + 1] = nullptr;
         }
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(FuseTypes::FuseLR, true);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        int mmps = 0;
         auto pdi =
             h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
         shared_ptr<SparseMatrix<S>> dm;
@@ -121,8 +285,8 @@ template <typename S> struct DMRG {
         if (decomp_type == DecompositionTypes::DensityMatrix) {
             if (noise_type == NoiseTypes::Perturbative && noise != 0) {
                 shared_ptr<SparseMatrixGroup<S>> pket =
-                    h_eff->perturbative_noise_two_dot(forward, i,
-                                                      me->ket->info);
+                    h_eff->perturbative_noise(forward, i, i + 1,
+                                              FuseTypes::FuseLR, me->ket->info);
                 h_eff->deallocate();
                 dm = MovingEnvironment<
                     S>::density_matrix_with_perturbative_noise(h_eff->opdq,
@@ -155,12 +319,14 @@ template <typename S> struct DMRG {
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'C';
         } else {
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'C';
@@ -180,9 +346,167 @@ template <typename S> struct DMRG {
         MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward,
                                             me->mpo->tf->opf->cg);
         return Iteration(vector<double>{get<0>(pdi) + me->mpo->const_e}, error,
-                         get<1>(pdi), get<2>(pdi), get<3>(pdi));
+                         mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
-    // State-averaged
+    // State-averaged one-site algorithm
+    // canonical form for wavefunction: J = left-fused, T = right-fused
+    Iteration update_multi_one_dot(int i, bool forward, uint16_t bond_dim,
+                                   double noise, double davidson_conv_thrd) {
+        shared_ptr<MultiMPS<S>> mket =
+            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+        frame->activate(0);
+        bool fuse_left = i <= me->n_sites / 2;
+        if (mket->canonical_form[i] == 'M') {
+            if (i == 0)
+                mket->canonical_form[i] = 'J';
+            else if (i == me->n_sites - 1)
+                mket->canonical_form[i] = 'T';
+            else
+                assert(false);
+        }
+        // guess wavefunction
+        // change to fused form for super-block hamiltonian
+        // note that this switch exactly matches two-site conventional mpo
+        // middle-site switch, so two-site conventional mpo can work
+        mket->load_tensor(i);
+        if ((fuse_left && mket->canonical_form[i] == 'T') ||
+            (!fuse_left && mket->canonical_form[i] == 'J')) {
+            vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mket->wfns;
+            if (fuse_left && mket->canonical_form[i] == 'T')
+                mket->wfns = MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                    i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+            else if (!fuse_left && mket->canonical_form[i] == 'J')
+                mket->wfns =
+                    MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                        i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+            for (int j = (int)prev_wfns.size() - 1; j >= 0; j--)
+                prev_wfns[j]->deallocate();
+            if (prev_wfns.size() != 0)
+                prev_wfns[0]->deallocate_infos();
+        }
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                              true);
+        int mmps = 0;
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
+        vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
+        for (int i = 0; i < mket->nroots; i++) {
+            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+            mps_quanta[i].erase(
+                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                          [this](const pair<S, double> &p) {
+                              return p.second < this->quanta_cutoff;
+                          }),
+                mps_quanta[i].end());
+        }
+        assert(noise_type != NoiseTypes::Perturbative);
+        assert(decomp_type == DecompositionTypes::DensityMatrix);
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mket->wfns;
+            if (!fuse_left && forward)
+                mket->wfns = MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                    i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+            else if (fuse_left && !forward)
+                mket->wfns =
+                    MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                        i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+            for (int j = (int)prev_wfns.size() - 1; j >= 0; j--)
+                prev_wfns[j]->deallocate();
+            if (prev_wfns.size() != 0)
+                prev_wfns[0]->deallocate_infos();
+        }
+        // splitting of wavefunction
+        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns,
+                                                 new_wfns;
+        shared_ptr<SparseMatrix<S>> dm, rot;
+        dm = MovingEnvironment<S>::density_matrix_with_multi_target(
+            h_eff->opdq, mket->wfns, mket->weights, forward, noise, noise_type);
+        double error = MovingEnvironment<S>::multi_split_density_matrix(
+            dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot, cutoff,
+            trunc_type);
+        shared_ptr<StateInfo<S>> info = nullptr;
+        // propagation
+        if (forward) {
+            mket->tensors[i] = rot;
+            mket->save_tensor(i);
+            info = rot->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            mket->info->left_dims[i + 1] = info;
+            mket->info->save_left_dims(i + 1);
+            info->deallocate();
+            if (i != me->n_sites - 1) {
+                MovingEnvironment<S>::contract_multi_one_dot(i + 1, new_wfns,
+                                                             mket, forward);
+                mket->save_wavefunction(i + 1);
+                mket->unload_wavefunction(i + 1);
+                mket->canonical_form[i] = 'L';
+                mket->canonical_form[i + 1] = 'T';
+            } else {
+                mket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_multi_one_dot(i, new_wfns, mket,
+                                                             !forward);
+                mket->save_wavefunction(i);
+                mket->unload_wavefunction(i);
+                mket->canonical_form[i] = 'J';
+            }
+        } else {
+            mket->tensors[i] = rot;
+            mket->save_tensor(i);
+            info = rot->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            mket->info->right_dims[i] = info;
+            mket->info->save_right_dims(i);
+            info->deallocate();
+            if (i > 0) {
+                MovingEnvironment<S>::contract_multi_one_dot(i - 1, new_wfns,
+                                                             mket, forward);
+                mket->save_wavefunction(i - 1);
+                mket->unload_wavefunction(i - 1);
+                mket->canonical_form[i - 1] = 'J';
+                mket->canonical_form[i] = 'R';
+            } else {
+                mket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_multi_one_dot(i, new_wfns, mket,
+                                                             !forward);
+                mket->save_wavefunction(i);
+                mket->unload_wavefunction(i);
+                mket->canonical_form[i] = 'T';
+            }
+        }
+        if (forward) {
+            for (int j = (int)new_wfns.size() - 1; j >= 0; j--)
+                new_wfns[j]->deallocate();
+            if (new_wfns.size() != 0)
+                new_wfns[0]->deallocate_infos();
+            rot->info->deallocate();
+            rot->deallocate();
+        } else {
+            rot->info->deallocate();
+            rot->deallocate();
+            for (int j = (int)new_wfns.size() - 1; j >= 0; j--)
+                new_wfns[j]->deallocate();
+            if (new_wfns.size() != 0)
+                new_wfns[0]->deallocate_infos();
+        }
+        dm->info->deallocate();
+        dm->deallocate();
+        for (int j = (int)old_wfns.size() - 1; j >= 0; j--)
+            old_wfns[j]->deallocate();
+        if (old_wfns.size() != 0)
+            old_wfns[0]->deallocate_infos();
+        for (auto &x : get<0>(pdi))
+            x += me->mpo->const_e;
+        Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
+                                get<2>(pdi), get<3>(pdi));
+        r.quanta = mps_quanta;
+        return r;
+    }
+    // State-averaged two-site algorithm
+    // canonical form for wavefunction: M = multi center
     Iteration update_multi_two_dot(int i, bool forward, uint16_t bond_dim,
                                    double noise, double davidson_conv_thrd) {
         shared_ptr<MultiMPS<S>> mket =
@@ -196,6 +520,7 @@ template <typename S> struct DMRG {
         vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, true);
+        int mmps = 0;
         auto pdi =
             h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter);
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
@@ -221,12 +546,14 @@ template <typename S> struct DMRG {
         shared_ptr<StateInfo<S>> info = nullptr;
         if (forward) {
             info = me->ket->tensors[i]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
             me->ket->canonical_form[i + 1] = 'M';
         } else {
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'M';
@@ -253,14 +580,15 @@ template <typename S> struct DMRG {
                                                   me->mpo->tf->opf->cg);
         for (auto &x : get<0>(pdi))
             x += me->mpo->const_e;
-        Iteration r = Iteration(get<0>(pdi), error, get<1>(pdi), get<2>(pdi),
-                                get<3>(pdi));
+        Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
+                                get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
         return r;
     }
     Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise,
                        double davidson_conv_thrd) {
         me->move_to(i);
+        assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M')
@@ -269,8 +597,15 @@ template <typename S> struct DMRG {
             else
                 return update_two_dot(i, forward, bond_dim, noise,
                                       davidson_conv_thrd);
-        } else
-            throw runtime_error("1 site not yet implemented");
+        } else {
+            if (me->ket->canonical_form[i] == 'J' ||
+                me->ket->canonical_form[i] == 'T')
+                return update_multi_one_dot(i, forward, bond_dim, noise,
+                                            davidson_conv_thrd);
+            else
+                return update_one_dot(i, forward, bond_dim, noise,
+                                      davidson_conv_thrd);
+        }
     }
     pair<vector<double>, vector<vector<pair<S, double>>>>
     sweep(bool forward, uint16_t bond_dim, double noise,
@@ -403,23 +738,244 @@ template <typename S> struct ImaginaryTE {
           forward(false), mode(mode), n_sub_sweeps(n_sub_sweeps) {}
     struct Iteration {
         double energy, normsq, error;
-        int nexpo, nexpok;
+        int nexpo, nexpok, mmps;
         double texpo;
         size_t nflop;
-        Iteration(double energy, double normsq, double error, int nexpo,
-                  int nexpok, size_t nflop = 0, double texpo = 1.0)
-            : energy(energy), normsq(normsq), error(error), nexpo(nexpo),
-              nexpok(nexpok), nflop(nflop), texpo(texpo) {}
+        Iteration(double energy, double normsq, double error, int mmps,
+                  int nexpo, int nexpok, size_t nflop = 0, double texpo = 1.0)
+            : energy(energy), normsq(normsq), error(error), mmps(mmps),
+              nexpo(nexpo), nexpok(nexpok), nflop(nflop), texpo(texpo) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
-            os << "Nexpo = " << setw(4) << r.nexpo << "/" << setw(4) << r.nexpok
-               << " E = " << setw(15) << r.energy << " Error = " << setw(15)
-               << setprecision(12) << r.error << " FLOPS = " << scientific
+            os << "Mmps =" << setw(5) << r.mmps;
+            os << " Nexpo = " << setw(4) << r.nexpo << "/" << setw(4)
+               << r.nexpok << " E = " << setw(17) << setprecision(10)
+               << r.energy << " Error = " << scientific << setw(8)
+               << setprecision(2) << r.error << " FLOPS = " << scientific
                << setw(8) << setprecision(2) << (double)r.nflop / r.texpo
                << " Texpo = " << fixed << setprecision(2) << r.texpo;
             return os;
         }
     };
+    // one-site algorithm
+    Iteration update_one_dot(int i, bool forward, bool advance, double beta,
+                             uint16_t bond_dim, double noise) {
+        frame->activate(0);
+        bool fuse_left = i <= me->n_sites / 2;
+        if (me->ket->canonical_form[i] == 'C') {
+            if (i == 0)
+                me->ket->canonical_form[i] = 'K';
+            else if (i == me->n_sites - 1)
+                me->ket->canonical_form[i] = 'S';
+            else
+                assert(false);
+        }
+        // guess wavefunction
+        // change to fused form for super-block hamiltonian
+        // note that this switch exactly matches two-site conventional mpo
+        // middle-site switch, so two-site conventional mpo can work
+        me->ket->load_tensor(i);
+        if ((fuse_left && me->ket->canonical_form[i] == 'S') ||
+            (!fuse_left && me->ket->canonical_form[i] == 'K')) {
+            shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+            if (fuse_left && me->ket->canonical_form[i] == 'S')
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            else if (!fuse_left && me->ket->canonical_form[i] == 'K')
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            prev_wfn->info->deallocate();
+            prev_wfn->deallocate();
+        }
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                        me->bra->tensors[i], me->ket->tensors[i]);
+        tuple<double, double, int, size_t, double> pdi;
+        TETypes effective_mode = mode;
+        if (mode == TETypes::RK4 &&
+            ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
+            effective_mode = TETypes::TangentSpace;
+        vector<MatrixRef> pdpf;
+        if (!advance &&
+            ((forward && i == me->n_sites - 1) || (!forward && i == 0))) {
+            assert(effective_mode == TETypes::TangentSpace);
+            // TangentSpace method does not allow multiple sweeps for one time
+            // step
+            assert(mode == TETypes::RK4);
+            MatrixRef tmp(nullptr, h_eff->ket->total_memory, 1);
+            tmp.allocate();
+            memcpy(tmp.data, h_eff->ket->data,
+                   h_eff->ket->total_memory * sizeof(double));
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3);
+            memcpy(h_eff->ket->data, tmp.data,
+                   h_eff->ket->total_memory * sizeof(double));
+            tmp.deallocate();
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
+            pdpf = pdp.first;
+        } else if (effective_mode == TETypes::TangentSpace)
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3);
+        else if (effective_mode == TETypes::RK4) {
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false);
+            pdpf = pdp.first;
+            pdi = pdp.second;
+        }
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+            if (!fuse_left && forward)
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            else if (fuse_left && !forward)
+                me->ket->tensors[i] =
+                    MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+            if (pdpf.size() != 0) {
+                shared_ptr<SparseMatrix<S>> tmp_wfn;
+                for (size_t ip = 0; ip < pdpf.size(); ip++) {
+                    assert(pdpf[ip].size() == prev_wfn->total_memory);
+                    memcpy(prev_wfn->data, pdpf[ip].data,
+                           pdpf[ip].size() * sizeof(double));
+                    if (!fuse_left && forward)
+                        tmp_wfn = MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+                    else if (fuse_left && !forward)
+                        tmp_wfn = MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
+                    assert(pdpf[ip].size() == tmp_wfn->total_memory);
+                    memcpy(pdpf[ip].data, tmp_wfn->data,
+                           pdpf[ip].size() * sizeof(double));
+                    tmp_wfn->info->deallocate();
+                    tmp_wfn->deallocate();
+                }
+            }
+            prev_wfn->info->deallocate();
+            prev_wfn->deallocate();
+        }
+        shared_ptr<SparseMatrix<S>> dm;
+        if (pdpf.size() != 0) {
+            dm = MovingEnvironment<S>::density_matrix_with_weights(
+                h_eff->opdq, me->ket->tensors[i], forward, noise, pdpf, weights,
+                noise_type);
+            frame->activate(1);
+            for (int i = pdpf.size() - 1; i >= 0; i--)
+                pdpf[i].deallocate();
+            frame->activate(0);
+        } else
+            dm = MovingEnvironment<S>::density_matrix(
+                h_eff->opdq, me->ket->tensors[i], forward, noise, noise_type);
+        int bdim = bond_dim;
+        int mmps = 0;
+        // splitting of wavefunction
+        shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
+        shared_ptr<SparseMatrix<S>> left, right;
+        if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
+             i % 2 == 0) ||
+            (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
+             i % 2 == 1))
+            bdim = -1;
+        double error = MovingEnvironment<S>::split_density_matrix(
+            dm, me->ket->tensors[i], bdim, forward, false, left, right, cutoff,
+            trunc_type);
+        shared_ptr<StateInfo<S>> info = nullptr;
+        // propagation
+        int expok = 0;
+        if (forward) {
+            if (mode == TETypes::RK4 && (i != me->n_sites - 1 || !advance))
+                right->normalize();
+            me->ket->tensors[i] = left;
+            me->ket->save_tensor(i);
+            info = left->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            me->ket->info->left_dims[i + 1] = info;
+            me->ket->info->save_left_dims(i + 1);
+            info->deallocate();
+            if (i != me->n_sites - 1) {
+                if (mode == TETypes::TangentSpace) {
+                    me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                    me->move_to(i + 1);
+                    me->ket->tensors[i] = left;
+                    shared_ptr<EffectiveHamiltonian<S>> k_eff =
+                        me->eff_ham(FuseTypes::NoFuseL, true, right, right);
+                    auto pdk =
+                        k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
+                    k_eff->deallocate();
+                    right->normalize();
+                    get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
+                    expok = get<2>(pdk);
+                }
+                MovingEnvironment<S>::contract_one_dot(i + 1, right, me->ket,
+                                                       forward);
+                me->ket->save_tensor(i + 1);
+                me->ket->unload_tensor(i + 1);
+                me->ket->canonical_form[i] = 'L';
+                me->ket->canonical_form[i + 1] = 'S';
+            } else {
+                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_one_dot(i, right, me->ket,
+                                                       !forward);
+                me->ket->save_tensor(i);
+                me->ket->unload_tensor(i);
+                me->ket->canonical_form[i] = 'K';
+            }
+        } else {
+            if (mode == TETypes::RK4 && (i != 0 || !advance))
+                left->normalize();
+            me->ket->tensors[i] = right;
+            me->ket->save_tensor(i);
+            info = right->info->extract_state_info(forward);
+            mmps = info->n_states_total;
+            me->ket->info->right_dims[i] = info;
+            me->ket->info->save_right_dims(i);
+            info->deallocate();
+            if (i > 0) {
+                if (mode == TETypes::TangentSpace) {
+                    me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                    me->move_to(i - 1);
+                    me->ket->tensors[i] = right;
+                    shared_ptr<EffectiveHamiltonian<S>> k_eff =
+                        me->eff_ham(FuseTypes::NoFuseR, true, left, left);
+                    auto pdk =
+                        k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
+                    k_eff->deallocate();
+                    left->normalize();
+                    get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
+                    expok = get<2>(pdk);
+                }
+                MovingEnvironment<S>::contract_one_dot(i - 1, left, me->ket,
+                                                       forward);
+                me->ket->save_tensor(i - 1);
+                me->ket->unload_tensor(i - 1);
+                me->ket->canonical_form[i - 1] = 'K';
+                me->ket->canonical_form[i] = 'R';
+            } else {
+                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                MovingEnvironment<S>::contract_one_dot(i, left, me->ket,
+                                                       !forward);
+                me->ket->save_tensor(i);
+                me->ket->unload_tensor(i);
+                me->ket->canonical_form[i] = 'S';
+            }
+        }
+        right->info->deallocate();
+        right->deallocate();
+        left->info->deallocate();
+        left->deallocate();
+        if (dm != nullptr) {
+            dm->info->deallocate();
+            dm->deallocate();
+        }
+        old_wfn->info->deallocate();
+        old_wfn->deallocate();
+        return Iteration(get<0>(pdi) + me->mpo->const_e,
+                         get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
+                         expok, get<3>(pdi), get<4>(pdi));
+    }
+    // two-site algorithm
     Iteration update_two_dot(int i, bool forward, bool advance, double beta,
                              uint16_t bond_dim, double noise) {
         frame->activate(0);
@@ -430,8 +986,8 @@ template <typename S> struct ImaginaryTE {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(FuseTypes::FuseLR, true);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         tuple<double, double, int, size_t, double> pdi;
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         TETypes effective_mode = mode;
@@ -480,6 +1036,7 @@ template <typename S> struct ImaginaryTE {
             frame->activate(0);
         }
         int bdim = bond_dim;
+        int mmps = 0;
         if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
              i % 2 == 0) ||
             (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
@@ -493,6 +1050,7 @@ template <typename S> struct ImaginaryTE {
             if (mode == TETypes::RK4 && (i + 1 != me->n_sites - 1 || !advance))
                 me->ket->tensors[i + 1]->normalize();
             info = me->ket->tensors[i]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->left_dims[i + 1] = info;
             me->ket->info->save_left_dims(i + 1);
             me->ket->canonical_form[i] = 'L';
@@ -501,6 +1059,7 @@ template <typename S> struct ImaginaryTE {
             if (mode == TETypes::RK4 && (i != 0 || !advance))
                 me->ket->tensors[i]->normalize();
             info = me->ket->tensors[i + 1]->info->extract_state_info(forward);
+            mmps = info->n_states_total;
             me->ket->info->right_dims[i + 1] = info;
             me->ket->info->save_right_dims(i + 1);
             me->ket->canonical_form[i] = 'C';
@@ -521,7 +1080,8 @@ template <typename S> struct ImaginaryTE {
             me->move_to(i + 1);
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                me->eff_ham(FuseTypes::FuseR, true);
+                me->eff_ham(FuseTypes::FuseR, true, me->bra->tensors[i + 1],
+                            me->ket->tensors[i + 1]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
             k_eff->deallocate();
             me->ket->tensors[i + 1]->normalize();
@@ -533,7 +1093,8 @@ template <typename S> struct ImaginaryTE {
             me->move_to(i - 1);
             me->ket->load_tensor(i);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                me->eff_ham(FuseTypes::FuseL, true);
+                me->eff_ham(FuseTypes::FuseL, true, me->bra->tensors[i],
+                            me->ket->tensors[i]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3);
             k_eff->deallocate();
             me->ket->tensors[i]->normalize();
@@ -545,16 +1106,17 @@ template <typename S> struct ImaginaryTE {
         MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket, forward,
                                             me->mpo->tf->opf->cg);
         return Iteration(get<0>(pdi) + me->mpo->const_e,
-                         get<1>(pdi) * get<1>(pdi), error, get<2>(pdi), expok,
-                         get<3>(pdi), get<4>(pdi));
+                         get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
+                         expok, get<3>(pdi), get<4>(pdi));
     }
     Iteration blocking(int i, bool forward, bool advance, double beta,
                        uint16_t bond_dim, double noise) {
         me->move_to(i);
+        assert(me->dot == 2 || me->dot == 1);
         if (me->dot == 2)
             return update_two_dot(i, forward, advance, beta, bond_dim, noise);
         else
-            throw runtime_error("1 site not yet implemented");
+            return update_one_dot(i, forward, advance, beta, bond_dim, noise);
     }
     tuple<double, double, double> sweep(bool forward, bool advance, double beta,
                                         uint16_t bond_dim, double noise) {
@@ -595,6 +1157,10 @@ template <typename S> struct ImaginaryTE {
     }
     void normalize() {
         size_t center = me->ket->canonical_form.find('C');
+        if (center == string::npos)
+            center = me->ket->canonical_form.find('K');
+        if (center == string::npos)
+            center = me->ket->canonical_form.find('S');
         assert(center != string::npos);
         me->ket->load_tensor(center);
         me->ket->tensors[center]->normalize();
@@ -669,14 +1235,17 @@ template <typename S> struct Compress {
         : me(me), bra_bond_dims(bra_bond_dims), ket_bond_dims(ket_bond_dims),
           noises(noises), forward(false) {}
     struct Iteration {
+        int mmps;
         double norm, error;
         double tmult;
         size_t nflop;
-        Iteration(double norm, double error, size_t nflop = 0,
+        Iteration(double norm, double error, int mmps, size_t nflop = 0,
                   double tmult = 1.0)
-            : norm(norm), error(error), nflop(nflop), tmult(tmult) {}
+            : norm(norm), error(error), mmps(mmps), nflop(nflop), tmult(tmult) {
+        }
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
+            os << "Mmps =" << setw(5) << r.mmps;
             os << " Norm = " << setw(15) << r.norm << " Error = " << setw(15)
                << setprecision(12) << r.error << " FLOPS = " << scientific
                << setw(8) << setprecision(2) << (double)r.nflop / r.tmult
@@ -684,6 +1253,146 @@ template <typename S> struct Compress {
             return os;
         }
     };
+    Iteration update_one_dot(int i, bool forward, uint16_t bra_bond_dim,
+                             uint16_t ket_bond_dim, double noise) {
+        assert(me->bra != me->ket);
+        frame->activate(0);
+        bool fuse_left = i <= me->n_sites / 2;
+        for (auto &mps : {me->bra, me->ket}) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else
+                    assert(false);
+            }
+            // guess wavefunction
+            // change to fused form for super-block hamiltonian
+            // note that this switch exactly matches two-site conventional mpo
+            // middle-site switch, so two-site conventional mpo can work
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
+                        me->bra->tensors[i], me->ket->tensors[i]);
+        auto pdi = h_eff->multiply();
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            for (auto &mps : {me->bra, me->ket}) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (!fuse_left && forward)
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (fuse_left && !forward)
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        shared_ptr<SparseMatrix<S>> old_bra = me->bra->tensors[i];
+        shared_ptr<SparseMatrix<S>> old_ket = me->ket->tensors[i];
+        double bra_error = 0.0;
+        int bra_mmps = 0;
+        for (auto &mps : {me->bra, me->ket}) {
+            // splitting of wavefunction
+            shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
+            shared_ptr<SparseMatrix<S>> left, right;
+            shared_ptr<SparseMatrix<S>> dm =
+                MovingEnvironment<S>::density_matrix(
+                    h_eff->opdq, old_wfn, forward, mps == me->bra ? noise : 0.0,
+                    mps == me->bra ? noise_type : NoiseTypes::None);
+            int bond_dim =
+                mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
+            double error = MovingEnvironment<S>::split_density_matrix(
+                dm, old_wfn, bond_dim, forward, false, left, right, cutoff,
+                trunc_type);
+            if (mps == me->bra)
+                bra_error = error;
+            shared_ptr<StateInfo<S>> info = nullptr;
+            // propagation
+            if (forward) {
+                mps->tensors[i] = left;
+                mps->save_tensor(i);
+                info = left->info->extract_state_info(forward);
+                if (mps == me->bra)
+                    bra_mmps = info->n_states_total;
+                mps->info->left_dims[i + 1] = info;
+                mps->info->save_left_dims(i + 1);
+                info->deallocate();
+                if (i != me->n_sites - 1) {
+                    MovingEnvironment<S>::contract_one_dot(i + 1, right, mps,
+                                                           forward);
+                    mps->save_tensor(i + 1);
+                    mps->unload_tensor(i + 1);
+                    mps->canonical_form[i] = 'L';
+                    mps->canonical_form[i + 1] = 'S';
+                } else {
+                    mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                    MovingEnvironment<S>::contract_one_dot(i, right, mps,
+                                                           !forward);
+                    mps->save_tensor(i);
+                    mps->unload_tensor(i);
+                    mps->canonical_form[i] = 'K';
+                }
+            } else {
+                mps->tensors[i] = right;
+                mps->save_tensor(i);
+                info = right->info->extract_state_info(forward);
+                if (mps == me->bra)
+                    bra_mmps = info->n_states_total;
+                mps->info->right_dims[i] = info;
+                mps->info->save_right_dims(i);
+                info->deallocate();
+                if (i > 0) {
+                    MovingEnvironment<S>::contract_one_dot(i - 1, left, mps,
+                                                           forward);
+                    mps->save_tensor(i - 1);
+                    mps->unload_tensor(i - 1);
+                    mps->canonical_form[i - 1] = 'K';
+                    mps->canonical_form[i] = 'R';
+                } else {
+                    mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                    MovingEnvironment<S>::contract_one_dot(i, left, mps,
+                                                           !forward);
+                    mps->save_tensor(i);
+                    mps->unload_tensor(i);
+                    mps->canonical_form[i] = 'S';
+                }
+            }
+            right->info->deallocate();
+            right->deallocate();
+            left->info->deallocate();
+            left->deallocate();
+            dm->info->deallocate();
+            dm->deallocate();
+        }
+        for (auto &old_wfn : {old_ket, old_bra}) {
+            old_wfn->info->deallocate();
+            old_wfn->deallocate();
+        }
+        return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
+                         get<2>(pdi));
+    }
     Iteration update_two_dot(int i, bool forward, uint16_t bra_bond_dim,
                              uint16_t ket_bond_dim, double noise) {
         assert(me->bra != me->ket);
@@ -696,13 +1405,14 @@ template <typename S> struct Compress {
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(FuseTypes::FuseLR, false);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, false, me->bra->tensors[i], me->ket->tensors[i]);
         auto pdi = h_eff->multiply();
         h_eff->deallocate();
         shared_ptr<SparseMatrix<S>> old_bra = me->bra->tensors[i];
         shared_ptr<SparseMatrix<S>> old_ket = me->ket->tensors[i];
         double bra_error = 0.0;
+        int bra_mmps = 0;
         for (auto &mps : {me->bra, me->ket}) {
             shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
             shared_ptr<SparseMatrix<S>> dm =
@@ -730,6 +1440,8 @@ template <typename S> struct Compress {
                 mps->canonical_form[i] = 'C';
                 mps->canonical_form[i + 1] = 'R';
             }
+            if (mps == me->bra)
+                bra_mmps = info->n_states_total;
             info->deallocate();
             mps->save_tensor(i + 1);
             mps->save_tensor(i);
@@ -744,7 +1456,8 @@ template <typename S> struct Compress {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
         }
-        return Iteration(get<0>(pdi), bra_error, get<1>(pdi), get<2>(pdi));
+        return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
+                         get<2>(pdi));
     }
     Iteration blocking(int i, bool forward, uint16_t bra_bond_dim,
                        uint16_t ket_bond_dim, double noise) {
@@ -753,7 +1466,8 @@ template <typename S> struct Compress {
             return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim,
                                   noise);
         else
-            throw runtime_error("1 site not yet implemented");
+            return update_one_dot(i, forward, bra_bond_dim, ket_bond_dim,
+                                  noise);
     }
     double sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim,
                  double noise) {
@@ -901,6 +1615,147 @@ template <typename S> struct Expect {
             return os;
         }
     };
+    Iteration update_one_dot(int i, bool forward, bool propagate,
+                             uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
+        frame->activate(0);
+        vector<shared_ptr<MPS<S>>> mpss =
+            me->bra == me->ket ? vector<shared_ptr<MPS<S>>>{me->bra}
+                               : vector<shared_ptr<MPS<S>>>{me->bra, me->ket};
+        bool fuse_left = i <= me->n_sites / 2;
+        for (auto &mps : mpss) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else
+                    assert(false);
+            }
+            // guess wavefunction
+            // change to fused form for super-block hamiltonian
+            // note that this switch exactly matches two-site conventional mpo
+            // middle-site switch, so two-site conventional mpo can work
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
+                        me->bra->tensors[i], me->ket->tensors[i]);
+        auto pdi = h_eff->expect();
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            for (auto &mps : mpss) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (!fuse_left && forward)
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (fuse_left && !forward)
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        vector<shared_ptr<SparseMatrix<S>>> old_wfns =
+            me->bra == me->ket
+                ? vector<shared_ptr<SparseMatrix<S>>>{me->bra->tensors[i]}
+                : vector<shared_ptr<SparseMatrix<S>>>{me->ket->tensors[i],
+                                                      me->bra->tensors[i]};
+        double bra_error = 0.0, ket_error = 0.0;
+        if (propagate) {
+            for (auto &mps : mpss) {
+                shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S>> left, right;
+                shared_ptr<SparseMatrix<S>> dm =
+                    MovingEnvironment<S>::density_matrix(
+                        h_eff->opdq, old_wfn, forward, 0.0, NoiseTypes::None);
+                int bond_dim =
+                    mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                double error = MovingEnvironment<S>::split_density_matrix(
+                    dm, old_wfn, bond_dim, forward, false, left, right, cutoff,
+                    trunc_type);
+                if (mps == me->bra)
+                    bra_error = error;
+                else
+                    ket_error = error;
+                shared_ptr<StateInfo<S>> info = nullptr;
+                // propagation
+                if (forward) {
+                    mps->tensors[i] = left;
+                    mps->save_tensor(i);
+                    info = left->info->extract_state_info(forward);
+                    mps->info->left_dims[i + 1] = info;
+                    mps->info->save_left_dims(i + 1);
+                    info->deallocate();
+                    if (i != me->n_sites - 1) {
+                        MovingEnvironment<S>::contract_one_dot(i + 1, right,
+                                                               mps, forward);
+                        mps->save_tensor(i + 1);
+                        mps->unload_tensor(i + 1);
+                        mps->canonical_form[i] = 'L';
+                        mps->canonical_form[i + 1] = 'S';
+                    } else {
+                        mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_one_dot(i, right, mps,
+                                                               !forward);
+                        mps->save_tensor(i);
+                        mps->unload_tensor(i);
+                        mps->canonical_form[i] = 'K';
+                    }
+                } else {
+                    mps->tensors[i] = right;
+                    mps->save_tensor(i);
+                    info = right->info->extract_state_info(forward);
+                    mps->info->right_dims[i] = info;
+                    mps->info->save_right_dims(i);
+                    info->deallocate();
+                    if (i > 0) {
+                        MovingEnvironment<S>::contract_one_dot(i - 1, left, mps,
+                                                               forward);
+                        mps->save_tensor(i - 1);
+                        mps->unload_tensor(i - 1);
+                        mps->canonical_form[i - 1] = 'K';
+                        mps->canonical_form[i] = 'R';
+                    } else {
+                        mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_one_dot(i, left, mps,
+                                                               !forward);
+                        mps->save_tensor(i);
+                        mps->unload_tensor(i);
+                        mps->canonical_form[i] = 'S';
+                    }
+                }
+                right->info->deallocate();
+                right->deallocate();
+                left->info->deallocate();
+                left->deallocate();
+                dm->info->deallocate();
+                dm->deallocate();
+            }
+        }
+        for (auto &old_wfn : old_wfns) {
+            old_wfn->info->deallocate();
+            old_wfn->deallocate();
+        }
+        return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
+                         get<2>(pdi));
+    }
     Iteration update_two_dot(int i, bool forward, bool propagate,
                              uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         frame->activate(0);
@@ -915,8 +1770,8 @@ template <typename S> struct Expect {
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(FuseTypes::FuseLR, false);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, false, me->bra->tensors[i], me->ket->tensors[i]);
         auto pdi = h_eff->expect();
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> old_wfns =
@@ -965,12 +1820,192 @@ template <typename S> struct Expect {
                 MovingEnvironment<S>::propagate_wfn(
                     i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
             }
-        }
+        } else
+            for (auto &mps : mpss)
+                mps->save_tensor(i);
         for (auto &old_wfn : old_wfns) {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
         }
         return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
+                         get<2>(pdi));
+    }
+    Iteration update_multi_one_dot(int i, bool forward, bool propagate,
+                                   uint16_t bra_bond_dim,
+                                   uint16_t ket_bond_dim) {
+        shared_ptr<MultiMPS<S>> mket =
+                                    dynamic_pointer_cast<MultiMPS<S>>(me->ket),
+                                mbra =
+                                    dynamic_pointer_cast<MultiMPS<S>>(me->bra);
+        if (me->bra == me->ket)
+            assert(mbra == mket);
+        frame->activate(0);
+        vector<shared_ptr<MultiMPS<S>>> mpss =
+            me->bra == me->ket ? vector<shared_ptr<MultiMPS<S>>>{mbra}
+                               : vector<shared_ptr<MultiMPS<S>>>{mbra, mket};
+        bool fuse_left = i <= me->n_sites / 2;
+        for (auto &mps : mpss) {
+            if (mps->canonical_form[i] == 'M') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'J';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'T';
+                else
+                    assert(false);
+            }
+            // guess wavefunction
+            // change to fused form for super-block hamiltonian
+            // note that this switch exactly matches two-site conventional mpo
+            // middle-site switch, so two-site conventional mpo can work
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'T') ||
+                (!fuse_left && mps->canonical_form[i] == 'J')) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mps->wfns;
+                if (fuse_left && mps->canonical_form[i] == 'T')
+                    mps->wfns =
+                        MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                            i, mps->info, prev_wfns, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'J')
+                    mps->wfns =
+                        MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                            i, mps->info, prev_wfns, me->mpo->tf->opf->cg);
+                for (int j = (int)prev_wfns.size() - 1; j >= 0; j--)
+                    prev_wfns[j]->deallocate();
+                if (prev_wfns.size() != 0)
+                    prev_wfns[0]->deallocate_infos();
+            }
+        }
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                              true);
+        auto pdi = h_eff->expect();
+        h_eff->deallocate();
+        // change to fused form for splitting
+        if (fuse_left != forward) {
+            for (auto &mps : mpss) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mps->wfns;
+                if (!fuse_left && forward)
+                    mps->wfns =
+                        MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                            i, mps->info, prev_wfns, me->mpo->tf->opf->cg);
+                else if (fuse_left && !forward)
+                    mps->wfns =
+                        MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                            i, mps->info, prev_wfns, me->mpo->tf->opf->cg);
+                for (int j = (int)prev_wfns.size() - 1; j >= 0; j--)
+                    prev_wfns[j]->deallocate();
+                if (prev_wfns.size() != 0)
+                    prev_wfns[0]->deallocate_infos();
+            }
+        }
+        // splitting of wavefunction
+        vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
+            me->bra == me->ket
+                ? vector<vector<shared_ptr<SparseMatrixGroup<S>>>>{mbra->wfns}
+                : vector<vector<shared_ptr<SparseMatrixGroup<S>>>>{mket->wfns,
+                                                                   mbra->wfns};
+        double bra_error = 0.0, ket_error = 0.0;
+        if (propagate) {
+            for (auto &mps : mpss) {
+                vector<shared_ptr<SparseMatrixGroup<S>>> old_wfn = mps->wfns,
+                                                         new_wfns;
+                shared_ptr<SparseMatrix<S>> rot;
+                shared_ptr<SparseMatrix<S>> dm =
+                    MovingEnvironment<S>::density_matrix_with_multi_target(
+                        h_eff->opdq, old_wfn, mps->weights, forward, 0.0,
+                        NoiseTypes::None);
+                int bond_dim =
+                    mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                double error = MovingEnvironment<S>::multi_split_density_matrix(
+                    dm, old_wfn, bond_dim, forward, false, new_wfns, rot,
+                    cutoff, trunc_type);
+                if (mps == mbra)
+                    bra_error = error;
+                else
+                    ket_error = error;
+                shared_ptr<StateInfo<S>> info = nullptr;
+                // propagation
+                if (forward) {
+                    mps->tensors[i] = rot;
+                    mps->save_tensor(i);
+                    info = rot->info->extract_state_info(forward);
+                    mps->info->left_dims[i + 1] = info;
+                    mps->info->save_left_dims(i + 1);
+                    info->deallocate();
+                    if (i != me->n_sites - 1) {
+                        MovingEnvironment<S>::contract_multi_one_dot(
+                            i + 1, new_wfns, mps, forward);
+                        mps->save_wavefunction(i + 1);
+                        mps->unload_wavefunction(i + 1);
+                        mps->canonical_form[i] = 'L';
+                        mps->canonical_form[i + 1] = 'T';
+                    } else {
+                        mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_multi_one_dot(
+                            i, new_wfns, mps, !forward);
+                        mps->save_wavefunction(i);
+                        mps->unload_wavefunction(i);
+                        mps->canonical_form[i] = 'J';
+                    }
+                } else {
+                    mps->tensors[i] = rot;
+                    mps->save_tensor(i);
+                    info = rot->info->extract_state_info(forward);
+                    mps->info->right_dims[i] = info;
+                    mps->info->save_right_dims(i);
+                    info->deallocate();
+                    if (i > 0) {
+                        MovingEnvironment<S>::contract_multi_one_dot(
+                            i - 1, new_wfns, mps, forward);
+                        mps->save_wavefunction(i - 1);
+                        mps->unload_wavefunction(i - 1);
+                        mps->canonical_form[i - 1] = 'J';
+                        mps->canonical_form[i] = 'R';
+                    } else {
+                        mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_multi_one_dot(
+                            i, new_wfns, mps, !forward);
+                        mps->save_wavefunction(i);
+                        mps->unload_wavefunction(i);
+                        mps->canonical_form[i] = 'T';
+                    }
+                }
+                if (forward) {
+                    for (int j = (int)new_wfns.size() - 1; j >= 0; j--)
+                        new_wfns[j]->deallocate();
+                    if (new_wfns.size() != 0)
+                        new_wfns[0]->deallocate_infos();
+                    rot->info->deallocate();
+                    rot->deallocate();
+                } else {
+                    rot->info->deallocate();
+                    rot->deallocate();
+                    for (int j = (int)new_wfns.size() - 1; j >= 0; j--)
+                        new_wfns[j]->deallocate();
+                    if (new_wfns.size() != 0)
+                        new_wfns[0]->deallocate_infos();
+                }
+                dm->info->deallocate();
+                dm->deallocate();
+            }
+        }
+        // if not propagate, the wfns are changed but not saved, so no need to
+        // save
+        for (auto &old_wfns : old_wfnss) {
+            for (int k = mket->nroots - 1; k >= 0; k--)
+                old_wfns[k]->deallocate();
+            old_wfns[0]->deallocate_infos();
+        }
+        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(
+            get<0>(pdi).size());
+        for (size_t k = 0; k < get<0>(pdi).size(); k++) {
+            long double x = 0.0;
+            for (size_t l = 0; l < partition_weights.size(); l++)
+                x += partition_weights[l] * get<0>(pdi)[k].second[l];
+            expectations[k] = make_pair(get<0>(pdi)[k].first, (double)x);
+        }
+        return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
     }
     Iteration update_multi_two_dot(int i, bool forward, bool propagate,
@@ -1053,6 +2088,9 @@ template <typename S> struct Expect {
                 MovingEnvironment<S>::propagate_multi_wfn(
                     i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
             }
+        } else {
+            for (auto &mps : mpss)
+                mps->save_tensor(i);
         }
         for (auto &old_wfns : old_wfnss) {
             for (int k = mket->nroots - 1; k >= 0; k--)
@@ -1073,6 +2111,7 @@ template <typename S> struct Expect {
     Iteration blocking(int i, bool forward, bool propagate,
                        uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         me->move_to(i);
+        assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M')
@@ -1081,8 +2120,15 @@ template <typename S> struct Expect {
             else
                 return update_two_dot(i, forward, propagate, bra_bond_dim,
                                       ket_bond_dim);
-        } else
-            throw runtime_error("1 site not yet implemented");
+        } else {
+            if (me->ket->canonical_form[i] == 'J' ||
+                me->ket->canonical_form[i] == 'T')
+                return update_multi_one_dot(i, forward, propagate, bra_bond_dim,
+                                            ket_bond_dim);
+            else
+                return update_one_dot(i, forward, propagate, bra_bond_dim,
+                                      ket_bond_dim);
+        }
     }
     void sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
         me->prepare();

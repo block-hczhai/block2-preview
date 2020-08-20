@@ -70,8 +70,8 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
         ts->data.resize(m.n);
         mps->info->load_left_dims(i);
         StateInfo<S> l = *mps->info->left_dims[i];
-        StateInfo<S> lm =
-            StateInfo<S>::tensor_product(l, m, *mps->info->left_dims_fci[i + 1]);
+        StateInfo<S> lm = StateInfo<S>::tensor_product(
+            l, m, *mps->info->left_dims_fci[i + 1]);
         StateInfo<S> clm = StateInfo<S>::get_connection_info(l, m, lm);
         shared_ptr<SparseMatrix<S>> mat = mps->tensors[i];
         assert(wfn == mat->info->is_wavefunction);
@@ -154,12 +154,17 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
         assert(mps->tensors[i] != nullptr);
         mps->load_tensor(i);
         shared_ptr<SparseTensor<S>> ts;
-        if (mps->canonical_form[i] == 'L' ||
+        if (mps->canonical_form[i] == 'L' || mps->canonical_form[i] == 'K' ||
             (i == 0 && mps->canonical_form[i] == 'C')) {
-            ts = transform_left_fused(i, mps, mps->canonical_form[i] == 'C');
+            ts = transform_left_fused(i, mps,
+                                      mps->canonical_form[i] == 'C' ||
+                                          mps->canonical_form[i] == 'K');
         } else if (mps->canonical_form[i] == 'R' ||
+                   mps->canonical_form[i] == 'S' ||
                    (i == mps->n_sites - 1 && mps->canonical_form[i] == 'C'))
-            ts = transform_right_fused(i, mps, mps->canonical_form[i] == 'C');
+            ts = transform_right_fused(i, mps,
+                                       mps->canonical_form[i] == 'C' ||
+                                           mps->canonical_form[i] == 'S');
         else
             assert(false);
         mps->unload_tensor(i);

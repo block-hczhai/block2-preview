@@ -861,6 +861,7 @@ template <typename S> struct MPS {
                     *info->left_dims_fci[center + dot]);
                 mat_info->initialize(t, *info->right_dims[center + dot],
                                      info->target, false, true);
+                canonical_form[center] = 'K';
             } else {
                 StateInfo<S> tl = StateInfo<S>::tensor_product(
                     *info->left_dims[center], *info->basis[center],
@@ -1083,23 +1084,35 @@ template <typename S> struct MPS {
     void load_mutable_left() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         for (int i = 0; i < center; i++)
-            if (tensors[i] != nullptr)
+            if (tensors[i] != nullptr) {
+                tensors[i]->alloc = d_alloc;
                 tensors[i]->load_data(get_filename(i), true, i_alloc);
+            }
     }
     void load_mutable_right() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         for (int i = center + dot; i < n_sites; i++)
-            if (tensors[i] != nullptr)
+            if (tensors[i] != nullptr) {
+                tensors[i]->alloc = d_alloc;
                 tensors[i]->load_data(get_filename(i), true, i_alloc);
+            }
     }
     virtual void load_mutable() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         for (int i = 0; i < n_sites; i++)
-            if (tensors[i] != nullptr)
+            if (tensors[i] != nullptr) {
+                tensors[i]->alloc = d_alloc;
                 tensors[i]->load_data(get_filename(i), true, i_alloc);
+            }
     }
     virtual void save_mutable() const {
         for (int i = 0; i < n_sites; i++)
@@ -1113,7 +1126,10 @@ template <typename S> struct MPS {
     virtual void load_tensor(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         assert(tensors[i] != nullptr);
+        tensors[i]->alloc = d_alloc;
         tensors[i]->load_data(get_filename(i), true, i_alloc);
     }
     virtual void unload_tensor(int i) {

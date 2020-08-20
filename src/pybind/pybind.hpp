@@ -1030,7 +1030,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def("get_right_partition_filename",
              &MovingEnvironment<S>::get_right_partition_filename)
         .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
-             py::arg("compute_diag"))
+             py::arg("compute_diag"), py::arg("bra_wfn"), py::arg("ket_wfn"))
         .def("multi_eff_ham", &MovingEnvironment<S>::multi_eff_ham,
              py::arg("fuse_type"), py::arg("compute_diag"))
         .def_static("contract_two_dot", &MovingEnvironment<S>::contract_two_dot,
@@ -1188,8 +1188,10 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename DMRG<S>::Iteration,
                shared_ptr<typename DMRG<S>::Iteration>>(m, "DMRGIteration")
-        .def(py::init<const vector<double> &, double, int, size_t, double>())
-        .def(py::init<const vector<double> &, double, int>())
+        .def(py::init<const vector<double> &, double, int, int, size_t,
+                      double>())
+        .def(py::init<const vector<double> &, double, int, int>())
+        .def_readwrite("mmps", &DMRG<S>::Iteration::mmps)
         .def_readwrite("energies", &DMRG<S>::Iteration::energies)
         .def_readwrite("error", &DMRG<S>::Iteration::error)
         .def_readwrite("ndav", &DMRG<S>::Iteration::ndav)
@@ -1227,8 +1229,9 @@ template <typename S> void bind_algorithms(py::module &m) {
     py::class_<typename ImaginaryTE<S>::Iteration,
                shared_ptr<typename ImaginaryTE<S>::Iteration>>(
         m, "ImaginaryTEIteration")
-        .def(py::init<double, double, double, int, int, size_t, double>())
-        .def(py::init<double, double, double, int, int>())
+        .def(py::init<double, double, double, int, int, int, size_t, double>())
+        .def(py::init<double, double, double, int, int, int>())
+        .def_readwrite("mmps", &ImaginaryTE<S>::Iteration::mmps)
         .def_readwrite("energy", &ImaginaryTE<S>::Iteration::energy)
         .def_readwrite("normsq", &ImaginaryTE<S>::Iteration::normsq)
         .def_readwrite("error", &ImaginaryTE<S>::Iteration::error)
@@ -1271,8 +1274,9 @@ template <typename S> void bind_algorithms(py::module &m) {
     py::class_<typename Compress<S>::Iteration,
                shared_ptr<typename Compress<S>::Iteration>>(m,
                                                             "CompressIteration")
-        .def(py::init<double, double, size_t, double>())
-        .def(py::init<double, double>())
+        .def(py::init<double, double, int, size_t, double>())
+        .def(py::init<double, double, int>())
+        .def_readwrite("mmps", &Compress<S>::Iteration::mmps)
         .def_readwrite("norm", &Compress<S>::Iteration::norm)
         .def_readwrite("error", &Compress<S>::Iteration::error)
         .def_readwrite("tmult", &Compress<S>::Iteration::tmult)
@@ -1600,7 +1604,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Auto", SeqTypes::Auto);
 
     py::enum_<FuseTypes>(m, "FuseTypes", py::arithmetic())
-        .value("NoFuse", FuseTypes::NoFuse)
+        .value("NoFuseL", FuseTypes::NoFuseL)
+        .value("NoFuseR", FuseTypes::NoFuseR)
         .value("FuseL", FuseTypes::FuseL)
         .value("FuseR", FuseTypes::FuseR)
         .value("FuseLR", FuseTypes::FuseLR);

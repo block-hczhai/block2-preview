@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstdio>
 #include <random>
 #include <sstream>
 #include <string>
@@ -134,6 +135,9 @@ struct Parsing {
         stringstream ss;
         ss << i;
         return ss.str();
+    }
+    static bool rename_file(const string &old_name, const string &new_name) {
+        return rename(old_name.c_str(), new_name.c_str()) == 0;
     }
     static bool file_exists(const string &name) {
         struct stat buffer;

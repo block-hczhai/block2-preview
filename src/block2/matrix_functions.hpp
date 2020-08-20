@@ -800,12 +800,13 @@ struct MatrixFunctions {
         };
         int m = min(deflation_max_size, n - 1);
         int lwork = n * (m + 2) + 5 * (m + 2) * (m + 2) + 7;
-        double w[n], work[lwork];
+        vector<double> w(n), work(lwork);
         if (anorm < 1E-10)
             anorm = 1.0;
-        int nmult = MatrixFunctions::expo_krylov(
-            lop, n, m, t, v.data, w, conv_thrd, anorm, work, lwork, iprint);
-        memcpy(v.data, w, sizeof(double) * n);
+        int nmult = MatrixFunctions::expo_krylov(lop, n, m, t, v.data, w.data(),
+                                                 conv_thrd, anorm, work.data(),
+                                                 lwork, iprint);
+        memcpy(v.data, w.data(), sizeof(double) * n);
         return nmult;
     }
 };
