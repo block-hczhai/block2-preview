@@ -86,7 +86,7 @@ template <typename S> struct Partition {
         for (auto &p : opt->ops) {
             shared_ptr<OpElement<S>> op =
                 dynamic_pointer_cast<OpElement<S>>(p.first);
-            p.second->allocate(find_op_info(left_op_infos, op->q_label));
+            p.second->info = find_op_info(left_op_infos, op->q_label);
         }
         return opt;
     }
@@ -111,7 +111,7 @@ template <typename S> struct Partition {
         for (auto &p : opt->ops) {
             shared_ptr<OpElement<S>> op =
                 dynamic_pointer_cast<OpElement<S>>(p.first);
-            p.second->allocate(find_op_info(right_op_infos, op->q_label));
+            p.second->info = find_op_info(right_op_infos, op->q_label);
         }
         return opt;
     }
@@ -151,12 +151,16 @@ template <typename S> struct Partition {
             S l = op->q_label;
             size_t idx = lower_bound(sl.begin(), sl.end(), l) - sl.begin();
             assert(idx != sl.size());
-            switch (exprs->data[i]->get_type()) {
+            shared_ptr<OpExpr<S>> opx =
+                exprs->data[i]->get_type() == OpTypes::ExprRef
+                    ? dynamic_pointer_cast<OpExprRef<S>>(exprs->data[i])->op
+                    : exprs->data[i];
+            switch (opx->get_type()) {
             case OpTypes::Zero:
                 break;
             case OpTypes::Prod: {
                 shared_ptr<OpString<S>> op =
-                    dynamic_pointer_cast<OpString<S>>(exprs->data[i]);
+                    dynamic_pointer_cast<OpString<S>>(opx);
                 assert(op->b != nullptr);
                 S bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
@@ -170,8 +174,7 @@ template <typename S> struct Partition {
                     subsl[idx].push_back(make_pair(!!(op->conj & 2), -ket));
             } break;
             case OpTypes::Sum: {
-                shared_ptr<OpSum<S>> sop =
-                    dynamic_pointer_cast<OpSum<S>>(exprs->data[i]);
+                shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(opx);
                 for (auto &op : sop->strings) {
                     S bra, ket;
                     if (op->get_type() == OpTypes::Prod) {

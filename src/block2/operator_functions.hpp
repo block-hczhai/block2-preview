@@ -252,7 +252,7 @@ template <typename S> struct OperatorFunctions {
             seq->simple_perform();
     }
     // c = a * b * scale
-    void product(const shared_ptr<SparseMatrix<S>> &a,
+    void product(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
                  const shared_ptr<SparseMatrix<S>> &b,
                  const shared_ptr<SparseMatrix<S>> &c,
                  double scale = 1.0) const {
@@ -263,19 +263,24 @@ template <typename S> struct OperatorFunctions {
         assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
+        bool cja = conj & 1, cjb = (conj & 2) >> 1;
         int adq = a->info->delta_quantum.multiplicity() - 1,
             bdq = b->info->delta_quantum.multiplicity() - 1,
             cdq = c->info->delta_quantum.multiplicity() - 1;
+        S sadq = cja ? -a->info->delta_quantum : a->info->delta_quantum;
+        S sbdq = cjb ? -b->info->delta_quantum : b->info->delta_quantum;
         for (int ic = 0; ic < c->info->n; ic++) {
             S cq = c->info->quanta[ic].get_bra(c->info->delta_quantum);
             S cqprime = c->info->quanta[ic].get_ket();
-            S aps = cq - a->info->delta_quantum;
+            S aps = cq - sadq;
             for (int k = 0; k < aps.count(); k++) {
                 S aqprime = aps[k];
-                int ia = a->info->find_state(
-                    a->info->delta_quantum.combine(cq, aps[k]));
+                S al = cja ? (-sadq).combine(aps[k], cq)
+                           : sadq.combine(cq, aps[k]);
+                int ia = a->info->find_state(al);
                 if (ia != -1) {
-                    S bl = b->info->delta_quantum.combine(aqprime, cqprime);
+                    S bl = cjb ? (-sbdq).combine(cqprime, aqprime)
+                               : sbdq.combine(aqprime, cqprime);
                     if (bl != S(S::invalid)) {
                         int ib = b->info->find_state(bl);
                         if (ib != -1) {
@@ -286,8 +291,15 @@ template <typename S> struct OperatorFunctions {
                                 cg->racah(cqpj, bdq, cqj, adq, aqpj, cdq);
                             factor *= sqrt((cdq + 1) * (aqpj + 1)) *
                                       (((adq + bdq - cdq) & 2) ? -1 : 1);
-                            MatrixFunctions::multiply((*a)[ia], false, (*b)[ib],
-                                                      false, (*c)[ic],
+                            if (cja)
+                                factor *= cg->transpose_cg(
+                                    (-sadq).twos(), cq.twos(), aqprime.twos());
+                            if (cjb)
+                                factor *= cg->transpose_cg((-sbdq).twos(),
+                                                           aqprime.twos(),
+                                                           cqprime.twos());
+                            MatrixFunctions::multiply((*a)[ia], cja, (*b)[ib],
+                                                      cjb, (*c)[ic],
                                                       scale * factor, 1.0);
                         }
                     }

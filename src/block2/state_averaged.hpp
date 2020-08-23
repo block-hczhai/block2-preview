@@ -41,10 +41,9 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     MultiMPSInfo(int n_sites, S vacuum, const vector<S> &targets,
                  const vector<shared_ptr<StateInfo<S>>> &basis,
                  bool init_fci = true)
-        : targets(targets), MPSInfo<S>(n_sites, vacuum, vacuum, basis,
-                                       false) {
-                    if (init_fci)
-        set_bond_dimension_fci();
+        : targets(targets), MPSInfo<S>(n_sites, vacuum, vacuum, basis, false) {
+        if (init_fci)
+            set_bond_dimension_fci();
     }
     MultiTypes get_multi_type() const override { return MultiTypes::Multi; }
     vector<S> get_complementary(S q) const override {
@@ -62,12 +61,14 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         S max_target = *max_element(targets.begin(), targets.end());
         left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0; i < n_sites; i++)
-            left_dims_fci[i + 1] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                *left_dims_fci[i], *basis[i], max_target));
+            left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *left_dims_fci[i], *basis[i], max_target));
         right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_fci[i] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                *basis[i], *right_dims_fci[i + 1], max_target));
+            right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[i], *right_dims_fci[i + 1], max_target));
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::multi_target_filter(*left_dims_fci[i],
                                               *right_dims_fci[i], targets);
@@ -187,18 +188,20 @@ template <typename S> struct MultiMPS : MPS<S> {
         ifs.close();
     }
     void save_data() const override {
-        ofstream ofs(get_filename(-1).c_str(), ios::binary);
-        if (!ofs.good())
-            throw runtime_error("MultiMPS::save_data on '" + get_filename(-1) +
-                                "' failed.");
-        MPS<S>::save_data_to(ofs);
-        ofs.write((char *)&nroots, sizeof(nroots));
-        assert(weights.size() == nroots);
-        ofs.write((char *)&weights[0], sizeof(double) * nroots);
-        if (!ofs.good())
-            throw runtime_error("MultiMPS::save_data on '" + get_filename(-1) +
-                                "' failed.");
-        ofs.close();
+        if (frame->prefix_can_write) {
+            ofstream ofs(get_filename(-1).c_str(), ios::binary);
+            if (!ofs.good())
+                throw runtime_error("MultiMPS::save_data on '" +
+                                    get_filename(-1) + "' failed.");
+            MPS<S>::save_data_to(ofs);
+            ofs.write((char *)&nroots, sizeof(nroots));
+            assert(weights.size() == nroots);
+            ofs.write((char *)&weights[0], sizeof(double) * nroots);
+            if (!ofs.good())
+                throw runtime_error("MultiMPS::save_data on '" +
+                                    get_filename(-1) + "' failed.");
+            ofs.close();
+        }
     }
     void load_mutable() const override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -213,17 +216,20 @@ template <typename S> struct MultiMPS : MPS<S> {
                 }
     }
     void save_mutable() const override {
-        for (int i = 0; i < n_sites; i++)
-            if (tensors[i] != nullptr)
-                tensors[i]->save_data(get_filename(i), true);
-            else if (i == center)
-                for (int j = 0; j < nroots; j++)
-                    wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites; i++)
+                if (tensors[i] != nullptr)
+                    tensors[i]->save_data(get_filename(i), true);
+                else if (i == center)
+                    for (int j = 0; j < nroots; j++)
+                        wfns[j]->save_data(get_wfn_filename(j), j == 0);
     }
     void save_wavefunction(int i) const {
-        assert(tensors[i] == nullptr);
-        for (int j = 0; j < nroots; j++)
-            wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        if (frame->prefix_can_write) {
+            assert(tensors[i] == nullptr);
+            for (int j = 0; j < nroots; j++)
+                wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        }
     }
     void load_wavefunction(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -242,12 +248,14 @@ template <typename S> struct MultiMPS : MPS<S> {
             wfns[0]->deallocate_infos();
     }
     void save_tensor(int i) const override {
-        assert(tensors[i] != nullptr || i == center);
-        if (tensors[i] != nullptr)
-            tensors[i]->save_data(get_filename(i), true);
-        else
-            for (int j = 0; j < nroots; j++)
-                wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        if (frame->prefix_can_write) {
+            assert(tensors[i] != nullptr || i == center);
+            if (tensors[i] != nullptr)
+                tensors[i]->save_data(get_filename(i), true);
+            else
+                for (int j = 0; j < nroots; j++)
+                    wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        }
     }
     void load_tensor(int i) override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =

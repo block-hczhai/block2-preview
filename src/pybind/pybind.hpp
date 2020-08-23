@@ -806,7 +806,8 @@ template <typename S> void bind_operator(py::module &m) {
              py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
              py::arg("scale") = 1.0)
         .def("product", &OperatorFunctions<S>::product, py::arg("a"),
-             py::arg("b"), py::arg("c"), py::arg("scale") = 1.0)
+             py::arg("conj"), py::arg("b"), py::arg("c"),
+             py::arg("scale") = 1.0)
         .def_static("trans_product", &OperatorFunctions<S>::trans_product,
                     py::arg("a"), py::arg("b"), py::arg("trace_right"),
                     py::arg("noise") = 0.0,
@@ -844,15 +845,17 @@ template <typename S> void bind_operator(py::module &m) {
         m, "TensorFunctions")
         .def(py::init<const shared_ptr<OperatorFunctions<S>> &>())
         .def_readwrite("opf", &TensorFunctions<S>::opf)
-        .def_static("left_assign", &TensorFunctions<S>::left_assign,
-                    py::arg("a"), py::arg("c"))
-        .def_static("right_assign", &TensorFunctions<S>::right_assign,
-                    py::arg("a"), py::arg("c"))
+        .def("left_assign", &TensorFunctions<S>::left_assign, py::arg("a"),
+             py::arg("c"))
+        .def("right_assign", &TensorFunctions<S>::right_assign, py::arg("a"),
+             py::arg("c"))
         .def("left_contract", &TensorFunctions<S>::left_contract, py::arg("a"),
              py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
         .def("right_contract", &TensorFunctions<S>::right_contract,
              py::arg("a"), py::arg("b"), py::arg("c"),
              py::arg("cexprs") = nullptr)
+        .def("tensor_product_multi_multiply",
+             &TensorFunctions<S>::tensor_product_multi_multiply)
         .def("tensor_product_multiply",
              &TensorFunctions<S>::tensor_product_multiply)
         .def("tensor_product_diagonal",
@@ -861,17 +864,18 @@ template <typename S> void bind_operator(py::module &m) {
         .def("left_rotate", &TensorFunctions<S>::left_rotate)
         .def("right_rotate", &TensorFunctions<S>::right_rotate)
         .def("numerical_transform", &TensorFunctions<S>::numerical_transform)
-        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor<S>>(*)(
-                                     const shared_ptr<OperatorTensor<S>> &,
-                                     const shared_ptr<OperatorTensor<S>> &,
-                                     const shared_ptr<OpExpr<S>> &)) &
-                                     TensorFunctions<S>::delayed_contract)
+        .def("delayed_contract",
+             (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
+                 const shared_ptr<OperatorTensor<S>> &,
+                 const shared_ptr<OperatorTensor<S>> &,
+                 const shared_ptr<OpExpr<S>> &) const) &
+                 TensorFunctions<S>::delayed_contract)
         .def("delayed_contract_simplified",
-             (shared_ptr<DelayedOperatorTensor<S>>(*)(
+             (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
                  const shared_ptr<OperatorTensor<S>> &,
                  const shared_ptr<OperatorTensor<S>> &,
                  const shared_ptr<Symbolic<S>> &,
-                 const shared_ptr<Symbolic<S>> &)) &
+                 const shared_ptr<Symbolic<S>> &) const) &
                  TensorFunctions<S>::delayed_contract);
 }
 
@@ -1357,6 +1361,52 @@ template <typename S> void bind_algorithms(py::module &m) {
              py::arg("n_physical_sites") = (uint16_t)0U);
 }
 
+template <typename S> void bind_parallel(py::module &m) {
+
+    py::class_<ParallelCommunicator<S>, shared_ptr<ParallelCommunicator<S>>>(
+        m, "ParallelCommunicator")
+        .def(py::init<>())
+        .def(py::init<int, int, int>())
+        .def_readwrite("size", &ParallelCommunicator<S>::size)
+        .def_readwrite("rank", &ParallelCommunicator<S>::rank)
+        .def_readwrite("root", &ParallelCommunicator<S>::root)
+        .def_readwrite("tcomm", &ParallelCommunicator<S>::tcomm)
+        .def("get_parallel_type", &ParallelCommunicator<S>::get_parallel_type)
+        .def("barrier", &ParallelCommunicator<S>::barrier);
+
+#ifdef _HAS_MPI
+    py::class_<MPICommunicator<S>, shared_ptr<MPICommunicator<S>>,
+               ParallelCommunicator<S>>(m, "MPICommunicator")
+        .def(py::init<>())
+        .def(py::init<int>());
+#endif
+
+    py::class_<ParallelRule<S>, shared_ptr<ParallelRule<S>>>(m, "ParallelRule")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def_readwrite("comm", &ParallelRule<S>::comm)
+        .def("get_parallel_type", &ParallelRule<S>::get_parallel_type)
+        .def("__call__", &ParallelRule<S>::operator())
+        .def("is_root", &ParallelRule<S>::is_root)
+        .def("available", &ParallelRule<S>::available)
+        .def("own", &ParallelRule<S>::own)
+        .def("owner", &ParallelRule<S>::owner)
+        .def("repeat", &ParallelRule<S>::repeat)
+        .def("partial", &ParallelRule<S>::partial);
+
+    py::class_<ParallelTensorFunctions<S>,
+               shared_ptr<ParallelTensorFunctions<S>>, TensorFunctions<S>>(
+        m, "ParallelTensorFunctions")
+        .def(py::init<const shared_ptr<OperatorFunctions<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>());
+
+    py::class_<ParallelMPO<S>, shared_ptr<ParallelMPO<S>>, MPO<S>>(
+        m, "ParallelMPO")
+        .def_readwrite("prim_mpo", &ParallelMPO<S>::prim_mpo)
+        .def_readwrite("rule", &ParallelMPO<S>::rule)
+        .def(py::init<const shared_ptr<MPO<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>());
+}
+
 template <typename S> void bind_mpo(py::module &m) {
 
     py::class_<MPOSchemer<S>, shared_ptr<MPOSchemer<S>>>(m, "MPOSchemer")
@@ -1393,6 +1443,7 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("schemer", &MPO<S>::schemer)
         .def("get_blocking_formulas", &MPO<S>::get_blocking_formulas)
         .def("get_ancilla_type", &MPO<S>::get_ancilla_type)
+        .def("get_parallel_type", &MPO<S>::get_parallel_type)
         .def("deallocate", &MPO<S>::deallocate);
 
     py::class_<Rule<S>, shared_ptr<Rule<S>>>(m, "Rule")
@@ -1462,6 +1513,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_hamiltonian<S>(m);
     bind_algorithms<S>(m);
     bind_mpo<S>(m);
+    bind_parallel<S>(m);
     bind_spin_specific<S>(m);
 }
 
@@ -1628,6 +1680,12 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<SparseMatrixTypes>(m, "SparseMatrixTypes", py::arithmetic())
         .value("Normal", SparseMatrixTypes::Normal)
         .value("CSR", SparseMatrixTypes::CSR);
+
+    py::enum_<ParallelOpTypes>(m, "ParallelOpTypes", py::arithmetic())
+        .value("None", ParallelOpTypes::None)
+        .value("Repeated", ParallelOpTypes::Repeated)
+        .value("Number", ParallelOpTypes::Number)
+        .value("Partial", ParallelOpTypes::Partial);
 }
 
 template <typename S = void> void bind_io(py::module &m) {
@@ -1738,6 +1796,23 @@ template <typename S = void> void bind_io(py::module &m) {
                         return Random::fill_rand_double(data.mutable_data(),
                                                         data.size(), a, b);
                     });
+
+    py::class_<ParallelProperty, shared_ptr<ParallelProperty>>(
+        m, "ParallelProperty")
+        .def_readwrite("owner", &ParallelProperty::owner)
+        .def_readwrite("ptype", &ParallelProperty::ptype)
+        .def(py::init<>())
+        .def(py::init<int, ParallelOpTypes>());
+
+#ifdef _HAS_MPI
+    py::class_<block2::MPI, shared_ptr<block2::MPI>>(m, "MPI")
+        .def_readwrite("_rank", &block2::MPI::_rank)
+        .def_readwrite("_size", &block2::MPI::_size)
+        .def(py::init<>())
+        .def_static("mpi", &block2::MPI::mpi)
+        .def_static("rank", &block2::MPI::rank)
+        .def_static("size", &block2::MPI::size);
+#endif
 }
 
 template <typename S = void> void bind_matrix(py::module &m) {
@@ -2064,6 +2139,7 @@ extern template void bind_partition<SZ>(py::module &m);
 extern template void bind_hamiltonian<SZ>(py::module &m);
 extern template void bind_algorithms<SZ>(py::module &m);
 extern template void bind_mpo<SZ>(py::module &m);
+extern template void bind_parallel<SZ>(py::module &m);
 
 extern template void bind_expr<SU2>(py::module &m);
 extern template void bind_state_info<SU2>(py::module &m, const string &name);
@@ -2075,6 +2151,7 @@ extern template void bind_partition<SU2>(py::module &m);
 extern template void bind_hamiltonian<SU2>(py::module &m);
 extern template void bind_algorithms<SU2>(py::module &m);
 extern template void bind_mpo<SU2>(py::module &m);
+extern template void bind_parallel<SU2>(py::module &m);
 
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());

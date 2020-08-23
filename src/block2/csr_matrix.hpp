@@ -80,10 +80,13 @@ struct CSRMatrixRef {
         return r;
     }
     double sparsity() const { return 1.0 - (double)nnz / (m * n); }
-    void allocate() {
-        if (alloc == nullptr)
-            alloc = dalloc;
-        data = alloc->allocate(memory_size());
+    void allocate(double *ptr = nullptr) {
+        if (ptr == nullptr) {
+            if (alloc == nullptr)
+                alloc = dalloc;
+            data = alloc->allocate(memory_size());
+        } else
+            data = ptr;
         if (nnz == size())
             cols = rows = nullptr;
         else {

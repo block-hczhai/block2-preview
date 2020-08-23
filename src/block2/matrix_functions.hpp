@@ -382,29 +382,40 @@ struct MatrixFunctions {
     // Davidson algorithm
     // aa: diag elements of a (for precondition)
     // bs: input/output vector
-    template <typename MatMul>
+    template <typename MatMul, typename PComm>
     static vector<double>
-    davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &bs,
-             int &ndav, bool iprint = false, double conv_thrd = 5E-6,
-             int max_iter = 5000, int deflation_min_size = 2,
-             int deflation_max_size = 50) {
-        int k = (int)bs.size();
+    davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
+             int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
+             double conv_thrd = 5E-6, int max_iter = 5000,
+             int deflation_min_size = 2, int deflation_max_size = 50) {
+        int k = (int)vs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
             deflation_max_size = k + k / 2;
-        for (int i = 0; i < k; i++) {
-            for (int j = 0; j < i; j++)
-                iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
-            iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
+        MatrixRef pbs(nullptr, deflation_max_size * vs[0].size(), 1);
+        MatrixRef pss(nullptr, deflation_max_size * vs[0].size(), 1);
+        pbs.allocate(), pss.allocate();
+        vector<MatrixRef> bs(deflation_max_size,
+                             MatrixRef(nullptr, vs[0].m, vs[0].n));
+        vector<MatrixRef> sigmas(deflation_max_size,
+                                 MatrixRef(nullptr, vs[0].m, vs[0].n));
+        for (int i = 0; i < deflation_max_size; i++) {
+            bs[i].data = pbs.data + bs[i].size() * i;
+            sigmas[i].data = pss.data + sigmas[i].size() * i;
         }
+        for (int i = 0; i < k; i++)
+            copy(bs[i], vs[i]);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            for (int i = 0; i < k; i++) {
+                for (int j = 0; j < i; j++)
+                    iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
+                iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
+            }
+        }
+        if (pcomm != nullptr)
+            pcomm->broadcast(pbs.data, bs[0].size() * k, pcomm->root);
         vector<double> eigvals;
-        vector<MatrixRef> sigmas;
-        sigmas.reserve(k);
-        for (int i = 0; i < k; i++) {
-            sigmas.push_back(MatrixRef(nullptr, bs[i].m, bs[i].n));
-            sigmas[i].allocate();
-        }
         MatrixRef q(nullptr, bs[0].m, bs[0].n);
         q.allocate();
         q.clear();
@@ -420,36 +431,43 @@ struct MatrixFunctions {
             DiagonalMatrix ld(nullptr, m);
             MatrixRef alpha(nullptr, m, m);
             ld.allocate();
-            alpha.allocate();
-            for (int i = 0; i < m; i++)
-                for (int j = 0; j <= i; j++)
-                    alpha(i, j) = dot(bs[i], sigmas[j]);
-            eigs(alpha, ld);
-            vector<MatrixRef> tmp(m, MatrixRef(nullptr, bs[0].m, bs[0].n));
-            for (int i = 0; i < m; i++) {
-                tmp[i].allocate();
-                copy(tmp[i], bs[i]);
-            }
-            // note alpha row/column is diff from python
-            // b[1:m] = np.dot(b[:], alpha[:, 1:m])
-            for (int j = 0; j < m; j++)
-                iscale(bs[j], alpha(j, j));
-            for (int j = 0; j < m; j++)
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                alpha.allocate();
                 for (int i = 0; i < m; i++)
-                    if (i != j)
-                        iadd(bs[j], tmp[i], alpha(j, i));
-            // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
-            for (int j = 0; j < m; j++) {
-                copy(tmp[j], sigmas[j]);
-                iscale(sigmas[j], alpha(j, j));
+                    for (int j = 0; j <= i; j++)
+                        alpha(i, j) = dot(bs[i], sigmas[j]);
+                eigs(alpha, ld);
+                vector<MatrixRef> tmp(m, MatrixRef(nullptr, bs[0].m, bs[0].n));
+                for (int i = 0; i < m; i++) {
+                    tmp[i].allocate();
+                    copy(tmp[i], bs[i]);
+                }
+                // note alpha row/column is diff from python
+                // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+                for (int j = 0; j < m; j++)
+                    iscale(bs[j], alpha(j, j));
+                for (int j = 0; j < m; j++)
+                    for (int i = 0; i < m; i++)
+                        if (i != j)
+                            iadd(bs[j], tmp[i], alpha(j, i));
+                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+                for (int j = 0; j < m; j++) {
+                    copy(tmp[j], sigmas[j]);
+                    iscale(sigmas[j], alpha(j, j));
+                }
+                for (int j = 0; j < m; j++)
+                    for (int i = 0; i < m; i++)
+                        if (i != j)
+                            iadd(sigmas[j], tmp[i], alpha(j, i));
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate();
+                alpha.deallocate();
             }
-            for (int j = 0; j < m; j++)
-                for (int i = 0; i < m; i++)
-                    if (i != j)
-                        iadd(sigmas[j], tmp[i], alpha(j, i));
-            for (int i = m - 1; i >= 0; i--)
-                tmp[i].deallocate();
-            alpha.deallocate();
+            if (pcomm != nullptr) {
+                pcomm->broadcast(ld.data, ld.size(), pcomm->root);
+                pcomm->broadcast(pbs.data, bs[0].size() * m, pcomm->root);
+                pcomm->broadcast(pss.data, sigmas[0].size() * m, pcomm->root);
+            }
             for (int i = 0; i < ck; i++) {
                 copy(q, sigmas[i]);
                 iadd(q, bs[i], -ld(i, i));
@@ -465,7 +483,10 @@ struct MatrixFunctions {
                 cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
                      << fixed << setw(15) << setprecision(8) << ld.data[ck]
                      << scientific << setw(13) << setprecision(2) << qq << endl;
-            olsen_precondition(q, bs[ck], ld.data[ck], aa);
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                olsen_precondition(q, bs[ck], ld.data[ck], aa);
+            if (pcomm != nullptr)
+                pcomm->broadcast(bs[ck].data, bs[ck].size(), pcomm->root);
             eigvals.resize(ck + 1);
             if (ck + 1 != 0)
                 memcpy(&eigvals[0], ld.data, (ck + 1) * sizeof(double));
@@ -477,16 +498,13 @@ struct MatrixFunctions {
             } else {
                 if (m >= deflation_max_size)
                     m = msig = deflation_min_size;
-                for (int j = 0; j < m; j++)
-                    iadd(q, bs[j], -dot(bs[j], q));
-                iscale(q, 1.0 / sqrt(dot(q, q)));
-                if (m >= (int)bs.size()) {
-                    bs.push_back(MatrixRef(nullptr, bs[0].m, bs[0].n));
-                    bs[m].allocate();
-                    sigmas.push_back(MatrixRef(nullptr, bs[0].m, bs[0].n));
-                    sigmas[m].allocate();
-                    sigmas[m].clear();
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    for (int j = 0; j < m; j++)
+                        iadd(q, bs[j], -dot(bs[j], q));
+                    iscale(q, 1.0 / sqrt(dot(q, q)));
                 }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(q.data, q.size(), pcomm->root);
                 copy(bs[m], q);
                 m++;
             }
@@ -495,11 +513,11 @@ struct MatrixFunctions {
                 assert(false);
             }
         }
-        for (int i = (int)bs.size() - 1; i >= k; i--)
-            sigmas[i].deallocate(), bs[i].deallocate();
+        for (int i = 0; i < k; i++)
+            copy(vs[i], bs[i]);
         q.deallocate();
-        for (int i = k - 1; i >= 0; i--)
-            sigmas[i].deallocate();
+        pss.deallocate();
+        pbs.deallocate();
         ndav = xiter;
         return eigvals;
     }

@@ -371,25 +371,25 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 find_site_op_info(S(0, 0, 0), 0));
             // hrl: s & 1 : 0 => 0; 1 => 1; 2 => 0; 3 => 1 (first index)
             // hrl: s >> 1: 0 => 0; 1 => 0; 2 => 1; 3 => 1  (second index)
-            opf->product(op_prims_normal[s & 1][OpNames::N],
+            opf->product(0, op_prims_normal[s & 1][OpNames::N],
                          op_prims_normal[s >> 1][OpNames::N],
                          op_prims_normal[s][OpNames::NN]);
             op_prims_normal[s][OpNames::A] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::A]->allocate(
                 find_site_op_info(S(2, sz_plus[s], 0), 0));
-            opf->product(op_prims_normal[s & 1][OpNames::C],
+            opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[s >> 1][OpNames::C],
                          op_prims_normal[s][OpNames::A]);
             op_prims_normal[s][OpNames::AD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::AD]->allocate(
                 find_site_op_info(S(-2, -sz_plus[s], 0), 0));
-            opf->product(op_prims_normal[s >> 1][OpNames::D],
+            opf->product(0, op_prims_normal[s >> 1][OpNames::D],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::AD]);
             op_prims_normal[s][OpNames::B] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::B]->allocate(
                 find_site_op_info(S(0, sz_minus[s], 0), 0));
-            opf->product(op_prims_normal[s & 1][OpNames::C],
+            opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[s >> 1][OpNames::D],
                          op_prims_normal[s][OpNames::B]);
         }
@@ -398,13 +398,13 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             op_prims_normal[s][OpNames::R] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::R]->allocate(
                 find_site_op_info(S(-1, -sz[s & 1], 0), 0));
-            opf->product(op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
+            opf->product(0, op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::R]);
             op_prims_normal[s][OpNames::RD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::RD]->allocate(
                 find_site_op_info(S(1, sz[s & 1], 0), 0));
-            opf->product(op_prims_normal[s & 1][OpNames::C],
+            opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims_normal[s][OpNames::RD]);
         }

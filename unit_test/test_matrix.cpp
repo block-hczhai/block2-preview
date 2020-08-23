@@ -224,7 +224,9 @@ TEST_F(TestMatrix, TestDavidson) {
         }
         MatMul mop(a);
         vector<double> vw = MatrixFunctions::davidson(
-            mop, aa, bs, ndav, false, 1E-8, n * k * 2, k * 2, max(5, k + 10));
+            mop, aa, bs, ndav, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, n * k * 2,
+            k * 2, max(5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         DiagonalMatrix w(&vw[0], k);
         MatrixFunctions::eigs(a, ww);

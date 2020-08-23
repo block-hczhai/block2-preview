@@ -132,28 +132,28 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             op_prims[s][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::NN]->allocate(
                 find_site_op_info(0, S(0, 0, 0)));
-            opf->product(op_prims[s & 1][OpNames::N],
+            opf->product(0, op_prims[s & 1][OpNames::N],
                          op_prims[s >> 1][OpNames::N],
                          op_prims[s][OpNames::NN]);
             op_prims[s][OpNames::A] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::A]->allocate(
                 find_site_op_info(0, S(2, sz_plus[s], 0)));
-            opf->product(op_prims[s & 1][OpNames::C],
+            opf->product(0, op_prims[s & 1][OpNames::C],
                          op_prims[s >> 1][OpNames::C], op_prims[s][OpNames::A]);
             op_prims[s][OpNames::AD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::AD]->allocate(
                 find_site_op_info(0, S(-2, -sz_plus[s], 0)));
-            opf->product(op_prims[s >> 1][OpNames::D],
+            opf->product(0, op_prims[s >> 1][OpNames::D],
                          op_prims[s & 1][OpNames::D], op_prims[s][OpNames::AD]);
             op_prims[s][OpNames::B] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::B]->allocate(
                 find_site_op_info(0, S(0, sz_minus[s], 0)));
-            opf->product(op_prims[s & 1][OpNames::C],
+            opf->product(0, op_prims[s & 1][OpNames::C],
                          op_prims[s >> 1][OpNames::D], op_prims[s][OpNames::B]);
             op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::BD]->allocate(
                 find_site_op_info(0, S(0, -sz_minus[s], 0)));
-            opf->product(op_prims[s & 1][OpNames::D],
+            opf->product(0, op_prims[s & 1][OpNames::D],
                          op_prims[s >> 1][OpNames::C],
                          op_prims[s][OpNames::BD]);
         }
@@ -162,7 +162,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s + 4][OpNames::NN]->allocate(
                 find_site_op_info(0, S(0, 0, 0)));
-            opf->product(op_prims[s | ((!s) << 1)][OpNames::B],
+            opf->product(0, op_prims[s | ((!s) << 1)][OpNames::B],
                          op_prims[(!s) | (s << 1)][OpNames::B],
                          op_prims[s + 4][OpNames::NN]);
         }
@@ -171,12 +171,12 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             op_prims[s][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::R]->allocate(
                 find_site_op_info(0, S(-1, -sz[s & 1], 0)));
-            opf->product(op_prims[(s >> 1) | (s & 2)][OpNames::B],
+            opf->product(0, op_prims[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims[s & 1][OpNames::D], op_prims[s][OpNames::R]);
             op_prims[s][OpNames::RD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::RD]->allocate(
                 find_site_op_info(0, S(1, sz[s & 1], 0)));
-            opf->product(op_prims[s & 1][OpNames::C],
+            opf->product(0, op_prims[s & 1][OpNames::C],
                          op_prims[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims[s][OpNames::RD]);
         }
@@ -266,7 +266,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(0, site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::A,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
@@ -283,7 +283,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(0, site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::A,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
@@ -298,7 +298,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 p.second = make_shared<SparseMatrix<S>>(d_alloc);
                 p.second->allocate(info);
                 // q_label is not used for comparison
-                opf->product(site_norm_ops[m].at(make_shared<OpElement<S>>(
+                opf->product(0, site_norm_ops[m].at(make_shared<OpElement<S>>(
                                  OpNames::B,
                                  SiteIndex({m, m}, {(uint8_t)(s & 1),
                                                     (uint8_t)((s & 2) >> 1)}),
@@ -557,40 +557,40 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             op_prims[s][OpNames::A] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::A]->allocate(
                 find_site_op_info(0, S(2, s * 2, 0)));
-            opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::C],
+            opf->product(0, op_prims[0][OpNames::C], op_prims[0][OpNames::C],
                          op_prims[s][OpNames::A]);
             op_prims[s][OpNames::AD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::AD]->allocate(
                 find_site_op_info(0, S(-2, s * 2, 0)));
-            opf->product(op_prims[0][OpNames::D], op_prims[0][OpNames::D],
+            opf->product(0, op_prims[0][OpNames::D], op_prims[0][OpNames::D],
                          op_prims[s][OpNames::AD]);
             op_prims[s][OpNames::B] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::B]->allocate(
                 find_site_op_info(0, S(0, s * 2, 0)));
-            opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::D],
+            opf->product(0, op_prims[0][OpNames::C], op_prims[0][OpNames::D],
                          op_prims[s][OpNames::B]);
             op_prims[s][OpNames::BD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::BD]->allocate(
                 find_site_op_info(0, S(0, s * 2, 0)));
-            opf->product(op_prims[0][OpNames::D], op_prims[0][OpNames::C],
+            opf->product(0, op_prims[0][OpNames::D], op_prims[0][OpNames::C],
                          op_prims[s][OpNames::BD]);
         }
         // NN[1] = sum_{sigma,tau} ad_{p,sigma} a_{p,tau} ad_{p,tau} a_{p,sigma}
         // = -sqrt(3) B1 x B1 + B0 x B0 where B0 x B0 == 0.5 NN
         op_prims[1][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[1][OpNames::NN]->allocate(find_site_op_info(0, S(0, 0, 0)));
-        opf->product(op_prims[1][OpNames::B], op_prims[1][OpNames::B],
+        opf->product(0, op_prims[1][OpNames::B], op_prims[1][OpNames::B],
                      op_prims[1][OpNames::NN], -sqrt(3.0));
         opf->iadd(op_prims[1][OpNames::NN], op_prims[0][OpNames::NN], 0.5);
         if (opf->seq->mode != SeqTypes::None)
             opf->seq->simple_perform();
         op_prims[0][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[0][OpNames::R]->allocate(find_site_op_info(0, S(-1, 1, 0)));
-        opf->product(op_prims[0][OpNames::B], op_prims[0][OpNames::D],
+        opf->product(0, op_prims[0][OpNames::B], op_prims[0][OpNames::D],
                      op_prims[0][OpNames::R]);
         op_prims[0][OpNames::RD] = make_shared<SparseMatrix<S>>(d_alloc);
         op_prims[0][OpNames::RD]->allocate(find_site_op_info(0, S(1, 1, 0)));
-        opf->product(op_prims[0][OpNames::C], op_prims[0][OpNames::B],
+        opf->product(0, op_prims[0][OpNames::C], op_prims[0][OpNames::B],
                      op_prims[0][OpNames::RD]);
         // site norm operators
         const shared_ptr<OpElement<S>> i_op =

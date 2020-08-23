@@ -44,7 +44,11 @@ template <typename S> struct OperatorTensor {
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() {
-        for (auto it = ops.crbegin(); it != ops.crend(); it++)
+        // need to check order in parallel mode
+        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        for (auto it = ops.cbegin(); it != ops.cend(); it++)
+            mp[it->second->data] = it->second;
+        for (auto it = mp.crbegin(); it != mp.crend(); it++)
             it->second->deallocate();
     }
     shared_ptr<OperatorTensor> copy() const {
@@ -58,8 +62,12 @@ template <typename S> struct OperatorTensor {
         r->lmat = lmat, r->rmat = rmat;
         for (auto &p : ops) {
             shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>();
-            mat->allocate(p.second->info);
-            mat->copy_data_from(p.second);
+            if (p.second->total_memory == 0)
+                mat->info = p.second->info;
+            else {
+                mat->allocate(p.second->info);
+                mat->copy_data_from(p.second);
+            }
             mat->factor = p.second->factor;
             r->ops[p.first] = mat;
         }
@@ -84,9 +92,16 @@ template <typename S> struct DelayedOperatorTensor {
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() {
-        for (auto it = rops.crbegin(); it != rops.crend(); it++)
+        // need to check order in parallel mode
+        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        for (auto it = rops.cbegin(); it != rops.cend(); it++)
+            mp[it->second->data] = it->second;
+        for (auto it = mp.crbegin(); it != mp.crend(); it++)
             it->second->deallocate();
-        for (auto it = lops.crbegin(); it != lops.crend(); it++)
+        mp.clear();
+        for (auto it = lops.cbegin(); it != lops.cend(); it++)
+            mp[it->second->data] = it->second;
+        for (auto it = mp.crbegin(); it != mp.crend(); it++)
             it->second->deallocate();
     }
 };

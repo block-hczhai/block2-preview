@@ -425,10 +425,11 @@ template <typename S> struct MPSInfo {
         return ss.str();
     }
     void save_mutable() const {
-        for (int i = 0; i < n_sites + 1; i++) {
-            left_dims[i]->save_data(get_filename(true, i));
-            right_dims[i]->save_data(get_filename(false, i));
-        }
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites + 1; i++) {
+                left_dims[i]->save_data(get_filename(true, i));
+                right_dims[i]->save_data(get_filename(false, i));
+            }
     }
     void load_mutable_left() const {
         for (int i = 0; i <= n_sites; i++)
@@ -449,10 +450,12 @@ template <typename S> struct MPSInfo {
             left_dims[i]->deallocate();
     }
     void save_left_dims(int i) const {
-        left_dims[i]->save_data(get_filename(true, i));
+        if (frame->prefix_can_write)
+            left_dims[i]->save_data(get_filename(true, i));
     }
     void save_right_dims(int i) const {
-        right_dims[i]->save_data(get_filename(false, i));
+        if (frame->prefix_can_write)
+            right_dims[i]->save_data(get_filename(false, i));
     }
     void load_left_dims(int i) {
         left_dims[i]->load_data(get_filename(true, i));
@@ -1071,15 +1074,17 @@ template <typename S> struct MPS {
         ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
     }
     virtual void save_data() const {
-        ofstream ofs(get_filename(-1).c_str(), ios::binary);
-        if (!ofs.good())
-            throw runtime_error("MPS::save_data on '" + get_filename(-1) +
-                                "' failed.");
-        save_data_to(ofs);
-        if (!ofs.good())
-            throw runtime_error("MPS::save_data on '" + get_filename(-1) +
-                                "' failed.");
-        ofs.close();
+        if (frame->prefix_can_write) {
+            ofstream ofs(get_filename(-1).c_str(), ios::binary);
+            if (!ofs.good())
+                throw runtime_error("MPS::save_data on '" + get_filename(-1) +
+                                    "' failed.");
+            save_data_to(ofs);
+            if (!ofs.good())
+                throw runtime_error("MPS::save_data on '" + get_filename(-1) +
+                                    "' failed.");
+            ofs.close();
+        }
     }
     void load_mutable_left() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -1115,13 +1120,16 @@ template <typename S> struct MPS {
             }
     }
     virtual void save_mutable() const {
-        for (int i = 0; i < n_sites; i++)
-            if (tensors[i] != nullptr)
-                tensors[i]->save_data(get_filename(i), true);
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites; i++)
+                if (tensors[i] != nullptr)
+                    tensors[i]->save_data(get_filename(i), true);
     }
     virtual void save_tensor(int i) const {
-        assert(tensors[i] != nullptr);
-        tensors[i]->save_data(get_filename(i), true);
+        if (frame->prefix_can_write) {
+            assert(tensors[i] != nullptr);
+            tensors[i]->save_data(get_filename(i), true);
+        }
     }
     virtual void load_tensor(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =

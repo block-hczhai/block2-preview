@@ -322,11 +322,12 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                      k++) {
                                     shared_ptr<OpExpr<S>> expr = abs_value(
                                         (shared_ptr<OpExpr<S>>)op->strings[k]
-                                            ->get_op());
+                                            ->a);
                                     if (mp.count(expr) == 0)
                                         op->strings[k]->factor = 0;
                                     else
                                         px[i & 1][mp[expr]] = 1;
+                                    assert(op->strings[k]->b == nullptr);
                                 }
                             }
                         }
@@ -444,11 +445,12 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                      k++) {
                                     shared_ptr<OpExpr<S>> expr = abs_value(
                                         (shared_ptr<OpExpr<S>>)op->strings[k]
-                                            ->get_op());
+                                            ->a);
                                     if (mp.count(expr) == 0)
                                         op->strings[k]->factor = 0;
                                     else
                                         px[i & 1][mp[expr]] = 1;
+                                    assert(op->strings[k]->b == nullptr);
                                 }
                             }
                         }

@@ -32,6 +32,8 @@ using namespace std;
 
 namespace block2 {
 
+enum struct ParallelTypes : uint8_t { Serial = 0, Distributed = 1 };
+
 // Operator names
 enum struct OpNames : uint8_t {
     H,
@@ -71,7 +73,15 @@ inline ostream &operator<<(ostream &os, const OpNames c) {
 }
 
 // Expression types
-enum struct OpTypes : uint8_t { Zero, Elem, Prod, Sum, ElemRef, SumProd };
+enum struct OpTypes : uint8_t {
+    Zero,
+    Elem,
+    Prod,
+    Sum,
+    ElemRef,
+    SumProd,
+    ExprRef
+};
 
 // Expression zero
 template <typename S> struct OpExpr {
@@ -271,6 +281,7 @@ template <typename S> struct OpString : OpExpr<S> {
 
 // Tensor product of one symbol and a sum:
 // (A) x {(B1) + (B2) + ...} or {(A1) + (A2) + ...} x (B)
+// first element in conjs must be 0
 template <typename S> struct OpSumProd : OpString<S> {
     vector<shared_ptr<OpElement<S>>> ops;
     vector<bool> conjs;
@@ -374,6 +385,15 @@ template <typename S> struct OpSum : OpExpr<S> {
     }
 };
 
+// Reference to local or distributed sum
+template <typename S> struct OpExprRef : OpExpr<S> {
+    bool is_local;
+    shared_ptr<OpExpr<S>> op;
+    OpExprRef(const shared_ptr<OpExpr<S>> &op, bool is_local)
+        : op(op), is_local(is_local) {}
+    const OpTypes get_type() const override { return OpTypes::ExprRef; }
+};
+
 template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
     assert(x->get_type() == OpTypes::Elem);
     return dynamic_pointer_cast<OpElement<S>>(x)->hash();
@@ -387,6 +407,9 @@ inline shared_ptr<OpExpr<S>> abs_value(const shared_ptr<OpExpr<S>> &x) {
     else if (x->get_type() == OpTypes::Elem) {
         shared_ptr<OpElement<S>> op = dynamic_pointer_cast<OpElement<S>>(x);
         return op->factor == 1.0 ? x : make_shared<OpElement<S>>(op->abs());
+    } else if (x->get_type() == OpTypes::ExprRef) {
+        shared_ptr<OpExprRef<S>> op = dynamic_pointer_cast<OpExprRef<S>>(x);
+        return abs_value(op->op);
     } else {
         assert(x->get_type() == OpTypes::Prod);
         shared_ptr<OpString<S>> op = dynamic_pointer_cast<OpString<S>>(x);
@@ -407,6 +430,10 @@ template <typename S> inline string to_str(const shared_ptr<OpExpr<S>> &x) {
         ss << *dynamic_pointer_cast<OpSum<S>>(x);
     else if (x->get_type() == OpTypes::SumProd)
         ss << *dynamic_pointer_cast<OpSumProd<S>>(x);
+    else if (x->get_type() == OpTypes::ExprRef)
+        ss << "["
+           << (dynamic_pointer_cast<OpExprRef<S>>(x)->is_local ? "T" : "F")
+           << "]" << to_str(dynamic_pointer_cast<OpExprRef<S>>(x)->op);
     return ss.str();
 }
 
@@ -546,6 +573,10 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
                                         d);
     else if (x->get_type() == OpTypes::Sum)
         return make_shared<OpSum<S>>(*dynamic_pointer_cast<OpSum<S>>(x) * d);
+    else if (x->get_type() == OpTypes::ExprRef)
+        return make_shared<OpExprRef<S>>(
+            dynamic_pointer_cast<OpExprRef<S>>(x)->op * d,
+            dynamic_pointer_cast<OpExprRef<S>>(x)->is_local);
     assert(false);
     return nullptr;
 }

@@ -104,6 +104,7 @@ template <typename S> struct MPO {
         : n_sites(n_sites), sparse_form(n_sites, 'N'), const_e(0.0),
           op(nullptr), schemer(nullptr), tf(nullptr) {}
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
+    virtual ParallelTypes get_parallel_type() const { return ParallelTypes::Serial; }
     virtual void deallocate() {}
     string get_blocking_formulas() const {
         stringstream ss;

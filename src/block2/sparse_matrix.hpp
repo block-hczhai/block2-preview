@@ -1498,6 +1498,13 @@ template <typename S> struct SparseMatrixGroup {
         r->total_memory = infos[idx]->get_total_memory();
         return r;
     }
+    friend ostream &operator<<(ostream &os, const SparseMatrixGroup<S> &c) {
+        os << "DATA = [ ";
+        for (int i = 0; i < c.total_memory; i++)
+            os << setw(20) << setprecision(14) << c.data[i] << " ";
+        os << "]" << endl;
+        return os;
+    }
 };
 
 } // namespace block2

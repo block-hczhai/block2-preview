@@ -23,9 +23,12 @@
 #include "determinant.hpp"
 #include "mpo.hpp"
 #include "mps.hpp"
+#include "parallel_mpo.hpp"
+#include "parallel_rule.hpp"
 #include "partition.hpp"
 #include "state_averaged.hpp"
 #include "tensor_functions.hpp"
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <memory>
@@ -121,7 +124,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     shared_ptr<SparseMatrixGroup<S>>
     perturbative_noise(bool trace_right, int iL, int iR, FuseTypes ftype,
-                       const shared_ptr<MPSInfo<S>> &mps_info) {
+                       const shared_ptr<MPSInfo<S>> &mps_info,
+                       const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
@@ -141,6 +145,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         perturb_ket_labels.resize(distance(
             perturb_ket_labels.begin(),
             unique(perturb_ket_labels.begin(), perturb_ket_labels.end())));
+        if (para_rule != nullptr) {
+            para_rule->comm->allreduce_sum(perturb_ket_labels);
+            sort(perturb_ket_labels.begin(), perturb_ket_labels.end());
+            perturb_ket_labels.resize(distance(
+                perturb_ket_labels.begin(),
+                unique(perturb_ket_labels.begin(), perturb_ket_labels.end())));
+        }
         // perturbed wavefunctions infos
         mps_info->load_left_dims(iL);
         mps_info->load_right_dims(iR + 1);
@@ -204,6 +215,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->tensor_product_partial_multiply(
             op->mat->data[0], op->lops, op->rops, trace_right, cmat, psubsl,
             cinfos, perturb_ket_labels, perturb_ket);
+        if (tf->opf->seq->mode == SeqTypes::Auto) {
+            tf->opf->seq->auto_perform();
+            if (para_rule != nullptr)
+                para_rule->comm->reduce_sum(perturb_ket, para_rule->comm->root);
+        }
         for (int j = (int)cinfos.size() - 1; j >= 0; j--)
             for (int k = (int)cinfos[j].size() - 1; k >= 0; k--)
                 cinfos[j][k]->deallocate();
@@ -246,7 +262,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
     tuple<double, int, size_t, double>
-    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000) {
+    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -257,10 +274,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         t.get_time();
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
-                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint,
-                                            conv_thrd, max_iter)
-                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint,
-                                            conv_thrd, max_iter);
+                ? MatrixFunctions::davidson(
+                      *tf->opf->seq, aa, bs, ndav, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter)
+                : MatrixFunctions::davidson(
+                      *this, aa, bs, ndav, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, nflop, t.get_time());
@@ -540,14 +561,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
-        for (int i = 0; i < cmat->n; i++)
-            tf->tensor_product_multiply(op->mat->data[idx], op->lops, op->rops,
-                                        (*cmat)[i], (*vmat)[i], opdq);
+        tf->tensor_product_multi_multiply(op->mat->data[idx], op->lops,
+                                          op->rops, cmat, vmat, opdq);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
     tuple<vector<double>, int, size_t, double>
-    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000) {
+    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
@@ -559,10 +580,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         t.get_time();
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
-                ? MatrixFunctions::davidson(*tf->opf->seq, aa, bs, ndav, iprint,
-                                            conv_thrd, max_iter)
-                : MatrixFunctions::davidson(*this, aa, bs, ndav, iprint,
-                                            conv_thrd, max_iter);
+                ? MatrixFunctions::davidson(
+                      *tf->opf->seq, aa, bs, ndav, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter)
+                : MatrixFunctions::davidson(
+                      *this, aa, bs, ndav, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter);
         size_t nflop = tf->opf->seq->cumulative_nflop;
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners, ndav, nflop, t.get_time());
@@ -645,16 +670,22 @@ template <typename S> struct MovingEnvironment {
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Tag is used to generate filename for disk storage
     string tag;
+    // Paralell execution control
+    shared_ptr<ParallelRule<S>> para_rule;
     bool iprint = false;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
                       const shared_ptr<MPS<S>> &ket, const string &tag = "DMRG")
         : n_sites(ket->n_sites), center(ket->center), dot(ket->dot), mpo(mpo),
-          bra(bra), ket(ket), tag(tag) {
+          bra(bra), ket(ket), tag(tag), para_rule(nullptr) {
         assert(bra->n_sites == ket->n_sites && mpo->n_sites == ket->n_sites);
         assert(bra->center == ket->center && bra->dot == ket->dot);
         hop_mat = make_shared<SymbolicColumnVector<S>>(1);
         (*hop_mat)[0] = mpo->op;
+        if (mpo->get_parallel_type() == ParallelTypes::Distributed) {
+            para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
+            para_rule->comm->barrier();
+        }
     }
     // Contract and renormalize left block by one site
     // new site = i - 1
@@ -767,13 +798,13 @@ template <typename S> struct MovingEnvironment {
     }
     string get_left_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART." << tag
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART." << tag
            << ".LEFT." << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".PART." << tag
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART." << tag
            << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
@@ -1160,11 +1191,10 @@ template <typename S> struct MovingEnvironment {
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
-                ? TensorFunctions<S>::delayed_contract(
-                      new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM])
-                : TensorFunctions<S>::delayed_contract(new_left, new_right,
-                                                       mpo->op);
+                ? mpo->tf->delayed_contract(new_left, new_right,
+                                            mpo->middle_operator_names[iM],
+                                            mpo->middle_operator_exprs[iM])
+                : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
         frame->activate(0);
         frame->reset(1);
         shared_ptr<SymbolicColumnVector<S>> hops =
@@ -1208,7 +1238,6 @@ template <typename S> struct MovingEnvironment {
                 assert(false);
         } else
             assert(false);
-
         if (fuse_type & FuseTypes::FuseL)
             left_contract(iL, left_op_infos, new_left);
         else
@@ -1220,11 +1249,10 @@ template <typename S> struct MovingEnvironment {
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
-                ? TensorFunctions<S>::delayed_contract(
-                      new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM])
-                : TensorFunctions<S>::delayed_contract(new_left, new_right,
-                                                       mpo->op);
+                ? mpo->tf->delayed_contract(new_left, new_right,
+                                            mpo->middle_operator_names[iM],
+                                            mpo->middle_operator_exprs[iM])
+                : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
         frame->activate(0);
         frame->reset(1);
         shared_ptr<SymbolicColumnVector<S>> hops =

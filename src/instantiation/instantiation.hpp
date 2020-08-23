@@ -35,10 +35,15 @@
 #include "../block2/mps_unfused.hpp"
 #include "../block2/operator_functions.hpp"
 #include "../block2/operator_tensor.hpp"
+#include "../block2/parallel_mpi.hpp"
+#include "../block2/parallel_mpo.hpp"
+#include "../block2/parallel_rule.hpp"
+#include "../block2/parallel_tensor_functions.hpp"
 #include "../block2/partition.hpp"
 #include "../block2/qc_hamiltonian.hpp"
 #include "../block2/qc_mpo.hpp"
 #include "../block2/qc_ncorr.hpp"
+#include "../block2/qc_parallel_rule.hpp"
 #include "../block2/qc_pdm1.hpp"
 #include "../block2/qc_pdm2.hpp"
 #include "../block2/qc_rule.hpp"
@@ -158,6 +163,27 @@ extern template struct block2::DelayedOperatorTensor<block2::SZ>;
 extern template struct block2::OperatorTensor<block2::SU2>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2>;
 
+// parallel_mpi.hpp
+#ifdef _HAS_MPI
+extern template struct block2::MPICommunicator<block2::SZ>;
+extern template struct block2::MPICommunicator<block2::SU2>;
+#endif
+
+// parallel_mpo.hpp
+extern template struct block2::ParallelMPO<block2::SZ>;
+extern template struct block2::ParallelMPO<block2::SU2>;
+
+// parallel_rule.hpp
+extern template struct block2::ParallelCommunicator<block2::SZ>;
+extern template struct block2::ParallelRule<block2::SZ>;
+
+extern template struct block2::ParallelCommunicator<block2::SU2>;
+extern template struct block2::ParallelRule<block2::SU2>;
+
+// parallel_tensor_functions.hpp
+extern template struct block2::ParallelTensorFunctions<block2::SZ>;
+extern template struct block2::ParallelTensorFunctions<block2::SU2>;
+
 // partition.hpp
 extern template struct block2::Partition<block2::SZ>;
 extern template struct block2::Partition<block2::SU2>;
@@ -176,6 +202,10 @@ extern template struct block2::MPOQC<block2::SU2>;
 // qc_ncorr.hpp
 extern template struct block2::NPC1MPOQC<block2::SZ>;
 extern template struct block2::NPC1MPOQC<block2::SU2>;
+
+// qc_parallel_rule.hpp
+extern template struct block2::ParallelRuleQC<block2::SZ>;
+extern template struct block2::ParallelRuleQC<block2::SU2>;
 
 // qc_pdm1.hpp
 extern template struct block2::PDM1MPOQC<block2::SZ>;

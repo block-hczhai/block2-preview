@@ -4,7 +4,37 @@
 
 using namespace block2;
 
+// suppress googletest output for non-root mpi procs
+struct MPITest {
+    shared_ptr<testing::TestEventListener> tel;
+    testing::TestEventListener *def_tel;
+    MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            def_tel = tels.Release(tels.default_result_printer());
+            tel = make_shared<testing::EmptyTestEventListener>();
+            tels.Append(tel.get());
+        }
+    }
+    ~MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            assert(tel.get() == tels.Release(tel.get()));
+            tel = nullptr;
+            tels.Append(def_tel);
+        }
+    }
+    static bool okay() {
+        static MPITest _mpi_test;
+        return _mpi_test.tel != nullptr;
+    }
+};
+
 class TestOneSiteDMRGN2STO3G : public ::testing::Test {
+    static bool _mpi;
+
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 27;
@@ -25,6 +55,8 @@ class TestOneSiteDMRGN2STO3G : public ::testing::Test {
     }
 };
 
+bool TestOneSiteDMRGN2STO3G::_mpi = MPITest::okay();
+
 template <typename S>
 void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                        const vector<vector<double>> &energies,
@@ -35,9 +67,19 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
     hamil.opf->seq->mode = SeqTypes::Simple;
 
 #ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
+    mkl_set_num_threads(1);
     mkl_set_dynamic(0);
 #endif
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
+#else
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRule<S>> para_rule =
+        make_shared<ParallelRuleQC<S>>(para_comm);
 
     Timer t;
     t.get_time();
@@ -51,6 +93,11 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
     cout << "MPO simplification start" << endl;
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    // MPO parallelization
+    cout << "MPO parallelization start" << endl;
+    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     uint16_t bond_dim = 200;
     vector<uint16_t> bdims = {bond_dim};
@@ -95,11 +142,20 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             // deallocate persistent stack memory
             mps_info->deallocate();
 
+            para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
+            para_comm->tcomm /= para_comm->size;
+            double tt = t.get_time();
+
             cout << "== " << name << " ==" << setw(20) << target
                  << " E = " << fixed << setw(22) << setprecision(12) << energy
                  << " error = " << scientific << setprecision(3) << setw(10)
                  << (energy - energies[i][j]) << " T = " << fixed << setw(10)
-                 << setprecision(3) << t.get_time() << endl;
+                 << setprecision(3) << tt << " Tcomm = " << fixed << setw(10)
+                 << setprecision(3) << para_comm->tcomm << " (" << setw(3)
+                 << fixed << setprecision(0) << (para_comm->tcomm * 100 / tt)
+                 << "%)" << endl;
+
+            para_comm->tcomm = 0.0;
 
             EXPECT_LT(abs(energy - energies[i][j]), 1E-5);
         }

@@ -6,84 +6,13 @@ using namespace block2;
 
 class TestDMRGN2STO3GSA : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 30;
 
     template <typename S>
-    void test_dmrg(const vector<S> &targets,
-                   const vector<double> &energies,
+    void test_dmrg(const vector<S> &targets, const vector<double> &energies,
                    const HamiltonianQC<S> &hamil, const string &name,
-                   uint16_t bond_dim, uint16_t nroots) {
-
-        hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-        mkl_set_num_threads(8);
-        mkl_set_dynamic(0);
-#endif
-
-        Timer t;
-        t.get_time();
-        // MPO construction
-        cout << "MPO start" << endl;
-        shared_ptr<MPO<S>> mpo =
-            make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
-        cout << "MPO end .. T = " << t.get_time() << endl;
-
-        // MPO simplification
-        cout << "MPO simplification start" << endl;
-        mpo =
-            make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
-        cout << "MPO simplification end .. T = " << t.get_time() << endl;
-
-        vector<uint16_t> bdims = {bond_dim};
-        vector<double> noises = {1E-6, 1E-7, 0.0};
-
-        t.get_time();
-
-        shared_ptr<MultiMPSInfo<S>> mps_info = make_shared<MultiMPSInfo<S>>(
-            hamil.n_sites, hamil.vacuum, targets, hamil.basis);
-        mps_info->set_bond_dimension(bond_dim);
-
-        // MPS
-        Random::rand_seed(0);
-
-        shared_ptr<MultiMPS<S>> mps =
-            make_shared<MultiMPS<S>>(hamil.n_sites, 0, 2, nroots);
-        mps->initialize(mps_info);
-        mps->random_canonicalize();
-
-        // MPS/MPSInfo save mutable
-        mps->save_mutable();
-        mps->deallocate();
-        mps_info->save_mutable();
-        mps_info->deallocate_mutable();
-
-        // ME
-        shared_ptr<MovingEnvironment<S>> me =
-            make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
-        me->init_environments(false);
-
-        // DMRG
-        shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
-        dmrg->iprint = 2;
-        double energy = dmrg->solve(10, mps->center == 0, 1E-8);
-
-        // deallocate persistent stack memory
-        mps_info->deallocate();
-
-        for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
-            cout << "== " << name << " (SA) =="
-                 << " E[" << setw(2) << i << "] = " << fixed << setw(22)
-                 << setprecision(12) << dmrg->energies.back()[i]
-                 << " error = " << scientific << setprecision(3) << setw(10)
-                 << (dmrg->energies.back()[i] - energies[i]) << endl;
-
-            EXPECT_LT(abs(dmrg->energies.back()[i] - energies[i]), 1E-7);
-        }
-
-        mpo->deallocate();
-    }
+                   uint16_t bond_dim, uint16_t nroots);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -95,7 +24,84 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
     }
 };
 
+template <typename S>
+void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
+                                  const vector<double> &energies,
+                                  const HamiltonianQC<S> &hamil,
+                                  const string &name, uint16_t bond_dim,
+                                  uint16_t nroots) {
+
+    hamil.opf->seq->mode = SeqTypes::Simple;
+
+#ifdef _HAS_INTEL_MKL
+    mkl_set_num_threads(8);
+    mkl_set_dynamic(0);
+#endif
+
+    Timer t;
+    t.get_time();
+    // MPO construction
+    cout << "MPO start" << endl;
+    shared_ptr<MPO<S>> mpo =
+        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    cout << "MPO end .. T = " << t.get_time() << endl;
+
+    // MPO simplification
+    cout << "MPO simplification start" << endl;
+    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    vector<uint16_t> bdims = {bond_dim};
+    vector<double> noises = {1E-6, 1E-7, 0.0};
+
+    t.get_time();
+
+    shared_ptr<MultiMPSInfo<S>> mps_info = make_shared<MultiMPSInfo<S>>(
+        hamil.n_sites, hamil.vacuum, targets, hamil.basis);
+    mps_info->set_bond_dimension(bond_dim);
+
+    // MPS
+    Random::rand_seed(0);
+
+    shared_ptr<MultiMPS<S>> mps =
+        make_shared<MultiMPS<S>>(hamil.n_sites, 0, 2, nroots);
+    mps->initialize(mps_info);
+    mps->random_canonicalize();
+
+    // MPS/MPSInfo save mutable
+    mps->save_mutable();
+    mps->deallocate();
+    mps_info->save_mutable();
+    mps_info->deallocate_mutable();
+
+    // ME
+    shared_ptr<MovingEnvironment<S>> me =
+        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    me->init_environments(false);
+
+    // DMRG
+    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    dmrg->iprint = 2;
+    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+
+    // deallocate persistent stack memory
+    mps_info->deallocate();
+
+    for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
+        cout << "== " << name << " (SA) =="
+             << " E[" << setw(2) << i << "] = " << fixed << setw(22)
+             << setprecision(12) << dmrg->energies.back()[i]
+             << " error = " << scientific << setprecision(3) << setw(10)
+             << (dmrg->energies.back()[i] - energies[i]) << endl;
+
+        EXPECT_LT(abs(dmrg->energies.back()[i] - energies[i]), 1E-7);
+    }
+
+    mpo->deallocate();
+}
+
 TEST_F(TestDMRGN2STO3GSA, TestSU2) {
+
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
@@ -137,6 +143,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
 }
 
 TEST_F(TestDMRGN2STO3GSA, TestSZ) {
+
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";

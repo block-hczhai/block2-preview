@@ -51,9 +51,13 @@ Dependence: `pybind11`, `python3`, and `mkl` (or `blas + lapack`). For unit test
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON
     make -j 10
 
-This will build the python extension (using 10 CPU cores).
+This will build the python extension (using 10 CPU cores) (serial code).
+
+### MKL
 
 If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required (with limited support for multi-threading).
+
+### Serial build
 
 By default, the C++ templates will be explicitly instantiated in different compilation units, so that parallel
 compilation is possible.
@@ -66,9 +70,18 @@ saved by avoiding unnecessary template instantiation, as follows:
 
 This may take 5 minutes, need 7 to 10 GB memory.
 
+### MPI build
+
+Adding option `-DMPI=ON` will build MPI parallel version. The C++ compiler and MPI library must be matched.
+If necessary, environment variables `CC`, `CXX`, and `MPIHOME` can be used to explicitly set the path.
+
+### Binary build
+
 To build unit tests and binary executable (instead of python extension), use the following:
 
     cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON
+
+### openMP
 
 If intel openMP library `libiomp5` is not available, one can use gnu openMP library.
 The following will switch to gnu openMP library:
@@ -79,6 +92,8 @@ The following will use sequential mkl library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=SEQ
 
+### Release build
+
 The release mode is controlled by CMAKE_BUILD_TYPE:
 
     cmake .. -DCMAKE_BUILD_TYPE=Release 
@@ -88,7 +103,6 @@ will use optimization flags such as -O3 (default).
     cmake .. -DCMAKE_BUILD_TYPE=Debug 
 
 enables debug flags.
-
 
 FT-DMRG
 -------
