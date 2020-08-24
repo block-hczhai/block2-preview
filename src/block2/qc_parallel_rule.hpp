@@ -54,9 +54,6 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
         case OpNames::RD:
             return ParallelProperty(si[0] % comm->size,
                                     ParallelOpTypes::Partial);
-        case OpNames::PDM1:
-            return ParallelProperty(find_index(si[0], si[1]) % comm->size,
-                                    ParallelOpTypes::Number);
         case OpNames::A:
         case OpNames::AD:
         case OpNames::P:
@@ -66,6 +63,65 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
         case OpNames::Q:
             return ParallelProperty(find_index(si[0], si[1]) % comm->size,
                                     ParallelOpTypes::None);
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
+// Rule for parallel dispatcher for quantum chemisty NPDM
+template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm)
+        : ParallelRule<S>(comm) {}
+    static uint64_t find_index(uint32_t i, uint32_t j) {
+        return i < j ? ((int)j * (j + 1) >> 1) + i
+                     : ((int)i * (i + 1) >> 1) + j;
+    }
+    static uint64_t find_index(uint16_t i, uint16_t j, uint16_t k,
+                               uint16_t l) {
+        uint64_t p = (uint32_t)find_index(i, j), q = (uint32_t)find_index(k, l);
+        return find_index(p, q);
+    }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (op->name) {
+        case OpNames::I:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
+        case OpNames::C:
+        case OpNames::D:
+        case OpNames::N:
+        case OpNames::NN:
+            return ParallelProperty(si[0] % comm->size,
+                                    ParallelOpTypes::Repeated);
+        case OpNames::A:
+        case OpNames::AD:
+        case OpNames::B:
+        case OpNames::BD:
+            return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                    ParallelOpTypes::Repeated);
+        case OpNames::CCD:
+        case OpNames::CDC:
+        case OpNames::CDD:
+        case OpNames::DCC:
+        case OpNames::DCD:
+        case OpNames::DDC:
+            return ParallelProperty(find_index(si[0], si[1], si[2], 0) %
+                                        comm->size,
+                                    ParallelOpTypes::Repeated);
+        case OpNames::CCDD:
+            return ParallelProperty(find_index(si[0], si[1], si[2], si[3]) %
+                                        comm->size,
+                                    ParallelOpTypes::Repeated);
+        case OpNames::PDM1:
+            return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                    ParallelOpTypes::Number);
+        case OpNames::PDM2:
+            return ParallelProperty(find_index(si[0], si[1], si[2], si[3]) %
+                                        comm->size,
+                                    ParallelOpTypes::Number);
         default:
             assert(false);
         }

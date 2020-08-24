@@ -621,10 +621,11 @@ struct MatrixFunctions {
     //   EXPOKIT: Software Package for Computing Matrix Exponentials.
     //   ACM - Transactions On Mathematical Software, 24(1):130-156, 1998
     // lwork = n*(m+1)+n+(m+2)^2+4*(m+2)^2+ideg+1
-    template <typename MatMul>
+    template <typename MatMul, typename PComm>
     static int expo_krylov(MatMul op, int n, int m, double t, double *v,
                            double *w, double &tol, double anorm, double *work,
-                           int lwork, bool iprint) {
+                           int lwork, bool iprint,
+                           const PComm &pcomm = nullptr) {
         const int inc = 1;
         const double sqr1 = sqrt(0.1), zero = 0.0;
         const int mxstep = 500, mxreject = 0, ideg = 6;
@@ -670,20 +671,28 @@ struct MatrixFunctions {
             p1 = 1.0 / beta;
             for (int i = 0; i < n; i++)
                 work[iv + i] = p1 * w[i];
-            memset(work + ih, 0, sizeof(double) * mh * mh);
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                memset(work + ih, 0, sizeof(double) * mh * mh);
             // Lanczos loop
             int j1v = iv + n;
+            double hj1j = 0.0;
             for (int j = 0; j < m; j++) {
                 nmult++;
                 op(work + j1v - n, work + j1v);
-                if (j != 0) {
-                    p1 = -work[ih + j * mh + j - 1];
-                    daxpy(&n, &p1, work + j1v - n - n, &inc, work + j1v, &inc);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    if (j != 0) {
+                        p1 = -work[ih + j * mh + j - 1];
+                        daxpy(&n, &p1, work + j1v - n - n, &inc, work + j1v,
+                              &inc);
+                    }
+                    double hjj =
+                        -ddot(&n, work + j1v - n, &inc, work + j1v, &inc);
+                    work[ih + j * (mh + 1)] = -hjj;
+                    daxpy(&n, &hjj, work + j1v - n, &inc, work + j1v, &inc);
+                    hj1j = dnrm2(&n, work + j1v, &inc);
                 }
-                double hjj = -ddot(&n, work + j1v - n, &inc, work + j1v, &inc);
-                daxpy(&n, &hjj, work + j1v - n, &inc, work + j1v, &inc);
-                double hj1j = dnrm2(&n, work + j1v, &inc);
-                work[ih + j * (mh + 1)] = -hjj;
+                if (pcomm != nullptr)
+                    pcomm->broadcast(&hj1j, 1, pcomm->root);
                 // if "happy breakdown" go straightforward at the end
                 if (hj1j <= break_tol) {
                     if (iprint)
@@ -694,89 +703,111 @@ struct MatrixFunctions {
                     t_step = t_out - t_now;
                     break;
                 }
-                work[ih + j * mh + j + 1] = hj1j;
-                work[ih + (j + 1) * mh + j] = hj1j;
-                hj1j = 1.0 / hj1j;
-                dscal(&n, &hj1j, work + j1v, &inc);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    work[ih + j * mh + j + 1] = hj1j;
+                    work[ih + (j + 1) * mh + j] = hj1j;
+                    hj1j = 1.0 / hj1j;
+                    dscal(&n, &hj1j, work + j1v, &inc);
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(work + j1v, n, pcomm->root);
                 j1v += n;
             }
             if (k1 != 0) {
                 nmult++;
                 op(work + j1v - n, work + j1v);
-                avnorm = dnrm2(&n, work + j1v, &inc);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                    avnorm = dnrm2(&n, work + j1v, &inc);
             }
-            // set 1 for the 2-corrected scheme
-            work[ih + m * mh + m - 1] = 0.0;
-            work[ih + m * mh + m + 1] = 1.0;
-            // loop while ireject<mxreject until the tolerance is reached
-            for (int ireject = 0;;) {
-                // compute w = beta*V*exp(t_step*H)*e1
-                nexph++;
-                mx = mbrkdwn + k1;
-                // irreducible rational Pade approximation
-                auto xp = expo_pade(ideg, mx, work + ih, mh, sgn * t_step,
-                                    work + ifree);
-                iexph = xp.first + ifree, ns = xp.second;
-                nscale += ns;
-                // error estimate
-                if (k1 == 0)
-                    err_loc = tol;
-                else {
-                    double p1 = abs(work[iexph + m]) * beta;
-                    double p2 = abs(work[iexph + m + 1]) * beta * avnorm;
-                    if (p1 > 10.0 * p2)
-                        err_loc = p2, xm = 1.0 / (double)m;
-                    else if (p1 > p2)
-                        err_loc = p1 * p2 / (p1 - p2), xm = 1.0 / (double)m;
-                    else
-                        err_loc = p1, xm = 1.0 / (double)(m - 1);
-                }
-                // reject the step-size if the error is not acceptable
-                if (k1 != 0 && err_loc > delta * t_step * tol &&
-                    (mxreject == 0 || ireject < mxreject)) {
-                    double t_old = t_step;
-                    t_step = gamma * t_step * pow(t_step * tol / err_loc, xm);
-                    p1 = pow(10.0, round(log10(t_step) - sqr1) - 1);
-                    t_step = floor(t_step / p1 + 0.55) * p1;
-                    if (iprint)
-                        cout << "t_step = " << t_old << " err_loc = " << err_loc
-                             << " err_required = " << delta * t_old * tol
-                             << endl
-                             << "  stepsize rejected, stepping down to:"
-                             << t_step << endl;
-                    ireject++;
-                    nreject++;
-                    if (mxreject != 0 && ireject > mxreject) {
-                        cerr << "failure in expo krylov: ---"
-                             << " The requested tolerance is too high. Rerun "
-                                "with a smaller value.";
-                        abort();
+            int ireject = 0;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                // set 1 for the 2-corrected scheme
+                work[ih + m * mh + m - 1] = 0.0;
+                work[ih + m * mh + m + 1] = 1.0;
+                // loop while ireject<mxreject until the tolerance is reached
+                for (ireject = 0;;) {
+                    // compute w = beta*V*exp(t_step*H)*e1
+                    nexph++;
+                    mx = mbrkdwn + k1;
+                    // irreducible rational Pade approximation
+                    auto xp = expo_pade(ideg, mx, work + ih, mh, sgn * t_step,
+                                        work + ifree);
+                    iexph = xp.first + ifree, ns = xp.second;
+                    nscale += ns;
+                    // error estimate
+                    if (k1 == 0)
+                        err_loc = tol;
+                    else {
+                        double p1 = abs(work[iexph + m]) * beta;
+                        double p2 = abs(work[iexph + m + 1]) * beta * avnorm;
+                        if (p1 > 10.0 * p2)
+                            err_loc = p2, xm = 1.0 / (double)m;
+                        else if (p1 > p2)
+                            err_loc = p1 * p2 / (p1 - p2), xm = 1.0 / (double)m;
+                        else
+                            err_loc = p1, xm = 1.0 / (double)(m - 1);
                     }
-                } else
-                    break;
+                    // reject the step-size if the error is not acceptable
+                    if (k1 != 0 && err_loc > delta * t_step * tol &&
+                        (mxreject == 0 || ireject < mxreject)) {
+                        double t_old = t_step;
+                        t_step =
+                            gamma * t_step * pow(t_step * tol / err_loc, xm);
+                        p1 = pow(10.0, round(log10(t_step) - sqr1) - 1);
+                        t_step = floor(t_step / p1 + 0.55) * p1;
+                        if (iprint)
+                            cout << "t_step = " << t_old
+                                 << " err_loc = " << err_loc
+                                 << " err_required = " << delta * t_old * tol
+                                 << endl
+                                 << "  stepsize rejected, stepping down to:"
+                                 << t_step << endl;
+                        ireject++;
+                        nreject++;
+                        break;
+                    } else
+                        break;
+                }
             }
-            // now update w = beta*V*exp(t_step*H)*e1 and the hump
-            mx = mbrkdwn + max(0, k1 - 1);
-            dgemv("n", &n, &mx, &beta, work + iv, &n, work + iexph, &inc, &zero,
-                  w, &inc);
-            beta = dnrm2(&n, w, &inc);
-            hump = max(hump, beta);
-            // suggested value for the next stepsize
-            t_new = gamma * t_step * pow(t_step * tol / err_loc, xm);
-            p1 = pow(10.0, round(log10(t_new) - sqr1) - 1);
-            t_new = floor(t_new / p1 + 0.55) * p1;
-            err_loc = max(err_loc, rndoff);
-            // update the time covered
-            t_now += t_step;
-            // display and keep some information
-            if (iprint)
-                cout << "integration " << nstep << " scale-square =" << ns
-                     << " step_size = " << t_step << " err_loc = " << err_loc
-                     << " next_step = " << t_new << endl;
-            step_min = min(step_min, t_step);
-            step_max = max(step_max, t_step);
-            s_error += err_loc;
-            x_error = max(x_error, err_loc);
+            if (mxreject != 0 && pcomm != nullptr)
+                pcomm->broadcast(&ireject, 1, pcomm->root);
+            if (mxreject != 0 && ireject > mxreject) {
+                cerr << "failure in expo krylov: ---"
+                     << " The requested tolerance is too high. Rerun "
+                        "with a smaller value.";
+                abort();
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                // now update w = beta*V*exp(t_step*H)*e1 and the hump
+                mx = mbrkdwn + max(0, k1 - 1);
+                dgemv("n", &n, &mx, &beta, work + iv, &n, work + iexph, &inc,
+                      &zero, w, &inc);
+                beta = dnrm2(&n, w, &inc);
+                hump = max(hump, beta);
+                // suggested value for the next stepsize
+                t_new = gamma * t_step * pow(t_step * tol / err_loc, xm);
+                p1 = pow(10.0, round(log10(t_new) - sqr1) - 1);
+                t_new = floor(t_new / p1 + 0.55) * p1;
+                err_loc = max(err_loc, rndoff);
+                // update the time covered
+                t_now += t_step;
+                // display and keep some information
+                if (iprint)
+                    cout << "integration " << nstep << " scale-square =" << ns
+                         << " step_size = " << t_step
+                         << " err_loc = " << err_loc << " next_step = " << t_new
+                         << endl;
+                step_min = min(step_min, t_step);
+                step_max = max(step_max, t_step);
+                s_error += err_loc;
+                x_error = max(x_error, err_loc);
+            }
+            if (pcomm != nullptr) {
+                double tmp[3] = {beta, t_new, t_now};
+                pcomm->broadcast(tmp, 3, pcomm->root);
+                pcomm->broadcast(w, n, pcomm->root);
+                beta = tmp[0], t_new = tmp[1], t_now = tmp[2];
+            }
             if (mxstep != 0 && nstep >= mxstep) {
                 iflag = 1;
                 break;
@@ -786,10 +817,10 @@ struct MatrixFunctions {
     }
     // apply exponential of a matrix to a vector
     // v: input/output vector
-    template <typename MatMul>
+    template <typename MatMul, typename PComm>
     static int expo_apply(MatMul op, double t, double anorm, MatrixRef &v,
                           double consta = 0.0, bool iprint = false,
-                          double conv_thrd = 5E-6,
+                          const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
                           int deflation_max_size = 20) {
         int vm = v.m, vn = v.n, n = vm * vn;
         if (n < 4) {
@@ -804,10 +835,14 @@ struct MatrixFunctions {
                 h[i * (n + 1)] += consta;
                 e.data[i] = 0.0;
             }
-            int iptr = expo_pade(6, n, h, n, t, work).first;
-            MatrixFunctions::multiply(MatrixRef(work + iptr, n, n), true, v,
-                                      false, e, 1.0, 0.0);
-            memcpy(v.data, e.data, sizeof(double) * n);
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                int iptr = expo_pade(6, n, h, n, t, work).first;
+                MatrixFunctions::multiply(MatrixRef(work + iptr, n, n), true, v,
+                                          false, e, 1.0, 0.0);
+                memcpy(v.data, e.data, sizeof(double) * n);
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(v.data, n, pcomm->root);
             return n;
         }
         auto lop = [&op, consta, n, vm, vn](double *a, double *b) -> void {
@@ -823,7 +858,7 @@ struct MatrixFunctions {
             anorm = 1.0;
         int nmult = MatrixFunctions::expo_krylov(lop, n, m, t, v.data, w.data(),
                                                  conv_thrd, anorm, work.data(),
-                                                 lwork, iprint);
+                                                 lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return nmult;
     }

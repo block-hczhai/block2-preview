@@ -117,7 +117,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops,
-                                        cmat, vmat, opdq);
+                                        cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         }
@@ -250,14 +250,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [c] = [H_eff[idx]] x [b]
     void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
-                    double factor = 1.0) {
+                    double factor = 1.0, bool all_reduce = true) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
         cmat->factor = factor;
         tf->tensor_product_multiply(op->mat->data[idx], op->lops, op->rops,
-                                    cmat, vmat, opdq);
+                                    cmat, vmat, opdq, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
@@ -282,13 +282,16 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                       *this, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter);
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(eners[0], ndav, nflop, t.get_time());
+        return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
     // [bra] = [H_eff] x [ket]
     // norm, nflop, tdav
-    tuple<double, size_t, double> multiply() {
+    tuple<double, size_t, double>
+    multiply(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
         Timer t;
         t.get_time();
@@ -300,14 +303,16 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                     MatrixRef(bra->data, bra->total_memory, 1));
         double norm =
             MatrixFunctions::norm(MatrixRef(bra->data, bra->total_memory, 1));
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(norm, nflop, t.get_time());
+        return make_tuple(norm, (size_t)nflop, t.get_time());
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, double>>, size_t, double>
-    expect() {
+    expect(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         Timer t;
         t.get_time();
         MatrixRef ktmp(ket->data, ket->total_memory, 1);
@@ -317,6 +322,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         assert(tf->opf->seq->mode != SeqTypes::Auto);
         vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
         expectations.reserve(op->mat->data.size());
+        vector<double> results;
+        vector<size_t> results_idx;
+        results.reserve(op->mat->data.size());
+        results_idx.reserve(op->mat->data.size());
         for (size_t i = 0; i < op->mat->data.size(); i++) {
             if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->name ==
                 OpNames::Zero)
@@ -325,21 +334,41 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                      opdq)
                 expectations.push_back(make_pair(op->ops[i], 0.0));
             else {
-                btmp.clear();
-                (*this)(ktmp, btmp, i);
-                double r = MatrixFunctions::dot(btmp, rtmp);
+                double r = 0.0;
+                if (para_rule == nullptr || !para_rule->number(op->ops[i])) {
+                    btmp.clear();
+                    (*this)(ktmp, btmp, i, 1.0, true);
+                    r = MatrixFunctions::dot(btmp, rtmp);
+                } else {
+                    if (para_rule->own(op->ops[i])) {
+                        btmp.clear();
+                        (*this)(ktmp, btmp, i, 1.0, false);
+                        r = MatrixFunctions::dot(btmp, rtmp);
+                    }
+                    results.push_back(r);
+                    results_idx.push_back(expectations.size());
+                }
                 expectations.push_back(make_pair(op->ops[i], r));
             }
         }
         btmp.deallocate();
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        if (results.size() != 0) {
+            assert(para_rule != nullptr);
+            para_rule->comm->allreduce_sum(results.data(), results.size());
+            for (size_t i = 0; i < results.size(); i++)
+                expectations[results_idx[i]].second = results[i];
+        }
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(expectations, nflop, t.get_time());
+        return make_tuple(expectations, (size_t)nflop, t.get_time());
     }
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
     pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
-    rk4_apply(double beta, double const_e, bool eval_energy = false) {
+    rk4_apply(double beta, double const_e, bool eval_energy = false,
+              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         MatrixRef v(ket->data, ket->total_memory, 1);
         vector<MatrixRef> k, r;
         Timer t;
@@ -392,15 +421,18 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         for (int i = 3; i >= 0; i--)
             k[i].deallocate();
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_pair(
-            r, make_tuple(energy, norm, 4 + eval_energy, nflop, t.get_time()));
+        return make_pair(r, make_tuple(energy, norm, 4 + eval_energy,
+                                       (size_t)nflop, t.get_time()));
     }
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
     tuple<double, double, int, size_t, double>
-    expo_apply(double beta, double const_e, bool iprint = false) {
+    expo_apply(double beta, double const_e, bool iprint = false,
+               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(compute_diag);
         double anorm =
             MatrixFunctions::norm(MatrixRef(diag->data, diag->total_memory, 1));
@@ -408,10 +440,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         Timer t;
         t.get_time();
         int nexpo = tf->opf->seq->mode == SeqTypes::Auto
-                        ? MatrixFunctions::expo_apply(*tf->opf->seq, beta,
-                                                      anorm, v, const_e, iprint)
-                        : MatrixFunctions::expo_apply(*this, beta, anorm, v,
-                                                      const_e, iprint);
+                        ? MatrixFunctions::expo_apply(
+                              *tf->opf->seq, beta, anorm, v, const_e, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm)
+                        : MatrixFunctions::expo_apply(
+                              *this, beta, anorm, v, const_e, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm);
         double norm = MatrixFunctions::norm(v);
         MatrixRef tmp(nullptr, ket->total_memory, 1);
         tmp.allocate();
@@ -422,9 +456,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             (*this)(v, tmp);
         double energy = MatrixFunctions::dot(v, tmp) / (norm * norm);
         tmp.deallocate();
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(energy, norm, nexpo + 1, nflop, t.get_time());
+        return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);
@@ -524,10 +560,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         // prepare batch gemm
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
-            for (int i = 0; i < cmat->n; i++)
-                tf->tensor_product_multiply(op->mat->data[0], op->lops,
-                                            op->rops, (*cmat)[i], (*vmat)[i],
-                                            opdq);
+            tf->tensor_product_multi_multiply(
+                op->mat->data[0], op->lops, op->rops, cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         }
@@ -556,13 +590,15 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             return 1;
     }
     // [c] = [H_eff[idx]] x [b]
-    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0) {
+    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
+                    bool all_reduce = true) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
         tf->tensor_product_multi_multiply(op->mat->data[idx], op->lops,
-                                          op->rops, cmat, vmat, opdq);
+                                          op->rops, cmat, vmat, opdq,
+                                          all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
@@ -588,14 +624,16 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                       *this, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter);
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(eners, ndav, nflop, t.get_time());
+        return make_tuple(eners, ndav, (size_t)nflop, t.get_time());
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
-    expect() {
+    expect(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         Timer t;
         t.get_time();
         MatrixRef ktmp(nullptr, ket[0]->total_memory, 1);
@@ -605,6 +643,10 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(tf->opf->seq->mode != SeqTypes::Auto);
         vector<pair<shared_ptr<OpExpr<S>>, vector<double>>> expectations;
         expectations.reserve(op->mat->data.size());
+        vector<double> results;
+        vector<size_t> results_idx;
+        results.reserve(op->mat->data.size() * ket.size());
+        results_idx.reserve(op->mat->data.size());
         for (size_t i = 0; i < op->mat->data.size(); i++) {
             vector<double> rr(ket.size(), 0);
             if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->name ==
@@ -614,20 +656,43 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                      opdq)
                 expectations.push_back(make_pair(op->ops[i], rr));
             else {
-                for (int j = 0; j < (int)ket.size(); j++) {
-                    ktmp.data = ket[j]->data;
-                    rtmp.data = bra[j]->data;
-                    btmp.clear();
-                    (*this)(ktmp, btmp, i);
-                    rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                if (para_rule == nullptr || !para_rule->number(op->ops[i])) {
+                    for (int j = 0; j < (int)ket.size(); j++) {
+                        ktmp.data = ket[j]->data;
+                        rtmp.data = bra[j]->data;
+                        btmp.clear();
+                        (*this)(ktmp, btmp, i, true);
+                        rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                    }
+                } else {
+                    if (para_rule->own(op->ops[i])) {
+                        for (int j = 0; j < (int)ket.size(); j++) {
+                            ktmp.data = ket[j]->data;
+                            rtmp.data = bra[j]->data;
+                            btmp.clear();
+                            (*this)(ktmp, btmp, i, false);
+                            rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                        }
+                    }
+                    results.insert(results.end(), rr.begin(), rr.end());
+                    results_idx.push_back(expectations.size());
                 }
                 expectations.push_back(make_pair(op->ops[i], rr));
             }
         }
         btmp.deallocate();
-        size_t nflop = tf->opf->seq->cumulative_nflop;
+        if (results.size() != 0) {
+            assert(para_rule != nullptr);
+            para_rule->comm->allreduce_sum(results.data(), results.size());
+            for (size_t i = 0; i < results.size(); i += ket.size())
+                memcpy(expectations[results_idx[i]].second.data(),
+                       results.data() + i, sizeof(double) * ket.size());
+        }
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(expectations, nflop, t.get_time());
+        return make_tuple(expectations, (size_t)nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);

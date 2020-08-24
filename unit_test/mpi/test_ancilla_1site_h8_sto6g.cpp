@@ -4,7 +4,37 @@
 
 using namespace block2;
 
-class TestAncillaH8STO6G : public ::testing::Test {
+// suppress googletest output for non-root mpi procs
+struct MPITest {
+    shared_ptr<testing::TestEventListener> tel;
+    testing::TestEventListener *def_tel;
+    MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            def_tel = tels.Release(tels.default_result_printer());
+            tel = make_shared<testing::EmptyTestEventListener>();
+            tels.Append(tel.get());
+        }
+    }
+    ~MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            assert(tel.get() == tels.Release(tel.get()));
+            tel = nullptr;
+            tels.Append(def_tel);
+        }
+    }
+    static bool okay() {
+        static MPITest _mpi_test;
+        return _mpi_test.tel != nullptr;
+    }
+};
+
+class TestOneSiteAncillaH8STO6G : public ::testing::Test {
+    static bool _mpi;
+
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -25,13 +55,13 @@ class TestAncillaH8STO6G : public ::testing::Test {
     }
 };
 
+bool TestOneSiteAncillaH8STO6G::_mpi = MPITest::okay();
+
 template <typename S>
-void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
-                                      S target,
-                                      const vector<double> &energies_fted,
-                                      const vector<double> &energies_m500,
-                                      const HamiltonianQC<S> &hamil,
-                                      const string &name) {
+void TestOneSiteAncillaH8STO6G::test_imag_te(
+    int n_sites, int n_physical_sites, S target,
+    const vector<double> &energies_fted, const vector<double> &energies_m500,
+    const HamiltonianQC<S> &hamil, const string &name) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
 
@@ -39,6 +69,16 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
 #endif
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
+#else
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRule<S>> para_rule =
+        make_shared<ParallelRuleQC<S>>(para_comm);
 
     Timer t;
     t.get_time();
@@ -58,10 +98,23 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
+    // MPO parallelization
+    cout << "MPO parallelization start" << endl;
+    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    cout << "MPO parallelization end .. T = " << t.get_time() << endl;
+
+    // Identity MPO
+    cout << "Identity MPO start" << endl;
+    shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
+    impo = make_shared<AncillaMPO<S>>(impo);
+    impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
+    impo = make_shared<ParallelMPO<S>>(impo, para_rule);
+    cout << "Identity MPO end .. T = " << t.get_time() << endl;
+
     uint16_t bond_dim = 500;
     double beta = 0.05;
     vector<uint16_t> bdims = {bond_dim};
-    vector<double> te_energies;
+    vector<double> te_energies, noises = {0.0};
 
     // Ancilla MPSInfo (thermal)
     Random::rand_seed(0);
@@ -78,15 +131,44 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mps_thermal->initialize(mps_info_thermal);
     mps_thermal->fill_thermal_limit();
 
-    // MPS/MPSInfo save mutable
+    // MPS/MPSInfo save mutable (thermal)
     mps_thermal->save_mutable();
     mps_thermal->deallocate();
     mps_info_thermal->save_mutable();
     mps_info_thermal->deallocate_mutable();
 
+    // Ancilla MPSInfo (fitting)
+    shared_ptr<AncillaMPSInfo<S>> imps_info = make_shared<AncillaMPSInfo<S>>(
+        n_physical_sites, hamil.vacuum, target, hamil.basis);
+    imps_info->set_bond_dimension(bond_dim);
+    imps_info->tag = "BRA";
+
+    // Ancilla MPS (fitting)
+    shared_ptr<MPS<S>> imps = make_shared<MPS<S>>(n_sites, n_sites - 2, 2);
+    imps->initialize(imps_info);
+    imps->random_canonicalize();
+
+    // MPS/MPSInfo save mutable (fitting)
+    imps->save_mutable();
+    imps->deallocate();
+    imps_info->save_mutable();
+    imps_info->deallocate_mutable();
+
+    // Identity ME
+    shared_ptr<MovingEnvironment<S>> ime =
+        make_shared<MovingEnvironment<S>>(impo, imps, mps_thermal, "COMPRESS");
+    ime->init_environments(false);
+
+    // Compress
+    shared_ptr<Compress<S>> cps =
+        make_shared<Compress<S>>(ime, bdims, bdims, noises);
+    double norm = cps->solve(10, imps->center == 0);
+
+    EXPECT_LT(abs(norm - 1.0), 1E-7);
+
     // TE ME
     shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps_thermal, mps_thermal, "TE");
+        make_shared<MovingEnvironment<S>>(mpo, imps, imps, "TE");
     me->init_environments(false);
 
     shared_ptr<Expect<S>> ex = make_shared<Expect<S>>(me, bond_dim, bond_dim);
@@ -97,16 +179,23 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
         make_shared<ImaginaryTE<S>>(me, bdims, TETypes::RK4);
     te->iprint = 2;
     te->n_sub_sweeps = 6;
-    te->solve(1, beta / 2, mps_thermal->center == 0);
+    te->solve(1, beta / 2, imps->center == 0);
 
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());
+
+    // two-site to one-site transition
+    me->dot = 1;
 
     te->n_sub_sweeps = 2;
-    te->solve(9, beta / 2, mps_thermal->center == 0);
+    te->solve(9, beta / 2, imps->center == 0);
 
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());
+
+    para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
+    para_comm->tcomm /= para_comm->size;
+    double tt = t.get_time();
 
     for (size_t i = 0; i < te_energies.size(); i++) {
         cout << "== " << name << " =="
@@ -116,16 +205,24 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
              << setprecision(3) << setw(10)
              << (te_energies[i] - energies_fted[i])
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
-             << (te_energies[i] - energies_m500[i]) << endl;
+             << (te_energies[i] - energies_m500[i]) << " T = " << fixed
+             << setw(10) << setprecision(3) << tt << " Tcomm = " << fixed
+             << setw(10) << setprecision(3) << para_comm->tcomm << " ("
+             << setw(3) << fixed << setprecision(0)
+             << (para_comm->tcomm * 100 / tt) << "%)" << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-4);
     }
 
+    para_comm->tcomm = 0.0;
+
+    imps_info->deallocate();
     mps_info_thermal->deallocate();
+    impo->deallocate();
     mpo->deallocate();
 }
 
-TEST_F(TestAncillaH8STO6G, TestSU2) {
+TEST_F(TestOneSiteAncillaH8STO6G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";
@@ -162,7 +259,7 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestAncillaH8STO6G, TestSZ) {
+TEST_F(TestOneSiteAncillaH8STO6G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";

@@ -36,7 +36,7 @@ void TestDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
+    mkl_set_dynamic(1);
 #endif
 
     Timer t;

@@ -186,13 +186,15 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                   op_expr_less<S>> &rop,
         const shared_ptr<SparseMatrixGroup<S>> &cmats,
-        const shared_ptr<SparseMatrixGroup<S>> &vmats, S opdq) const override {
+        const shared_ptr<SparseMatrixGroup<S>> &vmats, S opdq,
+        bool all_reduce) const override {
         switch (expr->get_type()) {
         case OpTypes::ExprRef: {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
-            tensor_product_multi_multiply(op->op, lop, rop, cmats, vmats, opdq);
-            if (opf->seq->mode != SeqTypes::Auto)
+            tensor_product_multi_multiply(op->op, lop, rop, cmats, vmats, opdq,
+                                          false);
+            if (all_reduce)
                 rule->comm->allreduce_sum(vmats);
         } break;
         case OpTypes::Zero:
@@ -200,7 +202,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         default:
             for (int i = 0; i < cmats->n; i++)
                 tensor_product_multiply(expr, lop, rop, (*cmats)[i],
-                                        (*vmats)[i], opdq);
+                                        (*vmats)[i], opdq, false);
             break;
         }
     }
@@ -212,7 +214,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                   op_expr_less<S>> &rop,
         const shared_ptr<SparseMatrix<S>> &cmat,
-        const shared_ptr<SparseMatrix<S>> &vmat, S opdq) const override {
+        const shared_ptr<SparseMatrix<S>> &vmat, S opdq,
+        bool all_reduce) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString<S>> op =
@@ -227,13 +230,13 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
             for (auto &x : op->strings)
-                tensor_product_multiply(x, lop, rop, cmat, vmat, opdq);
+                tensor_product_multiply(x, lop, rop, cmat, vmat, opdq, false);
         } break;
         case OpTypes::ExprRef: {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
-            tensor_product_multiply(op->op, lop, rop, cmat, vmat, opdq);
-            if (opf->seq->mode != SeqTypes::Auto)
+            tensor_product_multiply(op->op, lop, rop, cmat, vmat, opdq, false);
+            if (all_reduce)
                 rule->comm->allreduce_sum(vmat);
         } break;
         case OpTypes::Zero:

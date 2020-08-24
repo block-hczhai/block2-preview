@@ -84,6 +84,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
+    void broadcast(int *data, size_t len, int owner) override {
+        _t.get_time();
+        int ierr = MPI_Bcast(data, len, MPI_INT, owner, MPI_COMM_WORLD);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
     void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) override {
         _t.get_time();
         if (mat->get_type() == SparseMatrixTypes::Normal) {
@@ -142,20 +148,18 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             assert(false);
         tcomm += _t.get_time();
     }
-    void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
+    void allreduce_sum(double *data, size_t len) override {
         _t.get_time();
-        int ierr = MPI_Allreduce(MPI_IN_PLACE, mat->data, mat->total_memory,
-                                 MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        int ierr = MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE, MPI_SUM,
+                                 MPI_COMM_WORLD);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
+    void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
+        allreduce_sum(mat->data, mat->total_memory);
+    }
     void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) override {
-        _t.get_time();
-        assert(mat->get_type() == SparseMatrixTypes::Normal);
-        int ierr = MPI_Allreduce(MPI_IN_PLACE, mat->data, mat->total_memory,
-                                 MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        assert(ierr == 0);
-        tcomm += _t.get_time();
+        allreduce_sum(mat->data, mat->total_memory);
     }
     void allreduce_sum(vector<S> &vs) override {
         _t.get_time();
@@ -185,6 +189,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         _t.get_time();
         int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
                               MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
+    void reduce_sum(uint64_t *data, size_t len, int owner) override {
+        _t.get_time();
+        int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
+                              MPI_UINT64_T, MPI_SUM, owner, MPI_COMM_WORLD);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }

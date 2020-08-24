@@ -51,6 +51,10 @@ template <typename S> struct ParallelCommunicator {
     virtual void broadcast(double *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void broadcast(int *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void allreduce_sum(double *data, size_t len) { assert(size == 1); }
     virtual void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) {
         assert(size == 1);
     }
@@ -66,6 +70,9 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void reduce_sum(double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void reduce_sum(uint64_t *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void allreduce_logical_or(bool &v) { assert(size == 1); }
@@ -119,6 +126,11 @@ template <typename S> struct ParallelRule {
         assert(op->get_type() == OpTypes::Elem);
         ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
         return pp.ptype & ParallelOpTypes::Partial;
+    }
+    bool number(const shared_ptr<OpExpr<S>> &op) const noexcept {
+        assert(op->get_type() == OpTypes::Elem);
+        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        return pp.ptype & ParallelOpTypes::Number;
     }
     template <typename EvalOp, typename PostOp>
     void parallel_apply(EvalOp f, PostOp g,

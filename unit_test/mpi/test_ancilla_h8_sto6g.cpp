@@ -4,7 +4,37 @@
 
 using namespace block2;
 
+// suppress googletest output for non-root mpi procs
+struct MPITest {
+    shared_ptr<testing::TestEventListener> tel;
+    testing::TestEventListener *def_tel;
+    MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            def_tel = tels.Release(tels.default_result_printer());
+            tel = make_shared<testing::EmptyTestEventListener>();
+            tels.Append(tel.get());
+        }
+    }
+    ~MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            assert(tel.get() == tels.Release(tel.get()));
+            tel = nullptr;
+            tels.Append(def_tel);
+        }
+    }
+    static bool okay() {
+        static MPITest _mpi_test;
+        return _mpi_test.tel != nullptr;
+    }
+};
+
 class TestAncillaH8STO6G : public ::testing::Test {
+    static bool _mpi;
+
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -25,6 +55,8 @@ class TestAncillaH8STO6G : public ::testing::Test {
     }
 };
 
+bool TestAncillaH8STO6G::_mpi = MPITest::okay();
+
 template <typename S>
 void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
                                       S target,
@@ -39,6 +71,16 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mkl_set_num_threads(8);
     mkl_set_dynamic(0);
 #endif
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
+#else
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRule<S>> para_rule =
+        make_shared<ParallelRuleQC<S>>(para_comm);
 
     Timer t;
     t.get_time();
@@ -57,6 +99,11 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     cout << "MPO simplification start" << endl;
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    // MPO parallelization
+    cout << "MPO parallelization start" << endl;
+    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     uint16_t bond_dim = 500;
     double beta = 0.05;
@@ -108,6 +155,10 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());
 
+    para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
+    para_comm->tcomm /= para_comm->size;
+    double tt = t.get_time();
+
     for (size_t i = 0; i < te_energies.size(); i++) {
         cout << "== " << name << " =="
              << " BETA = " << setw(10) << fixed << setprecision(4) << (i * beta)
@@ -116,10 +167,16 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
              << setprecision(3) << setw(10)
              << (te_energies[i] - energies_fted[i])
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
-             << (te_energies[i] - energies_m500[i]) << endl;
+             << (te_energies[i] - energies_m500[i]) << " T = " << fixed
+             << setw(10) << setprecision(3) << tt << " Tcomm = " << fixed
+             << setw(10) << setprecision(3) << para_comm->tcomm << " ("
+             << setw(3) << fixed << setprecision(0)
+             << (para_comm->tcomm * 100 / tt) << "%)" << endl;
 
         EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
     }
+
+    para_comm->tcomm = 0.0;
 
     mps_info_thermal->deallocate();
     mpo->deallocate();

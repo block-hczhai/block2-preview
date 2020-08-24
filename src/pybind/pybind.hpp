@@ -934,14 +934,17 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("opdq", &EffectiveHamiltonian<S>::opdq)
         .def_readwrite("compute_diag", &EffectiveHamiltonian<S>::compute_diag)
         .def("__call__", &EffectiveHamiltonian<S>::operator(), py::arg("b"),
-             py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0)
+             py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0,
+             py::arg("all_reduce") = true)
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
-             py::arg("const_e"), py::arg("eval_energy") = false)
+             py::arg("const_e"), py::arg("eval_energy") = false,
+             py::arg("para_rule") = nullptr)
         .def("expo_apply", &EffectiveHamiltonian<S>::expo_apply,
-             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false)
+             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false,
+             py::arg("para_rule") = nullptr)
         .def("deallocate", &EffectiveHamiltonian<S>::deallocate);
 
     py::class_<EffectiveHamiltonian<S, MultiMPS<S>>,
@@ -970,7 +973,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("compute_diag",
                        &EffectiveHamiltonian<S, MultiMPS<S>>::compute_diag)
         .def("__call__", &EffectiveHamiltonian<S, MultiMPS<S>>::operator(),
-             py::arg("b"), py::arg("c"), py::arg("idx") = 0)
+             py::arg("b"), py::arg("c"), py::arg("idx") = 0,
+             py::arg("all_reduce") = true)
         .def("eigs", &EffectiveHamiltonian<S, MultiMPS<S>>::eigs)
         .def("expect", &EffectiveHamiltonian<S, MultiMPS<S>>::expect)
         .def("deallocate", &EffectiveHamiltonian<S, MultiMPS<S>>::deallocate);
@@ -989,6 +993,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("ket", &MovingEnvironment<S>::ket)
         .def_readwrite("envs", &MovingEnvironment<S>::envs)
         .def_readwrite("tag", &MovingEnvironment<S>::tag)
+        .def_readwrite("para_rule", &MovingEnvironment<S>::para_rule)
         .def("left_contract_rotate",
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
@@ -1392,6 +1397,14 @@ template <typename S> void bind_parallel(py::module &m) {
         .def("owner", &ParallelRule<S>::owner)
         .def("repeat", &ParallelRule<S>::repeat)
         .def("partial", &ParallelRule<S>::partial);
+
+    py::class_<ParallelRuleQC<S>, shared_ptr<ParallelRuleQC<S>>,
+               ParallelRule<S>>(m, "ParallelRuleQC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>());
+
+    py::class_<ParallelRuleNPDMQC<S>, shared_ptr<ParallelRuleNPDMQC<S>>,
+               ParallelRule<S>>(m, "ParallelRuleNPDMQC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>());
 
     py::class_<ParallelTensorFunctions<S>,
                shared_ptr<ParallelTensorFunctions<S>>, TensorFunctions<S>>(
@@ -2123,6 +2136,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 }
 
 #ifdef _EXPLICIT_TEMPLATE
+
 extern template void bind_data<>(py::module &m);
 extern template void bind_types<>(py::module &m);
 extern template void bind_io<>(py::module &m);

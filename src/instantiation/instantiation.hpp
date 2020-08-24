@@ -205,7 +205,10 @@ extern template struct block2::NPC1MPOQC<block2::SU2>;
 
 // qc_parallel_rule.hpp
 extern template struct block2::ParallelRuleQC<block2::SZ>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SZ>;
+
 extern template struct block2::ParallelRuleQC<block2::SU2>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SU2>;
 
 // qc_pdm1.hpp
 extern template struct block2::PDM1MPOQC<block2::SZ>;

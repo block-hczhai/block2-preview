@@ -166,10 +166,11 @@ template <typename S> struct TensorFunctions {
         const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                   op_expr_less<S>> &rop,
         const shared_ptr<SparseMatrixGroup<S>> &cmats,
-        const shared_ptr<SparseMatrixGroup<S>> &vmats, S opdq) const {
+        const shared_ptr<SparseMatrixGroup<S>> &vmats, S opdq,
+        bool all_reduce) const {
         for (int i = 0; i < cmats->n; i++)
             tensor_product_multiply(expr, lop, rop, (*cmats)[i], (*vmats)[i],
-                                    opdq);
+                                    opdq, false);
     }
     // vmat = expr x cmat
     virtual void tensor_product_multiply(
@@ -179,7 +180,8 @@ template <typename S> struct TensorFunctions {
         const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                   op_expr_less<S>> &rop,
         const shared_ptr<SparseMatrix<S>> &cmat,
-        const shared_ptr<SparseMatrix<S>> &vmat, S opdq) const {
+        const shared_ptr<SparseMatrix<S>> &vmat, S opdq,
+        bool all_reduce) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpString<S>> op =
@@ -194,7 +196,7 @@ template <typename S> struct TensorFunctions {
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
             for (auto &x : op->strings)
-                tensor_product_multiply(x, lop, rop, cmat, vmat, opdq);
+                tensor_product_multiply(x, lop, rop, cmat, vmat, opdq, false);
         } break;
         case OpTypes::Zero:
             break;

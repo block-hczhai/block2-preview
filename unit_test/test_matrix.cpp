@@ -184,8 +184,9 @@ TEST_F(TestMatrix, TestExponential) {
         }
         double anorm = MatrixFunctions::norm(aa);
         MatMul mop(a);
-        int nmult =
-            MatrixFunctions::expo_apply(mop, t, anorm, w, consta, false, 1E-8);
+        int nmult = MatrixFunctions::expo_apply(
+            mop, t, anorm, w, consta, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8);
         DiagonalMatrix ww(dalloc_()->allocate(n), n);
         MatrixFunctions::eigs(a, ww);
         MatrixFunctions::multiply(a, false, v, false, u, 1.0, 0.0);

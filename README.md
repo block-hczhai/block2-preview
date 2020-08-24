@@ -42,7 +42,11 @@ Features
 Installation
 ------------
 
-Dependence: `pybind11`, `python3`, and `mkl` (or `blas + lapack`). For unit tests, `googletest` is required.
+Dependence: `pybind11`, `python3`, and `mkl` (or `blas + lapack`).
+
+For distributed parallel calculation, `mpi` library is required.
+
+For unit tests, `googletest` is required.
 
 `cmake` (version >= 3.0) can be used to compile C++ part of the code, as follows:
 
@@ -57,7 +61,7 @@ This will build the python extension (using 10 CPU cores) (serial code).
 
 If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required (with limited support for multi-threading).
 
-### Serial build
+### Serial compilation
 
 By default, the C++ templates will be explicitly instantiated in different compilation units, so that parallel
 compilation is possible.
@@ -70,10 +74,12 @@ saved by avoiding unnecessary template instantiation, as follows:
 
 This may take 5 minutes, need 7 to 10 GB memory.
 
-### MPI build
+### MPI version
 
 Adding option `-DMPI=ON` will build MPI parallel version. The C++ compiler and MPI library must be matched.
 If necessary, environment variables `CC`, `CXX`, and `MPIHOME` can be used to explicitly set the path.
+
+For mixed `openMP/MPI`, use `mpirun --bind-to none -n ...` to execute binary.
 
 ### Binary build
 

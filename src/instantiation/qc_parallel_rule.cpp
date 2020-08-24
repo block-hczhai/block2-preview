@@ -21,4 +21,7 @@
 #include "instantiation.hpp"
 
 template struct block2::ParallelRuleQC<block2::SZ>;
+template struct block2::ParallelRuleNPDMQC<block2::SZ>;
+
 template struct block2::ParallelRuleQC<block2::SU2>;
+template struct block2::ParallelRuleNPDMQC<block2::SU2>;
