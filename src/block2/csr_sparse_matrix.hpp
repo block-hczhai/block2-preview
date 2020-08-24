@@ -63,9 +63,11 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
                                                     info->n_states_ket[i]);
     }
     void deallocate() override {
-        for (int i = info->n - 1; i >= 0; i--)
-            csr_data[i]->deallocate();
-        csr_data.clear();
+        if (csr_data.size() != 0) {
+            for (int i = info->n - 1; i >= 0; i--)
+                csr_data[i]->deallocate();
+            csr_data.clear();
+        }
         if (alloc != nullptr) {
             if (total_memory == 0)
                 assert(data == nullptr);

@@ -91,12 +91,10 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         tcomm += _t.get_time();
     }
     void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) override {
-        _t.get_time();
-        if (mat->get_type() == SparseMatrixTypes::Normal) {
-            int ierr = MPI_Bcast(mat->data, mat->total_memory, MPI_DOUBLE,
-                                 owner, MPI_COMM_WORLD);
-            assert(ierr == 0);
-        } else if (mat->get_type() == SparseMatrixTypes::CSR) {
+        if (mat->get_type() == SparseMatrixTypes::Normal)
+            broadcast(mat->data, mat->total_memory, owner);
+        else if (mat->get_type() == SparseMatrixTypes::CSR) {
+            _t.get_time();
             // remove mkl pointer
             // csr sparse matrix cannot be allocated by mkl sparse matrix
             // for mkl sparse matrix the memory for CSRMatrixRef is not
@@ -106,7 +104,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                 make_shared<CSRSparseMatrix<S>>();
             cmat->copy_data_from(mat);
             mat->deallocate();
-            *mat = *cmat;
+            *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = *cmat;
             vector<int> nnzs(mat->info->n);
             for (int i = 0; i < mat->info->n; i++)
                 nnzs[i] = cmat->csr_data[i]->nnz;
@@ -144,9 +142,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                     dp += cmat->csr_data[i]->memory_size();
                 }
             }
+            tcomm += _t.get_time();
         } else
             assert(false);
-        tcomm += _t.get_time();
     }
     void allreduce_sum(double *data, size_t len) override {
         _t.get_time();
@@ -159,6 +157,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         allreduce_sum(mat->data, mat->total_memory);
     }
     void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) override {
+        assert(mat->get_type() == SparseMatrixTypes::Normal);
         allreduce_sum(mat->data, mat->total_memory);
     }
     void allreduce_sum(vector<S> &vs) override {
@@ -214,16 +213,17 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                 make_shared<CSRSparseMatrix<S>>();
             cmat->copy_data_from(mat);
             mat->deallocate();
+            *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = *cmat;
             shared_ptr<CSROperatorFunctions<S>> copf =
                 make_shared<CSROperatorFunctions<S>>(nullptr);
-            vector<int> nnzs(mat->info->n), dz;
+            vector<int> nnzs(mat->info->n), dz, gnnzs;
             vector<double> dt;
             if (rank == owner)
-                nnzs.resize(mat->info->n * size);
+                gnnzs.resize(mat->info->n * size);
             for (int i = 0; i < mat->info->n; i++)
                 nnzs[i] = cmat->csr_data[i]->nnz;
-            int ierr = MPI_Gather(rank == owner ? MPI_IN_PLACE : nnzs.data(),
-                                  mat->info->n, MPI_INT, nnzs.data(),
+            int ierr = MPI_Gather(nnzs.data(),
+                                  mat->info->n, MPI_INT, gnnzs.data(),
                                   mat->info->n, MPI_INT, owner, MPI_COMM_WORLD);
             assert(ierr == 0);
             if (rank == owner) {
@@ -237,7 +237,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                     if (rank == owner)
                         continue;
                     for (int i = 0; i < mat->info->n; i++) {
-                        tmp->csr_data[i]->nnz = nnzs[k * mat->info->n + i];
+                        tmp->csr_data[i]->nnz = gnnzs[k * mat->info->n + i];
                         dz[k] += tmp->csr_data[i]->memory_size();
                     }
                     dt.resize(dz[k]);
