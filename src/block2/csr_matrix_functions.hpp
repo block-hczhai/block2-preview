@@ -55,8 +55,8 @@ struct MKLSparseAllocator : Allocator<double> {
     };
     static shared_ptr<sparse_matrix_t>
     to_mkl_sparse_matrix(const CSRMatrixRef &mat, bool conj = false) {
-        if (typeid(*mat.alloc).hash_code() ==
-            typeid(MKLSparseAllocator).hash_code())
+        auto &r = *mat.alloc.get();
+        if (typeid(r).hash_code() == typeid(MKLSparseAllocator).hash_code())
             return dynamic_pointer_cast<MKLSparseAllocator>(mat.alloc)->mat;
         shared_ptr<sparse_matrix_t> spa =
             shared_ptr<sparse_matrix_t>(new sparse_matrix_t, Deleter());

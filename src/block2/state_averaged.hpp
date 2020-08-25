@@ -216,13 +216,14 @@ template <typename S> struct MultiMPS : MPS<S> {
                 }
     }
     void save_mutable() const override {
-        if (frame->prefix_can_write)
+        if (frame->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     tensors[i]->save_data(get_filename(i), true);
                 else if (i == center)
                     for (int j = 0; j < nroots; j++)
                         wfns[j]->save_data(get_wfn_filename(j), j == 0);
+        }
     }
     void save_wavefunction(int i) const {
         if (frame->prefix_can_write) {
