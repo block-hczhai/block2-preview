@@ -689,7 +689,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
             set_bond_dimension_fci();
     }
     void set_bond_dimension(uint16_t m) override {
-        this->set_bond_dimension(m);
+        MPSInfo<S>::set_bond_dimension(m); // call base class method
         // zero states may occur
         for (int i = 0; i <= n_sites; i++)
             left_dims[i]->collect();
