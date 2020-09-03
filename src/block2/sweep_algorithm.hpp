@@ -47,6 +47,7 @@ template <typename S> struct DMRG {
     vector<uint16_t> bond_dims;
     vector<double> noises;
     vector<vector<double>> energies;
+    vector<double> discarded_weights;
     vector<vector<vector<pair<S, double>>>> mps_quanta;
     vector<double> davidson_conv_thrds;
     int davidson_max_iter = 5000;
@@ -706,11 +707,12 @@ template <typename S> struct DMRG {
                                       davidson_conv_thrd);
         }
     }
-    pair<vector<double>, vector<vector<pair<S, double>>>>
+    tuple<vector<double>, double, vector<vector<pair<S, double>>>>
     sweep(bool forward, uint16_t bond_dim, double noise,
           double davidson_conv_thrd) {
         me->prepare();
         vector<vector<double>> energies;
+        vector<double> discarded_weights;
         vector<vector<vector<pair<S, double>>>> quanta;
         vector<int> sweep_range;
         if (forward)
@@ -740,6 +742,7 @@ template <typename S> struct DMRG {
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
             energies.push_back(r.energies);
+            discarded_weights.push_back(r.error);
             quanta.push_back(r.quanta);
         }
         size_t idx =
@@ -748,7 +751,7 @@ template <typename S> struct DMRG {
                             return x[0] < y[0];
                         }) -
             energies.begin();
-        return make_pair(energies[idx], quanta[idx]);
+        return make_tuple(energies[idx], discarded_weights[idx], quanta[idx]);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
@@ -763,6 +766,7 @@ template <typename S> struct DMRG {
         Timer start, current;
         start.get_time();
         energies.clear();
+        discarded_weights.clear();
         mps_quanta.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
@@ -776,8 +780,9 @@ template <typename S> struct DMRG {
                      << setprecision(2) << davidson_conv_thrds[iw] << endl;
             auto sweep_results = sweep(forward, bond_dims[iw], noises[iw],
                                        davidson_conv_thrds[iw]);
-            energies.push_back(sweep_results.first);
-            mps_quanta.push_back(sweep_results.second);
+            energies.push_back(get<0>(sweep_results));
+            discarded_weights.push_back(get<1>(sweep_results));
+            mps_quanta.push_back(get<2>(sweep_results));
             bool converged = energies.size() >= 2 && tol > 0 &&
                              abs(energies[energies.size() - 1].back() -
                                  energies[energies.size() - 2].back()) < tol &&
@@ -787,13 +792,13 @@ template <typename S> struct DMRG {
             current.get_time();
             if (iprint == 1) {
                 cout << fixed << setprecision(8);
-                if (sweep_results.first.size() == 1)
+                if (get<0>(sweep_results).size() == 1)
                     cout << " .. Energy = " << setw(15)
-                         << sweep_results.first[0] << " ";
+                         << get<0>(sweep_results)[0] << " ";
                 else {
                     cout << " .. Energy[" << setw(3)
-                         << sweep_results.first.size() << "] = ";
-                    for (double x : sweep_results.first)
+                         << get<0>(sweep_results).size() << "] = ";
+                    for (double x : get<0>(sweep_results))
                         cout << setw(15) << x;
                     cout << " ";
                 }
