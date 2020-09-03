@@ -1229,7 +1229,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
         .def_readwrite("decomp_type", &DMRG<S>::decomp_type)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
+        .def("update_one_dot", &DMRG<S>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
+        .def("update_multi_one_dot", &DMRG<S>::update_multi_one_dot)
         .def("blocking", &DMRG<S>::blocking)
         .def("sweep", &DMRG<S>::sweep)
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
