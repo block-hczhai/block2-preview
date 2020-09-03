@@ -516,9 +516,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             // ATTENTION vv if you change allocation, you need to change the
             //                      deallocation routine in MPOQCSCI
             p.second->allocate(find_site_op_info(op.q_label, n_sites - 1));
-            auto delta_N = op.q_label.n();
-            auto delta_twoS = op.q_label.twos();
-            auto dQnPair = std::pair<int, int>{delta_N, delta_twoS};
+            auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
                 cout << "m == " << (int)n_sites - 1 << "allocate" << op.name
                      << "s" << (int)op.site_index[0] << ","
@@ -568,34 +566,34 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 sciWrapper->fillOp_H(mat);
                 break;
             case OpNames::C:
-                sciWrapper->fillOp_C(dQnPair, mat, ii);
+                sciWrapper->fillOp_C(delta_qn, mat, ii);
                 break;
             case OpNames::D:
-                sciWrapper->fillOp_D(dQnPair, mat, ii);
+                sciWrapper->fillOp_D(delta_qn, mat, ii);
                 break;
             case OpNames::R:
-                sciWrapper->fillOp_R(dQnPair, mat, ii);
+                sciWrapper->fillOp_R(delta_qn, mat, ii);
                 break;
             case OpNames::RD:
-                sciWrapper->fillOp_RD(dQnPair, mat, ii);
+                sciWrapper->fillOp_RD(delta_qn, mat, ii);
                 break;
             case OpNames::A:
-                sciWrapper->fillOp_A(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_A(delta_qn, mat, ii, jj);
                 break;
             case OpNames::AD:
-                sciWrapper->fillOp_AD(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_AD(delta_qn, mat, ii, jj);
                 break;
             case OpNames::B:
-                sciWrapper->fillOp_B(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_B(delta_qn, mat, ii, jj);
                 break;
             case OpNames::P:
-                sciWrapper->fillOp_P(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_P(delta_qn, mat, ii, jj);
                 break;
             case OpNames::PD:
-                sciWrapper->fillOp_PD(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_PD(delta_qn, mat, ii, jj);
                 break;
             case OpNames::Q:
-                sciWrapper->fillOp_Q(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_Q(delta_qn, mat, ii, jj);
                 break;
             default:
                 assert(false);
