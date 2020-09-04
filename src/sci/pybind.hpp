@@ -32,14 +32,17 @@ template <typename S> void bind_sci_wrapper(py::module &m){
     py::class_<sci::AbstractSciWrapper<S>, shared_ptr<sci::AbstractSciWrapper<S>>>
                                                         (m, "AbstractSciWrapper")
         .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
-                                   int, int, int>(),
+                     const std::vector<uint8_t>&,
+                     int, int, int>(),
                            py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
+                           py::arg("orbsym"),
                            py::arg("nMaxAlphaEl"), py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
                            "Initialization via generated CI space based on nMax*")
         .def(py::init<int, int, const shared_ptr<FCIDUMP> &,
+                     const std::vector<uint8_t>&,
                      const vector<vector<int>>&>(),
              py::arg("nOrbCas"), py::arg("nOrbExt"), py::arg("fcidump"),
-             py::arg("occs"),
+             py::arg("orbsym"), py::arg("occs"),
              "Initialization via externally given determinants in `occs`")
         .def_readonly("nOrbCas", &sci::AbstractSciWrapper<S>::nOrbCas)
         .def_readonly("nOrbExt", &sci::AbstractSciWrapper<S>::nOrbExt)

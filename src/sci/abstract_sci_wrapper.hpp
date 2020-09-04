@@ -31,7 +31,7 @@
  * @TODO: -[x] Template symmetry type
  *        -[x] Use symmetry type instead of intPair
  *              - Also for actual SCI code
- *        -[ ] Enable point group symmetry
+ *        -[x] Enable point group symmetry
  *        -[ ] More flexible SCI interface; block2-alternative to occs?
  *             -[ ] Divide Ctors or separate Ctor and actual initialization (violates C++ principles but would ease life)
  */
@@ -56,7 +56,7 @@ namespace sci {
         using BLSparseMatrix = block2::SparseMatrix<block2::SZ>;
         int nOrbCas, nOrbExt, nOrb; //!< *spatial* orbitals
         int nMaxAlphaEl, nMaxBetaEl, nMaxEl; //!< Maximal number of alpha/beta electrons
-        AbstractSciWrapper() : AbstractSciWrapper(1, 1, 1, 1, -1, nullptr) {}
+        AbstractSciWrapper() : AbstractSciWrapper(1, 1, 1, 1, -1, nullptr, {}) {}
 
         /** Initialization via generated CI space based on nMax*
          *
@@ -69,6 +69,7 @@ namespace sci {
          */
         AbstractSciWrapper(int nOrbCas, int nOrbExt,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           const std::vector<uint8_t>& orbsym,
                            int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl):
                 nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
                 nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}{
@@ -82,6 +83,7 @@ namespace sci {
          */
         AbstractSciWrapper(int nOrbCas, int nOrbExt,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           const std::vector<uint8_t>& orbsym,
                            const vector<vector<int>>& occs):
                 nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
                 nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}{
