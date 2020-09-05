@@ -56,7 +56,6 @@ template <typename S> struct HamiltonianSCI {
     vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
         *site_norm_ops;
     // Number of sites and point group symmetry irreducible representations
-    // TODO hrl: do I need n_orb?
     uint16_t n_sites, n_syms;
     shared_ptr<OperatorFunctions<S>> opf;
     // Point group symmetry of orbitals
@@ -206,7 +205,9 @@ template <typename S> struct HamiltonianSCI {
                              site_op_infos[iSite].end(), q,
                              SparseMatrixInfo<S>::cmp_op_info);
         if (p == site_op_infos[iSite].end() || p->first != q) {
-            assert(false);
+            cerr << "find_site_op_info cant find q:" << q << "iSite=" <<iSite<< endl;
+            cerr << "last site =" << n_sites-1<< endl;
+            throw std::runtime_error("oops");
             return nullptr;
         } else
             return p->second;

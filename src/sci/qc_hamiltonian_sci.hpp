@@ -93,37 +93,33 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 bas.n_states[3] = 1;
             bas.sort_states();
         }
+        if (std::abs(mu) > 1e-12) {
+            throw std::runtime_error("mu needs to be 0 right now");
+        }
         ////////////
         // SCI site
         const auto iSite = n_sites - 1;
         if (vacuum.n() != 0 or vacuum.twos() != 0) {
             // TODO why is vacuum an input?
-            throw std::runtime_error("Weird vacuum");
-        }
-        if (std::abs(mu) > 1e-12) {
-            throw std::runtime_error("mu needs to be 0 right now");
+            throw std::runtime_error("Weird vacuum; not implemented for sciwrapper");
         }
         basis[iSite] = make_shared<StateInfo<S>>();
         auto &bas = *basis[iSite];
         const auto qSize = static_cast<int>(sciWrapper->quantumNumbers.size());
         bas.allocate(qSize);
-        for (int i = 0; i < nOrbCas + nOrbExt; ++i) {
-            if (orb_sym.at(i) != 0) {
-                // needs to be done in sciWrapper. Complicates it right now...
-                throw std::runtime_error(
-                    "symmetry not yet properly implemented. ");
-            }
-        }
-        const auto iSym = 0;
         for (int iQ = 0; iQ < qSize; ++iQ) {
-            auto N = sciWrapper->quantumNumbers[iQ].first;
-            auto Sz = sciWrapper->quantumNumbers[iQ].second;
             auto o1 = sciWrapper->offsets[iQ].first;
             auto o2 = sciWrapper->offsets[iQ].second;
-            bas.quanta[iQ] = S(N, Sz, iSym);
+            bas.quanta[iQ] = sciWrapper->quantumNumbers[iQ];
             bas.n_states[iQ] = o2 - o1;
         }
         bas.sort_states();
+        for (int iQ = 0; iQ < qSize; ++iQ) {
+            if(bas.quanta[iQ] != sciWrapper->quantumNumbers[iQ]) {
+                // This should not happen as the quantum numbers are now always sorted accordingly
+                throw std::runtime_error("HamiltonianQCSCI: sciWrapper states were not sorted according to StateInfo sort");
+            }
+        }
         ////////////
         init_site_ops();
     }
@@ -434,8 +430,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             for (uint8_t s = 0; s < 4; s++)
                 ops[i][nn_op[s]] = nullptr;
         }
-        for (uint16_t m = 0; m < n_sites - 1;
-             m++) { // ATTENTION: Not for last site
+        //                              vv ATTENTION: Not for last site
+        for (uint16_t m = 0; m < n_sites - 1; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =
@@ -460,8 +456,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                     S(0, sz_minus[s], 0))] = nullptr;
             }
         }
-        for (uint16_t iSite = 0; iSite < n_sites - 1;
-             ++iSite) { // ATTENTION: Not for last site
+        //                              vv ATTENTION: Not for last site
+        for (uint16_t iSite = 0; iSite < n_sites - 1; ++iSite) {
             const auto iSym = orb_sym[iSite];
             site_norm_ops[iSite] = vector<
                 pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
@@ -480,12 +476,6 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         // hrl this should be ok for big site as this is the delta quantum
         // number
         //  compare with qLabels in MPOQCSCI
-        for (int i = 0; i < nOrbCas + nOrbExt; ++i) {
-            if (orb_sym.at(i) != 0) {
-                throw std::runtime_error(
-                    "symmetry not yet properly implemented. ");
-            }
-        }
         for (int iSite = 0; iSite < n_sites; ++iSite) {
             const auto iSym = orb_sym[iSite];
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
@@ -496,6 +486,20 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             for (auto n : {-2, 0, 2})
                 for (auto s : {-2, 0, 2})
                     info[S(n, s, 0)] = nullptr;
+            if(iSite == n_sites-1){ // last site... pg
+                // TODO which do I really need? Starting xSite from iSite does not work
+                for(int xSite = 0; xSite < orb_sym.size(); ++xSite) {
+                    for (auto n : {-1, 1})
+                        for (auto s : {-1, 1})
+                            info[S(n, s, orb_sym[xSite])] = nullptr;
+                    for(int ySite = 0; ySite < orb_sym.size(); ++ySite) {
+                        auto sym = orb_sym[xSite] ^ orb_sym[ySite];
+                        for (auto n : {-2, 0, 2})
+                            for (auto s : {-2, 0, 2})
+                                info[S(n, s, sym)] = nullptr;
+                    }
+                }
+            }
             site_op_infos[iSite] =
                 vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
                                                                  info.end());
@@ -516,9 +520,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             // ATTENTION vv if you change allocation, you need to change the
             //                      deallocation routine in MPOQCSCI
             p.second->allocate(find_site_op_info(op.q_label, n_sites - 1));
-            auto delta_N = op.q_label.n();
-            auto delta_twoS = op.q_label.twos();
-            auto dQnPair = std::pair<int, int>{delta_N, delta_twoS};
+            const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
                 cout << "m == " << (int)n_sites - 1 << "allocate" << op.name
                      << "s" << (int)op.site_index[0] << ","
@@ -554,8 +556,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 break;
             }
             switch (op.name) {
-            case OpNames::I: // hrl: these are just normal operators so we can
-                             // apply find_site_norm_op
+            case OpNames::I:
                 sciWrapper->fillOp_I(mat);
                 break;
             case OpNames::N:
@@ -568,34 +569,34 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 sciWrapper->fillOp_H(mat);
                 break;
             case OpNames::C:
-                sciWrapper->fillOp_C(dQnPair, mat, ii);
+                sciWrapper->fillOp_C(delta_qn, mat, ii);
                 break;
             case OpNames::D:
-                sciWrapper->fillOp_D(dQnPair, mat, ii);
+                sciWrapper->fillOp_D(delta_qn, mat, ii);
                 break;
             case OpNames::R:
-                sciWrapper->fillOp_R(dQnPair, mat, ii);
+                sciWrapper->fillOp_R(delta_qn, mat, ii);
                 break;
             case OpNames::RD:
-                sciWrapper->fillOp_RD(dQnPair, mat, ii);
+                sciWrapper->fillOp_RD(delta_qn, mat, ii);
                 break;
             case OpNames::A:
-                sciWrapper->fillOp_A(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_A(delta_qn, mat, ii, jj);
                 break;
             case OpNames::AD:
-                sciWrapper->fillOp_AD(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_AD(delta_qn, mat, ii, jj);
                 break;
             case OpNames::B:
-                sciWrapper->fillOp_B(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_B(delta_qn, mat, ii, jj);
                 break;
             case OpNames::P:
-                sciWrapper->fillOp_P(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_P(delta_qn, mat, ii, jj);
                 break;
             case OpNames::PD:
-                sciWrapper->fillOp_PD(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_PD(delta_qn, mat, ii, jj);
                 break;
             case OpNames::Q:
-                sciWrapper->fillOp_Q(dQnPair, mat, ii, jj);
+                sciWrapper->fillOp_Q(delta_qn, mat, ii, jj);
                 break;
             default:
                 assert(false);
