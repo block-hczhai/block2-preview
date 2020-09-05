@@ -497,35 +497,37 @@ struct FCIDUMP {
     }
     // Remove integral elements that violate point group symmetry
     // orbsym: in XOR convention
-    void symmetrize(const vector<uint8_t> orbsym) {
+    double symmetrize(const vector<uint8_t> &orbsym) {
         uint16_t n = n_sites();
         assert((int)orbsym.size() == n);
+        double error = 0.0;
         for (auto &t : ts)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j <= i; j++)
                     if (orbsym[i] ^ orbsym[j])
-                        t(i, j) = 0;
+                        error += abs(t(i, j)), t(i, j) = 0;
         for (auto &v : vgs)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++)
                             if (orbsym[i] ^ orbsym[j] ^ orbsym[k] ^ orbsym[l])
-                                v(i, j, k, l) = 0;
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
         for (auto &v : vabs)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j <= i; j++)
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l <= k; l++)
                             if (orbsym[i] ^ orbsym[j] ^ orbsym[k] ^ orbsym[l])
-                                v(i, j, k, l) = 0;
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
         for (auto &v : vs)
             for (int i = 0, ij = 0; i < n; i++)
                 for (int j = 0; j <= i; j++, ij++)
                     for (int k = 0, kl = 0; k <= i; k++)
                         for (int l = 0; l <= k; l++, kl++)
                             if (ij >= kl && (orbsym[i] ^ orbsym[j] ^ orbsym[k] ^ orbsym[l]))
-                                v(i, j, k, l) = 0;
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        return error;
     }
     // Target 2S or 2Sz
     uint16_t twos() const {
