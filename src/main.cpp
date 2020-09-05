@@ -146,6 +146,7 @@ template <typename S> void run(const map<string, string> &params) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
+    fcidump->symmetrize(orbsym);
     S vacuum(0);
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
