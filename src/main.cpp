@@ -146,7 +146,11 @@ template <typename S> void run(const map<string, string> &params) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    fcidump->symmetrize(orbsym);
+    double integral_error = fcidump->symmetrize(orbsym);
+    if (integral_error != 0)
+        cout << "integral error = " << scientific << setprecision(5)
+             << integral_error << endl;
+    assert(integral_error < 1E-10);
     S vacuum(0);
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
