@@ -994,6 +994,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("envs", &MovingEnvironment<S>::envs)
         .def_readwrite("tag", &MovingEnvironment<S>::tag)
         .def_readwrite("para_rule", &MovingEnvironment<S>::para_rule)
+        .def_readwrite("tctr", &MovingEnvironment<S>::tctr)
+        .def_readwrite("trot", &MovingEnvironment<S>::trot)
         .def("left_contract_rotate",
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
@@ -1773,10 +1775,13 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<>())
         .def(py::init<size_t, size_t>())
         .def(py::init<size_t, size_t, const string &>())
+        .def(py::init<size_t, size_t, const string &, double>())
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("prefix", &DataFrame::prefix)
         .def_readwrite("isize", &DataFrame::isize)
         .def_readwrite("dsize", &DataFrame::dsize)
+        .def_readwrite("tread", &DataFrame::tread)
+        .def_readwrite("twrite", &DataFrame::twrite)
         .def_readwrite("n_frames", &DataFrame::n_frames)
         .def_readwrite("i_frame", &DataFrame::i_frame)
         .def_readwrite("iallocs", &DataFrame::iallocs)
@@ -1784,7 +1789,15 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("activate", &DataFrame::activate)
         .def("load_data", &DataFrame::load_data)
         .def("save_data", &DataFrame::save_data)
-        .def("reset", &DataFrame::reset);
+        .def("reset", &DataFrame::reset)
+        .def("__repr__", [](DataFrame *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+    
+    py::bind_vector<vector<shared_ptr<StackAllocator<uint32_t>>>>(m, "VectorIntStackAllocator");
+    py::bind_vector<vector<shared_ptr<StackAllocator<double>>>>(m, "VectorDoubleStackAllocator");
 
     py::class_<Global>(m, "Global")
         .def_property_static(

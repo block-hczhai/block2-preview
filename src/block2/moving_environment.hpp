@@ -737,6 +737,8 @@ template <typename S> struct MovingEnvironment {
     string tag;
     // Paralell execution control
     shared_ptr<ParallelRule<S>> para_rule;
+    double tctr = 0, trot = 0;
+    Timer _t;
     bool iprint = false;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
@@ -778,11 +780,13 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S>> new_left = Partition<S>::build_left(
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
             mpo->sparse_form[i - 1] == 'S');
+        _t.get_time();
         mpo->tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                                new_left,
                                mpo->left_operator_exprs.size() != 0
                                    ? mpo->left_operator_exprs[i - 1]
                                    : nullptr);
+        tctr += _t.get_time();
         bra->load_tensor(i - 1);
         if (bra != ket)
             ket->load_tensor(i - 1);
@@ -791,8 +795,10 @@ template <typename S> struct MovingEnvironment {
                                          envs[i]->left_op_infos);
         frame->activate(1);
         envs[i]->left = Partition<S>::build_left(mats, envs[i]->left_op_infos);
+        _t.get_time();
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                              envs[i]->left);
+        trot += _t.get_time();
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
@@ -832,11 +838,13 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S>> new_right = Partition<S>::build_right(
             {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
             mpo->sparse_form[i + dot] == 'S');
+        _t.get_time();
         mpo->tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                                 new_right,
                                 mpo->right_operator_exprs.size() != 0
                                     ? mpo->right_operator_exprs[i + dot]
                                     : nullptr);
+        tctr += _t.get_time();
         bra->load_tensor(i + dot);
         if (bra != ket)
             ket->load_tensor(i + dot);
@@ -846,8 +854,10 @@ template <typename S> struct MovingEnvironment {
         frame->activate(1);
         envs[i]->right =
             Partition<S>::build_right(mats, envs[i]->right_op_infos);
+        _t.get_time();
         mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
                               ket->tensors[i + dot], envs[i]->right);
+        trot += _t.get_time();
         if (mpo->schemer != nullptr &&
             i + dot == mpo->schemer->right_trans_site)
             mpo->tf->numerical_transform(

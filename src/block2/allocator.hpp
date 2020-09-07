@@ -53,6 +53,7 @@ template <typename T> struct StackAllocator : Allocator<T> {
         assert(shift == 0);
         if (used + n >= size) {
             cout << "exceeding allowed memory"
+                 << " (size=" << size << ") "
                  << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
             abort();
             return 0;
@@ -159,6 +160,8 @@ struct DataFrame {
     bool prefix_can_write = true;
     size_t isize, dsize;
     uint16_t n_frames, i_frame;
+    mutable double tread = 0, twrite = 0; // io time cost
+    mutable Timer _t;
     vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
     vector<shared_ptr<StackAllocator<double>>> dallocs;
     // isize and dsize are in Bytes
@@ -204,6 +207,7 @@ struct DataFrame {
     }
     // Load one data frame from disk
     void load_data(uint16_t i, const string &filename) const {
+        _t.get_time();
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("DataFrame::load_data on '" + filename +
@@ -216,9 +220,11 @@ struct DataFrame {
             throw runtime_error("DataFrame::load_data on '" + filename +
                                 "' failed.");
         ifs.close();
+        tread += _t.get_time();
     }
     // Save one data frame to disk
     void save_data(uint16_t i, const string &filename) const {
+        _t.get_time();
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("DataFrame::save_data on '" + filename +
@@ -232,6 +238,7 @@ struct DataFrame {
             throw runtime_error("DataFrame::save_data on '" + filename +
                                 "' failed.");
         ofs.close();
+        twrite += _t.get_time();
     }
     void deallocate() {
         delete[] iallocs[0]->data;
