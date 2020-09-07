@@ -1986,6 +1986,9 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
+        .def("symmetrize", &FCIDUMP::symmetrize, py::arg("orbsym: in XOR convention"),
+             "Remove integral elements that violate point group symmetry. "
+             "Returns summed error in symmetrization")
         .def(
             "t",
             [](FCIDUMP *self, py::args &args) -> double {
@@ -2029,7 +2032,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
             "    Args:\n"
             "        i, j, k, l : spatial indices\n"
             "        sij, skl : spin indices (0=alpha, 1=beta)")
-        .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym)
+        .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym, "Orbital symmetry in molpro convention")
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
         .def_property_readonly("twos", &FCIDUMP::twos)
         .def_property_readonly("isym", &FCIDUMP::isym)
