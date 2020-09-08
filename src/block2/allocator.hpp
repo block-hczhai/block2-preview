@@ -191,6 +191,7 @@ struct DataFrame {
         if (!Parsing::path_exists(save_dir))
             Parsing::mkdir(save_dir);
     }
+    ~DataFrame() { deallocate(); }
     void activate(uint16_t i) {
         ialloc_() = iallocs[i_frame = i];
         dalloc_() = dallocs[i_frame];
