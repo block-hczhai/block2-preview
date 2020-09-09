@@ -70,7 +70,7 @@ enum struct WarmUpTypes : uint8_t { None, Local, Determinant };
 
 enum struct MultiTypes : uint8_t { None, Multi };
 
-// Quantum number infomation in a MPS
+// Quantum number information in a MPS
 template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;

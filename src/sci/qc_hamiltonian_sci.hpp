@@ -602,6 +602,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                 assert(false);
             }
         }
+        auto verbose = true;
+        sciWrapper->finalize(verbose);
     }
 };
 
