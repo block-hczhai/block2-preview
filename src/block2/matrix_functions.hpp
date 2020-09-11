@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "allocator.hpp"
 #include "matrix.hpp"
 #ifdef _HAS_INTEL_MKL
 #include "mkl.h"
@@ -318,18 +319,23 @@ struct MatrixFunctions {
     static void svd(const MatrixRef &a, const MatrixRef &l, const MatrixRef &s,
                     const MatrixRef &r) {
         int k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
-        double work[lwork];
+        // double work[lwork];
+        double *work = dalloc->allocate(lwork);
         assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
         dgesvd("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n, l.data,
                &k, work, &lwork, &info);
         assert(info == 0);
+        dalloc->deallocate(work, lwork);
     }
     // LQ factorization
     static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {
         int k = min(a.m, a.n), info, lwork = 34 * a.m;
-        double work[lwork], tau[k], t[a.m * a.n];
+        // double work[lwork], tau[k], t[a.m * a.n];
+        double *work = dalloc->allocate(lwork);
+        double *tau = dalloc->allocate(k);
+        double *t = dalloc->allocate(a.m * a.n);
         assert(a.m == l.m && a.n == q.n && l.n == k && q.m == k);
-        memcpy(t, a.data, sizeof(t));
+        memcpy(t, a.data, sizeof(double) * a.m * a.n);
         dgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memset(l.data, 0, sizeof(double) * k * a.m);
@@ -338,13 +344,19 @@ struct MatrixFunctions {
         dorgqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memcpy(q.data, t, sizeof(double) * k * a.n);
+        dalloc->deallocate(t, a.m * a.n);
+        dalloc->deallocate(tau, k);
+        dalloc->deallocate(work, lwork);
     }
     // QR factorization
     static void qr(const MatrixRef &a, const MatrixRef &q, const MatrixRef &r) {
         int k = min(a.m, a.n), info, lwork = 34 * a.n;
-        double work[lwork], tau[k], t[a.m * a.n];
+        // double work[lwork], tau[k], t[a.m * a.n];
+        double *work = dalloc->allocate(lwork);
+        double *tau = dalloc->allocate(k);
+        double *t = dalloc->allocate(a.m * a.n);
         assert(a.m == q.m && a.n == r.n && q.n == k && r.m == k);
-        memcpy(t, a.data, sizeof(t));
+        memcpy(t, a.data, sizeof(double) * a.m * a.n);
         dgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memset(r.data, 0, sizeof(double) * k * a.n);
@@ -355,14 +367,19 @@ struct MatrixFunctions {
         assert(info == 0);
         for (int j = 0; j < a.m; j++)
             memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
+        dalloc->deallocate(t, a.m * a.n);
+        dalloc->deallocate(tau, k);
+        dalloc->deallocate(work, lwork);
     }
     // eigenvectors are row vectors
     static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {
         assert(a.m == a.n && w.n == a.n);
         int lwork = 34 * a.n, info;
-        double work[lwork];
+        // double work[lwork];
+        double *work = dalloc->allocate(lwork);
         dsyev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
         assert(info == 0);
+        dalloc->deallocate(work, lwork);
     }
     static void olsen_precondition(const MatrixRef &q, const MatrixRef &c,
                                    double ld, const DiagonalMatrix &aa) {
