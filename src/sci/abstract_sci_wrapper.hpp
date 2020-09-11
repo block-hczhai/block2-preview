@@ -95,7 +95,9 @@ namespace sci {
         std::vector<sizPair> offsets; //!< index ranges [start,end) for each quantum number (in order of quantumNumbers)
         std::size_t nDet; //!< Total number of determinants
 
-        double eps = 1e-12; //!< Sparsity threshold
+        double eps = 1e-12; //!< Sparsity value threshold. Everything below eps will be set to 0.0");
+        double sparsityThresh = 0.75; // After > #zeros/#tot the sparse matrix is activated
+        int sparsityStart = 100*100; // After which matrix size (nCol * nRow) should sparse matrices be activated
 
         // Routines for filling the physical operator matrices
         /** Fill Identity */
@@ -126,6 +128,8 @@ namespace sci {
         virtual void fillOp_PD(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
         /** Fill Q op */
         virtual void fillOp_Q(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
+        /** Call this after the fillOps are done*/
+        virtual void finalize(const bool verbose=true) {};
     private:
         void throwError() const{
             throw std::runtime_error("You used the abstract sci wrapper and not the actual sci wrapper");

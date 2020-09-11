@@ -31,7 +31,7 @@ namespace block2 {
 
 // 2D dense matrix stored in stack memory
 struct MatrixRef {
-    int m, n;
+    int m, n; // m is rows, n is cols
     double *data;
     MatrixRef(double *data, int m, int n) : data(data), m(m), n(n) {}
     double &operator()(int i, int j) const {

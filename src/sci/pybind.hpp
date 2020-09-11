@@ -51,7 +51,12 @@ template <typename S> void bind_sci_wrapper(py::module &m){
         .def_readonly("nMaxBetaEl", &sci::AbstractSciWrapper<S>::nMaxBetaEl)
         .def_readonly("nMaxEl", &sci::AbstractSciWrapper<S>::nMaxEl)
         .def_readonly("nDet", &sci::AbstractSciWrapper<S>::nDet)
-        .def_readonly("eps", &sci::AbstractSciWrapper<S>::eps);
+        .def_readonly("sparsityThresh", &sci::AbstractSciWrapper<S>::sparsityThresh,
+                      "After > #zeros/#tot the sparse matrix is activated")
+        .def_readonly("sparsityStart", &sci::AbstractSciWrapper<S>::sparsityStart,
+                      "After which matrix size (nCol * nRow) should sparse matrices be activated")
+        .def_readonly("eps", &sci::AbstractSciWrapper<S>::eps,
+                      "Sparsity value threshold. Everything below eps will be set to 0.0");
 };
 
 template <typename S> void bind_hamiltonian_sci(py::module &m) {
