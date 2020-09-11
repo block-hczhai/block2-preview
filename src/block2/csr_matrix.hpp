@@ -145,7 +145,7 @@ struct CSRMatrixRef {
         alloc = make_shared<VectorAllocator<double>>();
         m = mat.m, n = mat.n, nnz = 0;
         for (int i = 0; i < mat.size(); i++)
-            nnz += mat.data[i] != 0;
+            nnz += abs(mat.data[i]) > cutoff;
         allocate();
         if (nnz == size())
             memcpy(data, mat.data, sizeof(double) * size());
