@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include "../block2/integral.hpp"
 #include "../block2/sparse_matrix.hpp"
+#include "../block2/csr_sparse_matrix.hpp"
 #include "../block2/symmetry.hpp"
 
 /** Interface to the SCI code for a big site.
@@ -53,7 +54,7 @@ namespace sci {
         // Actually I made this class not abstract (pure virtual fct) in order to ease life.
     public:
         using sizPair = std::pair<std::size_t, std::size_t>;
-        using BLSparseMatrix = block2::SparseMatrix<block2::SZ>;
+        using BLSparseMatrix = block2::CSRSparseMatrix<S>;
         int nOrbCas, nOrbExt, nOrb; //!< *spatial* orbitals
         int nMaxAlphaEl, nMaxBetaEl, nMaxEl; //!< Maximal number of alpha/beta electrons
         AbstractSciWrapper() : AbstractSciWrapper(1, 1, 1, 1, -1, nullptr, {}) {}

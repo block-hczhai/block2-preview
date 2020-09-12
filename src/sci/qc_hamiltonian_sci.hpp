@@ -516,7 +516,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         int ii, jj; // spin orbital indices
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
-            p.second = make_shared<SparseMatrix<S>>();
+            p.second = make_shared<CSRSparseMatrix<S>>();
             // ATTENTION vv if you change allocation, you need to change the
             //                      deallocation routine in MPOQCSCI
             p.second->allocate(find_site_op_info(op.q_label, n_sites - 1));
@@ -532,7 +532,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             // << (int)op.site_index[0] <<","
             //     << (int)op.site_index[1] << "ss" << (int)op.site_index.s(0)
             //     << (int)op.site_index.s(1) << endl;
-            auto &mat = *p.second;
+            auto &mat = dynamic_cast<CSRSparseMatrix<S>&>(*p.second);
             // get orbital indices
             ii = -1;
             jj = -1; // debug

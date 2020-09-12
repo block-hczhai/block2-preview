@@ -91,9 +91,8 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     vector<vector<T>> data;
     VectorAllocator() {}
     T *allocate(size_t n) override {
-        data.push_back(vector<T>());
-        data.back().resize(n);
-        return &data.back()[0];
+        data.emplace_back(n);
+        return data.back().data();
     }
     // explicit deallocation is not required for vector allocator
     // can be in arbitrary order
