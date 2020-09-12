@@ -79,7 +79,7 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         data = nullptr;
     }
     CSRMatrixRef &operator[](S q) const { return (*this)[info->find_state(q)]; }
-    CSRMatrixRef &operator[](int idx) const{
+    CSRMatrixRef &operator[](int idx) const {
         assert(idx != -1 and idx < csr_data.size());
         return *csr_data[idx];
     }
