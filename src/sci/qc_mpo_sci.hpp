@@ -42,11 +42,13 @@ template <typename, typename = void> struct MPOQCSCI;
 // Quantum chemistry MPO (non-spin-adapted)
 template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     using MPO<S>::n_sites;
+    using MPO<S>::sparse_form;
     QCTypes mode;
     bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
     MPOQCSCI(const HamiltonianQCSCI<S> &hamil, QCTypes mode = QCTypes::NC,
           bool symmetrized_p = true)
         : MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+        sparse_form[hamil.n_sites-1] = 'S'; // Big site will be sparse
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
@@ -70,7 +72,9 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> q_op[nOrb][nOrb][4];
         this->op = dynamic_pointer_cast<OpElement<S>>(h_op);
         this->const_e = hamil.e();
-        this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        this->tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
         this->site_op_infos = hamil.site_op_infos;
         if(mode != QCTypes::NC){
             throw std::invalid_argument("Currently, only NC is implemented as mode. "
