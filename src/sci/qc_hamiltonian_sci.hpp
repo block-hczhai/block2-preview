@@ -518,6 +518,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
             auto pmat = make_shared<CSRSparseMatrix<S>>();
             p.second = pmat;
+            // ATTENTION vv if you change allocation, you need to change the
+            //                      deallocation routine in MPOQCSCI
             pmat->initialize(find_site_op_info(op.q_label, n_sites - 1));
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
