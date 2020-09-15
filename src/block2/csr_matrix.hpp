@@ -42,7 +42,7 @@ struct CSRMatrixRef {
     int *rows, *cols;
     CSRMatrixRef()
         : m(0), n(0), nnz(0), data(nullptr), rows(nullptr), cols(nullptr) {}
-    CSRMatrixRef(int m, int n, int nnz = 0) : m(m), n(n), nnz(nnz){
+    CSRMatrixRef(int m, int n, int nnz = 0) : m(m), n(n), nnz(nnz) {
         alloc = make_shared<VectorAllocator<double>>();
         allocate();
         if (nnz != size())

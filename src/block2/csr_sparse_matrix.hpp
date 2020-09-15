@@ -62,6 +62,17 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
             csr_data[i] = make_shared<CSRMatrixRef>(info->n_states_bra[i],
                                                     info->n_states_ket[i]);
     }
+    // initialize csr_data without allocating memory
+    void initialize(const shared_ptr<SparseMatrixInfo<S>> &info) {
+        this->info = info;
+        csr_data.resize(info->n);
+        for (int i = 0; i < info->n; i++) {
+            csr_data[i] = make_shared<CSRMatrixRef>(info->n_states_bra[i],
+                                                    info->n_states_ket[i], 0,
+                                                    nullptr, nullptr, nullptr);
+            csr_data[i]->alloc = make_shared<VectorAllocator<double>>();
+        }
+    }
     void deallocate() override {
         if (csr_data.size() != 0) {
             for (int i = info->n - 1; i >= 0; i--)

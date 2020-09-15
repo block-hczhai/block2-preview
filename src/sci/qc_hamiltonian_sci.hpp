@@ -523,15 +523,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             //                      deallocation routine in MPOQCSCI
             // Also, the CSR stuff is more complicated and I will do the actual allocation
             //      of the individual matrices in the fillOp* routines.
-            // vv copy from mat.allocate, but without CSR allocation (just initialization)
-            mat.info = find_site_op_info(op.q_label, n_sites - 1);
-            mat.csr_data.resize(mat.info->n);
-            for (int i = 0; i < mat.info->n; i++) {
-                mat.csr_data[i] = make_shared<CSRMatrixRef>(mat.info->n_states_bra[i],
-                                                            mat.info->n_states_ket[i], 0,
-                                                            nullptr, nullptr, nullptr);
-                mat.csr_data[i]->alloc = make_shared<VectorAllocator<double>>();
-            }
+            //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
+            mat.initialize(find_site_op_info(op.q_label, n_sites - 1));
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
                 cout << "m == " << (int)n_sites - 1 << "allocate" << op.name
