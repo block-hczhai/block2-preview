@@ -58,6 +58,7 @@ template <typename S> struct DMRG {
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
     double cutoff = 1E-14;
     double quanta_cutoff = 1E-3;
+    bool decomp_last_site = true;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<uint16_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -149,142 +150,158 @@ template <typename S> struct DMRG {
                 me->ket->info, me->para_rule);
         h_eff->deallocate();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
-            // change to fused form for splitting
-            if (fuse_left != forward) {
-                shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
-                if (!fuse_left && forward)
-                    me->ket->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_left(
-                            i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
-                else if (fuse_left && !forward)
-                    me->ket->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_right(
-                            i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
-                prev_wfn->info->deallocate();
-                prev_wfn->deallocate();
-                if (pket != nullptr) {
-                    vector<shared_ptr<SparseMatrixGroup<S>>> prev_pkets = {
-                        pket};
-                    if (!fuse_left && forward)
-                        pket =
-                            MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
-                                i, me->ket->info, prev_pkets,
-                                me->mpo->tf->opf->cg)[0];
-                    else if (fuse_left && !forward)
-                        pket =
-                            MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
-                                i, me->ket->info, prev_pkets,
-                                me->mpo->tf->opf->cg)[0];
-                    prev_pkets[0]->deallocate_infos();
-                    prev_pkets[0]->deallocate();
-                }
-            }
-            // splitting of wavefunction
-            shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
-            shared_ptr<SparseMatrix<S>> dm, left, right;
-            if (decomp_type == DecompositionTypes::DensityMatrix) {
-                if (noise_type == NoiseTypes::Perturbative && noise != 0) {
-                    dm = MovingEnvironment<S>::
-                        density_matrix_with_perturbative_noise(
-                            h_eff->opdq, me->ket->tensors[i], forward, noise,
-                            pket);
-                    pket->deallocate_infos();
-                    pket->deallocate();
-                } else
-                    dm = MovingEnvironment<S>::density_matrix(
-                        h_eff->opdq, me->ket->tensors[i], forward, noise,
-                        noise_type);
-                error = MovingEnvironment<S>::split_density_matrix(
-                    dm, me->ket->tensors[i], (int)bond_dim, forward, true, left,
-                    right, cutoff, trunc_type);
-            } else if (decomp_type == DecompositionTypes::SVD) {
-                assert(noise_type == NoiseTypes::None ||
-                       noise_type == NoiseTypes::Wavefunction);
-                if (noise_type == NoiseTypes::Wavefunction && noise != 0)
-                    MovingEnvironment<S>::wavefunction_add_noise(
-                        me->ket->tensors[i], noise);
-                error = MovingEnvironment<S>::split_wavefunction_svd(
-                    h_eff->opdq, me->ket->tensors[i], (int)bond_dim, forward,
-                    true, left, right, cutoff, trunc_type);
-            } else
-                assert(false);
-            shared_ptr<StateInfo<S>> info = nullptr;
-            // propagation
-            if (forward) {
-                me->ket->tensors[i] = left;
+            if (!decomp_last_site &&
+                ((forward && i == me->n_sites - 1 && !fuse_left) ||
+                 (!forward && i == 0 && fuse_left))) {
                 me->ket->save_tensor(i);
-                info = left->info->extract_state_info(forward);
-                mmps = info->n_states_total;
-                me->ket->info->left_dims[i + 1] = info;
-                me->ket->info->save_left_dims(i + 1);
-                info->deallocate();
-                if (i != me->n_sites - 1) {
-                    MovingEnvironment<S>::contract_one_dot(i + 1, right,
-                                                           me->ket, forward);
-                    me->ket->save_tensor(i + 1);
-                    me->ket->unload_tensor(i + 1);
-                    me->ket->canonical_form[i] = 'L';
-                    me->ket->canonical_form[i + 1] = 'S';
-                } else {
-                    me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                    MovingEnvironment<S>::contract_one_dot(i, right, me->ket,
-                                                           !forward);
-                    me->ket->save_tensor(i);
-                    me->ket->unload_tensor(i);
-                    me->ket->canonical_form[i] = 'K';
-                }
+                me->ket->unload_tensor(i);
+                me->ket->canonical_form[i] = forward ? 'S' : 'K';
             } else {
-                me->ket->tensors[i] = right;
-                me->ket->save_tensor(i);
-                info = right->info->extract_state_info(forward);
-                mmps = info->n_states_total;
-                me->ket->info->right_dims[i] = info;
-                me->ket->info->save_right_dims(i);
-                info->deallocate();
-                if (i > 0) {
-                    MovingEnvironment<S>::contract_one_dot(i - 1, left, me->ket,
-                                                           forward);
-                    me->ket->save_tensor(i - 1);
-                    me->ket->unload_tensor(i - 1);
-                    me->ket->canonical_form[i - 1] = 'K';
-                    me->ket->canonical_form[i] = 'R';
-                } else {
-                    me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                    MovingEnvironment<S>::contract_one_dot(i, left, me->ket,
-                                                           !forward);
-                    me->ket->save_tensor(i);
-                    me->ket->unload_tensor(i);
-                    me->ket->canonical_form[i] = 'S';
+                // change to fused form for splitting
+                if (fuse_left != forward) {
+                    shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+                    if (!fuse_left && forward)
+                        me->ket->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_left(
+                                i, me->ket->info, prev_wfn,
+                                me->mpo->tf->opf->cg);
+                    else if (fuse_left && !forward)
+                        me->ket->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_right(
+                                i, me->ket->info, prev_wfn,
+                                me->mpo->tf->opf->cg);
+                    prev_wfn->info->deallocate();
+                    prev_wfn->deallocate();
+                    if (pket != nullptr) {
+                        vector<shared_ptr<SparseMatrixGroup<S>>> prev_pkets = {
+                            pket};
+                        if (!fuse_left && forward)
+                            pket = MovingEnvironment<S>::
+                                swap_multi_wfn_to_fused_left(
+                                    i, me->ket->info, prev_pkets,
+                                    me->mpo->tf->opf->cg)[0];
+                        else if (fuse_left && !forward)
+                            pket = MovingEnvironment<S>::
+                                swap_multi_wfn_to_fused_right(
+                                    i, me->ket->info, prev_pkets,
+                                    me->mpo->tf->opf->cg)[0];
+                        prev_pkets[0]->deallocate_infos();
+                        prev_pkets[0]->deallocate();
+                    }
                 }
+                // splitting of wavefunction
+                shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
+                shared_ptr<SparseMatrix<S>> dm, left, right;
+                if (decomp_type == DecompositionTypes::DensityMatrix) {
+                    if (noise_type == NoiseTypes::Perturbative && noise != 0) {
+                        dm = MovingEnvironment<S>::
+                            density_matrix_with_perturbative_noise(
+                                h_eff->opdq, me->ket->tensors[i], forward,
+                                noise, pket);
+                        pket->deallocate_infos();
+                        pket->deallocate();
+                    } else
+                        dm = MovingEnvironment<S>::density_matrix(
+                            h_eff->opdq, me->ket->tensors[i], forward, noise,
+                            noise_type);
+                    error = MovingEnvironment<S>::split_density_matrix(
+                        dm, me->ket->tensors[i], (int)bond_dim, forward, true,
+                        left, right, cutoff, trunc_type);
+                } else if (decomp_type == DecompositionTypes::SVD) {
+                    assert(noise_type == NoiseTypes::None ||
+                           noise_type == NoiseTypes::Wavefunction);
+                    if (noise_type == NoiseTypes::Wavefunction && noise != 0)
+                        MovingEnvironment<S>::wavefunction_add_noise(
+                            me->ket->tensors[i], noise);
+                    error = MovingEnvironment<S>::split_wavefunction_svd(
+                        h_eff->opdq, me->ket->tensors[i], (int)bond_dim,
+                        forward, true, left, right, cutoff, trunc_type);
+                } else
+                    assert(false);
+                shared_ptr<StateInfo<S>> info = nullptr;
+                // propagation
+                if (forward) {
+                    me->ket->tensors[i] = left;
+                    me->ket->save_tensor(i);
+                    info = left->info->extract_state_info(forward);
+                    mmps = info->n_states_total;
+                    me->ket->info->left_dims[i + 1] = info;
+                    me->ket->info->save_left_dims(i + 1);
+                    info->deallocate();
+                    if (i != me->n_sites - 1) {
+                        MovingEnvironment<S>::contract_one_dot(
+                            i + 1, right, me->ket, forward);
+                        me->ket->save_tensor(i + 1);
+                        me->ket->unload_tensor(i + 1);
+                        me->ket->canonical_form[i] = 'L';
+                        me->ket->canonical_form[i + 1] = 'S';
+                    } else {
+                        me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_one_dot(
+                            i, right, me->ket, !forward);
+                        me->ket->save_tensor(i);
+                        me->ket->unload_tensor(i);
+                        me->ket->canonical_form[i] = 'K';
+                    }
+                } else {
+                    me->ket->tensors[i] = right;
+                    me->ket->save_tensor(i);
+                    info = right->info->extract_state_info(forward);
+                    mmps = info->n_states_total;
+                    me->ket->info->right_dims[i] = info;
+                    me->ket->info->save_right_dims(i);
+                    info->deallocate();
+                    if (i > 0) {
+                        MovingEnvironment<S>::contract_one_dot(
+                            i - 1, left, me->ket, forward);
+                        me->ket->save_tensor(i - 1);
+                        me->ket->unload_tensor(i - 1);
+                        me->ket->canonical_form[i - 1] = 'K';
+                        me->ket->canonical_form[i] = 'R';
+                    } else {
+                        me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                        MovingEnvironment<S>::contract_one_dot(i, left, me->ket,
+                                                               !forward);
+                        me->ket->save_tensor(i);
+                        me->ket->unload_tensor(i);
+                        me->ket->canonical_form[i] = 'S';
+                    }
+                }
+                right->info->deallocate();
+                right->deallocate();
+                left->info->deallocate();
+                left->deallocate();
+                if (dm != nullptr) {
+                    dm->info->deallocate();
+                    dm->deallocate();
+                }
+                old_wfn->info->deallocate();
+                old_wfn->deallocate();
             }
-            right->info->deallocate();
-            right->deallocate();
-            left->info->deallocate();
-            left->deallocate();
-            if (dm != nullptr) {
-                dm->info->deallocate();
-                dm->deallocate();
-            }
-            old_wfn->info->deallocate();
-            old_wfn->deallocate();
         } else {
             if (pket != nullptr) {
                 pket->deallocate();
                 pket->deallocate_infos();
             }
             me->ket->unload_tensor(i);
-            if (forward) {
-                if (i != me->n_sites - 1) {
-                    me->ket->canonical_form[i] = 'L';
-                    me->ket->canonical_form[i + 1] = 'S';
-                } else
-                    me->ket->canonical_form[i] = 'K';
-            } else {
-                if (i > 0) {
-                    me->ket->canonical_form[i - 1] = 'K';
-                    me->ket->canonical_form[i] = 'R';
-                } else
-                    me->ket->canonical_form[i] = 'S';
+            if (!decomp_last_site &&
+                ((forward && i == me->n_sites - 1 && !fuse_left) ||
+                 (!forward && i == 0 && fuse_left)))
+                me->ket->canonical_form[i] = forward ? 'S' : 'K';
+            else {
+                if (forward) {
+                    if (i != me->n_sites - 1) {
+                        me->ket->canonical_form[i] = 'L';
+                        me->ket->canonical_form[i + 1] = 'S';
+                    } else
+                        me->ket->canonical_form[i] = 'K';
+                } else {
+                    if (i > 0) {
+                        me->ket->canonical_form[i - 1] = 'K';
+                        me->ket->canonical_form[i] = 'R';
+                    } else
+                        me->ket->canonical_form[i] = 'S';
+                }
             }
         }
         if (me->para_rule != nullptr)

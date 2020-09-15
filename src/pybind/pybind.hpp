@@ -1231,6 +1231,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("noise_type", &DMRG<S>::noise_type)
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
         .def_readwrite("decomp_type", &DMRG<S>::decomp_type)
+        .def_readwrite("decomp_last_site", &DMRG<S>::decomp_last_site)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("update_one_dot", &DMRG<S>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
