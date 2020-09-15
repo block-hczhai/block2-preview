@@ -1224,6 +1224,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("noises", &DMRG<S>::noises)
         .def_readwrite("davidson_conv_thrds", &DMRG<S>::davidson_conv_thrds)
         .def_readwrite("davidson_max_iter", &DMRG<S>::davidson_max_iter)
+        .def_readwrite("davidson_soft_max_iter",
+                       &DMRG<S>::davidson_soft_max_iter)
         .def_readwrite("energies", &DMRG<S>::energies)
         .def_readwrite("discarded_weights", &DMRG<S>::discarded_weights)
         .def_readwrite("mps_quanta", &DMRG<S>::mps_quanta)

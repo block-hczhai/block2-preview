@@ -263,6 +263,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // energy, ndav, nflop, tdav
     tuple<double, int, size_t, double>
     eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+         int soft_max_iter = -1,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(compute_diag);
@@ -277,11 +278,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 ? MatrixFunctions::davidson(
                       *tf->opf->seq, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter)
+                      conv_thrd, max_iter, soft_max_iter)
                 : MatrixFunctions::davidson(
                       *this, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter);
+                      conv_thrd, max_iter, soft_max_iter);
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);

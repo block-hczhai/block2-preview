@@ -404,7 +404,8 @@ struct MatrixFunctions {
     davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
              int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
              double conv_thrd = 5E-6, int max_iter = 5000,
-             int deflation_min_size = 2, int deflation_max_size = 50) {
+             int soft_max_iter = -1, int deflation_min_size = 2,
+             int deflation_max_size = 50) {
         int k = (int)vs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
@@ -525,10 +526,12 @@ struct MatrixFunctions {
                 copy(bs[m], q);
                 m++;
             }
-            if (xiter == max_iter) {
-                cout << "Error : only " << ck << " converged!" << endl;
-                assert(false);
-            }
+            if (xiter == soft_max_iter)
+                break;
+        }
+        if (xiter == max_iter) {
+            cout << "Error : only " << ck << " converged!" << endl;
+            assert(false);
         }
         for (int i = 0; i < k; i++)
             copy(vs[i], bs[i]);

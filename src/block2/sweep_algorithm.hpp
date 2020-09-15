@@ -51,6 +51,7 @@ template <typename S> struct DMRG {
     vector<vector<vector<pair<S, double>>>> mps_quanta;
     vector<double> davidson_conv_thrds;
     int davidson_max_iter = 5000;
+    int davidson_soft_max_iter = -1;
     bool forward;
     uint8_t iprint = 2;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -140,8 +141,9 @@ template <typename S> struct DMRG {
                         me->bra->tensors[i], me->ket->tensors[i]);
         int mmps = 0;
         double error = 0.0;
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                               davidson_max_iter, me->para_rule);
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                        davidson_soft_max_iter, me->para_rule);
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
         if (decomp_type == DecompositionTypes::DensityMatrix &&
             noise_type == NoiseTypes::Perturbative && noise != 0)
@@ -326,8 +328,9 @@ template <typename S> struct DMRG {
             FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         int mmps = 0;
         double error = 0.0;
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                               davidson_max_iter, me->para_rule);
+        auto pdi =
+            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                        davidson_soft_max_iter, me->para_rule);
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
         if (decomp_type == DecompositionTypes::DensityMatrix &&
             noise_type == NoiseTypes::Perturbative && noise != 0)
