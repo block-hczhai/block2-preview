@@ -705,8 +705,8 @@ template <typename S> struct DMRG {
         r.quanta = mps_quanta;
         return r;
     }
-    Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise,
-                       double davidson_conv_thrd) {
+    virtual Iteration blocking(int i, bool forward, uint16_t bond_dim,
+                               double noise, double davidson_conv_thrd) {
         me->move_to(i);
         assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {

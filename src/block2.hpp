@@ -70,6 +70,7 @@
 #include "sci/hamiltonian_sci.hpp"
 #include "sci/qc_hamiltonian_sci.hpp"
 #include "sci/qc_mpo_sci.hpp"
+#include "sci/sweep_algorithm_sci.hpp"
 #endif
 
 #ifdef _EXPLICIT_TEMPLATE

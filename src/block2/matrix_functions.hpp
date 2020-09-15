@@ -440,7 +440,7 @@ struct MatrixFunctions {
         int l = k, ck = 0, msig = 0, m = k, xiter = 0;
         if (iprint)
             cout << endl;
-        while (xiter < max_iter) {
+        while (xiter < max_iter && xiter < soft_max_iter) {
             xiter++;
             for (int i = msig; i < m; i++, msig++) {
                 sigmas[i].clear();
@@ -529,6 +529,8 @@ struct MatrixFunctions {
             if (xiter == soft_max_iter)
                 break;
         }
+        if (xiter == soft_max_iter)
+            eigvals.resize(k, 0);
         if (xiter == max_iter) {
             cout << "Error : only " << ck << " converged!" << endl;
             assert(false);
