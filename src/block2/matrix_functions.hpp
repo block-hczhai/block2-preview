@@ -440,7 +440,8 @@ struct MatrixFunctions {
         int l = k, ck = 0, msig = 0, m = k, xiter = 0;
         if (iprint)
             cout << endl;
-        while (xiter < max_iter && xiter < soft_max_iter) {
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
             xiter++;
             for (int i = msig; i < m; i++, msig++) {
                 sigmas[i].clear();
