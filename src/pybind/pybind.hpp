@@ -1243,6 +1243,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
+    py::class_<DMRGSCI<S>, shared_ptr<DMRGSCI<S>>, DMRG<S>>(m, "DMRGSCI")
+            .def("blocking", &DMRGSCI<S>::blocking);
+
     py::class_<typename ImaginaryTE<S>::Iteration,
                shared_ptr<typename ImaginaryTE<S>::Iteration>>(
         m, "ImaginaryTEIteration")
@@ -1645,7 +1648,9 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
         .value("Physical", TruncationTypes::Physical)
         .value("Reduced", TruncationTypes::Reduced)
-        .value("ReducedInversed", TruncationTypes::ReducedInversed);
+        .value("ReducedInversed", TruncationTypes::ReducedInversed)
+        .value("KeepOne", TruncationTypes::KeepOne)
+        .def(py::self * int(), "For KeepOne: Keep X states per quantum number");
 
     py::enum_<DecompositionTypes>(m, "DecompositionTypes", py::arithmetic())
         .value("DensityMatrix", DecompositionTypes::DensityMatrix)
