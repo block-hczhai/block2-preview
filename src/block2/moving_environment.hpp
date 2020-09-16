@@ -719,11 +719,20 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
 };
 
-enum struct TruncationTypes : uint8_t {
+enum struct TruncationTypes : uint16_t {
     Physical = 0,
     Reduced = 1,
-    ReducedInversed = 2
+    ReducedInversed = 2,
+    KeepOne = 4,
 };
+
+inline TruncationTypes operator*(TruncationTypes a, uint16_t b) {
+    return TruncationTypes((uint16_t)a * b);
+}
+
+inline TruncationTypes operator|(TruncationTypes a, TruncationTypes b) {
+    return TruncationTypes((uint16_t)a | (uint16_t)b);
+}
 
 // A tensor network < bra | mpo | ket >
 template <typename S> struct MovingEnvironment {
@@ -1692,10 +1701,11 @@ template <typename S> struct MovingEnvironment {
             MatrixRef wr(nullptr, w.n, 1);
             wr.allocate();
             MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
-            if (trunc_type == TruncationTypes::Reduced)
+            if ((uint16_t)trunc_type & (uint16_t)TruncationTypes::Reduced)
                 MatrixFunctions::iscale(
                     wr, 1.0 / dm->info->quanta[i].multiplicity());
-            else if (trunc_type == TruncationTypes::ReducedInversed)
+            else if ((uint16_t)trunc_type &
+                     (uint16_t)TruncationTypes::ReducedInversed)
                 MatrixFunctions::iscale(wr, dm->info->quanta[i].multiplicity());
             eigen_values.push_back(w);
             eigen_values_reduced.push_back(wr);
@@ -1706,6 +1716,7 @@ template <typename S> struct MovingEnvironment {
         for (int i = 0; i < (int)eigen_values.size(); i++)
             for (int j = 0; j < eigen_values[i].n; j++)
                 ss.push_back(make_pair(i, j));
+        assert(k_total == (int)ss.size());
         if (k != -1) {
             sort(ss.begin(), ss.end(),
                  [&eigen_values_reduced](const pair<int, int> &a,
@@ -1713,22 +1724,52 @@ template <typename S> struct MovingEnvironment {
                      return eigen_values_reduced[a.first].data[a.second] >
                             eigen_values_reduced[b.first].data[b.second];
                  });
-            for (int i = k; i < k_total; i++) {
-                double x = eigen_values[ss[i].first].data[ss[i].second];
-                if (x > 0)
-                    error += x;
+            if (((uint16_t)trunc_type >> 2) == 0) {
+                for (int i = k; i < k_total; i++) {
+                    double x = eigen_values[ss[i].first].data[ss[i].second];
+                    if (x > 0)
+                        error += x;
+                }
+                for (k = min(k, k_total);
+                     k > 1 && eigen_values_reduced[ss[k - 1].first]
+                                      .data[ss[k - 1].second] < cutoff;
+                     k--) {
+                    double x =
+                        eigen_values[ss[k - 1].first].data[ss[k - 1].second];
+                    if (x > 0)
+                        error += x;
+                }
+                if (k < k_total)
+                    ss.resize(k);
+            } else {
+                uint16_t keep = (uint16_t)trunc_type >> 2;
+                vector<int> mask(eigen_values.size(), 0), smask(k_total, 0);
+                for (int i = 0; i < k_total; i++) {
+                    mask[ss[i].first]++;
+                    smask[i] = mask[ss[i].first] > keep;
+                }
+                for (int i = k; i < k_total; i++) {
+                    double x = eigen_values[ss[i].first].data[ss[i].second];
+                    if (x > 0 && smask[i])
+                        error += x;
+                }
+                for (k = min(k, k_total);
+                     k > 1 && eigen_values_reduced[ss[k - 1].first]
+                                      .data[ss[k - 1].second] < cutoff;
+                     k--) {
+                    double x =
+                        eigen_values[ss[k - 1].first].data[ss[k - 1].second];
+                    if (x > 0 && smask[k - 1])
+                        error += x;
+                }
+                vector<pair<int, int>> rss(
+                    ss.begin(), k < k_total ? ss.begin() + k : ss.end());
+                for (int i = k; i < k_total; i++)
+                    if (!smask[i])
+                        rss.push_back(ss[i]);
+                ss = rss;
+                assert(ss.size() != 0);
             }
-            for (k = min(k, (int)ss.size());
-                 k > 1 &&
-                 eigen_values_reduced[ss[k - 1].first].data[ss[k - 1].second] <
-                     cutoff;
-                 k--) {
-                double x = eigen_values[ss[k - 1].first].data[ss[k - 1].second];
-                if (x > 0)
-                    error += x;
-            }
-            if (k < (int)ss.size())
-                ss.resize(k);
             sort(ss.begin(), ss.end(),
                  [](const pair<int, int> &a, const pair<int, int> &b) {
                      return a.first != b.first ? a.first < b.first
@@ -1753,10 +1794,11 @@ template <typename S> struct MovingEnvironment {
         for (int i = 0; i < (int)s.size(); i++) {
             shared_ptr<Tensor> wr = make_shared<Tensor>(s[i]->shape);
             MatrixFunctions::copy(wr->ref(), s[i]->ref());
-            if (trunc_type == TruncationTypes::Reduced)
+            if ((uint16_t)trunc_type & (uint16_t)TruncationTypes::Reduced)
                 MatrixFunctions::iscale(wr->ref(),
                                         sqrt(1.0 / qs[i].multiplicity()));
-            else if (trunc_type == TruncationTypes::ReducedInversed)
+            else if ((uint16_t)trunc_type &
+                     (uint16_t)TruncationTypes::ReducedInversed)
                 MatrixFunctions::iscale(wr->ref(), sqrt(qs[i].multiplicity()));
             s_reduced.push_back(wr);
             k_total += wr->shape[0];
@@ -1766,6 +1808,7 @@ template <typename S> struct MovingEnvironment {
         for (int i = 0; i < (int)s.size(); i++)
             for (int j = 0; j < s[i]->shape[0]; j++)
                 ss.push_back(make_pair(i, j));
+        assert(k_total == (int)ss.size());
         if (k != -1) {
             sort(
                 ss.begin(), ss.end(),
@@ -1773,21 +1816,52 @@ template <typename S> struct MovingEnvironment {
                     return s_reduced[a.first]->data[a.second] >
                            s_reduced[b.first]->data[b.second];
                 });
-            for (int i = k; i < k_total; i++) {
-                double x = s[ss[i].first]->data[ss[i].second];
-                if (x > 0)
-                    error += x * x;
+            if (((uint16_t)trunc_type >> 2) == 0) {
+                for (int i = k; i < k_total; i++) {
+                    double x = s[ss[i].first]->data[ss[i].second];
+                    if (x > 0)
+                        error += x * x;
+                }
+                for (k = min(k, k_total);
+                     k > 1 &&
+                     s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
+                         cutoff;
+                     k--) {
+                    double x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    if (x > 0)
+                        error += x * x;
+                }
+                if (k < k_total)
+                    ss.resize(k);
+            } else {
+                uint16_t keep = (uint16_t)trunc_type >> 2;
+                vector<int> mask(s.size(), 0), smask(k_total, 0);
+                for (int i = 0; i < k_total; i++) {
+                    mask[ss[i].first]++;
+                    smask[i] = mask[ss[i].first] > keep;
+                }
+                for (int i = k; i < k_total; i++) {
+                    double x = s[ss[i].first]->data[ss[i].second];
+                    if (x > 0 && smask[i])
+                        error += x * x;
+                }
+                for (k = min(k, k_total);
+                     k > 1 &&
+                     s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
+                         cutoff;
+                     k--) {
+                    double x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    if (x > 0 && smask[k - 1])
+                        error += x * x;
+                }
+                vector<pair<int, int>> rss(
+                    ss.begin(), k < k_total ? ss.begin() + k : ss.end());
+                for (int i = k; i < k_total; i++)
+                    if (!smask[i])
+                        rss.push_back(ss[i]);
+                ss = rss;
+                assert(ss.size() != 0);
             }
-            for (k = min(k, (int)ss.size());
-                 k > 1 &&
-                 s_reduced[ss[k - 1].first]->data[ss[k - 1].second] < cutoff;
-                 k--) {
-                double x = s[ss[k - 1].first]->data[ss[k - 1].second];
-                if (x > 0)
-                    error += x * x;
-            }
-            if (k < (int)ss.size())
-                ss.resize(k);
             sort(ss.begin(), ss.end(),
                  [](const pair<int, int> &a, const pair<int, int> &b) {
                      return a.first != b.first ? a.first < b.first
@@ -1958,7 +2032,7 @@ template <typename S> struct MovingEnvironment {
         vector<uint16_t> ilr, im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
-        if (k != 0)
+        if (ss.size() != 0)
             ilr.push_back(ss[0].first), im.push_back(1);
         for (int i = 1; i < (int)ss.size(); i++)
             if (ss[i].first != ilr.back())
@@ -2072,7 +2146,7 @@ template <typename S> struct MovingEnvironment {
         vector<uint16_t> ilr, im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
-        if (k != 0)
+        if (ss.size() != 0)
             ilr.push_back(ss[0].first), im.push_back(1);
         for (int i = 1; i < (int)ss.size(); i++)
             if (ss[i].first != ilr.back())
@@ -2166,7 +2240,7 @@ template <typename S> struct MovingEnvironment {
         vector<uint16_t> ilr, im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
-        if (k != 0)
+        if (ss.size() != 0)
             ilr.push_back(ss[0].first), im.push_back(1);
         for (int i = 1; i < (int)ss.size(); i++)
             if (ss[i].first != ilr.back())

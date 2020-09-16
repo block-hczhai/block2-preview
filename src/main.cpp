@@ -367,6 +367,14 @@ template <typename S> void run(const map<string, string> &params) {
         }
     }
 
+    // keep some number of states for each sparse block
+    if (params.count("trunc_type_keep") != 0) {
+        uint16_t n_keep =
+            (uint16_t)Parsing::to_int(params.at("trunc_type_keep"));
+        dmrg->trunc_type =
+            dmrg->trunc_type | (TruncationTypes::KeepOne * n_keep);
+    }
+
     if (params.count("cutoff") != 0)
         dmrg->cutoff = Parsing::to_double(params.at("cutoff"));
 
