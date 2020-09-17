@@ -1244,6 +1244,8 @@ template <typename S> void bind_algorithms(py::module &m) {
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
     py::class_<DMRGSCI<S>, shared_ptr<DMRGSCI<S>>, DMRG<S>>(m, "DMRGSCI")
+            .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                    const vector<uint16_t> &, const vector<double> &>())
             .def("blocking", &DMRGSCI<S>::blocking);
 
     py::class_<typename ImaginaryTE<S>::Iteration,
