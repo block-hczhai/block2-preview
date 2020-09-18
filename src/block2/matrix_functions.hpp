@@ -340,7 +340,7 @@ struct MatrixFunctions {
         assert(info == 0);
         memset(l.data, 0, sizeof(double) * k * a.m);
         for (int j = 0; j < a.m; j++)
-            memcpy(l.data + j * k, t + j * a.n, sizeof(double) * (j + 1));
+            memcpy(l.data + j * k, t + j * a.n, sizeof(double) * min(j + 1, k));
         dorgqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memcpy(q.data, t, sizeof(double) * k * a.n);

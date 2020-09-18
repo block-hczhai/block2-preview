@@ -789,6 +789,7 @@ template <typename S> struct DMRG {
         discarded_weights.clear();
         mps_quanta.clear();
         bool converged;
+        double energy_difference;
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
                 cout << "Sweep = " << setw(4) << iw
@@ -804,9 +805,9 @@ template <typename S> struct DMRG {
             energies.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             mps_quanta.push_back(get<2>(sweep_results));
-            auto energy_difference = iw == 0 ? 42.0 :
-                    energies[energies.size() - 1].back() -
-                    energies[energies.size() - 2].back();
+            if (energies.size() >= 2)
+                energy_difference = energies[energies.size() - 1].back() -
+                                    energies[energies.size() - 2].back();
             converged = energies.size() >= 2 && tol > 0 &&
                         abs(energy_difference) < tol &&
                         noises[iw] == noises.back() &&
@@ -829,9 +830,9 @@ template <typename S> struct DMRG {
             if (iprint >= 1) {
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current;
-                if(iw > 0)
-                    cout << " | Energy difference = " << setw(6) << setprecision(2) << scientific
-                         << energy_difference;
+                if (energies.size() >= 2)
+                    cout << " | Energy difference = " << setw(6)
+                         << setprecision(2) << scientific << energy_difference;
                 cout << endl;
             }
 
@@ -839,9 +840,9 @@ template <typename S> struct DMRG {
                 break;
         }
         this->forward = forward;
-        if(not converged and iprint > 0){
-            cout << "ATTENTION: DMRG is not converged to desired tolerance of." << tol << endl;
-        }
+        if (!converged && iprint > 0)
+            cout << "ATTENTION: DMRG is not converged to desired tolerance of "
+                 << tol << endl;
         return energies.back()[0];
     }
 };
