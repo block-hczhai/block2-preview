@@ -814,22 +814,20 @@ template <typename S> struct DMRG {
                         bond_dims[iw] == bond_dims.back();
             forward = !forward;
             current.get_time();
-            if (iprint == 1) {
+            if (iprint >= 1) {
+                cout << "Time elapsed = " << setw(10) << setprecision(3)
+                     << current.current - start.current;
                 cout << fixed << setprecision(8);
                 if (get<0>(sweep_results).size() == 1)
-                    cout << " .. Energy = " << setw(15)
+                    cout << " | Energy = " << setw(15)
                          << get<0>(sweep_results)[0] << " ";
                 else {
-                    cout << " .. Energy[" << setw(3)
+                    cout << " | Energy[" << setw(3)
                          << get<0>(sweep_results).size() << "] = ";
                     for (double x : get<0>(sweep_results))
                         cout << setw(15) << x;
                     cout << " ";
                 }
-            }
-            if (iprint >= 1) {
-                cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current;
                 if (energies.size() >= 2)
                     cout << " | Energy difference = " << setw(6)
                          << setprecision(2) << scientific << energy_difference;
@@ -842,7 +840,7 @@ template <typename S> struct DMRG {
         this->forward = forward;
         if (!converged && iprint > 0)
             cout << "ATTENTION: DMRG is not converged to desired tolerance of "
-                 << tol << endl;
+                 << scientific << tol << endl;
         return energies.back()[0];
     }
 };
