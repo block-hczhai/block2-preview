@@ -42,7 +42,7 @@ class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
     template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<double> &energies,
                    const HamiltonianQC<S> &hamil, const string &name,
-                   uint16_t bond_dim, uint16_t nroots);
+                   ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -60,7 +60,7 @@ template <typename S>
 void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
                                   const vector<double> &energies,
                                   const HamiltonianQC<S> &hamil,
-                                  const string &name, uint16_t bond_dim,
+                                  const string &name, ubond_t bond_dim,
                                   uint16_t nroots) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
@@ -98,7 +98,7 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
-    vector<uint16_t> bdims = {bond_dim};
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-6, 1E-7, 0.0};
 
     t.get_time();

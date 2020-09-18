@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <set>
 #include <type_traits>
@@ -31,6 +32,22 @@
 using namespace std;
 
 namespace block2 {
+
+#ifdef _LARGE_BOND
+typedef uint32_t ubond_t;
+#define _SI_MEM_SIZE(n) ((n) << 1)
+#define _DBL_MEM_SIZE(n) ((n) << 1)
+#else
+#ifdef _SMALL_BOND
+typedef uint8_t ubond_t;
+#define _SI_MEM_SIZE(n) ((n) + (((n) + 3) >> 2))
+#define _DBL_MEM_SIZE(n) ((n) - ((n) >> 1))
+#else
+typedef uint16_t ubond_t;
+#define _SI_MEM_SIZE(n) (((n) << 1) - ((n) >> 1))
+#define _DBL_MEM_SIZE(n) (n)
+#endif
+#endif
 
 template <typename, typename = void> struct StateInfo;
 
@@ -42,7 +59,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
     // Array for symmetry labels
     S *quanta;
     // Array for number of states
-    uint16_t *n_states;
+    ubond_t *n_states;
     int n_states_total, n;
     StateInfo()
         : quanta(0), n_states(0), n_states_total(0), n(0), vdata(nullptr) {}
@@ -57,15 +74,15 @@ struct StateInfo<S, typename enable_if<integral_constant<
                                 "' failed.");
         ifs.read((char *)&n_states_total, sizeof(n_states_total));
         ifs.read((char *)&n, sizeof(n));
-        vdata = make_shared<vector<uint32_t>>((n << 1) - (n >> 1));
+        vdata = make_shared<vector<uint32_t>>(_SI_MEM_SIZE(n));
         uint32_t *ptr = vdata->data();
-        ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        ifs.read((char *)ptr, sizeof(uint32_t) * _SI_MEM_SIZE(n));
         if (ifs.fail() || ifs.bad())
             throw runtime_error("StateInfo::load_data on '" + filename +
                                 "' failed.");
         ifs.close();
         quanta = (S *)ptr;
-        n_states = (uint16_t *)(ptr + n);
+        n_states = (ubond_t *)(ptr + n);
     }
     void save_data(const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
@@ -74,7 +91,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
                                 "' failed.");
         ofs.write((char *)&n_states_total, sizeof(n_states_total));
         ofs.write((char *)&n, sizeof(n));
-        ofs.write((char *)quanta, sizeof(uint32_t) * ((n << 1) - (n >> 1)));
+        ofs.write((char *)quanta, sizeof(uint32_t) * _SI_MEM_SIZE(n));
         if (!ofs.good())
             throw runtime_error("StateInfo::save_data on '" + filename +
                                 "' failed.");
@@ -83,25 +100,25 @@ struct StateInfo<S, typename enable_if<integral_constant<
     // need length * 2
     void allocate(int length, uint32_t *ptr = 0) {
         if (ptr == 0) {
-            vdata =
-                make_shared<vector<uint32_t>>((length << 1) - (length >> 1));
+            vdata = make_shared<vector<uint32_t>>(_SI_MEM_SIZE(length));
             ptr = vdata->data();
         }
         n = length;
         quanta = (S *)ptr;
-        n_states = (uint16_t *)(ptr + length);
+        n_states = (ubond_t *)(ptr + length);
     }
     void reallocate(int length) {
         if (length < n) {
-            memmove(quanta + length, n_states, length * sizeof(uint16_t));
-            vdata->resize((length << 1) - (length >> 1));
+            memmove(quanta + length, n_states, length * sizeof(ubond_t));
+            vdata->resize(_SI_MEM_SIZE(length));
             quanta = (S *)vdata->data();
-            n_states = (uint16_t *)(quanta + length);
+            n_states = (ubond_t *)(quanta + length);
         } else if (length > n) {
-            vdata->resize((length << 1) - (length >> 1));
+            vdata->resize(_SI_MEM_SIZE(length));
             quanta = (S *)vdata->data();
-            memmove(quanta + length, n_states, length * sizeof(uint16_t));
-            n_states = (uint16_t *)(quanta + length);
+            n_states = (ubond_t *)(quanta + n);
+            memmove(quanta + length, n_states, length * sizeof(ubond_t));
+            n_states = (ubond_t *)(quanta + length);
         }
         n = length;
     }
@@ -119,14 +136,14 @@ struct StateInfo<S, typename enable_if<integral_constant<
     }
     void copy_data_to(StateInfo &other) const {
         assert(other.n == n);
-        memcpy(other.quanta, quanta, ((n << 1) - (n >> 1)) * sizeof(uint32_t));
+        memcpy(other.quanta, quanta, _SI_MEM_SIZE(n) * sizeof(uint32_t));
     }
     void sort_states() {
         int idx[n];
         S q[n];
-        uint16_t nq[n];
+        ubond_t nq[n];
         memcpy(q, quanta, n * sizeof(S));
-        memcpy(nq, n_states, n * sizeof(uint16_t));
+        memcpy(nq, n_states, n * sizeof(ubond_t));
         for (int i = 0; i < n; i++)
             idx[i] = i;
         sort(idx, idx + n, [&q](int i, int j) { return q[i] < q[j]; });
@@ -146,7 +163,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
                 n_states[k] =
-                    (uint16_t)min((uint32_t)n_states[k] + n_states[i], 65535U);
+                    (ubond_t)min((uint32_t)n_states[k] + n_states[i],
+                                 (uint32_t)numeric_limits<ubond_t>::max());
             else {
                 k++;
                 quanta[k] = quanta[i];
@@ -184,7 +202,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         StateInfo c;
         c.allocate(cref.n);
         memcpy(c.quanta, cref.quanta, c.n * sizeof(S));
-        memset(c.n_states, 0, c.n * sizeof(uint16_t));
+        memset(c.n_states, 0, c.n * sizeof(ubond_t));
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {
                 S qc = a.quanta[i] + b.quanta[j];
@@ -194,7 +212,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
                         uint32_t nprod =
                             (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j] +
                             (uint32_t)c.n_states[ic];
-                        c.n_states[ic] = (uint16_t)min(nprod, 65535U);
+                        c.n_states[ic] = (ubond_t)min(
+                            nprod, (uint32_t)numeric_limits<ubond_t>::max());
                     }
                 }
             }
@@ -218,7 +237,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
                     c.quanta[ic + k] = qc[k];
                     uint32_t nprod =
                         (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j];
-                    c.n_states[ic + k] = (uint16_t)min(nprod, 65535U);
+                    c.n_states[ic + k] = (ubond_t)min(
+                        nprod, (uint32_t)numeric_limits<ubond_t>::max());
                 }
                 ic += qc.count();
             }
@@ -258,12 +278,12 @@ struct StateInfo<S, typename enable_if<integral_constant<
         a.n_states_total = 0;
         for (int i = 0; i < a.n; i++) {
             S qb = target - a.quanta[i];
-            int x = 0;
+            uint32_t x = 0;
             for (int k = 0; k < qb.count(); k++) {
                 int idx = b.find_state(qb[k]);
-                x += idx == -1 ? 0 : b.n_states[idx];
+                x += idx == -1 ? 0 : (uint32_t)b.n_states[idx];
             }
-            a.n_states[i] = (uint16_t)min(x, (int)a.n_states[i]);
+            a.n_states[i] = (ubond_t)min(x, (uint32_t)a.n_states[i]);
             a.n_states_total += a.n_states[i];
         }
     }
@@ -278,16 +298,17 @@ struct StateInfo<S, typename enable_if<integral_constant<
                     if ((idx = b.find_state(qb[k])) != -1)
                         idxs.insert(idx);
             }
-            int x = 0;
+            uint32_t x = 0;
             for (auto idx : idxs)
-                x += b.n_states[idx];
-            a.n_states[i] = (uint16_t)min(x, (int)a.n_states[i]);
+                x += (uint32_t)b.n_states[idx];
+            a.n_states[i] = (ubond_t)min(x, (uint32_t)a.n_states[i]);
             a.n_states_total += a.n_states[i];
         }
     }
     friend ostream &operator<<(ostream &os, const StateInfo<S> &c) {
         for (int i = 0; i < c.n; i++)
-            os << c.quanta[i].to_str() << " : " << c.n_states[i] << endl;
+            os << c.quanta[i].to_str() << " : " << (uint32_t)c.n_states[i]
+               << endl;
         return os;
     }
 };

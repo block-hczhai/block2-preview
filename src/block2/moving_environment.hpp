@@ -719,19 +719,23 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
 };
 
-enum struct TruncationTypes : uint16_t {
+enum struct TruncationTypes : ubond_t {
     Physical = 0,
     Reduced = 1,
     ReducedInversed = 2,
     KeepOne = 4,
 };
 
-inline TruncationTypes operator*(TruncationTypes a, uint16_t b) {
-    return TruncationTypes((uint16_t)a * b);
+inline TruncationTypes operator*(TruncationTypes a, ubond_t b) {
+    return TruncationTypes((ubond_t)a * b);
 }
 
 inline TruncationTypes operator|(TruncationTypes a, TruncationTypes b) {
-    return TruncationTypes((uint16_t)a | (uint16_t)b);
+    return TruncationTypes((ubond_t)a | (ubond_t)b);
+}
+
+inline ubond_t operator&(TruncationTypes a, TruncationTypes b) {
+    return (ubond_t)a & (ubond_t)b;
 }
 
 // A tensor network < bra | mpo | ket >
@@ -1701,11 +1705,10 @@ template <typename S> struct MovingEnvironment {
             MatrixRef wr(nullptr, w.n, 1);
             wr.allocate();
             MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
-            if ((uint16_t)trunc_type & (uint16_t)TruncationTypes::Reduced)
+            if (trunc_type & TruncationTypes::Reduced)
                 MatrixFunctions::iscale(
                     wr, 1.0 / dm->info->quanta[i].multiplicity());
-            else if ((uint16_t)trunc_type &
-                     (uint16_t)TruncationTypes::ReducedInversed)
+            else if (trunc_type & TruncationTypes::ReducedInversed)
                 MatrixFunctions::iscale(wr, dm->info->quanta[i].multiplicity());
             eigen_values.push_back(w);
             eigen_values_reduced.push_back(wr);
@@ -1724,7 +1727,7 @@ template <typename S> struct MovingEnvironment {
                      return eigen_values_reduced[a.first].data[a.second] >
                             eigen_values_reduced[b.first].data[b.second];
                  });
-            if (((uint16_t)trunc_type >> 2) == 0) {
+            if (((ubond_t)trunc_type >> 2) == 0) {
                 for (int i = k; i < k_total; i++) {
                     double x = eigen_values[ss[i].first].data[ss[i].second];
                     if (x > 0)
@@ -1742,7 +1745,7 @@ template <typename S> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                uint16_t keep = (uint16_t)trunc_type >> 2;
+                ubond_t keep = (ubond_t)trunc_type >> 2;
                 vector<int> mask(eigen_values.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
@@ -1794,11 +1797,10 @@ template <typename S> struct MovingEnvironment {
         for (int i = 0; i < (int)s.size(); i++) {
             shared_ptr<Tensor> wr = make_shared<Tensor>(s[i]->shape);
             MatrixFunctions::copy(wr->ref(), s[i]->ref());
-            if ((uint16_t)trunc_type & (uint16_t)TruncationTypes::Reduced)
+            if (trunc_type & TruncationTypes::Reduced)
                 MatrixFunctions::iscale(wr->ref(),
                                         sqrt(1.0 / qs[i].multiplicity()));
-            else if ((uint16_t)trunc_type &
-                     (uint16_t)TruncationTypes::ReducedInversed)
+            else if (trunc_type & TruncationTypes::ReducedInversed)
                 MatrixFunctions::iscale(wr->ref(), sqrt(qs[i].multiplicity()));
             s_reduced.push_back(wr);
             k_total += wr->shape[0];
@@ -1816,7 +1818,7 @@ template <typename S> struct MovingEnvironment {
                     return s_reduced[a.first]->data[a.second] >
                            s_reduced[b.first]->data[b.second];
                 });
-            if (((uint16_t)trunc_type >> 2) == 0) {
+            if (((ubond_t)trunc_type >> 2) == 0) {
                 for (int i = k; i < k_total; i++) {
                     double x = s[ss[i].first]->data[ss[i].second];
                     if (x > 0)
@@ -1834,7 +1836,7 @@ template <typename S> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                uint16_t keep = (uint16_t)trunc_type >> 2;
+                ubond_t keep = (ubond_t)trunc_type >> 2;
                 vector<int> mask(s.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
@@ -1871,11 +1873,9 @@ template <typename S> struct MovingEnvironment {
         return error;
     }
     // Get rotation matrix info from svd info
-    static shared_ptr<SparseMatrixInfo<S>>
-    rotation_matrix_info_from_svd(S opdq, const vector<S> &qs,
-                                  const vector<shared_ptr<Tensor>> &ts,
-                                  bool trace_right, const vector<uint16_t> &ilr,
-                                  const vector<uint16_t> &im) {
+    static shared_ptr<SparseMatrixInfo<S>> rotation_matrix_info_from_svd(
+        S opdq, const vector<S> &qs, const vector<shared_ptr<Tensor>> &ts,
+        bool trace_right, const vector<int> &ilr, const vector<ubond_t> &im) {
         shared_ptr<SparseMatrixInfo<S>> rinfo =
             make_shared<SparseMatrixInfo<S>>();
         rinfo->is_fermion = false;
@@ -1898,8 +1898,8 @@ template <typename S> struct MovingEnvironment {
     // Get wavefunction matrix info from svd info
     static shared_ptr<SparseMatrixInfo<S>> wavefunction_info_from_svd(
         const vector<S> &qs, const shared_ptr<SparseMatrixInfo<S>> &wfninfo,
-        bool trace_right, const vector<uint16_t> &ilr,
-        const vector<uint16_t> &im, vector<vector<uint16_t>> &idx_dm_to_wfn) {
+        bool trace_right, const vector<int> &ilr, const vector<ubond_t> &im,
+        vector<vector<int>> &idx_dm_to_wfn) {
         shared_ptr<SparseMatrixInfo<S>> winfo =
             make_shared<SparseMatrixInfo<S>>();
         winfo->is_fermion = false;
@@ -1944,7 +1944,7 @@ template <typename S> struct MovingEnvironment {
     static shared_ptr<SparseMatrixInfo<S>>
     rotation_matrix_info_from_density_matrix(
         const shared_ptr<SparseMatrixInfo<S>> &dminfo, bool trace_right,
-        const vector<uint16_t> &ilr, const vector<uint16_t> &im) {
+        const vector<int> &ilr, const vector<ubond_t> &im) {
         shared_ptr<SparseMatrixInfo<S>> rinfo =
             make_shared<SparseMatrixInfo<S>>();
         rinfo->is_fermion = false;
@@ -1971,8 +1971,8 @@ template <typename S> struct MovingEnvironment {
     wavefunction_info_from_density_matrix(
         const shared_ptr<SparseMatrixInfo<S>> &dminfo,
         const shared_ptr<SparseMatrixInfo<S>> &wfninfo, bool trace_right,
-        const vector<uint16_t> &ilr, const vector<uint16_t> &im,
-        vector<vector<uint16_t>> &idx_dm_to_wfn) {
+        const vector<int> &ilr, const vector<ubond_t> &im,
+        vector<vector<int>> &idx_dm_to_wfn) {
         shared_ptr<SparseMatrixInfo<S>> winfo =
             make_shared<SparseMatrixInfo<S>>();
         winfo->is_fermion = false;
@@ -2029,7 +2029,8 @@ template <typename S> struct MovingEnvironment {
             qs, s, ss, k, cutoff, trunc_type);
         // ilr: row index in singular values list
         // im: number of states
-        vector<uint16_t> ilr, im;
+        vector<int> ilr;
+        vector<ubond_t> im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
         if (ss.size() != 0)
@@ -2040,7 +2041,7 @@ template <typename S> struct MovingEnvironment {
             else
                 ++im.back();
         shared_ptr<SparseMatrixInfo<S>> linfo, rinfo;
-        vector<vector<uint16_t>> idx_dm_to_wfn;
+        vector<vector<int>> idx_dm_to_wfn;
         if (trace_right) {
             linfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
                 opdq, qs, l, true, ilr, im);
@@ -2143,7 +2144,8 @@ template <typename S> struct MovingEnvironment {
             dm, ss, k, cutoff, trunc_type);
         // ilr: row index in dm
         // im: number of states
-        vector<uint16_t> ilr, im;
+        vector<int> ilr;
+        vector<ubond_t> im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
         if (ss.size() != 0)
@@ -2154,7 +2156,7 @@ template <typename S> struct MovingEnvironment {
             else
                 ++im.back();
         shared_ptr<SparseMatrixInfo<S>> linfo, rinfo;
-        vector<vector<uint16_t>> idx_dm_to_wfn;
+        vector<vector<int>> idx_dm_to_wfn;
         if (trace_right) {
             linfo =
                 MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
@@ -2237,7 +2239,8 @@ template <typename S> struct MovingEnvironment {
             dm, ss, k, cutoff, trunc_type);
         // ilr: row index in dm
         // im: number of states
-        vector<uint16_t> ilr, im;
+        vector<int> ilr;
+        vector<ubond_t> im;
         ilr.reserve(ss.size());
         im.reserve(ss.size());
         if (ss.size() != 0)
@@ -2249,7 +2252,7 @@ template <typename S> struct MovingEnvironment {
                 ++im.back();
         shared_ptr<SparseMatrixInfo<S>> rinfo;
         vector<shared_ptr<SparseMatrixInfo<S>>> winfos;
-        vector<vector<vector<uint16_t>>> idx_dm_to_wfns;
+        vector<vector<vector<int>>> idx_dm_to_wfns;
         idx_dm_to_wfns.resize(wfns[0]->n);
         if (trace_right)
             rinfo =

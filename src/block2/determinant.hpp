@@ -201,7 +201,7 @@ template <typename S> struct DeterminantQC {
     S det_quantum(const vector<uint8_t> &det, int i_begin, int i_end) const {
         int n_block_sites = i_end - i_begin;
         assert(det.size() == n_block_sites);
-        uint16_t n = 0, twos = 0, ipg = 0;
+        int n = 0, twos = 0, ipg = 0;
         for (int i = 0; i < n_block_sites; i++) {
             n += det[i];
             if (det[i] == 1)
@@ -247,7 +247,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     shared_ptr<FCIDUMP> fcidump;
     shared_ptr<DeterminantQC<S>> det;
     vector<uint8_t> iocc;
-    uint16_t n_det_states = 2; // number of states for each determinant
+    ubond_t n_det_states = 2; // number of states for each determinant
     DeterminantMPSInfo(int n_sites, S vacuum, S target,
                        const vector<shared_ptr<StateInfo<S>>> &basis,
                        const vector<uint8_t> &orb_sym, uint8_t n_syms,
@@ -257,7 +257,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
           det(make_shared<DeterminantQC<S>>(iocc, orb_sym,
                                             fcidump->h1e_energy())),
           MPSInfo<S>(n_sites, vacuum, target, basis, n_syms) {}
-    void set_bond_dimension(uint16_t m) override {
+    void set_bond_dimension(ubond_t m) override {
         this->bond_dim = m;
         this->left_dims[0] = make_shared<StateInfo<S>>(this->vacuum);
         this->right_dims[this->n_sites] =
@@ -362,7 +362,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             rref = rr;
         }
         // get complementary quantum numbers
-        map<S, uint16_t> qs;
+        map<S, ubond_t> qs;
         for (int i = 0; i < rref.n; i++) {
             S qls = this->target - rref.quanta[i];
             for (int k = 0; k < qls.count(); k++)
@@ -403,7 +403,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             lref = ll;
         }
         // get complementary quantum numbers
-        map<S, uint16_t> qs;
+        map<S, ubond_t> qs;
         for (int i = 0; i < lref.n; i++) {
             S qrs = this->target - lref.quanta[i];
             for (int k = 0; k < qrs.count(); k++)

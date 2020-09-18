@@ -44,7 +44,7 @@ enum struct DecompositionTypes : uint8_t { SVD = 0, DensityMatrix = 1 };
 // Density Matrix Renormalization Group
 template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
-    vector<uint16_t> bond_dims;
+    vector<ubond_t> bond_dims;
     vector<double> noises;
     vector<vector<double>> energies;
     vector<double> discarded_weights;
@@ -61,7 +61,7 @@ template <typename S> struct DMRG {
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
-         const vector<uint16_t> &bond_dims, const vector<double> &noises)
+         const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
         vector<double> energies;
@@ -104,7 +104,7 @@ template <typename S> struct DMRG {
     };
     // one-site single-state dmrg algorithm
     // canonical form for wavefunction: K = left-fused, S = right-fused
-    Iteration update_one_dot(int i, bool forward, uint16_t bond_dim,
+    Iteration update_one_dot(int i, bool forward, ubond_t bond_dim,
                              double noise, double davidson_conv_thrd) {
         frame->activate(0);
         bool fuse_left = i <= me->n_sites / 2;
@@ -313,7 +313,7 @@ template <typename S> struct DMRG {
     }
     // two-site single-state dmrg algorithm
     // canonical form for wavefunction: C = center
-    Iteration update_two_dot(int i, bool forward, uint16_t bond_dim,
+    Iteration update_two_dot(int i, bool forward, ubond_t bond_dim,
                              double noise, double davidson_conv_thrd) {
         frame->activate(0);
         if (me->ket->tensors[i] != nullptr &&
@@ -421,7 +421,7 @@ template <typename S> struct DMRG {
     }
     // State-averaged one-site algorithm
     // canonical form for wavefunction: J = left-fused, T = right-fused
-    Iteration update_multi_one_dot(int i, bool forward, uint16_t bond_dim,
+    Iteration update_multi_one_dot(int i, bool forward, ubond_t bond_dim,
                                    double noise, double davidson_conv_thrd) {
         shared_ptr<MultiMPS<S>> mket =
             dynamic_pointer_cast<MultiMPS<S>>(me->ket);
@@ -605,7 +605,7 @@ template <typename S> struct DMRG {
     }
     // State-averaged two-site algorithm
     // canonical form for wavefunction: M = multi center
-    Iteration update_multi_two_dot(int i, bool forward, uint16_t bond_dim,
+    Iteration update_multi_two_dot(int i, bool forward, ubond_t bond_dim,
                                    double noise, double davidson_conv_thrd) {
         shared_ptr<MultiMPS<S>> mket =
             dynamic_pointer_cast<MultiMPS<S>>(me->ket);
@@ -705,7 +705,7 @@ template <typename S> struct DMRG {
         r.quanta = mps_quanta;
         return r;
     }
-    virtual Iteration blocking(int i, bool forward, uint16_t bond_dim,
+    virtual Iteration blocking(int i, bool forward, ubond_t bond_dim,
                                double noise, double davidson_conv_thrd) {
         me->move_to(i);
         assert(me->dot == 1 || me->dot == 2);
@@ -728,7 +728,7 @@ template <typename S> struct DMRG {
         }
     }
     tuple<vector<double>, double, vector<vector<pair<S, double>>>>
-    sweep(bool forward, uint16_t bond_dim, double noise,
+    sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
         me->prepare();
         vector<vector<double>> energies;
@@ -854,7 +854,7 @@ enum struct TruncPatternTypes : uint8_t { None, TruncAfterOdd, TruncAfterEven };
 // Imaginary Time Evolution
 template <typename S> struct ImaginaryTE {
     shared_ptr<MovingEnvironment<S>> me;
-    vector<uint16_t> bond_dims;
+    vector<ubond_t> bond_dims;
     vector<double> noises;
     vector<double> errors;
     vector<double> energies;
@@ -869,7 +869,7 @@ template <typename S> struct ImaginaryTE {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     ImaginaryTE(const shared_ptr<MovingEnvironment<S>> &me,
-                const vector<uint16_t> &bond_dims,
+                const vector<ubond_t> &bond_dims,
                 TETypes mode = TETypes::TangentSpace, int n_sub_sweeps = 1)
         : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
           forward(false), mode(mode), n_sub_sweeps(n_sub_sweeps) {}
@@ -896,7 +896,7 @@ template <typename S> struct ImaginaryTE {
     };
     // one-site algorithm
     Iteration update_one_dot(int i, bool forward, bool advance, double beta,
-                             uint16_t bond_dim, double noise) {
+                             ubond_t bond_dim, double noise) {
         frame->activate(0);
         bool fuse_left = i <= me->n_sites / 2;
         if (me->ket->canonical_form[i] == 'C') {
@@ -1183,7 +1183,7 @@ template <typename S> struct ImaginaryTE {
     }
     // two-site algorithm
     Iteration update_two_dot(int i, bool forward, bool advance, double beta,
-                             uint16_t bond_dim, double noise) {
+                             ubond_t bond_dim, double noise) {
         frame->activate(0);
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr)
@@ -1349,7 +1349,7 @@ template <typename S> struct ImaginaryTE {
                          expok, get<3>(pdi), get<4>(pdi));
     }
     Iteration blocking(int i, bool forward, bool advance, double beta,
-                       uint16_t bond_dim, double noise) {
+                       ubond_t bond_dim, double noise) {
         me->move_to(i);
         assert(me->dot == 2 || me->dot == 1);
         if (me->dot == 2)
@@ -1358,7 +1358,7 @@ template <typename S> struct ImaginaryTE {
             return update_one_dot(i, forward, advance, beta, bond_dim, noise);
     }
     tuple<double, double, double> sweep(bool forward, bool advance, double beta,
-                                        uint16_t bond_dim, double noise) {
+                                        ubond_t bond_dim, double noise) {
         me->prepare();
         vector<double> energies, normsqs;
         vector<int> sweep_range;
@@ -1459,7 +1459,7 @@ template <typename S> struct ImaginaryTE {
 // Compression
 template <typename S> struct Compress {
     shared_ptr<MovingEnvironment<S>> me;
-    vector<uint16_t> bra_bond_dims, ket_bond_dims;
+    vector<ubond_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
     vector<double> norms;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -1468,9 +1468,8 @@ template <typename S> struct Compress {
     uint8_t iprint = 2;
     double cutoff = 0.0;
     Compress(const shared_ptr<MovingEnvironment<S>> &me,
-             const vector<uint16_t> &bra_bond_dims,
-             const vector<uint16_t> &ket_bond_dims,
-             const vector<double> &noises)
+             const vector<ubond_t> &bra_bond_dims,
+             const vector<ubond_t> &ket_bond_dims, const vector<double> &noises)
         : me(me), bra_bond_dims(bra_bond_dims), ket_bond_dims(ket_bond_dims),
           noises(noises), forward(false) {}
     struct Iteration {
@@ -1492,8 +1491,8 @@ template <typename S> struct Compress {
             return os;
         }
     };
-    Iteration update_one_dot(int i, bool forward, uint16_t bra_bond_dim,
-                             uint16_t ket_bond_dim, double noise) {
+    Iteration update_one_dot(int i, bool forward, ubond_t bra_bond_dim,
+                             ubond_t ket_bond_dim, double noise) {
         assert(me->bra != me->ket);
         frame->activate(0);
         bool fuse_left = i <= me->n_sites / 2;
@@ -1656,8 +1655,8 @@ template <typename S> struct Compress {
         return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
                          get<2>(pdi));
     }
-    Iteration update_two_dot(int i, bool forward, uint16_t bra_bond_dim,
-                             uint16_t ket_bond_dim, double noise) {
+    Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
+                             ubond_t ket_bond_dim, double noise) {
         assert(me->bra != me->ket);
         frame->activate(0);
         for (auto &mps : {me->bra, me->ket}) {
@@ -1739,8 +1738,8 @@ template <typename S> struct Compress {
         return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
                          get<2>(pdi));
     }
-    Iteration blocking(int i, bool forward, uint16_t bra_bond_dim,
-                       uint16_t ket_bond_dim, double noise) {
+    Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
+                       ubond_t ket_bond_dim, double noise) {
         me->move_to(i);
         if (me->dot == 2)
             return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim,
@@ -1749,7 +1748,7 @@ template <typename S> struct Compress {
             return update_one_dot(i, forward, bra_bond_dim, ket_bond_dim,
                                   noise);
     }
-    double sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim,
+    double sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim,
                  double noise) {
         me->prepare();
         vector<double> norms;
@@ -1846,7 +1845,7 @@ get_partition_weights(double beta, const vector<double> &energies,
 // Expectation value
 template <typename S> struct Expect {
     shared_ptr<MovingEnvironment<S>> me;
-    uint16_t bra_bond_dim, ket_bond_dim;
+    ubond_t bra_bond_dim, ket_bond_dim;
     vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> expectations;
     bool forward;
     TruncationTypes trunc_type = TruncationTypes::Physical;
@@ -1855,15 +1854,15 @@ template <typename S> struct Expect {
     double beta = 0.0;
     // partition function (for thermal-averaged MultiMPS)
     vector<long double> partition_weights;
-    Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
-           uint16_t ket_bond_dim)
+    Expect(const shared_ptr<MovingEnvironment<S>> &me, ubond_t bra_bond_dim,
+           ubond_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
           forward(false) {
         expectations.resize(me->n_sites - me->dot + 1);
         partition_weights = vector<long double>{1.0L};
     }
-    Expect(const shared_ptr<MovingEnvironment<S>> &me, uint16_t bra_bond_dim,
-           uint16_t ket_bond_dim, double beta, const vector<double> &energies,
+    Expect(const shared_ptr<MovingEnvironment<S>> &me, ubond_t bra_bond_dim,
+           ubond_t ket_bond_dim, double beta, const vector<double> &energies,
            const vector<int> &multiplicities)
         : Expect(me, bra_bond_dim, ket_bond_dim) {
         this->beta = beta;
@@ -1896,7 +1895,7 @@ template <typename S> struct Expect {
         }
     };
     Iteration update_one_dot(int i, bool forward, bool propagate,
-                             uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
+                             ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         frame->activate(0);
         vector<shared_ptr<MPS<S>>> mpss =
             me->bra == me->ket ? vector<shared_ptr<MPS<S>>>{me->bra}
@@ -2063,7 +2062,7 @@ template <typename S> struct Expect {
                          get<2>(pdi));
     }
     Iteration update_two_dot(int i, bool forward, bool propagate,
-                             uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
+                             ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         frame->activate(0);
         vector<shared_ptr<MPS<S>>> mpss =
             me->bra == me->ket ? vector<shared_ptr<MPS<S>>>{me->bra}
@@ -2156,8 +2155,7 @@ template <typename S> struct Expect {
                          get<2>(pdi));
     }
     Iteration update_multi_one_dot(int i, bool forward, bool propagate,
-                                   uint16_t bra_bond_dim,
-                                   uint16_t ket_bond_dim) {
+                                   ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         shared_ptr<MultiMPS<S>> mket =
                                     dynamic_pointer_cast<MultiMPS<S>>(me->ket),
                                 mbra =
@@ -2375,8 +2373,7 @@ template <typename S> struct Expect {
                          get<2>(pdi));
     }
     Iteration update_multi_two_dot(int i, bool forward, bool propagate,
-                                   uint16_t bra_bond_dim,
-                                   uint16_t ket_bond_dim) {
+                                   ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         shared_ptr<MultiMPS<S>> mket =
                                     dynamic_pointer_cast<MultiMPS<S>>(me->ket),
                                 mbra =
@@ -2498,7 +2495,7 @@ template <typename S> struct Expect {
                          get<2>(pdi));
     }
     Iteration blocking(int i, bool forward, bool propagate,
-                       uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
+                       ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         me->move_to(i);
         assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {
@@ -2519,7 +2516,7 @@ template <typename S> struct Expect {
                                       ket_bond_dim);
         }
     }
-    void sweep(bool forward, uint16_t bra_bond_dim, uint16_t ket_bond_dim) {
+    void sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         me->prepare();
         vector<int> sweep_range;
         if (forward)

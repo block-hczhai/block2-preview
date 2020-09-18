@@ -26,7 +26,7 @@ Revised:     added sz, May 18, 2020
 
 from block2 import SU2, SZ
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
-from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
+from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
 from block2 import init_memory, release_memory, set_mkl_num_threads
 import time
 import numpy as np
@@ -95,7 +95,7 @@ class FTDMRG:
                     assert abs(h1e[i, j] - h1e[j, i]) < tol
                     mh1e[k] = h1e[i, j]
                     k += 1
-            mg2e = g2e.flatten().copy()
+            mg2e = g2e.flatten()
             mh1e[np.abs(mh1e) < tol] = 0.0
             mg2e[np.abs(mg2e) < tol] = 0.0
             self.fcidump.initialize_su2(
@@ -115,7 +115,7 @@ class FTDMRG:
                         xmh1e[k] = xh1e[i, j]
                         k += 1
                 xmh1e[np.abs(xmh1e) < tol] = 0.0
-            mg2e = tuple(xg2e.flatten().copy() for xg2e in g2e)
+            mg2e = tuple(xg2e.flatten() for xg2e in g2e)
             for xmg2e in mg2e:
                 xmg2e[np.abs(xmg2e) < tol] = 0.0
             self.fcidump.initialize_sz(
@@ -214,7 +214,7 @@ class FTDMRG:
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
             print('TE INIT time = ', time.perf_counter() - tx)
-        te = ImaginaryTE(me, VectorUInt16(bond_dims), method, n_sub_sweeps)
+        te = ImaginaryTE(me, VectorUBond(bond_dims), method, n_sub_sweeps)
         te.iprint = self.verbose
         te.solve(n_steps, beta_step, mps.center == 0)
 
@@ -275,8 +275,8 @@ class FTDMRG:
         ime.init_environments()
 
         # Compress
-        cps = Compress(ime, VectorUInt16(
-            [bond_dim]), VectorUInt16([10]), VectorDouble([0.0]))
+        cps = Compress(ime, VectorUBond(
+            [bond_dim]), VectorUBond([10]), VectorDouble([0.0]))
         cps.solve(30, False)
 
         mps_info.load_mutable()

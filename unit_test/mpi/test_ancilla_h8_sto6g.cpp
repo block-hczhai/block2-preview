@@ -105,9 +105,9 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 500;
+    ubond_t bond_dim = 500;
     double beta = 0.05;
-    vector<uint16_t> bdims = {bond_dim};
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> te_energies;
 
     // Ancilla MPSInfo (thermal)

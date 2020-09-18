@@ -111,9 +111,9 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
     impo = make_shared<ParallelMPO<S>>(impo, para_rule);
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 500;
+    ubond_t bond_dim = 500;
     double beta = 0.05;
-    vector<uint16_t> bdims = {bond_dim};
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> te_energies, noises = {0.0};
 
     // Ancilla MPSInfo (thermal)

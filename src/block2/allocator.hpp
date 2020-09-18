@@ -158,7 +158,7 @@ struct DataFrame {
     string save_dir, prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
     size_t isize, dsize;
-    uint16_t n_frames, i_frame;
+    int n_frames, i_frame;
     mutable double tread = 0, twrite = 0; // io time cost
     mutable Timer _t;
     vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
@@ -166,7 +166,7 @@ struct DataFrame {
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double main_ratio = 0.7,
-              uint16_t n_frames = 2)
+              int n_frames = 2)
         : n_frames(n_frames), save_dir(save_dir) {
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
@@ -180,7 +180,7 @@ struct DataFrame {
         dallocs.push_back(make_shared<StackAllocator<double>>(dptr, dmain));
         iptr += imain;
         dptr += dmain;
-        for (uint16_t i = 0; i < n_frames - 1; i++) {
+        for (int i = 0; i < n_frames - 1; i++) {
             iallocs.push_back(
                 make_shared<StackAllocator<uint32_t>>(iptr + i * ir, ir));
             dallocs.push_back(
@@ -191,11 +191,11 @@ struct DataFrame {
             Parsing::mkdir(save_dir);
     }
     ~DataFrame() { deallocate(); }
-    void activate(uint16_t i) {
+    void activate(int i) {
         ialloc_() = iallocs[i_frame = i];
         dalloc_() = dallocs[i_frame];
     }
-    void reset(uint16_t i) {
+    void reset(int i) {
         iallocs[i]->used = 0;
         dallocs[i]->used = 0;
     }
@@ -206,7 +206,7 @@ struct DataFrame {
                                 new_filename + "' failed.");
     }
     // Load one data frame from disk
-    void load_data(uint16_t i, const string &filename) const {
+    void load_data(int i, const string &filename) const {
         _t.get_time();
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
@@ -223,7 +223,7 @@ struct DataFrame {
         tread += _t.get_time();
     }
     // Save one data frame to disk
-    void save_data(uint16_t i, const string &filename) const {
+    void save_data(int i, const string &filename) const {
         _t.get_time();
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())

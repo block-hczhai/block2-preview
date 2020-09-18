@@ -28,7 +28,7 @@ Author: Huanchen Zhai, Jun 21, 2020
 import numpy as np
 import time
 from block2 import init_memory, release_memory, set_mkl_num_threads
-from block2 import VectorUInt8, VectorUInt16, VectorInt, VectorDouble, PointGroup
+from block2 import VectorUInt8, VectorUBond, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
 from block2 import SU2, SZ, get_partition_weights
 
@@ -97,7 +97,7 @@ class LTDMRG:
                     assert abs(h1e[i, j] - h1e[j, i]) < tol
                     mh1e[k] = h1e[i, j]
                     k += 1
-            mg2e = g2e.flatten().copy()
+            mg2e = g2e.flatten()
             mh1e[np.abs(mh1e) < tol] = 0.0
             mg2e[np.abs(mg2e) < tol] = 0.0
             self.fcidump.initialize_su2(
@@ -117,7 +117,7 @@ class LTDMRG:
                         xmh1e[k] = xh1e[i, j]
                         k += 1
                 xmh1e[np.abs(xmh1e) < tol] = 0.0
-            mg2e = tuple(xg2e.flatten().copy() for xg2e in g2e)
+            mg2e = tuple(xg2e.flatten() for xg2e in g2e)
             for xmg2e in mg2e:
                 xmg2e[np.abs(xmg2e) < tol] = 0.0
             self.fcidump.initialize_sz(
@@ -176,7 +176,7 @@ class LTDMRG:
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
             print('DMRG INIT time = ', time.perf_counter() - tx)
-        dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
+        dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
         dmrg.davidson_max_iter = 1000 * self.nroots
         dmrg.iprint = self.verbose
         dmrg.solve(n_steps, mps.center == 0)

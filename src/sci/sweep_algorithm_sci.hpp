@@ -34,9 +34,9 @@ template <typename S> struct DMRGSCI : DMRG<S> {
     using DMRG<S>::decomp_type;
     using typename DMRG<S>::Iteration;
     DMRGSCI(const shared_ptr<MovingEnvironment<S>> &me,
-            const vector<uint16_t> &bond_dims, const vector<double> &noises)
+            const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : DMRG<S>(me, bond_dims, noises) {}
-    Iteration blocking(int i, bool forward, uint16_t bond_dim, double noise,
+    Iteration blocking(int i, bool forward, ubond_t bond_dim, double noise,
                        double davidson_conv_thrd) override {
         int dsmi = davidson_soft_max_iter;
         NoiseTypes nt = noise_type;

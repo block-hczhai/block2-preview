@@ -98,15 +98,21 @@ The following will use sequential mkl library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=SEQ
 
+### Maximal bond dimension
+
+The default maximal allowed bond dimension per symmetry block is `65535`.
+Adding option `-DSMALL_BOND=ON` will change this value to `255`.
+Adding option `-DLARGE_BOND=ON` will change this value to `4294967295`.
+
 ### Release build
 
 The release mode is controlled by CMAKE_BUILD_TYPE:
 
-    cmake .. -DCMAKE_BUILD_TYPE=Release 
+    cmake .. -DCMAKE_BUILD_TYPE=Release
 
 will use optimization flags such as -O3 (default).
 
-    cmake .. -DCMAKE_BUILD_TYPE=Debug 
+    cmake .. -DCMAKE_BUILD_TYPE=Debug
 
 enables debug flags.
 

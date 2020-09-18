@@ -85,6 +85,8 @@ template <typename S> void run(const map<string, string> &params) {
     cout << "double  stack memory = " << fixed << setprecision(4)
          << ((frame_()->dsize << 3) / 1E9) << " GB" << endl;
 
+    cout << "bond integer size = " << sizeof(ubond_t) << endl;
+
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
     PGTypes pg = PGTypes::C1;
@@ -198,7 +200,9 @@ template <typename S> void run(const map<string, string> &params) {
         cout << endl;
     }
 
-    vector<uint16_t> bdims = {250, 250, 250, 250, 250, 500};
+    vector<ubond_t> bdims = {
+        250, 250, 250,
+        250, 250, (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max())};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
     vector<double> davidson_conv_thrds = {5E-6};
 
@@ -207,7 +211,7 @@ template <typename S> void run(const map<string, string> &params) {
             Parsing::split(params.at("bond_dims"), " ", true);
         bdims.clear();
         for (auto x : xbdims)
-            bdims.push_back((uint16_t)Parsing::to_int(x));
+            bdims.push_back((ubond_t)Parsing::to_int(x));
     }
 
     if (params.count("noises") != 0) {
@@ -369,8 +373,7 @@ template <typename S> void run(const map<string, string> &params) {
 
     // keep some number of states for each sparse block
     if (params.count("trunc_type_keep") != 0) {
-        uint16_t n_keep =
-            (uint16_t)Parsing::to_int(params.at("trunc_type_keep"));
+        ubond_t n_keep = (ubond_t)Parsing::to_int(params.at("trunc_type_keep"));
         dmrg->trunc_type =
             dmrg->trunc_type | (TruncationTypes::KeepOne * n_keep);
     }

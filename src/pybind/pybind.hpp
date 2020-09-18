@@ -31,6 +31,7 @@ using namespace block2;
 PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
+PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
@@ -388,8 +389,8 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
             [](StateInfo<S> *self) { return Array<S>(self->quanta, self->n); })
         .def_property_readonly("n_states",
                                [](StateInfo<S> *self) {
-                                   return Array<uint16_t>(self->n_states,
-                                                          self->n);
+                                   return Array<ubond_t>(self->n_states,
+                                                         self->n);
                                })
         .def("allocate",
              [](StateInfo<S> *self, int length) { self->allocate(length); })
@@ -457,12 +458,12 @@ template <typename S> void bind_sparse(py::module &m) {
                                })
         .def_property_readonly("n_states_bra",
                                [](SparseMatrixInfo<S> *self) {
-                                   return py::array_t<uint16_t>(
+                                   return py::array_t<ubond_t>(
                                        self->n, self->n_states_bra);
                                })
         .def_property_readonly("n_states_ket",
                                [](SparseMatrixInfo<S> *self) {
-                                   return py::array_t<uint16_t>(
+                                   return py::array_t<ubond_t>(
                                        self->n, self->n_states_ket);
                                })
         .def("initialize", &SparseMatrixInfo<S>::initialize, py::arg("bra"),
@@ -1083,8 +1084,8 @@ template <typename S> void bind_partition(py::module &m) {
             "wavefunction_info_from_svd",
             [](const vector<S> &qs,
                const shared_ptr<SparseMatrixInfo<S>> &wfninfo, bool trace_right,
-               const vector<uint16_t> &ilr, const vector<uint16_t> &im) {
-                vector<vector<uint16_t>> idx_dm_to_wfn;
+               const vector<int> &ilr, const vector<ubond_t> &im) {
+                vector<vector<int>> idx_dm_to_wfn;
                 shared_ptr<SparseMatrixInfo<S>> r =
                     MovingEnvironment<S>::wavefunction_info_from_svd(
                         qs, wfninfo, trace_right, ilr, im, idx_dm_to_wfn);
@@ -1099,8 +1100,8 @@ template <typename S> void bind_partition(py::module &m) {
             "wavefunction_info_from_density_matrix",
             [](const shared_ptr<SparseMatrixInfo<S>> &dminfo,
                const shared_ptr<SparseMatrixInfo<S>> &wfninfo, bool trace_right,
-               const vector<uint16_t> &ilr, const vector<uint16_t> &im) {
-                vector<vector<uint16_t>> idx_dm_to_wfn;
+               const vector<int> &ilr, const vector<ubond_t> &im) {
+                vector<vector<int>> idx_dm_to_wfn;
                 shared_ptr<SparseMatrixInfo<S>> r =
                     MovingEnvironment<S>::wavefunction_info_from_density_matrix(
                         dminfo, wfninfo, trace_right, ilr, im, idx_dm_to_wfn);
@@ -1216,7 +1217,7 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<DMRG<S>, shared_ptr<DMRG<S>>>(m, "DMRG")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<uint16_t> &, const vector<double> &>())
+                      const vector<ubond_t> &, const vector<double> &>())
         .def_readwrite("iprint", &DMRG<S>::iprint)
         .def_readwrite("cutoff", &DMRG<S>::cutoff)
         .def_readwrite("me", &DMRG<S>::me)
@@ -1243,11 +1244,6 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
-    py::class_<DMRGSCI<S>, shared_ptr<DMRGSCI<S>>, DMRG<S>>(m, "DMRGSCI")
-            .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                    const vector<uint16_t> &, const vector<double> &>())
-            .def("blocking", &DMRGSCI<S>::blocking);
-
     py::class_<typename ImaginaryTE<S>::Iteration,
                shared_ptr<typename ImaginaryTE<S>::Iteration>>(
         m, "ImaginaryTEIteration")
@@ -1269,9 +1265,9 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<ImaginaryTE<S>, shared_ptr<ImaginaryTE<S>>>(m, "ImaginaryTE")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<uint16_t> &, TETypes>())
+                      const vector<ubond_t> &, TETypes>())
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<uint16_t> &, TETypes, int>())
+                      const vector<ubond_t> &, TETypes, int>())
         .def_readwrite("iprint", &ImaginaryTE<S>::iprint)
         .def_readwrite("cutoff", &ImaginaryTE<S>::cutoff)
         .def_readwrite("me", &ImaginaryTE<S>::me)
@@ -1311,7 +1307,7 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<Compress<S>, shared_ptr<Compress<S>>>(m, "Compress")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<uint16_t> &, const vector<uint16_t> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
         .def_readwrite("iprint", &Compress<S>::iprint)
         .def_readwrite("cutoff", &Compress<S>::cutoff)
@@ -1346,11 +1342,11 @@ template <typename S> void bind_algorithms(py::module &m) {
         });
 
     py::class_<Expect<S>, shared_ptr<Expect<S>>>(m, "Expect")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
-                      uint16_t>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, uint16_t,
-                      uint16_t, double, const vector<double> &,
-                      const vector<int> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t,
+                      ubond_t>())
+        .def(
+            py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t, ubond_t,
+                     double, const vector<double> &, const vector<int> &>())
         .def_readwrite("iprint", &Expect<S>::iprint)
         .def_readwrite("cutoff", &Expect<S>::cutoff)
         .def_readwrite("beta", &Expect<S>::beta)
@@ -1548,6 +1544,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<int>>(m, "VectorInt");
     py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
+    py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
@@ -1601,6 +1598,18 @@ template <typename S = void> void bind_data(py::module &m) {
         });
 
     bind_array<uint16_t>(m, "ArrayUInt16");
+    bind_array<uint32_t>(m, "ArrayUInt32");
+
+    if (sizeof(ubond_t) == sizeof(uint8_t)) {
+        m.attr("VectorUBond") = m.attr("VectorUInt8");
+        m.attr("ArrayUBond") = m.attr("ArrayUInt8");
+    } else if (sizeof(ubond_t) == sizeof(uint16_t)) {
+        m.attr("VectorUBond") = m.attr("VectorUInt16");
+        m.attr("ArrayUBond") = m.attr("ArrayUInt16");
+    } else if (sizeof(ubond_t) == sizeof(uint32_t)) {
+        m.attr("VectorUBond") = m.attr("VectorUInt32");
+        m.attr("ArrayUBond") = m.attr("ArrayUInt32");
+    }
 }
 
 template <typename S = void> void bind_types(py::module &m) {

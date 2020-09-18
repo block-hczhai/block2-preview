@@ -68,8 +68,8 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 200, bra_bond_dim = 100;
-    vector<uint16_t> bdims = {bond_dim};
+    ubond_t bond_dim = 200, bra_bond_dim = 100;
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-6, 1E-7, 0.0};
 
     t.get_time();
@@ -132,7 +132,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     ime->init_environments();
 
     // Compress
-    vector<uint16_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
+    vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
     noises = {0.0};
     shared_ptr<Compress<S>> cps =
         make_shared<Compress<S>>(ime, bra_bdims, ket_bdims, noises);

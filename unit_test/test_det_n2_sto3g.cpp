@@ -88,7 +88,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    uint16_t bond_dim = 200;
+    ubond_t bond_dim = 200;
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
@@ -119,7 +119,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     frame_()->activate(0);
 
     // DMRG
-    vector<uint16_t> bdims = {bond_dim};
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-6, 0.0};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;

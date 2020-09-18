@@ -30,7 +30,7 @@ from .core import MPS as PYMPS, Tensor, SubTensor
 
 from block2 import SZ, Global
 from block2 import init_memory, release_memory, set_mkl_num_threads
-from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
+from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, NoiseTypes
 from block2.sz import HamiltonianQC, MPS, MPSInfo, AncillaMPSInfo
 from block2.sz import PDM1MPOQC, AncillaMPO, SimplifiedMPO, Rule, RuleQC, MPOQC
@@ -295,7 +295,7 @@ class HamilTools:
 
             me = MovingEnvironment(mpo, mps, mps, "DMRG")
             me.init_environments(True)
-            dmrg = DMRG(me, VectorUInt16([bond_dim]), VectorDouble([1E-6, 0]))
+            dmrg = DMRG(me, VectorUBond([bond_dim]), VectorDouble([1E-6, 0]))
             energy = dmrg.solve(n_sweeps, mps.center == 0)
 
             print("Ground State Energy = ", energy)

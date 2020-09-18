@@ -177,7 +177,7 @@ TEST_F(TestNPDM, TestSU2) {
     // cout << nmpo->get_blocking_formulas() << endl;
     // abort();
 
-    uint16_t bond_dim = 200;
+    ubond_t bond_dim = 200;
 
     for (int dot = 1; dot <= 2; dot++) {
 
@@ -208,7 +208,7 @@ TEST_F(TestNPDM, TestSU2) {
         cout << "INIT end .. T = " << t.get_time() << endl;
 
         // DMRG
-        vector<uint16_t> bdims = {bond_dim};
+        vector<ubond_t> bdims = {bond_dim};
         vector<double> noises = {1E-6, 0};
         shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
         dmrg->iprint = 2;
@@ -744,7 +744,7 @@ TEST_F(TestNPDM, TestSZ) {
     nmpo = make_shared<SimplifiedMPO<SZ>>(nmpo, make_shared<Rule<SZ>>(), true);
     cout << "1NPC MPO simplification end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 200;
+    ubond_t bond_dim = 200;
 
     for (int dot = 1; dot <= 2; dot++) {
 
@@ -775,7 +775,7 @@ TEST_F(TestNPDM, TestSZ) {
         cout << "INIT end .. T = " << t.get_time() << endl;
 
         // DMRG
-        vector<uint16_t> bdims = {bond_dim};
+        vector<ubond_t> bdims = {bond_dim};
         vector<double> noises = {1E-6, 0};
         shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
         dmrg->iprint = 2;

@@ -4,7 +4,7 @@ sys.path[:0] = ["../../build"]
 
 from block2 import SU2, Global
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
-from block2 import VectorUInt8, VectorUInt16, VectorDouble, PointGroup
+from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
 from block2.su2 import HamiltonianQC, MPS, MPSInfo
 from block2.su2 import PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
@@ -54,7 +54,7 @@ mps_info.deallocate_mutable()
 
 me = MovingEnvironment(mpo, mps, mps, "DMRG")
 me.init_environments(True)
-dmrg = DMRG(me, VectorUInt16(bond_dims), VectorDouble(noises))
+dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
 dmrg.solve(10, mps.center == 0)
 
 mps_info.deallocate()

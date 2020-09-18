@@ -75,7 +75,7 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;
     S target;
-    uint16_t bond_dim;
+    ubond_t bond_dim;
     // States in each site
     vector<shared_ptr<StateInfo<S>>> basis;
     // Maximal possible states for left/right block (may be equal to/smaller
@@ -300,7 +300,7 @@ template <typename S> struct MPSInfo {
                            left_probs[i]->probs + left_probs[i]->n, 0.0);
             for (int j = 0; j < left_probs[i]->n; j++)
                 left_dims[i]->n_states[j] =
-                    min((uint16_t)round(left_probs[i]->probs[j] / prob_sum * m),
+                    min((ubond_t)round(left_probs[i]->probs[j] / prob_sum * m),
                         left_dims_fci_t[i]->n_states[j]);
             left_dims[i]->collect();
             if (i != n_sites) {
@@ -327,9 +327,9 @@ template <typename S> struct MPSInfo {
                 accumulate(right_probs[i]->probs,
                            right_probs[i]->probs + right_probs[i]->n, 0.0);
             for (int j = 0; j < right_probs[i]->n; j++)
-                right_dims[i]->n_states[j] = min(
-                    (uint16_t)round(right_probs[i]->probs[j] / prob_sum * m),
-                    right_dims_fci_t[i]->n_states[j]);
+                right_dims[i]->n_states[j] =
+                    min((ubond_t)round(right_probs[i]->probs[j] / prob_sum * m),
+                        right_dims_fci_t[i]->n_states[j]);
             right_dims[i]->collect();
             if (i != 0) {
                 StateInfo<S> tmp = StateInfo<S>::tensor_product(
@@ -349,7 +349,7 @@ template <typename S> struct MPSInfo {
     }
     // set up bond dimension using FCI quantum numbers
     // each FCI quantum number has at least one state kept
-    virtual void set_bond_dimension(uint16_t m) {
+    virtual void set_bond_dimension(ubond_t m) {
         bond_dim = m;
         left_dims[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0; i < n_sites; i++)
@@ -363,8 +363,8 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)left_dims[i + 1]->n_states[k] *
                                         m / left_dims[i + 1]->n_states_total) +
                                    0.1);
-                    left_dims[i + 1]->n_states[k] =
-                        (uint16_t)min(new_n_states, 65535U);
+                    left_dims[i + 1]->n_states[k] = (ubond_t)min(
+                        new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += left_dims[i + 1]->n_states[k];
                 }
                 left_dims[i + 1]->n_states_total = new_total;
@@ -381,8 +381,8 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)right_dims[i]->n_states[k] * m /
                                         right_dims[i]->n_states_total) +
                                    0.1);
-                    right_dims[i]->n_states[k] =
-                        (uint16_t)min(new_n_states, 65535U);
+                    right_dims[i]->n_states[k] = (ubond_t)min(
+                        new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += right_dims[i]->n_states[k];
                 }
                 right_dims[i]->n_states_total = new_total;
@@ -496,7 +496,7 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
                    const vector<uint8_t> &iocc, bool init_fci = true)
         : iocc(iocc), MPSInfo<S>(n_sites, vacuum, target, basis, init_fci) {}
     WarmUpTypes get_warm_up_type() const override { return WarmUpTypes::Local; }
-    void set_bond_dimension(uint16_t m) override {
+    void set_bond_dimension(ubond_t m) override {
         bond_dim = m;
         left_dims[0] = make_shared<StateInfo<S>>(vacuum);
         right_dims[n_sites] = make_shared<StateInfo<S>>(vacuum);
@@ -688,7 +688,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         if (init_fci)
             set_bond_dimension_fci();
     }
-    void set_bond_dimension(uint16_t m) override {
+    void set_bond_dimension(ubond_t m) override {
         MPSInfo<S>::set_bond_dimension(m); // call base class method
         // zero states may occur
         for (int i = 0; i <= n_sites; i++)

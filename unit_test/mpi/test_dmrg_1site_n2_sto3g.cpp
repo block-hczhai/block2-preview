@@ -99,8 +99,8 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
     mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
-    uint16_t bond_dim = 200;
-    vector<uint16_t> bdims = {bond_dim};
+    ubond_t bond_dim = 200;
+    vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-6, 1E-7, 0.0};
 
     t.get_time();
