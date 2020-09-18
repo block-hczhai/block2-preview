@@ -788,6 +788,7 @@ template <typename S> struct DMRG {
         energies.clear();
         discarded_weights.clear();
         mps_quanta.clear();
+        bool converged;
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1)
                 cout << "Sweep = " << setw(4) << iw
@@ -803,11 +804,13 @@ template <typename S> struct DMRG {
             energies.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             mps_quanta.push_back(get<2>(sweep_results));
-            bool converged = energies.size() >= 2 && tol > 0 &&
-                             abs(energies[energies.size() - 1].back() -
-                                 energies[energies.size() - 2].back()) < tol &&
-                             noises[iw] == noises.back() &&
-                             bond_dims[iw] == bond_dims.back();
+            auto energy_difference = iw == 0 ? 42.0 :
+                    energies[energies.size() - 1].back() -
+                    energies[energies.size() - 2].back();
+            converged = energies.size() >= 2 && tol > 0 &&
+                        abs(energy_difference) < tol &&
+                        noises[iw] == noises.back() &&
+                        bond_dims[iw] == bond_dims.back();
             forward = !forward;
             current.get_time();
             if (iprint == 1) {
@@ -823,13 +826,22 @@ template <typename S> struct DMRG {
                     cout << " ";
                 }
             }
-            if (iprint >= 1)
+            if (iprint >= 1) {
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current << endl;
+                     << current.current - start.current;
+                if(iw > 0)
+                    cout << " | Energy difference = " << setw(6) << setprecision(2) << scientific
+                         << energy_difference;
+                cout << endl;
+            }
+
             if (converged)
                 break;
         }
         this->forward = forward;
+        if(not converged and iprint > 0){
+            cout << "ATTENTION: DMRG is not converged to desired tolerance of." << tol << endl;
+        }
         return energies.back()[0];
     }
 };
