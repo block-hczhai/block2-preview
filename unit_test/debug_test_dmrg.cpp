@@ -84,8 +84,8 @@ TEST_F(TestDMRG, Test) {
     //     norb, vacuum, target, hamil.basis);
 
     // CCSD init
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis);
+    shared_ptr<MPSInfo<SU2>> mps_info =
+        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -105,7 +105,8 @@ TEST_F(TestDMRG, Test) {
 
     // Determinant init
     // shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
-    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
+    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target,
+    //     hamil.basis,
     //                                      hamil.orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
 
@@ -152,12 +153,12 @@ TEST_F(TestDMRG, Test) {
     frame_()->activate(0);
 
     // DMRG
+    // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-                              500, 500, 750, 750, 750, 750, 750};
+                             500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
                              1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
     // noises = vector<double>{1E-5};
-    // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->iprint = 2;
