@@ -795,9 +795,9 @@ template <typename S> struct DMRG {
                 cout << "Sweep = " << setw(4) << iw
                      << " | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
-                     << " | Bond dimension = " << setw(4) << bond_dims[iw]
-                     << " | Noise = " << scientific << setw(9)
-                     << setprecision(2) << noises[iw]
+                     << " | Bond dimension = " << setw(4)
+                     << (uint32_t)bond_dims[iw] << " | Noise = " << scientific
+                     << setw(9) << setprecision(2) << noises[iw]
                      << " | Dav threshold = " << scientific << setw(9)
                      << setprecision(2) << davidson_conv_thrds[iw] << endl;
             auto sweep_results = sweep(forward, bond_dims[iw], noises[iw],
@@ -1427,8 +1427,9 @@ template <typename S> struct ImaginaryTE {
                          << (forward ? "forward" : "backward")
                          << " | Beta = " << fixed << setw(10) << setprecision(5)
                          << beta << " | Bond dimension = " << setw(4)
-                         << bond_dims[iw] << " | Noise = " << scientific
-                         << setw(9) << setprecision(2) << noises[iw] << endl;
+                         << (uint32_t)bond_dims[iw]
+                         << " | Noise = " << scientific << setw(9)
+                         << setprecision(2) << noises[iw] << endl;
                 }
                 auto r = sweep(forward, isw == n_sub_sweeps - 1, beta,
                                bond_dims[iw], noises[iw]);
@@ -1799,8 +1800,9 @@ template <typename S> struct Compress {
                      << " | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
                      << " | BRA bond dimension = " << setw(4)
-                     << bra_bond_dims[iw] << " | Noise = " << scientific
-                     << setw(9) << setprecision(2) << noises[iw] << endl;
+                     << (uint32_t)bra_bond_dims[iw]
+                     << " | Noise = " << scientific << setw(9)
+                     << setprecision(2) << noises[iw] << endl;
             double norm = sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw],
                                 noises[iw]);
             norms.push_back(norm);
@@ -2557,8 +2559,10 @@ template <typename S> struct Expect {
             if (iprint >= 1) {
                 cout << "Expectation | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
-                     << " | BRA bond dimension = " << setw(4) << bra_bond_dim
-                     << " | KET bond dimension = " << setw(4) << ket_bond_dim;
+                     << " | BRA bond dimension = " << setw(4)
+                     << (uint32_t)bra_bond_dim
+                     << " | KET bond dimension = " << setw(4)
+                     << (uint32_t)ket_bond_dim;
                 if (beta != 0.0)
                     cout << " | 1/T = " << fixed << setw(10) << setprecision(5)
                          << beta;
