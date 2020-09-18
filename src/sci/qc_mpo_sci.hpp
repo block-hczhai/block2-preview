@@ -45,21 +45,36 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     using MPO<S>::sparse_form;
     QCTypes mode;
     bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
+    bool firstSiteIsSCI, lastSiteIsSCI;
     MPOQCSCI(const HamiltonianQCSCI<S> &hamil, QCTypes mode = QCTypes::NC,
           bool symmetrized_p = true)
         : MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
-        sparse_form[hamil.n_sites-1] = 'S'; // Big site will be sparse
+        int nOrbFirst = 1; // #Orbitals of first site
+        if(hamil.sciWrapperLeft != nullptr){
+            sparse_form[0] = 'S'; // Big site will be sparse
+            firstSiteIsSCI = true;
+            nOrbFirst = hamil.sciWrapperLeft->nOrbThis;
+            throw std::runtime_error("Big left site is not properly implemented yet. ");
+        }else{
+            firstSiteIsSCI = false;
+        }
+        if(hamil.sciWrapperRight != nullptr){
+            sparse_form[hamil.n_sites-1] = 'S'; // Big site will be sparse
+            lastSiteIsSCI = true;
+        }else{
+            lastSiteIsSCI = false;
+        }
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        const auto nOrb = hamil.nOrbCas + hamil.nOrbExt;
+        const auto nOrb = hamil.nOrbCas + hamil.nOrbRight;
         if(nOrb > numeric_limits<uint16_t>::max()){
             cerr << "value of nOrb " << nOrb << endl;
             cerr << "max value of uint16_t" << numeric_limits<uint16_t>::max() << endl;
             throw std::runtime_error("SiteIndex and others require int16 type...");
         }
-        const auto ciSite = hamil.n_sites - 1;
+        const auto lastSite = hamil.n_sites - 1;
         shared_ptr<OpExpr<S>> c_op[nOrb][2], d_op[nOrb][2]; // hrl: site; sz value
         shared_ptr<OpExpr<S>> mc_op[nOrb][2], md_op[nOrb][2]; // hrl: mc stands for minus C
         shared_ptr<OpExpr<S>> rd_op[nOrb][2], r_op[nOrb][2];
@@ -152,11 +167,12 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
              *  1, H, R,  R', a, a',P, P', Q
              *  This is the order used here
              */
-            int lshape = 2 + 4 * nOrb + 12 * m * m; // left bond dimension of MPO site
-            int rshape = 2 + 4 * nOrb + 12 * (m+1) * (m+1); // right bond dimension of MPO site
+            const auto mm = m + nOrbFirst - 1; // First site may be big
+            const int lshape = 2 + 4 * nOrb + 12 * mm * mm; // left bond dimension of MPO site
+            const int rshape = 2 + 4 * nOrb + 12 * (mm+1) * (mm+1); // right bond dimension of MPO site
             if (m == 0)
                 pmat = make_shared<SymbolicRowVector<S>>(rshape);
-            else if (m == ciSite) // last site
+            else if (m == lastSite) // last site
                 pmat = make_shared<SymbolicColumnVector<S>>(lshape);
             else
                 pmat = make_shared<SymbolicMatrix<S>>(lshape, rshape);
@@ -171,22 +187,34 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 /////////////////////////////
                 mat[{0, 0}] = h_op;
                 mat[{0, 1}] = i_op;
-                mat[{0, 2}] = c_op[m][0];
-                mat[{0, 3}] = c_op[m][1];
-                mat[{0, 4}] = d_op[m][0];
-                mat[{0, 5}] = d_op[m][1];
-                p = 6;
+                p = 2;
+                if(not firstSiteIsSCI) {
+                    mat[{0, 2}] = c_op[m][0];
+                    mat[{0, 3}] = c_op[m][1];
+                    mat[{0, 4}] = d_op[m][0];
+                    mat[{0, 5}] = d_op[m][1];
+                    p = 6;
+                }else{
+                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
+                        mat[{0, p++}] = c_op[iOrb][0];
+                        mat[{0, p++}] = c_op[iOrb][1];
+                    }
+                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
+                        mat[{0, p++}] = d_op[iOrb][0];
+                        mat[{0, p++}] = d_op[iOrb][1];
+                    }
+                }
                 for (uint8_t s = 0; s < 2; s++) { // R
-                    for (uint16_t j = m + 1; j < nOrb; j++) {
+                    for (uint16_t j = mm + 1; j < nOrb; j++) {
                         mat[{0, p++}] = rd_op[j][s];
                     }
                 }
                 for (uint8_t s = 0; s < 2; s++) { // -R
-                    for (uint16_t j = m + 1; j < nOrb; j++){
+                    for (uint16_t j = mm + 1; j < nOrb; j++){
                         mat[{0, p++}] = mr_op[j][s];
                     }
                 }
-            } else if (m == ciSite) {
+            } else if (m == lastSite) {
                 /////////////////////////////
                 // Last site left blocking
                 // 1 H, R, -R', a, a'
@@ -195,20 +223,20 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 mat[{1, 0}] = h_op;
                 p = 2;
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < mm; j++)
                         mat[{p++, 0}] = r_op[j][s];
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < mm; j++)
                         mat[{p++, 0}] = mrd_op[j][s];
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for(int x = m; x < nOrb; ++x){
+                    for(int x = mm; x < nOrb; ++x){
                         mat[{p++, 0}] = d_op[x][s];
                     }
                 }
                 for (uint8_t s = 0; s < 2; s++) {
-                    for(int x = m; x < nOrb; ++x) {
+                    for(int x = mm; x < nOrb; ++x) {
                         mat[{p++, 0}] = c_op[x][s];
                     }
                 }
@@ -218,15 +246,30 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 // First site right blocking
                 // A, A', B
                 /////////////////////////////
-                for (uint8_t s = 0; s < 4; s++)
-                    mat[{0, p++}] = a_op[m][m][s];
-                for (uint8_t s = 0; s < 4; s++)
-                    mat[{0, p++}] = ad_op[m][m][s];
-                for (uint8_t s = 0; s < 4; s++)
-                    mat[{0, p++}] = b_op[m][m][s];
+                if(not firstSiteIsSCI) {
+                    for (uint8_t s = 0; s < 4; s++)
+                        mat[{0, p++}] = a_op[m][m][s];
+                    for (uint8_t s = 0; s < 4; s++)
+                        mat[{0, p++}] = ad_op[m][m][s];
+                    for (uint8_t s = 0; s < 4; s++)
+                        mat[{0, p++}] = b_op[m][m][s];
+                }else{
+                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
+                            for (uint8_t s = 0; s < 4; s++)
+                                mat[{0, p++}] = a_op[iOrb][jOrb][s];
+                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
+                            for (uint8_t s = 0; s < 4; s++)
+                                mat[{0, p++}] = ad_op[iOrb][jOrb][s];
+                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
+                            for (uint8_t s = 0; s < 4; s++)
+                                mat[{0, p++}] = b_op[iOrb][jOrb][s];
+                }
                 assert(p == mat.n);
             } else {
-                if (m != hamil.n_sites - 1) {
+                if (m != lastSite) {
                     /////////////////////////////
                     // Normal site left blocking
                     // R', -R, a, a'
@@ -235,20 +278,20 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     mat[{1, 0}] = h_op;
                     p = 2;
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < mm; j++)
                             mat[{p++, 0}] = r_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < mm; j++)
                             mat[{p++, 0}] = mrd_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
                         mat[{p, 0}] = d_op[m][s];
-                        p += nOrb - m;
+                        p += nOrb - mm;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
                         mat[{p, 0}] = c_op[m][s];
-                        p += nOrb - m;
+                        p += nOrb - mm;
                     }
                 }
                 /////////////////////////////
@@ -272,7 +315,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     }
                 assert(p == mat.m);
             }
-            if (m != 0 and m != hamil.n_sites - 1) {
+            if (m != 0 and m != lastSite) {
                 /////////////////////////////
                 // Normal sites
                 /////////////////////////////
@@ -282,42 +325,42 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 // pointers
                 /////////////////////////////
                 int pi = 1;
-                int pc[2] = {2, 2 + m};
-                int pd[2] = {2 + m * 2, 2 + m * 3};
-                int prd[2] = {2 + m * 4 - m, 2 + m * 3 + nOrb - m};
-                int pr[2] = {2 + m * 2 + nOrb * 2 - m,
-                             2 + m + nOrb * 3 - m};
-                int pa[4] = {2 + nOrb * 4 + m * m * 0,
-                             2 + nOrb * 4 + m * m * 1,
-                             2 + nOrb * 4 + m * m * 2,
-                             2 + nOrb * 4 + m * m * 3};
-                int pad[4] = {2 + nOrb * 4 + m * m * 4,
-                              2 + nOrb * 4 + m * m * 5,
-                              2 + nOrb * 4 + m * m * 6,
-                              2 + nOrb * 4 + m * m * 7};
-                int pb[4] = {2 + nOrb * 4 + m * m * 8,
-                             2 + nOrb * 4 + m * m * 9,
-                             2 + nOrb * 4 + m * m * 10,
-                             2 + nOrb * 4 + m * m * 11};
+                int pc[2] = {2, 2 + mm};
+                int pd[2] = {2 + mm * 2, 2 + mm * 3};
+                int prd[2] = {2 + mm * 4 - mm, 2 + mm * 3 + nOrb - mm};
+                int pr[2] = {2 + mm * 2 + nOrb * 2 - mm,
+                             2 + mm + nOrb * 3 - mm};
+                int pa[4] = {2 + nOrb * 4 + mm * mm * 0,
+                             2 + nOrb * 4 + mm * mm * 1,
+                             2 + nOrb * 4 + mm * mm * 2,
+                             2 + nOrb * 4 + mm * mm * 3};
+                int pad[4] = {2 + nOrb * 4 + mm * mm * 4,
+                              2 + nOrb * 4 + mm * mm * 5,
+                              2 + nOrb * 4 + mm * mm * 6,
+                              2 + nOrb * 4 + mm * mm * 7};
+                int pb[4] = {2 + nOrb * 4 + mm * mm * 8,
+                             2 + nOrb * 4 + mm * mm * 9,
+                             2 + nOrb * 4 + mm * mm * 10,
+                             2 + nOrb * 4 + mm * mm * 11};
                 // C
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < mm; j++)
                         mat[{pc[s] + j, p++}] = i_op;
-                    mat[{pi, p++}] = c_op[m][s];
+                    mat[{pi, p++}] = c_op[mm][s];
                 }
                 // D
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t j = 0; j < m; j++)
+                    for (uint16_t j = 0; j < mm; j++)
                         mat[{pd[s] + j, p++}] = i_op;
-                    mat[{pi, p++}] = d_op[m][s];
+                    mat[{pi, p++}] = d_op[mm][s];
                 }
                 // RD
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t i = m + 1; i < nOrb; i++) {
+                    for (uint16_t i = mm + 1; i < nOrb; i++) {
                         mat[{prd[s] + i, p}] = i_op;
                         mat[{pi, p }] = rd_op[i][s];
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t k = 0; k < m; k++) {
+                            for (uint16_t k = 0; k < mm; k++) {
                                 mat[{pd[sp] + k, p}] =
                                     -1.0 * pd_op[k][i][sp | (s << 1)]; // HRL: new commit by HC on 2020-07-15 ( 82c7cb334f3cae06de5ec0cbfe0122bb550b59cc )
                                     //pd_op[i][k][s | (sp << 1)]; // old commit ; just symmetry
@@ -326,48 +369,48 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             }
                         if (!symmetrized_p)
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint16_t j = 0; j < m; j++)
-                                    for (uint16_t l = 0; l < m; l++) {
+                                for (uint16_t j = 0; j < mm; j++)
+                                    for (uint16_t l = 0; l < mm; l++) {
                                         double f = hamil.v(s, sp, i, j, m, l);
-                                        mat[{pa[s | (sp << 1)] + j * m + l, p}] =
-                                                f * d_op[m][sp];
+                                        mat[{pa[s | (sp << 1)] + j * mm + l, p}] =
+                                                f * d_op[mm][sp];
                                     }
                         else
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint16_t j = 0; j < m; j++)
-                                    for (uint16_t l = 0; l < m; l++) {
-                                        double f0 =  0.5 * hamil.v(s, sp, i, j, m, l),
-                                               f1 = -0.5 * hamil.v(s, sp, i, l, m, j);
-                                        mat[{pa[s | (sp << 1)] + j * m + l, p}] +=
-                                            f0 * d_op[m][sp];
-                                        mat[{pa[sp | (s << 1)] + j * m + l, p}] +=
-                                            f1 * d_op[m][sp];
+                                for (uint16_t j = 0; j < mm; j++)
+                                    for (uint16_t l = 0; l < mm; l++) {
+                                        double f0 =  0.5 * hamil.v(s, sp, i, j, mm, l),
+                                               f1 = -0.5 * hamil.v(s, sp, i, l, mm, j);
+                                        mat[{pa[s | (sp << 1)] + j * mm + l, p}] +=
+                                            f0 * d_op[mm][sp];
+                                        mat[{pa[sp | (s << 1)] + j * mm + l, p}] +=
+                                            f1 * d_op[mm][sp];
                                     }
                         for (uint8_t sp = 0; sp < 2; sp++)
                             for (uint16_t k = 0; k < m; k++)
-                                for (uint16_t l = 0; l < m; l++) {
-                                    double f = hamil.v(s, sp, i, m, k, l);
-                                    mat[{pb[sp | (sp << 1)] + l * m + k, p}] =
-                                            f * c_op[m][s];
+                                for (uint16_t l = 0; l < mm; l++) {
+                                    double f = hamil.v(s, sp, i, mm, k, l);
+                                    mat[{pb[sp | (sp << 1)] + l * mm + k, p}] =
+                                            f * c_op[mm][s];
                                 }
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t j = 0; j < m; j++)
-                                for (uint16_t k = 0; k < m; k++) {
+                            for (uint16_t j = 0; j < mm; j++)
+                                for (uint16_t k = 0; k < mm; k++) {
                                     double f =
-                                        -1.0 * hamil.v(s, sp, i, j, k, m);
-                                    mat[{pb[s | (sp << 1)] + j * m + k, p}] +=
-                                        f * c_op[m][sp];
+                                        -1.0 * hamil.v(s, sp, i, j, k, mm);
+                                    mat[{pb[s | (sp << 1)] + j * mm + k, p}] +=
+                                        f * c_op[mm][sp];
                                 }
                         ++p;
                     }
                 }
                 // R
                 for (uint8_t s = 0; s < 2; s++) {
-                    for (uint16_t i = m + 1; i < nOrb; i++) {
+                    for (uint16_t i = mm + 1; i < nOrb; i++) {
                         mat[{pr[s] + i, p}] = i_op;
                         mat[{pi, p}] = mr_op[i][s];
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t k = 0; k < m; k++) {
+                            for (uint16_t k = 0; k < mm; k++) {
                                 mat[{pc[sp] + k, p}] =
                                     p_op[k][i][sp | (s << 1)]; // HRL: new commit by HC on 2020-07-15 ( 82c7cb334f3cae06de5ec0cbfe0122bb550b59cc )
                                     //-1.0 * p_op[i][k][s | (sp << 1)]; //old HRL ; just symmetry
@@ -376,85 +419,85 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             }
                         if (!symmetrized_p)
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint16_t j = 0; j < m; j++)
-                                    for (uint16_t l = 0; l < m; l++) {
+                                for (uint16_t j = 0; j < mm; j++)
+                                    for (uint16_t l = 0; l < mm; l++) {
                                         double f = -1.0 * hamil.v(s, sp, i,
-                                                                  j, m, l);
-                                        mat[{pad[s | (sp << 1)] + j * m + l, p}] =
-                                            f * c_op[m][sp];
+                                                                  j, mm, l);
+                                        mat[{pad[s | (sp << 1)] + j * mm + l, p}] =
+                                            f * c_op[mm][sp];
                                     }
                         else
                             for (uint8_t sp = 0; sp < 2; sp++)
-                                for (uint16_t j = 0; j < m; j++)
-                                    for (uint16_t l = 0; l < m; l++) {
+                                for (uint16_t j = 0; j < mm; j++)
+                                    for (uint16_t l = 0; l < mm; l++) {
                                         double f0 = -0.5 * hamil.v(s, sp, i,
-                                                                   j, m, l),
+                                                                   j, mm, l),
                                                f1 = 0.5 * hamil.v(s, sp, i,
-                                                                  l, m, j);
-                                        mat[{pad[s | (sp << 1)] + j * m + l, p}] +=
-                                            f0 * c_op[m][sp];
-                                        mat[{pad[sp | (s << 1)] + j * m + l, p}] +=
-                                            f1 * c_op[m][sp];
+                                                                  l, mm, j);
+                                        mat[{pad[s | (sp << 1)] + j * mm + l, p}] +=
+                                            f0 * c_op[mm][sp];
+                                        mat[{pad[sp | (s << 1)] + j * mm + l, p}] +=
+                                            f1 * c_op[mm][sp];
                                     }
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t k = 0; k < m; k++)
-                                for (uint16_t l = 0; l < m; l++) {
+                            for (uint16_t k = 0; k < mm; k++)
+                                for (uint16_t l = 0; l < mm; l++) {
                                     double f =
-                                            -1.0 * hamil.v(s, sp, i, m, k, l);
-                                    mat[{pb[sp | (sp << 1)] + k * m + l, p}]
-                                            = f * d_op[m][s];
+                                            -1.0 * hamil.v(s, sp, i, mm, k, l);
+                                    mat[{pb[sp | (sp << 1)] + k * mm + l, p}]
+                                            = f * d_op[mm][s];
                                 }
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t j = 0; j < m; j++)
-                                for (uint16_t k = 0; k < m; k++) {
+                            for (uint16_t j = 0; j < mm; j++)
+                                for (uint16_t k = 0; k < mm; k++) {
                                     double f = (-1.0) * (-1.0) *
-                                               hamil.v(s, sp, i, j, k, m);
-                                    mat[{pb[sp | (s << 1)] + k * m + j, p}] =
-                                            f * d_op[m][sp];
+                                               hamil.v(s, sp, i, j, k, mm);
+                                    mat[{pb[sp | (s << 1)] + k * mm + j, p}] =
+                                            f * d_op[mm][sp];
                                 }
                         ++p;
                     }
                 }
                 // A
                 for (uint8_t s = 0; s < 4; s++) {
-                    for (uint16_t i = 0; i < m; i++)
-                        for (uint16_t j = 0; j < m; j++)
-                            mat[{pa[s] + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint16_t i = 0; i < m; i++) {
-                        mat[{pc[s & 1] + i, p + i * (m + 1) + m}] = c_op[m][s >> 1];
-                        mat[{pc[s >> 1] + i, p + m * (m + 1) + i}] = mc_op[m][s & 1];
+                    for (uint16_t i = 0; i < mm; i++)
+                        for (uint16_t j = 0; j < mm; j++)
+                            mat[{pa[s] + i * mm + j, p + i * (mm + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < mm; i++) {
+                        mat[{pc[s & 1] + i, p + i * (mm + 1) + mm}] = c_op[mm][s >> 1];
+                        mat[{pc[s >> 1] + i, p + mm * (mm + 1) + i}] = mc_op[mm][s & 1];
                     }
-                    mat[{pi, p + m * (m + 1) + m}] = a_op[m][m][s];
-                    p += (m + 1) * (m + 1);
+                    mat[{pi, p + mm * (mm + 1) + mm}] = a_op[mm][mm][s];
+                    p += (mm + 1) * (mm + 1);
                 }
                 // AD
                 for (uint8_t s = 0; s < 4; s++) {
-                    for (uint16_t i = 0; i < m; i++)
-                        for (uint16_t j = 0; j < m; j++)
-                            mat[{pad[s] + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint16_t i = 0; i < m; i++) {
-                        mat[{pd[s & 1] + i, p + i * (m + 1) + m}] = md_op[m][s >> 1];
-                        mat[{pd[s >> 1] + i, p + m * (m + 1) + i}] = d_op[m][s & 1];
+                    for (uint16_t i = 0; i < mm; i++)
+                        for (uint16_t j = 0; j < mm; j++)
+                            mat[{pad[s] + i * mm + j, p + i * (mm + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < mm; i++) {
+                        mat[{pd[s & 1] + i, p + i * (mm + 1) + mm}] = md_op[mm][s >> 1];
+                        mat[{pd[s >> 1] + i, p + mm * (mm + 1) + i}] = d_op[mm][s & 1];
                     }
-                    mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m][s];
-                    p += (m + 1) * (m + 1);
+                    mat[{pi, p + mm * (mm + 1) + mm}] = ad_op[mm][mm][s];
+                    p += (mm + 1) * (mm + 1);
                 }
                 // B
                 for (uint8_t s = 0; s < 4; s++) {
-                    for (uint16_t i = 0; i < m; i++)
-                        for (uint16_t j = 0; j < m; j++)
-                            mat[{pb[s] + i * m + j, p + i * (m + 1) + j}] = i_op;
-                    for (uint16_t i = 0; i < m; i++) {
-                        mat[{pc[s & 1] + i, p + i * (m + 1) + m}] = d_op[m][s >> 1];
-                        mat[{pd[s >> 1] + i, p + m * (m + 1) + i}] = mc_op[m][s & 1];
+                    for (uint16_t i = 0; i < mm; i++)
+                        for (uint16_t j = 0; j < mm; j++)
+                            mat[{pb[s] + i * mm + j, p + i * (mm + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < mm; i++) {
+                        mat[{pc[s & 1] + i, p + i * (mm + 1) + mm}] = d_op[mm][s >> 1];
+                        mat[{pd[s >> 1] + i, p + mm * (mm + 1) + i}] = mc_op[mm][s & 1];
                     }
-                    mat[{pi, p + m * (m + 1) + m}] = b_op[m][m][s];
-                    p += (m + 1) * (m + 1);
+                    mat[{pi, p + mm * (mm + 1) + mm}] = b_op[mm][mm][s];
+                    p += (mm + 1) * (mm + 1);
                 }
                 assert(p == mat.n);
             }
             shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
-            if (not (m == 0 and m == hamil.n_sites - 1)) {
+            if (not (m == 0 and m == lastSite)) {
                 opt->lmat = opt->rmat = pmat;
             } else{ // should only occur for n_sites = 2
                 opt->rmat = pmat;
@@ -466,44 +509,44 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 // left operator names
                 /////////////////////////////
                 shared_ptr<SymbolicRowVector<S>> plop;
-                if (m == hamil.n_sites - 1)
+                if (m == lastSite)
                     plop = make_shared<SymbolicRowVector<S>>(1);
                 else
                     plop = make_shared<SymbolicRowVector<S>>(rshape);
                 SymbolicRowVector<S> &lop = *plop;
                 lop[0] = h_op;
-                if (m != hamil.n_sites - 1) {
+                if (m != lastSite) {
                     lop[1] = i_op;
                     p = 2;
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m + 1; j++)
+                        for (uint16_t j = 0; j < mm + 1; j++)
                             lop[p++] = c_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m + 1; j++)
+                        for (uint16_t j = 0; j < mm+ 1; j++)
                             lop[p++] = d_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = m + 1; j < nOrb; j++)
+                        for (uint16_t j = mm + 1; j < nOrb; j++)
                             lop[p++] = rd_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = m + 1; j < nOrb; j++)
+                        for (uint16_t j = mm + 1; j < nOrb; j++)
                             lop[p++] = mr_op[j][s];
                     }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m + 1; j++) {
-                            for (uint8_t k = 0; k < m + 1; k++)
+                        for (uint16_t j = 0; j < mm + 1; j++) {
+                            for (uint8_t k = 0; k < mm + 1; k++)
                                 lop[p++] = a_op[j][k][s];
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m + 1; j++) {
-                            for (uint8_t k = 0; k < m + 1; k++)
+                        for (uint16_t j = 0; j < mm + 1; j++) {
+                            for (uint8_t k = 0; k < mm + 1; k++)
                                 lop[p++] = ad_op[j][k][s];
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m + 1; j++) {
-                            for (uint16_t k = 0; k < m + 1; k++)
+                        for (uint16_t j = 0; j < mm + 1; j++) {
+                            for (uint16_t k = 0; k < mm + 1; k++)
                                 lop[p++] = b_op[j][k][s];
                         }
                     assert(p == rshape);
@@ -527,34 +570,34 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     rop[1] = h_op;
                     p = 2;
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < mm; j++)
                             rop[p++] = r_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = 0; j < m; j++)
+                        for (uint16_t j = 0; j < mm; j++)
                             rop[p++] = mrd_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = m; j < nOrb; j++)
+                        for (uint16_t j = mm; j < nOrb; j++)
                             rop[p++] = d_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        for (uint16_t j = m; j < nOrb; j++)
+                        for (uint16_t j = mm; j < nOrb; j++)
                             rop[p++] = c_op[j][s];
                     }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m; j++) {
-                            for (uint16_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < mm; j++) {
+                            for (uint16_t k = 0; k < mm; k++)
                                 rop[p++] = 0.5 * p_op[j][k][s];
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m; j++) {
-                            for (uint16_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < mm; j++) {
+                            for (uint16_t k = 0; k < mm; k++)
                                 rop[p++] = 0.5 * pd_op[j][k][s];
                         }
                     for (uint8_t s = 0; s < 4; s++)
-                        for (uint16_t j = 0; j < m; j++) {
-                            for (uint16_t k = 0; k < m; k++)
+                        for (uint16_t j = 0; j < mm; j++) {
+                            for (uint16_t k = 0; k < mm; k++)
                                 rop[p++] = q_op[j][k][s];
                         }
                     assert(p == lshape);
@@ -574,7 +617,8 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(it->first);
                 //cout << "m == " << (int) m << "deallocate" << op.name << "s" << (int) op.site_index[0] << ","
                 //     << (int) op.site_index[1] << "ss" << (int) op.site_index.s(0) << (int) op.site_index.s(1) << endl;
-                if (m == n_sites - 1) { //ATTENTION hrl: I assume that all operators are allocated on the big site
+                if ( (m == n_sites - 1 and lastSiteIsSCI) or (m==0 and firstSiteIsSCI)) {
+                    //ATTENTION hrl: I assume that all operators are allocated on the big site
                     it->second->deallocate();
                 } else if (op.name == OpNames::R || op.name == OpNames::RD ||
                            op.name == OpNames::H ||
