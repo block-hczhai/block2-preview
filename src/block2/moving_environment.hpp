@@ -987,6 +987,8 @@ template <typename S> struct MovingEnvironment {
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
         }
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         bra->center = ket->center = center;
         // dynamic environment generation for warmup sweep
         if (i != n_sites - dot && envs[i]->right == nullptr) {
