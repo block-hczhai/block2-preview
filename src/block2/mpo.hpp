@@ -21,6 +21,7 @@
 #pragma once
 
 #include "ancilla.hpp"
+#include "csr_operator_functions.hpp"
 #include "operator_tensor.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"
@@ -52,6 +53,28 @@ template <typename S> struct MPOSchemer {
         r->left_new_operator_exprs = left_new_operator_exprs;
         r->right_new_operator_exprs = right_new_operator_exprs;
         return r;
+    }
+    void load_data(ifstream &ifs) {
+        ifs.read((char *)&left_trans_site, sizeof(left_trans_site));
+        ifs.read((char *)&right_trans_site, sizeof(right_trans_site));
+        left_new_operator_names =
+            dynamic_pointer_cast<SymbolicRowVector<S>>(load_symbolic<S>(ifs));
+        right_new_operator_names =
+            dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                load_symbolic<S>(ifs));
+        left_new_operator_exprs =
+            dynamic_pointer_cast<SymbolicRowVector<S>>(load_symbolic<S>(ifs));
+        right_new_operator_exprs =
+            dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                load_symbolic<S>(ifs));
+    }
+    void save_data(ofstream &ofs) const {
+        ofs.write((char *)&left_trans_site, sizeof(left_trans_site));
+        ofs.write((char *)&right_trans_site, sizeof(right_trans_site));
+        save_symbolic<S>(left_new_operator_names, ofs);
+        save_symbolic<S>(right_new_operator_names, ofs);
+        save_symbolic<S>(left_new_operator_exprs, ofs);
+        save_symbolic<S>(right_new_operator_exprs, ofs);
     }
     string get_transform_formulas() const {
         stringstream ss;
@@ -98,14 +121,161 @@ template <typename S> struct MPO {
     double const_e;
     shared_ptr<TensorFunctions<S>> tf;
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
+    vector<shared_ptr<StateInfo<S>>> basis; // only for fused mpo
     // N = Normal, S = CSR
     string sparse_form;
     MPO(int n_sites)
         : n_sites(n_sites), sparse_form(n_sites, 'N'), const_e(0.0),
           op(nullptr), schemer(nullptr), tf(nullptr) {}
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
-    virtual ParallelTypes get_parallel_type() const { return ParallelTypes::Serial; }
-    virtual void deallocate() {}
+    virtual ParallelTypes get_parallel_type() const {
+        return ParallelTypes::Serial;
+    }
+    virtual void deallocate() {
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            tensors[m]->deallocate();
+    }
+    void load_data(ifstream &ifs) {
+        ifs.read((char *)&n_sites, sizeof(n_sites));
+        ifs.read((char *)&const_e, sizeof(const_e));
+        sparse_form = string(n_sites, 'N');
+        ifs.read((char *)&sparse_form[0], sizeof(char) * n_sites);
+        bool has_op, has_schemer;
+        ifs.read((char *)&has_op, sizeof(has_op));
+        ifs.read((char *)&has_schemer, sizeof(has_schemer));
+        if (has_op)
+            op = dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
+        if (has_schemer) {
+            schemer = make_shared<MPOSchemer<S>>(0, 0);
+            schemer->load_data(ifs);
+        }
+        int sz, sub_sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        site_op_infos.resize(sz);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        for (int i = 0; i < sz; i++) {
+            ifs.read((char *)&sub_sz, sizeof(sub_sz));
+            site_op_infos[i].resize(sub_sz);
+            for (int j = 0; j < sub_sz; j++) {
+                ifs.read((char *)&site_op_infos[i][j].first,
+                         sizeof(site_op_infos[i][j].first));
+                site_op_infos[i][j].second =
+                    make_shared<SparseMatrixInfo<S>>(i_alloc);
+                site_op_infos[i][j].second->load_data(ifs);
+            }
+        }
+        ifs.read((char *)&sz, sizeof(sz));
+        tensors.resize(sz);
+        for (int i = 0; i < sz; i++) {
+            tensors[i] = make_shared<OperatorTensor<S>>();
+            tensors[i]->load_data(ifs);
+        }
+        ifs.read((char *)&sz, sizeof(sz));
+        basis.resize(sz);
+        for (int i = 0; i < sz; i++) {
+            basis[i] = make_shared<StateInfo<S>>();
+            basis[i]->load_data(ifs);
+        }
+        ifs.read((char *)&sz, sizeof(sz));
+        left_operator_names.resize(sz);
+        for (int i = 0; i < sz; i++)
+            left_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.read((char *)&sz, sizeof(sz));
+        right_operator_names.resize(sz);
+        for (int i = 0; i < sz; i++)
+            right_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.read((char *)&sz, sizeof(sz));
+        middle_operator_names.resize(sz);
+        for (int i = 0; i < sz; i++)
+            middle_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.read((char *)&sz, sizeof(sz));
+        left_operator_exprs.resize(sz);
+        for (int i = 0; i < sz; i++)
+            left_operator_exprs[i] = load_symbolic<S>(ifs);
+        ifs.read((char *)&sz, sizeof(sz));
+        right_operator_exprs.resize(sz);
+        for (int i = 0; i < sz; i++)
+            right_operator_exprs[i] = load_symbolic<S>(ifs);
+        ifs.read((char *)&sz, sizeof(sz));
+        middle_operator_exprs.resize(sz);
+        for (int i = 0; i < sz; i++)
+            middle_operator_exprs[i] = load_symbolic<S>(ifs);
+    }
+    void load_data(const string &filename) {
+        ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_data on '" + filename + "' failed.");
+        load_data(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_data on '" + filename + "' failed.");
+        ifs.close();
+    }
+    void save_data(ofstream &ofs) const {
+        ofs.write((char *)&n_sites, sizeof(n_sites));
+        ofs.write((char *)&const_e, sizeof(const_e));
+        ofs.write((char *)&sparse_form[0], sizeof(char) * n_sites);
+        bool has_op = op != nullptr, has_schemer = schemer != nullptr;
+        ofs.write((char *)&has_op, sizeof(has_op));
+        ofs.write((char *)&has_schemer, sizeof(has_schemer));
+        if (has_op)
+            save_expr<S>(op, ofs);
+        if (has_schemer)
+            schemer->save_data(ofs);
+        int sz = (int)site_op_infos.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++) {
+            int sub_sz = (int)site_op_infos[i].size();
+            ofs.write((char *)&sub_sz, sizeof(sub_sz));
+            for (int j = 0; j < sub_sz; j++) {
+                ofs.write((char *)&site_op_infos[i][j].first,
+                          sizeof(site_op_infos[i][j].first));
+                assert(site_op_infos[i][j].second != nullptr);
+                site_op_infos[i][j].second->save_data(ofs);
+            }
+        }
+        sz = (int)tensors.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            tensors[i]->save_data(ofs);
+        sz = (int)basis.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            basis[i]->save_data(ofs);
+        sz = (int)left_operator_names.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(left_operator_names[i], ofs);
+        sz = (int)right_operator_names.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(right_operator_names[i], ofs);
+        sz = (int)middle_operator_names.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(middle_operator_names[i], ofs);
+        sz = (int)left_operator_exprs.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(left_operator_exprs[i], ofs);
+        sz = (int)right_operator_exprs.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(right_operator_exprs[i], ofs);
+        sz = (int)middle_operator_exprs.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_symbolic<S>(middle_operator_exprs[i], ofs);
+    }
+    void save_data(const string &filename) const {
+        ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("MPO:save_data on '" + filename + "' failed.");
+        save_data(ofs);
+        if (!ofs.good())
+            throw runtime_error("MPO:save_data on '" + filename + "' failed.");
+        ofs.close();
+    }
     string get_blocking_formulas() const {
         stringstream ss;
         for (int i = 0; i < n_sites; i++) {

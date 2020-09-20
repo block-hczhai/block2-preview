@@ -819,18 +819,16 @@ template <typename S> struct DMRG {
                      << current.current - start.current;
                 cout << fixed << setprecision(8);
                 if (get<0>(sweep_results).size() == 1)
-                    cout << " | Energy = " << setw(15)
-                         << get<0>(sweep_results)[0] << " ";
+                    cout << " | E = " << setw(15) << get<0>(sweep_results)[0];
                 else {
-                    cout << " | Energy[" << setw(3)
-                         << get<0>(sweep_results).size() << "] = ";
+                    cout << " | E[" << setw(3) << get<0>(sweep_results).size()
+                         << "] = ";
                     for (double x : get<0>(sweep_results))
                         cout << setw(15) << x;
-                    cout << " ";
                 }
                 if (energies.size() >= 2)
-                    cout << " | Energy difference = " << setw(6)
-                         << setprecision(2) << scientific << energy_difference;
+                    cout << " | DE = " << setw(6) << setprecision(2)
+                         << scientific << energy_difference;
                 cout << endl;
             }
 

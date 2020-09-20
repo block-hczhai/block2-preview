@@ -987,6 +987,8 @@ template <typename S> struct MovingEnvironment {
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
         }
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         bra->center = ket->center = center;
         // dynamic environment generation for warmup sweep
         if (i != n_sites - dot && envs[i]->right == nullptr) {
@@ -1666,7 +1668,8 @@ template <typename S> struct MovingEnvironment {
             OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);
         double norm = dm->norm();
-        dm->iscale(noise / norm);
+        if (abs(norm) > TINY)
+            dm->iscale(noise / norm);
         OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
                                             NoiseTypes::None);
         return dm;

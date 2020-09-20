@@ -538,6 +538,7 @@ struct SparseMatrixInfo<
     }
     void save_data(ofstream &ofs) const {
         ofs.write((char *)&delta_quantum, sizeof(delta_quantum));
+        assert(n != -1);
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)quanta,
                   sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
@@ -792,6 +793,12 @@ template <typename S> struct SparseMatrix {
     virtual const SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
+    virtual void load_data(ifstream &ifs) {
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&total_memory, sizeof(total_memory));
+        data = alloc->allocate(total_memory);
+        ifs.read((char *)data, sizeof(double) * total_memory);
+    }
     void load_data(const string &filename, bool load_info = false,
                    const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
         if (alloc == nullptr)
@@ -805,14 +812,16 @@ template <typename S> struct SparseMatrix {
             info->load_data(ifs);
         } else
             info = nullptr;
-        ifs.read((char *)&factor, sizeof(factor));
-        ifs.read((char *)&total_memory, sizeof(total_memory));
-        data = alloc->allocate(total_memory);
-        ifs.read((char *)data, sizeof(double) * total_memory);
+        load_data(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("SparseMatrix:load_data on '" + filename +
                                 "' failed.");
         ifs.close();
+    }
+    virtual void save_data(ofstream &ofs) const {
+        ofs.write((char *)&factor, sizeof(factor));
+        ofs.write((char *)&total_memory, sizeof(total_memory));
+        ofs.write((char *)data, sizeof(double) * total_memory);
     }
     void save_data(const string &filename, bool save_info = false) const {
         ofstream ofs(filename.c_str(), ios::binary);
@@ -821,9 +830,7 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         if (save_info)
             info->save_data(ofs);
-        ofs.write((char *)&factor, sizeof(factor));
-        ofs.write((char *)&total_memory, sizeof(total_memory));
-        ofs.write((char *)data, sizeof(double) * total_memory);
+        save_data(ofs);
         if (!ofs.good())
             throw runtime_error("SparseMatrix:save_data on '" + filename +
                                 "' failed.");

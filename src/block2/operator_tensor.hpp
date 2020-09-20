@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "csr_sparse_matrix.hpp"
 #include "sparse_matrix.hpp"
 #include "symbolic.hpp"
 #include <map>
@@ -51,6 +52,58 @@ template <typename S> struct OperatorTensor {
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
             it->second->deallocate();
     }
+    void load_data(ifstream &ifs) {
+        bool lr;
+        ifs.read((char *)&lr, sizeof(lr));
+        if (lr) {
+            lmat = load_symbolic<S>(ifs);
+            rmat = lmat;
+        } else {
+            lmat = load_symbolic<S>(ifs);
+            rmat = load_symbolic<S>(ifs);
+        }
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        for (int i = 0; i < sz; i++) {
+            shared_ptr<OpExpr<S>> expr = load_expr<S>(ifs);
+            SparseMatrixTypes tp;
+            ifs.read((char *)&tp, sizeof(tp));
+            assert(tp == SparseMatrixTypes::Normal ||
+                   tp == SparseMatrixTypes::CSR);
+            shared_ptr<SparseMatrix<S>> mat =
+                tp == SparseMatrixTypes::Normal
+                    ? make_shared<SparseMatrix<S>>(d_alloc)
+                    : make_shared<CSRSparseMatrix<S>>(d_alloc);
+            mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            mat->info->load_data(ifs);
+            mat->load_data(ifs);
+            ops[expr] = mat;
+        }
+    }
+    void save_data(ofstream &ofs) const {
+        bool lr = lmat == rmat;
+        ofs.write((char *)&lr, sizeof(lr));
+        if (lr)
+            save_symbolic(lmat, ofs);
+        else {
+            save_symbolic(lmat, ofs);
+            save_symbolic(rmat, ofs);
+        }
+        int sz = (int)ops.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (auto &op : ops) {
+            save_expr(op.first, ofs);
+            assert(op.second != nullptr);
+            SparseMatrixTypes tp = op.second->get_type();
+            ofs.write((char *)&tp, sizeof(tp));
+            op.second->info->save_data(ofs);
+            op.second->save_data(ofs);
+        }
+    }
     shared_ptr<OperatorTensor> copy() const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
@@ -61,6 +114,7 @@ template <typename S> struct OperatorTensor {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
         for (auto &p : ops) {
+            assert(p.second->get_type() == SparseMatrixTypes::Normal);
             shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>();
             if (p.second->total_memory == 0)
                 mat->info = p.second->info;

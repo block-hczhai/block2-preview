@@ -183,7 +183,9 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ", 400, 16);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ",
+                  (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()),
+                  16);
 
     hamil.deallocate();
     fcidump->deallocate();

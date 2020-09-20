@@ -44,11 +44,10 @@ template <typename S> struct FusedMPO : MPO<S> {
     using MPO<S>::site_op_infos;
     using MPO<S>::left_operator_names;
     using MPO<S>::right_operator_names;
-    vector<shared_ptr<StateInfo<S>>> basis;
     AncillaTypes ancilla_type;
     FusedMPO(const shared_ptr<MPO<S>> &mpo,
              const vector<shared_ptr<StateInfo<S>>> &basis, uint16_t a,
-             uint16_t b)
+             uint16_t b, const shared_ptr<StateInfo<S>> &ref = nullptr)
         : MPO<S>(mpo->n_sites - 1) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -62,7 +61,8 @@ template <typename S> struct FusedMPO : MPO<S> {
         assert(mpo->tensors[b]->lmat == mpo->tensors[b]->rmat);
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::op = mpo->op;
-        MPO<S>::schemer = mpo->schemer->copy();
+        MPO<S>::schemer =
+            mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
         MPO<S>::tf = mpo->tf;
         ancilla_type = mpo->get_ancilla_type();
         char fused_sparse_form =
@@ -71,8 +71,13 @@ template <typename S> struct FusedMPO : MPO<S> {
         shared_ptr<Symbolic<S>> fused_mat =
             mpo->tensors[a]->lmat * mpo->tensors[b]->lmat;
         assert(fused_mat->m == 1 || fused_mat->n == 1);
-        shared_ptr<StateInfo<S>> fused_basis = make_shared<StateInfo<S>>(
-            StateInfo<S>::tensor_product(*basis[a], *basis[b], S::invalid));
+        shared_ptr<StateInfo<S>> fused_basis = nullptr;
+        if (ref == nullptr)
+            fused_basis = make_shared<StateInfo<S>>(
+                StateInfo<S>::tensor_product(*basis[a], *basis[b], S::invalid));
+        else
+            fused_basis = make_shared<StateInfo<S>>(
+                StateInfo<S>::tensor_product(*basis[a], *basis[b], *ref));
         shared_ptr<StateInfo<S>> fused_cinfo =
             make_shared<StateInfo<S>>(StateInfo<S>::get_connection_info(
                 *basis[a], *basis[b], *fused_basis));

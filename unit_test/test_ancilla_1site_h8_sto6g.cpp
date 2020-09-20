@@ -63,7 +63,8 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
     impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    ubond_t bond_dim = 500;
+    ubond_t bond_dim =
+        (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max());
     double beta = 0.05;
     vector<ubond_t> bdims = {bond_dim};
     vector<double> te_energies, noises = {0.0};

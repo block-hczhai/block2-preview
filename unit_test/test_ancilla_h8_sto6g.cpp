@@ -58,7 +58,8 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
-    ubond_t bond_dim = 500;
+    ubond_t bond_dim =
+        (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max());
     double beta = 0.05;
     vector<ubond_t> bdims = {bond_dim};
     vector<double> te_energies;
