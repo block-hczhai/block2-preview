@@ -51,6 +51,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::tensors = mpo->tensors;
+        MPO<S>::basis = mpo->basis;
         MPO<S>::op = mpo->op;
         MPO<S>::schemer = mpo->schemer;
         MPO<S>::tf = mpo->tf;
@@ -732,7 +733,10 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         }
         name->data.resize(k);
         expr->data.resize(k);
-        name->n = expr->n = (int)name->data.size();
+        if (name->get_type() == SymTypes::RVec)
+            name->n = expr->n = (int)name->data.size();
+        else
+            name->m = expr->m = (int)name->data.size();
     }
     void simplify() {
         if (MPO<S>::schemer != nullptr) {

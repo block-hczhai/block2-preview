@@ -89,6 +89,30 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         total_memory = 0;
         data = nullptr;
     }
+    void load_data(ifstream &ifs) override {
+        SparseMatrix<S>::load_data(ifs);
+        csr_data.resize(info->n);
+        if (total_memory != 0) {
+            for (int i = 0; i < info->n; i++) {
+                MatrixRef dmat = SparseMatrix<S>::operator[](i);
+                csr_data[i] = make_shared<CSRMatrixRef>(
+                    dmat.m, dmat.n, dmat.size(), dmat.data, nullptr, nullptr);
+            }
+        } else {
+            for (int i = 0; i < info->n; i++) {
+                csr_data[i] = make_shared<CSRMatrixRef>();
+                csr_data[i]->load_data(ifs);
+            }
+        }
+    }
+    void save_data(ofstream &ofs) const override {
+        SparseMatrix<S>::save_data(ofs);
+        if (total_memory == 0) {
+            assert((int)csr_data.size() == info->n);
+            for (int i = 0; i < info->n; i++)
+                csr_data[i]->save_data(ofs);
+        }
+    }
     CSRMatrixRef &operator[](S q) const { return (*this)[info->find_state(q)]; }
     CSRMatrixRef &operator[](int idx) const {
         assert(idx != -1 and idx < csr_data.size());
@@ -159,9 +183,18 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         assert(csr_data.size() == 0);
         info = mat->info;
         csr_data.resize(info->n);
-        for (int i = 0; i < info->n; i++) {
-            csr_data[i] = make_shared<CSRMatrixRef>();
-            csr_data[i]->from_dense((*mat)[i]);
+        if (mat->get_type() == SparseMatrixTypes::Normal) {
+            for (int i = 0; i < info->n; i++) {
+                csr_data[i] = make_shared<CSRMatrixRef>();
+                csr_data[i]->from_dense((*mat)[i]);
+            }
+        } else {
+            shared_ptr<CSRSparseMatrix<S>> smat =
+                dynamic_pointer_cast<CSRSparseMatrix<S>>(mat);
+            for (int i = 0; i < info->n; i++) {
+                csr_data[i] = make_shared<CSRMatrixRef>();
+                csr_data[i]->from_dense((*smat)[i].dense_ref());
+            }
         }
     }
     // this will not allocate dense matrix

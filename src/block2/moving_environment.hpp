@@ -1668,7 +1668,8 @@ template <typename S> struct MovingEnvironment {
             OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);
         double norm = dm->norm();
-        dm->iscale(noise / norm);
+        if (abs(norm) > TINY)
+            dm->iscale(noise / norm);
         OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
                                             NoiseTypes::None);
         return dm;

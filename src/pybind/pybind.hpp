@@ -502,10 +502,17 @@ template <typename S> void bind_sparse(py::module &m) {
                        sizeof(double) * self->total_memory);
             })
         .def("clear", &SparseMatrix<S>::clear)
-        .def("load_data", &SparseMatrix<S>::load_data, py::arg("filename"),
-             py::arg("load_info") = false, py::arg("i_alloc") = nullptr)
-        .def("save_data", &SparseMatrix<S>::save_data, py::arg("filename"),
-             py::arg("save_info") = false)
+        .def("load_data",
+             (void (SparseMatrix<S>::*)(
+                 const string &, bool,
+                 const shared_ptr<Allocator<uint32_t>> &)) &
+                 SparseMatrix<S>::load_data,
+             py::arg("filename"), py::arg("load_info") = false,
+             py::arg("i_alloc") = nullptr)
+        .def("save_data",
+             (void (SparseMatrix<S>::*)(const string &, bool) const) &
+                 SparseMatrix<S>::save_data,
+             py::arg("filename"), py::arg("save_info") = false)
         .def("copy_data_from", &SparseMatrix<S>::copy_data_from)
         .def("selective_copy_from", &SparseMatrix<S>::selective_copy_from)
         .def("sparsity", &SparseMatrix<S>::sparsity)
@@ -1463,6 +1470,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("tf", &MPO<S>::tf)
         .def_readwrite("site_op_infos", &MPO<S>::site_op_infos)
         .def_readwrite("schemer", &MPO<S>::schemer)
+        .def("load_data",
+             (void (MPO<S>::*)(const string &)) & MPO<S>::load_data)
+        .def("save_data",
+             (void (MPO<S>::*)(const string &) const) & MPO<S>::save_data)
         .def("get_blocking_formulas", &MPO<S>::get_blocking_formulas)
         .def("get_ancilla_type", &MPO<S>::get_ancilla_type)
         .def("get_parallel_type", &MPO<S>::get_parallel_type)
@@ -1498,7 +1509,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("basis", &FusedMPO<S>::basis)
         .def(py::init<const shared_ptr<MPO<S>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
-                      uint16_t>());
+                      uint16_t>())
+        .def(py::init<const shared_ptr<MPO<S>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
+                      uint16_t, const shared_ptr<StateInfo<S>> &>());
 
     py::class_<IdentityMPO<S>, shared_ptr<IdentityMPO<S>>, MPO<S>>(
         m, "IdentityMPO")
@@ -1507,7 +1521,8 @@ template <typename S> void bind_mpo(py::module &m) {
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)
         .def(py::init<const HamiltonianQC<S> &>())
-        .def(py::init<const HamiltonianQC<S> &, QCTypes>());
+        .def(py::init<const HamiltonianQC<S> &, QCTypes>())
+        .def(py::init<const HamiltonianQC<S> &, QCTypes, int>());
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
         .def(py::init<const Hamiltonian<S> &>());

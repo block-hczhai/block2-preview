@@ -54,6 +54,30 @@ struct CSRMatrixRef {
     int memory_size() const {
         return nnz == m * n ? nnz : nnz + ((nnz + m + 2) >> 1);
     }
+    void load_data(ifstream &ifs) {
+        ifs.read((char *)&m, sizeof(m));
+        ifs.read((char *)&n, sizeof(n));
+        ifs.read((char *)&nnz, sizeof(nnz));
+        if (alloc == nullptr)
+            alloc = make_shared<VectorAllocator<double>>();
+        allocate();
+        ifs.read((char *)data, sizeof(double) * nnz);
+        if (nnz != size()) {
+            ifs.read((char *)cols, sizeof(int) * nnz);
+            ifs.read((char *)rows, sizeof(int) * (m + 1));
+        } else
+            cols = rows = nullptr;
+    }
+    void save_data(ofstream &ofs) const {
+        ofs.write((char *)&m, sizeof(m));
+        ofs.write((char *)&n, sizeof(n));
+        ofs.write((char *)&nnz, sizeof(nnz));
+        ofs.write((char *)data, sizeof(double) * nnz);
+        if (nnz != size()) {
+            ofs.write((char *)cols, sizeof(int) * nnz);
+            ofs.write((char *)rows, sizeof(int) * (m + 1));
+        }
+    }
     CSRMatrixRef
     transpose(const shared_ptr<Allocator<double>> &alloc = nullptr) const {
         CSRMatrixRef r(n, m, nnz, nullptr, nullptr, nullptr);

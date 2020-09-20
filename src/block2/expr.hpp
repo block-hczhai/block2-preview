@@ -394,6 +394,151 @@ template <typename S> struct OpExprRef : OpExpr<S> {
     const OpTypes get_type() const override { return OpTypes::ExprRef; }
 };
 
+template <typename S>
+inline void save_expr(const shared_ptr<OpExpr<S>> &x, ofstream &ofs) {
+    OpTypes tp = x->get_type();
+    ofs.write((char *)&tp, sizeof(tp));
+    if (tp == OpTypes::Zero)
+        ;
+    else if (tp == OpTypes::Elem) {
+        shared_ptr<OpElement<S>> op = dynamic_pointer_cast<OpElement<S>>(x);
+        ofs.write((char *)&op->name, sizeof(op->name));
+        ofs.write((char *)&op->site_index, sizeof(op->site_index));
+        ofs.write((char *)&op->factor, sizeof(op->factor));
+        ofs.write((char *)&op->q_label, sizeof(op->q_label));
+    } else if (tp == OpTypes::Prod) {
+        shared_ptr<OpString<S>> op = dynamic_pointer_cast<OpString<S>>(x);
+        ofs.write((char *)&op->factor, sizeof(op->factor));
+        ofs.write((char *)&op->conj, sizeof(op->conj));
+        uint8_t has_ab =
+            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1));
+        ofs.write((char *)&has_ab, sizeof(has_ab));
+        if (has_ab & 1)
+            save_expr<S>(op->a, ofs);
+        if (has_ab & 2)
+            save_expr<S>(op->b, ofs);
+    } else if (tp == OpTypes::Sum) {
+        shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(x);
+        int sz = (int)op->strings.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_expr<S>(op->strings[i], ofs);
+    } else if (tp == OpTypes::ElemRef) {
+        shared_ptr<OpElementRef<S>> op =
+            dynamic_pointer_cast<OpElementRef<S>>(x);
+        ofs.write((char *)&op->factor, sizeof(op->factor));
+        ofs.write((char *)&op->trans, sizeof(op->trans));
+        assert(op->op != nullptr);
+        save_expr<S>(op->op, ofs);
+    } else if (tp == OpTypes::SumProd) {
+        shared_ptr<OpSumProd<S>> op = dynamic_pointer_cast<OpSumProd<S>>(x);
+        ofs.write((char *)&op->factor, sizeof(op->factor));
+        ofs.write((char *)&op->conj, sizeof(op->conj));
+        uint8_t has_ab =
+            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1));
+        ofs.write((char *)&has_ab, sizeof(has_ab));
+        if (has_ab & 1)
+            save_expr<S>(op->a, ofs);
+        if (has_ab & 2)
+            save_expr<S>(op->b, ofs);
+        assert(op->ops.size() == op->conjs.size());
+        int sz = (int)op->ops.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            save_expr<S>(op->ops[i], ofs);
+        for (int i = 0; i < sz; i++) {
+            bool x = op->conjs[i];
+            ofs.write((char *)&x, sizeof(x));
+        }
+    } else if (tp == OpTypes::ExprRef) {
+        shared_ptr<OpExprRef<S>> op = dynamic_pointer_cast<OpExprRef<S>>(x);
+        ofs.write((char *)&op->is_local, sizeof(op->is_local));
+        assert(op->op != nullptr);
+        save_expr<S>(op->op, ofs);
+    } else
+        assert(false);
+}
+
+template <typename S> inline shared_ptr<OpExpr<S>> load_expr(ifstream &ifs) {
+    OpTypes tp;
+    ifs.read((char *)&tp, sizeof(tp));
+    if (tp == OpTypes::Zero)
+        return make_shared<OpExpr<S>>();
+    else if (tp == OpTypes::Elem) {
+        OpNames name;
+        SiteIndex site_index;
+        double factor;
+        S q_label;
+        ifs.read((char *)&name, sizeof(name));
+        ifs.read((char *)&site_index, sizeof(site_index));
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&q_label, sizeof(q_label));
+        return make_shared<OpElement<S>>(name, site_index, q_label, factor);
+    } else if (tp == OpTypes::Prod) {
+        double factor;
+        uint8_t conj, has_ab;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&conj, sizeof(conj));
+        ifs.read((char *)&has_ab, sizeof(has_ab));
+        shared_ptr<OpElement<S>> a =
+            (has_ab & 1) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                         : nullptr;
+        shared_ptr<OpElement<S>> b =
+            (has_ab & 2) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                         : nullptr;
+        return make_shared<OpString<S>>(a, b, factor, conj);
+    } else if (tp == OpTypes::Sum) {
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        vector<shared_ptr<OpString<S>>> strings(sz);
+        for (int i = 0; i < sz; i++)
+            strings[i] = dynamic_pointer_cast<OpString<S>>(load_expr<S>(ifs));
+        return make_shared<OpSum<S>>(strings);
+    } else if (tp == OpTypes::ElemRef) {
+        int8_t factor, trans;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&trans, sizeof(trans));
+        shared_ptr<OpElement<S>> op =
+            dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
+        return make_shared<OpElementRef<S>>(op, trans, factor);
+    } else if (tp == OpTypes::SumProd) {
+        double factor;
+        uint8_t conj, has_ab;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&conj, sizeof(conj));
+        ifs.read((char *)&has_ab, sizeof(has_ab));
+        shared_ptr<OpElement<S>> a =
+            (has_ab & 1) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                         : nullptr;
+        shared_ptr<OpElement<S>> b =
+            (has_ab & 2) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                         : nullptr;
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        vector<shared_ptr<OpElement<S>>> ops(sz);
+        vector<bool> conjs(sz);
+        for (int i = 0; i < sz; i++)
+            ops[i] = dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
+        for (int i = 0; i < sz; i++) {
+            bool x;
+            ifs.read((char *)&x, sizeof(x));
+            conjs[i] = x;
+        }
+        assert(a == nullptr || b == nullptr);
+        return b == nullptr
+                   ? make_shared<OpSumProd<S>>(a, ops, conjs, factor, conj)
+                   : make_shared<OpSumProd<S>>(ops, b, conjs, factor, conj);
+    } else if (tp == OpTypes::ExprRef) {
+        bool is_local;
+        ifs.read((char *)&is_local, sizeof(is_local));
+        shared_ptr<OpExpr<S>> op = load_expr<S>(ifs);
+        return make_shared<OpExprRef<S>>(op, is_local);
+    } else {
+        assert(false);
+        return nullptr;
+    }
+}
+
 template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
     assert(x->get_type() == OpTypes::Elem);
     return dynamic_pointer_cast<OpElement<S>>(x)->hash();

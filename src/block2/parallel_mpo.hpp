@@ -39,6 +39,7 @@ template <typename S> struct ParallelMPO : MPO<S> {
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::tensors = mpo->tensors;
+        MPO<S>::basis = mpo->basis;
         MPO<S>::op = mpo->op;
         MPO<S>::tf =
             make_shared<ParallelTensorFunctions<S>>(mpo->tf->opf, rule);

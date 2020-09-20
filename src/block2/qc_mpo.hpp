@@ -85,7 +85,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
     QCTypes mode;
     bool symmetrized_p;
     MPOQC(const HamiltonianQC<S> &hamil, QCTypes mode = QCTypes::NC,
-          bool symmetrized_p = true)
+          int trans_center = -1, bool symmetrized_p = true)
         : MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
@@ -106,11 +106,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
         uint16_t trans_l = -1, trans_r = hamil.n_sites;
+        if (trans_center == -1)
+            trans_center = hamil.n_sites >> 1;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
-            trans_l = (hamil.n_sites >> 1) - 1, trans_r = (hamil.n_sites >> 1);
+            trans_l = trans_center - 1, trans_r = trans_center;
         else if (mode == QCTypes::Conventional)
-            trans_l = (hamil.n_sites >> 1) - 1,
-            trans_r = (hamil.n_sites >> 1) + 1;
+            trans_l = trans_center - 1, trans_r = trans_center + 1;
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < hamil.n_sites; m++)
@@ -1138,7 +1139,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
 // Quantum chemistry MPO (spin-adapted)
 template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
     QCTypes mode;
-    MPOQC(const HamiltonianQC<S> &hamil, QCTypes mode = QCTypes::NC)
+    MPOQC(const HamiltonianQC<S> &hamil, QCTypes mode = QCTypes::NC,
+          int trans_center = -1)
         : MPO<S>(hamil.n_sites), mode(mode) {
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
@@ -1158,11 +1160,12 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
         uint16_t trans_l = -1, trans_r = hamil.n_sites;
+        if (trans_center == -1)
+            trans_center = hamil.n_sites >> 1;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
-            trans_l = (hamil.n_sites >> 1) - 1, trans_r = (hamil.n_sites >> 1);
+            trans_l = trans_center - 1, trans_r = trans_center;
         else if (mode == QCTypes::Conventional)
-            trans_l = (hamil.n_sites >> 1) - 1,
-            trans_r = (hamil.n_sites >> 1) + 1;
+            trans_l = trans_center - 1, trans_r = trans_center + 1;
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
                                                 S(1, 1, hamil.orb_sym[m]));

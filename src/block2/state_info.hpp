@@ -62,36 +62,43 @@ struct StateInfo<S, typename enable_if<integral_constant<
     ubond_t *n_states;
     int n_states_total, n;
     StateInfo()
-        : quanta(0), n_states(0), n_states_total(0), n(0), vdata(nullptr) {}
+        : quanta(nullptr), n_states(nullptr), n_states_total(0), n(0),
+          vdata(nullptr) {}
     StateInfo(S q) : vdata(nullptr) {
         allocate(1);
         quanta[0] = q, n_states[0] = 1, n_states_total = 1;
+    }
+    void load_data(ifstream &ifs) {
+        ifs.read((char *)&n_states_total, sizeof(n_states_total));
+        ifs.read((char *)&n, sizeof(n));
+        vdata = make_shared<vector<uint32_t>>(_SI_MEM_SIZE(n));
+        uint32_t *ptr = vdata->data();
+        ifs.read((char *)ptr, sizeof(uint32_t) * _SI_MEM_SIZE(n));
+        quanta = (S *)ptr;
+        n_states = (ubond_t *)(ptr + n);
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("StateInfo::load_data on '" + filename +
                                 "' failed.");
-        ifs.read((char *)&n_states_total, sizeof(n_states_total));
-        ifs.read((char *)&n, sizeof(n));
-        vdata = make_shared<vector<uint32_t>>(_SI_MEM_SIZE(n));
-        uint32_t *ptr = vdata->data();
-        ifs.read((char *)ptr, sizeof(uint32_t) * _SI_MEM_SIZE(n));
+        load_data(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("StateInfo::load_data on '" + filename +
                                 "' failed.");
         ifs.close();
-        quanta = (S *)ptr;
-        n_states = (ubond_t *)(ptr + n);
+    }
+    void save_data(ofstream &ofs) const {
+        ofs.write((char *)&n_states_total, sizeof(n_states_total));
+        ofs.write((char *)&n, sizeof(n));
+        ofs.write((char *)quanta, sizeof(uint32_t) * _SI_MEM_SIZE(n));
     }
     void save_data(const string &filename) const {
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("StateInfo::save_data on '" + filename +
                                 "' failed.");
-        ofs.write((char *)&n_states_total, sizeof(n_states_total));
-        ofs.write((char *)&n, sizeof(n));
-        ofs.write((char *)quanta, sizeof(uint32_t) * _SI_MEM_SIZE(n));
+        save_data(ofs);
         if (!ofs.good())
             throw runtime_error("StateInfo::save_data on '" + filename +
                                 "' failed.");

@@ -37,6 +37,8 @@ template <typename S> struct Symbolic {
     int m, n; //!< rows, columns
     vector<shared_ptr<OpExpr<S>>> data;
     Symbolic(int m, int n) : m(m), n(n), data(){};
+    Symbolic(int m, int n, const vector<shared_ptr<OpExpr<S>>> &data)
+        : m(m), n(n), data(data){};
     virtual ~Symbolic() = default;
     virtual const SymTypes get_type() const = 0;
     virtual shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) {
@@ -53,6 +55,8 @@ template <typename S> struct SymbolicRowVector : Symbolic<S> {
         Symbolic<S>::data =
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
+    SymbolicRowVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
+        : Symbolic<S>(1, n, data) {}
     const SymTypes get_type() const override { return SymTypes::RVec; }
     shared_ptr<OpExpr<S>> &operator[](int i) {
         assert(i < this->data.size());
@@ -79,6 +83,8 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
         Symbolic<S>::data =
             vector<shared_ptr<OpExpr<S>>>(n, make_shared<OpExpr<S>>());
     }
+    SymbolicColumnVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
+        : Symbolic<S>(n, 1, data) {}
     const SymTypes get_type() const override { return SymTypes::CVec; }
     shared_ptr<OpExpr<S>> &operator[](int i) {
         assert(i < this->data.size());
@@ -150,6 +156,60 @@ inline ostream &operator<<(ostream &os, const shared_ptr<Symbolic<S>> sym) {
         break;
     }
     return os;
+}
+
+template <typename S>
+inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ofstream &ofs) {
+    SymTypes tp = x->get_type();
+    ofs.write((char *)&tp, sizeof(tp));
+    ofs.write((char *)&x->m, sizeof(x->m));
+    ofs.write((char *)&x->n, sizeof(x->n));
+    int sz = (int)x->data.size();
+    ofs.write((char *)&sz, sizeof(sz));
+    for (int i = 0; i < sz; i++) {
+        assert(x->data[i] != nullptr);
+        save_expr(x->data[i], ofs);
+    }
+    if (tp == SymTypes::RVec)
+        assert(x->m == 1 && sz == x->n);
+    else if (tp == SymTypes::CVec)
+        assert(x->n == 1 && sz == x->m);
+    else if (tp == SymTypes::Mat) {
+        shared_ptr<SymbolicMatrix<S>> mat =
+            dynamic_pointer_cast<SymbolicMatrix<S>>(x);
+        assert((int)mat->indices.size() == sz);
+        ofs.write((char *)mat->indices.data(), sizeof(pair<int, int>) * sz);
+    }
+}
+
+template <typename S>
+inline shared_ptr<Symbolic<S>> load_symbolic(ifstream &ifs) {
+    SymTypes tp;
+    int m, n, sz;
+    ifs.read((char *)&tp, sizeof(tp));
+    ifs.read((char *)&m, sizeof(m));
+    ifs.read((char *)&n, sizeof(n));
+    ifs.read((char *)&sz, sizeof(sz));
+    vector<shared_ptr<OpExpr<S>>> data(sz);
+    for (int i = 0; i < sz; i++)
+        data[i] = load_expr<S>(ifs);
+    if (tp == SymTypes::RVec) {
+        assert(m == 1 && sz == n);
+        return make_shared<SymbolicRowVector<S>>(n, data);
+    } else if (tp == SymTypes::CVec) {
+        assert(n == 1 && sz == m);
+        return make_shared<SymbolicColumnVector<S>>(m, data);
+    } else if (tp == SymTypes::Mat) {
+        shared_ptr<SymbolicMatrix<S>> mat =
+            make_shared<SymbolicMatrix<S>>(m, n);
+        mat->data = data;
+        mat->indices.resize(sz);
+        ifs.read((char *)mat->indices.data(), sizeof(pair<int, int>) * sz);
+        return mat;
+    } else {
+        assert(false);
+        return nullptr;
+    }
 }
 
 // Dot product of symbolic vector/matrix

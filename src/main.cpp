@@ -152,12 +152,28 @@ template <typename S> void run(const map<string, string> &params) {
     if (integral_error != 0)
         cout << "integral error = " << scientific << setprecision(5)
              << integral_error << endl;
-    assert(integral_error < 1E-10);
+    cout << fixed;
+
     S vacuum(0);
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<S> hamil(vacuum, norb, orbsym, fcidump);
+
+    hamil.opf->seq->mode = SeqTypes::Simple;
+
+    if (params.count("seq_type") != 0) {
+        if (params.at("seq_type") == "none")
+            hamil.opf->seq->mode = SeqTypes::None;
+        else if (params.at("seq_type") == "simple")
+            hamil.opf->seq->mode = SeqTypes::Simple;
+        else if (params.at("seq_type") == "auto")
+            hamil.opf->seq->mode = SeqTypes::Auto;
+        else {
+            cerr << "unknown seq type : " << params.at("seq_type") << endl;
+            abort();
+        }
+    }
 
     QCTypes qc_type = QCTypes::Conventional;
 
@@ -174,20 +190,126 @@ template <typename S> void run(const map<string, string> &params) {
         }
     }
 
+    // middle transformation site for conventional mpo
+    int trans_center = -1;
+    if (params.count("trans_center") != 0)
+        trans_center = Parsing::to_int(params.at("trans_center"));
+
     Timer t;
     t.get_time();
-    // MPO construction
-    cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo = make_shared<MPOQC<S>>(hamil, qc_type);
-    cout << "MPO end .. T = " << t.get_time() << endl;
 
-    // MPO simplification
-    cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
-    cout << "MPO simplification end .. T = " << t.get_time() << endl;
+    shared_ptr<MPO<S>> mpo;
+
+    if (params.count("load_mpo") != 0) {
+        string fn = params.at("load_mpo");
+        mpo = make_shared<MPO<S>>(0);
+        cout << "MPO loading start" << endl;
+        mpo->load_data(fn);
+        if (mpo->sparse_form.find('S') == string::npos)
+            mpo->tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            mpo->tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        mpo->tf->opf->seq = hamil.opf->seq;
+        cout << "MPO loading end .. T = " << t.get_time() << endl;
+
+        if (mpo->basis.size() != 0)
+            hamil.basis = mpo->basis;
+        hamil.n_sites = mpo->n_sites;
+        norb = mpo->n_sites;
+
+    } else {
+        // MPO construction
+        cout << "MPO start" << endl;
+        mpo = make_shared<MPOQC<S>>(hamil, qc_type, trans_center);
+        cout << "MPO end .. T = " << t.get_time() << endl;
+
+        if (params.count("fused") != 0 || params.count("mrci-fused") != 0) {
+            int n_ext = 0;
+
+            shared_ptr<MPSInfo<S>> fusing_mps_info;
+
+            if (params.count("mrci-fused") != 0) {
+                vector<string> xmrci =
+                    Parsing::split(params.at("mrci-fused"), " ", true);
+                n_ext = Parsing::to_int(xmrci[0]);
+                int mrci_order = Parsing::to_int(xmrci[1]);
+                fusing_mps_info = make_shared<MRCIMPSInfo<S>>(
+                    hamil.n_sites, n_ext, mrci_order, hamil.vacuum, target,
+                    hamil.basis);
+            } else {
+                n_ext = Parsing::to_int(params.at("fused"));
+                fusing_mps_info = make_shared<MPSInfo<S>>(
+                    hamil.n_sites, hamil.vacuum, target, hamil.basis);
+            }
+
+            double sparsity = 1.1;
+
+            if (params.count("sparse_mpo") != 0) {
+                sparsity = Parsing::to_double(params.at("sparse_mpo"));
+                mpo->tf = make_shared<TensorFunctions<S>>(
+                    make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+                mpo->tf->opf->seq = hamil.opf->seq;
+            }
+
+            cout << "MPO fusing start" << endl;
+            for (int i = 0; i < n_ext - 1; i++) {
+                cout << "fusing .. " << i + 1 << " / " << n_ext << endl;
+                shared_ptr<MPO<S>> old_mpo = mpo;
+                mpo = make_shared<FusedMPO<S>>(
+                    mpo, hamil.basis, mpo->n_sites - 2, mpo->n_sites - 1,
+                    fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
+                old_mpo->tensors[old_mpo->n_sites - 1]->deallocate();
+                old_mpo->tensors[old_mpo->n_sites - 2]->deallocate();
+                if (i == 10) {
+                    for (auto &op : mpo->tensors[mpo->n_sites - 1]->ops) {
+                        shared_ptr<CSRSparseMatrix<S>> smat =
+                            make_shared<CSRSparseMatrix<S>>();
+                        if (op.second->get_type() ==
+                            SparseMatrixTypes::Normal) {
+                            if (op.second->sparsity() > sparsity) {
+                                smat->from_dense(op.second);
+                                op.second->deallocate();
+                            } else
+                                smat->wrap_dense(op.second);
+                        }
+                        op.second = smat;
+                    }
+                    mpo->sparse_form[mpo->n_sites - 1] = 'S';
+                }
+                hamil.basis = mpo->basis;
+                hamil.n_sites = mpo->n_sites;
+            }
+            cout << "MPO fusing end .. T = " << t.get_time() << endl;
+
+            fusing_mps_info->deallocate();
+
+            norb = hamil.n_sites;
+        }
+
+        // MPO simplification
+        cout << "MPO simplification start" << endl;
+        mpo =
+            make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+        cout << "MPO simplification end .. T = " << t.get_time() << endl;
+    }
+
+    if (params.count("save_mpo") != 0) {
+        string fn = params.at("save_mpo");
+        cout << "MPO saving start" << endl;
+        mpo->save_data(fn);
+        cout << "MPO saving end .. T = " << t.get_time() << endl;
+    }
 
     if (params.count("print_mpo") != 0)
         cout << mpo->get_blocking_formulas() << endl;
+
+    if (params.count("print_basis_dims") != 0) {
+        cout << "basis dims = ";
+        for (int i = 0; i < norb; i++)
+            cout << hamil.basis[i]->n_states_total << " ";
+        cout << endl;
+    }
 
     if (params.count("print_mpo_dims") != 0) {
         cout << "left mpo dims = ";
@@ -231,21 +353,6 @@ template <typename S> void run(const map<string, string> &params) {
         }
     }
 
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-    if (params.count("seq_type") != 0) {
-        if (params.at("seq_type") == "none")
-            hamil.opf->seq->mode = SeqTypes::None;
-        else if (params.at("seq_type") == "simple")
-            hamil.opf->seq->mode = SeqTypes::Simple;
-        else if (params.at("seq_type") == "auto")
-            hamil.opf->seq->mode = SeqTypes::Auto;
-        else {
-            cerr << "unknown seq type : " << params.at("seq_type") << endl;
-            abort();
-        }
-    }
-
     shared_ptr<MPSInfo<S>> mps_info = nullptr;
 
     if (params.count("casci") != 0) {
@@ -254,6 +361,23 @@ template <typename S> void run(const map<string, string> &params) {
         mps_info = make_shared<CASCIMPSInfo<S>>(
             norb, vacuum, target, hamil.basis, Parsing::to_int(xcasci[0]),
             Parsing::to_int(xcasci[1]));
+
+        if (params.count("print_casci") != 0) {
+            for (auto &cm :
+                 dynamic_pointer_cast<CASCIMPSInfo<S>>(mps_info)->casci_mask)
+                cout << (cm == ActiveTypes::Active
+                             ? "A "
+                             : (cm == ActiveTypes::Frozen ? "F " : "E "));
+            cout << endl;
+        }
+
+    } else if (params.count("mrci") != 0) {
+        vector<string> xmrci = Parsing::split(params.at("mrci"), " ", true);
+        int n_ext = Parsing::to_int(xmrci[0]);
+        int mrci_order = Parsing::to_int(xmrci[1]);
+        mps_info =
+            make_shared<MRCIMPSInfo<S>>(hamil.n_sites, n_ext, mrci_order,
+                                        hamil.vacuum, target, hamil.basis);
     } else
         mps_info = make_shared<MPSInfo<S>>(norb, vacuum, target, hamil.basis);
     double bias = 1.0;
@@ -261,8 +385,8 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("occ_bias") != 0)
         bias = Parsing::to_double(params.at("occ_bias"));
 
-    if (params.count("mps") != 0) {
-        mps_info->tag = params.at("mps");
+    if (params.count("load_mps") != 0) {
+        mps_info->tag = params.at("load_mps");
         mps_info->load_mutable();
     } else if (occs.size() == 0)
         mps_info->set_bond_dimension(bdims[0]);
@@ -302,8 +426,8 @@ template <typename S> void run(const map<string, string> &params) {
         dot = Parsing::to_int(params.at("dot"));
     shared_ptr<MPS<S>> mps = nullptr;
 
-    if (params.count("mps") != 0) {
-        mps_info->tag = params.at("mps");
+    if (params.count("load_mps") != 0) {
+        mps_info->tag = params.at("load_mps");
         mps = make_shared<MPS<S>>(mps_info);
         mps->load_data();
         mps->load_mutable();
