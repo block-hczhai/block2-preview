@@ -30,6 +30,7 @@ namespace block2 {
 // Rule for MPO simplification
 template <typename S> struct Rule {
     Rule() {}
+    virtual ~Rule() = default;
     virtual shared_ptr<OpElementRef<S>>
     operator()(const shared_ptr<OpElement<S>> &op) const {
         return nullptr;

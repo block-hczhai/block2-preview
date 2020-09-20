@@ -53,6 +53,7 @@ template <typename S> struct Hamiltonian {
         assert((int)this->n_sites == n_sites);
         n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;
     }
+    virtual ~Hamiltonian() = default;
     // Fill the map with sparse matrix representation of site operators
     // The keys in map should be already set by filter_site_ops
     virtual void get_site_ops(

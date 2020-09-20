@@ -127,6 +127,7 @@ template <typename S> struct MPO {
     MPO(int n_sites)
         : n_sites(n_sites), sparse_form(n_sites, 'N'), const_e(0.0),
           op(nullptr), schemer(nullptr), tf(nullptr) {}
+    virtual ~MPO() = default;
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual ParallelTypes get_parallel_type() const {
         return ParallelTypes::Serial;

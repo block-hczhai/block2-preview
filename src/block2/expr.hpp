@@ -85,6 +85,7 @@ enum struct OpTypes : uint8_t {
 
 // Expression zero
 template <typename S> struct OpExpr {
+    virtual ~OpExpr() = default;
     virtual const OpTypes get_type() const { return OpTypes::Zero; }
     bool operator==(const OpExpr &other) const { return true; }
 };
@@ -252,7 +253,7 @@ template <typename S> struct OpString : OpExpr<S> {
           a(a == nullptr ? nullptr : make_shared<OpElement<S>>(a->abs())),
           b(b == nullptr ? nullptr : make_shared<OpElement<S>>(b->abs())),
           conj(conj) {}
-    const OpTypes get_type() const override { return OpTypes::Prod; }
+    virtual const OpTypes get_type() const override { return OpTypes::Prod; }
     OpString abs() const { return OpString(a, b, 1.0, conj); }
     shared_ptr<OpElement<S>> get_op() const {
         assert(b == nullptr);

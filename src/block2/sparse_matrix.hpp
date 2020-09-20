@@ -790,6 +790,7 @@ template <typename S> struct SparseMatrix {
     SparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
+    virtual ~SparseMatrix() = default;
     virtual const SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
