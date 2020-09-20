@@ -19,6 +19,7 @@
  */
 
 #include "block2.hpp"
+#include <malloc.h>
 
 using namespace std;
 using namespace block2;
@@ -255,12 +256,9 @@ template <typename S> void run(const map<string, string> &params) {
             cout << "MPO fusing start" << endl;
             for (int i = 0; i < n_ext - 1; i++) {
                 cout << "fusing .. " << i + 1 << " / " << n_ext << endl;
-                shared_ptr<MPO<S>> old_mpo = mpo;
                 mpo = make_shared<FusedMPO<S>>(
                     mpo, hamil.basis, mpo->n_sites - 2, mpo->n_sites - 1,
                     fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
-                old_mpo->tensors[old_mpo->n_sites - 1]->deallocate();
-                old_mpo->tensors[old_mpo->n_sites - 2]->deallocate();
                 if (i == 10) {
                     for (auto &op : mpo->tensors[mpo->n_sites - 1]->ops) {
                         shared_ptr<CSRSparseMatrix<S>> smat =

@@ -46,7 +46,7 @@ namespace block2 {
 struct MKLSparseAllocator : Allocator<double> {
     shared_ptr<sparse_matrix_t> mat;
     MKLSparseAllocator(const shared_ptr<sparse_matrix_t> &mat) : mat(mat) {}
-    void deallocate(void *ptr, size_t n) override { mkl_sparse_destroy(*mat); }
+    void deallocate(void *ptr, size_t n) override { mat = nullptr; }
     struct Deleter {
         void operator()(sparse_matrix_t *p) {
             mkl_sparse_destroy(*p);
@@ -145,7 +145,8 @@ struct CSRMatrixFunctions {
             MKLSparseAllocator::to_mkl_sparse_matrix(a);
         shared_ptr<sparse_matrix_t> spb =
             MKLSparseAllocator::to_mkl_sparse_matrix(b);
-        shared_ptr<sparse_matrix_t> spc = make_shared<sparse_matrix_t>();
+        shared_ptr<sparse_matrix_t> spc = shared_ptr<sparse_matrix_t>(
+            new sparse_matrix_t, MKLSparseAllocator::Deleter());
         sparse_status_t st = mkl_sparse_d_add(
             conj ? SPARSE_OPERATION_TRANSPOSE : SPARSE_OPERATION_NON_TRANSPOSE,
             *spb, scale, *spa, spc.get());
