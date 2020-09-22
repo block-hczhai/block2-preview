@@ -73,6 +73,7 @@ template <typename S> struct HamiltonianSCI {
         opf = make_shared<OperatorFunctions<S>>(make_shared<CG<S>>());
         opf->cg->initialize();
     }
+    virtual ~HamiltonianSCI() = default;
 
     // Fill the map with sparse matrix representation of site operators
     // Trivial sparse matrices are removed from symbolic operator tensor and map

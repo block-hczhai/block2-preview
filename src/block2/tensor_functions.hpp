@@ -36,6 +36,7 @@ namespace block2 {
 template <typename S> struct TensorFunctions {
     shared_ptr<OperatorFunctions<S>> opf;
     TensorFunctions(const shared_ptr<OperatorFunctions<S>> &opf) : opf(opf) {}
+    virtual ~TensorFunctions() = default;
     // c = a
     virtual void left_assign(const shared_ptr<OperatorTensor<S>> &a,
                              shared_ptr<OperatorTensor<S>> &c) const {

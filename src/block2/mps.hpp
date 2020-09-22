@@ -99,6 +99,7 @@ template <typename S> struct MPSInfo {
         for (int i = n_sites; i >= 0; i--)
             right_dims[i] = make_shared<StateInfo<S>>();
     }
+    virtual ~MPSInfo() = default;
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
@@ -805,6 +806,7 @@ template <typename S> struct MPS {
         for (int i = center + dot; i < n_sites; i++)
             canonical_form[i] = 'R';
     }
+    virtual ~MPS() = default;
     void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();

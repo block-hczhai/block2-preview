@@ -63,6 +63,7 @@ template <typename S> struct DMRG {
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
+    virtual ~DMRG() = default;
     struct Iteration {
         vector<double> energies;
         vector<vector<pair<S, double>>> quanta;

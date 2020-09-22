@@ -45,6 +45,7 @@ template <typename S> struct OperatorFunctions {
     OperatorFunctions(const shared_ptr<CG<S>> &cg) : cg(cg) {
         seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
     }
+    virtual ~OperatorFunctions() = default;
     // a += b * scale
     virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
                       const shared_ptr<SparseMatrix<S>> &b, double scale = 1.0,

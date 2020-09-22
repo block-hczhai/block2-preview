@@ -790,6 +790,7 @@ template <typename S> struct SparseMatrix {
     SparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
+    virtual ~SparseMatrix() = default;
     virtual const SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
@@ -1062,7 +1063,7 @@ template <typename S> struct SparseMatrix {
         }
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
-        double dt[tmp[nr]];
+        double *dt = dalloc->allocate(tmp[nr]);
         uint32_t it[nr];
         memset(it, 0, sizeof(uint32_t) * nr);
         for (int i = 0; i < n; i++) {
@@ -1091,6 +1092,7 @@ template <typename S> struct SparseMatrix {
                    n_states * sizeof(double));
             it[ir] += n_states;
         }
+        dalloc->deallocate(dt, tmp[nr]);
     }
     void right_canonicalize(const shared_ptr<SparseMatrix<S>> &lmat) {
         int nl = lmat->info->n, n = info->n;
@@ -1105,7 +1107,7 @@ template <typename S> struct SparseMatrix {
         }
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
-        double dt[tmp[nl]];
+        double *dt = dalloc->allocate(tmp[nl]);
         uint32_t it[nl];
         memset(it, 0, sizeof(uint32_t) * nl);
         for (int i = 0; i < n; i++) {
@@ -1141,6 +1143,7 @@ template <typename S> struct SparseMatrix {
                        dt + (tmp[il] + it[il] + k * nxr), inr * sizeof(double));
             it[il] += inr * nxl;
         }
+        dalloc->deallocate(dt, tmp[nl]);
     }
     void left_multiply(const shared_ptr<SparseMatrix<S>> &lmat,
                        const StateInfo<S> &l, const StateInfo<S> &m,

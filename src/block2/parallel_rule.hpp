@@ -41,6 +41,7 @@ template <typename S> struct ParallelCommunicator {
     ParallelCommunicator() : size(1), rank(0), root(0) {}
     ParallelCommunicator(int size, int rank, int root)
         : size(size), rank(rank), root(root) {}
+    virtual ~ParallelCommunicator() = default;
     virtual ParallelTypes get_parallel_type() const {
         return ParallelTypes::Serial;
     }
@@ -95,6 +96,7 @@ template <typename S> struct ParallelRule {
         if (comm->rank != comm->root)
             frame->prefix_can_write = false;
     }
+    virtual ~ParallelRule() = default;
     ParallelTypes get_parallel_type() const {
         return comm->get_parallel_type();
     }

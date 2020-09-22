@@ -36,6 +36,7 @@ namespace block2 {
 // Abstract memory allocator
 template <typename T> struct Allocator {
     Allocator() {}
+    virtual ~Allocator() = default;
     virtual T *allocate(size_t n) { return nullptr; }
     virtual void deallocate(void *ptr, size_t n) {}
     virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
