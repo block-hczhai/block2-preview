@@ -37,6 +37,7 @@
 
 using namespace std;
 
+
 namespace block2 {
 template <typename, typename = void> struct HamiltonianQCSCI;
 
@@ -50,6 +51,27 @@ template <typename, typename = void> struct HamiltonianQCSCI;
  */
 template <typename S>
 struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
+private:
+    static int getNOrbCas(const int nOrbTot, const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciLeft,
+                          const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciRight){
+        auto nCas = nOrbTot;
+        nCas -= sciLeft==nullptr?0:sciLeft->nOrbThis;
+        nCas -= sciRight==nullptr?0:sciRight->nOrbThis;
+        return nCas;
+    }
+    static int getNSites(const int nOrbTot, const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciLeft,
+                         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciRight){
+        auto nCas = getNOrbCas(nOrbTot, sciLeft, sciRight);
+        if(sciLeft == nullptr){
+            assert(sciRight != nullptr);
+            return 1 + nCas;
+        }else if(sciRight == nullptr){
+            return 1 + nCas;
+        }else{
+            return 2 + nCas;
+        }
+    }
+public:
     using HamiltonianSCI<S>::n_syms;
     using HamiltonianSCI<S>::n_sites;
     using HamiltonianSCI<S>::vacuum;
@@ -67,20 +89,43 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
     shared_ptr<FCIDUMP> fcidump;
     double mu = 0; //!> Chemical potential
     std::shared_ptr<sci::AbstractSciWrapper<S>>
-        sciWrapper;       //!< Wrapper class for the
-                          //!!  physical operators/determinants on the big site
-    int nOrbCas, nOrbExt; //!> Number of spatial orbitals in CAS; External
-                          //! space. nSites=nOrbCas+1
-    HamiltonianQCSCI(
-        S vacuum, int nOrbCAS, int nOrbExt, const vector<uint8_t> &orb_sym,
+        sciWrapperLeft, sciWrapperRight; //!< Wrapper classes for the
+                                         //!!  physical operators/determinants on the big site
+    int nOrbLeft; //!> Number of spatial orbitals for left SCI space (small nOrb)
+    int nOrbRight; //!> Number of spatial orbitals for right SCI space  (large nOrb)
+    int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
+    HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
-        const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapper)
-        : HamiltonianSCI<S>(vacuum, nOrbCAS + 1, orb_sym), fcidump(fcidump),
-          sciWrapper(sciWrapper), nOrbCas{nOrbCAS}, nOrbExt{nOrbExt} {
+        const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
+        const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperRight = nullptr)
+            : HamiltonianSCI<S>(vacuum, getNSites(nOrbTot, sciWrapperLeft,sciWrapperRight), orb_sym),
+              fcidump(fcidump),
+              sciWrapperLeft(sciWrapperLeft), sciWrapperRight(sciWrapperRight),
+              nOrbLeft{sciWrapperLeft==nullptr?0:sciWrapperLeft->nOrbThis},
+              nOrbRight{sciWrapperRight==nullptr?0:sciWrapperRight->nOrbThis},
+              nOrbCas{getNOrbCas(nOrbTot, sciWrapperLeft,sciWrapperRight)}
+        {
         cout << " Hamiltonian: n_sites = " << (int)n_sites
-             << ", nOrbCas = " << nOrbCas << ", nOrbExt =" << nOrbExt << endl;
+             << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
+        if(orb_sym.size() != nOrbLeft + nOrbCas + nOrbRight){
+            cout << "Error! orb_sym.size()=" << orb_sym.size() << "!= nOrbTot=" <<
+            nOrbLeft + nOrbCas + nOrbRight << endl;
+            throw std::runtime_error("Wrong orb_sym size");
+        }
+        if(nOrbLeft > nOrbRight){
+            cout << "Warning: Left big site should have fewer orbitals than right one" << endl;
+        }
+        if(nOrbLeft + nOrbCas > nOrbRight){
+            cout << "Warning: There should be more orbitals on the right big site "
+                    "than on the other sites (NC scheme)" << endl;
+        }
+        iStart = sciWrapperLeft != nullptr ? 1 : 0;
+        iEnd = sciWrapperRight != nullptr ? n_sites-1 : n_sites;
+        if(sciWrapperLeft != nullptr) {
+           initSciBasis(sciWrapperLeft, 0);
+        }
         // CAS sites
-        for (int iSite = 0; iSite < n_sites - 1; ++iSite) {
+        for (int iSite = iStart; iSite < iEnd; ++iSite) {
             basis[iSite] = make_shared<StateInfo<S>>();
             auto &bas = *basis[iSite];
             auto iSym = orb_sym[iSite];
@@ -96,31 +141,9 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         if (std::abs(mu) > 1e-12) {
             throw std::runtime_error("mu needs to be 0 right now");
         }
-        ////////////
-        // SCI site
-        const auto iSite = n_sites - 1;
-        if (vacuum.n() != 0 or vacuum.twos() != 0) {
-            // TODO why is vacuum an input?
-            throw std::runtime_error("Weird vacuum; not implemented for sciwrapper");
+        if(sciWrapperRight != nullptr) {
+            initSciBasis(sciWrapperRight, n_sites-1);
         }
-        basis[iSite] = make_shared<StateInfo<S>>();
-        auto &bas = *basis[iSite];
-        const auto qSize = static_cast<int>(sciWrapper->quantumNumbers.size());
-        bas.allocate(qSize);
-        for (int iQ = 0; iQ < qSize; ++iQ) {
-            auto o1 = sciWrapper->offsets[iQ].first;
-            auto o2 = sciWrapper->offsets[iQ].second;
-            bas.quanta[iQ] = sciWrapper->quantumNumbers[iQ];
-            bas.n_states[iQ] = o2 - o1;
-        }
-        bas.sort_states();
-        for (int iQ = 0; iQ < qSize; ++iQ) {
-            if(bas.quanta[iQ] != sciWrapper->quantumNumbers[iQ]) {
-                // This should not happen as the quantum numbers are now always sorted accordingly
-                throw std::runtime_error("HamiltonianQCSCI: sciWrapper states were not sorted according to StateInfo sort");
-            }
-        }
-        ////////////
         init_site_ops();
     }
 
@@ -142,7 +165,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             for (int j = info.size() - 1; j >= 0; j--)
                 info[j].second->deallocate();
         }
-        for (int iSite = n_sites - 1; iSite >= 0; --iSite) {
+        for (int iSite = iEnd; iSite >= iStart; --iSite) {
             basis[iSite]->deallocate();
         }
         HamiltonianSCI<S>::deallocate();
@@ -161,8 +184,11 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
     void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
-        if (m == n_sites - 1 and true) {
-            get_site_ops_big_site(ops);
+        if (m == n_sites - 1 and sciWrapperRight != nullptr) {
+            get_site_ops_big_site(sciWrapperRight, ops, m);
+            return;
+        }else if(m == 0 and sciWrapperLeft != nullptr){
+            get_site_ops_big_site(sciWrapperLeft, ops, m);
             return;
         }
         uint16_t i, j, k;
@@ -197,7 +223,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             case OpNames::R:
                 i = op.site_index[0];
                 s = op.site_index.ss();
-                // TODO hrl: this is S + R or S + .5 R; see webpage
+                // hrl: this is S + R or S + .5 R; see webpage
                 if (orb_sym[i] != orb_sym[m] ||
                     (abs(t(s, i, m)) < TINY &&
                      abs(v(s, 0, i, m, m, m)) < TINY &&
@@ -325,14 +351,43 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
     }
 
   private:
+    uint16_t iStart, iEnd; // Loop indices for normal sites
+    void initSciBasis(const std::shared_ptr<sci::AbstractSciWrapper<S>>& sciWrapper, const int iSite){
+        if (vacuum.n() != 0 or vacuum.twos() != 0) {
+            // TODO why is vacuum an input?
+            throw std::runtime_error("Weird vacuum; not implemented for sciwrapper");
+        }
+        basis[iSite] = make_shared<StateInfo<S>>();
+        auto &bas = *basis[iSite];
+        const auto qSize = static_cast<int>(sciWrapper->quantumNumbers.size());
+        bas.allocate(qSize);
+        for (int iQ = 0; iQ < qSize; ++iQ) {
+            auto o1 = sciWrapper->offsets[iQ].first;
+            auto o2 = sciWrapper->offsets[iQ].second;
+            bas.quanta[iQ] = sciWrapper->quantumNumbers[iQ];
+            bas.n_states[iQ] = o2 - o1;
+        }
+        bas.sort_states();
+        for (int iQ = 0; iQ < qSize; ++iQ) {
+            if (bas.quanta[iQ] != sciWrapper->quantumNumbers[iQ]) {
+                // This should not happen as the quantum numbers are now always sorted accordingly
+                cout << "Error for iSite = " << iSite << endl;
+                throw std::runtime_error(
+                        "HamiltonianQCSCI: sciWrapper states were not sorted according to StateInfo sort");
+            }
+        }
+    }
+
+
     void init_site_ops() {
         init_site_op_infos();
 
-        // pg symmetry for first orbital
-        const uint8_t ipg = orb_sym[0];
+        // pg symmetry for reference orbital
+        // op_prims_normal need normal site as reference => use first one (iStart)
+        const uint8_t ipg = orb_sym[iStart];
         op_prims_normal[0][OpNames::I] = make_shared<SparseMatrix<S>>();
         op_prims_normal[0][OpNames::I]->allocate(
-            find_site_op_info(S(0, 0, 0), 0));
+            find_site_op_info(S(0, 0, 0), iStart));
         (*op_prims_normal[0][OpNames::I])[S(0, 0, 0)](0, 0) = 1.0; //  |00>
         (*op_prims_normal[0][OpNames::I])[S(1, -1, ipg)](0, 0) =
             1.0; // |10> (alpha)
@@ -343,20 +398,20 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         for (uint8_t s = 0; s < 2; s++) {
             op_prims_normal[s][OpNames::N] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::N]->allocate(
-                find_site_op_info(S(0, 0, 0), 0));
+                find_site_op_info(S(0, 0, 0), iStart));
             (*op_prims_normal[s][OpNames::N])[S(0, 0, 0)](0, 0) = 0.0;
             (*op_prims_normal[s][OpNames::N])[S(1, -1, ipg)](0, 0) = s;
             (*op_prims_normal[s][OpNames::N])[S(1, 1, ipg)](0, 0) = 1 - s;
             (*op_prims_normal[s][OpNames::N])[S(2, 0, 0)](0, 0) = 1.0;
             op_prims_normal[s][OpNames::C] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::C]->allocate(
-                find_site_op_info(S(1, sz[s], ipg), 0));
+                find_site_op_info(S(1, sz[s], ipg), iStart));
             (*op_prims_normal[s][OpNames::C])[S(0, 0, 0)](0, 0) = 1.0;
             (*op_prims_normal[s][OpNames::C])[S(1, -sz[s], ipg)](0, 0) =
                 s ? -1.0 : 1.0;
             op_prims_normal[s][OpNames::D] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::D]->allocate(
-                find_site_op_info(S(-1, -sz[s], ipg), 0));
+                find_site_op_info(S(-1, -sz[s], ipg), iStart));
             (*op_prims_normal[s][OpNames::D])[S(1, sz[s], ipg)](0, 0) = 1.0;
             (*op_prims_normal[s][OpNames::D])[S(2, 0, 0)](0, 0) =
                 s ? -1.0 : 1.0;
@@ -366,7 +421,7 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         for (uint8_t s = 0; s < 4; s++) {
             op_prims_normal[s][OpNames::NN] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::NN]->allocate(
-                find_site_op_info(S(0, 0, 0), 0));
+                find_site_op_info(S(0, 0, 0), iStart));
             // hrl: s & 1 : 0 => 0; 1 => 1; 2 => 0; 3 => 1 (first index)
             // hrl: s >> 1: 0 => 0; 1 => 0; 2 => 1; 3 => 1  (second index)
             opf->product(0, op_prims_normal[s & 1][OpNames::N],
@@ -374,19 +429,19 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                          op_prims_normal[s][OpNames::NN]);
             op_prims_normal[s][OpNames::A] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::A]->allocate(
-                find_site_op_info(S(2, sz_plus[s], 0), 0));
+                find_site_op_info(S(2, sz_plus[s], 0), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[s >> 1][OpNames::C],
                          op_prims_normal[s][OpNames::A]);
             op_prims_normal[s][OpNames::AD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::AD]->allocate(
-                find_site_op_info(S(-2, -sz_plus[s], 0), 0));
+                find_site_op_info(S(-2, -sz_plus[s], 0), iStart));
             opf->product(0, op_prims_normal[s >> 1][OpNames::D],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::AD]);
             op_prims_normal[s][OpNames::B] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::B]->allocate(
-                find_site_op_info(S(0, sz_minus[s], 0), 0));
+                find_site_op_info(S(0, sz_minus[s], 0), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[s >> 1][OpNames::D],
                          op_prims_normal[s][OpNames::B]);
@@ -395,13 +450,13 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         for (uint8_t s = 0; s < 4; s++) {
             op_prims_normal[s][OpNames::R] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::R]->allocate(
-                find_site_op_info(S(-1, -sz[s & 1], ipg), 0));
+                find_site_op_info(S(-1, -sz[s & 1], ipg), iStart));
             opf->product(0, op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::R]);
             op_prims_normal[s][OpNames::RD] = make_shared<SparseMatrix<S>>();
             op_prims_normal[s][OpNames::RD]->allocate(
-                find_site_op_info(S(1, sz[s & 1], ipg), 0));
+                find_site_op_info(S(1, sz[s & 1], ipg), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims_normal[s][OpNames::RD]);
@@ -432,8 +487,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             for (uint8_t s = 0; s < 4; s++)
                 ops[i][nn_op[s]] = nullptr;
         }
-        //                              vv ATTENTION: Not for last site
-        for (uint16_t m = 0; m < n_sites - 1; m++) {
+        // vv only for normal sites
+        for (uint16_t m = iStart; m < iEnd; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =
@@ -458,8 +513,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
                     S(0, sz_minus[s], 0))] = nullptr;
             }
         }
-        //                              vv ATTENTION: Not for last site
-        for (uint16_t iSite = 0; iSite < n_sites - 1; ++iSite) {
+        // vv only for normal sites
+        for (uint16_t iSite = iStart; iSite < iEnd; ++iSite) {
             const auto iSym = orb_sym[iSite];
             site_norm_ops[iSite] = vector<
                 pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
@@ -488,7 +543,8 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             for (auto n : {-2, 0, 2})
                 for (auto s : {-2, 0, 2})
                     info[S(n, s, 0)] = nullptr;
-            if(iSite == n_sites-1){ // last site... pg
+            if( (iSite == n_sites-1 and sciWrapperRight != nullptr) or
+                (iSite == 0 and sciWrapperLeft != nullptr)){ // extremal site... pg
                 // TODO which do I really need? Starting xSite from iSite does not work
                 for(int xSite = 0; xSite < orb_sym.size(); ++xSite) {
                     for (auto n : {-1, 1})
@@ -512,9 +568,9 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             }
         }
     }
-    void get_site_ops_big_site(
+    void get_site_ops_big_site(const std::shared_ptr<sci::AbstractSciWrapper<S>>& sciWrapper,
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-            &ops) const {
+            &ops, int iSite) const {
         int ii, jj; // spin orbital indices
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
@@ -526,19 +582,15 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
             // Also, the CSR stuff is more complicated and I will do the actual allocation
             //      of the individual matrices in the fillOp* routines.
             //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
-            mat.initialize(find_site_op_info(op.q_label, n_sites - 1));
+            mat.initialize(find_site_op_info(op.q_label, iSite));
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
-                cout << "m == " << (int)n_sites - 1 << "allocate" << op.name
+                cout << "m == " << iSite << "allocate" << op.name
                      << "s" << (int)op.site_index[0] << ","
                      << (int)op.site_index[1] << "ss" << (int)op.site_index.s(0)
                      << (int)op.site_index.s(1) << endl;
                 cout << "q_label:" << op.q_label << endl;
             }
-            // cout << "m == "<< (int)n_sites-1 << "allocate"<< op.name << "s"
-            // << (int)op.site_index[0] <<","
-            //     << (int)op.site_index[1] << "ss" << (int)op.site_index.s(0)
-            //     << (int)op.site_index.s(1) << endl;
             // get orbital indices
             ii = -1;
             jj = -1; // debug

@@ -55,39 +55,48 @@ namespace sci {
     public:
         using sizPair = std::pair<std::size_t, std::size_t>;
         using BLSparseMatrix = block2::CSRSparseMatrix<S>;
-        int nOrbCas, nOrbExt, nOrb; //!< *spatial* orbitals
+        int nOrbOther, nOrbThis, nOrb; //!< *spatial* orbitals
         int nMaxAlphaEl, nMaxBetaEl, nMaxEl; //!< Maximal number of alpha/beta electrons
+        bool isRight; //!< Whether orbitals of SCI are right to other orbitals or not
         AbstractSciWrapper() : AbstractSciWrapper(1, 1, 1, 1, -1, nullptr, {}) {}
 
         /** Initialization via generated CI space based on nMax*
          *
-         * @param nOrbCas (Spatial) orbitals in the CAS space. This is handled by normal "small" MPS sites
-         * @param nOrbExt Orbitals in external space. This is handled via SCI
+         * @param nOrb Total (spatial) orbitals
+         * @param nOrbThis Orbitals handled via SCI
+         * @param isRight Whether orbitals of SCI are right to other orbitals or not
          * @param nMaxAlphaEl Maximal number of alpha electrons in external space
          * @param nMaxBetaEl Maximal number of beta electrons in external space
          * @param nMaxEl Maximal number of alpha+beta electrons in external space
          * @param fcidump block2 FCIDUMP file
          */
-        AbstractSciWrapper(int nOrbCas, int nOrbExt,
+        AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl):
-                nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
+                nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
+                isRight{isRight},
                 nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}{
+            if(nOrbOther < 0)
+                throw std::invalid_argument("nOrb < nOrbThis?");
         };
         /** Initialization via externally given determinants in `occs`.
          *
-         * @param nOrbCas (Spatial) orbitals in the CAS space. This is handled by normal "small" MPS sites
-         * @param nOrbExt Orbitals in external space. This is handled via SCI
+         * @param nOrb Total (spatial) orbitals
+         * @param nOrbThis Orbitals handled via SCI
+         * @param isRight: Whether orbitals of SCI are right to other orbitals or not
          * @param occs  Vector of occupations for filling determinants. If used, nMax* are ignored!
          * @param fcidump block2 FCIDUMP file
          */
-        AbstractSciWrapper(int nOrbCas, int nOrbExt,
+        AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            const vector<vector<int>>& occs):
-                nOrbCas{nOrbCas}, nOrbExt{nOrbExt}, nOrb{nOrbCas + nOrbExt},
+                nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
+                isRight{isRight},
                 nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}{
+            if(nOrbOther < 0)
+                throw std::invalid_argument("nOrb < nOrbThis?");
         };
         virtual ~AbstractSciWrapper() = default;
 
