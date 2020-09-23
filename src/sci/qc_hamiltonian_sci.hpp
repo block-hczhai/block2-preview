@@ -37,6 +37,7 @@
 
 using namespace std;
 
+
 namespace block2 {
 template <typename, typename = void> struct HamiltonianQCSCI;
 
@@ -50,6 +51,27 @@ template <typename, typename = void> struct HamiltonianQCSCI;
  */
 template <typename S>
 struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
+private:
+    static int getNOrbCas(const int nOrbTot, const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciLeft,
+                          const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciRight){
+        auto nCas = nOrbTot;
+        nCas -= sciLeft==nullptr?0:sciLeft->nOrbThis;
+        nCas -= sciRight==nullptr?0:sciRight->nOrbThis;
+        return nCas;
+    }
+    static int getNSites(const int nOrbTot, const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciLeft,
+                         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciRight){
+        auto nCas = getNOrbCas(nOrbTot, sciLeft, sciRight);
+        if(sciLeft == nullptr){
+            assert(sciRight != nullptr);
+            return 1 + nCas;
+        }else if(sciRight == nullptr){
+            return 1 + nCas;
+        }else{
+            return 2 + nCas;
+        }
+    }
+public:
     using HamiltonianSCI<S>::n_syms;
     using HamiltonianSCI<S>::n_sites;
     using HamiltonianSCI<S>::vacuum;
@@ -70,30 +92,19 @@ struct HamiltonianQCSCI<S, typename S::is_sz_t> : HamiltonianSCI<S> {
         sciWrapperLeft, sciWrapperRight; //!< Wrapper classes for the
                                          //!!  physical operators/determinants on the big site
     int nOrbLeft; //!> Number of spatial orbitals for left SCI space (small nOrb)
-    int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
     int nOrbRight; //!> Number of spatial orbitals for right SCI space  (large nOrb)
-    static int getNBigSites(const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciLeft,
-                           const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciRight){
-        if(sciLeft == nullptr){
-            assert(sciRight != nullptr);
-            return 1;
-        }else if(sciRight == nullptr){
-            return 1;
-        }else{
-            return 2;
-        }
-    }
-    HamiltonianQCSCI(S vacuum, int nOrbCAS, const vector<uint8_t> &orb_sym,
+    int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
+    HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperRight = nullptr)
-            : HamiltonianSCI<S>(vacuum, nOrbCAS + getNBigSites(sciWrapperLeft,sciWrapperRight), orb_sym),
+            : HamiltonianSCI<S>(vacuum, getNSites(nOrbTot, sciWrapperLeft,sciWrapperRight), orb_sym),
               fcidump(fcidump),
               sciWrapperLeft(sciWrapperLeft), sciWrapperRight(sciWrapperRight),
-              nOrbCas{nOrbCAS},
               nOrbLeft{sciWrapperLeft==nullptr?0:sciWrapperLeft->nOrbThis},
-              nOrbRight{sciWrapperRight==nullptr?0:sciWrapperRight->nOrbThis}
-              {
+              nOrbRight{sciWrapperRight==nullptr?0:sciWrapperRight->nOrbThis},
+              nOrbCas{getNOrbCas(nOrbTot, sciWrapperLeft,sciWrapperRight)}
+        {
         cout << " Hamiltonian: n_sites = " << (int)n_sites
              << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
         if(orb_sym.size() != nOrbLeft + nOrbCas + nOrbRight){

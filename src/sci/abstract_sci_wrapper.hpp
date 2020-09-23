@@ -62,37 +62,41 @@ namespace sci {
 
         /** Initialization via generated CI space based on nMax*
          *
-         * @param nOrbOther (Spatial) orbitals handled outside SCI
+         * @param nOrb Total (spatial) orbitals
          * @param nOrbThis Orbitals handled via SCI
-         * @param isRight: Whether orbitals of SCI are right to other orbitals or not
+         * @param isRight Whether orbitals of SCI are right to other orbitals or not
          * @param nMaxAlphaEl Maximal number of alpha electrons in external space
          * @param nMaxBetaEl Maximal number of beta electrons in external space
          * @param nMaxEl Maximal number of alpha+beta electrons in external space
          * @param fcidump block2 FCIDUMP file
          */
-        AbstractSciWrapper(int nOrbOther, int nOrbThis, bool isRight,
+        AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl):
-                nOrbOther{nOrbOther}, nOrbThis{nOrbThis}, nOrb{nOrbOther + nOrbThis},
+                nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
                 isRight{isRight},
                 nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}{
+            if(nOrbOther < 0)
+                throw std::invalid_argument("nOrb < nOrbThis?");
         };
         /** Initialization via externally given determinants in `occs`.
          *
-         * @param nOrbOther (Spatial) orbitals handled outside SCI
+         * @param nOrb Total (spatial) orbitals
          * @param nOrbThis Orbitals handled via SCI
          * @param isRight: Whether orbitals of SCI are right to other orbitals or not
          * @param occs  Vector of occupations for filling determinants. If used, nMax* are ignored!
          * @param fcidump block2 FCIDUMP file
          */
-        AbstractSciWrapper(int nOrbOther, int nOrbThis, bool isRight,
+        AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            const vector<vector<int>>& occs):
-                nOrbOther{nOrbOther}, nOrbThis{nOrbThis}, nOrb{nOrbOther + nOrbThis},
+                nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
                 isRight{isRight},
                 nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}{
+            if(nOrbOther < 0)
+                throw std::invalid_argument("nOrb < nOrbThis?");
         };
         virtual ~AbstractSciWrapper() = default;
 

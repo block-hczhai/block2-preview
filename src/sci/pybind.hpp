@@ -34,7 +34,7 @@ template <typename S> void bind_sci_wrapper(py::module &m){
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
                      const std::vector<uint8_t>&,
                      int, int, int>(),
-                           py::arg("nOrbOther"), py::arg("nOrbThis"), py::arg("isRight"),
+                           py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
                            py::arg("fcidump"),
                            py::arg("orbsym"),
                            py::arg("nMaxAlphaEl"), py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
@@ -42,7 +42,7 @@ template <typename S> void bind_sci_wrapper(py::module &m){
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
                      const std::vector<uint8_t>&,
                      const vector<vector<int>>&>(),
-             py::arg("nOrbOther"), py::arg("nOrbThis"), py::arg("isRight"),
+             py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
              py::arg("fcidump"),
              py::arg("orbsym"), py::arg("occs"),
              "Initialization via externally given determinants in `occs`")
@@ -92,7 +92,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
                     const shared_ptr<FCIDUMP> &,
                     const std::shared_ptr<sci::AbstractSciWrapper<S>> &,
                     const std::shared_ptr<sci::AbstractSciWrapper<S>> &>(),
-                    py::arg("vacuum"), py::arg("nOrbCas"),
+                    py::arg("vacuum"), py::arg("nOrbTot"),
                     py::arg("orb_Sym"), py::arg("fcidump"), py::arg("sciWrapperLeft")=nullptr,
                     py::arg("sciWraperRight")=nullptr)
             .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
