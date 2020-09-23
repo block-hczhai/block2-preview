@@ -387,7 +387,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                                             f1 * d_op[mm][sp];
                                     }
                         for (uint8_t sp = 0; sp < 2; sp++)
-                            for (uint16_t k = 0; k < m; k++)
+                            for (uint16_t k = 0; k < mm; k++)
                                 for (uint16_t l = 0; l < mm; l++) {
                                     double f = hamil.v(s, sp, i, mm, k, l);
                                     mat[{pb[sp | (sp << 1)] + l * mm + k, p}] =
