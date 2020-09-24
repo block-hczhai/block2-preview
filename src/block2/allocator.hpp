@@ -99,7 +99,7 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     // can be in arbitrary order
     void deallocate(void *ptr, size_t n) override {
         for (int i = (int)data.size() - 1; i >= 0; i--)
-            if (&data[i][0] == ptr) {
+            if (data[i].data() == ptr) {
                 assert(data[i].size() == n);
                 data.erase(data.begin() + i);
                 return;
@@ -110,13 +110,13 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     // Change the allocated size for one allocated block
     T *reallocate(T *ptr, size_t n, size_t new_n) override {
         for (int i = (int)data.size() - 1; i >= 0; i--)
-            if (&data[i][0] == ptr) {
+            if (data[i].data() == ptr) {
                 cout << "warning: reallocation in vector allocator may cause "
                         "undefined behavior!"
                      << endl;
                 assert(data[i].size() == n);
                 data[i].resize(new_n);
-                return &data[i][0];
+                return data[i].data();
             }
         cout << "reallocation of unallocated address" << endl;
         abort();
