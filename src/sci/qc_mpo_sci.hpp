@@ -75,16 +75,21 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             throw std::runtime_error("SiteIndex and others require int16 type...");
         }
         const auto lastSite = hamil.n_sites - 1;
-        shared_ptr<OpExpr<S>> c_op[nOrb][2], d_op[nOrb][2]; // hrl: site; sz value
-        shared_ptr<OpExpr<S>> mc_op[nOrb][2], md_op[nOrb][2]; // hrl: mc stands for minus C
-        shared_ptr<OpExpr<S>> rd_op[nOrb][2], r_op[nOrb][2];
-        shared_ptr<OpExpr<S>> mrd_op[nOrb][2], mr_op[nOrb][2];
-        shared_ptr<OpExpr<S>> a_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> ad_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> b_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> p_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> pd_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> q_op[nOrb][nOrb][4];
+        // vv nOrb x 2 matrices
+        using OpExprMat2 = vector< array<shared_ptr<OpExpr<S>>,2> >;
+        OpExprMat2 c_op(nOrb), d_op(nOrb); // hrl: site; sz value
+        OpExprMat2 mc_op(nOrb), md_op(nOrb); // hrl: mc stands for minus C
+        OpExprMat2 rd_op(nOrb), r_op(nOrb);
+        OpExprMat2 mrd_op(nOrb), mr_op(nOrb);
+        // vv nOrb x nOrb x 4 tensors
+        using OpExprMat4 = vector< array<shared_ptr<OpExpr<S>>,4> >;
+        using OpExprTens4 = vector<OpExprMat4>;
+        OpExprTens4 a_op(nOrb, OpExprMat4(nOrb)); //It would be so easy in fortran...
+        OpExprTens4 ad_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 b_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 p_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 pd_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 q_op(nOrb, OpExprMat4(nOrb));
         this->op = dynamic_pointer_cast<OpElement<S>>(h_op);
         this->const_e = hamil.e();
         //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
