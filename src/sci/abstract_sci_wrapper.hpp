@@ -38,14 +38,12 @@
  */
 
 namespace sci {
-    namespace detail{
-        template <typename S>
-        struct SHasher{
-            std::size_t operator()(const S &s) const noexcept {
-                return s.hash();
-            }
-        };
-    }
+    template <typename S>
+    struct SHasher{
+        std::size_t operator()(const S &s) const noexcept {
+            return s.hash();
+        }
+    };
 
     template <typename, typename = void> struct AbstractSciWrapper;
 
@@ -55,6 +53,16 @@ namespace sci {
     public:
         using sizPair = std::pair<std::size_t, std::size_t>;
         using BLSparseMatrix = block2::CSRSparseMatrix<S>;
+        struct entryTuple1{ // ease life and define this instead of using std::tuple
+            BLSparseMatrix& mat;
+            int iOrb;
+            entryTuple1(BLSparseMatrix& mat, int iOrb):mat{mat}, iOrb{iOrb} {}
+        };
+        struct entryTuple2{ // ease life and define this instead of using std::tuple
+            BLSparseMatrix& mat;
+            int iOrb, jOrb;
+            entryTuple2(BLSparseMatrix& mat, int iOrb, int jOrb):mat{mat}, iOrb{iOrb}, jOrb{jOrb}{}
+        };
         int nOrbOther, nOrbThis, nOrb; //!< *spatial* orbitals
         int nMaxAlphaEl, nMaxBetaEl, nMaxEl; //!< Maximal number of alpha/beta electrons
         bool isRight; //!< Whether orbitals of SCI are right to other orbitals or not
@@ -101,7 +109,7 @@ namespace sci {
         virtual ~AbstractSciWrapper() = default;
 
         std::vector<S> quantumNumbers; //!< vector of (N,2*Sz) quantum numbers used
-        std::unordered_map<S,int,typename detail::SHasher<S>> quantumNumberToIdx; //!< quantum number to idx in quantumNumbers vector
+        std::unordered_map<S,int,SHasher<S>> quantumNumberToIdx; //!< quantum number to idx in quantumNumbers vector
         std::vector<sizPair> offsets; //!< index ranges [start,end) for each quantum number (in order of quantumNumbers)
         std::size_t nDet; //!< Total number of determinants
 
@@ -123,9 +131,9 @@ namespace sci {
         /** Fill a */
         virtual void fillOp_D(const S& deltaQN, BLSparseMatrix& mat, int iOrb) const {throwError();};
         /** Fill R */
-        virtual void fillOp_R(const S& deltaQN, BLSparseMatrix& mat, int iOrb) const {throwError();};
+        virtual void fillOp_R(const S& deltaQN, std::vector<entryTuple1>& entries) const {throwError();};
         /** Fill R' */
-        virtual void fillOp_RD(const S& deltaQN, BLSparseMatrix& mat, int iOrb) const {throwError();};
+        virtual void fillOp_RD(const S& deltaQN, std::vector<entryTuple1>& entries) const {throwError();};
         /** Fill A = i j */
         virtual void fillOp_A(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
         /** Fill A' = j'i' (note order!) */
@@ -133,11 +141,11 @@ namespace sci {
         /** Fill B = i'j */
         virtual void fillOp_B(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
         /** Fill P op */
-        virtual void fillOp_P(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
+        virtual void fillOp_P(const S& deltaQN, std::vector<entryTuple2>& entries) const {throwError();};
         /** Fill P' op */
-        virtual void fillOp_PD(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
+        virtual void fillOp_PD(const S& deltaQN, std::vector<entryTuple2>& entries) const {throwError();};
         /** Fill Q op */
-        virtual void fillOp_Q(const S& deltaQN, BLSparseMatrix& mat, int iOrb, int jOrb) const {throwError();};
+        virtual void fillOp_Q(const S& deltaQN, std::vector<entryTuple2>& entries) const {throwError();};
         /** Call this after the fillOps are done*/
         virtual void finalize(const bool verbose=true) {};
     private:

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <omp.h> // order matters, maybe because of defines in block2?
 #include "../block2.hpp"
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -1762,6 +1763,14 @@ template <typename S = void> void bind_io(py::module &m) {
         mkl_set_dynamic(0);
 #else
         throw runtime_error("cannot set number of mkl threads.");
+#endif
+    });
+    m.def("set_omp_num_threads", [](int n) {
+#ifdef _OPENMP
+        omp_set_num_threads(n);
+#else
+        if(n != 1)
+            throw runtime_error("cannot set number of omp threads.");
 #endif
     });
 
