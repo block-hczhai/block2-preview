@@ -20,8 +20,10 @@
 
 #pragma once
 
-#include <omp.h> // order matters, maybe because of defines in block2?
 #include "../block2.hpp"
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
