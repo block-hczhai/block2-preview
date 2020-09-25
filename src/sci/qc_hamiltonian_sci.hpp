@@ -572,6 +572,14 @@ public:
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             &ops, int iSite) const {
         int ii, jj; // spin orbital indices
+        // For optimization purposes (parallelization + orbital loop elsewhere
+        // I want to collect operators of same name and quantum numbers
+        using fillTuple2 = typename sci::AbstractSciWrapper<S>::entryTuple2;
+        using fillTuple1 = typename sci::AbstractSciWrapper<S>::entryTuple1;
+        // A,AD,B would be for a small site => I assume that it is not big and have not yet optimized it
+        // Same for C and D, which is fast
+        unordered_map< S, std::vector<fillTuple2>, sci::SHasher<S> > opsQ, opsP, opsPD;
+        unordered_map< S, std::vector<fillTuple1>, sci::SHasher<S> > opsR, opsRD;
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
             auto pmat = make_shared<CSRSparseMatrix<S>>();
@@ -633,10 +641,10 @@ public:
                 sciWrapper->fillOp_D(delta_qn, mat, ii);
                 break;
             case OpNames::R:
-                sciWrapper->fillOp_R(delta_qn, mat, ii);
+                opsR[delta_qn].emplace_back(mat,ii);
                 break;
             case OpNames::RD:
-                sciWrapper->fillOp_RD(delta_qn, mat, ii);
+                opsRD[delta_qn].emplace_back(mat,ii);
                 break;
             case OpNames::A:
                 sciWrapper->fillOp_A(delta_qn, mat, ii, jj);
@@ -648,17 +656,37 @@ public:
                 sciWrapper->fillOp_B(delta_qn, mat, ii, jj);
                 break;
             case OpNames::P:
-                sciWrapper->fillOp_P(delta_qn, mat, ii, jj);
+                opsP[delta_qn].emplace_back(mat,ii,jj);
                 break;
             case OpNames::PD:
-                sciWrapper->fillOp_PD(delta_qn, mat, ii, jj);
+                opsPD[delta_qn].emplace_back(mat,ii,jj);
                 break;
             case OpNames::Q:
-                sciWrapper->fillOp_Q(delta_qn, mat, ii, jj);
+                opsQ[delta_qn].emplace_back(mat,ii,jj);
                 break;
             default:
                 assert(false);
             }
+        }
+        for(auto& pairs: opsR){
+            sciWrapper->fillOp_R(pairs.first, pairs.second);
+            pairs.second.clear(); pairs.second.shrink_to_fit();
+        }
+        for(auto& pairs: opsRD){
+            sciWrapper->fillOp_RD(pairs.first, pairs.second);
+            pairs.second.clear(); pairs.second.shrink_to_fit();
+        }
+        for(auto& pairs: opsP){
+            sciWrapper->fillOp_P(pairs.first, pairs.second);
+            pairs.second.clear(); pairs.second.shrink_to_fit();
+        }
+        for(auto& pairs: opsPD){
+            sciWrapper->fillOp_PD(pairs.first, pairs.second);
+            pairs.second.clear(); pairs.second.shrink_to_fit();
+        }
+        for(auto& pairs: opsQ){
+            sciWrapper->fillOp_Q(pairs.first, pairs.second);
+            pairs.second.clear(); pairs.second.shrink_to_fit();
         }
         auto verbose = true;
         sciWrapper->finalize(verbose);
