@@ -95,6 +95,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
         this->tf = make_shared<TensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        this->tf->opf->seq = hamil.opf->seq; // seq_type
         this->site_op_infos = hamil.site_op_infos;
         if(mode != QCTypes::NC){
             throw std::invalid_argument("Currently, only NC is implemented as mode. "
