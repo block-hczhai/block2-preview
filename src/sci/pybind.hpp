@@ -110,6 +110,8 @@ template <typename S> void bind_mpo_sci(py::module &m) {
     py::class_<DMRGSCI<S>, shared_ptr<DMRGSCI<S>>, DMRG<S>>(m, "DMRGSCI")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<double> &>())
+        .def_readwrite("last_site_svd", &DMRGSCI<S>::last_site_svd)
+        .def_readwrite("last_site_1site", &DMRGSCI<S>::last_site_1site)
         .def("blocking", &DMRGSCI<S>::blocking);
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
