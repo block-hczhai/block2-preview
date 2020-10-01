@@ -933,7 +933,7 @@ template <typename S> struct SparseMatrix {
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
-        double dt[tmp[nr]];
+        double *dt = dalloc->allocate(tmp[nr]);
         uint32_t it[nr], sz[nr];
         memset(it, 0, sizeof(uint32_t) * nr);
         for (int i = 0; i < info->n; i++) {
@@ -979,6 +979,7 @@ template <typename S> struct SparseMatrix {
         }
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == merged_l[ir]->size());
+        dalloc->deallocate(dt, tmp[nr]);
     }
     // r will have the same number of non-zero blocks as this matrix
     // s will be labelled by left q labels
@@ -998,7 +999,7 @@ template <typename S> struct SparseMatrix {
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
-        double dt[tmp[nl]];
+        double *dt = dalloc->allocate(tmp[nl]);
         uint32_t it[nl], sz[nl];
         memset(it, 0, sizeof(uint32_t) * nl);
         for (int i = 0; i < info->n; i++) {
@@ -1050,6 +1051,7 @@ template <typename S> struct SparseMatrix {
         }
         for (int il = 0; il < nl; il++)
             assert(it[il] == merged_r[il]->shape[1]);
+        dalloc->deallocate(dt, tmp[nl]);
     }
     void left_canonicalize(const shared_ptr<SparseMatrix<S>> &rmat) {
         int nr = rmat->info->n, n = info->n;
@@ -1512,6 +1514,165 @@ template <typename S> struct SparseMatrixGroup {
         r->info = infos[idx];
         r->total_memory = infos[idx]->get_total_memory();
         return r;
+    }
+    // l will have the same number of non-zero blocks as this matrix group
+    // s will be labelled by right q labels
+    void left_svd(vector<S> &rqs, vector<vector<shared_ptr<Tensor>>> &l,
+                  vector<shared_ptr<Tensor>> &s,
+                  vector<shared_ptr<Tensor>> &r) {
+        map<S, uint32_t> qs_mp;
+        for (const auto &info : infos)
+            for (int i = 0; i < info->n; i++) {
+                S q = info->is_wavefunction ? -info->quanta[i].get_ket()
+                                            : info->quanta[i].get_ket();
+                qs_mp[q] +=
+                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            }
+        int nr = (int)qs_mp.size(), k = 0;
+        rqs.resize(nr);
+        uint32_t tmp[nr + 1];
+        memset(tmp, 0, sizeof(uint32_t) * (nr + 1));
+        for (auto &mp : qs_mp)
+            rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
+        for (int ir = 0; ir < nr; ir++)
+            tmp[ir + 1] += tmp[ir];
+        double *dt = dalloc->allocate(tmp[nr]);
+        uint32_t it[nr], sz[nr];
+        memset(it, 0, sizeof(uint32_t) * nr);
+        for (int ii = 0; ii < n; ii++) {
+            const auto &info = infos[ii];
+            for (int i = 0; i < info->n; i++) {
+                S q = info->is_wavefunction ? -info->quanta[i].get_ket()
+                                            : info->quanta[i].get_ket();
+                int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
+                uint32_t n_states =
+                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                memcpy(dt + (tmp[ir] + it[ir]),
+                       data + offsets[ii] + info->n_states_total[i],
+                       n_states * sizeof(double));
+                sz[ir] = info->n_states_ket[i];
+                it[ir] += n_states;
+            }
+        }
+        for (int ir = 0; ir < nr; ir++)
+            assert(it[ir] == tmp[ir + 1] - tmp[ir]);
+        vector<shared_ptr<Tensor>> merged_l;
+        r.clear();
+        s.clear();
+        for (int ir = 0; ir < nr; ir++) {
+            int nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
+            assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
+            int nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
+                                 tss->ref().flip_dims(), tsr->ref());
+            merged_l.push_back(tsl);
+            s.push_back(tss);
+            r.push_back(tsr);
+        }
+        memset(it, 0, sizeof(uint32_t) * nr);
+        l.resize(n);
+        for (int ii = 0; ii < n; ii++) {
+            const auto &info = infos[ii];
+            for (int i = 0; i < info->n; i++) {
+                S q = info->is_wavefunction ? -info->quanta[i].get_ket()
+                                            : info->quanta[i].get_ket();
+                int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
+                shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{
+                    (int)info->n_states_bra[i], merged_l[ir]->shape[1]});
+                memcpy(tsl->data.data(), merged_l[ir]->data.data() + it[ir],
+                       tsl->size() * sizeof(double));
+                it[ir] += tsl->size();
+                l[ii].push_back(tsl);
+            }
+        }
+        for (int ir = 0; ir < nr; ir++)
+            assert(it[ir] == merged_l[ir]->size());
+        dalloc->deallocate(dt, tmp[nr]);
+    }
+    // r will have the same number of non-zero blocks as this matrix group
+    // s will be labelled by left q labels
+    void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
+                   vector<shared_ptr<Tensor>> &s,
+                   vector<vector<shared_ptr<Tensor>>> &r) {
+        map<S, uint32_t> qs_mp;
+        for (const auto &info : infos)
+            for (int i = 0; i < info->n; i++) {
+                S q = info->quanta[i].get_bra(info->delta_quantum);
+                qs_mp[q] +=
+                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            }
+        int nl = (int)qs_mp.size(), p = 0;
+        lqs.resize(nl);
+        uint32_t tmp[nl + 1];
+        memset(tmp, 0, sizeof(uint32_t) * (nl + 1));
+        for (auto &mp : qs_mp)
+            lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
+        for (int il = 0; il < nl; il++)
+            tmp[il + 1] += tmp[il];
+        double *dt = dalloc->allocate(tmp[nl]);
+        uint32_t it[nl], sz[nl];
+        memset(it, 0, sizeof(uint32_t) * nl);
+        for (int ii = 0; ii < n; ii++) {
+            const auto &info = infos[ii];
+            for (int i = 0; i < info->n; i++) {
+                S q = info->quanta[i].get_bra(info->delta_quantum);
+                int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
+                uint32_t nxl = info->n_states_bra[i],
+                         nxr = (tmp[il + 1] - tmp[il]) / nxl;
+                assert((tmp[il + 1] - tmp[il]) % nxl == 0);
+                uint32_t inr = info->n_states_ket[i];
+                for (uint32_t k = 0; k < nxl; k++)
+                    memcpy(dt + (tmp[il] + it[il] + k * nxr),
+                           data + offsets[ii] +
+                               (info->n_states_total[i] + k * inr),
+                           inr * sizeof(double));
+                sz[il] = nxl;
+                it[il] += inr;
+            }
+        }
+        for (int il = 0; il < nl; il++)
+            assert(it[il] == (tmp[il + 1] - tmp[il]) / sz[il]);
+        vector<shared_ptr<Tensor>> merged_r;
+        l.clear();
+        s.clear();
+        for (int il = 0; il < nl; il++) {
+            int nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
+            assert((tmp[il + 1] - tmp[il]) % nxl == 0);
+            int nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
+                                 tss->ref().flip_dims(), tsr->ref());
+            l.push_back(tsl);
+            s.push_back(tss);
+            merged_r.push_back(tsr);
+        }
+        memset(it, 0, sizeof(uint32_t) * nl);
+        r.resize(n);
+        for (int ii = 0; ii < n; ii++) {
+            const auto &info = infos[ii];
+            for (int i = 0; i < info->n; i++) {
+                S q = info->quanta[i].get_bra(info->delta_quantum);
+                int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
+                shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{
+                    merged_r[il]->shape[0], (int)info->n_states_ket[i]});
+                int inr = info->n_states_ket[i], ixr = merged_r[il]->shape[1];
+                int inl = merged_r[il]->shape[0];
+                for (uint32_t k = 0; k < inl; k++)
+                    memcpy(tsr->data.data() + k * inr,
+                           merged_r[il]->data.data() + (it[il] + k * ixr),
+                           inr * sizeof(double));
+                it[il] += inr;
+                r[ii].push_back(tsr);
+            }
+        }
+        for (int il = 0; il < nl; il++)
+            assert(it[il] == merged_r[il]->shape[1]);
+        dalloc->deallocate(dt, tmp[nl]);
     }
     friend ostream &operator<<(ostream &os, const SparseMatrixGroup<S> &c) {
         os << "DATA = [ ";

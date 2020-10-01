@@ -151,6 +151,8 @@ TEST_F(TestDMRGN2STO3G, TestSU2) {
                    DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
+                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil.deallocate();
     fcidump->deallocate();
@@ -206,6 +208,8 @@ TEST_F(TestDMRGN2STO3G, TestSZ) {
                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ SVD PERT",
+                  DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil.deallocate();
     fcidump->deallocate();

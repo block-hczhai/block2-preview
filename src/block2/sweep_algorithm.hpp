@@ -146,8 +146,7 @@ template <typename S> struct DMRG {
             h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                         davidson_soft_max_iter, me->para_rule);
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
-        if (decomp_type == DecompositionTypes::DensityMatrix &&
-            noise_type == NoiseTypes::Perturbative && noise != 0)
+        if (noise_type == NoiseTypes::Perturbative && noise != 0)
             pket = h_eff->perturbative_noise(
                 forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                 me->ket->info, me->para_rule);
@@ -212,13 +211,20 @@ template <typename S> struct DMRG {
                         left, right, cutoff, trunc_type);
                 } else if (decomp_type == DecompositionTypes::SVD) {
                     assert(noise_type == NoiseTypes::None ||
+                           noise_type == NoiseTypes::Perturbative ||
                            noise_type == NoiseTypes::Wavefunction);
-                    if (noise_type == NoiseTypes::Wavefunction && noise != 0)
-                        MovingEnvironment<S>::wavefunction_add_noise(
-                            me->ket->tensors[i], noise);
+                    if (noise != 0) {
+                        if (noise_type == NoiseTypes::Wavefunction)
+                            MovingEnvironment<S>::wavefunction_add_noise(
+                                me->ket->tensors[i], noise);
+                        else if (noise_type == NoiseTypes::Perturbative)
+                            MovingEnvironment<S>::
+                                wavefunction_add_perturbative_noise(
+                                    me->ket->tensors[i], noise, pket);
+                    }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
                         h_eff->opdq, me->ket->tensors[i], (int)bond_dim,
-                        forward, true, left, right, cutoff, trunc_type);
+                        forward, true, left, right, cutoff, trunc_type, pket);
                 } else
                     assert(false);
                 shared_ptr<StateInfo<S>> info = nullptr;
@@ -333,8 +339,7 @@ template <typename S> struct DMRG {
             h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                         davidson_soft_max_iter, me->para_rule);
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
-        if (decomp_type == DecompositionTypes::DensityMatrix &&
-            noise_type == NoiseTypes::Perturbative && noise != 0)
+        if (noise_type == NoiseTypes::Perturbative && noise != 0)
             pket =
                 h_eff->perturbative_noise(forward, i, i + 1, FuseTypes::FuseLR,
                                           me->ket->info, me->para_rule);
@@ -359,14 +364,22 @@ template <typename S> struct DMRG {
                     trunc_type);
             } else if (decomp_type == DecompositionTypes::SVD) {
                 assert(noise_type == NoiseTypes::None ||
+                       noise_type == NoiseTypes::Perturbative ||
                        noise_type == NoiseTypes::Wavefunction);
-                if (noise_type == NoiseTypes::Wavefunction && noise != 0)
-                    MovingEnvironment<S>::wavefunction_add_noise(h_eff->ket,
-                                                                 noise);
+                if (noise != 0) {
+                    if (noise_type == NoiseTypes::Wavefunction)
+                        MovingEnvironment<S>::wavefunction_add_noise(h_eff->ket,
+                                                                     noise);
+                    else if (noise_type == NoiseTypes::Perturbative)
+                        MovingEnvironment<
+                            S>::wavefunction_add_perturbative_noise(h_eff->ket,
+                                                                    noise,
+                                                                    pket);
+                }
                 error = MovingEnvironment<S>::split_wavefunction_svd(
                     h_eff->opdq, h_eff->ket, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
-                    trunc_type);
+                    trunc_type, pket);
             } else
                 assert(false);
             shared_ptr<StateInfo<S>> info = nullptr;

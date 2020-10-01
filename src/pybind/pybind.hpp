@@ -43,6 +43,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Tensor>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<CSRMatrixRef>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
@@ -649,6 +650,22 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("norm", &SparseMatrixGroup<S>::norm)
         .def("iscale", &SparseMatrixGroup<S>::iscale, py::arg("d"))
         .def("normalize", &SparseMatrixGroup<S>::normalize)
+        .def("left_svd",
+             [](SparseMatrixGroup<S> *self) {
+                 vector<S> qs;
+                 vector<shared_ptr<Tensor>> s, r;
+                 vector<vector<shared_ptr<Tensor>>> l;
+                 self->left_svd(qs, l, s, r);
+                 return make_tuple(qs, l, s, r);
+             })
+        .def("right_svd",
+             [](SparseMatrixGroup<S> *self) {
+                 vector<S> qs;
+                 vector<shared_ptr<Tensor>> l, s;
+                 vector<vector<shared_ptr<Tensor>>> r;
+                 self->right_svd(qs, l, s, r);
+                 return make_tuple(qs, l, s, r);
+             })
         .def("__getitem__",
              [](SparseMatrixGroup<S> *self, int idx) { return (*self)[idx]; });
 
@@ -1060,6 +1077,9 @@ template <typename S> void bind_partition(py::module &m) {
         .def_static("wavefunction_add_noise",
                     &MovingEnvironment<S>::wavefunction_add_noise,
                     py::arg("psi"), py::arg("noise"))
+        .def_static("wavefunction_add_perturbative_noise",
+                    &MovingEnvironment<S>::wavefunction_add_perturbative_noise,
+                    py::arg("psi"), py::arg("noise"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
@@ -1988,6 +2008,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         });
 
     py::bind_vector<vector<shared_ptr<Tensor>>>(m, "VectorTensor");
+    py::bind_vector<vector<vector<shared_ptr<Tensor>>>>(m, "VectorVectorTensor");
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
         .def_static(
