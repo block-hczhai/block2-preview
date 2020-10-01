@@ -287,11 +287,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                     if (MPO<S>::schemer != nullptr &&
                         i == MPO<S>::schemer->left_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
-                        memcpy(&px[!(i & 1)][0], &px[i & 1][0],
+                        memcpy(px[!(i & 1)].data(), px[i & 1].data(),
                                sizeof(uint8_t) * px[!(i & 1)].size());
                         px[i & 1].resize(
                             MPO<S>::left_operator_names[i]->data.size());
-                        memset(&px[i & 1][0], 0,
+                        memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
                         map<shared_ptr<OpExpr<S>>, int, op_expr_less<S>> mp;
                         for (size_t j = 0;
@@ -410,11 +410,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                     if (MPO<S>::schemer != nullptr &&
                         i == MPO<S>::schemer->right_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
-                        memcpy(&px[!(i & 1)][0], &px[i & 1][0],
+                        memcpy(px[!(i & 1)].data(), px[i & 1].data(),
                                sizeof(uint8_t) * px[!(i & 1)].size());
                         px[i & 1].resize(
                             MPO<S>::right_operator_names[i]->data.size());
-                        memset(&px[i & 1][0], 0,
+                        memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
                         map<shared_ptr<OpExpr<S>>, int, op_expr_less<S>> mp;
                         for (size_t j = 0;
@@ -471,7 +471,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         px[!(i & 1)].resize(
                             MPO<S>::schemer->right_new_operator_names->data
                                 .size());
-                    memset(&px[!(i & 1)][0], 0,
+                    memset(px[!(i & 1)].data(), 0,
                            sizeof(uint8_t) * px[!(i & 1)].size());
                     if (MPO<S>::tensors[i]->rmat->get_type() == SymTypes::Mat) {
                         shared_ptr<SymbolicMatrix<S>> mat =

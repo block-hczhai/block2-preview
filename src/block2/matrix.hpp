@@ -109,17 +109,17 @@ struct Tensor {
             accumulate(shape.begin(), shape.end(), 1, multiplies<double>()));
     }
     size_t size() const { return data.size(); }
-    void clear() { memset(&data[0], 0, size() * sizeof(double)); }
+    void clear() { memset(data.data(), 0, size() * sizeof(double)); }
     MatrixRef ref() {
         if (shape.size() == 3 && shape[1] == 1)
-            return MatrixRef(&data[0], shape[0], shape[2]);
+            return MatrixRef(data.data(), shape[0], shape[2]);
         else if (shape.size() == 2)
-            return MatrixRef(&data[0], shape[0], shape[1]);
+            return MatrixRef(data.data(), shape[0], shape[1]);
         else if (shape.size() == 1)
-            return MatrixRef(&data[0], shape[0], 1);
+            return MatrixRef(data.data(), shape[0], 1);
         else {
             assert(false);
-            return MatrixRef(&data[0], 0, 1);
+            return MatrixRef(data.data(), 0, 1);
         }
     }
     double &operator()(initializer_list<int> idx) {
