@@ -271,7 +271,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         for (int ic = 0; ic < c.n; ic++) {
             vector<uint32_t> &v = mp.at(c.quanta[ic]);
             ci.n_states[ic] = iab;
-            memcpy(ci.quanta + iab, &v[0], v.size() * sizeof(uint32_t));
+            memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(uint32_t));
             iab += v.size();
         }
         ci.reallocate(iab);
