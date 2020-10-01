@@ -508,7 +508,7 @@ struct MatrixFunctions {
                 pcomm->broadcast(bs[ck].data, bs[ck].size(), pcomm->root);
             eigvals.resize(ck + 1);
             if (ck + 1 != 0)
-                memcpy(&eigvals[0], ld.data, (ck + 1) * sizeof(double));
+                memcpy(eigvals.data(), ld.data, (ck + 1) * sizeof(double));
             ld.deallocate();
             if (qq < conv_thrd) {
                 ck++;

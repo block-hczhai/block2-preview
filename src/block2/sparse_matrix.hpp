@@ -150,12 +150,12 @@ struct SparseMatrixInfo<
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
-            memcpy(idx, &vidx[0], n[4] * sizeof(uint32_t));
+            memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
             memset(stride, 0, nc * sizeof(uint32_t));
-            memcpy(factor, &vf[0], nc * sizeof(double));
-            memcpy(ia, &via[0], nc * sizeof(uint16_t));
-            memcpy(ib, &vib[0], nc * sizeof(uint16_t));
-            memcpy(ic, &vic[0], nc * sizeof(uint16_t));
+            memcpy(factor, vf.data(), nc * sizeof(double));
+            memcpy(ia, via.data(), nc * sizeof(uint16_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
         }
         // Compute non-zero-block indices for 'tensor_product_multiply'
         void initialize_wfn(
@@ -283,12 +283,12 @@ struct SparseMatrixInfo<
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
-            memcpy(idx, &vidx[0], n[4] * sizeof(uint32_t));
-            memcpy(stride, &viv[0], nc * sizeof(uint32_t));
-            memcpy(factor, &vf[0], nc * sizeof(double));
-            memcpy(ia, &via[0], nc * sizeof(uint16_t));
-            memcpy(ib, &vib[0], nc * sizeof(uint16_t));
-            memcpy(ic, &vic[0], nc * sizeof(uint16_t));
+            memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
+            memcpy(stride, viv.data(), nc * sizeof(uint32_t));
+            memcpy(factor, vf.data(), nc * sizeof(double));
+            memcpy(ia, via.data(), nc * sizeof(uint16_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
         }
         // Compute non-zero-block indices for 'tensor_product'
         void initialize_tp(
@@ -416,12 +416,12 @@ struct SparseMatrixInfo<
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
-            memcpy(idx, &vidx[0], n[4] * sizeof(uint32_t));
-            memcpy(stride, &vstride[0], nc * sizeof(uint32_t));
-            memcpy(factor, &vf[0], nc * sizeof(double));
-            memcpy(ia, &via[0], nc * sizeof(uint16_t));
-            memcpy(ib, &vib[0], nc * sizeof(uint16_t));
-            memcpy(ic, &vic[0], nc * sizeof(uint16_t));
+            memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
+            memcpy(stride, vstride.data(), nc * sizeof(uint32_t));
+            memcpy(factor, vf.data(), nc * sizeof(double));
+            memcpy(ia, via.data(), nc * sizeof(uint16_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
         }
         void reallocate(bool clean) {
             size_t length = (n[4] << 1) + (nc << 2) + nc - (nc >> 1);
@@ -571,7 +571,7 @@ struct SparseMatrixInfo<
         n = qs.size();
         allocate(n);
         if (n != 0) {
-            memcpy(quanta, &qs[0], n * sizeof(S));
+            memcpy(quanta, qs.data(), n * sizeof(S));
             if (rinfo->is_wavefunction)
                 for (int i = 0; i < n; i++) {
                     S bra = quanta[i].get_bra(delta_quantum);
@@ -620,7 +620,7 @@ struct SparseMatrixInfo<
         n = qs.size();
         allocate(n);
         if (n != 0) {
-            memcpy(quanta, &qs[0], n * sizeof(S));
+            memcpy(quanta, qs.data(), n * sizeof(S));
             if (trace_right)
                 for (size_t iw = 0; iw < wfn_infos.size(); iw++) {
                     shared_ptr<SparseMatrixInfo> wfn_info = wfn_infos[iw];
@@ -668,7 +668,7 @@ struct SparseMatrixInfo<
         n = qs.size();
         allocate(n);
         if (n != 0) {
-            memcpy(quanta, &qs[0], n * sizeof(S));
+            memcpy(quanta, qs.data(), n * sizeof(S));
             sort(quanta, quanta + n);
             for (int i = 0; i < n; i++) {
                 assert(ket.find_state(wfn ? -quanta[i].get_ket()
