@@ -991,7 +991,8 @@ template <typename S> struct MovingEnvironment {
             para_rule->comm->barrier();
         bra->center = ket->center = center;
         // dynamic environment generation for warmup sweep
-        if (i != n_sites - dot && envs[i]->right == nullptr) {
+        if (i != n_sites - dot && envs[i]->right == nullptr &&
+            ket->info->get_warm_up_type() != WarmUpTypes::None) {
             frame->reset(1);
             frame->activate(0);
             vector<shared_ptr<MPS<S>>> mpss =
@@ -1064,7 +1065,8 @@ template <typename S> struct MovingEnvironment {
             if (new_data_name != "")
                 frame->load_data(1, new_data_name);
         }
-        if (i != 0 && envs[i]->left == nullptr) {
+        if (i != 0 && envs[i]->left == nullptr &&
+            ket->info->get_warm_up_type() != WarmUpTypes::None) {
             frame->reset(1);
             frame->activate(0);
             vector<shared_ptr<MPS<S>>> mpss =

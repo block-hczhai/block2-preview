@@ -136,21 +136,26 @@ template <typename S> struct DMRG {
             prev_wfn->info->deallocate();
             prev_wfn->deallocate();
         }
-        // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                        me->bra->tensors[i], me->ket->tensors[i]);
+        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
-        auto pdi =
-            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                        davidson_soft_max_iter, me->para_rule);
+        tuple<double, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
-        if (noise_type == NoiseTypes::Perturbative && noise != 0)
-            pket = h_eff->perturbative_noise(
-                forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                me->ket->info, me->para_rule);
-        h_eff->deallocate();
+        // effective hamiltonian
+        if (davidson_soft_max_iter != 0 || noise != 0) {
+            shared_ptr<EffectiveHamiltonian<S>> h_eff =
+                me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                            true, me->bra->tensors[i], me->ket->tensors[i]);
+            pdi =
+                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                            davidson_soft_max_iter, me->para_rule);
+            if (noise_type == NoiseTypes::Perturbative && noise != 0)
+                pket = h_eff->perturbative_noise(forward, i, i,
+                                                 fuse_left ? FuseTypes::FuseL
+                                                           : FuseTypes::FuseR,
+                                                 me->ket->info, me->para_rule);
+            h_eff->deallocate();
+        }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (!decomp_last_site &&
                 ((forward && i == me->n_sites - 1 && !fuse_left) ||
@@ -198,13 +203,13 @@ template <typename S> struct DMRG {
                     if (noise_type == NoiseTypes::Perturbative && noise != 0) {
                         dm = MovingEnvironment<S>::
                             density_matrix_with_perturbative_noise(
-                                h_eff->opdq, me->ket->tensors[i], forward,
-                                noise, pket);
+                                opdq, me->ket->tensors[i], forward, noise,
+                                pket);
                         pket->deallocate_infos();
                         pket->deallocate();
                     } else
                         dm = MovingEnvironment<S>::density_matrix(
-                            h_eff->opdq, me->ket->tensors[i], forward, noise,
+                            opdq, me->ket->tensors[i], forward, noise,
                             noise_type);
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
@@ -223,8 +228,8 @@ template <typename S> struct DMRG {
                                     me->ket->tensors[i], noise, pket);
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
-                        h_eff->opdq, me->ket->tensors[i], (int)bond_dim,
-                        forward, true, left, right, cutoff, trunc_type, pket);
+                        opdq, me->ket->tensors[i], (int)bond_dim, forward, true,
+                        left, right, cutoff, trunc_type, pket);
                 } else
                     assert(false);
                 shared_ptr<StateInfo<S>> info = nullptr;
@@ -331,35 +336,41 @@ template <typename S> struct DMRG {
             me->ket->tensors[i + 1] = nullptr;
         }
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
-        auto pdi =
-            h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                        davidson_soft_max_iter, me->para_rule);
+        tuple<double, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
-        if (noise_type == NoiseTypes::Perturbative && noise != 0)
-            pket =
-                h_eff->perturbative_noise(forward, i, i + 1, FuseTypes::FuseLR,
-                                          me->ket->info, me->para_rule);
-        h_eff->deallocate();
+        // effective hamiltonian
+        if (davidson_soft_max_iter != 0 || noise != 0) {
+            shared_ptr<EffectiveHamiltonian<S>> h_eff =
+                me->eff_ham(FuseTypes::FuseLR, true, me->bra->tensors[i],
+                            me->ket->tensors[i]);
+            pdi =
+                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                            davidson_soft_max_iter, me->para_rule);
+            if (noise_type == NoiseTypes::Perturbative && noise != 0)
+                pket = h_eff->perturbative_noise(forward, i, i + 1,
+                                                 FuseTypes::FuseLR,
+                                                 me->ket->info, me->para_rule);
+            h_eff->deallocate();
+        }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<SparseMatrix<S>> dm;
             if (decomp_type == DecompositionTypes::DensityMatrix) {
                 if (noise_type == NoiseTypes::Perturbative && noise != 0) {
                     dm = MovingEnvironment<
-                        S>::density_matrix_with_perturbative_noise(h_eff->opdq,
-                                                                   h_eff->ket,
+                        S>::density_matrix_with_perturbative_noise(opdq,
+                                                                   old_wfn,
                                                                    forward,
                                                                    noise, pket);
                     pket->deallocate();
                     pket->deallocate_infos();
                 } else
                     dm = MovingEnvironment<S>::density_matrix(
-                        h_eff->opdq, h_eff->ket, forward, noise, noise_type);
+                        opdq, old_wfn, forward, noise, noise_type);
                 error = MovingEnvironment<S>::split_density_matrix(
-                    dm, h_eff->ket, (int)bond_dim, forward, true,
+                    dm, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
                     trunc_type);
             } else if (decomp_type == DecompositionTypes::SVD) {
@@ -368,16 +379,16 @@ template <typename S> struct DMRG {
                        noise_type == NoiseTypes::Wavefunction);
                 if (noise != 0) {
                     if (noise_type == NoiseTypes::Wavefunction)
-                        MovingEnvironment<S>::wavefunction_add_noise(h_eff->ket,
+                        MovingEnvironment<S>::wavefunction_add_noise(old_wfn,
                                                                      noise);
                     else if (noise_type == NoiseTypes::Perturbative)
                         MovingEnvironment<
-                            S>::wavefunction_add_perturbative_noise(h_eff->ket,
+                            S>::wavefunction_add_perturbative_noise(old_wfn,
                                                                     noise,
                                                                     pket);
                 }
                 error = MovingEnvironment<S>::split_wavefunction_svd(
-                    h_eff->opdq, h_eff->ket, (int)bond_dim, forward, true,
+                    opdq, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
                     trunc_type, pket);
             } else
@@ -469,25 +480,29 @@ template <typename S> struct DMRG {
             if (prev_wfns.size() != 0)
                 prev_wfns[0]->deallocate_infos();
         }
-        // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-            me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                              true);
+        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                               davidson_max_iter, me->para_rule);
+        tuple<vector<double>, int, size_t, double> pdi;
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
-        for (int i = 0; i < mket->nroots; i++) {
-            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
-            mps_quanta[i].erase(
-                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
-                          [this](const pair<S, double> &p) {
-                              return p.second < this->quanta_cutoff;
-                          }),
-                mps_quanta[i].end());
+        // effective hamiltonian
+        if (davidson_soft_max_iter != 0 || noise != 0) {
+            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+                me->multi_eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true);
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_max_iter, me->para_rule);
+            for (int i = 0; i < mket->nroots; i++) {
+                mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+                mps_quanta[i].erase(
+                    remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                              [this](const pair<S, double> &p) {
+                                  return p.second < this->quanta_cutoff;
+                              }),
+                    mps_quanta[i].end());
+            }
+            h_eff->deallocate();
         }
-        h_eff->deallocate();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(noise_type != NoiseTypes::Perturbative);
             assert(decomp_type == DecompositionTypes::DensityMatrix);
@@ -512,8 +527,7 @@ template <typename S> struct DMRG {
                                                      new_wfns;
             shared_ptr<SparseMatrix<S>> dm, rot;
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                h_eff->opdq, mket->wfns, mket->weights, forward, noise,
-                noise_type);
+                opdq, mket->wfns, mket->weights, forward, noise, noise_type);
             error = MovingEnvironment<S>::multi_split_density_matrix(
                 dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot,
                 cutoff, trunc_type);
@@ -630,32 +644,36 @@ template <typename S> struct DMRG {
             mket->load_tensor(i);
         mket->tensors[i] = mket->tensors[i + 1] = nullptr;
         vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
-        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-            me->multi_eff_ham(FuseTypes::FuseLR, true);
+        S opdq = me->mpo->op->q_label;
+        // effective hamiltonian
         int mmps = 0;
         double error = 0.0;
-        auto pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                               davidson_max_iter, me->para_rule);
+        tuple<vector<double>, int, size_t, double> pdi;
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
-        for (int i = 0; i < mket->nroots; i++) {
-            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
-            mps_quanta[i].erase(
-                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
-                          [this](const pair<S, double> &p) {
-                              return p.second < this->quanta_cutoff;
-                          }),
-                mps_quanta[i].end());
+        if (davidson_soft_max_iter != 0 || noise != 0) {
+            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+                me->multi_eff_ham(FuseTypes::FuseLR, true);
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_max_iter, me->para_rule);
+            for (int i = 0; i < mket->nroots; i++) {
+                mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+                mps_quanta[i].erase(
+                    remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                              [this](const pair<S, double> &p) {
+                                  return p.second < this->quanta_cutoff;
+                              }),
+                    mps_quanta[i].end());
+            }
+            h_eff->deallocate();
         }
-        h_eff->deallocate();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(noise_type != NoiseTypes::Perturbative);
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             shared_ptr<SparseMatrix<S>> dm;
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                h_eff->opdq, h_eff->ket, mket->weights, forward, noise,
-                noise_type);
+                opdq, old_wfns, mket->weights, forward, noise, noise_type);
             error = MovingEnvironment<S>::multi_split_density_matrix(
-                dm, h_eff->ket, (int)bond_dim, forward, true, mket->wfns,
+                dm, old_wfns, (int)bond_dim, forward, true, mket->wfns,
                 forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
                 trunc_type);
             shared_ptr<StateInfo<S>> info = nullptr;
