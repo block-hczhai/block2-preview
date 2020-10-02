@@ -222,7 +222,7 @@ template <typename S> struct DMRG {
                             MovingEnvironment<S>::wavefunction_add_noise(
                                 me->ket->tensors[i], noise);
                         else if (noise_type == NoiseTypes::Perturbative)
-                            MovingEnvironment<S>::sacle_perturbative_noise(
+                            MovingEnvironment<S>::scale_perturbative_noise(
                                 noise, pket);
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
@@ -381,7 +381,7 @@ template <typename S> struct DMRG {
                         MovingEnvironment<S>::wavefunction_add_noise(old_wfn,
                                                                      noise);
                     else if (noise_type == NoiseTypes::Perturbative)
-                        MovingEnvironment<S>::sacle_perturbative_noise(noise,
+                        MovingEnvironment<S>::scale_perturbative_noise(noise,
                                                                        pket);
                 }
                 error = MovingEnvironment<S>::split_wavefunction_svd(
