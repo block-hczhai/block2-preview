@@ -1155,11 +1155,11 @@ template <typename S> void bind_partition(py::module &m) {
             "split_wavefunction_svd",
             [](S opdq, const shared_ptr<SparseMatrix<S>> &wfn, int k,
                bool trace_right, bool normalize, double cutoff,
-               TruncationTypes trunc_type) {
+               TruncationTypes trunc_type, DecompositionTypes decomp_type) {
                 shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
                 double error = MovingEnvironment<S>::split_wavefunction_svd(
                     opdq, wfn, k, trace_right, normalize, left, right, cutoff,
-                    trunc_type);
+                    trunc_type, decomp_type);
                 return make_tuple(error, left, right);
             },
             py::arg("opdq"), py::arg("wfn"), py::arg("k"),
@@ -1703,7 +1703,8 @@ template <typename S = void> void bind_types(py::module &m) {
 
     py::enum_<DecompositionTypes>(m, "DecompositionTypes", py::arithmetic())
         .value("DensityMatrix", DecompositionTypes::DensityMatrix)
-        .value("SVD", DecompositionTypes::SVD);
+        .value("SVD", DecompositionTypes::SVD)
+        .value("PureSVD", DecompositionTypes::PureSVD);
 
     py::enum_<SymTypes>(m, "SymTypes", py::arithmetic())
         .value("RVec", SymTypes::RVec)
@@ -2008,7 +2009,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
         });
 
     py::bind_vector<vector<shared_ptr<Tensor>>>(m, "VectorTensor");
-    py::bind_vector<vector<vector<shared_ptr<Tensor>>>>(m, "VectorVectorTensor");
+    py::bind_vector<vector<vector<shared_ptr<Tensor>>>>(m,
+                                                        "VectorVectorTensor");
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
         .def_static(

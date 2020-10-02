@@ -719,6 +719,12 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
 };
 
+enum struct DecompositionTypes : uint8_t {
+    SVD = 0,
+    PureSVD = 1,
+    DensityMatrix = 2
+};
+
 enum struct TruncationTypes : ubond_t {
     Physical = 0,
     Reduced = 1,
@@ -2045,6 +2051,7 @@ template <typename S> struct MovingEnvironment {
         bool normalize, shared_ptr<SparseMatrix<S>> &left,
         shared_ptr<SparseMatrix<S>> &right, double cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical,
+        DecompositionTypes decomp_type = DecompositionTypes::PureSVD,
         const shared_ptr<SparseMatrixGroup<S>> &mwfn = nullptr) {
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
@@ -2122,19 +2129,26 @@ template <typename S> struct MovingEnvironment {
                     int iw = idx_dm_to_wfn[ss[iss].first][iww];
                     int ir = rinfo->find_state(wfn->info->quanta[iw]);
                     assert(ir != -1);
-                    for (int j = 0; j < im[i]; j++) {
-                        MatrixFunctions::copy(
-                            MatrixRef(right->data + rinfo->n_states_total[ir] +
-                                          j * r[iw]->shape[1],
-                                      1, r[iw]->shape[1]),
-                            MatrixRef(&r[iw]->ref()(ss[iss + j].second, 0), 1,
-                                      r[iw]->shape[1]));
-                        MatrixFunctions::iscale(
-                            MatrixRef(right->data + rinfo->n_states_total[ir] +
-                                          j * r[iw]->shape[1],
-                                      1, r[iw]->shape[1]),
-                            s[ss[iss + j].first]->data[ss[iss + j].second]);
-                    }
+                    if (decomp_type == DecompositionTypes::PureSVD) {
+                        for (int j = 0; j < im[i]; j++) {
+                            MatrixFunctions::copy(
+                                MatrixRef(right->data +
+                                              rinfo->n_states_total[ir] +
+                                              j * r[iw]->shape[1],
+                                          1, r[iw]->shape[1]),
+                                MatrixRef(&r[iw]->ref()(ss[iss + j].second, 0),
+                                          1, r[iw]->shape[1]));
+                            MatrixFunctions::iscale(
+                                MatrixRef(right->data +
+                                              rinfo->n_states_total[ir] +
+                                              j * r[iw]->shape[1],
+                                          1, r[iw]->shape[1]),
+                                s[ss[iss + j].first]->data[ss[iss + j].second]);
+                        }
+                    } else
+                        MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw],
+                                                  false, (*right)[ir], 1.0,
+                                                  0.0);
                 }
                 iss += im[i];
             }
@@ -2155,21 +2169,26 @@ template <typename S> struct MovingEnvironment {
                     int iw = idx_dm_to_wfn[ss[iss].first][iww];
                     int il = linfo->find_state(wfn->info->quanta[iw]);
                     assert(il != -1);
-                    for (int j = 0; j < im[i]; j++) {
-                        MatrixFunctions::copy(
-                            MatrixRef(left->data + linfo->n_states_total[il] +
-                                          j,
-                                      linfo->n_states_bra[il], 1),
-                            MatrixRef(&l[iw]->ref()(0, ss[iss + j].second),
-                                      linfo->n_states_bra[il], 1),
-                            linfo->n_states_ket[il], l[iw]->shape[1]);
-                        MatrixFunctions::iscale(
-                            MatrixRef(left->data + linfo->n_states_total[il] +
-                                          j,
-                                      linfo->n_states_bra[il], 1),
-                            s[ss[iss + j].first]->data[ss[iss + j].second],
-                            linfo->n_states_ket[il]);
-                    }
+                    if (decomp_type == DecompositionTypes::PureSVD) {
+                        for (int j = 0; j < im[i]; j++) {
+                            MatrixFunctions::copy(
+                                MatrixRef(left->data +
+                                              linfo->n_states_total[il] + j,
+                                          linfo->n_states_bra[il], 1),
+                                MatrixRef(&l[iw]->ref()(0, ss[iss + j].second),
+                                          linfo->n_states_bra[il], 1),
+                                linfo->n_states_ket[il], l[iw]->shape[1]);
+                            MatrixFunctions::iscale(
+                                MatrixRef(left->data +
+                                              linfo->n_states_total[il] + j,
+                                          linfo->n_states_bra[il], 1),
+                                s[ss[iss + j].first]->data[ss[iss + j].second],
+                                linfo->n_states_ket[il]);
+                        }
+                    } else
+                        MatrixFunctions::multiply((*wfn)[iw], false,
+                                                  (*right)[i], true,
+                                                  (*left)[il], 1.0, 0.0);
                 }
                 iss += im[i];
             }

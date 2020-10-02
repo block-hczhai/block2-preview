@@ -39,8 +39,6 @@ using namespace std;
 
 namespace block2 {
 
-enum struct DecompositionTypes : uint8_t { SVD = 0, DensityMatrix = 1 };
-
 // Density Matrix Renormalization Group
 template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
@@ -214,7 +212,8 @@ template <typename S> struct DMRG {
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
                         left, right, cutoff, trunc_type);
-                } else if (decomp_type == DecompositionTypes::SVD) {
+                } else if (decomp_type == DecompositionTypes::SVD ||
+                           decomp_type == DecompositionTypes::PureSVD) {
                     assert(noise_type == NoiseTypes::None ||
                            noise_type == NoiseTypes::Perturbative ||
                            noise_type == NoiseTypes::Wavefunction);
@@ -229,7 +228,7 @@ template <typename S> struct DMRG {
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
                         opdq, me->ket->tensors[i], (int)bond_dim, forward, true,
-                        left, right, cutoff, trunc_type, pket);
+                        left, right, cutoff, trunc_type, decomp_type, pket);
                 } else
                     assert(false);
                 shared_ptr<StateInfo<S>> info = nullptr;
@@ -373,7 +372,8 @@ template <typename S> struct DMRG {
                     dm, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
                     trunc_type);
-            } else if (decomp_type == DecompositionTypes::SVD) {
+            } else if (decomp_type == DecompositionTypes::SVD ||
+                       decomp_type == DecompositionTypes::PureSVD) {
                 assert(noise_type == NoiseTypes::None ||
                        noise_type == NoiseTypes::Perturbative ||
                        noise_type == NoiseTypes::Wavefunction);
@@ -390,7 +390,7 @@ template <typename S> struct DMRG {
                 error = MovingEnvironment<S>::split_wavefunction_svd(
                     opdq, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
-                    trunc_type, pket);
+                    trunc_type, decomp_type, pket);
             } else
                 assert(false);
             shared_ptr<StateInfo<S>> info = nullptr;
