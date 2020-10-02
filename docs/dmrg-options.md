@@ -11,7 +11,7 @@ DMRG Options
 `decomp_last_site`
 ------------------
 
-- **Meaning:** If `flase`, decomposition for *affected* sites will be skipped.
+- **Meaning:** If `false`, decomposition for *affected* sites will be skipped.
 - **Default:** `true`.
 - **Affected sites:**
   - For `me->dot = 1`, only affect site `n - 1` for forward and site `0` for backward sweep.
