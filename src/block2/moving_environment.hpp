@@ -1652,7 +1652,7 @@ template <typename S> struct MovingEnvironment {
         assert(iinfo != -1);
         shared_ptr<SparseMatrix<S>> pmat = (*mats)[iinfo];
         assert(psi->total_memory == pmat->total_memory);
-        double noise_scale = noise / mats->norm();
+        double noise_scale = sqrt(noise) / mats->norm();
         MatrixFunctions::iscale(MatrixRef(mats->data, mats->total_memory, 1),
                                 noise_scale);
         MatrixFunctions::iadd(MatrixRef(pmat->data, pmat->total_memory, 1),
