@@ -1700,6 +1700,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Nothing", NoiseTypes::None)
         .value("Wavefunction", NoiseTypes::Wavefunction)
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
+        .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("Perturbative", NoiseTypes::Perturbative);
 
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())

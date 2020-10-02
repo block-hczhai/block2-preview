@@ -1485,7 +1485,8 @@ template <typename S> struct SparseMatrixGroup {
     }
     void deallocate_infos() {
         for (int i = n - 1; i >= 0; i--)
-            infos[i]->deallocate();
+            if (infos[i]->n != -1)
+                infos[i]->deallocate();
     }
     void randomize(double a = 0.0, double b = 1.0) const {
         Random::fill_rand_double(data, total_memory, a, b);

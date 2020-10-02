@@ -147,12 +147,18 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSU2) {
     targets.resize(2);
     energies.resize(2);
 
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD", DecompositionTypes::PureSVD,
+                   NoiseTypes::Wavefunction);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
+                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
                    DecompositionTypes::SVD, NoiseTypes::Perturbative);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
+                   DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
+                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 
     hamil.deallocate();
     fcidump->deallocate();
@@ -204,12 +210,18 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSZ) {
     targets.resize(2);
     energies.resize(2);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD", DecompositionTypes::PureSVD,
+                  NoiseTypes::Wavefunction);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
+                  DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD PERT",
                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT",
+                  DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ SVD RED PERT",
+                  DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 
     hamil.deallocate();
     fcidump->deallocate();

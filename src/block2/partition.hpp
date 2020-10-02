@@ -140,7 +140,8 @@ template <typename S> struct Partition {
     static vector<vector<pair<uint8_t, S>>>
     get_uniq_sub_labels(const shared_ptr<Symbolic<S>> &exprs,
                         const shared_ptr<Symbolic<S>> &mat, const vector<S> &sl,
-                        bool partial = false, bool left_only = true) {
+                        bool partial = false, bool left_only = true,
+                        bool uniq_sorted = true) {
         vector<vector<pair<uint8_t, S>>> subsl(sl.size());
         if (exprs == nullptr)
             return subsl;
@@ -215,10 +216,13 @@ template <typename S> struct Partition {
                 assert(false);
             }
         }
-        for (size_t i = 0; i < subsl.size(); i++) {
-            sort(subsl[i].begin(), subsl[i].end());
-            subsl[i].resize(distance(subsl[i].begin(),
-                                     unique(subsl[i].begin(), subsl[i].end())));
+        if (uniq_sorted) {
+            for (size_t i = 0; i < subsl.size(); i++) {
+                sort(subsl[i].begin(), subsl[i].end());
+                subsl[i].resize(
+                    distance(subsl[i].begin(),
+                             unique(subsl[i].begin(), subsl[i].end())));
+            }
         }
         return subsl;
     }

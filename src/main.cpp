@@ -476,6 +476,8 @@ template <typename S> void run(const map<string, string> &params) {
             dmrg->noise_type = NoiseTypes::Wavefunction;
         else if (params.at("noise_type") == "perturbative")
             dmrg->noise_type = NoiseTypes::Perturbative;
+        else if (params.at("noise_type") == "reduced_perturbative")
+            dmrg->noise_type = NoiseTypes::ReducedPerturbative;
         else {
             cerr << "unknown noise type : " << params.at("noise_type") << endl;
             abort();
@@ -489,6 +491,20 @@ template <typename S> void run(const map<string, string> &params) {
             dmrg->trunc_type = TruncationTypes::Reduced;
         else {
             cerr << "unknown trunc type : " << params.at("trunc_type") << endl;
+            abort();
+        }
+    }
+
+    if (params.count("decomp_type") != 0) {
+        if (params.at("decomp_type") == "density_matrix")
+            dmrg->decomp_type = DecompositionTypes::DensityMatrix;
+        else if (params.at("decomp_type") == "svd")
+            dmrg->decomp_type = DecompositionTypes::SVD;
+        else if (params.at("decomp_type") == "pure_svd")
+            dmrg->decomp_type = DecompositionTypes::PureSVD;
+        else {
+            cerr << "unknown decomp type : " << params.at("decomp_type")
+                 << endl;
             abort();
         }
     }

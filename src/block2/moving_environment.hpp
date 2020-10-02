@@ -125,6 +125,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     shared_ptr<SparseMatrixGroup<S>>
     perturbative_noise(bool trace_right, int iL, int iR, FuseTypes ftype,
                        const shared_ptr<MPSInfo<S>> &mps_info,
+                       const NoiseTypes noise_type,
                        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -133,14 +134,18 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
         vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
-            op->mat, hop_mat, msl, true, trace_right)[0];
-        vector<S> perturb_ket_labels;
+            op->mat, hop_mat, msl, true, trace_right, false)[0];
+        vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
         for (size_t j = 0; j < psubsl.size(); j++) {
             S pks = ket_label + psubsl[j].second;
             for (int k = 0; k < pks.count(); k++)
                 perturb_ket_labels.push_back(pks[k]);
         }
+        sort(psubsl.begin(), psubsl.end());
+        psubsl.resize(
+            distance(psubsl.begin(), unique(psubsl.begin(), psubsl.end())));
+        all_perturb_ket_labels = perturb_ket_labels;
         sort(perturb_ket_labels.begin(), perturb_ket_labels.end());
         perturb_ket_labels.resize(distance(
             perturb_ket_labels.begin(),
@@ -183,7 +188,20 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // perturbed wavefunctions
         shared_ptr<SparseMatrixGroup<S>> perturb_ket =
             make_shared<SparseMatrixGroup<S>>(d_alloc);
-        perturb_ket->allocate(infos);
+        if (noise_type == NoiseTypes::ReducedPerturbative)
+            perturb_ket->allocate(infos);
+        else if (noise_type == NoiseTypes::Perturbative) {
+            vector<shared_ptr<SparseMatrixInfo<S>>> all_infos;
+            all_infos.reserve(all_perturb_ket_labels.size());
+            for (S q : all_perturb_ket_labels) {
+                int ib = lower_bound(perturb_ket_labels.begin(),
+                                     perturb_ket_labels.end(), q) -
+                         perturb_ket_labels.begin();
+                all_infos.push_back(infos[ib]);
+            }
+            perturb_ket->allocate(all_infos);
+        } else
+            assert(false);
         // connection infos
         frame->activate(0);
         vector<vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
@@ -211,10 +229,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 assert(cinfos[j][k]->n[4] == 1);
             }
         }
+        int vidx = noise_type == NoiseTypes::ReducedPerturbative ? -1 : 0;
         // perform multiplication
         tf->tensor_product_partial_multiply(
             op->mat->data[0], op->lops, op->rops, trace_right, cmat, psubsl,
-            cinfos, perturb_ket_labels, perturb_ket);
+            cinfos, perturb_ket_labels, perturb_ket, vidx);
+        if (noise_type != NoiseTypes::ReducedPerturbative)
+            assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             tf->opf->seq->auto_perform();
             if (para_rule != nullptr)

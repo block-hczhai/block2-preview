@@ -35,7 +35,8 @@ enum struct NoiseTypes : uint8_t {
     None,
     Wavefunction,
     DensityMatrix,
-    Perturbative
+    Perturbative,
+    ReducedPerturbative
 };
 
 // SparseMatrix operations

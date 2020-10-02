@@ -106,8 +106,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         const vector<
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             &cinfos,
-        const vector<S> &vdqs,
-        const shared_ptr<SparseMatrixGroup<S>> &vmats) const override {
+        const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
+        int &vidx) const override {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         switch (expr->get_type()) {
@@ -130,7 +130,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
-                    shared_ptr<SparseMatrix<S>> vmat = (*vmats)[iv];
+                    shared_ptr<SparseMatrix<S>> vmat =
+                        vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
                     opf->tensor_product_multiply(op->conj & 1, lmat, rmat, cmat,
                                                  vmat, opdq, op->factor);
@@ -149,7 +150,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
-                    shared_ptr<SparseMatrix<S>> vmat = (*vmats)[iv];
+                    shared_ptr<SparseMatrix<S>> vmat =
+                        vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
                     opf->tensor_product_multiply(op->conj & 2, lmat, rmat, cmat,
                                                  vmat, opdq, op->factor);
@@ -161,13 +163,14 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
             for (auto &x : op->strings)
                 tensor_product_partial_multiply(x, lop, rop, trace_right, cmat,
-                                                psubsl, cinfos, vdqs, vmats);
+                                                psubsl, cinfos, vdqs, vmats,
+                                                vidx);
         } break;
         case OpTypes::ExprRef: {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
             tensor_product_partial_multiply(op->op, lop, rop, trace_right, cmat,
-                                            psubsl, cinfos, vdqs, vmats);
+                                            psubsl, cinfos, vdqs, vmats, vidx);
             if (opf->seq->mode != SeqTypes::Auto)
                 rule->comm->reduce_sum(vmats, rule->comm->root);
         } break;
