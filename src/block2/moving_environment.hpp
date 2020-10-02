@@ -1643,7 +1643,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Scale perturbative noise (before svd)
     static void
-    sacle_perturbative_noise(double noise,
+    scale_perturbative_noise(double noise,
                              const shared_ptr<SparseMatrixGroup<S>> &mats) {
         if (abs(noise) < TINY && noise == 0.0)
             return;
@@ -1684,7 +1684,7 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
-        sacle_perturbative_noise(noise, mats);
+        scale_perturbative_noise(noise, mats);
         for (int i = 1; i < mats->n; i++)
             OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);

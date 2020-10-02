@@ -1077,8 +1077,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def_static("wavefunction_add_noise",
                     &MovingEnvironment<S>::wavefunction_add_noise,
                     py::arg("psi"), py::arg("noise"))
-        .def_static("sacle_perturbative_noise",
-                    &MovingEnvironment<S>::sacle_perturbative_noise,
+        .def_static("scale_perturbative_noise",
+                    &MovingEnvironment<S>::scale_perturbative_noise,
                     py::arg("noise"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
