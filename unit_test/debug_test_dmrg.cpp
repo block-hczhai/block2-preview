@@ -27,15 +27,15 @@ TEST_F(TestDMRG, Test) {
 
     string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
-    occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // occs = read_occ(occ_filename);
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
     // occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
     // pg = PGTypes::C2V;
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
 
     vector<uint8_t> ioccs;
@@ -77,7 +77,7 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 250;
+    ubond_t bond_dim = 200;
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
@@ -125,7 +125,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 1);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -154,7 +154,7 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     // vector<ubond_t> bdims = {50};
-    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+    vector<ubond_t> bdims = {500, 500, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
                              1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
@@ -164,9 +164,9 @@ TEST_F(TestDMRG, Test) {
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    // dmrg->decomp_type = DecompositionTypes::SVD;
-    // dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->solve(50, true, 0.0);
+    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->noise_type = NoiseTypes::Perturbative;
+    dmrg->solve(2, true, 0.0);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

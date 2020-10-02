@@ -1518,10 +1518,16 @@ template <typename S> struct SparseMatrixGroup {
     // l will have the same number of non-zero blocks as this matrix group
     // s will be labelled by right q labels
     void left_svd(vector<S> &rqs, vector<vector<shared_ptr<Tensor>>> &l,
-                  vector<shared_ptr<Tensor>> &s,
-                  vector<shared_ptr<Tensor>> &r) {
+                  vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
+                  const shared_ptr<SparseMatrix<S>> &extmat = nullptr) {
         map<S, uint32_t> qs_mp;
-        for (const auto &info : infos)
+        vector<shared_ptr<SparseMatrixInfo<S>>> extinfos = infos;
+        vector<size_t> extoffsets = offsets;
+        if (extmat != nullptr) {
+            extinfos.push_back(extmat->info);
+            extoffsets.push_back(extmat->data - data);
+        }
+        for (const auto &info : extinfos)
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
@@ -1539,8 +1545,8 @@ template <typename S> struct SparseMatrixGroup {
         double *dt = dalloc->allocate(tmp[nr]);
         uint32_t it[nr], sz[nr];
         memset(it, 0, sizeof(uint32_t) * nr);
-        for (int ii = 0; ii < n; ii++) {
-            const auto &info = infos[ii];
+        for (int ii = 0; ii < (int)extinfos.size(); ii++) {
+            const auto &info = extinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
@@ -1548,7 +1554,7 @@ template <typename S> struct SparseMatrixGroup {
                 uint32_t n_states =
                     (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
                 memcpy(dt + (tmp[ir] + it[ir]),
-                       data + offsets[ii] + info->n_states_total[i],
+                       data + extoffsets[ii] + info->n_states_total[i],
                        n_states * sizeof(double));
                 sz[ir] = info->n_states_ket[i];
                 it[ir] += n_states;
@@ -1573,9 +1579,9 @@ template <typename S> struct SparseMatrixGroup {
             r.push_back(tsr);
         }
         memset(it, 0, sizeof(uint32_t) * nr);
-        l.resize(n);
-        for (int ii = 0; ii < n; ii++) {
-            const auto &info = infos[ii];
+        l.resize(extinfos.size());
+        for (int ii = 0; ii < (int)extinfos.size(); ii++) {
+            const auto &info = extinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
@@ -1596,9 +1602,16 @@ template <typename S> struct SparseMatrixGroup {
     // s will be labelled by left q labels
     void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
                    vector<shared_ptr<Tensor>> &s,
-                   vector<vector<shared_ptr<Tensor>>> &r) {
+                   vector<vector<shared_ptr<Tensor>>> &r,
+                   const shared_ptr<SparseMatrix<S>> &extmat = nullptr) {
         map<S, uint32_t> qs_mp;
-        for (const auto &info : infos)
+        vector<shared_ptr<SparseMatrixInfo<S>>> extinfos = infos;
+        vector<size_t> extoffsets = offsets;
+        if (extmat != nullptr) {
+            extinfos.push_back(extmat->info);
+            extoffsets.push_back(extmat->data - data);
+        }
+        for (const auto &info : extinfos)
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 qs_mp[q] +=
@@ -1615,8 +1628,8 @@ template <typename S> struct SparseMatrixGroup {
         double *dt = dalloc->allocate(tmp[nl]);
         uint32_t it[nl], sz[nl];
         memset(it, 0, sizeof(uint32_t) * nl);
-        for (int ii = 0; ii < n; ii++) {
-            const auto &info = infos[ii];
+        for (int ii = 0; ii < (int)extinfos.size(); ii++) {
+            const auto &info = extinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
@@ -1626,7 +1639,7 @@ template <typename S> struct SparseMatrixGroup {
                 uint32_t inr = info->n_states_ket[i];
                 for (uint32_t k = 0; k < nxl; k++)
                     memcpy(dt + (tmp[il] + it[il] + k * nxr),
-                           data + offsets[ii] +
+                           data + extoffsets[ii] +
                                (info->n_states_total[i] + k * inr),
                            inr * sizeof(double));
                 sz[il] = nxl;
@@ -1652,9 +1665,9 @@ template <typename S> struct SparseMatrixGroup {
             merged_r.push_back(tsr);
         }
         memset(it, 0, sizeof(uint32_t) * nl);
-        r.resize(n);
-        for (int ii = 0; ii < n; ii++) {
-            const auto &info = infos[ii];
+        r.resize(extinfos.size());
+        for (int ii = 0; ii < (int)extinfos.size(); ii++) {
+            const auto &info = extinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();

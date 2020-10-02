@@ -1641,28 +1641,17 @@ template <typename S> struct MovingEnvironment {
                               noise_scale);
         tmp->deallocate();
     }
-    // Direct add perturbative noise to wavefunction (before svd)
-    // psi will be added to mats
-    static void wavefunction_add_perturbative_noise(
-        const shared_ptr<SparseMatrix<S>> &psi, double noise,
-        const shared_ptr<SparseMatrixGroup<S>> &mats) {
-        assert(psi->factor == 1.0);
+    // Scale perturbative noise (before svd)
+    static void
+    sacle_perturbative_noise(double noise,
+                             const shared_ptr<SparseMatrixGroup<S>> &mats) {
         if (abs(noise) < TINY && noise == 0.0)
             return;
-        int iinfo = -1;
-        for (int i = 0; i < mats->n; i++)
-            if (mats->infos[i]->delta_quantum == psi->info->delta_quantum) {
-                iinfo = i;
-                break;
-            }
-        assert(iinfo != -1);
-        shared_ptr<SparseMatrix<S>> pmat = (*mats)[iinfo];
-        assert(psi->total_memory == pmat->total_memory);
-        double noise_scale = sqrt(noise) / mats->norm();
-        MatrixFunctions::iscale(MatrixRef(mats->data, mats->total_memory, 1),
-                                noise_scale);
-        MatrixFunctions::iadd(MatrixRef(pmat->data, pmat->total_memory, 1),
-                              MatrixRef(psi->data, psi->total_memory, 1), 1);
+        double norm = mats->norm();
+        if (abs(norm) > TINY)
+            MatrixFunctions::iscale(
+                MatrixRef(mats->data, mats->total_memory, 1),
+                sqrt(noise) / norm);
     }
     // Density matrix of a MultiMPS tensor
     static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
@@ -1695,12 +1684,10 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
+        sacle_perturbative_noise(noise, mats);
         for (int i = 1; i < mats->n; i++)
             OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);
-        double norm = dm->norm();
-        if (abs(norm) > TINY)
-            dm->iscale(noise / norm);
         OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
                                             NoiseTypes::None);
         return dm;
@@ -2057,20 +2044,13 @@ template <typename S> struct MovingEnvironment {
         vector<S> qs;
         // for perturbative SVD
         if (mwfn != nullptr) {
-            int iinfo = -1;
-            for (int i = 0; i < mwfn->n; i++)
-                if (mwfn->infos[i]->delta_quantum == wfn->info->delta_quantum) {
-                    iinfo = i;
-                    break;
-                }
-            assert(iinfo != -1);
             vector<vector<shared_ptr<Tensor>>> xlr;
             if (trace_right) {
-                mwfn->right_svd(qs, l, s, xlr);
-                r = xlr[iinfo];
+                mwfn->right_svd(qs, l, s, xlr, wfn);
+                r = xlr.back();
             } else {
-                mwfn->left_svd(qs, xlr, s, r);
-                l = xlr[iinfo];
+                mwfn->left_svd(qs, xlr, s, r, wfn);
+                l = xlr.back();
             }
         } else {
             if (trace_right)

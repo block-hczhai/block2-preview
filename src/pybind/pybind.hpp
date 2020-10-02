@@ -1077,9 +1077,9 @@ template <typename S> void bind_partition(py::module &m) {
         .def_static("wavefunction_add_noise",
                     &MovingEnvironment<S>::wavefunction_add_noise,
                     py::arg("psi"), py::arg("noise"))
-        .def_static("wavefunction_add_perturbative_noise",
-                    &MovingEnvironment<S>::wavefunction_add_perturbative_noise,
-                    py::arg("psi"), py::arg("noise"), py::arg("mats"))
+        .def_static("sacle_perturbative_noise",
+                    &MovingEnvironment<S>::sacle_perturbative_noise,
+                    py::arg("noise"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
@@ -1164,6 +1164,7 @@ template <typename S> void bind_partition(py::module &m) {
             },
             py::arg("opdq"), py::arg("wfn"), py::arg("k"),
             py::arg("trace_right"), py::arg("normalize"), py::arg("cutoff"),
+            py::arg("decomp_type") = DecompositionTypes::PureSVD,
             py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
