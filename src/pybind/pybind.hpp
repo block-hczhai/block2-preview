@@ -1338,6 +1338,8 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<Compress<S>, shared_ptr<Compress<S>>>(m, "Compress")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
         .def_readwrite("iprint", &Compress<S>::iprint)
@@ -1350,6 +1352,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("forward", &Compress<S>::forward)
         .def_readwrite("noise_type", &Compress<S>::noise_type)
         .def_readwrite("trunc_type", &Compress<S>::trunc_type)
+        .def_readwrite("decomp_type", &Compress<S>::decomp_type)
+        .def_readwrite("decomp_last_site", &Compress<S>::decomp_last_site)
         .def("update_two_dot", &Compress<S>::update_two_dot)
         .def("blocking", &Compress<S>::blocking)
         .def("sweep", &Compress<S>::sweep)
@@ -1482,6 +1486,7 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("n_sites", &MPO<S>::n_sites)
         .def_readwrite("const_e", &MPO<S>::const_e)
         .def_readwrite("tensors", &MPO<S>::tensors)
+        .def_readwrite("basis", &MPO<S>::basis)
         .def_readwrite("sparse_form", &MPO<S>::sparse_form)
         .def_readwrite("left_operator_names", &MPO<S>::left_operator_names)
         .def_readwrite("right_operator_names", &MPO<S>::right_operator_names)
@@ -1530,7 +1535,6 @@ template <typename S> void bind_mpo(py::module &m) {
         .def("simplify", &SimplifiedMPO<S>::simplify);
 
     py::class_<FusedMPO<S>, shared_ptr<FusedMPO<S>>, MPO<S>>(m, "FusedMPO")
-        .def_readwrite("basis", &FusedMPO<S>::basis)
         .def(py::init<const shared_ptr<MPO<S>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
                       uint16_t>())
@@ -1540,6 +1544,9 @@ template <typename S> void bind_mpo(py::module &m) {
 
     py::class_<IdentityMPO<S>, shared_ptr<IdentityMPO<S>>, MPO<S>>(
         m, "IdentityMPO")
+        .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, S,
+                      const shared_ptr<OperatorFunctions<S>> &>())
         .def(py::init<const Hamiltonian<S> &>());
 
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")

@@ -35,6 +35,93 @@ namespace block2 {
 
 // MPO of identity operator
 template <typename S> struct IdentityMPO : MPO<S> {
+    using MPO<S>::n_sites;
+    using MPO<S>::site_op_infos;
+    IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
+                const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
+                const shared_ptr<OperatorFunctions<S>> &opf)
+        : MPO<S>(bra_basis.size()) {
+        shared_ptr<OpElement<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(bra_basis.size() == ket_basis.size());
+        MPO<S>::op = i_op;
+        MPO<S>::const_e = 0.0;
+        // site operator infos
+        site_op_infos.resize(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++) {
+            shared_ptr<SparseMatrixInfo<S>> info =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            info->initialize(*bra_basis[m], *ket_basis[m], vacuum, false);
+            site_op_infos[m].push_back(make_pair(vacuum, info));
+        }
+        bool has_sparse = false;
+        for (uint16_t m = 0; m < n_sites; m++) {
+            // site tensor
+            shared_ptr<Symbolic<S>> pmat;
+            if (m == 0)
+                pmat = make_shared<SymbolicRowVector<S>>(1);
+            else if (m == n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S>>(1);
+            else
+                pmat = make_shared<SymbolicMatrix<S>>(1, 1);
+            (*pmat)[{0, 0}] = i_op;
+            shared_ptr<OperatorTensor<S>> opt =
+                make_shared<OperatorTensor<S>>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector<S>> plop =
+                make_shared<SymbolicRowVector<S>>(1);
+            (*plop)[0] = i_op;
+            this->left_operator_names.push_back(plop);
+            shared_ptr<SymbolicColumnVector<S>> prop =
+                make_shared<SymbolicColumnVector<S>>(1);
+            (*prop)[0] = i_op;
+            this->right_operator_names.push_back(prop);
+            bool no_sparse = bra_basis[m]->n == bra_basis[m]->n_states_total &&
+                          ket_basis[m]->n == ket_basis[m]->n_states_total;
+            // site operators
+            shared_ptr<SparseMatrixInfo<S>> info = site_op_infos[m][0].second;
+            if (no_sparse) {
+                shared_ptr<SparseMatrix<S>> mat =
+                    make_shared<SparseMatrix<S>>(d_alloc);
+                opt->ops[i_op] = mat;
+                mat->allocate(info);
+                for (int i = 0; i < mat->total_memory; i++)
+                    mat->data[i] = 1;
+            } else {
+                has_sparse = true;
+                MPO<S>::sparse_form[m] = 'S';
+                shared_ptr<CSRSparseMatrix<S>> mat =
+                    make_shared<CSRSparseMatrix<S>>(d_alloc);
+                opt->ops[i_op] = mat;
+                mat->initialize(info);
+                for (int i = 0; i < info->n; i++) {
+                    shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                    cmat->nnz = min(cmat->m, cmat->n);
+                    cmat->allocate();
+                    for (int j = 0; j < cmat->nnz; j++)
+                        cmat->data[j] = 1;
+                    if (cmat->nnz != cmat->size()) {
+                        for (int j = 0; j < cmat->nnz; j++)
+                            cmat->rows[j] = j, cmat->cols[j] = j;
+                        for (int j = cmat->nnz; j <= cmat->m; j++)
+                            cmat->rows[j] = cmat->nnz;
+                    }
+                }
+            }
+            this->tensors.push_back(opt);
+        }
+        if (has_sparse) {
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(opf->cg));
+            MPO<S>::tf->opf->seq = opf->seq;
+        } else
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(opf);
+    }
     IdentityMPO(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);

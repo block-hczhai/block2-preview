@@ -27,15 +27,15 @@ TEST_F(TestDMRG, Test) {
 
     string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
-    // occs = read_occ(occ_filename);
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    occs = read_occ(occ_filename);
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
     // occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
     // pg = PGTypes::C2V;
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
-    string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     fcidump->read(filename);
 
     vector<uint8_t> ioccs;
@@ -57,7 +57,7 @@ TEST_F(TestDMRG, Test) {
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
 #ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
+    mkl_set_num_threads(16);
     mkl_set_dynamic(0);
 #endif
 
@@ -125,7 +125,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 1);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -154,19 +154,22 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     // vector<ubond_t> bdims = {50};
-    vector<ubond_t> bdims = {500, 500, 250, 250, 250, 500, 500, 500,
+    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
-                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-7, 1E-7,  1E-7,  1E-8,  1E-8,
+                             1E-8, 1E-9, 1E-9, 1E-9, 1E-10, 1E-10, 1E-10, 0.0};
+    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6,
+                              1E-6, 1E-6, 5E-7, 5E-7, 5E-7, 1E-7, 1E-7, 1E-8};
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->solve(2, true, 0.0);
+    dmrg->solve(50, true, 0.0);
 
     // deallocate persistent stack memory
     mps_info->deallocate();
