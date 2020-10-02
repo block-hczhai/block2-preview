@@ -323,7 +323,7 @@ template <typename S> void run(const map<string, string> &params) {
     vector<ubond_t> bdims = {
         250, 250, 250,
         250, 250, (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max())};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 0.0};
+    vector<double> noises = {1E-7, 1E-8, 1E-8, 1E-9, 1E-9, 0.0};
     vector<double> davidson_conv_thrds = {5E-6};
 
     if (params.count("bond_dims") != 0) {

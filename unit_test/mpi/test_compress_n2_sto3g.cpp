@@ -124,7 +124,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     ubond_t bond_dim = 200, bra_bond_dim = 100;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 1E-7, 0.0};
+    vector<double> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 

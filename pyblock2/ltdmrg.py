@@ -505,7 +505,7 @@ if __name__ == "__main__":
 
     # parameters
     bond_dims = [250, 250, 500, 500, 500, 500, 750]
-    noises = [1E-5, 1E-5, 1E-6, 1E-6, 1E-7, 1E-7, 1E-8, 1E-8, 0]
+    noises = [1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-9, 1E-9, 1E-9, 0]
     sweep_tol = 1E-8
     max_dmrg_steps = 30
 

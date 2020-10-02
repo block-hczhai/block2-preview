@@ -1622,7 +1622,7 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
-        OperatorFunctions<S>::trans_product(psi, dm, trace_right, noise,
+        OperatorFunctions<S>::trans_product(psi, dm, trace_right, sqrt(noise),
                                             noise_type);
         return dm;
     }
@@ -1635,7 +1635,7 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
         tmp->allocate(psi->info);
         tmp->randomize(-0.5, 0.5);
-        double noise_scale = noise / tmp->norm();
+        double noise_scale = sqrt(noise) / tmp->norm();
         MatrixFunctions::iadd(MatrixRef(psi->data, psi->total_memory, 1),
                               MatrixRef(tmp->data, tmp->total_memory, 1),
                               noise_scale);
@@ -1679,8 +1679,8 @@ template <typename S> struct MovingEnvironment {
             for (int j = 0; j < psi[i]->n; j++) {
                 shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
                 wfn->factor = weights[i];
-                OperatorFunctions<S>::trans_product(wfn, dm, trace_right, noise,
-                                                    noise_type);
+                OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
+                                                    sqrt(noise), noise_type);
             }
         return dm;
     }

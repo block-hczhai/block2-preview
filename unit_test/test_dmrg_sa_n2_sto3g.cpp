@@ -52,7 +52,7 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 1E-7, 0.0};
+    vector<double> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
