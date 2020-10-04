@@ -19,7 +19,6 @@
  */
 
 #include "block2.hpp"
-#include <malloc.h>
 
 using namespace std;
 using namespace block2;

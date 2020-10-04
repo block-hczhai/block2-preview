@@ -133,8 +133,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             make_shared<VectorAllocator<double>>();
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
+        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
+        shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
+            1, vector<shared_ptr<OpExpr<S>>>{pexpr});
         vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
-            op->mat, hop_mat, msl, true, trace_right, false)[0];
+            pmat, hop_mat, msl, true, trace_right, false)[0];
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
         for (size_t j = 0; j < psubsl.size(); j++) {
@@ -188,9 +191,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // perturbed wavefunctions
         shared_ptr<SparseMatrixGroup<S>> perturb_ket =
             make_shared<SparseMatrixGroup<S>>(d_alloc);
-        if (noise_type == NoiseTypes::ReducedPerturbative)
+        assert(noise_type & NoiseTypes::Perturbative);
+        bool reduced = noise_type == NoiseTypes::ReducedPerturbative ||
+                       noise_type == NoiseTypes::ReducedPerturbativeUnscaled;
+        if (reduced)
             perturb_ket->allocate(infos);
-        else if (noise_type == NoiseTypes::Perturbative) {
+        else {
             vector<shared_ptr<SparseMatrixInfo<S>>> all_infos;
             all_infos.reserve(all_perturb_ket_labels.size());
             for (S q : all_perturb_ket_labels) {
@@ -200,8 +206,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 all_infos.push_back(infos[ib]);
             }
             perturb_ket->allocate(all_infos);
-        } else
-            assert(false);
+        }
         // connection infos
         frame->activate(0);
         vector<vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
@@ -229,12 +234,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 assert(cinfos[j][k]->n[4] == 1);
             }
         }
-        int vidx = noise_type == NoiseTypes::ReducedPerturbative ? -1 : 0;
+        int vidx = reduced ? -1 : 0;
         // perform multiplication
         tf->tensor_product_partial_multiply(
-            op->mat->data[0], op->lops, op->rops, trace_right, cmat, psubsl,
-            cinfos, perturb_ket_labels, perturb_ket, vidx);
-        if (noise_type != NoiseTypes::ReducedPerturbative)
+            pexpr, op->lops, op->rops, trace_right, cmat, psubsl, cinfos,
+            perturb_ket_labels, perturb_ket, vidx);
+        if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             tf->opf->seq->auto_perform();
@@ -1664,10 +1669,21 @@ template <typename S> struct MovingEnvironment {
     }
     // Scale perturbative noise (before svd)
     static void
-    scale_perturbative_noise(double noise,
+    scale_perturbative_noise(double noise, NoiseTypes noise_type,
                              const shared_ptr<SparseMatrixGroup<S>> &mats) {
         if (abs(noise) < TINY && noise == 0.0)
             return;
+        if (noise_type == NoiseTypes::Perturbative ||
+            noise_type == NoiseTypes::ReducedPerturbative) {
+            for (int i = 0; i < mats->n; i++) {
+                double mat_norm = (*mats)[i]->norm();
+                if (abs(mat_norm) > TINY)
+                    MatrixFunctions::iscale(MatrixRef((*mats)[i]->data,
+                                                      (*mats)[i]->total_memory,
+                                                      1),
+                                            1 / mat_norm);
+            }
+        }
         double norm = mats->norm();
         if (abs(norm) > TINY)
             MatrixFunctions::iscale(
@@ -1697,7 +1713,8 @@ template <typename S> struct MovingEnvironment {
     // Density matrix with perturbed wavefunctions as noise
     static shared_ptr<SparseMatrix<S>> density_matrix_with_perturbative_noise(
         S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
-        double noise, const shared_ptr<SparseMatrixGroup<S>> &mats) {
+        double noise, NoiseTypes noise_type,
+        const shared_ptr<SparseMatrixGroup<S>> &mats) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
@@ -1705,7 +1722,7 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
-        scale_perturbative_noise(noise, mats);
+        scale_perturbative_noise(noise, noise_type, mats);
         for (int i = 1; i < mats->n; i++)
             OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
                                                 0.0, NoiseTypes::None);

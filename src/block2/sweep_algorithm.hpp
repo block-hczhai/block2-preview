@@ -147,9 +147,7 @@ template <typename S> struct DMRG {
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                             davidson_soft_max_iter, me->para_rule);
-            if ((noise_type == NoiseTypes::Perturbative ||
-                 noise_type == NoiseTypes::ReducedPerturbative) &&
-                noise != 0)
+            if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                 pket = h_eff->perturbative_noise(
                     forward, i, i,
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -200,13 +198,11 @@ template <typename S> struct DMRG {
                 shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
                 shared_ptr<SparseMatrix<S>> dm, left, right;
                 if (decomp_type == DecompositionTypes::DensityMatrix) {
-                    if ((noise_type == NoiseTypes::Perturbative ||
-                         noise_type == NoiseTypes::ReducedPerturbative) &&
-                        noise != 0) {
+                    if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
                         dm = MovingEnvironment<S>::
                             density_matrix_with_perturbative_noise(
                                 opdq, me->ket->tensors[i], forward, noise,
-                                pket);
+                                noise_type, pket);
                         pket->deallocate_infos();
                         pket->deallocate();
                     } else
@@ -219,18 +215,15 @@ template <typename S> struct DMRG {
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
                     assert(noise_type == NoiseTypes::None ||
-                           noise_type == NoiseTypes::Perturbative ||
-                           noise_type == NoiseTypes::ReducedPerturbative ||
+                           (noise_type & NoiseTypes::Perturbative) ||
                            noise_type == NoiseTypes::Wavefunction);
                     if (noise != 0) {
                         if (noise_type == NoiseTypes::Wavefunction)
                             MovingEnvironment<S>::wavefunction_add_noise(
                                 me->ket->tensors[i], noise);
-                        else if ((noise_type == NoiseTypes::Perturbative ||
-                                  noise_type ==
-                                      NoiseTypes::ReducedPerturbative))
+                        else if (noise_type & NoiseTypes::Perturbative)
                             MovingEnvironment<S>::scale_perturbative_noise(
-                                noise, pket);
+                                noise, noise_type, pket);
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
                         opdq, me->ket->tensors[i], (int)bond_dim, forward, true,
@@ -354,9 +347,7 @@ template <typename S> struct DMRG {
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                             davidson_soft_max_iter, me->para_rule);
-            if ((noise_type == NoiseTypes::Perturbative ||
-                 noise_type == NoiseTypes::ReducedPerturbative) &&
-                noise != 0)
+            if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                 pket = h_eff->perturbative_noise(
                     forward, i, i + 1, FuseTypes::FuseLR, me->ket->info,
                     noise_type, me->para_rule);
@@ -365,14 +356,14 @@ template <typename S> struct DMRG {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<SparseMatrix<S>> dm;
             if (decomp_type == DecompositionTypes::DensityMatrix) {
-                if ((noise_type == NoiseTypes::Perturbative ||
-                     noise_type == NoiseTypes::ReducedPerturbative) &&
-                    noise != 0) {
+                if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
                     dm = MovingEnvironment<
                         S>::density_matrix_with_perturbative_noise(opdq,
                                                                    old_wfn,
                                                                    forward,
-                                                                   noise, pket);
+                                                                   noise,
+                                                                   noise_type,
+                                                                   pket);
                     pket->deallocate();
                     pket->deallocate_infos();
                 } else
@@ -385,17 +376,15 @@ template <typename S> struct DMRG {
             } else if (decomp_type == DecompositionTypes::SVD ||
                        decomp_type == DecompositionTypes::PureSVD) {
                 assert(noise_type == NoiseTypes::None ||
-                       noise_type == NoiseTypes::Perturbative ||
-                       noise_type == NoiseTypes::ReducedPerturbative ||
+                       (noise_type & NoiseTypes::Perturbative) ||
                        noise_type == NoiseTypes::Wavefunction);
                 if (noise != 0) {
                     if (noise_type == NoiseTypes::Wavefunction)
                         MovingEnvironment<S>::wavefunction_add_noise(old_wfn,
                                                                      noise);
-                    else if (noise_type == NoiseTypes::Perturbative ||
-                             noise_type == NoiseTypes::ReducedPerturbative)
-                        MovingEnvironment<S>::scale_perturbative_noise(noise,
-                                                                       pket);
+                    else if (noise_type & NoiseTypes::Perturbative)
+                        MovingEnvironment<S>::scale_perturbative_noise(
+                            noise, noise_type, pket);
                 }
                 error = MovingEnvironment<S>::split_wavefunction_svd(
                     opdq, old_wfn, (int)bond_dim, forward, true,
@@ -514,8 +503,7 @@ template <typename S> struct DMRG {
             h_eff->deallocate();
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
-            assert(noise_type != NoiseTypes::Perturbative &&
-                   noise_type != NoiseTypes::ReducedPerturbative);
+            assert(!(noise_type & NoiseTypes::Perturbative));
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             // change to fused form for splitting
             if (fuse_left != forward) {
@@ -678,8 +666,7 @@ template <typename S> struct DMRG {
             h_eff->deallocate();
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
-            assert(noise_type != NoiseTypes::Perturbative &&
-                   noise_type != NoiseTypes::ReducedPerturbative);
+            assert(!(noise_type & NoiseTypes::Perturbative));
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             shared_ptr<SparseMatrix<S>> dm;
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(

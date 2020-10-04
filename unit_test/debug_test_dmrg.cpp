@@ -57,7 +57,7 @@ TEST_F(TestDMRG, Test) {
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
 #ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(16);
+    mkl_set_num_threads(8);
     mkl_set_dynamic(0);
 #endif
 
@@ -156,10 +156,12 @@ TEST_F(TestDMRG, Test) {
     // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-7, 1E-7,  1E-7,  1E-8,  1E-8,
-                             1E-8, 1E-9, 1E-9, 1E-9, 1E-10, 1E-10, 1E-10, 0.0};
-    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6,
-                              1E-6, 1E-6, 5E-7, 5E-7, 5E-7, 1E-7, 1E-7, 1E-8};
+    vector<double> noises = {1E-5,  1E-5,  1E-6,  1E-6, 1E-6, 1E-6, 1E-7,
+                             1E-7,  1E-7,  1E-7,  1E-7, 1E-7, 1E-7};
+    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5,
+                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
+                              1E-6, 1E-6, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7,
+                              5E-7};
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
@@ -167,7 +169,8 @@ TEST_F(TestDMRG, Test) {
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    dmrg->decomp_type = DecompositionTypes::SVD;
+    // dmrg->decomp_type = DecompositionTypes::SVD;
+    // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->solve(50, true, 0.0);
 

@@ -32,12 +32,18 @@ using namespace std;
 namespace block2 {
 
 enum struct NoiseTypes : uint8_t {
-    None,
-    Wavefunction,
-    DensityMatrix,
-    Perturbative,
-    ReducedPerturbative
+    None = 0,
+    Wavefunction = 1,
+    DensityMatrix = 2,
+    Perturbative = 4,
+    ReducedPerturbative = 5,
+    PerturbativeUnscaled = 6,
+    ReducedPerturbativeUnscaled = 7
 };
+
+inline bool operator&(NoiseTypes a, NoiseTypes b) {
+    return ((uint8_t)a & (uint8_t)b) != 0;
+}
 
 // SparseMatrix operations
 template <typename S> struct OperatorFunctions {

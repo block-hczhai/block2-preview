@@ -1079,7 +1079,7 @@ template <typename S> void bind_partition(py::module &m) {
                     py::arg("psi"), py::arg("noise"))
         .def_static("scale_perturbative_noise",
                     &MovingEnvironment<S>::scale_perturbative_noise,
-                    py::arg("noise"), py::arg("mats"))
+                    py::arg("noise"), py::arg("noise_type"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
@@ -1701,7 +1701,9 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Wavefunction", NoiseTypes::Wavefunction)
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
         .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
-        .value("Perturbative", NoiseTypes::Perturbative);
+        .value("Perturbative", NoiseTypes::Perturbative)
+        .value("ReducedPerturbativeUnscaled", NoiseTypes::ReducedPerturbativeUnscaled)
+        .value("PerturbativeUnscaled", NoiseTypes::PerturbativeUnscaled);
 
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
         .value("Physical", TruncationTypes::Physical)
