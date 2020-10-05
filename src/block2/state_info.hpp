@@ -60,7 +60,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
     S *quanta;
     // Array for number of states
     ubond_t *n_states;
-    int n_states_total, n;
+    int n;
+    int64_t n_states_total;
     StateInfo()
         : quanta(nullptr), n_states(nullptr), n_states_total(0), n(0),
           vdata(nullptr) {}

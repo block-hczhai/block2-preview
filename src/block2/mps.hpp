@@ -364,6 +364,7 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)left_dims[i + 1]->n_states[k] *
                                         m / left_dims[i + 1]->n_states_total) +
                                    0.1);
+                    assert(new_n_states != 0);
                     left_dims[i + 1]->n_states[k] = (ubond_t)min(
                         new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += left_dims[i + 1]->n_states[k];
@@ -382,6 +383,7 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)right_dims[i]->n_states[k] * m /
                                         right_dims[i]->n_states_total) +
                                    0.1);
+                    assert(new_n_states != 0);
                     right_dims[i]->n_states[k] = (ubond_t)min(
                         new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += right_dims[i]->n_states[k];
