@@ -132,6 +132,112 @@ template <typename S> struct MPO {
     virtual ParallelTypes get_parallel_type() const {
         return ParallelTypes::Serial;
     }
+    // in bytes; 0 = peak term, 1 = peak memory, 2 = total disk storage
+    // only count lower bound of doubles
+    virtual vector<size_t> estimate_storage(shared_ptr<MPSInfo<S>> info,
+                                            int dot) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        size_t peak = 0, total = 0, psz = 0;
+        shared_ptr<SparseMatrixInfo<S>> mat_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        vector<size_t> left_total(1, 0), right_total(1, 0);
+        for (int i = 0; i < n_sites; i++) {
+            size_t sz = 0;
+            map<S, size_t> mpsz;
+            for (auto xop : left_operator_names[i]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpsz.count(op->q_label)) {
+                    mat_info->initialize(*info->left_dims[i + 1],
+                                         *info->left_dims[i + 1], op->q_label,
+                                         op->q_label.is_fermion());
+                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpsz.at(op->q_label);
+            }
+            left_total.push_back(left_total.back() + sz);
+        }
+        for (int i = n_sites - 1; i >= 0; i--) {
+            size_t sz = 0;
+            map<S, size_t> mpsz;
+            for (auto xop : right_operator_names[i]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpsz.count(op->q_label)) {
+                    mat_info->initialize(*info->right_dims[i],
+                                         *info->right_dims[i], op->q_label,
+                                         op->q_label.is_fermion());
+                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpsz.at(op->q_label);
+            }
+            right_total.push_back(right_total.back() + sz);
+        }
+        for (int i = 0; i < n_sites; i++) {
+            if (dot == 2 && i == n_sites - 1)
+                break;
+            StateInfo<S> tl, tr;
+            int iL = -1, iR = -1;
+            if (dot == 2) {
+                tl = StateInfo<S>::tensor_product(*info->left_dims[i],
+                                                  *info->basis[i],
+                                                  *info->left_dims_fci[i + 1]);
+                tr = StateInfo<S>::tensor_product(*info->basis[i + 1],
+                                                  *info->right_dims[i + 2],
+                                                  *info->right_dims_fci[i + 1]);
+                iL = i, iR = i + 1;
+            } else {
+                bool fuse_left = schemer == nullptr
+                                     ? (i <= n_sites / 2)
+                                     : (i < schemer->left_trans_site);
+                iL = i, iR = i;
+                if (fuse_left) {
+                    tl = StateInfo<S>::tensor_product(
+                        *info->left_dims[i], *info->basis[i],
+                        *info->left_dims_fci[i + 1]);
+                    tr = *info->right_dims[i + 1];
+
+                } else {
+                    tl = *info->left_dims[i];
+                    tr = StateInfo<S>::tensor_product(*info->basis[i],
+                                                      *info->right_dims[i + 1],
+                                                      *info->right_dims_fci[i]);
+                }
+            }
+            size_t sz = 0;
+            map<S, size_t> mpszl, mpszr;
+            for (auto xop : left_operator_names[iL]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpszl.count(op->q_label)) {
+                    mat_info->initialize(tl, tl, op->q_label,
+                                         op->q_label.is_fermion());
+                    mpszl[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpszl.at(op->q_label);
+                psz = max(psz, mpszl.at(op->q_label));
+            }
+            for (auto xop : right_operator_names[iR]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpszr.count(op->q_label)) {
+                    mat_info->initialize(tr, tr, op->q_label,
+                                         op->q_label.is_fermion());
+                    mpszr[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpszr.at(op->q_label);
+                psz = max(psz, mpszr.at(op->q_label));
+            }
+            peak = max(peak, sz);
+        }
+        total = left_total.back() + right_total.back();
+        return vector<size_t>{psz * 8, peak * 8, total * 8};
+    }
     virtual void deallocate() {
         for (int16_t m = n_sites - 1; m >= 0; m--)
             tensors[m]->deallocate();

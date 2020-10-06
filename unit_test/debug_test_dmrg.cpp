@@ -77,7 +77,7 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 200;
+    ubond_t bond_dim = 250;
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
@@ -126,6 +126,17 @@ TEST_F(TestDMRG, Test) {
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
     shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    auto st = mps->estimate_storage(mps_info);
+    cout << "MPS memory = " << Parsing::to_size_string(st[0])
+         << "; storage = " << Parsing::to_size_string(st[1]) << endl;
+    auto st2 = mpo->estimate_storage(mps_info, 2);
+    cout << "2-site MPO term = " << Parsing::to_size_string(st2[0])
+         << "; memory = " << Parsing::to_size_string(st2[1])
+         << "; storage = " << Parsing::to_size_string(st2[2]) << endl;
+    auto st3 = mpo->estimate_storage(mps_info, 1);
+    cout << "1-site MPO term = " << Parsing::to_size_string(st3[0])
+         << "; memory = " << Parsing::to_size_string(st3[1])
+         << "; storage = " << Parsing::to_size_string(st3[2]) << endl;
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -156,12 +167,11 @@ TEST_F(TestDMRG, Test) {
     // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-5,  1E-5,  1E-6,  1E-6, 1E-6, 1E-6, 1E-7,
-                             1E-7,  1E-7,  1E-7,  1E-7, 1E-7, 1E-7};
-    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5,
-                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
-                              1E-6, 1E-6, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7,
-                              5E-7};
+    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7,
+                             1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7};
+    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
+                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
+                              5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);

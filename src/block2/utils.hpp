@@ -24,6 +24,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstdio>
+#include <iomanip>
 #include <random>
 #include <sstream>
 #include <string>
@@ -135,6 +136,25 @@ struct Parsing {
         stringstream ss;
         ss << i;
         return ss.str();
+    }
+    static string to_size_string(size_t i) {
+        stringstream ss;
+        if (i < 1000) {
+            ss << i << " B";
+            return ss.str();
+        } else {
+            size_t a = 1024, b = 10;
+            string suffix = "KMGTPEZY";
+            for (size_t j = 0; j < suffix.size(); j++, a *= 1024) {
+                for (int k = 10, p = 2; k <= 1000; k *= 10, p--)
+                    if (i < k * a) {
+                        ss << fixed << setprecision(p) << (i / (long double)a)
+                           << " " << suffix[j] << "B";
+                        return ss.str();
+                    }
+            }
+            return "??? B";
+        }
     }
     static bool rename_file(const string &old_name, const string &new_name) {
         return rename(old_name.c_str(), new_name.c_str()) == 0;

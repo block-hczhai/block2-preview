@@ -809,6 +809,59 @@ template <typename S> struct MPS {
             canonical_form[i] = 'R';
     }
     virtual ~MPS() = default;
+    // in bytes; 0 = peak memory, 1 = total disk storage
+    // only count lower bound of doubles
+    virtual vector<size_t>
+    estimate_storage(shared_ptr<MPSInfo<S>> info = nullptr) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        size_t peak = 0, total = 0;
+        shared_ptr<SparseMatrixInfo<S>> mat_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        if (info == nullptr)
+            info = this->info;
+        assert(info != nullptr);
+        vector<size_t> left_total(1, 0), right_total(1, 0);
+        for (int i = 0; i < n_sites; i++) {
+            StateInfo<S> t = StateInfo<S>::tensor_product(
+                *info->left_dims[i], *info->basis[i],
+                *info->left_dims_fci[i + 1]);
+            mat_info->initialize(t, *info->left_dims[i + 1], info->vacuum,
+                                 false);
+            left_total.push_back(left_total.back() +
+                                 mat_info->get_total_memory());
+            mat_info->deallocate();
+        }
+        for (int i = n_sites - 1; i >= 0; i--) {
+            StateInfo<S> t = StateInfo<S>::tensor_product(
+                *info->basis[i], *info->right_dims[i + 1],
+                *info->right_dims_fci[i]);
+            mat_info->initialize(*info->right_dims[i], t, info->vacuum, false);
+            right_total.push_back(right_total.back() +
+                                  mat_info->get_total_memory());
+            mat_info->deallocate();
+        }
+        if (dot == 2) {
+            for (int i = 0; i < n_sites - 1; i++) {
+                StateInfo<S> tl = StateInfo<S>::tensor_product(
+                    *info->left_dims[i], *info->basis[i],
+                    *info->left_dims_fci[i + 1]);
+                StateInfo<S> tr = StateInfo<S>::tensor_product(
+                    *info->basis[i + 1], *info->right_dims[i + 2],
+                    *info->right_dims_fci[i + 1]);
+                mat_info->initialize(tl, tr, info->target, false, true);
+                peak = max(peak, (size_t)mat_info->get_total_memory());
+                total = max(total, left_total[i] +
+                                       right_total[n_sites + 1 - (i + 2)] +
+                                       mat_info->get_total_memory());
+                mat_info->deallocate();
+            }
+        } else
+            for (int i = 0; i < n_sites; i++)
+                total =
+                    max(total, left_total[i] + right_total[n_sites + 1 - i]);
+        return vector<size_t>{peak * 8, total * 8};
+    }
     void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();

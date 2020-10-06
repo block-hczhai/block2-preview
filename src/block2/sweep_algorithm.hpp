@@ -106,7 +106,9 @@ template <typename S> struct DMRG {
     Iteration update_one_dot(int i, bool forward, ubond_t bond_dim,
                              double noise, double davidson_conv_thrd) {
         frame->activate(0);
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         if (me->ket->canonical_form[i] == 'C') {
             if (i == 0)
                 me->ket->canonical_form[i] = 'K';
@@ -450,7 +452,9 @@ template <typename S> struct DMRG {
         shared_ptr<MultiMPS<S>> mket =
             dynamic_pointer_cast<MultiMPS<S>>(me->ket);
         frame->activate(0);
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         if (mket->canonical_form[i] == 'M') {
             if (i == 0)
                 mket->canonical_form[i] = 'J';
@@ -925,7 +929,9 @@ template <typename S> struct ImaginaryTE {
     Iteration update_one_dot(int i, bool forward, bool advance, double beta,
                              ubond_t bond_dim, double noise) {
         frame->activate(0);
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         if (me->ket->canonical_form[i] == 'C') {
             if (i == 0)
                 me->ket->canonical_form[i] = 'K';
@@ -1526,7 +1532,9 @@ template <typename S> struct Compress {
                              ubond_t ket_bond_dim, double noise) {
         assert(me->bra != me->ket);
         frame->activate(0);
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         for (auto &mps : {me->bra, me->ket}) {
             if (mps->canonical_form[i] == 'C') {
                 if (i == 0)
@@ -1980,7 +1988,9 @@ template <typename S> struct Expect {
         vector<shared_ptr<MPS<S>>> mpss =
             me->bra == me->ket ? vector<shared_ptr<MPS<S>>>{me->bra}
                                : vector<shared_ptr<MPS<S>>>{me->bra, me->ket};
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         for (auto &mps : mpss) {
             if (mps->canonical_form[i] == 'C') {
                 if (i == 0)
@@ -2246,7 +2256,9 @@ template <typename S> struct Expect {
         vector<shared_ptr<MultiMPS<S>>> mpss =
             me->bra == me->ket ? vector<shared_ptr<MultiMPS<S>>>{mbra}
                                : vector<shared_ptr<MultiMPS<S>>>{mbra, mket};
-        bool fuse_left = i <= me->n_sites / 2;
+        bool fuse_left = me->mpo->schemer == nullptr
+                             ? (i <= me->n_sites / 2)
+                             : (i < me->mpo->schemer->left_trans_site);
         for (auto &mps : mpss) {
             if (mps->canonical_form[i] == 'M') {
                 if (i == 0)
