@@ -54,7 +54,8 @@ template <typename T> struct StackAllocator : Allocator<T> {
         assert(shift == 0);
         if (used + n >= size) {
             cout << "exceeding allowed memory"
-                 << " (size=" << size << ") "
+                 << " (size=" << size << ", trying to allocate "
+                 << n << ") "
                  << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
             abort();
             return 0;
