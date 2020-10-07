@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "archived_tensor_functions.hpp"
 #include "determinant.hpp"
 #include "mpo.hpp"
 #include "mps.hpp"
@@ -827,6 +828,12 @@ template <typename S> struct MovingEnvironment {
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
             mpo->sparse_form[i - 1] == 'S');
         _t.get_time();
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_middle_archive_filename();
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         mpo->tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
                                new_left,
                                mpo->left_operator_exprs.size() != 0
@@ -842,6 +849,12 @@ template <typename S> struct MovingEnvironment {
         frame->activate(1);
         envs[i]->left = Partition<S>::build_left(mats, envs[i]->left_op_infos);
         _t.get_time();
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_left_archive_filename(i);
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                              envs[i]->left);
         trot += _t.get_time();
@@ -885,6 +898,12 @@ template <typename S> struct MovingEnvironment {
             {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
             mpo->sparse_form[i + dot] == 'S');
         _t.get_time();
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_middle_archive_filename();
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         mpo->tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
                                 new_right,
                                 mpo->right_operator_exprs.size() != 0
@@ -901,6 +920,12 @@ template <typename S> struct MovingEnvironment {
         envs[i]->right =
             Partition<S>::build_right(mats, envs[i]->right_op_infos);
         _t.get_time();
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_right_archive_filename(i);
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
                               ket->tensors[i + dot], envs[i]->right);
         trot += _t.get_time();
@@ -916,6 +941,24 @@ template <typename S> struct MovingEnvironment {
         new_right->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
+    }
+    string get_left_archive_filename(int i) const {
+        stringstream ss;
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
+           << ".LEFT." << Parsing::to_string(i);
+        return ss.str();
+    }
+    string get_middle_archive_filename() const {
+        stringstream ss;
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
+           << ".MIDDLE." << Parsing::to_string(0);
+        return ss.str();
+    }
+    string get_right_archive_filename(int i) const {
+        stringstream ss;
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
+           << ".RIGHT." << Parsing::to_string(i);
+        return ss.str();
     }
     string get_left_partition_filename(int i) const {
         stringstream ss;
@@ -1305,6 +1348,12 @@ template <typename S> struct MovingEnvironment {
                 assert(false);
         } else
             assert(false);
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_middle_archive_filename();
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         if (fuse_type & FuseTypes::FuseL)
             left_contract(iL, left_op_infos, new_left);
         else
@@ -1363,6 +1412,12 @@ template <typename S> struct MovingEnvironment {
                 assert(false);
         } else
             assert(false);
+        if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+                ->filename = get_middle_archive_filename();
+            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
+                0;
+        }
         if (fuse_type & FuseTypes::FuseL)
             left_contract(iL, left_op_infos, new_left);
         else

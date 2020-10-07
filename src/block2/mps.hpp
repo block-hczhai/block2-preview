@@ -857,9 +857,11 @@ template <typename S> struct MPS {
                 mat_info->deallocate();
             }
         } else
-            for (int i = 0; i < n_sites; i++)
+            for (int i = 1; i <= n_sites; i++) {
+                peak = max(peak, (size_t)(left_total[i] - left_total[i - 1]));
                 total =
-                    max(total, left_total[i] + right_total[n_sites + 1 - i]);
+                    max(total, left_total[i] + right_total[n_sites - i]);
+            }
         return vector<size_t>{peak * 8, total * 8};
     }
     void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {

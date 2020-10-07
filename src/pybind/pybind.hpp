@@ -585,6 +585,14 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("from_dense", &CSRSparseMatrix<S>::from_dense)
         .def("to_dense", &CSRSparseMatrix<S>::to_dense);
 
+    py::class_<ArchivedSparseMatrix<S>, shared_ptr<ArchivedSparseMatrix<S>>,
+               SparseMatrix<S>>(m, "ArchivedSparseMatrix")
+        .def(py::init<const string &, int64_t>())
+        .def_readwrite("filename", &ArchivedSparseMatrix<S>::filename)
+        .def_readwrite("offset", &ArchivedSparseMatrix<S>::offset)
+        .def("load_archive", &ArchivedSparseMatrix<S>::load_archive)
+        .def("save_archive", &ArchivedSparseMatrix<S>::save_archive);
+
     py::class_<SparseTensor<S>, shared_ptr<SparseTensor<S>>>(m, "SparseTensor")
         .def(py::init<>())
         .def(py::init<
@@ -797,6 +805,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("save_tensor", &MPS<S>::save_tensor)
         .def("load_tensor", &MPS<S>::load_tensor)
         .def("unload_tensor", &MPS<S>::unload_tensor)
+        .def("estimate_storage", &MPS<S>::estimate_storage,
+             py::arg("info") = nullptr)
         .def("deallocate", &MPS<S>::deallocate);
 
     py::class_<MultiMPS<S>, shared_ptr<MultiMPS<S>>, MPS<S>>(m, "MultiMPS")
@@ -873,6 +883,7 @@ template <typename S> void bind_operator(py::module &m) {
         m, "TensorFunctions")
         .def(py::init<const shared_ptr<OperatorFunctions<S>> &>())
         .def_readwrite("opf", &TensorFunctions<S>::opf)
+        .def("get_type", &TensorFunctions<S>::get_type)
         .def("left_assign", &TensorFunctions<S>::left_assign, py::arg("a"),
              py::arg("c"))
         .def("right_assign", &TensorFunctions<S>::right_assign, py::arg("a"),
@@ -905,6 +916,15 @@ template <typename S> void bind_operator(py::module &m) {
                  const shared_ptr<Symbolic<S>> &,
                  const shared_ptr<Symbolic<S>> &) const) &
                  TensorFunctions<S>::delayed_contract);
+
+    py::class_<ArchivedTensorFunctions<S>,
+               shared_ptr<ArchivedTensorFunctions<S>>, TensorFunctions<S>>(
+        m, "ArchivedTensorFunctions")
+        .def(py::init<const shared_ptr<OperatorFunctions<S>> &>())
+        .def_readwrite("filename", &ArchivedTensorFunctions<S>::filename)
+        .def_readwrite("offset", &ArchivedTensorFunctions<S>::offset)
+        .def("archive_tensor", &ArchivedTensorFunctions<S>::archive_tensor,
+             py::arg("a"));
 }
 
 template <typename S> void bind_partition(py::module &m) {
@@ -1064,6 +1084,12 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
+        .def("get_left_archive_filename",
+             &MovingEnvironment<S>::get_left_archive_filename)
+        .def("get_middle_archive_filename",
+             &MovingEnvironment<S>::get_middle_archive_filename)
+        .def("get_right_archive_filename",
+             &MovingEnvironment<S>::get_right_archive_filename)
         .def("get_left_partition_filename",
              &MovingEnvironment<S>::get_left_partition_filename)
         .def("get_right_partition_filename",
@@ -1506,6 +1532,8 @@ template <typename S> void bind_mpo(py::module &m) {
         .def("get_blocking_formulas", &MPO<S>::get_blocking_formulas)
         .def("get_ancilla_type", &MPO<S>::get_ancilla_type)
         .def("get_parallel_type", &MPO<S>::get_parallel_type)
+        .def("estimate_storage", &MPO<S>::estimate_storage, py::arg("info"),
+             py::arg("dot"))
         .def("deallocate", &MPO<S>::deallocate);
 
     py::class_<Rule<S>, shared_ptr<Rule<S>>>(m, "Rule")
@@ -1567,6 +1595,11 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("prim_mpo", &AncillaMPO<S>::prim_mpo)
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
+
+    py::class_<ArchivedMPO<S>, shared_ptr<ArchivedMPO<S>>, MPO<S>>(
+        m, "ArchivedMPO")
+        .def(py::init<const shared_ptr<MPO<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S>> &, const string &>());
 }
 
 template <typename S> void bind_class(py::module &m, const string &name) {
@@ -1702,7 +1735,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
         .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("Perturbative", NoiseTypes::Perturbative)
-        .value("ReducedPerturbativeUnscaled", NoiseTypes::ReducedPerturbativeUnscaled)
+        .value("ReducedPerturbativeUnscaled",
+               NoiseTypes::ReducedPerturbativeUnscaled)
         .value("PerturbativeUnscaled", NoiseTypes::PerturbativeUnscaled);
 
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
@@ -1766,13 +1800,18 @@ template <typename S = void> void bind_types(py::module &m) {
 
     py::enum_<SparseMatrixTypes>(m, "SparseMatrixTypes", py::arithmetic())
         .value("Normal", SparseMatrixTypes::Normal)
-        .value("CSR", SparseMatrixTypes::CSR);
+        .value("CSR", SparseMatrixTypes::CSR)
+        .value("Archived", SparseMatrixTypes::Archived);
 
     py::enum_<ParallelOpTypes>(m, "ParallelOpTypes", py::arithmetic())
         .value("None", ParallelOpTypes::None)
         .value("Repeated", ParallelOpTypes::Repeated)
         .value("Number", ParallelOpTypes::Number)
         .value("Partial", ParallelOpTypes::Partial);
+
+    py::enum_<TensorFunctionsTypes>(m, "TensorFunctionsTypes", py::arithmetic())
+        .value("Normal", TensorFunctionsTypes::Normal)
+        .value("Archived", TensorFunctionsTypes::Archived);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

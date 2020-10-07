@@ -22,6 +22,7 @@
 
 #include "ancilla.hpp"
 #include "csr_operator_functions.hpp"
+#include "mps.hpp"
 #include "operator_tensor.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"

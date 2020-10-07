@@ -78,6 +78,7 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     }
     mpo->tf = make_shared<TensorFunctions<S>>(
         make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+    mpo->tf->opf->seq = hamil.opf->seq;
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification

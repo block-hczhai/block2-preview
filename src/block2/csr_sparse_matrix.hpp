@@ -20,8 +20,6 @@
 
 #pragma once
 
-#pragma once
-
 #include "csr_matrix.hpp"
 #include "csr_matrix_functions.hpp"
 #include "sparse_matrix.hpp"

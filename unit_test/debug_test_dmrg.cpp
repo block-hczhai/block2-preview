@@ -55,6 +55,7 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    hamil.opf->seq->mode = SeqTypes::Simple;
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
@@ -67,6 +68,7 @@ TEST_F(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<SU2>> mpo =
         make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    // mpo = make_shared<ArchivedMPO<SU2>>(mpo);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -77,7 +79,7 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 250;
+    ubond_t bond_dim = 200;
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
@@ -152,7 +154,6 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SU2>> me =
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
     t.get_time();

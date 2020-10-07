@@ -22,6 +22,9 @@
 
 #include "block2/allocator.hpp"
 #include "block2/ancilla.hpp"
+#include "block2/archived_mpo.hpp"
+#include "block2/archived_sparse_matrix.hpp"
+#include "block2/archived_tensor_functions.hpp"
 #include "block2/batch_gemm.hpp"
 #include "block2/cg.hpp"
 #include "block2/csr_matrix.hpp"
