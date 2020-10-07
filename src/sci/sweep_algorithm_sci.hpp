@@ -193,7 +193,6 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                                                                h_eff->diag, h_eff->opdq);
                             if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
                                 h_eff->tf->opf->seq->auto_perform();
-                            diag_info->deallocate();
                             h_eff->compute_diag = true;
                         } else {
                             h_eff->diag->clear();
@@ -258,6 +257,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         me->ket->info, noise_type, me->para_rule);
             }
+            diag_info->deallocate();
             h_eff->deallocate();
             return pdi;
         }
