@@ -123,6 +123,9 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     std::vector<S> mod_qns; // Quantum numbers to be modified
     int max_aqcc_iter = 5; // Max iter spent on last site. Convergence depends on davidson conv.
                            // Note that this does not need to be fully converged as we do sweeps anyways.
+    // vvv temporary variables should be removed!!!
+    bool calcDiagIterative = false;
+    bool recomputeMPOInIter = true;
     DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me,
         const vector<ubond_t> &bond_dims, const vector<double> &noises,
         double g_factor, double ref_energy,
@@ -146,7 +149,6 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         override{
             tuple<double, int, size_t, double> pdi{0.,0,0,0.}; // energy, ndav, nflop, tdav
             const auto doAQCC = i_site == me->n_sites-1 and abs(davidson_soft_max_iter) > 0;
-            auto calcDiagIterative = false;
             shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                                                                     // vv diag will be computed in aqcc loop
                                                                     not doAQCC or not calcDiagIterative, me->bra->tensors[i_site],
@@ -204,7 +206,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     //
                     // EIG and conv check
                     //
-                    if(true){ // ATTENTION: For now, redo it as h_Eff modification above does not work
+                    if(recomputeMPOInIter){ // ATTENTION: For now, redo it as h_Eff modification above does not work
                         modify_mpo_mats(false, shift);
                         h_eff = me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                                 // vv diag will be computed in aqcc loop
@@ -257,7 +259,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         me->ket->info, noise_type, me->para_rule);
             }
-            if(doAQCC){
+            if(doAQCC and calcDiagIterative){
                 diag_info->deallocate();
             }
             h_eff->deallocate();
