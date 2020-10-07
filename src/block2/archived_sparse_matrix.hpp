@@ -118,10 +118,11 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
                 ofs.seekp(sizeof(double) * offset);
                 for (int i = 0; i < info->n; i++)
                     smat->csr_data[i]->save_data(ofs);
-                total_memory = (ofs.tellp() - sizeof(double) * offset +
+                total_memory = ((size_t)ofs.tellp() - sizeof(double) * offset +
                                 sizeof(double) - 1) /
                                sizeof(double);
-                assert(ofs.tellp() <= sizeof(double) * (offset + total_memory));
+                assert((size_t)ofs.tellp() <=
+                       sizeof(double) * (offset + total_memory));
                 ofs.close();
             } else
                 total_memory = 0;
