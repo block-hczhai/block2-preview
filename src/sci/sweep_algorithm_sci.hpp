@@ -151,6 +151,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                                                                     // vv diag will be computed in aqcc loop
                                                                     not doAQCC or not calcDiagIterative, me->bra->tensors[i_site],
                                                                     me->ket->tensors[i_site]);
+            shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info; // used if doAQCC
             if (doAQCC){
                 // AQCC
                 if(energies.size() > 0){
@@ -179,8 +180,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         if (itAQCC == 0) {
                             h_eff->diag = make_shared<SparseMatrix < S>>();
                             h_eff->diag->allocate(h_eff->ket->info);
-                            shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
-                                    make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
+                            diag_info = make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
                             S cdq = h_eff->ket->info->delta_quantum;
                             vector<S> msl = Partition<S>::get_uniq_labels({h_eff->hop_mat});
                             vector<vector<pair<uint8_t, S>>> msubsl =
@@ -204,7 +204,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     //
                     // EIG and conv check
                     //
-                    { // ATTENTION: For now, redo it as h_Eff modification above does not work
+                    if(true){ // ATTENTION: For now, redo it as h_Eff modification above does not work
                         modify_mpo_mats(false, shift);
                         h_eff = me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                                 // vv diag will be computed in aqcc loop
@@ -257,7 +257,9 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         me->ket->info, noise_type, me->para_rule);
             }
-            diag_info->deallocate();
+            if(doAQCC){
+                diag_info->deallocate();
+            }
             h_eff->deallocate();
             return pdi;
         }
