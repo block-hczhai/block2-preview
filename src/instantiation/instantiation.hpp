@@ -21,6 +21,9 @@
 #pragma once
 
 #include "../block2/allocator.hpp"
+#include "../block2/archived_mpo.hpp"
+#include "../block2/archived_sparse_matrix.hpp"
+#include "../block2/archived_tensor_functions.hpp"
 #include "../block2/cg.hpp"
 #include "../block2/csr_operator_functions.hpp"
 #include "../block2/csr_sparse_matrix.hpp"
@@ -61,6 +64,18 @@
 // allocator.hpp
 extern template struct block2::StackAllocator<uint32_t>;
 extern template struct block2::StackAllocator<double>;
+
+// archived_mpo.hpp
+extern template struct block2::ArchivedMPO<block2::SZ>;
+extern template struct block2::ArchivedMPO<block2::SU2>;
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SZ>;
+extern template struct block2::ArchivedSparseMatrix<block2::SU2>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SZ>;
+extern template struct block2::ArchivedTensorFunctions<block2::SU2>;
 
 // cg.hpp
 extern template struct block2::CG<block2::SZ>;

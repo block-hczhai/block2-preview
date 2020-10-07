@@ -114,16 +114,29 @@ template <typename S> struct OperatorTensor {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
         for (auto &p : ops) {
-            assert(p.second->get_type() == SparseMatrixTypes::Normal);
-            shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>();
-            if (p.second->total_memory == 0)
-                mat->info = p.second->info;
-            else {
-                mat->allocate(p.second->info);
-                mat->copy_data_from(p.second);
-            }
-            mat->factor = p.second->factor;
-            r->ops[p.first] = mat;
+            if (p.second->get_type() == SparseMatrixTypes::Normal) {
+                shared_ptr<SparseMatrix<S>> mat =
+                    make_shared<SparseMatrix<S>>();
+                if (p.second->total_memory == 0)
+                    mat->info = p.second->info;
+                else {
+                    mat->allocate(p.second->info);
+                    mat->copy_data_from(p.second);
+                }
+                mat->factor = p.second->factor;
+                r->ops[p.first] = mat;
+            } else if (p.second->get_type() == SparseMatrixTypes::Archived) {
+                shared_ptr<ArchivedSparseMatrix<S>> pmat =
+                    dynamic_pointer_cast<ArchivedSparseMatrix<S>>(p.second);
+                shared_ptr<ArchivedSparseMatrix<S>> mat =
+                    make_shared<ArchivedSparseMatrix<S>>(
+                        pmat->filename, pmat->offset, pmat->alloc);
+                mat->info = pmat->info;
+                mat->factor = pmat->factor;
+                mat->sparse_type = pmat->sparse_type;
+                r->ops[p.first] = mat;
+            } else
+                assert(false);
         }
         return r;
     }

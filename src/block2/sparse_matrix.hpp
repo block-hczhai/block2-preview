@@ -777,7 +777,7 @@ struct SparseMatrixInfo<
     }
 };
 
-enum struct SparseMatrixTypes : uint8_t { Normal = 0, CSR = 1 };
+enum struct SparseMatrixTypes : uint8_t { Normal = 0, CSR = 1, Archived = 2 };
 
 // Block-sparse Matrix
 // Representing operator, wavefunction, density matrix and MPS tensors

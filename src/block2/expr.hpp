@@ -170,6 +170,16 @@ struct SiteIndex {
         ss << "]";
         return ss.str();
     }
+    string get_name() const {
+        stringstream ss;
+        for (uint8_t i = 0; i < size(); i++)
+            ss << (int)(*this)[i] << (i == size() - 1 ? "" : "-");
+        if (spin_size() != 0)
+            ss << "~";
+        for (uint8_t i = 0; i < spin_size(); i++)
+            ss << (int)s(i) << (i == spin_size() - 1 ? "" : "-");
+        return ss.str();
+    }
     friend ostream &operator<<(ostream &os, SiteIndex c) {
         os << c.to_str();
         return os;
@@ -221,6 +231,13 @@ template <typename S> struct OpElement : OpExpr<S> {
         else
             os << c.name << c.site_index;
         return os;
+    }
+    string get_name() const {
+        stringstream ss;
+        if (factor != 1.0)
+            ss << scientific << setprecision(6) << factor;
+        ss << name << site_index.get_name() << endl;
+        return ss.str();
     }
 };
 

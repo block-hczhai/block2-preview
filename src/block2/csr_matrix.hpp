@@ -75,7 +75,8 @@ struct CSRMatrixRef {
         ofs.write((char *)data, sizeof(double) * nnz);
         if (nnz != size()) {
             ofs.write((char *)cols, sizeof(int) * nnz);
-            ofs.write((char *)rows, sizeof(int) * (m + 1));
+            ofs.write((char *)rows, sizeof(int) * m);
+            ofs.write((char *)&nnz, sizeof(int));
         }
     }
     CSRMatrixRef
