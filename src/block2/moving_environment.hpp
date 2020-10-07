@@ -89,7 +89,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
-        // tensor prodcut diagonal
+        // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
@@ -552,7 +552,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
-        // tensor prodcut diagonal
+        // tensor product diagonal
         if (compute_diag) {
             for (int i = 0; i < diag->n; i++) {
                 shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>

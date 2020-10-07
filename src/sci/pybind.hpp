@@ -46,6 +46,7 @@ template <typename S> void bind_sci_wrapper(py::module &m){
              py::arg("fcidump"),
              py::arg("orbsym"), py::arg("occs"),
              "Initialization via externally given determinants in `occs`")
+        .def_readonly("quantumNumbers", &sci::AbstractSciWrapper<S>::quantumNumbers)
         .def_readonly("nOrbOther", &sci::AbstractSciWrapper<S>::nOrbOther)
         .def_readonly("nOrbThis", &sci::AbstractSciWrapper<S>::nOrbThis)
         .def_readonly("nOrb", &sci::AbstractSciWrapper<S>::nOrb)
@@ -113,6 +114,13 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("last_site_svd", &DMRGSCI<S>::last_site_svd)
         .def_readwrite("last_site_1site", &DMRGSCI<S>::last_site_1site)
         .def("blocking", &DMRGSCI<S>::blocking);
+
+    py::class_<DMRGSCIAQCC<S>, shared_ptr<DMRGSCIAQCC<S>>, DMRGSCI<S>>(m, "DMRGSCIAQCC")
+            .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                    const vector<ubond_t> &, const vector<double> &,
+                            double, double, const std::vector<S>&>())
+            .def_readwrite("g_factor", &DMRGSCIAQCC<S>::g_factor)
+            .def_readwrite("ref_energy", &DMRGSCIAQCC<S>::ref_energy);
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
             .def_readwrite("mode", &MPOQCSCI<S>::mode)

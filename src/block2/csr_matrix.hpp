@@ -37,7 +37,7 @@ namespace block2 {
 // Compressed-Sparse-Row matrix
 struct CSRMatrixRef {
     shared_ptr<Allocator<double>> alloc = nullptr;
-    int m, n, nnz;
+    int m, n, nnz; // m is rows, n is cols, nnz is number of nonzeros
     double *data;
     int *rows, *cols;
     CSRMatrixRef()
