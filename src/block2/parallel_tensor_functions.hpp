@@ -58,9 +58,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     assert(c->ops[pc]->data == nullptr);
                     c->ops[pc]->allocate(c->ops[pc]->info);
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                        c->ops[pc]->copy_data_from(a->ops[pa]);
+                        c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else
-                        c->ops[pc]->selective_copy_from(a->ops[pa]);
+                        c->ops[pc]->selective_copy_from(a->ops[pa], true);
                     c->ops[pc]->factor = a->ops[pa]->factor;
                 }
             }
@@ -86,9 +86,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     assert(c->ops[pc]->data == nullptr);
                     c->ops[pc]->allocate(c->ops[pc]->info);
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                        c->ops[pc]->copy_data_from(a->ops[pa]);
+                        c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else
-                        c->ops[pc]->selective_copy_from(a->ops[pa]);
+                        c->ops[pc]->selective_copy_from(a->ops[pa], true);
                     c->ops[pc]->factor = a->ops[pa]->factor;
                 }
             }

@@ -837,11 +837,11 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         ofs.close();
     }
-    virtual void copy_data_from(const shared_ptr<SparseMatrix> &other) {
+    virtual void copy_data_from(const shared_ptr<SparseMatrix> &other, bool ref = false) {
         assert(total_memory == other->total_memory);
         memcpy(data, other->data, sizeof(double) * total_memory);
     }
-    virtual void selective_copy_from(const shared_ptr<SparseMatrix> &other) {
+    virtual void selective_copy_from(const shared_ptr<SparseMatrix> &other, bool ref = false) {
         for (int i = 0, k; i < other->info->n; i++)
             if ((k = info->find_state(other->info->quanta[i])) != -1)
                 memcpy(data + info->n_states_total[k],

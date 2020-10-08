@@ -72,9 +72,9 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 shared_ptr<SparseMatrix<S>> matc = c->ops.at(pc);
                 matc->allocate(matc->info);
                 if (matc->info->n == mata->info->n)
-                    matc->copy_data_from(mata);
+                    matc->copy_data_from(mata, true);
                 else
-                    matc->selective_copy_from(mata);
+                    matc->selective_copy_from(mata, true);
                 matc->factor = mata->factor;
                 shared_ptr<ArchivedSparseMatrix<S>> arc =
                     make_shared<ArchivedSparseMatrix<S>>(filename, offset);
@@ -107,9 +107,9 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 shared_ptr<SparseMatrix<S>> matc = c->ops.at(pc);
                 matc->allocate(matc->info);
                 if (matc->info->n == mata->info->n)
-                    matc->copy_data_from(mata);
+                    matc->copy_data_from(mata, true);
                 else
-                    matc->selective_copy_from(mata);
+                    matc->selective_copy_from(mata, true);
                 matc->factor = mata->factor;
                 shared_ptr<ArchivedSparseMatrix<S>> arc =
                     make_shared<ArchivedSparseMatrix<S>>(filename, offset);
@@ -586,7 +586,7 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 c->ops.at(op)->allocate(c->ops.at(op)->info);
                 tensor_product(expr, b->ops, a->ops, c->ops.at(op));
                 shared_ptr<ArchivedSparseMatrix<S>> arc =
-                make_shared<ArchivedSparseMatrix<S>>(filename, offset);
+                    make_shared<ArchivedSparseMatrix<S>>(filename, offset);
                 arc->save_archive(c->ops.at(op));
                 c->ops.at(op)->deallocate();
                 c->ops.at(op) = arc;
