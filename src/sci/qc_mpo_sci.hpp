@@ -54,7 +54,6 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             sparse_form[0] = 'S'; // Big site will be sparse
             firstSiteIsSCI = true;
             nOrbFirst = hamil.sciWrapperLeft->nOrbThis;
-            throw std::runtime_error("Big left site is not properly implemented yet. ");
         }else{
             firstSiteIsSCI = false;
         }
@@ -68,7 +67,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        const auto nOrb = hamil.nOrbCas + hamil.nOrbRight;
+        const auto nOrb = hamil.nOrbLeft + hamil.nOrbCas + hamil.nOrbRight;
         if(nOrb > numeric_limits<uint16_t>::max()){
             cerr << "value of nOrb " << nOrb << endl;
             cerr << "max value of uint16_t" << numeric_limits<uint16_t>::max() << endl;
@@ -210,7 +209,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                         mat[{0, p++}] = d_op[iOrb][1];
                     }
                 }
-                for (uint8_t s = 0; s < 2; s++) { // R
+                for (uint8_t s = 0; s < 2; s++) { // R'
                     for (uint16_t j = mm + 1; j < nOrb; j++) {
                         mat[{0, p++}] = rd_op[j][s];
                     }

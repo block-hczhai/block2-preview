@@ -87,7 +87,7 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
             }
             return mat;
         } else
-            assert(false);
+            throw runtime_error("Unknown SparseType");
     }
     void save_archive(const shared_ptr<SparseMatrix<S>> &mat) {
         sparse_type = mat->get_type();

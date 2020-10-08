@@ -125,8 +125,6 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     int max_aqcc_iter = 5; // Max iter spent on last site. Convergence depends on davidson conv.
                            // Note that this does not need to be fully converged as we do sweeps anyways.
     // vvv temporary variables should be removed!!!
-    bool calcDiagIterative = false;
-    bool recomputeMPOInIter = true;
     DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me,
         const vector<ubond_t> &bond_dims, const vector<double> &noises,
         double g_factor, double ref_energy,
@@ -152,7 +150,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
             const auto doAQCC = i_site == me->n_sites-1 and abs(davidson_soft_max_iter) > 0;
             shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                                                                     // vv diag will be computed in aqcc loop
-                                                                    not doAQCC or not calcDiagIterative, me->bra->tensors[i_site],
+                                                                    not doAQCC, me->bra->tensors[i_site],
                                                                     me->ket->tensors[i_site]);
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info, wfn_info; // used if doAQCC
             wfn_info = h_eff->cmat->info->cinfo;
@@ -177,46 +175,34 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     //
                     // Compute diagonal
                     //
-                    if(calcDiagIterative) {
-                        //ATTENTION: This causes a bug in eigs I don't understand
-                        // csr_operator_functions.hpp:205: void block2::CSROperatorFunctions<S>::tensor_product_multiply(uint8_t, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, S, double) const [with S = block2::SZLong; uint8_t = unsigned char]: Assertion `ik < cinfo->n[conj + 1]' failed.
-                        if (itAQCC == 0) {
-                            h_eff->diag = make_shared<SparseMatrix < S>>();
-                            h_eff->diag->allocate(h_eff->ket->info);
-                            diag_info = make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-                            S cdq = h_eff->ket->info->delta_quantum;
-                            vector<S> msl = Partition<S>::get_uniq_labels({h_eff->hop_mat});
-                            vector<vector<pair<uint8_t, S>>> msubsl =
-                                    Partition<S>::get_uniq_sub_labels(h_eff->op->mat, h_eff->hop_mat, msl);
-                            diag_info->initialize_diag(cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
-                                                       h_eff->right_op_infos, h_eff->diag->info, h_eff->tf->opf->cg);
-                            h_eff->diag->info->cinfo = diag_info;
-                            h_eff->tf->tensor_product_diagonal(h_eff->op->mat->data[0], h_eff->op->lops,
-                                                               h_eff->op->rops,
-                                                               h_eff->diag, h_eff->opdq);
-                            if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
-                                h_eff->tf->opf->seq->auto_perform();
-                            h_eff->compute_diag = true;
-                        } else {
-                            h_eff->diag->clear();
-                            h_eff->diag->info->cinfo = diag_info;
-                            h_eff->tf->tensor_product_diagonal(h_eff->op->mat->data[0], h_eff->op->lops,
-                                                               h_eff->op->rops,
-                                                               h_eff->diag, h_eff->opdq);
-                        }
+                    if (itAQCC == 0) {
+                        h_eff->diag = make_shared<SparseMatrix < S>>();
+                        h_eff->diag->allocate(h_eff->ket->info);
+                        diag_info = make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
+                        S cdq = h_eff->ket->info->delta_quantum;
+                        vector<S> msl = Partition<S>::get_uniq_labels({h_eff->hop_mat});
+                        vector<vector<pair<uint8_t, S>>> msubsl =
+                                Partition<S>::get_uniq_sub_labels(h_eff->op->mat, h_eff->hop_mat, msl);
+                        diag_info->initialize_diag(cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
+                                                   h_eff->right_op_infos, h_eff->diag->info, h_eff->tf->opf->cg);
+                        h_eff->diag->info->cinfo = diag_info;
+                        h_eff->tf->tensor_product_diagonal(h_eff->op->mat->data[0], h_eff->op->lops,
+                                                           h_eff->op->rops,
+                                                           h_eff->diag, h_eff->opdq);
+                        if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
+                            h_eff->tf->opf->seq->auto_perform();
+                        h_eff->compute_diag = true;
+                    } else {
+                        h_eff->diag->clear();
+                        h_eff->diag->info->cinfo = diag_info;
+                        h_eff->tf->tensor_product_diagonal(h_eff->op->mat->data[0], h_eff->op->lops,
+                                                           h_eff->op->rops,
+                                                           h_eff->diag, h_eff->opdq);
                     }
                     //
                     // EIG and conv check
                     //
-                    if(recomputeMPOInIter){ // ATTENTION: For now, redo it as h_Eff modification above does not work
-                        modify_mpo_mats(false, shift);
-                        h_eff = me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                                // vv diag will be computed in aqcc loop
-                                            true, me->bra->tensors[i_site],
-                                            me->ket->tensors[i_site]);
-                    }
-                    if(calcDiagIterative)
-                        h_eff->cmat->info->cinfo = wfn_info;
+                    h_eff->cmat->info->cinfo = wfn_info;
                     const auto pdi2 = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                                                   davidson_soft_max_iter, me->para_rule);
                     const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
@@ -240,8 +226,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         break;
                     }
                 }
-                // ATTENTION: Right now, moving environment contains a copy of the mpo site matrices...
-                //                     => so MPO needs to be adjusted as well
+                // ATTENTION: Adjust MPO mats. The new code update 6d0291a8edb7dab07caedd83c73806d8f56da2f3
+                //      should not require this anymore as h_eff contains references to the MPO.
+                //      Nevertheless, just do it here again in case the code will be changed again
+                //      (e.g., for dense matrices, where there are still copies in h_eff)
                 const auto shift = (1. - g_factor) * delta_e;
                 modify_mpo_mats(false, shift);
                 // vv restore printing
@@ -263,7 +251,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         me->ket->info, noise_type, me->para_rule);
             }
-            if(doAQCC and calcDiagIterative){
+            if(doAQCC){
                 diag_info->deallocate();
             }
             h_eff->deallocate();
@@ -303,8 +291,6 @@ private:
             if(idx < 0){
                 // Not all QNs make sense for H!
                 continue;
-                //cerr << "DMRGSCIAQCC: Quantumnumber " << qn << "not found!" << endl;
-                //throw std::runtime_error("DMRGSCIAQCC: mod_qns not found in Hop");
             }
             CSRMatrixRef mat = (*Hop)[idx];
             assert(mat.m == mat.n);
