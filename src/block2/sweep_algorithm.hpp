@@ -142,9 +142,9 @@ template <typename S> struct DMRG {
         tuple<double, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
         // effective hamiltonian
-        if (davidson_soft_max_iter != 0 || noise != 0) {
-            pdi = one_dot_eigs_and_perturb(forward, fuse_left, i, davidson_conv_thrd, noise, pket);
-        }
+        if (davidson_soft_max_iter != 0 || noise != 0)
+            pdi = one_dot_eigs_and_perturb(forward, fuse_left, i,
+                                           davidson_conv_thrd, noise, pket);
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (!decomp_last_site &&
                 ((forward && i == me->n_sites - 1 && !fuse_left) ||
@@ -312,24 +312,21 @@ template <typename S> struct DMRG {
         return Iteration(vector<double>{get<0>(pdi) + me->mpo->const_e}, error,
                          mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
-
-    virtual tuple<double, int, size_t, double> one_dot_eigs_and_perturb(const bool forward,
-                                                                        const bool fuse_left, const int i,
-                                                                        const double davidson_conv_thrd,
-                                                                        const double noise,
-                                                                        shared_ptr<SparseMatrixGroup<S>>& pket){
+    virtual tuple<double, int, size_t, double>
+    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
+                             const int i, const double davidson_conv_thrd,
+                             const double noise,
+                             shared_ptr<SparseMatrixGroup<S>> &pket) {
         tuple<double, int, size_t, double> pdi;
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
-                me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                            true, me->bra->tensors[i], me->ket->tensors[i]);
-        pdi =
-                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, me->para_rule);
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                        me->bra->tensors[i], me->ket->tensors[i]);
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_soft_max_iter, me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(
-                    forward, i, i,
-                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                    me->ket->info, noise_type, me->para_rule);
+                forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                me->ket->info, noise_type, me->para_rule);
         h_eff->deallocate();
         return pdi;
     }

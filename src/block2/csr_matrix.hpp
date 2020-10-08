@@ -121,10 +121,9 @@ struct CSRMatrixRef {
         }
     }
     void deallocate() {
-        if (alloc == nullptr) {
-            assert(cols == nullptr && rows == nullptr);
+        if (alloc == nullptr)
             data = nullptr;
-        } else {
+        else {
             alloc->deallocate(data, memory_size());
             alloc = nullptr;
             data = nullptr;

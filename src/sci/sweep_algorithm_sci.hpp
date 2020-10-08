@@ -1,6 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
+ * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
  * Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -153,7 +154,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                                                                     // vv diag will be computed in aqcc loop
                                                                     not doAQCC or not calcDiagIterative, me->bra->tensors[i_site],
                                                                     me->ket->tensors[i_site]);
-            shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info; // used if doAQCC
+            shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info, wfn_info; // used if doAQCC
+            wfn_info = h_eff->cmat->info->cinfo;
             if (doAQCC){
                 // AQCC
                 if(energies.size() > 0){
@@ -168,10 +170,9 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     // Shift non-reference ops
                     //
                     const auto shift = (1. - g_factor) * delta_e;
-                    auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(h_eff->op->rops[me->mpo->op]);
-                    if(Hop == nullptr){
+                    if (h_eff->op->rops[me->mpo->op]->get_type() != SparseMatrixTypes::CSR)
                         throw std::runtime_error("MRCIAQCC: No CSRSparseMatrix is used?");
-                    }
+                    auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(h_eff->op->rops[me->mpo->op]);
                     modify_H_mats(Hop, false, shift);
                     //
                     // Compute diagonal
@@ -198,6 +199,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                             h_eff->compute_diag = true;
                         } else {
                             h_eff->diag->clear();
+                            h_eff->diag->info->cinfo = diag_info;
                             h_eff->tf->tensor_product_diagonal(h_eff->op->mat->data[0], h_eff->op->lops,
                                                                h_eff->op->rops,
                                                                h_eff->diag, h_eff->opdq);
@@ -213,6 +215,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                                             true, me->bra->tensors[i_site],
                                             me->ket->tensors[i_site]);
                     }
+                    if(calcDiagIterative)
+                        h_eff->cmat->info->cinfo = wfn_info;
                     const auto pdi2 = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                                                   davidson_soft_max_iter, me->para_rule);
                     const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
@@ -244,10 +248,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 if(iprint >= 2) {
                     if (last_site_1site) {
                         cout << (forward ? " -->" : " <--") << " Site = " << setw(4) << i_site << " LAST .. ";
-
                     } else {
                         cout << (forward ? " -->" : " <--") << " Site = " << setw(4) << i_site << " .. ";
                     }
+                    cout.flush();
                 }
             }else {
                 pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
@@ -267,7 +271,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         }
 
 private:
-    std::vector<double> mpo_diag_elements; // Save diagonal elements of all operators for adjusting shift
+    std::vector<pair<S, vector<double>>> mpo_diag_elements; // Save diagonal elements of all operators for adjusting shift
     // save == true: fill mpo_diag_elements (ONLY in ctor); diag_shift will not be used then
     void modify_mpo_mats(const bool save, const double diag_shift) {
         if (save) {
@@ -277,6 +281,8 @@ private:
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
             if (op.name == OpNames::H) {
+                if (p.second->get_type() != SparseMatrixTypes::CSR)
+                    throw std::runtime_error("MRCIAQCC: No CSRSparseMatrix is used?");
                 auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
                 modify_H_mats(Hop, save, diag_shift);
                 break;
@@ -284,9 +290,16 @@ private:
         }
     }
     void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S>>& Hop, const bool save, const double diag_shift){
-        std::size_t itVec = 0;
-        for(const auto& qn: mod_qns){
-            const auto idx = Hop->info->find_state(qn);
+        if (save) {
+            for(const auto& qn: mod_qns){
+                const auto idx = Hop->info->find_state(qn);
+                if(idx < 0)
+                    continue;
+                mpo_diag_elements.push_back(make_pair(qn, vector<double>()));
+            }
+        }
+        for(auto& pqn: mpo_diag_elements){
+            const auto idx = Hop->info->find_state(pqn.first);
             if(idx < 0){
                 // Not all QNs make sense for H!
                 continue;
@@ -295,13 +308,15 @@ private:
             }
             CSRMatrixRef mat = (*Hop)[idx];
             assert(mat.m == mat.n);
+            if(!save)
+                assert(mat.m == (int) pqn.second.size());
             if(mat.nnz == mat.size()){
                 auto dmat = mat.dense_ref();
                 for (int iRow = 0; iRow < mat.m; iRow++) {
                     if(save){
-                        mpo_diag_elements.emplace_back(dmat(iRow,iRow));
+                        pqn.second.emplace_back(dmat(iRow,iRow));
                     }else{
-                        auto origVal = mpo_diag_elements[itVec++];
+                        auto origVal = pqn.second[iRow];
                         auto prev = dmat(iRow,iRow);
                         dmat(iRow,iRow) = origVal + diag_shift;
                         assert(abs( mat.dense_ref()(iRow,iRow) - origVal - diag_shift) < 1e-13);
@@ -314,17 +329,18 @@ private:
                     int ic = lower_bound(mat.cols + mat.rows[iRow], mat.cols + rows_end, iRow) - mat.cols;
                     if (ic != rows_end && mat.cols[ic] == iRow) {
                         if(save) {
-                            mpo_diag_elements.emplace_back(mat.data[ic]);
+                            pqn.second.emplace_back(mat.data[ic]);
                         }else{
-                            auto origVal = mpo_diag_elements[itVec++];
+                            auto origVal = pqn.second[iRow];
                             mat.data[ic] = origVal + diag_shift;
                         }
                         ++nCounts;
-                    }
+                    } else if(save) 
+                        pqn.second.emplace_back(0);
                 }
                 if(nCounts != mat.m and save){ // Do this only once in Ctor!
                     // This is the diagonal so I assume for now that this rarely appears.
-                    cerr << "DMRGSCIAQCC: ATTENTION! for qn" << qn << " only " << nCounts
+                    cerr << "DMRGSCIAQCC: ATTENTION! for qn" << pqn.first << " only " << nCounts
                          << " of " << mat.m << "diagonals are shifted. Change code!" << endl;
                 }
             }
