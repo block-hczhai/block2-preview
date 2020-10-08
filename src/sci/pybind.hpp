@@ -120,8 +120,6 @@ template <typename S> void bind_mpo_sci(py::module &m) {
                     const vector<ubond_t> &, const vector<double> &,
                             double, double, const std::vector<S>&>())
             .def_readwrite("g_factor", &DMRGSCIAQCC<S>::g_factor)
-            .def_readwrite("recomputeMPOInIter", &DMRGSCIAQCC<S>::recomputeMPOInIter)
-            .def_readwrite("calcDiagIterative", &DMRGSCIAQCC<S>::calcDiagIterative)
             .def_readwrite("ref_energy", &DMRGSCIAQCC<S>::ref_energy);
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
