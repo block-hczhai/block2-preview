@@ -115,6 +115,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     using DMRGSCI<S>::noise_type;
     using DMRGSCI<S>::decomp_type;
     using DMRGSCI<S>::energies;
+    using DMRGSCI<S>::sweep_energies;
     using DMRGSCI<S>::last_site_svd;
     using DMRGSCI<S>::last_site_1site;
 
@@ -156,8 +157,14 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
             wfn_info = h_eff->cmat->info->cinfo;
             if (doAQCC){
                 // AQCC
-                if(energies.size() > 0){
-                    delta_e = energies.back().at(0) - ref_energy;
+                if(sweep_energies.size() > 0){
+                    // vv taken from DRMG::sweep
+                    size_t idx =
+                            min_element(sweep_energies.begin(), sweep_energies.end(),
+                                        [](const vector<double> &x, const vector<double> &y) {
+                                            return x[0] < y[0];
+                                        }) - sweep_energies.begin();
+                    delta_e = sweep_energies[idx].at(0) - ref_energy;
                 }
                 double last_delta_e = delta_e;
                 if(iprint >= 2){
@@ -203,6 +210,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     // EIG and conv check
                     //
                     h_eff->cmat->info->cinfo = wfn_info;
+                    // TODO The best would be to do the adaption of the diagonal directly in eigs
                     const auto pdi2 = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                                                   davidson_soft_max_iter, me->para_rule);
                     const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
@@ -212,13 +220,18 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     std::get<2>(pdi) += std::get<2>(pdi2); // nflop
                     std::get<3>(pdi) += std::get<3>(pdi2); // tdav
                     delta_e = energy - ref_energy;
-                    auto converged = abs(delta_e - last_delta_e) / abs(delta_e) < 1.1 * davidson_conv_thrd;
+                    const auto converged = abs(delta_e - last_delta_e) / abs(delta_e) <
+                                           1.1 * max(davidson_conv_thrd,noise);//convergence can be loosely defined here
                     if(iprint >= 2){
                         cout << "\tAQCC: " << setw(2) << itAQCC <<
                              " E=" << fixed << setw(17) << setprecision(10) << energy <<
                              " Delta=" << fixed << setw(17) << setprecision(10) <<  delta_e <<
-                             " nDav=" << setw(3) << ndav <<
-                             " conv=" << (converged ? "T" : "F") << endl;
+                             " nDav=" << setw(3) << ndav << " conv=" << (converged ? "T" : "F");
+                        if(itAQCC == 0){
+                            cout << "; init Delta=" << fixed << setw(17) << setprecision(10) <<  last_delta_e << endl;
+                        }else{
+                            cout << endl;
+                        }
                     }
                     last_delta_e = delta_e;
                     if(converged){
