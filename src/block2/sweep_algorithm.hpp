@@ -47,6 +47,9 @@ template <typename S> struct DMRG {
     vector<vector<double>> energies;
     vector<double> discarded_weights;
     vector<vector<vector<pair<S, double>>>> mps_quanta;
+    vector<vector<double>> sweep_energies;
+    vector<double> sweep_discarded_weights;
+    vector<vector<vector<pair<S, double>>>> sweep_quanta;
     vector<double> davidson_conv_thrds;
     int davidson_max_iter = 5000;
     int davidson_soft_max_iter = -1;
@@ -773,9 +776,9 @@ template <typename S> struct DMRG {
     sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
         me->prepare();
-        vector<vector<double>> energies;
-        vector<double> discarded_weights;
-        vector<vector<vector<pair<S, double>>>> quanta;
+        sweep_energies.clear();
+        sweep_discarded_weights.clear();
+        sweep_quanta.clear();
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
@@ -803,17 +806,18 @@ template <typename S> struct DMRG {
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
-            energies.push_back(r.energies);
-            discarded_weights.push_back(r.error);
-            quanta.push_back(r.quanta);
+            sweep_energies.push_back(r.energies);
+            sweep_discarded_weights.push_back(r.error);
+            sweep_quanta.push_back(r.quanta);
         }
         size_t idx =
-            min_element(energies.begin(), energies.end(),
+            min_element(sweep_energies.begin(), sweep_energies.end(),
                         [](const vector<double> &x, const vector<double> &y) {
                             return x[0] < y[0];
                         }) -
-            energies.begin();
-        return make_tuple(energies[idx], discarded_weights[idx], quanta[idx]);
+            sweep_energies.begin();
+        return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
+                          sweep_quanta[idx]);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)

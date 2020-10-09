@@ -1287,6 +1287,10 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("energies", &DMRG<S>::energies)
         .def_readwrite("discarded_weights", &DMRG<S>::discarded_weights)
         .def_readwrite("mps_quanta", &DMRG<S>::mps_quanta)
+        .def_readwrite("sweep_energies", &DMRG<S>::sweep_energies)
+        .def_readwrite("sweep_discarded_weights",
+                       &DMRG<S>::sweep_discarded_weights)
+        .def_readwrite("sweep_quanta", &DMRG<S>::sweep_quanta)
         .def_readwrite("forward", &DMRG<S>::forward)
         .def_readwrite("noise_type", &DMRG<S>::noise_type)
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
