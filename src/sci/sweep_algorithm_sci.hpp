@@ -217,7 +217,6 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         cout << "\tAQCC: " << setw(2) << itAQCC <<
                              " E=" << fixed << setw(17) << setprecision(10) << energy <<
                              " Delta=" << fixed << setw(17) << setprecision(10) <<  delta_e <<
-                            " prevDelta=" << fixed << setw(17) << setprecision(10) <<  last_delta_e <<
                              " nDav=" << setw(3) << ndav <<
                              " conv=" << (converged ? "T" : "F") << endl;
                     }
