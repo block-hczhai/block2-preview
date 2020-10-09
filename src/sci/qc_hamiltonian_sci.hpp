@@ -488,7 +488,8 @@ public:
                 ops[i][nn_op[s]] = nullptr;
         }
         // vv only for normal sites
-        for (uint16_t m = iStart; m < iEnd; m++) {
+        //                             vvv needs to include all left and cas orbitals for NC scheme
+        for (uint16_t m = iStart; m < nOrbLeft + nOrbCas; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =

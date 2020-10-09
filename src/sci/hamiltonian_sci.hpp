@@ -220,6 +220,11 @@ template <typename S> struct HamiltonianSCI {
         auto p = lower_bound(site_norm_ops[iSite].begin(),
                              site_norm_ops[iSite].end(), q, cmp_site_norm_op);
         if (p == site_norm_ops[iSite].end() || !(p->first == q)) {
+            cout << "FIND SITE NORM OP FOR"<< iSite << endl;
+            cout << "fail for site" << iSite << endl;
+            auto opQ = dynamic_pointer_cast<OpElement<S>>(q);
+            cout << " that is:"<< *opQ << endl;
+            throw std::runtime_error("Fail in find_site_norm_op");
             assert(false);
             return nullptr;
         } else {
