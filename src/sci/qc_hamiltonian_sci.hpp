@@ -128,7 +128,7 @@ public:
         for (int iSite = iStart; iSite < iEnd; ++iSite) {
             basis[iSite] = make_shared<StateInfo<S>>();
             auto &bas = *basis[iSite];
-            auto iSym = orb_sym[iSite];
+            auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             bas.allocate(4);
             bas.quanta[0] = vacuum;
             bas.quanta[1] = S(1, -1, iSym);
@@ -184,13 +184,14 @@ public:
     void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
+        uint16_t pm = m;
         if (m == n_sites - 1 and sciWrapperRight != nullptr) {
             get_site_ops_big_site(sciWrapperRight, ops, m);
             return;
         }else if(m == 0 and sciWrapperLeft != nullptr){
             get_site_ops_big_site(sciWrapperLeft, ops, m);
             return;
-        }
+        } else m = nOrbLeft == 0 ? m : m + nOrbLeft - 1;
         uint16_t i, j, k;
         uint8_t s;
         shared_ptr<SparseMatrix<S>> zero = make_shared<SparseMatrix<S>>();
@@ -208,11 +209,11 @@ public:
             case OpNames::A:
             case OpNames::AD:
             case OpNames::B:
-                p.second = find_site_norm_op(p.first, m);
+                p.second = find_site_norm_op(p.first, pm);
                 break;
             case OpNames::H: // hrl: Here we need to take integrals into account
                 p.second = make_shared<SparseMatrix<S>>();
-                p.second->allocate(find_site_op_info(op.q_label, m));
+                p.second->allocate(find_site_op_info(op.q_label, pm));
                 (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
                 (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
                 (*p.second)[S(1, 1, orb_sym[m])](0, 0) = t(0, m, m);
@@ -231,10 +232,10 @@ public:
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m));
+                    p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
-                    tmp->allocate(find_site_op_info(op.q_label, m));
+                    tmp->allocate(find_site_op_info(op.q_label, pm));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
                             op_prims_normal[s + (sp << 1)].at(OpNames::R));
@@ -256,10 +257,10 @@ public:
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m));
+                    p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
-                    tmp->allocate(find_site_op_info(op.q_label, m));
+                    tmp->allocate(find_site_op_info(op.q_label, pm));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
                             op_prims_normal[s + (sp << 1)].at(OpNames::RD));
@@ -280,7 +281,7 @@ public:
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
                     p.second->allocate(
-                        find_site_op_info(op.q_label, m),
+                        find_site_op_info(op.q_label, pm),
                         op_prims_normal[s].at(OpNames::AD)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
                 }
@@ -293,7 +294,7 @@ public:
                     p.second = zero;
                 else {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m),
+                    p.second->allocate(find_site_op_info(op.q_label, pm),
                                        op_prims_normal[s].at(OpNames::A)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
                 }
@@ -311,12 +312,12 @@ public:
                         p.second = zero;
                     else {
                         p.second = make_shared<SparseMatrix<S>>();
-                        p.second->allocate(find_site_op_info(op.q_label, m));
+                        p.second->allocate(find_site_op_info(op.q_label, pm));
                         p.second->copy_data_from(
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)].at(
                                 OpNames::B));
                         p.second->factor *= -v(s & 1, s >> 1, i, m, m, j);
-                        tmp->allocate(find_site_op_info(op.q_label, m));
+                        tmp->allocate(find_site_op_info(op.q_label, pm));
                         for (uint8_t sp = 0; sp < 2; sp++) {
                             tmp->copy_data_from(
                                 op_prims_normal[sp | (sp << 1)].at(OpNames::B));
@@ -335,7 +336,7 @@ public:
                     else {
                         p.second = make_shared<SparseMatrix<S>>();
                         p.second->allocate(
-                            find_site_op_info(op.q_label, m),
+                            find_site_op_info(op.q_label, pm),
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)]
                                 .at(OpNames::B)
                                 ->data);
@@ -488,8 +489,8 @@ public:
                 ops[i][nn_op[s]] = nullptr;
         }
         // vv only for normal sites
-        //                             vvv needs to include all left and cas orbitals for NC scheme
-        for (uint16_t m = iStart; m < nOrbLeft + nOrbCas; m++) {
+        //                vvv needs to include all left and cas orbitals for NC scheme
+        for (uint16_t m = nOrbLeft; m < nOrbLeft + nOrbCas; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =
@@ -516,7 +517,7 @@ public:
         }
         // vv only for normal sites
         for (uint16_t iSite = iStart; iSite < iEnd; ++iSite) {
-            const auto iSym = orb_sym[iSite];
+            const auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             site_norm_ops[iSite] = vector<
                 pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
                 ops[iSym].begin(), ops[iSym].end());
@@ -535,7 +536,7 @@ public:
         // number
         //  compare with qLabels in MPOQCSCI
         for (int iSite = 0; iSite < n_sites; ++iSite) {
-            const auto iSym = orb_sym[iSite];
+            const auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
             info[this->vacuum] = nullptr;
             for (auto n : {-1, 1})
