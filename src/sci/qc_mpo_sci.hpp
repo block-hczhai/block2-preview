@@ -200,13 +200,15 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     mat[{0, 5}] = d_op[m][1];
                     p = 6;
                 }else{
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
-                        mat[{0, p++}] = c_op[iOrb][0];
-                        mat[{0, p++}] = c_op[iOrb][1];
+                    for (uint8_t s = 0; s < 2; s++) {
+                        for (int iOrb = 0; iOrb < nOrbFirst; ++iOrb) {
+                            mat[{0, p++}] = c_op[iOrb][s];
+                        }
                     }
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
-                        mat[{0, p++}] = d_op[iOrb][0];
-                        mat[{0, p++}] = d_op[iOrb][1];
+                    for (uint8_t s = 0; s < 2; s++) {
+                        for (int iOrb = 0; iOrb < nOrbFirst; ++iOrb) {
+                            mat[{0, p++}] = d_op[iOrb][s];
+                        }
                     }
                 }
                 for (uint8_t s = 0; s < 2; s++) { // R'
@@ -291,11 +293,11 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             mat[{p++, 0}] = mrd_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        mat[{p, 0}] = d_op[m][s];
+                        mat[{p, 0}] = d_op[mm][s];
                         p += nOrb - mm;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        mat[{p, 0}] = c_op[m][s];
+                        mat[{p, 0}] = c_op[mm][s];
                         p += nOrb - mm;
                     }
                 }
@@ -304,18 +306,18 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 // P, P', Q
                 /////////////////////////////
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = 0.5 * p_op[j][k][s];
                     }
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = 0.5 * pd_op[j][k][s];
                     }
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = q_op[j][k][s];
                     }
                 assert(p == mat.m);
@@ -376,7 +378,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = 0; j < mm; j++)
                                     for (uint16_t l = 0; l < mm; l++) {
-                                        double f = hamil.v(s, sp, i, j, m, l);
+                                        double f = hamil.v(s, sp, i, j, mm, l);
                                         mat[{pa[s | (sp << 1)] + j * mm + l, p}] =
                                                 f * d_op[mm][sp];
                                     }
