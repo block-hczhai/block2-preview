@@ -225,20 +225,27 @@ template <typename S> void run(const map<string, string> &params) {
         cout << "MPO end .. T = " << t.get_time() << endl;
 
         if (params.count("fused") != 0 || params.count("mrci-fused") != 0) {
-            int n_ext = 0;
+            int n_extl = 0, n_extr = 0;
 
             shared_ptr<MPSInfo<S>> fusing_mps_info;
 
             if (params.count("mrci-fused") != 0) {
                 vector<string> xmrci =
                     Parsing::split(params.at("mrci-fused"), " ", true);
-                n_ext = Parsing::to_int(xmrci[0]);
+                n_extr = Parsing::to_int(xmrci[0]);
                 int mrci_order = Parsing::to_int(xmrci[1]);
                 fusing_mps_info = make_shared<MRCIMPSInfo<S>>(
-                    hamil.n_sites, n_ext, mrci_order, hamil.vacuum, target,
+                    hamil.n_sites, n_extr, mrci_order, hamil.vacuum, target,
                     hamil.basis);
             } else {
-                n_ext = Parsing::to_int(params.at("fused"));
+                vector<string> xfused =
+                    Parsing::split(params.at("fused"), " ", true);
+                if (xfused.size() == 1)
+                    n_extr = Parsing::to_int(xfused[0]);
+                else {
+                    n_extl = Parsing::to_int(xfused[0]);
+                    n_extr = Parsing::to_int(xfused[1]);
+                }
                 fusing_mps_info = make_shared<MPSInfo<S>>(
                     hamil.n_sites, hamil.vacuum, target, hamil.basis);
             }
@@ -252,9 +259,34 @@ template <typename S> void run(const map<string, string> &params) {
                 mpo->tf->opf->seq = hamil.opf->seq;
             }
 
-            cout << "MPO fusing start" << endl;
-            for (int i = 0; i < n_ext - 1; i++) {
-                cout << "fusing .. " << i + 1 << " / " << n_ext << endl;
+            cout << "MPO fusing left start" << endl;
+            for (int i = 0; i < n_extl - 1; i++) {
+                cout << "fusing left .. " << i + 1 << " / " << n_extl << endl;
+                mpo = make_shared<FusedMPO<S>>(mpo, hamil.basis, 0, 1);
+                if (i == 10) {
+                    for (auto &op : mpo->tensors[0]->ops) {
+                        shared_ptr<CSRSparseMatrix<S>> smat =
+                            make_shared<CSRSparseMatrix<S>>();
+                        if (op.second->get_type() ==
+                            SparseMatrixTypes::Normal) {
+                            if (op.second->sparsity() > sparsity) {
+                                smat->from_dense(op.second);
+                                op.second->deallocate();
+                            } else
+                                smat->wrap_dense(op.second);
+                        }
+                        op.second = smat;
+                    }
+                    mpo->sparse_form[0] = 'S';
+                }
+                hamil.basis = mpo->basis;
+                hamil.n_sites = mpo->n_sites;
+            }
+            cout << "MPO fusing left end .. T = " << t.get_time() << endl;
+
+            cout << "MPO fusing right start" << endl;
+            for (int i = 0; i < n_extr - 1; i++) {
+                cout << "fusing right .. " << i + 1 << " / " << n_extr << endl;
                 mpo = make_shared<FusedMPO<S>>(
                     mpo, hamil.basis, mpo->n_sites - 2, mpo->n_sites - 1,
                     fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
@@ -277,7 +309,7 @@ template <typename S> void run(const map<string, string> &params) {
                 hamil.basis = mpo->basis;
                 hamil.n_sites = mpo->n_sites;
             }
-            cout << "MPO fusing end .. T = " << t.get_time() << endl;
+            cout << "MPO fusing right end .. T = " << t.get_time() << endl;
 
             fusing_mps_info->deallocate();
 
