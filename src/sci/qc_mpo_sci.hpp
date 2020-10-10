@@ -261,17 +261,17 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     for (uint8_t s = 0; s < 4; s++)
                         mat[{0, p++}] = b_op[m][m][s];
                 }else{
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = a_op[iOrb][jOrb][s];
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = ad_op[iOrb][jOrb][s];
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = b_op[iOrb][jOrb][s];
                 }
                 assert(p == mat.n);
