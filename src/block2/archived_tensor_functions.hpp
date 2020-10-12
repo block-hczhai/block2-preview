@@ -38,18 +38,19 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         return TensorFunctionsTypes::Archived;
     }
     void archive_tensor(const shared_ptr<OperatorTensor<S>> &a) const {
-        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto &op : a->ops) {
             shared_ptr<SparseMatrix<S>> mat = op.second;
             shared_ptr<ArchivedSparseMatrix<S>> arc =
                 make_shared<ArchivedSparseMatrix<S>>(filename, offset);
             arc->save_archive(mat);
-            mp[op.second->data] = op.second;
+            mp[op.second->data].push_back(op.second);
             op.second = arc;
             offset += arc->total_memory;
         }
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
     }
     // c = a
     void left_assign(const shared_ptr<OperatorTensor<S>> &a,

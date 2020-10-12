@@ -46,11 +46,12 @@ template <typename S> struct OperatorTensor {
     }
     void deallocate() {
         // need to check order in parallel mode
-        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto it = ops.cbegin(); it != ops.cend(); it++)
-            mp[it->second->data] = it->second;
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
     }
     void load_data(ifstream &ifs) {
         bool lr;
@@ -160,16 +161,18 @@ template <typename S> struct DelayedOperatorTensor {
     }
     void deallocate() {
         // need to check order in parallel mode
-        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto it = rops.cbegin(); it != rops.cend(); it++)
-            mp[it->second->data] = it->second;
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
         mp.clear();
         for (auto it = lops.cbegin(); it != lops.cend(); it++)
-            mp[it->second->data] = it->second;
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
     }
 };
 
