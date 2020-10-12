@@ -384,8 +384,8 @@ public:
         init_site_op_infos();
 
         // pg symmetry for reference orbital
-        // op_prims_normal need normal site as reference => use first one (iStart)
-        const uint8_t ipg = orb_sym[iStart];
+        // op_prims_normal need normal site as reference => use first normal orbital
+        const uint8_t ipg = orb_sym[nOrbLeft];
         op_prims_normal[0][OpNames::I] = make_shared<SparseMatrix<S>>();
         op_prims_normal[0][OpNames::I]->allocate(
             find_site_op_info(S(0, 0, 0), iStart));
