@@ -1526,8 +1526,10 @@ template <typename S> struct Compress {
              const vector<double> &noises = vector<double>())
         : me(me), lme(lme), bra_bond_dims(bra_bond_dims),
           ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {
-        assert(lme->bra == lme->ket && lme->bra == me->bra);
-        assert(lme->tag != me->tag);
+        if (lme != nullptr) {
+            assert(lme->bra == lme->ket && lme->bra == me->bra);
+            assert(lme->tag != me->tag);
+        }
     }
     virtual ~Compress() = default;
     struct Iteration {
@@ -1596,7 +1598,7 @@ template <typename S> struct Compress {
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
                         prev_bra, me->ket->tensors[i]);
-        auto pdi = h_eff->multiply(me->para_rule);
+        auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
         if (lme != nullptr) {
@@ -1833,7 +1835,7 @@ template <typename S> struct Compress {
         }
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, false, prev_bra, me->ket->tensors[i]);
-        auto pdi = h_eff->multiply(me->para_rule);
+        auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
         if (lme != nullptr) {
@@ -1959,8 +1961,8 @@ template <typename S> struct Compress {
                          get<2>(pdi), get<3>(pdi));
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
-                       ubond_t ket_bond_dim, double noise,
-                       double minres_conv_thrd) {
+                               ubond_t ket_bond_dim, double noise,
+                               double minres_conv_thrd) {
         me->move_to(i);
         if (lme != nullptr)
             lme->move_to(i);

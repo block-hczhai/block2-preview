@@ -320,9 +320,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // energy, ndav, nflop, tdav
     tuple<double, int, size_t, double>
     inverse_multiply(double const_e, bool iprint = false,
-                    double conv_thrd = 5E-6, int max_iter = 5000,
-                    int soft_max_iter = -1,
-                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+                     double conv_thrd = 5E-6, int max_iter = 5000,
+                     int soft_max_iter = -1,
+                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int nmult = 0;
         frame->activate(0);
         Timer t;
@@ -347,8 +347,17 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // [bra] = [H_eff] x [ket]
     // norm, nmult, nflop, tdav
     tuple<double, int, size_t, double>
-    multiply(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    multiply(double const_e,
+             const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
+        shared_ptr<OpExpr<S>> expr = op->mat->data[0];
+        if (const_e != 0) {
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+                OpNames::I, SiteIndex(),
+                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+            if (para_rule == nullptr || para_rule->is_root())
+                op->mat->data[0] = expr + const_e * (iop * iop);
+        }
         Timer t;
         t.get_time();
         if (tf->opf->seq->mode == SeqTypes::Auto)
@@ -357,6 +366,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         else
             (*this)(MatrixRef(ket->data, ket->total_memory, 1),
                     MatrixRef(bra->data, bra->total_memory, 1));
+        op->mat->data[0] = expr;
         double norm =
             MatrixFunctions::norm(MatrixRef(bra->data, bra->total_memory, 1));
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
