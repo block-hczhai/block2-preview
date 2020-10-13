@@ -133,10 +133,12 @@ extern template struct block2::MovingEnvironment<block2::SU2>;
 extern template struct block2::MPOSchemer<block2::SZ>;
 extern template struct block2::MPO<block2::SZ>;
 extern template struct block2::AncillaMPO<block2::SZ>;
+extern template struct block2::NegativeMPO<block2::SZ>;
 
 extern template struct block2::MPOSchemer<block2::SU2>;
 extern template struct block2::MPO<block2::SU2>;
 extern template struct block2::AncillaMPO<block2::SU2>;
+extern template struct block2::NegativeMPO<block2::SU2>;
 
 // mpo_fusing.hpp
 extern template struct block2::FusedMPO<block2::SZ>;

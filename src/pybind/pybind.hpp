@@ -1615,6 +1615,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
 
+    py::class_<NegativeMPO<S>, shared_ptr<NegativeMPO<S>>, MPO<S>>(
+        m, "NegativeMPO")
+        .def(py::init<const shared_ptr<MPO<S>> &>());
+
     py::class_<ArchivedMPO<S>, shared_ptr<ArchivedMPO<S>>, MPO<S>>(
         m, "ArchivedMPO")
         .def(py::init<const shared_ptr<MPO<S>> &>())

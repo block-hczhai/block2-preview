@@ -126,9 +126,9 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     imps_info->save_mutable();
     imps_info->deallocate_mutable();
 
-    // Identity ME
-    shared_ptr<MovingEnvironment<S>> ime =
-        make_shared<MovingEnvironment<S>>(impo, imps, mps, "COMPRESS");
+    // Negative identity ME
+    shared_ptr<MovingEnvironment<S>> ime = make_shared<MovingEnvironment<S>>(
+        make_shared<NegativeMPO<S>>(impo), imps, mps, "COMPRESS");
     ime->init_environments();
 
     // Left ME
@@ -163,7 +163,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - 1.0), 1E-7);
+    EXPECT_LT(abs(energy + 1.0), 1E-7);
 
     imps_info->deallocate();
     mps_info->deallocate();
