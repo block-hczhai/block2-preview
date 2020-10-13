@@ -986,6 +986,7 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("all_reduce") = true)
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
+        .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1353,11 +1354,12 @@ template <typename S> void bind_algorithms(py::module &m) {
     py::class_<typename Compress<S>::Iteration,
                shared_ptr<typename Compress<S>::Iteration>>(m,
                                                             "CompressIteration")
-        .def(py::init<double, double, int, size_t, double>())
-        .def(py::init<double, double, int>())
+        .def(py::init<double, double, int, int, size_t, double>())
+        .def(py::init<double, double, int, int>())
         .def_readwrite("mmps", &Compress<S>::Iteration::mmps)
         .def_readwrite("norm", &Compress<S>::Iteration::norm)
         .def_readwrite("error", &Compress<S>::Iteration::error)
+        .def_readwrite("nmult", &Compress<S>::Iteration::nmult)
         .def_readwrite("tmult", &Compress<S>::Iteration::tmult)
         .def_readwrite("nflop", &Compress<S>::Iteration::nflop)
         .def("__repr__", [](typename Compress<S>::Iteration *self) {
@@ -1372,9 +1374,17 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
         .def_readwrite("iprint", &Compress<S>::iprint)
         .def_readwrite("cutoff", &Compress<S>::cutoff)
         .def_readwrite("me", &Compress<S>::me)
+        .def_readwrite("lme", &Compress<S>::lme)
         .def_readwrite("bra_bond_dims", &Compress<S>::bra_bond_dims)
         .def_readwrite("ket_bond_dims", &Compress<S>::ket_bond_dims)
         .def_readwrite("noises", &Compress<S>::noises)
@@ -1384,6 +1394,11 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &Compress<S>::trunc_type)
         .def_readwrite("decomp_type", &Compress<S>::decomp_type)
         .def_readwrite("decomp_last_site", &Compress<S>::decomp_last_site)
+        .def_readwrite("minres_conv_thrds", &Compress<S>::minres_conv_thrds)
+        .def_readwrite("minres_max_iter", &Compress<S>::minres_max_iter)
+        .def_readwrite("minres_soft_max_iter",
+                       &Compress<S>::minres_soft_max_iter)
+        .def("update_one_dot", &Compress<S>::update_one_dot)
         .def("update_two_dot", &Compress<S>::update_two_dot)
         .def("blocking", &Compress<S>::blocking)
         .def("sweep", &Compress<S>::sweep)

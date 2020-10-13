@@ -155,6 +155,14 @@ struct MatrixFunctions {
                     return false;
         return true;
     }
+    // solve a^T x[i, :] = b[i, :] => output in b; a will be overwritten
+    static void linear(const MatrixRef &a, const MatrixRef &b) {
+        assert(a.m == a.n && a.m == b.n);
+        int *work = (int *)ialloc->allocate(a.n), info = -1;
+        dgesv(&a.m, &b.m, a.data, &a.n, work, b.data, &a.n, &info);
+        assert(info == 0);
+        ialloc->deallocate(work, a.n);
+    }
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
@@ -884,6 +892,113 @@ struct MatrixFunctions {
                                                  lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return nmult;
+    }
+    // Solve x in linear equation H x = b where H^T = H
+    // by applying linear CG method to equation (H H) x = H b
+    // where H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double minres(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
+                          double consta = 0.0, bool iprint = false,
+                          const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                          int max_iter = 5000, int soft_max_iter = -1) {
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        r.allocate();
+        r.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iadd(r, b, -1);
+            iscale(r, -1);
+            p.allocate();
+            copy(p, r);
+            error = dot(r, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                func = dot(x, b);
+                p.deallocate();
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            r.deallocate();
+            nmult = 1;
+            return func;
+        }
+        if (pcomm != nullptr)
+            pcomm->broadcast(r.data, r.size(), pcomm->root);
+        double beta = 0, prev_beta = 0;
+        MatrixRef hp(nullptr, x.m, x.n), hr(nullptr, x.m, x.n);
+        hr.allocate();
+        hr.clear();
+        op(r, hr);
+        if (consta != 0)
+            iadd(hr, r, consta);
+        prev_beta = dot(r, hr);
+        int xiter = 0;
+
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            hp.allocate();
+            copy(hp, hr);
+        }
+
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = dot(r, hr) / dot(hp, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                error = dot(r, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&error, 2, pcomm->root);
+                pcomm->broadcast(r.data, r.size(), pcomm->root);
+            }
+            if (error < conv_thrd)
+                break;
+            else {
+                hr.clear();
+                op(r, hr);
+                if (consta != 0)
+                    iadd(hr, r, consta);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    beta = dot(r, hr);
+                    iadd(p, r, prev_beta / beta);
+                    iscale(p, beta / prev_beta);
+                    iadd(hp, hr, prev_beta / beta);
+                    iscale(hp, beta / prev_beta);
+                    prev_beta = beta;
+                }
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            hp.deallocate();
+        hr.deallocate();
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            p.deallocate();
+        r.deallocate();
+        return func;
     }
 };
 

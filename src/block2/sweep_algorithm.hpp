@@ -197,8 +197,6 @@ template <typename S> struct DMRG {
                             density_matrix_with_perturbative_noise(
                                 opdq, me->ket->tensors[i], forward, noise,
                                 noise_type, pket);
-                        pket->deallocate_infos();
-                        pket->deallocate();
                     } else
                         dm = MovingEnvironment<S>::density_matrix(
                             opdq, me->ket->tensors[i], forward, noise,
@@ -285,10 +283,6 @@ template <typename S> struct DMRG {
                 old_wfn->deallocate();
             }
         } else {
-            if (pket != nullptr) {
-                pket->deallocate();
-                pket->deallocate_infos();
-            }
             me->ket->unload_tensor(i);
             if (!decomp_last_site &&
                 ((forward && i == me->n_sites - 1 && !fuse_left) ||
@@ -309,6 +303,10 @@ template <typename S> struct DMRG {
                         me->ket->canonical_form[i] = 'S';
                 }
             }
+        }
+        if (pket != nullptr) {
+            pket->deallocate();
+            pket->deallocate_infos();
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -376,8 +374,6 @@ template <typename S> struct DMRG {
                                                                    noise,
                                                                    noise_type,
                                                                    pket);
-                    pket->deallocate();
-                    pket->deallocate_infos();
                 } else
                     dm = MovingEnvironment<S>::density_matrix(
                         opdq, old_wfn, forward, noise, noise_type);
@@ -435,10 +431,6 @@ template <typename S> struct DMRG {
             MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket,
                                                 forward, me->mpo->tf->opf->cg);
         } else {
-            if (pket != nullptr) {
-                pket->deallocate();
-                pket->deallocate_infos();
-            }
             old_wfn->info->deallocate();
             old_wfn->deallocate();
             me->ket->tensors[i + 1] = make_shared<SparseMatrix<S>>();
@@ -449,6 +441,10 @@ template <typename S> struct DMRG {
                 me->ket->canonical_form[i] = 'C';
                 me->ket->canonical_form[i + 1] = 'R';
             }
+        }
+        if (pket != nullptr) {
+            pket->deallocate();
+            pket->deallocate_infos();
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -1503,10 +1499,13 @@ template <typename S> struct ImaginaryTE {
 
 // Compression
 template <typename S> struct Compress {
-    shared_ptr<MovingEnvironment<S>> me;
+    shared_ptr<MovingEnvironment<S>> me, lme;
     vector<ubond_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
     vector<double> norms;
+    vector<double> minres_conv_thrds;
+    int minres_max_iter = 5000;
+    int minres_soft_max_iter = -1;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
@@ -1518,29 +1517,42 @@ template <typename S> struct Compress {
              const vector<ubond_t> &bra_bond_dims,
              const vector<ubond_t> &ket_bond_dims,
              const vector<double> &noises = vector<double>())
-        : me(me), bra_bond_dims(bra_bond_dims), ket_bond_dims(ket_bond_dims),
-          noises(noises), forward(false) {}
+        : me(me), lme(nullptr), bra_bond_dims(bra_bond_dims),
+          ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {}
+    Compress(const shared_ptr<MovingEnvironment<S>> &me,
+             const shared_ptr<MovingEnvironment<S>> &lme,
+             const vector<ubond_t> &bra_bond_dims,
+             const vector<ubond_t> &ket_bond_dims,
+             const vector<double> &noises = vector<double>())
+        : me(me), lme(lme), bra_bond_dims(bra_bond_dims),
+          ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {
+        assert(lme->bra == lme->ket && lme->bra == me->bra);
+        assert(lme->tag != me->tag);
+    }
+    virtual ~Compress() = default;
     struct Iteration {
-        int mmps;
-        double norm, error;
-        double tmult;
+        int nmult, mmps;
+        double norm, error, tmult;
         size_t nflop;
-        Iteration(double norm, double error, int mmps, size_t nflop = 0,
-                  double tmult = 1.0)
-            : norm(norm), error(error), mmps(mmps), nflop(nflop), tmult(tmult) {
-        }
+        Iteration(double norm, double error, int mmps, int nmult,
+                  size_t nflop = 0, double tmult = 1.0)
+            : norm(norm), error(error), mmps(mmps), nmult(nmult), nflop(nflop),
+              tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Mmps =" << setw(5) << r.mmps;
-            os << " Norm = " << setw(15) << r.norm << " Error = " << setw(15)
-               << setprecision(12) << r.error << " FLOPS = " << scientific
-               << setw(8) << setprecision(2) << (double)r.nflop / r.tmult
-               << " Tmult = " << fixed << setprecision(2) << r.tmult;
+            os << " Nmult = " << setw(4) << r.nmult
+               << (r.nmult == 1 ? " Norm = " : " F = ") << setw(15) << r.norm
+               << " Error = " << setw(15) << setprecision(12) << r.error
+               << " FLOPS = " << scientific << setw(8) << setprecision(2)
+               << (double)r.nflop / r.tmult << " Tmult = " << fixed
+               << setprecision(2) << r.tmult;
             return os;
         }
     };
     Iteration update_one_dot(int i, bool forward, ubond_t bra_bond_dim,
-                             ubond_t ket_bond_dim, double noise) {
+                             ubond_t ket_bond_dim, double noise,
+                             double minres_conv_thrd) {
         assert(me->bra != me->ket);
         frame->activate(0);
         bool fuse_left = me->mpo->schemer == nullptr
@@ -1575,12 +1587,40 @@ template <typename S> struct Compress {
                 prev_wfn->deallocate();
             }
         }
+        shared_ptr<SparseMatrix<S>> prev_bra = me->bra->tensors[i];
+        if (lme != nullptr) {
+            prev_bra = make_shared<SparseMatrix<S>>();
+            prev_bra->allocate(me->bra->tensors[i]->info);
+        }
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                        me->bra->tensors[i], me->ket->tensors[i]);
+                        prev_bra, me->ket->tensors[i]);
         auto pdi = h_eff->multiply(me->para_rule);
         h_eff->deallocate();
+        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
+        if (lme != nullptr) {
+            if (minres_soft_max_iter != 0 || noise != 0) {
+                shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
+                    me->bra->tensors[i], prev_bra);
+                auto lpdi = l_eff->inverse_multiply(
+                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                get<0>(pdi) = get<0>(lpdi);
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi);
+                get<3>(pdi) += get<3>(lpdi);
+                if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+                    pbra = l_eff->perturbative_noise(
+                        forward, i, i,
+                        fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                        me->bra->info, noise_type, me->para_rule);
+                l_eff->deallocate();
+            } else
+                get<0>(pdi) = 0;
+            prev_bra->deallocate();
+        }
         double bra_error = 0.0;
         int bra_mmps = 0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1610,9 +1650,27 @@ template <typename S> struct Compress {
                         prev_wfn->info->deallocate();
                         prev_wfn->deallocate();
                     }
+                    if (pbra != nullptr) {
+                        vector<shared_ptr<SparseMatrixGroup<S>>> prev_pbras = {
+                            pbra};
+                        if (!fuse_left && forward)
+                            pbra = MovingEnvironment<S>::
+                                swap_multi_wfn_to_fused_left(
+                                    i, me->bra->info, prev_pbras,
+                                    me->mpo->tf->opf->cg)[0];
+                        else if (fuse_left && !forward)
+                            pbra = MovingEnvironment<S>::
+                                swap_multi_wfn_to_fused_right(
+                                    i, me->bra->info, prev_pbras,
+                                    me->mpo->tf->opf->cg)[0];
+                        prev_pbras[0]->deallocate_infos();
+                        prev_pbras[0]->deallocate();
+                    }
                 }
                 shared_ptr<SparseMatrix<S>> old_bra = me->bra->tensors[i];
                 shared_ptr<SparseMatrix<S>> old_ket = me->ket->tensors[i];
+                if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+                    assert(pbra != nullptr);
                 for (auto &mps : {me->bra, me->ket}) {
                     // splitting of wavefunction
                     shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
@@ -1622,22 +1680,36 @@ template <typename S> struct Compress {
                                                   : (int)ket_bond_dim,
                         error;
                     if (decomp_type == DecompositionTypes::DensityMatrix) {
-                        dm = MovingEnvironment<S>::density_matrix(
-                            h_eff->opdq, old_wfn, forward,
-                            mps == me->bra ? noise : 0.0,
-                            mps == me->bra && noise != 0 ? noise_type
-                                                         : NoiseTypes::None);
+                        if ((noise_type & NoiseTypes::Perturbative) &&
+                            noise != 0 && mps == me->bra) {
+                            dm = MovingEnvironment<S>::
+                                density_matrix_with_perturbative_noise(
+                                    h_eff->opdq, old_wfn, forward, noise,
+                                    noise_type, pbra);
+                        } else
+                            dm = MovingEnvironment<S>::density_matrix(
+                                h_eff->opdq, old_wfn, forward,
+                                mps == me->bra ? noise : 0.0,
+                                mps == me->bra && noise != 0
+                                    ? noise_type
+                                    : NoiseTypes::None);
                         error = MovingEnvironment<S>::split_density_matrix(
                             dm, old_wfn, bond_dim, forward, false, left, right,
                             cutoff, trunc_type);
                     } else if (decomp_type == DecompositionTypes::SVD ||
                                decomp_type == DecompositionTypes::PureSVD) {
-                        if (noise != 0)
-                            MovingEnvironment<S>::wavefunction_add_noise(
-                                old_wfn, mps == me->bra ? noise : 0.0);
+                        if (noise != 0 && mps == me->bra) {
+                            if (noise_type == NoiseTypes::Wavefunction)
+                                MovingEnvironment<S>::wavefunction_add_noise(
+                                    old_wfn, noise);
+                            else if (noise_type & NoiseTypes::Perturbative)
+                                MovingEnvironment<S>::scale_perturbative_noise(
+                                    noise, noise_type, pbra);
+                        }
                         error = MovingEnvironment<S>::split_wavefunction_svd(
                             h_eff->opdq, old_wfn, bond_dim, forward, false,
-                            left, right, cutoff, trunc_type, decomp_type);
+                            left, right, cutoff, trunc_type, decomp_type,
+                            mps == me->bra ? pbra : nullptr);
                     } else
                         assert(false);
                     if (mps == me->bra)
@@ -1732,13 +1804,18 @@ template <typename S> struct Compress {
             me->ket->unload_tensor(i);
             me->bra->unload_tensor(i);
         }
+        if (pbra != nullptr) {
+            pbra->deallocate();
+            pbra->deallocate_infos();
+        }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
-                         get<2>(pdi));
+                         get<2>(pdi), get<3>(pdi));
     }
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
-                             ubond_t ket_bond_dim, double noise) {
+                             ubond_t ket_bond_dim, double noise,
+                             double minres_conv_thrd) {
         assert(me->bra != me->ket);
         frame->activate(0);
         for (auto &mps : {me->bra, me->ket}) {
@@ -1749,14 +1826,42 @@ template <typename S> struct Compress {
                 mps->tensors[i + 1] = nullptr;
             }
         }
+        shared_ptr<SparseMatrix<S>> prev_bra = me->bra->tensors[i];
+        if (lme != nullptr) {
+            prev_bra = make_shared<SparseMatrix<S>>();
+            prev_bra->allocate(me->bra->tensors[i]->info);
+        }
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, false, me->bra->tensors[i], me->ket->tensors[i]);
+            FuseTypes::FuseLR, false, prev_bra, me->ket->tensors[i]);
         auto pdi = h_eff->multiply(me->para_rule);
         h_eff->deallocate();
+        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
+        if (lme != nullptr) {
+            if (minres_soft_max_iter != 0 || noise != 0) {
+                shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+                    FuseTypes::FuseLR, false, me->bra->tensors[i], prev_bra);
+                auto lpdi = l_eff->inverse_multiply(
+                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                get<0>(pdi) = get<0>(lpdi);
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi);
+                get<3>(pdi) += get<3>(lpdi);
+                if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+                    pbra = l_eff->perturbative_noise(
+                        forward, i, i + 1, FuseTypes::FuseLR, me->bra->info,
+                        noise_type, me->para_rule);
+                l_eff->deallocate();
+            } else
+                get<0>(pdi) = 0;
+            prev_bra->deallocate();
+        }
         shared_ptr<SparseMatrix<S>> old_bra = me->bra->tensors[i];
         shared_ptr<SparseMatrix<S>> old_ket = me->ket->tensors[i];
         double bra_error = 0.0;
         int bra_mmps = 0;
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            assert(pbra != nullptr);
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             for (auto &mps : {me->bra, me->ket}) {
                 shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
@@ -1765,23 +1870,36 @@ template <typename S> struct Compress {
                         mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim,
                     error;
                 if (decomp_type == DecompositionTypes::DensityMatrix) {
-                    dm = MovingEnvironment<S>::density_matrix(
-                        h_eff->opdq, old_wfn, forward,
-                        mps == me->bra ? noise : 0.0,
-                        mps == me->bra && noise != 0 ? noise_type
-                                                     : NoiseTypes::None);
+                    if ((noise_type & NoiseTypes::Perturbative) && noise != 0 &&
+                        mps == me->bra)
+                        dm = MovingEnvironment<S>::
+                            density_matrix_with_perturbative_noise(
+                                h_eff->opdq, old_wfn, forward, noise,
+                                noise_type, pbra);
+                    else
+                        dm = MovingEnvironment<S>::density_matrix(
+                            h_eff->opdq, old_wfn, forward,
+                            mps == me->bra ? noise : 0.0,
+                            mps == me->bra && noise != 0 ? noise_type
+                                                         : NoiseTypes::None);
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
                         mps->tensors[i + 1], cutoff, trunc_type);
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
-                    if (noise != 0)
-                        MovingEnvironment<S>::wavefunction_add_noise(
-                            old_wfn, mps == me->bra ? noise : 0.0);
+                    if (noise != 0 && mps == me->bra) {
+                        if (noise_type == NoiseTypes::Wavefunction)
+                            MovingEnvironment<S>::wavefunction_add_noise(
+                                old_wfn, noise);
+                        else if (noise_type & NoiseTypes::Perturbative)
+                            MovingEnvironment<S>::scale_perturbative_noise(
+                                noise, noise_type, pbra);
+                    }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
                         h_eff->opdq, old_wfn, bond_dim, forward, false,
                         mps->tensors[i], mps->tensors[i + 1], cutoff,
-                        trunc_type, decomp_type);
+                        trunc_type, decomp_type,
+                        mps == me->bra ? pbra : nullptr);
                 } else
                     assert(false);
                 if (mps == me->bra)
@@ -1827,6 +1945,10 @@ template <typename S> struct Compress {
                 }
             }
         }
+        if (pbra != nullptr) {
+            pbra->deallocate();
+            pbra->deallocate_infos();
+        }
         for (auto &old_wfn : {old_ket, old_bra}) {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
@@ -1834,21 +1956,26 @@ template <typename S> struct Compress {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
-                         get<2>(pdi));
+                         get<2>(pdi), get<3>(pdi));
     }
-    Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
-                       ubond_t ket_bond_dim, double noise) {
+    virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
+                       ubond_t ket_bond_dim, double noise,
+                       double minres_conv_thrd) {
         me->move_to(i);
+        if (lme != nullptr)
+            lme->move_to(i);
         if (me->dot == 2)
-            return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim,
-                                  noise);
+            return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
+                                  minres_conv_thrd);
         else
-            return update_one_dot(i, forward, bra_bond_dim, ket_bond_dim,
-                                  noise);
+            return update_one_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
+                                  minres_conv_thrd);
     }
     double sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim,
-                 double noise) {
+                 double noise, double minres_conv_thrd) {
         me->prepare();
+        if (lme != nullptr)
+            lme->prepare();
         vector<double> norms;
         vector<int> sweep_range;
         if (forward)
@@ -1872,8 +1999,8 @@ template <typename S> struct Compress {
                 cout.flush();
             }
             t.get_time();
-            Iteration r =
-                blocking(i, forward, bra_bond_dim, ket_bond_dim, noise);
+            Iteration r = blocking(i, forward, bra_bond_dim, ket_bond_dim,
+                                   noise, minres_conv_thrd);
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -1888,39 +2015,59 @@ template <typename S> struct Compress {
             ket_bond_dims.resize(n_sweeps, ket_bond_dims.back());
         if (noises.size() < n_sweeps)
             noises.resize(n_sweeps, noises.size() == 0 ? 0.0 : noises.back());
+        if (minres_conv_thrds.size() < n_sweeps)
+            for (size_t i = minres_conv_thrds.size(); i < noises.size(); i++)
+                minres_conv_thrds.push_back(
+                    (noises[i] == 0 ? (tol == 0 ? 1E-9 : tol) : noises[i]) *
+                    0.1);
         Timer start, current;
         start.get_time();
         norms.clear();
+        bool converged;
         for (int iw = 0; iw < n_sweeps; iw++) {
-            if (iprint >= 1)
+            if (iprint >= 1) {
                 cout << "Sweep = " << setw(4) << iw
                      << " | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
                      << " | BRA bond dimension = " << setw(4)
                      << (uint32_t)bra_bond_dims[iw]
                      << " | Noise = " << scientific << setw(9)
-                     << setprecision(2) << noises[iw] << endl;
+                     << setprecision(2) << noises[iw];
+                if (lme != nullptr)
+                    cout << " | MinRes threshold = " << scientific << setw(9)
+                         << setprecision(2) << minres_conv_thrds[iw];
+                cout << endl;
+            }
             double norm = sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw],
-                                noises[iw]);
+                                noises[iw], minres_conv_thrds[iw]);
+            double dnorm;
             norms.push_back(norm);
-            bool converged =
-                norms.size() >= 2 && tol > 0 &&
-                abs(norms[norms.size() - 1] - norms[norms.size() - 2]) < tol &&
-                noises[iw] == noises.back() &&
-                bra_bond_dims[iw] == bra_bond_dims.back();
+            if (norms.size() >= 2)
+                dnorm = norms[norms.size() - 1] - norms[norms.size() - 2];
+            converged = norms.size() >= 2 && tol > 0 && abs(dnorm) < tol &&
+                        noises[iw] == noises.back() &&
+                        bra_bond_dims[iw] == bra_bond_dims.back();
             forward = !forward;
             current.get_time();
-            if (iprint == 1) {
-                cout << fixed << setprecision(8);
-                cout << " .. Norm = " << setw(15) << norm << " ";
-            }
-            if (iprint >= 1)
+            if (iprint >= 1) {
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current << endl;
+                     << current.current - start.current;
+                cout << fixed << setprecision(8);
+                cout << (lme == nullptr ? " | Norm = " : " | F = ") << setw(15)
+                     << norm;
+                if (norms.size() >= 2)
+                    cout << (lme == nullptr ? " | DN = " : " | DF = ")
+                         << setw(6) << setprecision(2) << scientific << dnorm;
+                cout << endl;
+            }
             if (converged)
                 break;
         }
         this->forward = forward;
+        if (!converged && iprint > 0)
+            cout << "ATTENTION: Compress is not converged to desired tolerance "
+                    "of "
+                 << scientific << tol << endl;
         return norms.back();
     }
 };

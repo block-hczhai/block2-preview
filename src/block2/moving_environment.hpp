@@ -316,9 +316,37 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
+    // [bra] = [H_eff]^(-1) x [ket]
+    // energy, ndav, nflop, tdav
+    tuple<double, int, size_t, double>
+    inverse_multiply(double const_e, bool iprint = false,
+                    double conv_thrd = 5E-6, int max_iter = 5000,
+                    int soft_max_iter = -1,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int nmult = 0;
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        MatrixRef mket(ket->data, ket->total_memory, 1);
+        MatrixRef mbra(bra->data, bra->total_memory, 1);
+        double r = tf->opf->seq->mode == SeqTypes::Auto
+                       ? MatrixFunctions::minres(
+                             *tf->opf->seq, mbra, mket, nmult, const_e, iprint,
+                             para_rule == nullptr ? nullptr : para_rule->comm,
+                             conv_thrd, max_iter, soft_max_iter)
+                       : MatrixFunctions::minres(
+                             *this, mbra, mket, nmult, const_e, iprint,
+                             para_rule == nullptr ? nullptr : para_rule->comm,
+                             conv_thrd, max_iter, soft_max_iter);
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(r, nmult, (size_t)nflop, t.get_time());
+    }
     // [bra] = [H_eff] x [ket]
-    // norm, nflop, tdav
-    tuple<double, size_t, double>
+    // norm, nmult, nflop, tdav
+    tuple<double, int, size_t, double>
     multiply(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
         Timer t;
@@ -335,7 +363,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(norm, (size_t)nflop, t.get_time());
+        return make_tuple(norm, 1, (size_t)nflop, t.get_time());
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult

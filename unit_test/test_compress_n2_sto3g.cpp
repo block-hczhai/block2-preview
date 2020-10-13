@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestCompressN2STO3G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 20;
+    size_t dsize = 1L << 24;
 
     template <typename S>
     void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
@@ -131,14 +131,23 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
         make_shared<MovingEnvironment<S>>(impo, imps, mps, "COMPRESS");
     ime->init_environments();
 
+    // Left ME
+    shared_ptr<MovingEnvironment<S>> lme =
+        make_shared<MovingEnvironment<S>>(mpo, imps, imps, "LINEAR");
+    double ce = mpo->const_e;
+    mpo->const_e = 0;
+    lme->init_environments();
+
     // Compress
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
-    noises = {0.0};
+    noises = {1E-4, 1E-6, 1E-8, 0};
     shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(ime, bra_bdims, ket_bdims, noises);
-    double norm = cps->solve(10, mps->center == 0);
+        make_shared<Compress<S>>(ime, lme, bra_bdims, ket_bdims, noises);
+    cps->noise_type = NoiseTypes::ReducedPerturbative;
+    cps->decomp_type = DecompositionTypes::SVD;
+    double norm = cps->solve(10, mps->center == 0, 1E-10);
 
-    EXPECT_LT(abs(norm - 1.0), 1E-7);
+    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), 1E-7);
 
     // Energy ME
     shared_ptr<MovingEnvironment<S>> eme =
@@ -154,7 +163,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    EXPECT_LT(abs(energy - 1.0), 1E-7);
 
     imps_info->deallocate();
     mps_info->deallocate();
