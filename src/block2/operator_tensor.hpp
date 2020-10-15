@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include "archived_sparse_matrix.hpp"
 #include "csr_sparse_matrix.hpp"
+#include "delayed_sparse_matrix.hpp"
 #include "sparse_matrix.hpp"
 #include "symbolic.hpp"
 #include <map>
@@ -100,6 +102,8 @@ template <typename S> struct OperatorTensor {
             save_expr(op.first, ofs);
             assert(op.second != nullptr);
             SparseMatrixTypes tp = op.second->get_type();
+            assert(tp == SparseMatrixTypes::Normal ||
+                   tp == SparseMatrixTypes::CSR);
             ofs.write((char *)&tp, sizeof(tp));
             op.second->info->save_data(ofs);
             op.second->save_data(ofs);
@@ -136,7 +140,11 @@ template <typename S> struct OperatorTensor {
                 mat->factor = pmat->factor;
                 mat->sparse_type = pmat->sparse_type;
                 r->ops[p.first] = mat;
-            } else
+            } else if (p.second->get_type() == SparseMatrixTypes::Delayed)
+                r->ops[p.first] =
+                    dynamic_pointer_cast<DelayedSparseMatrix<S>>(p.second)
+                        ->copy();
+            else
                 assert(false);
         }
         return r;

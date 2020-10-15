@@ -593,6 +593,37 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("load_archive", &ArchivedSparseMatrix<S>::load_archive)
         .def("save_archive", &ArchivedSparseMatrix<S>::save_archive);
 
+    py::class_<DelayedSparseMatrix<S>, shared_ptr<DelayedSparseMatrix<S>>,
+               SparseMatrix<S>>(m, "DelayedSparseMatrix")
+        .def(py::init<>())
+        .def("build", &DelayedSparseMatrix<S>::build)
+        .def("copy", &DelayedSparseMatrix<S>::copy)
+        .def("selective_copy", &DelayedSparseMatrix<S>::selective_copy);
+
+    py::class_<DelayedSparseMatrix<S, SparseMatrix<S>>,
+               shared_ptr<DelayedSparseMatrix<S, SparseMatrix<S>>>,
+               SparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
+        .def_readwrite("mat", &DelayedSparseMatrix<S, SparseMatrix<S>>::mat)
+        .def(py::init<const shared_ptr<SparseMatrix<S>> &>());
+
+    py::class_<DelayedSparseMatrix<S, CSRSparseMatrix<S>>,
+               shared_ptr<DelayedSparseMatrix<S, CSRSparseMatrix<S>>>,
+               SparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
+        .def_readwrite("mat", &DelayedSparseMatrix<S, CSRSparseMatrix<S>>::mat)
+        .def(py::init<const shared_ptr<CSRSparseMatrix<S>> &>());
+
+    py::class_<DelayedSparseMatrix<S, Hamiltonian<S>>,
+               shared_ptr<DelayedSparseMatrix<S, Hamiltonian<S>>>,
+               SparseMatrix<S>>(m, "DelayedHamilSparseMatrix")
+        .def_readwrite("hamil", &DelayedSparseMatrix<S, Hamiltonian<S>>::hamil)
+        .def_readwrite("m", &DelayedSparseMatrix<S, Hamiltonian<S>>::m)
+        .def_readwrite("op", &DelayedSparseMatrix<S, Hamiltonian<S>>::op)
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
+                      const shared_ptr<OpExpr<S>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
+                      const shared_ptr<OpExpr<S>> &,
+                      const shared_ptr<SparseMatrixInfo<S>> &>());
+
     py::class_<SparseTensor<S>, shared_ptr<SparseTensor<S>>>(m, "SparseTensor")
         .def(py::init<>())
         .def(py::init<
@@ -925,6 +956,10 @@ template <typename S> void bind_operator(py::module &m) {
         .def_readwrite("offset", &ArchivedTensorFunctions<S>::offset)
         .def("archive_tensor", &ArchivedTensorFunctions<S>::archive_tensor,
              py::arg("a"));
+
+    py::class_<DelayedTensorFunctions<S>, shared_ptr<DelayedTensorFunctions<S>>,
+               TensorFunctions<S>>(m, "DelayedTensorFunctions")
+        .def(py::init<const shared_ptr<OperatorFunctions<S>> &>());
 }
 
 template <typename S> void bind_partition(py::module &m) {
@@ -1235,6 +1270,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("vacuum", &Hamiltonian<S>::vacuum)
         .def_readwrite("basis", &Hamiltonian<S>::basis)
         .def_readwrite("site_op_infos", &Hamiltonian<S>::site_op_infos)
+        .def_readwrite("delayed", &Hamiltonian<S>::delayed)
         .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
         .def("filter_site_ops", &Hamiltonian<S>::filter_site_ops)
         .def("find_site_op_info", &Hamiltonian<S>::find_site_op_info)
@@ -1744,6 +1780,21 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Zero", OpNames::Zero)
         .value("PDM1", OpNames::PDM1);
 
+    py::enum_<DelayedOpNames>(m, "DelayedOpNames", py::arithmetic())
+        .value("Nothing", DelayedOpNames::None)
+        .value("H", DelayedOpNames::H)
+        .value("Normal", DelayedOpNames::Normal)
+        .value("R", DelayedOpNames::R)
+        .value("RD", DelayedOpNames::RD)
+        .value("P", DelayedOpNames::P)
+        .value("PD", DelayedOpNames::PD)
+        .value("Q", DelayedOpNames::Q)
+        .value("CCDD", DelayedOpNames::CCDD)
+        .value("CCD", DelayedOpNames::CCD)
+        .value("CDD", DelayedOpNames::CDD)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
+
     py::enum_<OpTypes>(m, "OpTypes", py::arithmetic())
         .value("Zero", OpTypes::Zero)
         .value("Elem", OpTypes::Elem)
@@ -1824,7 +1875,8 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<SparseMatrixTypes>(m, "SparseMatrixTypes", py::arithmetic())
         .value("Normal", SparseMatrixTypes::Normal)
         .value("CSR", SparseMatrixTypes::CSR)
-        .value("Archived", SparseMatrixTypes::Archived);
+        .value("Archived", SparseMatrixTypes::Archived)
+        .value("Delayed", SparseMatrixTypes::Delayed);
 
     py::enum_<ParallelOpTypes>(m, "ParallelOpTypes", py::arithmetic())
         .value("None", ParallelOpTypes::None)
@@ -1834,7 +1886,8 @@ template <typename S = void> void bind_types(py::module &m) {
 
     py::enum_<TensorFunctionsTypes>(m, "TensorFunctionsTypes", py::arithmetic())
         .value("Normal", TensorFunctionsTypes::Normal)
-        .value("Archived", TensorFunctionsTypes::Archived);
+        .value("Archived", TensorFunctionsTypes::Archived)
+        .value("Delayed", TensorFunctionsTypes::Delayed);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

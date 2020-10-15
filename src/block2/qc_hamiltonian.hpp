@@ -45,6 +45,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     using Hamiltonian<S>::orb_sym;
     using Hamiltonian<S>::find_site_op_info;
     using Hamiltonian<S>::opf;
+    using Hamiltonian<S>::delayed;
     // Sparse matrix representation for normal site operators
     vector<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                op_expr_less<S>>>
@@ -246,6 +247,12 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         shared_ptr<SparseMatrix<S>> zero =
             make_shared<SparseMatrix<S>>(nullptr);
         shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<Hamiltonian<S>> ph = nullptr;
+        if (delayed != DelayedOpNames::None) {
+            ph = make_shared<HamiltonianQC>(*this);
+            ph->delayed = DelayedOpNames::None;
+            assert(delayed != DelayedOpNames::None);
+        }
         zero->factor = 0.0;
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
@@ -261,67 +268,79 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::AD:
             case OpNames::B:
             case OpNames::BD:
-                p.second = site_norm_ops[m].at(p.first);
+                if (!(delayed & DelayedOpNames::Normal))
+                    p.second = site_norm_ops[m].at(p.first);
                 break;
             case OpNames::CCDD:
-                s = op.site_index.ss();
-                p.second = make_shared<SparseMatrix<S>>(d_alloc);
-                p.second->allocate(info);
-                // q_label is not used for comparison
-                opf->product(0,
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::A,
-                                 SiteIndex({m, m}, {(uint8_t)(s & 1),
-                                                    (uint8_t)((s & 2) >> 1)}),
-                                 vacuum)),
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::AD,
-                                 SiteIndex({m, m}, {(uint8_t)((s & 8) >> 3),
-                                                    (uint8_t)((s & 4) >> 2)}),
-                                 vacuum)),
-                             p.second);
+                if (!(delayed & DelayedOpNames::CCDD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(
+                        0,
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::A,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            vacuum)),
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::AD,
+                            SiteIndex({m, m}, {(uint8_t)((s & 8) >> 3),
+                                               (uint8_t)((s & 4) >> 2)}),
+                            vacuum)),
+                        p.second);
+                }
                 break;
             case OpNames::CCD:
-                s = op.site_index.ss();
-                p.second = make_shared<SparseMatrix<S>>(d_alloc);
-                p.second->allocate(info);
-                // q_label is not used for comparison
-                opf->product(0,
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::A,
-                                 SiteIndex({m, m}, {(uint8_t)(s & 1),
-                                                    (uint8_t)((s & 2) >> 1)}),
-                                 vacuum)),
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::D,
-                                 SiteIndex({m}, {(uint8_t)(s >> 2)}), vacuum)),
-                             p.second);
+                if (!(delayed & DelayedOpNames::CCD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(
+                        0,
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::A,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            vacuum)),
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::D, SiteIndex({m}, {(uint8_t)(s >> 2)}),
+                            vacuum)),
+                        p.second);
+                }
                 break;
             case OpNames::CDD:
-                s = op.site_index.ss();
-                p.second = make_shared<SparseMatrix<S>>(d_alloc);
-                p.second->allocate(info);
-                // q_label is not used for comparison
-                opf->product(0,
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::B,
-                                 SiteIndex({m, m}, {(uint8_t)(s & 1),
-                                                    (uint8_t)((s & 2) >> 1)}),
-                                 vacuum)),
-                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                 OpNames::D,
-                                 SiteIndex({m}, {(uint8_t)(s >> 2)}), vacuum)),
-                             p.second);
+                if (!(delayed & DelayedOpNames::CDD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(
+                        0,
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::B,
+                            SiteIndex({m, m}, {(uint8_t)(s & 1),
+                                               (uint8_t)((s & 2) >> 1)}),
+                            vacuum)),
+                        site_norm_ops[m].at(make_shared<OpElement<S>>(
+                            OpNames::D, SiteIndex({m}, {(uint8_t)(s >> 2)}),
+                            vacuum)),
+                        p.second);
+                }
                 break;
             case OpNames::H:
-                p.second = make_shared<SparseMatrix<S>>(d_alloc);
-                p.second->allocate(info);
-                (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
-                (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
-                (*p.second)[S(1, 1, orb_sym[m])](0, 0) = t(0, m, m);
-                (*p.second)[S(2, 0, 0)](0, 0) =
-                    t(0, m, m) + t(1, m, m) +
-                    0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
+                if (!(delayed & DelayedOpNames::H)) {
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
+                    (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
+                    (*p.second)[S(1, 1, orb_sym[m])](0, 0) = t(0, m, m);
+                    (*p.second)[S(2, 0, 0)](0, 0) =
+                        t(0, m, m) + t(1, m, m) +
+                        0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
+                }
                 break;
             case OpNames::R:
                 i = op.site_index[0];
@@ -331,7 +350,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::R)) {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::D));
@@ -356,7 +375,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::RD)) {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::C));
@@ -379,7 +398,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 s = op.site_index.ss();
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::P)) {
                     p.second = make_shared<SparseMatrix<S>>(nullptr);
                     p.second->allocate(info, op_prims[s].at(OpNames::AD)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
@@ -391,7 +410,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 s = op.site_index.ss();
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::PD)) {
                     p.second = make_shared<SparseMatrix<S>>(nullptr);
                     p.second->allocate(info, op_prims[s].at(OpNames::A)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
@@ -408,7 +427,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                         abs(v(s & 1, 0, i, j, m, m)) < TINY &&
                         abs(v(s & 1, 1, i, j, m, m)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>(d_alloc);
                         p.second->allocate(info);
                         p.second->copy_data_from(
@@ -430,7 +449,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                 case 2U:
                     if (abs(v(s & 1, s >> 1, i, m, m, j)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>(nullptr);
                         p.second->allocate(info,
                                            op_prims[(s >> 1) | ((s & 1) << 1)]
@@ -444,6 +463,9 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             default:
                 assert(false);
             }
+            if (p.second == nullptr)
+                p.second = make_shared<DelayedSparseMatrix<S, Hamiltonian<S>>>(
+                    ph, m, p.first, info);
         }
     }
     void deallocate() override {
@@ -479,6 +501,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     using Hamiltonian<S>::orb_sym;
     using Hamiltonian<S>::find_site_op_info;
     using Hamiltonian<S>::opf;
+    using Hamiltonian<S>::delayed;
     // Sparse matrix representation for normal site operators
     vector<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                op_expr_less<S>>>
@@ -644,6 +667,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
         shared_ptr<SparseMatrix<S>> zero =
             make_shared<SparseMatrix<S>>(nullptr);
         shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<Hamiltonian<S>> ph = nullptr;
+        if (delayed != DelayedOpNames::None) {
+            ph = make_shared<HamiltonianQC>(*this);
+            ph->delayed = DelayedOpNames::None;
+            assert(delayed != DelayedOpNames::None);
+        }
         zero->factor = 0.0;
         for (auto &p : ops) {
             OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
@@ -659,21 +688,25 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             case OpNames::AD:
             case OpNames::B:
             case OpNames::BD:
-                p.second = site_norm_ops[m].at(p.first);
+                if (!(delayed & DelayedOpNames::Normal))
+                    p.second = site_norm_ops[m].at(p.first);
                 break;
             case OpNames::H:
-                p.second = make_shared<SparseMatrix<S>>(d_alloc);
-                p.second->allocate(info);
-                (*p.second)[S(0, 0, 0, 0)](0, 0) = 0.0;
-                (*p.second)[S(1, 1, 1, orb_sym[m])](0, 0) = t(m, m);
-                (*p.second)[S(2, 0, 0, 0)](0, 0) = t(m, m) * 2 + v(m, m, m, m);
+                if (!(delayed & DelayedOpNames::H)) {
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    (*p.second)[S(0, 0, 0, 0)](0, 0) = 0.0;
+                    (*p.second)[S(1, 1, 1, orb_sym[m])](0, 0) = t(m, m);
+                    (*p.second)[S(2, 0, 0, 0)](0, 0) =
+                        t(m, m) * 2 + v(m, m, m, m);
+                }
                 break;
             case OpNames::R:
                 i = op.site_index[0];
                 if (orb_sym[i] != orb_sym[m] ||
                     (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::R)) {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::D));
@@ -692,7 +725,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 if (orb_sym[i] != orb_sym[m] ||
                     (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::RD)) {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::C));
@@ -712,7 +745,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 s = op.site_index.s();
                 if (abs(v(i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::P)) {
                     p.second = make_shared<SparseMatrix<S>>(nullptr);
                     p.second->allocate(info, op_prims[s].at(OpNames::AD)->data);
                     p.second->factor *= v(i, m, k, m);
@@ -724,7 +757,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 s = op.site_index.s();
                 if (abs(v(i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedOpNames::PD)) {
                     p.second = make_shared<SparseMatrix<S>>(nullptr);
                     p.second->allocate(info, op_prims[s].at(OpNames::A)->data);
                     p.second->factor *= v(i, m, k, m);
@@ -738,7 +771,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 case 0U:
                     if (abs(2 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>(nullptr);
                         p.second->allocate(info,
                                            op_prims[0].at(OpNames::B)->data);
@@ -748,7 +781,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 case 1U:
                     if (abs(v(i, m, m, j)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>(nullptr);
                         p.second->allocate(info,
                                            op_prims[1].at(OpNames::B)->data);
@@ -760,6 +793,9 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             default:
                 assert(false);
             }
+            if (p.second == nullptr)
+                p.second = make_shared<DelayedSparseMatrix<S, Hamiltonian<S>>>(
+                    ph, m, p.first, info);
         }
     }
     void deallocate() override {

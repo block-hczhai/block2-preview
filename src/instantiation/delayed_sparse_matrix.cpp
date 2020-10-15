@@ -20,9 +20,13 @@
 
 #include "instantiation.hpp"
 
-template struct block2::Hamiltonian<block2::SZ>;
-template struct block2::Hamiltonian<block2::SU2>;
+template struct block2::DelayedSparseMatrix<block2::SZ>;
+template struct block2::DelayedSparseMatrix<block2::SU2>;
 template struct block2::DelayedSparseMatrix<block2::SZ,
-                                            block2::Hamiltonian<block2::SZ>>;
+                                            block2::SparseMatrix<block2::SZ>>;
 template struct block2::DelayedSparseMatrix<block2::SU2,
-                                            block2::Hamiltonian<block2::SU2>>;
+                                            block2::SparseMatrix<block2::SU2>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SZ, block2::CSRSparseMatrix<block2::SZ>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SU2, block2::CSRSparseMatrix<block2::SU2>>;

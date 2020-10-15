@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "delayed_sparse_matrix.hpp"
 #include "expr.hpp"
 #include "operator_functions.hpp"
 #include "sparse_matrix.hpp"
@@ -33,6 +34,29 @@
 using namespace std;
 
 namespace block2 {
+
+// Delayed Operator names
+enum struct DelayedOpNames : uint32_t {
+    None = 0,
+    H = 1,
+    Normal = 2,
+    R = 4,
+    RD = 8,
+    P = 16,
+    PD = 32,
+    Q = 64,
+    CCDD = 128,
+    CCD = 256,
+    CDD = 512
+};
+
+inline DelayedOpNames operator|(DelayedOpNames a, DelayedOpNames b) {
+    return DelayedOpNames((uint16_t)a | (uint16_t)b);
+}
+
+inline uint16_t operator&(DelayedOpNames a, DelayedOpNames b) {
+    return (uint16_t)a & (uint16_t)b;
+}
 
 // Hamiltonian includes sparse matrix info and matrix representations
 // of site operators
@@ -48,6 +72,7 @@ template <typename S> struct Hamiltonian {
     vector<uint8_t> orb_sym;
     // For storing pre-computed CG factors for sparse matrix functions
     shared_ptr<OperatorFunctions<S>> opf = nullptr;
+    DelayedOpNames delayed = DelayedOpNames::None;
     Hamiltonian(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
@@ -115,7 +140,7 @@ template <typename S> struct Hamiltonian {
                                                ->get_op());
                         shared_ptr<SparseMatrix<S>> &mat = ops[xx];
                         if (!(mat->factor == 0.0 || mat->info->n == 0 ||
-                              ops[xx]->norm() < TINY)) {
+                              mat->norm() < TINY)) {
                             if (i != kk)
                                 dynamic_pointer_cast<OpSum<S>>(x)->strings[kk] =
                                     dynamic_pointer_cast<OpSum<S>>(x)
@@ -157,15 +182,60 @@ template <typename S> struct Hamiltonian {
     }
     // Find sparse matrix info for site operator with the given delta quantum q
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(uint16_t i, S q) const {
-        auto p = lower_bound(site_op_infos[i].begin(),
-                             site_op_infos[i].end(), q,
-                             SparseMatrixInfo<S>::cmp_op_info);
+        auto p = lower_bound(site_op_infos[i].begin(), site_op_infos[i].end(),
+                             q, SparseMatrixInfo<S>::cmp_op_info);
         if (p == site_op_infos[i].end() || p->first != q)
             return nullptr;
         else
             return p->second;
     }
     virtual void deallocate() {}
+};
+
+// Delayed site operator
+template <typename S>
+struct DelayedSparseMatrix<S, Hamiltonian<S>> : DelayedSparseMatrix<S> {
+    shared_ptr<Hamiltonian<S>> hamil;
+    uint16_t m;
+    shared_ptr<OpExpr<S>> op;
+    DelayedSparseMatrix(const shared_ptr<Hamiltonian<S>> &hamil, uint16_t m,
+                        const shared_ptr<OpExpr<S>> &op,
+                        const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
+        : DelayedSparseMatrix<S>(), hamil(hamil), m(m), op(op) {
+        assert(hamil->delayed == DelayedOpNames::None);
+        this->info = info;
+    }
+    shared_ptr<SparseMatrix<S>> build() override {
+        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
+            ops;
+        ops[op] = nullptr;
+        hamil->get_site_ops(m, ops);
+        if (this->info->n == ops.at(op)->info->n)
+            return ops.at(op);
+        else {
+            shared_ptr<SparseMatrix<S>> new_mat;
+            if (ops.at(op)->get_type() == SparseMatrixTypes::Normal)
+                new_mat = make_shared<SparseMatrix<S>>();
+            else
+                new_mat = make_shared<CSRSparseMatrix<S>>();
+            new_mat->allocate(this->info);
+            new_mat->selective_copy_from(ops.at(op), false);
+            new_mat->factor = ops.at(op)->factor;
+            ops.at(op)->deallocate();
+            return new_mat;
+        }
+    }
+    double norm() const override { return 1.0; }
+    shared_ptr<DelayedSparseMatrix<S>> copy() override {
+        return make_shared<DelayedSparseMatrix>(*this);
+    }
+    shared_ptr<DelayedSparseMatrix<S>>
+    selective_copy(const shared_ptr<SparseMatrixInfo<S>> &info) override {
+        shared_ptr<DelayedSparseMatrix> mat =
+            make_shared<DelayedSparseMatrix>(*this);
+        mat->info = info;
+        return mat;
+    }
 };
 
 } // namespace block2
