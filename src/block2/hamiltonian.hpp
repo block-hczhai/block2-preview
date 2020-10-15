@@ -51,11 +51,11 @@ enum struct DelayedOpNames : uint32_t {
 };
 
 inline DelayedOpNames operator|(DelayedOpNames a, DelayedOpNames b) {
-    return DelayedOpNames((uint16_t)a | (uint16_t)b);
+    return DelayedOpNames((uint32_t)a | (uint32_t)b);
 }
 
-inline uint16_t operator&(DelayedOpNames a, DelayedOpNames b) {
-    return (uint16_t)a & (uint16_t)b;
+inline uint32_t operator&(DelayedOpNames a, DelayedOpNames b) {
+    return (uint32_t)a & (uint32_t)b;
 }
 
 // Hamiltonian includes sparse matrix info and matrix representations

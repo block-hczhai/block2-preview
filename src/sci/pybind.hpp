@@ -76,6 +76,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
         .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
         .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
         .def_readwrite("basis", &HamiltonianSCI<S>::basis)
+        .def_readwrite("delayed", &HamiltonianSCI<S>::delayed)
         .def("deallocate", &HamiltonianSCI<S>::deallocate);
     // vv hrl: switched off as not really required (now protected)
     /*.def_property_readonly(
@@ -149,4 +150,20 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("mode", &MPOQCSCI<S>::mode)
         .def(py::init<const HamiltonianQCSCI<S> &>())
         .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
+}
+
+template <typename S = void> void bind_types_sci(py::module &m) {
+    py::enum_<DelayedSCIOpNames>(m, "DelayedSCIOpNames", py::arithmetic())
+        .value("Nothing", DelayedSCIOpNames::None)
+        .value("H", DelayedSCIOpNames::H)
+        .value("Normal", DelayedSCIOpNames::Normal)
+        .value("R", DelayedSCIOpNames::R)
+        .value("RD", DelayedSCIOpNames::RD)
+        .value("P", DelayedSCIOpNames::P)
+        .value("PD", DelayedSCIOpNames::PD)
+        .value("Q", DelayedSCIOpNames::Q)
+        .value("LeftBig", DelayedSCIOpNames::LeftBig)
+        .value("RightBig", DelayedSCIOpNames::RightBig)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 }
