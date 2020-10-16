@@ -105,8 +105,8 @@ template <typename S> struct ParallelRule {
         return ParallelProperty();
     }
     bool is_root() const noexcept { return comm->rank == comm->root; }
-    bool available(const shared_ptr<OpExpr<S>> &op, int node = -1) const
-        noexcept {
+    bool available(const shared_ptr<OpExpr<S>> &op,
+                   int node = -1) const noexcept {
         return (node == -1 ? own(op) : owner(op) == node) || repeat(op);
     }
     bool own(const shared_ptr<OpExpr<S>> &op) const noexcept {
@@ -208,8 +208,8 @@ template <typename S> struct ParallelRule {
             else
                 return zero_ref;
         } else if (expr->get_type() == OpTypes::Prod) {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             bool aa = available(op->a, owner),
                  ab = op->b == nullptr ? true : available(op->b, owner);
             if (aa && ab)
@@ -233,9 +233,9 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpString<S>>(op->a, ops[0], op->factor,
-                                                     op->conj ^
-                                                         (conjs[0] << 1)),
+                            make_shared<OpProduct<S>>(op->a, ops[0], op->factor,
+                                                      op->conj ^
+                                                          (conjs[0] << 1)),
                             ops.size() == op->ops.size());
                     else {
                         uint8_t cjx = op->conj;
@@ -261,8 +261,8 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpString<S>>(ops[0], op->b, op->factor,
-                                                     op->conj ^ conjs[0]),
+                            make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
+                                                      op->conj ^ conjs[0]),
                             ops.size() == op->ops.size());
                     else {
                         uint8_t cjx = op->conj;

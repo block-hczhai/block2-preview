@@ -160,8 +160,8 @@ template <typename S> struct Partition {
             case OpTypes::Zero:
                 break;
             case OpTypes::Prod: {
-                shared_ptr<OpString<S>> op =
-                    dynamic_pointer_cast<OpString<S>>(opx);
+                shared_ptr<OpProduct<S>> op =
+                    dynamic_pointer_cast<OpProduct<S>>(opx);
                 assert(op->b != nullptr);
                 S bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;

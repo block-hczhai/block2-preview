@@ -119,14 +119,14 @@ extern template struct block2::DeterminantMPSInfo<block2::SU2>;
 extern template struct block2::OpExpr<block2::SZ>;
 extern template struct block2::OpElement<block2::SZ>;
 extern template struct block2::OpElementRef<block2::SZ>;
-extern template struct block2::OpString<block2::SZ>;
+extern template struct block2::OpProduct<block2::SZ>;
 extern template struct block2::OpSumProd<block2::SZ>;
 extern template struct block2::OpSum<block2::SZ>;
 
 extern template struct block2::OpExpr<block2::SU2>;
 extern template struct block2::OpElement<block2::SU2>;
 extern template struct block2::OpElementRef<block2::SU2>;
-extern template struct block2::OpString<block2::SU2>;
+extern template struct block2::OpProduct<block2::SU2>;
 extern template struct block2::OpSumProd<block2::SU2>;
 extern template struct block2::OpSum<block2::SU2>;
 

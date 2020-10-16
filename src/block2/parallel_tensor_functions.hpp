@@ -112,8 +112,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> old_cinfo =
                 cmat->info->cinfo;
@@ -221,8 +221,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         bool all_reduce) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
@@ -259,8 +259,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         shared_ptr<SparseMatrix<S>> &mat, S opdq) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);

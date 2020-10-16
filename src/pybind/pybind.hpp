@@ -48,7 +48,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<CSRMatrixRef>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
@@ -72,7 +72,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
@@ -271,20 +271,21 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("factor", &OpElementRef<S>::factor)
         .def_readwrite("trans", &OpElementRef<S>::trans);
 
-    py::class_<OpString<S>, shared_ptr<OpString<S>>, OpExpr<S>>(m, "OpString")
+    py::class_<OpProduct<S>, shared_ptr<OpProduct<S>>, OpExpr<S>>(m,
+                                                                  "OpProduct")
         .def(py::init<const shared_ptr<OpElement<S>> &, double>())
         .def(py::init<const shared_ptr<OpElement<S>> &, double, uint8_t>())
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const shared_ptr<OpElement<S>> &, double>())
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const shared_ptr<OpElement<S>> &, double, uint8_t>())
-        .def_readwrite("factor", &OpString<S>::factor)
-        .def_readwrite("conj", &OpString<S>::conj)
-        .def_readwrite("a", &OpString<S>::a)
-        .def_readwrite("b", &OpString<S>::b);
+        .def_readwrite("factor", &OpProduct<S>::factor)
+        .def_readwrite("conj", &OpProduct<S>::conj)
+        .def_readwrite("a", &OpProduct<S>::a)
+        .def_readwrite("b", &OpProduct<S>::b);
 
-    py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpString<S>>(m,
-                                                                    "OpSumProd")
+    py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpProduct<S>>(
+        m, "OpSumProd")
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const vector<shared_ptr<OpElement<S>>> &,
                       const vector<bool> &, double, uint8_t>())
@@ -301,12 +302,12 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("conjs", &OpSumProd<S>::conjs);
 
     py::class_<OpSum<S>, shared_ptr<OpSum<S>>, OpExpr<S>>(m, "OpSum")
-        .def(py::init<const vector<shared_ptr<OpString<S>>> &>())
+        .def(py::init<const vector<shared_ptr<OpProduct<S>>> &>())
         .def_readwrite("strings", &OpSum<S>::strings);
 
     py::bind_vector<vector<shared_ptr<OpExpr<S>>>>(m, "VectorOpExpr");
     py::bind_vector<vector<shared_ptr<OpElement<S>>>>(m, "VectorOpElement");
-    py::bind_vector<vector<shared_ptr<OpString<S>>>>(m, "VectorOpString");
+    py::bind_vector<vector<shared_ptr<OpProduct<S>>>>(m, "VectorOpProduct");
 
     struct PySymbolic : Symbolic<S> {
         using Symbolic<S>::Symbolic;

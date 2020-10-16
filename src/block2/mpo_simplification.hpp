@@ -213,18 +213,18 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         break;
                     case OpTypes::Prod:
                         if (left_zero_ops.count(
-                                dynamic_pointer_cast<OpString<S>>(x)->a) ||
+                                dynamic_pointer_cast<OpProduct<S>>(x)->a) ||
                             right_zero_ops.count(
-                                dynamic_pointer_cast<OpString<S>>(x)->b))
+                                dynamic_pointer_cast<OpProduct<S>>(x)->b))
                             MPO<S>::middle_operator_exprs[i]->data[j] = zero;
                         break;
                     case OpTypes::Sum:
                         for (auto &r :
                              dynamic_pointer_cast<OpSum<S>>(x)->strings)
                             if (left_zero_ops.count(
-                                    dynamic_pointer_cast<OpString<S>>(r)->a) ||
+                                    dynamic_pointer_cast<OpProduct<S>>(r)->a) ||
                                 right_zero_ops.count(
-                                    dynamic_pointer_cast<OpString<S>>(r)->b)) {
+                                    dynamic_pointer_cast<OpProduct<S>>(r)->b)) {
                                 MPO<S>::middle_operator_exprs[i]->data[j] =
                                     zero;
                                 break;
@@ -513,8 +513,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             shared_ptr<OpElementRef<S>> opl = rule->operator()(op->a);
             shared_ptr<OpElementRef<S>> opr = rule->operator()(op->b);
@@ -524,11 +524,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                            ((opr != nullptr && opr->trans) << 1);
             double factor = (opl != nullptr ? opl->factor : 1.0) *
                             (opr != nullptr ? opr->factor : 1.0) * op->factor;
-            return make_shared<OpString<S>>(a, b, factor, conj);
+            return make_shared<OpProduct<S>>(a, b, factor, conj);
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> ops = dynamic_pointer_cast<OpSum<S>>(expr);
-            map<shared_ptr<OpExpr<S>>, vector<shared_ptr<OpString<S>>>,
+            map<shared_ptr<OpExpr<S>>, vector<shared_ptr<OpProduct<S>>>,
                 op_expr_less<S>>
                 mp;
             for (auto &x : ops->strings) {
@@ -545,8 +545,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                 (opr != nullptr ? opr->factor : 1.0) *
                                 x->factor;
                 if (!mp.count(a))
-                    mp[a] = vector<shared_ptr<OpString<S>>>();
-                vector<shared_ptr<OpString<S>>> &px = mp.at(a);
+                    mp[a] = vector<shared_ptr<OpProduct<S>>>();
+                vector<shared_ptr<OpProduct<S>>> &px = mp.at(a);
                 int g = -1;
                 for (size_t k = 0; k < px.size(); k++)
                     if (px[k]->b == b && px[k]->conj == conj) {
@@ -554,14 +554,14 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         break;
                     }
                 if (g == -1)
-                    px.push_back(make_shared<OpString<S>>(a, b, factor, conj));
+                    px.push_back(make_shared<OpProduct<S>>(a, b, factor, conj));
                 else {
                     px[g]->factor += factor;
                     if (abs(px[g]->factor) < TINY)
                         px.erase(px.begin() + g);
                 }
             }
-            vector<shared_ptr<OpString<S>>> terms;
+            vector<shared_ptr<OpProduct<S>>> terms;
             terms.reserve(mp.size());
             for (auto &r : mp)
                 terms.insert(terms.end(), r.second.begin(), r.second.end());
@@ -571,7 +571,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 return make_shared<OpSum<S>>(terms);
             else if (collect_terms && op != S(S::invalid)) {
                 map<shared_ptr<OpExpr<S>>,
-                    map<int, vector<shared_ptr<OpString<S>>>>, op_expr_less<S>>
+                    map<int, vector<shared_ptr<OpProduct<S>>>>, op_expr_less<S>>
                     mpa[2], mpb[2];
                 for (auto &x : terms) {
                     assert(x->a != nullptr && x->b != nullptr);
@@ -627,7 +627,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         conjs.flip(), cjx |= 1 << 1;
                                     if (ops.size() == 1)
                                         terms.push_back(
-                                            make_shared<OpString<S>>(
+                                            make_shared<OpProduct<S>>(
                                                 dynamic_pointer_cast<
                                                     OpElement<S>>(r.first),
                                                 ops[0], 1.0, cjx));
@@ -681,7 +681,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         conjs.flip(), cjx |= 1;
                                     if (ops.size() == 1)
                                         terms.push_back(
-                                            make_shared<OpString<S>>(
+                                            make_shared<OpProduct<S>>(
                                                 ops[0],
                                                 dynamic_pointer_cast<
                                                     OpElement<S>>(r.first),
