@@ -1519,8 +1519,8 @@ template <typename S> struct Compress {
              const vector<double> &noises = vector<double>())
         : me(me), lme(nullptr), bra_bond_dims(bra_bond_dims),
           ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {}
-    Compress(const shared_ptr<MovingEnvironment<S>> &me,
-             const shared_ptr<MovingEnvironment<S>> &lme,
+    Compress(const shared_ptr<MovingEnvironment<S>> &lme,
+             const shared_ptr<MovingEnvironment<S>> &me,
              const vector<ubond_t> &bra_bond_dims,
              const vector<ubond_t> &ket_bond_dims,
              const vector<double> &noises = vector<double>())

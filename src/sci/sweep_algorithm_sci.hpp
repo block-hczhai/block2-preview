@@ -126,8 +126,8 @@ template <typename S> struct CompressSCI : Compress<S> {
                 const vector<ubond_t> &ket_bond_dims,
                 const vector<double> &noises = vector<double>())
         : Compress<S>(me, bra_bond_dims, ket_bond_dims, noises) {}
-    CompressSCI(const shared_ptr<MovingEnvironment<S>> &me,
-                const shared_ptr<MovingEnvironment<S>> &lme,
+    CompressSCI(const shared_ptr<MovingEnvironment<S>> &lme,
+                const shared_ptr<MovingEnvironment<S>> &me,
                 const vector<ubond_t> &bra_bond_dims,
                 const vector<ubond_t> &ket_bond_dims,
                 const vector<double> &noises = vector<double>())
