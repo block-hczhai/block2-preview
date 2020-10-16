@@ -1732,12 +1732,12 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix of a MPS tensor
     static shared_ptr<SparseMatrix<S>>
-    density_matrix(S opdq, const shared_ptr<SparseMatrix<S>> &psi,
+    density_matrix(S vacuum, const shared_ptr<SparseMatrix<S>> &psi,
                    bool trace_right, double noise, NoiseTypes noise_type) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
-            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
@@ -1805,13 +1805,13 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix with perturbed wavefunctions as noise
     static shared_ptr<SparseMatrix<S>> density_matrix_with_perturbative_noise(
-        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
         double noise, NoiseTypes noise_type,
         const shared_ptr<SparseMatrixGroup<S>> &mats) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
-            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
@@ -1825,7 +1825,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix of several MPS tensors summed with weights
     static shared_ptr<SparseMatrix<S>> density_matrix_with_weights(
-        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
         double noise, const vector<MatrixRef> &mats,
         const vector<double> &weights, NoiseTypes noise_type) {
         double *ptr = psi->data;
@@ -1833,7 +1833,7 @@ template <typename S> struct MovingEnvironment {
         assert(mats.size() == weights.size() - 1);
         psi->factor = sqrt(weights[0]);
         shared_ptr<SparseMatrix<S>> dm =
-            density_matrix(opdq, psi, trace_right, noise, noise_type);
+            density_matrix(vacuum, psi, trace_right, noise, noise_type);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
             psi->factor = sqrt(weights[i]);

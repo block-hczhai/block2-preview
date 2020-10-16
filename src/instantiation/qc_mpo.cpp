@@ -21,7 +21,9 @@
 #include "instantiation.hpp"
 
 template struct block2::IdentityMPO<block2::SZ>;
+template struct block2::SiteMPO<block2::SZ>;
 template struct block2::MPOQC<block2::SZ>;
 
 template struct block2::IdentityMPO<block2::SU2>;
+template struct block2::SiteMPO<block2::SU2>;
 template struct block2::MPOQC<block2::SU2>;

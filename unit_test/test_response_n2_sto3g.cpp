@@ -4,10 +4,10 @@
 
 using namespace block2;
 
-class TestCompressN2STO3G : public ::testing::Test {
+class TestResponseN2STO3G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 24;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 28;
 
     template <typename S>
     void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
@@ -24,11 +24,12 @@ class TestCompressN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
+void TestResponseN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
                                     const string &name, int dot) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
 
+    double pdm_std = -0.000012699067;
     double energy_std = -107.654122447525;
 
 #ifdef _HAS_INTEL_MKL
@@ -49,17 +50,32 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
-    cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> ntr_mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
-    cout << "MPO end .. T = " << t.get_time() << endl;
+    cout << "C/D MPO start" << endl;
+    bool su2 = S(1, 1, 0).multiplicity() == 2;
+    shared_ptr<OpElement<S>> c_op, d_op;
+    if (su2) {
+        c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({0}, {}),
+                                         S(1, 1, hamil.orb_sym[0]));
+        d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({1}, {}),
+                                         S(-1, 1, hamil.orb_sym[1]));
+        pdm_std *= -sqrt(2);
+    } else {
+        c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({0}, {0}),
+                                         S(1, 1, hamil.orb_sym[0]));
+        d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({1}, {0}),
+                                         S(-1, -1, hamil.orb_sym[1]));
+    }
+    shared_ptr<MPO<S>> cmpo = make_shared<SiteMPO<S>>(hamil, c_op);
+    shared_ptr<MPO<S>> dmpo = make_shared<SiteMPO<S>>(hamil, d_op);
+    cout << "C/D MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification (no transpose)
-    cout << "MPO simplification (no transpose) start" << endl;
-    ntr_mpo = make_shared<SimplifiedMPO<S>>(
-        ntr_mpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()),
-        true);
-    cout << "MPO simplification (no transpose) end .. T = " << t.get_time()
+    cout << "C/D MPO simplification (no transpose) start" << endl;
+    cmpo = make_shared<SimplifiedMPO<S>>(
+        cmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
+    dmpo = make_shared<SimplifiedMPO<S>>(
+        dmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
+    cout << "C/D MPO simplification (no transpose) end .. T = " << t.get_time()
          << endl;
 
     // Identity MPO
@@ -68,15 +84,15 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    ubond_t bond_dim = 200, bra_bond_dim = 100;
-    vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    ubond_t ket_bond_dim = 500, bra_bond_dim = 500;
+    vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = {ket_bond_dim};
+    vector<double> noises = {1E-4, 1E-6, 1E-8, 0};
 
     t.get_time();
 
     shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
         hamil.n_sites, hamil.vacuum, target, hamil.basis);
-    mps_info->set_bond_dimension(bond_dim);
+    mps_info->set_bond_dimension(ket_bond_dim);
     mps_info->tag = "KET";
 
     // MPS
@@ -98,7 +114,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     me->init_environments(false);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::Perturbative;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
@@ -110,69 +126,92 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     EXPECT_LT(abs(energy - energy_std), 1E-7);
 
-    shared_ptr<MPSInfo<S>> imps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target, hamil.basis);
-    imps_info->set_bond_dimension(bra_bond_dim);
-    imps_info->tag = "BRA";
+    // D APPLY MPS
+    shared_ptr<MPSInfo<S>> dmps_info = make_shared<MPSInfo<S>>(
+        hamil.n_sites, hamil.vacuum, target + d_op->q_label, hamil.basis);
+    dmps_info->set_bond_dimension(bra_bond_dim);
+    dmps_info->tag = "DBRA";
 
-    shared_ptr<MPS<S>> imps =
+    shared_ptr<MPS<S>> dmps =
         make_shared<MPS<S>>(hamil.n_sites, mps->center, dot);
-    imps->initialize(imps_info);
-    imps->random_canonicalize();
+    dmps->initialize(dmps_info);
+    dmps->random_canonicalize();
 
     // MPS/MPSInfo save mutable
-    imps->save_mutable();
-    imps->deallocate();
-    imps_info->save_mutable();
-    imps_info->deallocate_mutable();
+    dmps->save_mutable();
+    dmps->deallocate();
+    dmps_info->save_mutable();
+    dmps_info->deallocate_mutable();
 
-    // Negative identity ME
-    shared_ptr<MovingEnvironment<S>> ime = make_shared<MovingEnvironment<S>>(
-        make_shared<NegativeMPO<S>>(impo), imps, mps, "COMPRESS");
-    ime->init_environments();
-
-    // Left ME
-    shared_ptr<MovingEnvironment<S>> lme =
-        make_shared<MovingEnvironment<S>>(mpo, imps, imps, "LINEAR");
-    double ce = mpo->const_e;
-    mpo->const_e = 0;
-    lme->init_environments();
+    // D APPLY ME
+    shared_ptr<MovingEnvironment<S>> dme =
+        make_shared<MovingEnvironment<S>>(dmpo, dmps, mps, "CPS-D");
+    dme->init_environments();
 
     // Compress
-    vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
-    noises = {1E-4, 1E-6, 1E-8, 0};
     shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(lme, ime, bra_bdims, ket_bdims, noises);
-    cps->noise_type = NoiseTypes::ReducedPerturbative;
-    cps->decomp_type = DecompositionTypes::SVD;
+        make_shared<Compress<S>>(dme, bra_bdims, ket_bdims, noises);
+    cps->noise_type = NoiseTypes::DensityMatrix;
+    cps->decomp_type = DecompositionTypes::DensityMatrix;
     double norm = cps->solve(10, mps->center == 0, 1E-10);
 
-    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), 1E-7);
+    // C APPLY MPS
+    shared_ptr<MPSInfo<S>> cmps_info = make_shared<MPSInfo<S>>(
+        hamil.n_sites, hamil.vacuum, target, hamil.basis);
+    cmps_info->set_bond_dimension(bra_bond_dim);
+    cmps_info->tag = "CBRA";
 
-    // Energy ME
-    shared_ptr<MovingEnvironment<S>> eme =
-        make_shared<MovingEnvironment<S>>(ntr_mpo, imps, mps, "EXPECT");
-    eme->init_environments(false);
+    shared_ptr<MPS<S>> cmps =
+        make_shared<MPS<S>>(hamil.n_sites, mps->center, dot);
+    cmps->initialize(cmps_info);
+    cmps->random_canonicalize();
 
-    shared_ptr<Expect<S>> ex2 = make_shared<Expect<S>>(eme, bond_dim, bond_dim);
-    energy = ex2->solve(false) + mpo->const_e;
+    // MPS/MPSInfo save mutable
+    cmps->save_mutable();
+    cmps->deallocate();
+    cmps_info->save_mutable();
+    cmps_info->deallocate_mutable();
+
+    // C APPLY ME
+    shared_ptr<MovingEnvironment<S>> cme =
+        make_shared<MovingEnvironment<S>>(cmpo, cmps, dmps, "CPS-C");
+    cme->init_environments();
+
+    // Compress
+    cps = make_shared<Compress<S>>(cme, bra_bdims, bra_bdims, noises);
+    norm = cps->solve(10, cmps->center == 0, 1E-10);
+
+    if (mps->center != cmps->center) {
+        cps->noises = {0};
+        cps->solve(1, cmps->center == 0, 0);
+    }
+
+    // Identity ME
+    shared_ptr<MovingEnvironment<S>> ime =
+        make_shared<MovingEnvironment<S>>(impo, cmps, mps, "EXP");
+    ime->init_environments();
+
+    shared_ptr<Expect<S>> ex =
+        make_shared<Expect<S>>(ime, bra_bond_dim, bra_bond_dim);
+    ex->solve(true, cmps->center == 0);
+    double pdm = ex->expectations[0][0].second;
 
     cout << "== " << name << " (CPS) ==" << setw(20) << target
-         << " E = " << fixed << setw(22) << setprecision(12) << energy
+         << " PDM = " << fixed << setw(22) << setprecision(12) << pdm
+         << " STD = " << fixed << setw(22) << setprecision(12) << pdm_std
          << " error = " << scientific << setprecision(3) << setw(10)
-         << (energy - energy_std) << " T = " << fixed << setw(10)
-         << setprecision(3) << t.get_time() << endl;
+         << (pdm - pdm_std) << " T = " << fixed << setw(10) << setprecision(3)
+         << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy + 1.0), 1E-7);
+    EXPECT_LT(abs(pdm - pdm_std), 1E-7);
 
-    imps_info->deallocate();
+    dmps_info->deallocate();
     mps_info->deallocate();
-    impo->deallocate();
-    ntr_mpo->deallocate();
+    dmpo->deallocate();
     mpo->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSU2) {
+TEST_F(TestResponseN2STO3G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
@@ -195,7 +234,7 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSZ) {
+TEST_F(TestResponseN2STO3G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";

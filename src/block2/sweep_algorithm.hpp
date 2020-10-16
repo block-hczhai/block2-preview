@@ -139,7 +139,6 @@ template <typename S> struct DMRG {
             prev_wfn->info->deallocate();
             prev_wfn->deallocate();
         }
-        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
         tuple<double, int, size_t, double> pdi;
@@ -195,12 +194,12 @@ template <typename S> struct DMRG {
                     if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
                         dm = MovingEnvironment<S>::
                             density_matrix_with_perturbative_noise(
-                                opdq, me->ket->tensors[i], forward, noise,
-                                noise_type, pket);
+                                me->ket->info->vacuum, me->ket->tensors[i],
+                                forward, noise, noise_type, pket);
                     } else
                         dm = MovingEnvironment<S>::density_matrix(
-                            opdq, me->ket->tensors[i], forward, noise,
-                            noise_type);
+                            me->ket->info->vacuum, me->ket->tensors[i], forward,
+                            noise, noise_type);
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
                         left, right, cutoff, trunc_type);
@@ -218,8 +217,9 @@ template <typename S> struct DMRG {
                                 noise, noise_type, pket);
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
-                        opdq, me->ket->tensors[i], (int)bond_dim, forward, true,
-                        left, right, cutoff, trunc_type, decomp_type, pket);
+                        me->ket->info->vacuum, me->ket->tensors[i],
+                        (int)bond_dim, forward, true, left, right, cutoff,
+                        trunc_type, decomp_type, pket);
                 } else
                     assert(false);
                 shared_ptr<StateInfo<S>> info = nullptr;
@@ -344,7 +344,6 @@ template <typename S> struct DMRG {
             me->ket->tensors[i + 1] = nullptr;
         }
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
-        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
         tuple<double, int, size_t, double> pdi;
@@ -367,16 +366,14 @@ template <typename S> struct DMRG {
             shared_ptr<SparseMatrix<S>> dm;
             if (decomp_type == DecompositionTypes::DensityMatrix) {
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
-                    dm = MovingEnvironment<
-                        S>::density_matrix_with_perturbative_noise(opdq,
-                                                                   old_wfn,
-                                                                   forward,
-                                                                   noise,
-                                                                   noise_type,
-                                                                   pket);
+                    dm = MovingEnvironment<S>::
+                        density_matrix_with_perturbative_noise(
+                            me->ket->info->vacuum, old_wfn, forward, noise,
+                            noise_type, pket);
                 } else
                     dm = MovingEnvironment<S>::density_matrix(
-                        opdq, old_wfn, forward, noise, noise_type);
+                        me->ket->info->vacuum, old_wfn, forward, noise,
+                        noise_type);
                 error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
@@ -395,8 +392,8 @@ template <typename S> struct DMRG {
                             noise, noise_type, pket);
                 }
                 error = MovingEnvironment<S>::split_wavefunction_svd(
-                    opdq, old_wfn, (int)bond_dim, forward, true,
-                    me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
+                    me->ket->info->vacuum, old_wfn, (int)bond_dim, forward,
+                    true, me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
                     trunc_type, decomp_type, pket);
             } else
                 assert(false);
@@ -489,7 +486,6 @@ template <typename S> struct DMRG {
             if (prev_wfns.size() != 0)
                 prev_wfns[0]->deallocate_infos();
         }
-        S opdq = me->mpo->op->q_label;
         int mmps = 0;
         double error = 0.0;
         tuple<vector<double>, int, size_t, double> pdi;
@@ -536,7 +532,8 @@ template <typename S> struct DMRG {
                                                      new_wfns;
             shared_ptr<SparseMatrix<S>> dm, rot;
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                opdq, mket->wfns, mket->weights, forward, noise, noise_type);
+                mket->info->vacuum, mket->wfns, mket->weights, forward, noise,
+                noise_type);
             error = MovingEnvironment<S>::multi_split_density_matrix(
                 dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot,
                 cutoff, trunc_type);
@@ -653,7 +650,6 @@ template <typename S> struct DMRG {
             mket->load_tensor(i);
         mket->tensors[i] = mket->tensors[i + 1] = nullptr;
         vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
-        S opdq = me->mpo->op->q_label;
         // effective hamiltonian
         int mmps = 0;
         double error = 0.0;
@@ -680,7 +676,8 @@ template <typename S> struct DMRG {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             shared_ptr<SparseMatrix<S>> dm;
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                opdq, old_wfns, mket->weights, forward, noise, noise_type);
+                mket->info->vacuum, old_wfns, mket->weights, forward, noise,
+                noise_type);
             error = MovingEnvironment<S>::multi_split_density_matrix(
                 dm, old_wfns, (int)bond_dim, forward, true, mket->wfns,
                 forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
@@ -878,7 +875,7 @@ template <typename S> struct DMRG {
                 break;
         }
         this->forward = forward;
-        if (!converged && iprint > 0)
+        if (!converged && iprint > 0 && tol != 0)
             cout << "ATTENTION: DMRG is not converged to desired tolerance of "
                  << scientific << tol << endl;
         return energies.back()[0];
@@ -1049,15 +1046,15 @@ template <typename S> struct ImaginaryTE {
             }
             if (pdpf.size() != 0) {
                 dm = MovingEnvironment<S>::density_matrix_with_weights(
-                    h_eff->opdq, me->ket->tensors[i], forward, noise, pdpf,
-                    weights, noise_type);
+                    me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
+                    pdpf, weights, noise_type);
                 frame->activate(1);
                 for (int i = pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
                 dm = MovingEnvironment<S>::density_matrix(
-                    h_eff->opdq, me->ket->tensors[i], forward, noise,
+                    me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
                     noise_type);
             // splitting of wavefunction
             old_wfn = me->ket->tensors[i];
@@ -1275,15 +1272,16 @@ template <typename S> struct ImaginaryTE {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (pdpf.size() != 0) {
                 dm = MovingEnvironment<S>::density_matrix_with_weights(
-                    h_eff->opdq, h_eff->ket, forward, noise, pdpf, weights,
-                    noise_type);
+                    me->ket->info->vacuum, h_eff->ket, forward, noise, pdpf,
+                    weights, noise_type);
                 frame->activate(1);
                 for (int i = pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
-                dm = MovingEnvironment<S>::density_matrix(
-                    h_eff->opdq, h_eff->ket, forward, noise, noise_type);
+                dm = MovingEnvironment<S>::density_matrix(me->ket->info->vacuum,
+                                                          h_eff->ket, forward,
+                                                          noise, noise_type);
             if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
                  i % 2 == 0) ||
                 (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
@@ -1686,11 +1684,11 @@ template <typename S> struct Compress {
                             noise != 0 && mps == me->bra) {
                             dm = MovingEnvironment<S>::
                                 density_matrix_with_perturbative_noise(
-                                    h_eff->opdq, old_wfn, forward, noise,
+                                    mps->info->vacuum, old_wfn, forward, noise,
                                     noise_type, pbra);
                         } else
                             dm = MovingEnvironment<S>::density_matrix(
-                                h_eff->opdq, old_wfn, forward,
+                                mps->info->vacuum, old_wfn, forward,
                                 mps == me->bra ? noise : 0.0,
                                 mps == me->bra && noise != 0
                                     ? noise_type
@@ -1709,8 +1707,8 @@ template <typename S> struct Compress {
                                     noise, noise_type, pbra);
                         }
                         error = MovingEnvironment<S>::split_wavefunction_svd(
-                            h_eff->opdq, old_wfn, bond_dim, forward, false,
-                            left, right, cutoff, trunc_type, decomp_type,
+                            mps->info->vacuum, old_wfn, bond_dim, forward,
+                            false, left, right, cutoff, trunc_type, decomp_type,
                             mps == me->bra ? pbra : nullptr);
                     } else
                         assert(false);
@@ -1876,11 +1874,11 @@ template <typename S> struct Compress {
                         mps == me->bra)
                         dm = MovingEnvironment<S>::
                             density_matrix_with_perturbative_noise(
-                                h_eff->opdq, old_wfn, forward, noise,
+                                mps->info->vacuum, old_wfn, forward, noise,
                                 noise_type, pbra);
                     else
                         dm = MovingEnvironment<S>::density_matrix(
-                            h_eff->opdq, old_wfn, forward,
+                            mps->info->vacuum, old_wfn, forward,
                             mps == me->bra ? noise : 0.0,
                             mps == me->bra && noise != 0 ? noise_type
                                                          : NoiseTypes::None);
@@ -1898,7 +1896,7 @@ template <typename S> struct Compress {
                                 noise, noise_type, pbra);
                     }
                     error = MovingEnvironment<S>::split_wavefunction_svd(
-                        h_eff->opdq, old_wfn, bond_dim, forward, false,
+                        mps->info->vacuum, old_wfn, bond_dim, forward, false,
                         mps->tensors[i], mps->tensors[i + 1], cutoff,
                         trunc_type, decomp_type,
                         mps == me->bra ? pbra : nullptr);
@@ -2066,7 +2064,7 @@ template <typename S> struct Compress {
                 break;
         }
         this->forward = forward;
-        if (!converged && iprint > 0)
+        if (!converged && iprint > 0 && tol != 0)
             cout << "ATTENTION: Compress is not converged to desired tolerance "
                     "of "
                  << scientific << tol << endl;
@@ -2214,7 +2212,7 @@ template <typename S> struct Expect {
                     shared_ptr<SparseMatrix<S>> left, right;
                     shared_ptr<SparseMatrix<S>> dm =
                         MovingEnvironment<S>::density_matrix(
-                            h_eff->opdq, old_wfn, forward, 0.0,
+                            mps->info->vacuum, old_wfn, forward, 0.0,
                             NoiseTypes::None);
                     int bond_dim =
                         mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
@@ -2341,7 +2339,7 @@ template <typename S> struct Expect {
                     shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
                     shared_ptr<SparseMatrix<S>> dm =
                         MovingEnvironment<S>::density_matrix(
-                            h_eff->opdq, old_wfn, forward, 0.0,
+                            mps->info->vacuum, old_wfn, forward, 0.0,
                             NoiseTypes::None);
                     int bond_dim =
                         mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
@@ -2492,8 +2490,8 @@ template <typename S> struct Expect {
                     shared_ptr<SparseMatrix<S>> rot;
                     shared_ptr<SparseMatrix<S>> dm =
                         MovingEnvironment<S>::density_matrix_with_multi_target(
-                            h_eff->opdq, old_wfn, mps->weights, forward, 0.0,
-                            NoiseTypes::None);
+                            mps->info->vacuum, old_wfn, mps->weights, forward,
+                            0.0, NoiseTypes::None);
                     int bond_dim =
                         mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
                     double error =
@@ -2661,8 +2659,8 @@ template <typename S> struct Expect {
                         mps->wfns;
                     shared_ptr<SparseMatrix<S>> dm =
                         MovingEnvironment<S>::density_matrix_with_multi_target(
-                            h_eff->opdq, old_wfn, mps->weights, forward, 0.0,
-                            NoiseTypes::None);
+                            mps->info->vacuum, old_wfn, mps->weights, forward,
+                            0.0, NoiseTypes::None);
                     int bond_dim =
                         mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
                     double error =

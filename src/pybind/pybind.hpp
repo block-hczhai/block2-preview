@@ -1144,11 +1144,11 @@ template <typename S> void bind_partition(py::module &m) {
                     &MovingEnvironment<S>::scale_perturbative_noise,
                     py::arg("noise"), py::arg("noise_type"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
         .def_static("density_matrix_with_weights",
                     &MovingEnvironment<S>::density_matrix_with_weights,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("mats"), py::arg("weights"),
                     py::arg("noise_type"))
         .def_static("truncate_density_matrix",
@@ -1632,6 +1632,12 @@ template <typename S> void bind_mpo(py::module &m) {
                       const vector<shared_ptr<StateInfo<S>>> &, S,
                       const shared_ptr<OperatorFunctions<S>> &>())
         .def(py::init<const Hamiltonian<S> &>());
+
+    py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
+        .def(py::init<const Hamiltonian<S> &,
+                      const shared_ptr<OpElement<S>> &>())
+        .def(py::init<const Hamiltonian<S> &, const shared_ptr<OpElement<S>> &,
+                      int>());
 
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)

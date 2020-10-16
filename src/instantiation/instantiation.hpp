@@ -233,9 +233,11 @@ extern template struct block2::HamiltonianQC<block2::SU2>;
 
 // qc_mpo.hpp
 extern template struct block2::IdentityMPO<block2::SZ>;
+extern template struct block2::SiteMPO<block2::SZ>;
 extern template struct block2::MPOQC<block2::SZ>;
 
 extern template struct block2::IdentityMPO<block2::SU2>;
+extern template struct block2::SiteMPO<block2::SU2>;
 extern template struct block2::MPOQC<block2::SU2>;
 
 // qc_ncorr.hpp
