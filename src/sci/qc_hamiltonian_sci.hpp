@@ -107,17 +107,21 @@ public:
               nOrbRight{sciWrapperRight==nullptr?0:sciWrapperRight->nOrbThis},
               nOrbCas{getNOrbCas(nOrbTot, sciWrapperLeft,sciWrapperRight)}
         {
-        cout << " Hamiltonian: n_sites = " << (int)n_sites
-             << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
+        assert(sciWrapperLeft!= nullptr or sciWrapperRight != nullptr);
+        const auto verbose = sciWrapperLeft != nullptr ? sciWrapperLeft->verbose : sciWrapperRight->verbose;
+        if (verbose) {
+            cout << " Hamiltonian: n_sites = " << (int) n_sites
+                 << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
+        }
         if(orb_sym.size() != nOrbLeft + nOrbCas + nOrbRight){
             cout << "Error! orb_sym.size()=" << orb_sym.size() << "!= nOrbTot=" <<
             nOrbLeft + nOrbCas + nOrbRight << endl;
             throw std::runtime_error("Wrong orb_sym size");
         }
-        if(nOrbLeft > nOrbRight){
+        if(nOrbLeft > nOrbRight and verbose){
             cout << "Warning: Left big site should have fewer orbitals than right one" << endl;
         }
-        if(nOrbLeft + nOrbCas > nOrbRight){
+        if(nOrbLeft + nOrbCas > nOrbRight and verbose){
             cout << "Warning: There should be more orbitals on the right big site "
                     "than on the other sites (NC scheme)" << endl;
         }
@@ -182,6 +186,7 @@ public:
 
     double e() const { return fcidump->e; }
 
+  protected:
     void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
@@ -720,7 +725,7 @@ public:
             pairs.second.clear(); pairs.second.shrink_to_fit();
         }
         if (sci_finalize)
-            sciWrapper->finalize(true);
+            sciWrapper->finalize();
     }
 };
 
