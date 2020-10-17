@@ -22,10 +22,10 @@
 
 template struct block2::DMRG<block2::SZ>;
 template struct block2::ImaginaryTE<block2::SZ>;
-template struct block2::Compress<block2::SZ>;
+template struct block2::Linear<block2::SZ>;
 template struct block2::Expect<block2::SZ>;
 
 template struct block2::DMRG<block2::SU2>;
 template struct block2::ImaginaryTE<block2::SU2>;
-template struct block2::Compress<block2::SU2>;
+template struct block2::Linear<block2::SU2>;
 template struct block2::Expect<block2::SU2>;

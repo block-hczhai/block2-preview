@@ -148,9 +148,9 @@ void TestResponseN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
         make_shared<MovingEnvironment<S>>(dmpo, dmps, mps, "CPS-D");
     dme->init_environments();
 
-    // Compress
-    shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(dme, bra_bdims, ket_bdims, noises);
+    // Linear
+    shared_ptr<Linear<S>> cps =
+        make_shared<Linear<S>>(dme, bra_bdims, ket_bdims, noises);
     cps->noise_type = NoiseTypes::DensityMatrix;
     cps->decomp_type = DecompositionTypes::DensityMatrix;
     double norm = cps->solve(10, mps->center == 0, 1E-10);
@@ -177,8 +177,8 @@ void TestResponseN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
         make_shared<MovingEnvironment<S>>(cmpo, cmps, dmps, "CPS-C");
     cme->init_environments();
 
-    // Compress
-    cps = make_shared<Compress<S>>(cme, bra_bdims, bra_bdims, noises);
+    // Linear
+    cps = make_shared<Linear<S>>(cme, bra_bdims, bra_bdims, noises);
     norm = cps->solve(10, cmps->center == 0, 1E-10);
 
     if (mps->center != cmps->center) {

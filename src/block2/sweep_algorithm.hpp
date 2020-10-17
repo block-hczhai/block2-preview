@@ -1495,9 +1495,15 @@ template <typename S> struct ImaginaryTE {
     }
 };
 
-// Compression
-template <typename S> struct Compress {
-    shared_ptr<MovingEnvironment<S>> me, lme;
+// Solve |x> in Linear Equation LHS|x> = RHS|r>
+// where |r> is a constant MPS
+// target quantity is calculated in tme
+// if lme == nullptr, LHS = 1
+// if tme == lme == nullptr, target is sqrt(<x|x>)
+// if tme == nullptr, target is <x|RHS|r>
+template <typename S> struct Linear {
+    // lme = LHS ME, rme = RHS ME, tme = Target ME
+    shared_ptr<MovingEnvironment<S>> lme, rme, tme;
     vector<ubond_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
     vector<double> norms;
@@ -1511,25 +1517,36 @@ template <typename S> struct Compress {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
-    Compress(const shared_ptr<MovingEnvironment<S>> &me,
-             const vector<ubond_t> &bra_bond_dims,
-             const vector<ubond_t> &ket_bond_dims,
-             const vector<double> &noises = vector<double>())
-        : me(me), lme(nullptr), bra_bond_dims(bra_bond_dims),
-          ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {}
-    Compress(const shared_ptr<MovingEnvironment<S>> &lme,
-             const shared_ptr<MovingEnvironment<S>> &me,
-             const vector<ubond_t> &bra_bond_dims,
-             const vector<ubond_t> &ket_bond_dims,
-             const vector<double> &noises = vector<double>())
-        : me(me), lme(lme), bra_bond_dims(bra_bond_dims),
+    Linear(const shared_ptr<MovingEnvironment<S>> &lme,
+           const shared_ptr<MovingEnvironment<S>> &rme,
+           const shared_ptr<MovingEnvironment<S>> &tme,
+           const vector<ubond_t> &bra_bond_dims,
+           const vector<ubond_t> &ket_bond_dims,
+           const vector<double> &noises = vector<double>())
+        : lme(lme), rme(rme), tme(tme), bra_bond_dims(bra_bond_dims),
           ket_bond_dims(ket_bond_dims), noises(noises), forward(false) {
         if (lme != nullptr) {
-            assert(lme->bra == lme->ket && lme->bra == me->bra);
-            assert(lme->tag != me->tag);
+            assert(lme->bra == lme->ket && lme->bra == rme->bra);
+            assert(lme->tag != rme->tag);
+        }
+        if (tme != nullptr) {
+            assert(tme->tag != rme->tag);
+            if (lme != nullptr)
+                assert(tme->tag != lme->tag);
         }
     }
-    virtual ~Compress() = default;
+    Linear(const shared_ptr<MovingEnvironment<S>> &rme,
+           const vector<ubond_t> &bra_bond_dims,
+           const vector<ubond_t> &ket_bond_dims,
+           const vector<double> &noises = vector<double>())
+        : Linear(nullptr, rme, nullptr, bra_bond_dims, ket_bond_dims, noises) {}
+    Linear(const shared_ptr<MovingEnvironment<S>> &lme,
+           const shared_ptr<MovingEnvironment<S>> &rme,
+           const vector<ubond_t> &bra_bond_dims,
+           const vector<ubond_t> &ket_bond_dims,
+           const vector<double> &noises = vector<double>())
+        : Linear(lme, rme, nullptr, bra_bond_dims, ket_bond_dims, noises) {}
+    virtual ~Linear() = default;
     struct Iteration {
         int nmult, mmps;
         double norm, error, tmult;
@@ -1553,6 +1570,7 @@ template <typename S> struct Compress {
     Iteration update_one_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, double noise,
                              double minres_conv_thrd) {
+        const shared_ptr<MovingEnvironment<S>> &me = rme;
         assert(me->bra != me->ket);
         frame->activate(0);
         bool fuse_left = me->mpo->schemer == nullptr
@@ -1620,6 +1638,16 @@ template <typename S> struct Compress {
             } else
                 get<0>(pdi) = 0;
             prev_bra->deallocate();
+        }
+        if (tme != nullptr) {
+            shared_ptr<EffectiveHamiltonian<S>> t_eff =
+                tme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                             false, tme->bra->tensors[i], tme->ket->tensors[i]);
+            auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            get<0>(pdi) = get<0>(tpdi)[0].second;
+            get<1>(pdi)++;
+            get<2>(pdi) += get<1>(tpdi);
+            get<3>(pdi) += get<2>(tpdi);
         }
         double bra_error = 0.0;
         int bra_mmps = 0;
@@ -1816,6 +1844,7 @@ template <typename S> struct Compress {
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, double noise,
                              double minres_conv_thrd) {
+        const shared_ptr<MovingEnvironment<S>> &me = rme;
         assert(me->bra != me->ket);
         frame->activate(0);
         for (auto &mps : {me->bra, me->ket}) {
@@ -1855,6 +1884,17 @@ template <typename S> struct Compress {
             } else
                 get<0>(pdi) = 0;
             prev_bra->deallocate();
+        }
+        if (tme != nullptr) {
+            shared_ptr<EffectiveHamiltonian<S>> t_eff =
+                tme->eff_ham(FuseTypes::FuseLR, false, tme->bra->tensors[i],
+                             tme->ket->tensors[i]);
+            auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            get<0>(pdi) = get<0>(tpdi)[0].second;
+            get<1>(pdi)++;
+            get<2>(pdi) += get<1>(tpdi);
+            get<3>(pdi) += get<2>(tpdi);
+            t_eff->deallocate();
         }
         shared_ptr<SparseMatrix<S>> old_bra = me->bra->tensors[i];
         shared_ptr<SparseMatrix<S>> old_ket = me->ket->tensors[i];
@@ -1961,10 +2001,12 @@ template <typename S> struct Compress {
     virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                                ubond_t ket_bond_dim, double noise,
                                double minres_conv_thrd) {
-        me->move_to(i);
+        rme->move_to(i);
         if (lme != nullptr)
             lme->move_to(i);
-        if (me->dot == 2)
+        if (tme != nullptr)
+            tme->move_to(i);
+        if (rme->dot == 2)
             return update_two_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
                                   minres_conv_thrd);
         else
@@ -1973,23 +2015,25 @@ template <typename S> struct Compress {
     }
     double sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim,
                  double noise, double minres_conv_thrd) {
-        me->prepare();
+        rme->prepare();
         if (lme != nullptr)
             lme->prepare();
+        if (tme != nullptr)
+            tme->prepare();
         vector<double> norms;
         vector<int> sweep_range;
         if (forward)
-            for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
+            for (int it = rme->center; it < rme->n_sites - rme->dot + 1; it++)
                 sweep_range.push_back(it);
         else
-            for (int it = me->center; it >= 0; it--)
+            for (int it = rme->center; it >= 0; it--)
                 sweep_range.push_back(it);
 
         Timer t;
         for (auto i : sweep_range) {
             check_signal_()();
             if (iprint >= 2) {
-                if (me->dot == 2)
+                if (rme->dot == 2)
                     cout << " " << (forward ? "-->" : "<--")
                          << " Site = " << setw(4) << i << "-" << setw(4)
                          << i + 1 << " .. ";
@@ -2065,7 +2109,7 @@ template <typename S> struct Compress {
         }
         this->forward = forward;
         if (!converged && iprint > 0 && tol != 0)
-            cout << "ATTENTION: Compress is not converged to desired tolerance "
+            cout << "ATTENTION: Linear is not converged to desired tolerance "
                     "of "
                  << scientific << tol << endl;
         return norms.back();
@@ -2181,7 +2225,7 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
                         me->bra->tensors[i], me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -2325,7 +2369,7 @@ template <typename S> struct Expect {
         }
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, false, me->bra->tensors[i], me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> old_wfns =
             me->bra == me->ket
@@ -2452,7 +2496,7 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                               true);
-        auto pdi = h_eff->expect(me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -2644,7 +2688,7 @@ template <typename S> struct Expect {
         }
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, false);
-        auto pdi = h_eff->expect(me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
             me->bra == me->ket

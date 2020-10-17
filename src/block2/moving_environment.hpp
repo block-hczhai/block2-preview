@@ -323,8 +323,44 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
+    // [bra] = (([H_eff] + omega)^2 + eta^2)^(-1) x [ket]
+    // energy, nmult, nflop, tmult
+    tuple<double, int, size_t, double> imag_green_function(
+        double const_e, double omega, double eta, bool iprint = false,
+        double conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int nmult = 0, numltx = 0;
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        MatrixRef mket(ket->data, ket->total_memory, 1);
+        MatrixRef mbra(bra->data, bra->total_memory, 1);
+        MatrixRef btmp(nullptr, bra->total_memory, 1);
+        btmp.allocate();
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        auto op = [omega, eta, const_e, this, &btmp,
+                   &nmult](const MatrixRef &b, const MatrixRef &c) -> void {
+            btmp.clear();
+            (*this)(b, btmp);
+            MatrixFunctions::iadd(btmp, b, const_e + omega);
+            (*this)(btmp, c);
+            MatrixFunctions::iadd(c, btmp, const_e + omega);
+            MatrixFunctions::iadd(c, b, eta * eta);
+            nmult += 2;
+        };
+        double r = MatrixFunctions::minres(
+            op, mbra, mket, numltx, 0.0, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            max_iter, soft_max_iter);
+        btmp.deallocate();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(r, nmult, (size_t)nflop, t.get_time());
+    }
     // [bra] = [H_eff]^(-1) x [ket]
-    // energy, ndav, nflop, tdav
+    // energy, nmult, nflop, tmult
     tuple<double, int, size_t, double>
     inverse_multiply(double const_e, bool iprint = false,
                      double conv_thrd = 5E-6, int max_iter = 5000,
@@ -352,7 +388,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         return make_tuple(r, nmult, (size_t)nflop, t.get_time());
     }
     // [bra] = [H_eff] x [ket]
-    // norm, nmult, nflop, tdav
+    // norm, nmult, nflop, tmult
     tuple<double, int, size_t, double>
     multiply(double const_e,
              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -367,12 +403,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         Timer t;
         t.get_time();
-        if (tf->opf->seq->mode == SeqTypes::Auto)
-            (*tf->opf->seq)(MatrixRef(ket->data, ket->total_memory, 1),
-                            MatrixRef(bra->data, bra->total_memory, 1));
-        else
-            (*this)(MatrixRef(ket->data, ket->total_memory, 1),
-                    MatrixRef(bra->data, bra->total_memory, 1));
+        // Auto mode cannot add const_e term
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        (*this)(MatrixRef(ket->data, ket->total_memory, 1),
+                MatrixRef(bra->data, bra->total_memory, 1));
         op->mat->data[0] = expr;
         double norm =
             MatrixFunctions::norm(MatrixRef(bra->data, bra->total_memory, 1));
@@ -385,7 +419,17 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, double>>, size_t, double>
-    expect(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    expect(double const_e,
+           const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        shared_ptr<OpExpr<S>> expr = nullptr;
+        if (const_e != 0 && op->mat->data.size() > 0) {
+            expr = op->mat->data[0];
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+                OpNames::I, SiteIndex(),
+                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+            if (para_rule == nullptr || para_rule->is_root())
+                op->mat->data[0] = expr + const_e * (iop * iop);
+        }
         Timer t;
         t.get_time();
         MatrixRef ktmp(ket->data, ket->total_memory, 1);
@@ -425,6 +469,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             }
         }
         btmp.deallocate();
+        if (const_e != 0 && op->mat->data.size() > 0)
+            op->mat->data[0] = expr;
         if (results.size() != 0) {
             assert(para_rule != nullptr);
             para_rule->comm->allreduce_sum(results.data(), results.size());
@@ -706,7 +752,17 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
-    expect(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    expect(double const_e,
+           const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        shared_ptr<OpExpr<S>> expr = nullptr;
+        if (const_e != 0 && op->mat->data.size() > 0) {
+            expr = op->mat->data[0];
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+                OpNames::I, SiteIndex(),
+                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+            if (para_rule == nullptr || para_rule->is_root())
+                op->mat->data[0] = expr + const_e * (iop * iop);
+        }
         Timer t;
         t.get_time();
         MatrixRef ktmp(nullptr, ket[0]->total_memory, 1);
@@ -754,6 +810,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             }
         }
         btmp.deallocate();
+        if (const_e != 0 && op->mat->data.size() > 0)
+            op->mat->data[0] = expr;
         if (results.size() != 0) {
             assert(para_rule != nullptr);
             para_rule->comm->allreduce_sum(results.data(), results.size());

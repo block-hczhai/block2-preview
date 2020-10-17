@@ -201,8 +201,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     ime->dot = 2;
     ime->init_environments();
 
-    // Compress
-    shared_ptr<Compress<S>> cps = make_shared<Compress<S>>(ime, bdims2, bdims1);
+    // Linear
+    shared_ptr<Linear<S>> cps = make_shared<Linear<S>>(ime, bdims2, bdims1);
     cps->iprint = 2;
     cps->decomp_type = dt;
     cps->decomp_last_site = dcl;

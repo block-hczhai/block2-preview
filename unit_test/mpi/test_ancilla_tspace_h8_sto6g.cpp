@@ -161,9 +161,9 @@ void TestTSpaceAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
         make_shared<MovingEnvironment<S>>(impo, imps, mps_thermal, "COMPRESS");
     ime->init_environments(false);
 
-    // Compress
-    shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(ime, bdims, bdims, noises);
+    // Linear
+    shared_ptr<Linear<S>> cps =
+        make_shared<Linear<S>>(ime, bdims, bdims, noises);
     double norm = cps->solve(10, imps->center == 0);
 
     EXPECT_LT(abs(norm - 1.0), 1E-7);

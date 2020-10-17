@@ -110,31 +110,40 @@ template <typename S> struct DMRGSCI : DMRG<S> {
     }
 };
 
-// Compression for SCI
-template <typename S> struct CompressSCI : Compress<S> {
-    using Compress<S>::iprint;
-    using Compress<S>::me;
-    using Compress<S>::lme;
-    using Compress<S>::minres_soft_max_iter;
-    using Compress<S>::noise_type;
-    using Compress<S>::decomp_type;
-    using typename Compress<S>::Iteration;
+// Linear equation for SCI
+template <typename S> struct LinearSCI : Linear<S> {
+    using Linear<S>::iprint;
+    using Linear<S>::lme;
+    using Linear<S>::rme;
+    using Linear<S>::tme;
+    using Linear<S>::minres_soft_max_iter;
+    using Linear<S>::noise_type;
+    using Linear<S>::decomp_type;
+    using typename Linear<S>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
-    CompressSCI(const shared_ptr<MovingEnvironment<S>> &me,
-                const vector<ubond_t> &bra_bond_dims,
-                const vector<ubond_t> &ket_bond_dims,
-                const vector<double> &noises = vector<double>())
-        : Compress<S>(me, bra_bond_dims, ket_bond_dims, noises) {}
-    CompressSCI(const shared_ptr<MovingEnvironment<S>> &lme,
-                const shared_ptr<MovingEnvironment<S>> &me,
-                const vector<ubond_t> &bra_bond_dims,
-                const vector<ubond_t> &ket_bond_dims,
-                const vector<double> &noises = vector<double>())
-        : Compress<S>(me, lme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearSCI(const shared_ptr<MovingEnvironment<S>> &rme,
+              const vector<ubond_t> &bra_bond_dims,
+              const vector<ubond_t> &ket_bond_dims,
+              const vector<double> &noises = vector<double>())
+        : Linear<S>(rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearSCI(const shared_ptr<MovingEnvironment<S>> &lme,
+              const shared_ptr<MovingEnvironment<S>> &rme,
+              const vector<ubond_t> &bra_bond_dims,
+              const vector<ubond_t> &ket_bond_dims,
+              const vector<double> &noises = vector<double>())
+        : Linear<S>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearSCI(const shared_ptr<MovingEnvironment<S>> &lme,
+              const shared_ptr<MovingEnvironment<S>> &rme,
+              const shared_ptr<MovingEnvironment<S>> &tme,
+              const vector<ubond_t> &bra_bond_dims,
+              const vector<ubond_t> &ket_bond_dims,
+              const vector<double> &noises = vector<double>())
+        : Linear<S>(lme, rme, tme, bra_bond_dims, ket_bond_dims, noises) {}
     Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                        ubond_t ket_bond_dim, double noise,
                        double minres_conv_thrd) override {
+        const shared_ptr<MovingEnvironment<S>> &me = rme;
         const int dsmi =
             minres_soft_max_iter; // Save it as it may be changed here
         const NoiseTypes nt = noise_type;
@@ -142,7 +151,7 @@ template <typename S> struct CompressSCI : Compress<S> {
         if (last_site_1site && (i == 0 || i == me->n_sites - 1) &&
             me->dot == 1) {
             throw std::runtime_error(
-                "CompressSCI: last_site_1site should only be "
+                "LinearSCI: last_site_1site should only be "
                 "used in two site algorithm.");
         }
         const auto last_site_1_and_forward =
@@ -157,10 +166,14 @@ template <typename S> struct CompressSCI : Compress<S> {
                 lme->dot = 1;
                 lme->ket->canonical_form[i] = 'K';
             }
+            if (tme != nullptr) {
+                tme->dot = 1;
+                tme->ket->canonical_form[i] = 'K';
+            }
             minres_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            Compress<S>::blocking(i, forward, bra_bond_dim, ket_bond_dim, 0,
-                                  minres_conv_thrd);
+            Linear<S>::blocking(i, forward, bra_bond_dim, ket_bond_dim, 0,
+                                minres_conv_thrd);
             minres_soft_max_iter = dsmi;
             i++;
             if (iprint >= 2) {
@@ -172,6 +185,8 @@ template <typename S> struct CompressSCI : Compress<S> {
             me->dot = 1;
             if (lme != nullptr)
                 lme->dot = 1;
+            if (tme != nullptr)
+                tme->dot = 1;
             i = me->n_sites - 1;
             if (iprint >= 2) {
                 cout << "\r " << (forward ? "-->" : "<--")
@@ -185,7 +200,7 @@ template <typename S> struct CompressSCI : Compress<S> {
                 noise_type = NoiseTypes::Wavefunction;
             decomp_type = DecompositionTypes::SVD;
         }
-        Iteration r = Compress<S>::blocking(
+        Iteration r = Linear<S>::blocking(
             i, forward, bra_bond_dim, ket_bond_dim, noise, minres_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             r.norm = 0;
@@ -200,12 +215,16 @@ template <typename S> struct CompressSCI : Compress<S> {
                 lme->dot = 2;
                 lme->center = me->n_sites - 2;
             }
+            if (tme != nullptr) {
+                tme->dot = 2;
+                tme->center = me->n_sites - 2;
+            }
         } else if (last_site_1site && !forward && i == me->n_sites - 1) {
             assert(me->dot = 1);
             minres_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            Compress<S>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
-                                  minres_conv_thrd);
+            Linear<S>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
+                                minres_conv_thrd);
             minres_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -216,6 +235,12 @@ template <typename S> struct CompressSCI : Compress<S> {
                 lme->envs[i - 1]->right = nullptr;
                 lme->dot = 2;
                 lme->ket->canonical_form[i - 2] = 'C';
+            }
+            if (tme != nullptr) {
+                tme->envs[i - 1]->right_op_infos.clear();
+                tme->envs[i - 1]->right = nullptr;
+                tme->dot = 2;
+                tme->ket->canonical_form[i - 2] = 'C';
             }
         }
         return r;

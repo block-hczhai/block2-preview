@@ -4,7 +4,7 @@
 
 using namespace block2;
 
-class TestCompressN2STO3G : public ::testing::Test {
+class TestLinearN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
@@ -24,7 +24,7 @@ class TestCompressN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
+void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
                                     const string &name, int dot) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
@@ -138,11 +138,11 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     mpo->const_e = 0;
     lme->init_environments();
 
-    // Compress
+    // Linear
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
     noises = {1E-4, 1E-6, 1E-8, 0};
-    shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(lme, ime, bra_bdims, ket_bdims, noises);
+    shared_ptr<Linear<S>> cps =
+        make_shared<Linear<S>>(lme, ime, bra_bdims, ket_bdims, noises);
     cps->noise_type = NoiseTypes::ReducedPerturbative;
     cps->decomp_type = DecompositionTypes::SVD;
     double norm = cps->solve(10, mps->center == 0, 1E-10);
@@ -172,7 +172,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     mpo->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSU2) {
+TEST_F(TestLinearN2STO3G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
@@ -195,7 +195,7 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSZ) {
+TEST_F(TestLinearN2STO3G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";

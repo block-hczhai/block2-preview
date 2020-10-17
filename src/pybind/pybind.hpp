@@ -1023,6 +1023,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
         .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
+        .def("imag_green_function", &EffectiveHamiltonian<S>::imag_green_function)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1388,24 +1389,23 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("solve", &ImaginaryTE<S>::solve, py::arg("n_sweeps"),
              py::arg("beta"), py::arg("forward") = true, py::arg("tol") = 1E-6);
 
-    py::class_<typename Compress<S>::Iteration,
-               shared_ptr<typename Compress<S>::Iteration>>(m,
-                                                            "CompressIteration")
+    py::class_<typename Linear<S>::Iteration,
+               shared_ptr<typename Linear<S>::Iteration>>(m, "LinearIteration")
         .def(py::init<double, double, int, int, size_t, double>())
         .def(py::init<double, double, int, int>())
-        .def_readwrite("mmps", &Compress<S>::Iteration::mmps)
-        .def_readwrite("norm", &Compress<S>::Iteration::norm)
-        .def_readwrite("error", &Compress<S>::Iteration::error)
-        .def_readwrite("nmult", &Compress<S>::Iteration::nmult)
-        .def_readwrite("tmult", &Compress<S>::Iteration::tmult)
-        .def_readwrite("nflop", &Compress<S>::Iteration::nflop)
-        .def("__repr__", [](typename Compress<S>::Iteration *self) {
+        .def_readwrite("mmps", &Linear<S>::Iteration::mmps)
+        .def_readwrite("norm", &Linear<S>::Iteration::norm)
+        .def_readwrite("error", &Linear<S>::Iteration::error)
+        .def_readwrite("nmult", &Linear<S>::Iteration::nmult)
+        .def_readwrite("tmult", &Linear<S>::Iteration::tmult)
+        .def_readwrite("nflop", &Linear<S>::Iteration::nflop)
+        .def("__repr__", [](typename Linear<S>::Iteration *self) {
             stringstream ss;
             ss << *self;
             return ss.str();
         });
 
-    py::class_<Compress<S>, shared_ptr<Compress<S>>>(m, "Compress")
+    py::class_<Linear<S>, shared_ptr<Linear<S>>>(m, "Linear")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &>())
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
@@ -1418,28 +1418,37 @@ template <typename S> void bind_algorithms(py::module &m) {
                       const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
-        .def_readwrite("iprint", &Compress<S>::iprint)
-        .def_readwrite("cutoff", &Compress<S>::cutoff)
-        .def_readwrite("me", &Compress<S>::me)
-        .def_readwrite("lme", &Compress<S>::lme)
-        .def_readwrite("bra_bond_dims", &Compress<S>::bra_bond_dims)
-        .def_readwrite("ket_bond_dims", &Compress<S>::ket_bond_dims)
-        .def_readwrite("noises", &Compress<S>::noises)
-        .def_readwrite("norms", &Compress<S>::norms)
-        .def_readwrite("forward", &Compress<S>::forward)
-        .def_readwrite("noise_type", &Compress<S>::noise_type)
-        .def_readwrite("trunc_type", &Compress<S>::trunc_type)
-        .def_readwrite("decomp_type", &Compress<S>::decomp_type)
-        .def_readwrite("decomp_last_site", &Compress<S>::decomp_last_site)
-        .def_readwrite("minres_conv_thrds", &Compress<S>::minres_conv_thrds)
-        .def_readwrite("minres_max_iter", &Compress<S>::minres_max_iter)
-        .def_readwrite("minres_soft_max_iter",
-                       &Compress<S>::minres_soft_max_iter)
-        .def("update_one_dot", &Compress<S>::update_one_dot)
-        .def("update_two_dot", &Compress<S>::update_two_dot)
-        .def("blocking", &Compress<S>::blocking)
-        .def("sweep", &Compress<S>::sweep)
-        .def("solve", &Compress<S>::solve, py::arg("n_sweeps"),
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
+        .def_readwrite("iprint", &Linear<S>::iprint)
+        .def_readwrite("cutoff", &Linear<S>::cutoff)
+        .def_readwrite("lme", &Linear<S>::lme)
+        .def_readwrite("rme", &Linear<S>::rme)
+        .def_readwrite("tme", &Linear<S>::tme)
+        .def_readwrite("bra_bond_dims", &Linear<S>::bra_bond_dims)
+        .def_readwrite("ket_bond_dims", &Linear<S>::ket_bond_dims)
+        .def_readwrite("noises", &Linear<S>::noises)
+        .def_readwrite("norms", &Linear<S>::norms)
+        .def_readwrite("forward", &Linear<S>::forward)
+        .def_readwrite("noise_type", &Linear<S>::noise_type)
+        .def_readwrite("trunc_type", &Linear<S>::trunc_type)
+        .def_readwrite("decomp_type", &Linear<S>::decomp_type)
+        .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
+        .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
+        .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
+        .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
+        .def("update_one_dot", &Linear<S>::update_one_dot)
+        .def("update_two_dot", &Linear<S>::update_two_dot)
+        .def("blocking", &Linear<S>::blocking)
+        .def("sweep", &Linear<S>::sweep)
+        .def("solve", &Linear<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
     py::class_<typename Expect<S>::Iteration,

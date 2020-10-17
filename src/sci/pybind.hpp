@@ -119,8 +119,8 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("last_site_1site", &DMRGSCI<S>::last_site_1site)
         .def("blocking", &DMRGSCI<S>::blocking);
 
-    py::class_<CompressSCI<S>, shared_ptr<CompressSCI<S>>, Compress<S>>(
-        m, "CompressSCI")
+    py::class_<LinearSCI<S>, shared_ptr<LinearSCI<S>>, Linear<S>>(
+        m, "LinearSCI")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
@@ -133,9 +133,18 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &>())
-        .def_readwrite("last_site_svd", &CompressSCI<S>::last_site_svd)
-        .def_readwrite("last_site_1site", &CompressSCI<S>::last_site_1site)
-        .def("blocking", &CompressSCI<S>::blocking);
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def_readwrite("last_site_svd", &LinearSCI<S>::last_site_svd)
+        .def_readwrite("last_site_1site", &LinearSCI<S>::last_site_1site)
+        .def("blocking", &LinearSCI<S>::blocking);
 
     py::class_<DMRGSCIAQCC<S>, shared_ptr<DMRGSCIAQCC<S>>, DMRGSCI<S>>(
         m, "DMRGSCIAQCC")
