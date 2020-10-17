@@ -24,6 +24,7 @@
 #include "../block2/mpo.hpp"
 #include "../block2/operator_tensor.hpp"
 #include "../block2/qc_mpo.hpp"
+#include "../block2/delayed_tensor_functions.hpp"
 #include "qc_hamiltonian_sci.hpp"
 #include "../block2/symbolic.hpp"
 #include "../block2/tensor_functions.hpp"
@@ -93,6 +94,12 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         this->const_e = hamil.e();
         //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
         this->tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        if (hamil.delayed == DelayedSCIOpNames::None)
+            this->tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        else
+            this->tf = make_shared<DelayedTensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
         this->tf->opf->seq = hamil.opf->seq; // seq_type
         this->site_op_infos = hamil.site_op_infos;

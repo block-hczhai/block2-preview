@@ -27,6 +27,8 @@
 #include "../block2/cg.hpp"
 #include "../block2/csr_operator_functions.hpp"
 #include "../block2/csr_sparse_matrix.hpp"
+#include "../block2/delayed_sparse_matrix.hpp"
+#include "../block2/delayed_tensor_functions.hpp"
 #include "../block2/determinant.hpp"
 #include "../block2/expr.hpp"
 #include "../block2/hamiltonian.hpp"
@@ -89,6 +91,22 @@ extern template struct block2::CSROperatorFunctions<block2::SU2>;
 extern template struct block2::CSRSparseMatrix<block2::SZ>;
 extern template struct block2::CSRSparseMatrix<block2::SU2>;
 
+// delayed_sparse_matrix.hpp
+extern template struct block2::DelayedSparseMatrix<block2::SZ>;
+extern template struct block2::DelayedSparseMatrix<block2::SU2>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, block2::SparseMatrix<block2::SZ>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, block2::SparseMatrix<block2::SU2>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, block2::CSRSparseMatrix<block2::SZ>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, block2::CSRSparseMatrix<block2::SU2>>;
+
+// delayed_tensor_functions.hpp
+extern template struct block2::DelayedTensorFunctions<block2::SZ>;
+extern template struct block2::DelayedTensorFunctions<block2::SU2>;
+
 // determinant.hpp
 extern template struct block2::DeterminantTRIE<block2::SZ>;
 extern template struct block2::DeterminantQC<block2::SZ>;
@@ -101,20 +119,24 @@ extern template struct block2::DeterminantMPSInfo<block2::SU2>;
 extern template struct block2::OpExpr<block2::SZ>;
 extern template struct block2::OpElement<block2::SZ>;
 extern template struct block2::OpElementRef<block2::SZ>;
-extern template struct block2::OpString<block2::SZ>;
+extern template struct block2::OpProduct<block2::SZ>;
 extern template struct block2::OpSumProd<block2::SZ>;
 extern template struct block2::OpSum<block2::SZ>;
 
 extern template struct block2::OpExpr<block2::SU2>;
 extern template struct block2::OpElement<block2::SU2>;
 extern template struct block2::OpElementRef<block2::SU2>;
-extern template struct block2::OpString<block2::SU2>;
+extern template struct block2::OpProduct<block2::SU2>;
 extern template struct block2::OpSumProd<block2::SU2>;
 extern template struct block2::OpSum<block2::SU2>;
 
 // hamiltonian.hpp
 extern template struct block2::Hamiltonian<block2::SZ>;
 extern template struct block2::Hamiltonian<block2::SU2>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, block2::Hamiltonian<block2::SZ>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, block2::Hamiltonian<block2::SU2>>;
 
 // moving_environment.hpp
 extern template struct block2::EffectiveHamiltonian<block2::SZ,
@@ -133,10 +155,12 @@ extern template struct block2::MovingEnvironment<block2::SU2>;
 extern template struct block2::MPOSchemer<block2::SZ>;
 extern template struct block2::MPO<block2::SZ>;
 extern template struct block2::AncillaMPO<block2::SZ>;
+extern template struct block2::NegativeMPO<block2::SZ>;
 
 extern template struct block2::MPOSchemer<block2::SU2>;
 extern template struct block2::MPO<block2::SU2>;
 extern template struct block2::AncillaMPO<block2::SU2>;
+extern template struct block2::NegativeMPO<block2::SU2>;
 
 // mpo_fusing.hpp
 extern template struct block2::FusedMPO<block2::SZ>;
@@ -209,9 +233,11 @@ extern template struct block2::HamiltonianQC<block2::SU2>;
 
 // qc_mpo.hpp
 extern template struct block2::IdentityMPO<block2::SZ>;
+extern template struct block2::SiteMPO<block2::SZ>;
 extern template struct block2::MPOQC<block2::SZ>;
 
 extern template struct block2::IdentityMPO<block2::SU2>;
+extern template struct block2::SiteMPO<block2::SU2>;
 extern template struct block2::MPOQC<block2::SU2>;
 
 // qc_ncorr.hpp

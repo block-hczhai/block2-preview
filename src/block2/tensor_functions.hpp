@@ -32,7 +32,11 @@ using namespace std;
 
 namespace block2 {
 
-enum struct TensorFunctionsTypes : uint8_t { Normal = 0, Archived = 1 };
+enum struct TensorFunctionsTypes : uint8_t {
+    Normal = 0,
+    Archived = 1,
+    Delayed = 2
+};
 
 // Operations for operator tensors
 template <typename S> struct TensorFunctions {
@@ -106,8 +110,8 @@ template <typename S> struct TensorFunctions {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> old_cinfo =
                 cmat->info->cinfo;
@@ -193,8 +197,8 @@ template <typename S> struct TensorFunctions {
         bool all_reduce) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
@@ -224,8 +228,8 @@ template <typename S> struct TensorFunctions {
         shared_ptr<SparseMatrix<S>> &mat, S opdq) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             assert(!(lop.count(op->a) == 0 || rop.count(op->b) == 0));
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);
@@ -255,8 +259,8 @@ template <typename S> struct TensorFunctions {
                    shared_ptr<SparseMatrix<S>> &mat) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             assert(op->b != nullptr);
             assert(lop.count(op->a) != 0 && rop.count(op->b) != 0);
             shared_ptr<SparseMatrix<S>> lmat = lop.at(op->a);

@@ -777,7 +777,12 @@ struct SparseMatrixInfo<
     }
 };
 
-enum struct SparseMatrixTypes : uint8_t { Normal = 0, CSR = 1, Archived = 2 };
+enum struct SparseMatrixTypes : uint8_t {
+    Normal = 0,
+    CSR = 1,
+    Archived = 2,
+    Delayed = 3
+};
 
 // Block-sparse Matrix
 // Representing operator, wavefunction, density matrix and MPS tensors
@@ -837,11 +842,13 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         ofs.close();
     }
-    virtual void copy_data_from(const shared_ptr<SparseMatrix> &other, bool ref = false) {
+    virtual void copy_data_from(const shared_ptr<SparseMatrix> &other,
+                                bool ref = false) {
         assert(total_memory == other->total_memory);
         memcpy(data, other->data, sizeof(double) * total_memory);
     }
-    virtual void selective_copy_from(const shared_ptr<SparseMatrix> &other, bool ref = false) {
+    virtual void selective_copy_from(const shared_ptr<SparseMatrix> &other,
+                                     bool ref = false) {
         for (int i = 0, k; i < other->info->n; i++)
             if ((k = info->find_state(other->info->quanta[i])) != -1)
                 memcpy(data + info->n_states_total[k],

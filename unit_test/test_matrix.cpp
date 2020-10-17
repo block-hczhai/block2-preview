@@ -248,6 +248,62 @@ TEST_F(TestMatrix, TestDavidson) {
     }
 }
 
+TEST_F(TestMatrix, TestMinRes) {
+    for (int i = 0; i < n_tests * 100; i++) {
+        int m = Random::rand_int(1, 200);
+        int n = 1;
+        int nmult = 0;
+        MatrixRef a(dalloc_()->allocate(m * m), m, m);
+        MatrixRef af(dalloc_()->allocate(m * m), m, m);
+        MatrixRef b(dalloc_()->allocate(n * m), n, m);
+        MatrixRef x(dalloc_()->allocate(n * m), n, m);
+        MatrixRef xg(dalloc_()->allocate(n * m), n, m);
+        Random::fill_rand_double(a.data, a.size());
+        Random::fill_rand_double(b.data, b.size());
+        Random::fill_rand_double(xg.data, xg.size());
+        for (int ki = 0; ki < m; ki++)
+            for (int kj = 0; kj < ki; kj++)
+                a(ki, kj) = a(kj, ki);
+        MatrixFunctions::copy(af, a);
+        MatrixFunctions::copy(x, b);
+        MatrixFunctions::linear(af, x);
+        MatMul mop(a);
+        double func = MatrixFunctions::minres(
+            mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
+        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 0.0));
+        xg.deallocate();
+        x.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+    }
+}
+
+TEST_F(TestMatrix, TestLinear) {
+    for (int i = 0; i < n_tests; i++) {
+        int m = Random::rand_int(1, 200);
+        int n = Random::rand_int(1, 200);
+        MatrixRef a(dalloc_()->allocate(m * m), m, m);
+        MatrixRef af(dalloc_()->allocate(m * m), m, m);
+        MatrixRef b(dalloc_()->allocate(n * m), n, m);
+        MatrixRef bg(dalloc_()->allocate(n * m), n, m);
+        MatrixRef x(dalloc_()->allocate(n * m), n, m);
+        Random::fill_rand_double(a.data, a.size());
+        Random::fill_rand_double(b.data, b.size());
+        MatrixFunctions::copy(af, a);
+        MatrixFunctions::copy(x, b);
+        MatrixFunctions::linear(af, x);
+        MatrixFunctions::multiply(x, false, a, false, bg, 1.0, 0.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(bg, b, 1E-9, 0.0));
+        x.deallocate();
+        bg.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+    }
+}
+
 TEST_F(TestMatrix, TestEigs) {
     for (int i = 0; i < n_tests; i++) {
         int m = Random::rand_int(1, 200);

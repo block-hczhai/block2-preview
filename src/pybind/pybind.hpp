@@ -48,7 +48,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<CSRMatrixRef>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
@@ -72,7 +72,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
-PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpString<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
@@ -271,20 +271,21 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("factor", &OpElementRef<S>::factor)
         .def_readwrite("trans", &OpElementRef<S>::trans);
 
-    py::class_<OpString<S>, shared_ptr<OpString<S>>, OpExpr<S>>(m, "OpString")
+    py::class_<OpProduct<S>, shared_ptr<OpProduct<S>>, OpExpr<S>>(m,
+                                                                  "OpProduct")
         .def(py::init<const shared_ptr<OpElement<S>> &, double>())
         .def(py::init<const shared_ptr<OpElement<S>> &, double, uint8_t>())
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const shared_ptr<OpElement<S>> &, double>())
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const shared_ptr<OpElement<S>> &, double, uint8_t>())
-        .def_readwrite("factor", &OpString<S>::factor)
-        .def_readwrite("conj", &OpString<S>::conj)
-        .def_readwrite("a", &OpString<S>::a)
-        .def_readwrite("b", &OpString<S>::b);
+        .def_readwrite("factor", &OpProduct<S>::factor)
+        .def_readwrite("conj", &OpProduct<S>::conj)
+        .def_readwrite("a", &OpProduct<S>::a)
+        .def_readwrite("b", &OpProduct<S>::b);
 
-    py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpString<S>>(m,
-                                                                    "OpSumProd")
+    py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpProduct<S>>(
+        m, "OpSumProd")
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const vector<shared_ptr<OpElement<S>>> &,
                       const vector<bool> &, double, uint8_t>())
@@ -301,12 +302,12 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("conjs", &OpSumProd<S>::conjs);
 
     py::class_<OpSum<S>, shared_ptr<OpSum<S>>, OpExpr<S>>(m, "OpSum")
-        .def(py::init<const vector<shared_ptr<OpString<S>>> &>())
+        .def(py::init<const vector<shared_ptr<OpProduct<S>>> &>())
         .def_readwrite("strings", &OpSum<S>::strings);
 
     py::bind_vector<vector<shared_ptr<OpExpr<S>>>>(m, "VectorOpExpr");
     py::bind_vector<vector<shared_ptr<OpElement<S>>>>(m, "VectorOpElement");
-    py::bind_vector<vector<shared_ptr<OpString<S>>>>(m, "VectorOpString");
+    py::bind_vector<vector<shared_ptr<OpProduct<S>>>>(m, "VectorOpProduct");
 
     struct PySymbolic : Symbolic<S> {
         using Symbolic<S>::Symbolic;
@@ -592,6 +593,37 @@ template <typename S> void bind_sparse(py::module &m) {
         .def_readwrite("offset", &ArchivedSparseMatrix<S>::offset)
         .def("load_archive", &ArchivedSparseMatrix<S>::load_archive)
         .def("save_archive", &ArchivedSparseMatrix<S>::save_archive);
+
+    py::class_<DelayedSparseMatrix<S>, shared_ptr<DelayedSparseMatrix<S>>,
+               SparseMatrix<S>>(m, "DelayedSparseMatrix")
+        .def(py::init<>())
+        .def("build", &DelayedSparseMatrix<S>::build)
+        .def("copy", &DelayedSparseMatrix<S>::copy)
+        .def("selective_copy", &DelayedSparseMatrix<S>::selective_copy);
+
+    py::class_<DelayedSparseMatrix<S, SparseMatrix<S>>,
+               shared_ptr<DelayedSparseMatrix<S, SparseMatrix<S>>>,
+               SparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
+        .def_readwrite("mat", &DelayedSparseMatrix<S, SparseMatrix<S>>::mat)
+        .def(py::init<const shared_ptr<SparseMatrix<S>> &>());
+
+    py::class_<DelayedSparseMatrix<S, CSRSparseMatrix<S>>,
+               shared_ptr<DelayedSparseMatrix<S, CSRSparseMatrix<S>>>,
+               SparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
+        .def_readwrite("mat", &DelayedSparseMatrix<S, CSRSparseMatrix<S>>::mat)
+        .def(py::init<const shared_ptr<CSRSparseMatrix<S>> &>());
+
+    py::class_<DelayedSparseMatrix<S, Hamiltonian<S>>,
+               shared_ptr<DelayedSparseMatrix<S, Hamiltonian<S>>>,
+               SparseMatrix<S>>(m, "DelayedHamilSparseMatrix")
+        .def_readwrite("hamil", &DelayedSparseMatrix<S, Hamiltonian<S>>::hamil)
+        .def_readwrite("m", &DelayedSparseMatrix<S, Hamiltonian<S>>::m)
+        .def_readwrite("op", &DelayedSparseMatrix<S, Hamiltonian<S>>::op)
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
+                      const shared_ptr<OpExpr<S>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
+                      const shared_ptr<OpExpr<S>> &,
+                      const shared_ptr<SparseMatrixInfo<S>> &>());
 
     py::class_<SparseTensor<S>, shared_ptr<SparseTensor<S>>>(m, "SparseTensor")
         .def(py::init<>())
@@ -925,6 +957,10 @@ template <typename S> void bind_operator(py::module &m) {
         .def_readwrite("offset", &ArchivedTensorFunctions<S>::offset)
         .def("archive_tensor", &ArchivedTensorFunctions<S>::archive_tensor,
              py::arg("a"));
+
+    py::class_<DelayedTensorFunctions<S>, shared_ptr<DelayedTensorFunctions<S>>,
+               TensorFunctions<S>>(m, "DelayedTensorFunctions")
+        .def(py::init<const shared_ptr<OperatorFunctions<S>> &>());
 }
 
 template <typename S> void bind_partition(py::module &m) {
@@ -986,6 +1022,7 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("all_reduce") = true)
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
+        .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1107,11 +1144,11 @@ template <typename S> void bind_partition(py::module &m) {
                     &MovingEnvironment<S>::scale_perturbative_noise,
                     py::arg("noise"), py::arg("noise_type"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("noise_type"))
         .def_static("density_matrix_with_weights",
                     &MovingEnvironment<S>::density_matrix_with_weights,
-                    py::arg("opdq"), py::arg("psi"), py::arg("trace_right"),
+                    py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
                     py::arg("noise"), py::arg("mats"), py::arg("weights"),
                     py::arg("noise_type"))
         .def_static("truncate_density_matrix",
@@ -1234,6 +1271,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("vacuum", &Hamiltonian<S>::vacuum)
         .def_readwrite("basis", &Hamiltonian<S>::basis)
         .def_readwrite("site_op_infos", &Hamiltonian<S>::site_op_infos)
+        .def_readwrite("delayed", &Hamiltonian<S>::delayed)
         .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
         .def("filter_site_ops", &Hamiltonian<S>::filter_site_ops)
         .def("find_site_op_info", &Hamiltonian<S>::find_site_op_info)
@@ -1353,11 +1391,12 @@ template <typename S> void bind_algorithms(py::module &m) {
     py::class_<typename Compress<S>::Iteration,
                shared_ptr<typename Compress<S>::Iteration>>(m,
                                                             "CompressIteration")
-        .def(py::init<double, double, int, size_t, double>())
-        .def(py::init<double, double, int>())
+        .def(py::init<double, double, int, int, size_t, double>())
+        .def(py::init<double, double, int, int>())
         .def_readwrite("mmps", &Compress<S>::Iteration::mmps)
         .def_readwrite("norm", &Compress<S>::Iteration::norm)
         .def_readwrite("error", &Compress<S>::Iteration::error)
+        .def_readwrite("nmult", &Compress<S>::Iteration::nmult)
         .def_readwrite("tmult", &Compress<S>::Iteration::tmult)
         .def_readwrite("nflop", &Compress<S>::Iteration::nflop)
         .def("__repr__", [](typename Compress<S>::Iteration *self) {
@@ -1372,9 +1411,17 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
         .def_readwrite("iprint", &Compress<S>::iprint)
         .def_readwrite("cutoff", &Compress<S>::cutoff)
         .def_readwrite("me", &Compress<S>::me)
+        .def_readwrite("lme", &Compress<S>::lme)
         .def_readwrite("bra_bond_dims", &Compress<S>::bra_bond_dims)
         .def_readwrite("ket_bond_dims", &Compress<S>::ket_bond_dims)
         .def_readwrite("noises", &Compress<S>::noises)
@@ -1384,6 +1431,11 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &Compress<S>::trunc_type)
         .def_readwrite("decomp_type", &Compress<S>::decomp_type)
         .def_readwrite("decomp_last_site", &Compress<S>::decomp_last_site)
+        .def_readwrite("minres_conv_thrds", &Compress<S>::minres_conv_thrds)
+        .def_readwrite("minres_max_iter", &Compress<S>::minres_max_iter)
+        .def_readwrite("minres_soft_max_iter",
+                       &Compress<S>::minres_soft_max_iter)
+        .def("update_one_dot", &Compress<S>::update_one_dot)
         .def("update_two_dot", &Compress<S>::update_two_dot)
         .def("blocking", &Compress<S>::blocking)
         .def("sweep", &Compress<S>::sweep)
@@ -1581,6 +1633,12 @@ template <typename S> void bind_mpo(py::module &m) {
                       const shared_ptr<OperatorFunctions<S>> &>())
         .def(py::init<const Hamiltonian<S> &>());
 
+    py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
+        .def(py::init<const Hamiltonian<S> &,
+                      const shared_ptr<OpElement<S>> &>())
+        .def(py::init<const Hamiltonian<S> &, const shared_ptr<OpElement<S>> &,
+                      int>());
+
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)
         .def(py::init<const HamiltonianQC<S> &>())
@@ -1599,6 +1657,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("prim_mpo", &AncillaMPO<S>::prim_mpo)
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
+
+    py::class_<NegativeMPO<S>, shared_ptr<NegativeMPO<S>>, MPO<S>>(
+        m, "NegativeMPO")
+        .def(py::init<const shared_ptr<MPO<S>> &>());
 
     py::class_<ArchivedMPO<S>, shared_ptr<ArchivedMPO<S>>, MPO<S>>(
         m, "ArchivedMPO")
@@ -1725,6 +1787,21 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Zero", OpNames::Zero)
         .value("PDM1", OpNames::PDM1);
 
+    py::enum_<DelayedOpNames>(m, "DelayedOpNames", py::arithmetic())
+        .value("Nothing", DelayedOpNames::None)
+        .value("H", DelayedOpNames::H)
+        .value("Normal", DelayedOpNames::Normal)
+        .value("R", DelayedOpNames::R)
+        .value("RD", DelayedOpNames::RD)
+        .value("P", DelayedOpNames::P)
+        .value("PD", DelayedOpNames::PD)
+        .value("Q", DelayedOpNames::Q)
+        .value("CCDD", DelayedOpNames::CCDD)
+        .value("CCD", DelayedOpNames::CCD)
+        .value("CDD", DelayedOpNames::CDD)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
+
     py::enum_<OpTypes>(m, "OpTypes", py::arithmetic())
         .value("Zero", OpTypes::Zero)
         .value("Elem", OpTypes::Elem)
@@ -1805,7 +1882,8 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<SparseMatrixTypes>(m, "SparseMatrixTypes", py::arithmetic())
         .value("Normal", SparseMatrixTypes::Normal)
         .value("CSR", SparseMatrixTypes::CSR)
-        .value("Archived", SparseMatrixTypes::Archived);
+        .value("Archived", SparseMatrixTypes::Archived)
+        .value("Delayed", SparseMatrixTypes::Delayed);
 
     py::enum_<ParallelOpTypes>(m, "ParallelOpTypes", py::arithmetic())
         .value("None", ParallelOpTypes::None)
@@ -1815,7 +1893,8 @@ template <typename S = void> void bind_types(py::module &m) {
 
     py::enum_<TensorFunctionsTypes>(m, "TensorFunctionsTypes", py::arithmetic())
         .value("Normal", TensorFunctionsTypes::Normal)
-        .value("Archived", TensorFunctionsTypes::Archived);
+        .value("Archived", TensorFunctionsTypes::Archived)
+        .value("Delayed", TensorFunctionsTypes::Delayed);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

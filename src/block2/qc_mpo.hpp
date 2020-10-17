@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "delayed_tensor_functions.hpp"
 #include "mpo.hpp"
 #include "operator_tensor.hpp"
 #include "qc_hamiltonian.hpp"
@@ -82,7 +83,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
             (*prop)[0] = i_op;
             this->right_operator_names.push_back(prop);
             bool no_sparse = bra_basis[m]->n == bra_basis[m]->n_states_total &&
-                          ket_basis[m]->n == ket_basis[m]->n_states_total;
+                             ket_basis[m]->n == ket_basis[m]->n_states_total;
             // site operators
             shared_ptr<SparseMatrixInfo<S>> info = site_op_infos[m][0].second;
             if (no_sparse) {
@@ -127,7 +128,10 @@ template <typename S> struct IdentityMPO : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         MPO<S>::op = i_op;
         MPO<S>::const_e = 0.0;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        if (hamil.delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
             // site tensor
@@ -150,6 +154,56 @@ template <typename S> struct IdentityMPO : MPO<S> {
             shared_ptr<SymbolicColumnVector<S>> prop =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*prop)[0] = i_op;
+            this->right_operator_names.push_back(prop);
+            // site operators
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            this->tensors.push_back(opt);
+        }
+    }
+};
+
+// MPO of single site operator
+template <typename S> struct SiteMPO : MPO<S> {
+    using MPO<S>::n_sites;
+    using MPO<S>::site_op_infos;
+    // build site operator op at site k
+    SiteMPO(const Hamiltonian<S> &hamil, const shared_ptr<OpElement<S>> &op,
+            int k = -1)
+        : MPO<S>(hamil.n_sites) {
+        shared_ptr<OpElement<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+        MPO<S>::op = op;
+        MPO<S>::const_e = 0.0;
+        if (hamil.delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
+        if (k == -1) {
+            assert(op->site_index.size() >= 1);
+            k = op->site_index[0];
+        }
+        MPO<S>::site_op_infos = hamil.site_op_infos;
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+            // site tensor
+            shared_ptr<Symbolic<S>> pmat;
+            if (m == 0)
+                pmat = make_shared<SymbolicRowVector<S>>(1);
+            else if (m == hamil.n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S>>(1);
+            else
+                pmat = make_shared<SymbolicMatrix<S>>(1, 1);
+            (*pmat)[{0, 0}] = m == k ? op : i_op;
+            shared_ptr<OperatorTensor<S>> opt =
+                make_shared<OperatorTensor<S>>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector<S>> plop =
+                make_shared<SymbolicRowVector<S>>(1);
+            (*plop)[0] = m >= k ? op : i_op;
+            this->left_operator_names.push_back(plop);
+            shared_ptr<SymbolicColumnVector<S>> prop =
+                make_shared<SymbolicColumnVector<S>>(1);
+            (*prop)[0] = m <= k ? op : i_op;
             this->right_operator_names.push_back(prop);
             // site operators
             hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
@@ -190,7 +244,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> q_op[hamil.n_sites][hamil.n_sites][4];
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
         MPO<S>::const_e = hamil.e();
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        if (hamil.delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
         uint16_t trans_l = -1, trans_r = hamil.n_sites;
         if (trans_center == -1)
@@ -1244,7 +1301,10 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         shared_ptr<OpExpr<S>> q_op[hamil.n_sites][hamil.n_sites][2];
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
         MPO<S>::const_e = hamil.e();
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        if (hamil.delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
         MPO<S>::site_op_infos = hamil.site_op_infos;
         uint16_t trans_l = -1, trans_r = hamil.n_sites;
         if (trans_center == -1)

@@ -237,9 +237,16 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        tf->tensor_product_partial_multiply(
-            pexpr, op->lops, op->rops, trace_right, cmat, psubsl, cinfos,
-            perturb_ket_labels, perturb_ket, vidx);
+        // if no identity operator found in one side,
+        // then the site does not have to be optimized.
+        // perturbative noise can be skipped
+        const shared_ptr<OpElement<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
+        if ((!trace_right && op->lops.count(i_op)) ||
+            (trace_right && op->rops.count(i_op)))
+            tf->tensor_product_partial_multiply(
+                pexpr, op->lops, op->rops, trace_right, cmat, psubsl, cinfos,
+                perturb_ket_labels, perturb_ket, vidx);
         if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
@@ -316,11 +323,48 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
+    // [bra] = [H_eff]^(-1) x [ket]
+    // energy, ndav, nflop, tdav
+    tuple<double, int, size_t, double>
+    inverse_multiply(double const_e, bool iprint = false,
+                     double conv_thrd = 5E-6, int max_iter = 5000,
+                     int soft_max_iter = -1,
+                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int nmult = 0;
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        MatrixRef mket(ket->data, ket->total_memory, 1);
+        MatrixRef mbra(bra->data, bra->total_memory, 1);
+        double r = tf->opf->seq->mode == SeqTypes::Auto
+                       ? MatrixFunctions::minres(
+                             *tf->opf->seq, mbra, mket, nmult, const_e, iprint,
+                             para_rule == nullptr ? nullptr : para_rule->comm,
+                             conv_thrd, max_iter, soft_max_iter)
+                       : MatrixFunctions::minres(
+                             *this, mbra, mket, nmult, const_e, iprint,
+                             para_rule == nullptr ? nullptr : para_rule->comm,
+                             conv_thrd, max_iter, soft_max_iter);
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(r, nmult, (size_t)nflop, t.get_time());
+    }
     // [bra] = [H_eff] x [ket]
-    // norm, nflop, tdav
-    tuple<double, size_t, double>
-    multiply(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    // norm, nmult, nflop, tdav
+    tuple<double, int, size_t, double>
+    multiply(double const_e,
+             const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
+        shared_ptr<OpExpr<S>> expr = op->mat->data[0];
+        if (const_e != 0) {
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+                OpNames::I, SiteIndex(),
+                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+            if (para_rule == nullptr || para_rule->is_root())
+                op->mat->data[0] = expr + const_e * (iop * iop);
+        }
         Timer t;
         t.get_time();
         if (tf->opf->seq->mode == SeqTypes::Auto)
@@ -329,13 +373,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         else
             (*this)(MatrixRef(ket->data, ket->total_memory, 1),
                     MatrixRef(bra->data, bra->total_memory, 1));
+        op->mat->data[0] = expr;
         double norm =
             MatrixFunctions::norm(MatrixRef(bra->data, bra->total_memory, 1));
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(norm, (size_t)nflop, t.get_time());
+        return make_tuple(norm, 1, (size_t)nflop, t.get_time());
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
@@ -1694,12 +1739,12 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix of a MPS tensor
     static shared_ptr<SparseMatrix<S>>
-    density_matrix(S opdq, const shared_ptr<SparseMatrix<S>> &psi,
+    density_matrix(S vacuum, const shared_ptr<SparseMatrix<S>> &psi,
                    bool trace_right, double noise, NoiseTypes noise_type) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
-            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
@@ -1767,13 +1812,13 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix with perturbed wavefunctions as noise
     static shared_ptr<SparseMatrix<S>> density_matrix_with_perturbative_noise(
-        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
         double noise, NoiseTypes noise_type,
         const shared_ptr<SparseMatrixGroup<S>> &mats) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
-            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, opdq,
+            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
@@ -1787,7 +1832,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Density matrix of several MPS tensors summed with weights
     static shared_ptr<SparseMatrix<S>> density_matrix_with_weights(
-        S opdq, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
+        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
         double noise, const vector<MatrixRef> &mats,
         const vector<double> &weights, NoiseTypes noise_type) {
         double *ptr = psi->data;
@@ -1795,7 +1840,7 @@ template <typename S> struct MovingEnvironment {
         assert(mats.size() == weights.size() - 1);
         psi->factor = sqrt(weights[0]);
         shared_ptr<SparseMatrix<S>> dm =
-            density_matrix(opdq, psi, trace_right, noise, noise_type);
+            density_matrix(vacuum, psi, trace_right, noise, noise_type);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
             psi->factor = sqrt(weights[i]);

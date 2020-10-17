@@ -20,16 +20,13 @@
 
 #include "instantiation.hpp"
 
-template struct block2::OpExpr<block2::SZ>;
-template struct block2::OpElement<block2::SZ>;
-template struct block2::OpElementRef<block2::SZ>;
-template struct block2::OpProduct<block2::SZ>;
-template struct block2::OpSumProd<block2::SZ>;
-template struct block2::OpSum<block2::SZ>;
-
-template struct block2::OpExpr<block2::SU2>;
-template struct block2::OpElement<block2::SU2>;
-template struct block2::OpElementRef<block2::SU2>;
-template struct block2::OpProduct<block2::SU2>;
-template struct block2::OpSumProd<block2::SU2>;
-template struct block2::OpSum<block2::SU2>;
+template struct block2::DelayedSparseMatrix<block2::SZ>;
+template struct block2::DelayedSparseMatrix<block2::SU2>;
+template struct block2::DelayedSparseMatrix<block2::SZ,
+                                            block2::SparseMatrix<block2::SZ>>;
+template struct block2::DelayedSparseMatrix<block2::SU2,
+                                            block2::SparseMatrix<block2::SU2>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SZ, block2::CSRSparseMatrix<block2::SZ>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SU2, block2::CSRSparseMatrix<block2::SU2>>;
