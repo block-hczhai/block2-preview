@@ -893,14 +893,107 @@ struct MatrixFunctions {
         memcpy(v.data, w.data(), sizeof(double) * n);
         return nmult;
     }
+    // Solve x in linear equation H x = b
+    // by applying linear CG method
+    // where H is symmetric and positive-definite
+    // H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double
+    conjugate_gradient(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
+                       double consta = 0.0, bool iprint = false,
+                       const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                       int max_iter = 5000, int soft_max_iter = -1) {
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        double old_error = 0.0;
+        r.allocate();
+        p.allocate();
+        r.clear();
+        p.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iadd(r, b, -1);
+            iscale(r, -1);
+            copy(p, r);
+            error = dot(r, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                func = dot(x, b);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            p.deallocate();
+            r.deallocate();
+            nmult = 1;
+            return func;
+        }
+        old_error = error;
+        if (pcomm != nullptr)
+            pcomm->broadcast(p.data, p.size(), pcomm->root);
+        MatrixRef hp(nullptr, x.m, x.n);
+        hp.allocate();
+        int xiter = 0;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            hp.clear();
+            op(p, hp);
+            if (consta != 0)
+                iadd(hp, p, consta);
+
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = old_error / dot(p, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                error = dot(r, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&error, 2, pcomm->root);
+            if (error < conv_thrd)
+                break;
+            else {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    double beta = error / old_error;
+                    old_error = error;
+                    iadd(p, r, 1 / beta);
+                    iscale(p, beta);
+                }
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (cg) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        hp.deallocate();
+        p.deallocate();
+        r.deallocate();
+        return func;
+    }
     // Solve x in linear equation H x = b where H^T = H
     // by applying linear CG method to equation (H H) x = H b
     // where H x := op(x) + consta * x
     template <typename MatMul, typename PComm>
     static double minres(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
-                          double consta = 0.0, bool iprint = false,
-                          const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
-                          int max_iter = 5000, int soft_max_iter = -1) {
+                         double consta = 0.0, bool iprint = false,
+                         const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                         int max_iter = 5000, int soft_max_iter = -1) {
         MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
@@ -988,7 +1081,7 @@ struct MatrixFunctions {
             }
         }
         if (xiter == max_iter && error >= conv_thrd) {
-            cout << "Error : linear solver not converged!" << endl;
+            cout << "Error : linear solver (minres) not converged!" << endl;
             assert(false);
         }
         nmult = xiter + 1;

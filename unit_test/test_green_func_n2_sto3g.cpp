@@ -211,7 +211,7 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
     linear->eta = eta;
     linear->noise_type = NoiseTypes::ReducedPerturbative;
     linear->decomp_type = DecompositionTypes::SVD;
-    linear->iprint = 0;
+    linear->iprint = 2;
     // linear->trunc_type = TruncationTypes::KeepOne * 100;
     // linear->cutoff = 0;
     for (auto xomega : vector<double>{-3.2,-3.1,-3.0, -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2.0}) {

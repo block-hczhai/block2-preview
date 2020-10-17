@@ -323,7 +323,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
-    // [bra] = (([H_eff] + omega)^2 + eta^2)^(-1) x [ket]
+    // [bra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
     // energy, nmult, nflop, tmult
     tuple<double, int, size_t, double> imag_green_function(
         double const_e, double omega, double eta, bool iprint = false,
@@ -352,7 +352,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             MatrixFunctions::iadd(c, b, eta * eta);
             nmult += 2;
         };
-        double r = MatrixFunctions::minres(
+        double r = MatrixFunctions::conjugate_gradient(
             op, mbra, ktmp, numltx, 0.0, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
             max_iter, soft_max_iter);
