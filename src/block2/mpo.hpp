@@ -428,22 +428,29 @@ template <typename S> struct MPO {
     }
 };
 
-// -1 * MPO
-template <typename S> struct NegativeMPO : MPO<S> {
-    using MPO<S>::middle_operator_exprs;
-    using MPO<S>::n_sites;
-    using MPO<S>::const_e;
-    NegativeMPO(const shared_ptr<MPO<S>> &mpo) : MPO<S>(*mpo) {
-        assert(middle_operator_exprs.size() != 0);
-        for (size_t ix = 0; ix < middle_operator_exprs.size(); ix++) {
-            auto &x = middle_operator_exprs[ix];
-            x = x->copy();
-            for (size_t j = 0; j < x->data.size(); j++)
-                x->data[j] = (-1.0) * x->data[j];
-        }
-        const_e = -const_e;
+template <typename S>
+inline shared_ptr<MPO<S>> operator*(double d, const shared_ptr<MPO<S>> &mpo) {
+    shared_ptr<MPO<S>> rmpo = make_shared<MPO<S>>(*mpo);
+    assert(rmpo->middle_operator_exprs.size() != 0);
+    for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+        auto &x = rmpo->middle_operator_exprs[ix];
+        x = x->copy();
+        for (size_t j = 0; j < x->data.size(); j++)
+            x->data[j] = d * x->data[j];
     }
-};
+    rmpo->const_e = d * rmpo->const_e;
+    return rmpo;
+}
+
+template <typename S>
+inline shared_ptr<MPO<S>> operator*(const shared_ptr<MPO<S>> &mpo, double d) {
+    return d * mpo;
+}
+
+template <typename S>
+inline shared_ptr<MPO<S>> operator-(const shared_ptr<MPO<S>> &mpo) {
+    return (-1.0) * mpo;
+}
 
 // Adding ancilla (identity) sites to a MPO
 // n_sites = 2 * n_physical_sites

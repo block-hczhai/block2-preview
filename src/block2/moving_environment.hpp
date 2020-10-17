@@ -335,8 +335,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         t.get_time();
         MatrixRef mket(ket->data, ket->total_memory, 1);
         MatrixRef mbra(bra->data, bra->total_memory, 1);
+        MatrixRef ktmp(nullptr, ket->total_memory, 1);
+        ktmp.allocate();
         MatrixRef btmp(nullptr, bra->total_memory, 1);
         btmp.allocate();
+        ktmp.clear();
+        MatrixFunctions::iadd(ktmp, mket, -eta);
         assert(tf->opf->seq->mode != SeqTypes::Auto);
         auto op = [omega, eta, const_e, this, &btmp,
                    &nmult](const MatrixRef &b, const MatrixRef &c) -> void {
@@ -349,10 +353,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             nmult += 2;
         };
         double r = MatrixFunctions::minres(
-            op, mbra, mket, numltx, 0.0, iprint,
+            op, mbra, ktmp, numltx, 0.0, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
             max_iter, soft_max_iter);
         btmp.deallocate();
+        ktmp.deallocate();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);

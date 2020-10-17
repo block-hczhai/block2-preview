@@ -1023,7 +1023,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
         .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
-        .def("imag_green_function", &EffectiveHamiltonian<S>::imag_green_function)
+        .def("imag_green_function",
+             &EffectiveHamiltonian<S>::imag_green_function)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1434,16 +1435,21 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("tme", &Linear<S>::tme)
         .def_readwrite("bra_bond_dims", &Linear<S>::bra_bond_dims)
         .def_readwrite("ket_bond_dims", &Linear<S>::ket_bond_dims)
+        .def_readwrite("target_bra_bond_dim", &Linear<S>::target_bra_bond_dim)
+        .def_readwrite("target_ket_bond_dim", &Linear<S>::target_ket_bond_dim)
         .def_readwrite("noises", &Linear<S>::noises)
         .def_readwrite("norms", &Linear<S>::norms)
         .def_readwrite("forward", &Linear<S>::forward)
         .def_readwrite("noise_type", &Linear<S>::noise_type)
         .def_readwrite("trunc_type", &Linear<S>::trunc_type)
         .def_readwrite("decomp_type", &Linear<S>::decomp_type)
+        .def_readwrite("eq_type", &Linear<S>::eq_type)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
         .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
+        .def_readwrite("omega", &Linear<S>::omega)
+        .def_readwrite("eta", &Linear<S>::eta)
         .def("update_one_dot", &Linear<S>::update_one_dot)
         .def("update_two_dot", &Linear<S>::update_two_dot)
         .def("blocking", &Linear<S>::blocking)
@@ -1599,7 +1605,14 @@ template <typename S> void bind_mpo(py::module &m) {
         .def("get_parallel_type", &MPO<S>::get_parallel_type)
         .def("estimate_storage", &MPO<S>::estimate_storage, py::arg("info"),
              py::arg("dot"))
-        .def("deallocate", &MPO<S>::deallocate);
+        .def("deallocate", &MPO<S>::deallocate)
+        .def("__neg__",
+             [](MPO<S> *self) { return -make_shared<MPO<S>>(*self); })
+        .def("__mul__", [](MPO<S> *self,
+                           double d) { return d * make_shared<MPO<S>>(*self); })
+        .def("__rmul__", [](MPO<S> *self, double d) {
+            return d * make_shared<MPO<S>>(*self);
+        });
 
     py::class_<Rule<S>, shared_ptr<Rule<S>>>(m, "Rule")
         .def(py::init<>())
@@ -1666,10 +1679,6 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("prim_mpo", &AncillaMPO<S>::prim_mpo)
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, bool>());
-
-    py::class_<NegativeMPO<S>, shared_ptr<NegativeMPO<S>>, MPO<S>>(
-        m, "NegativeMPO")
-        .def(py::init<const shared_ptr<MPO<S>> &>());
 
     py::class_<ArchivedMPO<S>, shared_ptr<ArchivedMPO<S>>, MPO<S>>(
         m, "ArchivedMPO")
@@ -1904,6 +1913,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Normal", TensorFunctionsTypes::Normal)
         .value("Archived", TensorFunctionsTypes::Archived)
         .value("Delayed", TensorFunctionsTypes::Delayed);
+
+    py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
+        .value("Normal", EquationTypes::Normal)
+        .value("ImagGreenFunction", EquationTypes::ImagGreenFunction);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

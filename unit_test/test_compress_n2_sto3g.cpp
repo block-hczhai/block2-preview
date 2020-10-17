@@ -25,7 +25,7 @@ class TestLinearN2STO3G : public ::testing::Test {
 
 template <typename S>
 void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
-                                    const string &name, int dot) {
+                                  const string &name, int dot) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
 
@@ -127,8 +127,8 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     imps_info->deallocate_mutable();
 
     // Negative identity ME
-    shared_ptr<MovingEnvironment<S>> ime = make_shared<MovingEnvironment<S>>(
-        make_shared<NegativeMPO<S>>(impo), imps, mps, "COMPRESS");
+    shared_ptr<MovingEnvironment<S>> ime =
+        make_shared<MovingEnvironment<S>>(-impo, imps, mps, "COMPRESS");
     ime->init_environments();
 
     // Left ME
@@ -152,13 +152,15 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     // Energy ME
     shared_ptr<MovingEnvironment<S>> eme =
         make_shared<MovingEnvironment<S>>(ntr_mpo, imps, mps, "EXPECT");
+    ntr_mpo->const_e = 0;
     eme->init_environments(false);
 
     shared_ptr<Expect<S>> ex2 = make_shared<Expect<S>>(eme, bond_dim, bond_dim);
-    energy = ex2->solve(false) + mpo->const_e;
+    energy = ex2->solve(false);
 
     cout << "== " << name << " (CPS) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
+         << " STD = " << fixed << setw(22) << setprecision(12) << energy_std
          << " error = " << scientific << setprecision(3) << setw(10)
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
