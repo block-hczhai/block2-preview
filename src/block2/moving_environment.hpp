@@ -362,7 +362,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(r, nmult, (size_t)nflop, t.get_time());
+        return make_tuple(r / (-eta), nmult, (size_t)nflop, t.get_time());
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
