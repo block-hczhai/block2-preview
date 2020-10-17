@@ -81,10 +81,10 @@ namespace sci {
         AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
-                           int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl):
+                           int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl, bool verbose=true):
                 nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
                 isRight{isRight},
-                nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}{
+                nMaxAlphaEl{nMaxAlphaEl}, nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}, verbose{verbose}{
             if(nOrbOther < 0)
                 throw std::invalid_argument("nOrb < nOrbThis?");
         };
@@ -99,10 +99,10 @@ namespace sci {
         AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
                            const std::shared_ptr<block2::FCIDUMP>& fcidump,
                            const std::vector<uint8_t>& orbsym,
-                           const vector<vector<int>>& occs):
+                           const vector<vector<int>>& occs, bool verbose=true):
                 nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
                 isRight{isRight},
-                nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}{
+                nMaxAlphaEl{-1}, nMaxBetaEl{-1}, nMaxEl{-1}, verbose{verbose}{
             if(nOrbOther < 0)
                 throw std::invalid_argument("nOrb < nOrbThis?");
         };
@@ -116,6 +116,7 @@ namespace sci {
         double eps = 1e-12; //!< Sparsity value threshold. Everything below eps will be set to 0.0");
         double sparsityThresh = 0.75; // After > #zeros/#tot the sparse matrix is activated
         int sparsityStart = 100*100; // After which matrix size (nCol * nRow) should sparse matrices be activated
+        bool verbose = true;
 
         // Routines for filling the physical operator matrices
         /** Fill Identity */
@@ -147,7 +148,7 @@ namespace sci {
         /** Fill Q op */
         virtual void fillOp_Q(const S& deltaQN, std::vector<entryTuple2>& entries) const {throwError();};
         /** Call this after the fillOps are done*/
-        virtual void finalize(const bool verbose=true) {};
+        virtual void finalize() {};
     private:
         void throwError() const{
             throw std::runtime_error("You used the abstract sci wrapper and not the actual sci wrapper");

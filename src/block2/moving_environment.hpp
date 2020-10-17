@@ -782,7 +782,7 @@ template <typename S> struct MovingEnvironment {
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Tag is used to generate filename for disk storage
     string tag;
-    // Paralell execution control
+    // Parallel execution control
     shared_ptr<ParallelRule<S>> para_rule;
     double tctr = 0, trot = 0;
     Timer _t;
