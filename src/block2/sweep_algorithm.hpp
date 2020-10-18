@@ -229,6 +229,8 @@ template <typename S> struct DMRG {
                     me->ket->save_tensor(i);
                     info = left->info->extract_state_info(forward);
                     mmps = info->n_states_total;
+                    me->ket->info->bond_dim =
+                        max(me->ket->info->bond_dim, (ubond_t)mmps);
                     me->ket->info->left_dims[i + 1] = info;
                     me->ket->info->save_left_dims(i + 1);
                     info->deallocate();
@@ -252,6 +254,8 @@ template <typename S> struct DMRG {
                     me->ket->save_tensor(i);
                     info = right->info->extract_state_info(forward);
                     mmps = info->n_states_total;
+                    me->ket->info->bond_dim =
+                        max(me->ket->info->bond_dim, (ubond_t)mmps);
                     me->ket->info->right_dims[i] = info;
                     me->ket->info->save_right_dims(i);
                     info->deallocate();
@@ -401,6 +405,8 @@ template <typename S> struct DMRG {
             if (forward) {
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
                 me->ket->info->save_left_dims(i + 1);
                 me->ket->canonical_form[i] = 'L';
@@ -409,6 +415,8 @@ template <typename S> struct DMRG {
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
                 me->ket->info->save_right_dims(i + 1);
                 me->ket->canonical_form[i] = 'C';
@@ -544,6 +552,7 @@ template <typename S> struct DMRG {
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                mket->info->bond_dim = max(mket->info->bond_dim, (ubond_t)mmps);
                 mket->info->left_dims[i + 1] = info;
                 mket->info->save_left_dims(i + 1);
                 info->deallocate();
@@ -567,6 +576,7 @@ template <typename S> struct DMRG {
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                mket->info->bond_dim = max(mket->info->bond_dim, (ubond_t)mmps);
                 mket->info->right_dims[i] = info;
                 mket->info->save_right_dims(i);
                 info->deallocate();
@@ -686,6 +696,8 @@ template <typename S> struct DMRG {
             if (forward) {
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
                 me->ket->info->save_left_dims(i + 1);
                 me->ket->canonical_form[i] = 'L';
@@ -694,6 +706,8 @@ template <typename S> struct DMRG {
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
                 me->ket->info->save_right_dims(i + 1);
                 me->ket->canonical_form[i] = 'M';
@@ -1084,6 +1098,8 @@ template <typename S> struct ImaginaryTE {
                 me->ket->save_tensor(i);
                 info = left->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
                 me->ket->info->save_left_dims(i + 1);
             } else {
@@ -1093,6 +1109,8 @@ template <typename S> struct ImaginaryTE {
                 me->ket->save_tensor(i);
                 info = right->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i] = info;
                 me->ket->info->save_right_dims(i);
             }
@@ -1306,6 +1324,8 @@ template <typename S> struct ImaginaryTE {
                     me->ket->tensors[i + 1]->normalize();
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
                 me->ket->info->save_left_dims(i + 1);
                 me->ket->canonical_form[i] = 'L';
@@ -1316,6 +1336,8 @@ template <typename S> struct ImaginaryTE {
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
                 mmps = info->n_states_total;
+                me->ket->info->bond_dim =
+                    max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
                 me->ket->info->save_right_dims(i + 1);
                 me->ket->canonical_form[i] = 'C';
@@ -1787,8 +1809,11 @@ template <typename S> struct Linear {
                         mps->tensors[i] = left;
                         mps->save_tensor(i);
                         info = left->info->extract_state_info(forward);
-                        if (mps == me->bra)
+                        if (mps == me->bra) {
                             bra_mmps = info->n_states_total;
+                            mps->info->bond_dim =
+                                max(mps->info->bond_dim, (ubond_t)bra_mmps);
+                        }
                         mps->info->left_dims[i + 1] = info;
                         mps->info->save_left_dims(i + 1);
                         info->deallocate();
@@ -1811,8 +1836,11 @@ template <typename S> struct Linear {
                         mps->tensors[i] = right;
                         mps->save_tensor(i);
                         info = right->info->extract_state_info(forward);
-                        if (mps == me->bra)
+                        if (mps == me->bra) {
                             bra_mmps = info->n_states_total;
+                            mps->info->bond_dim =
+                                max(mps->info->bond_dim, (ubond_t)bra_mmps);
+                        }
                         mps->info->right_dims[i] = info;
                         mps->info->save_right_dims(i);
                         info->deallocate();
@@ -2026,8 +2054,11 @@ template <typename S> struct Linear {
                     mps->canonical_form[i] = 'C';
                     mps->canonical_form[i + 1] = 'R';
                 }
-                if (mps == me->bra)
+                if (mps == me->bra) {
                     bra_mmps = info->n_states_total;
+                    mps->info->bond_dim =
+                        max(mps->info->bond_dim, (ubond_t)bra_mmps);
+                }
                 info->deallocate();
                 mps->save_tensor(i + 1);
                 mps->save_tensor(i);

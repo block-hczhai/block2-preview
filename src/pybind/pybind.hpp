@@ -725,12 +725,16 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("left_dims", &MPSInfo<S>::left_dims)
         .def_readwrite("right_dims", &MPSInfo<S>::right_dims)
         .def_readwrite("tag", &MPSInfo<S>::tag)
-        .def(py::init([](int n_sites, S vacuum, S target,
-                         const vector<shared_ptr<StateInfo<S>>> &basis) {
-            return make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis);
-        }))
+        .def(py::init<int>())
+        .def(py::init<int, S, S, const vector<shared_ptr<StateInfo<S>>> &>())
+        .def(py::init<int, S, S, const vector<shared_ptr<StateInfo<S>>> &,
+                      bool>())
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
         .def("get_multi_type", &MPSInfo<S>::get_multi_type)
+        .def("load_data",
+             (void (MPSInfo<S>::*)(const string &)) & MPSInfo<S>::load_data)
+        .def("save_data", (void (MPSInfo<S>::*)(const string &) const) &
+                              MPSInfo<S>::save_data)
         .def("set_bond_dimension_using_occ",
              &MPSInfo<S>::set_bond_dimension_using_occ, py::arg("m"),
              py::arg("occ"), py::arg("bias") = 1.0)

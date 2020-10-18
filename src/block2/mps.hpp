@@ -84,6 +84,7 @@ template <typename S> struct MPSInfo {
     // Actual (truncated) states for left/right block
     vector<shared_ptr<StateInfo<S>>> left_dims, right_dims;
     string tag = "KET";
+    MPSInfo(int n_sites) : n_sites(n_sites), bond_dim(0) {}
     MPSInfo(int n_sites, S vacuum, S target,
             const vector<shared_ptr<StateInfo<S>>> &basis, bool init_fci = true)
         : n_sites(n_sites), vacuum(vacuum), target(target), basis(basis),
@@ -103,6 +104,81 @@ template <typename S> struct MPSInfo {
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
+    virtual void load_data(ifstream &ifs) {
+        ifs.read((char *)&n_sites, sizeof(n_sites));
+        ifs.read((char *)&vacuum, sizeof(vacuum));
+        ifs.read((char *)&target, sizeof(target));
+        ifs.read((char *)&bond_dim, sizeof(bond_dim));
+        int ltag = 0;
+        ifs.read((char *)&ltag, sizeof(ltag));
+        tag = string(ltag, ' ');
+        ifs.read((char *)&tag[0], sizeof(char) * ltag);
+        basis.resize(n_sites);
+        left_dims_fci.resize(n_sites + 1);
+        right_dims_fci.resize(n_sites + 1);
+        left_dims.resize(n_sites + 1);
+        right_dims.resize(n_sites + 1);
+        for (int i = 0; i < n_sites; i++) {
+            basis[i] = make_shared<StateInfo<S>>();
+            basis[i]->load_data(ifs);
+        }
+        vector<vector<shared_ptr<StateInfo<S>>> *> arrs = {&left_dims_fci,
+                                                           &right_dims_fci};
+        for (auto *arr : arrs)
+            for (int i = 0; i <= n_sites; i++) {
+                (*arr)[i] = make_shared<StateInfo<S>>();
+                (*arr)[i]->load_data(ifs);
+            }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i] = make_shared<StateInfo<S>>();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i] = make_shared<StateInfo<S>>();
+    }
+    void load_data(const string &filename) {
+        ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPSInfo:load_data on '" + filename +
+                                "' failed.");
+        load_data(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPSInfo:load_data on '" + filename +
+                                "' failed.");
+        ifs.close();
+    }
+    virtual void save_data(ofstream &ofs) const {
+        ofs.write((char *)&n_sites, sizeof(n_sites));
+        ofs.write((char *)&vacuum, sizeof(vacuum));
+        ofs.write((char *)&target, sizeof(target));
+        ofs.write((char *)&bond_dim, sizeof(bond_dim));
+        int ltag = (int)tag.size();
+        ofs.write((char *)&ltag, sizeof(ltag));
+        ofs.write((char *)&tag[0], sizeof(char) * ltag);
+        assert((int)basis.size() == n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            assert(basis[i] != nullptr);
+            basis[i]->save_data(ofs);
+        }
+        vector<const vector<shared_ptr<StateInfo<S>>> *> arrs = {
+            &left_dims_fci, &right_dims_fci};
+        for (const auto *arr : arrs) {
+            assert((int)arr->size() == n_sites + 1);
+            for (int i = 0; i <= n_sites; i++) {
+                assert((*arr)[i] != nullptr);
+                (*arr)[i]->save_data(ofs);
+            }
+        }
+    }
+    void save_data(const string &filename) const {
+        ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("MPSInfo:save_data on '" + filename +
+                                "' failed.");
+        save_data(ofs);
+        if (!ofs.good())
+            throw runtime_error("MPSInfo:save_data on '" + filename +
+                                "' failed.");
+        ofs.close();
+    }
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
@@ -859,8 +935,7 @@ template <typename S> struct MPS {
         } else
             for (int i = 1; i <= n_sites; i++) {
                 peak = max(peak, (size_t)(left_total[i] - left_total[i - 1]));
-                total =
-                    max(total, left_total[i] + right_total[n_sites - i]);
+                total = max(total, left_total[i] + right_total[n_sites - i]);
             }
         return vector<size_t>{peak * 8, total * 8};
     }
