@@ -337,6 +337,48 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
             }
     }
+    void intermediates(const shared_ptr<Symbolic<S>> &names,
+                       const shared_ptr<Symbolic<S>> &exprs,
+                       const shared_ptr<OperatorTensor<S>> &a,
+                       bool left) const override {
+        vector<shared_ptr<SparseMatrix<S>>> mats;
+        auto f = [&a, left, this](const shared_ptr<OpExpr<S>> &pexpr,
+                                  shared_ptr<SparseMatrix<S>> &mat) {
+            if (pexpr->get_type() == OpTypes::Sum) {
+                shared_ptr<OpSum<S>> expr =
+                    dynamic_pointer_cast<OpSum<S>>(pexpr);
+                for (size_t j = 0; j < expr->strings.size(); j++)
+                    if (expr->strings[j]->get_type() == OpTypes::SumProd) {
+                        shared_ptr<OpSumProd<S>> ex =
+                            dynamic_pointer_cast<OpSumProd<S>>(
+                                expr->strings[j]);
+                        if ((left && ex->b == nullptr) ||
+                            (!left && ex->a == nullptr) || ex->c == nullptr)
+                            continue;
+                        if (a->ops.count(ex->c) != 0)
+                            continue;
+                        shared_ptr<SparseMatrix<S>> tmp =
+                            make_shared<SparseMatrix<S>>();
+                        shared_ptr<OpExpr<S>> opb =
+                            abs_value((shared_ptr<OpExpr<S>>)ex->ops[0]);
+                        assert(a->ops.count(opb) != 0);
+                        tmp->allocate(a->ops.at(opb)->info);
+                        for (size_t k = 0; k < ex->ops.size(); k++) {
+                            this->opf->iadd(
+                                tmp,
+                                a->ops.at(abs_value(
+                                    (shared_ptr<OpExpr<S>>)ex->ops[k])),
+                                ex->ops[k]->factor, ex->conjs[k]);
+                            if (this->opf->seq->mode == SeqTypes::Simple)
+                                this->opf->seq->simple_perform();
+                        }
+                        a->ops[ex->c] = tmp;
+                    }
+            }
+        };
+        auto g = []() {};
+        rule->parallel_apply(f, g, names->data, exprs->data, mats);
+    }
     // Numerical transform from normal operators
     // to complementary operators near the middle site
     void

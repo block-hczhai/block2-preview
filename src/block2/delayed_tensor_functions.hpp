@@ -353,8 +353,17 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                 dynamic_pointer_cast<OpSumProd<S>>(expr);
             assert((op->a == nullptr) ^ (op->b == nullptr));
             assert(op->ops.size() != 0);
+            bool has_intermediate = false;
             shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
-            if (op->b == nullptr) {
+            if (op->c != nullptr && ((op->b == nullptr && rop.count(op->c)) ||
+                                     (op->a == nullptr && lop.count(op->c)))) {
+                has_intermediate = true;
+                if (op->b == nullptr && rop.count(op->c))
+                    tmp = rop.at(op->c);
+                else
+                    tmp = lop.at(op->c);
+                assert(tmp->get_type() != SparseMatrixTypes::Delayed);
+            } else if (op->b == nullptr) {
                 shared_ptr<OpExpr<S>> opb =
                     abs_value((shared_ptr<OpExpr<S>>)op->ops[0]);
                 assert(lop.count(op->a) != 0 && rop.count(opb) != 0);
@@ -367,8 +376,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                         dr ? dynamic_pointer_cast<DelayedSparseMatrix<S>>(rmat)
                                  ->build()
                            : rmat;
-                    opf->iadd(tmp, rmat, op->factor * op->ops[i]->factor,
-                              op->conjs[i]);
+                    opf->iadd(tmp, rmat, op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                     if (dr)
@@ -387,8 +395,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                         dl ? dynamic_pointer_cast<DelayedSparseMatrix<S>>(lmat)
                                  ->build()
                            : lmat;
-                    opf->iadd(tmp, lmat, op->factor * op->ops[i]->factor,
-                              op->conjs[i]);
+                    opf->iadd(tmp, lmat, op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                     if (dl)
@@ -401,7 +408,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                 lmat = dl ? dynamic_pointer_cast<DelayedSparseMatrix<S>>(lmat)
                                 ->build()
                           : lmat;
-                opf->tensor_product(op->conj, lmat, tmp, mat, 1.0);
+                opf->tensor_product(op->conj, lmat, tmp, mat, op->factor);
                 if (dl)
                     lmat->deallocate();
             } else {
@@ -410,11 +417,12 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                 rmat = dr ? dynamic_pointer_cast<DelayedSparseMatrix<S>>(rmat)
                                 ->build()
                           : rmat;
-                opf->tensor_product(op->conj, tmp, rmat, mat, 1.0);
+                opf->tensor_product(op->conj, tmp, rmat, mat, op->factor);
                 if (dr)
                     rmat->deallocate();
             }
-            tmp->deallocate();
+            if (!has_intermediate)
+                tmp->deallocate();
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);

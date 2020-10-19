@@ -288,10 +288,17 @@ template <typename S> void bind_expr(py::module &m) {
         m, "OpSumProd")
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const vector<shared_ptr<OpElement<S>>> &,
+                      const vector<bool> &, double, uint8_t,
+                      const shared_ptr<OpElement<S>> &>())
+        .def(py::init<const shared_ptr<OpElement<S>> &,
+                      const vector<shared_ptr<OpElement<S>>> &,
                       const vector<bool> &, double, uint8_t>())
         .def(py::init<const shared_ptr<OpElement<S>> &,
                       const vector<shared_ptr<OpElement<S>>> &,
                       const vector<bool> &, double>())
+        .def(py::init<const vector<shared_ptr<OpElement<S>>> &,
+                      const shared_ptr<OpElement<S>> &, const vector<bool> &,
+                      double, uint8_t, const shared_ptr<OpElement<S>> &>())
         .def(py::init<const vector<shared_ptr<OpElement<S>>> &,
                       const shared_ptr<OpElement<S>> &, const vector<bool> &,
                       double, uint8_t>())
@@ -299,7 +306,8 @@ template <typename S> void bind_expr(py::module &m) {
                       const shared_ptr<OpElement<S>> &, const vector<bool> &,
                       double>())
         .def_readwrite("ops", &OpSumProd<S>::ops)
-        .def_readwrite("conjs", &OpSumProd<S>::conjs);
+        .def_readwrite("conjs", &OpSumProd<S>::conjs)
+        .def_readwrite("c", &OpSumProd<S>::c);
 
     py::class_<OpSum<S>, shared_ptr<OpSum<S>>, OpExpr<S>>(m, "OpSum")
         .def(py::init<const vector<shared_ptr<OpProduct<S>>> &>())
@@ -938,6 +946,7 @@ template <typename S> void bind_operator(py::module &m) {
         .def("tensor_product", &TensorFunctions<S>::tensor_product)
         .def("left_rotate", &TensorFunctions<S>::left_rotate)
         .def("right_rotate", &TensorFunctions<S>::right_rotate)
+        .def("intermediates", &TensorFunctions<S>::intermediates)
         .def("numerical_transform", &TensorFunctions<S>::numerical_transform)
         .def("delayed_contract",
              (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
@@ -1027,8 +1036,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def("eigs", &EffectiveHamiltonian<S>::eigs)
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
         .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
-        .def("imag_green_function",
-             &EffectiveHamiltonian<S>::greens_function)
+        .def("greens_function", &EffectiveHamiltonian<S>::greens_function)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1648,10 +1656,13 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("prim_mpo", &SimplifiedMPO<S>::prim_mpo)
         .def_readwrite("rule", &SimplifiedMPO<S>::rule)
         .def_readwrite("collect_terms", &SimplifiedMPO<S>::collect_terms)
+        .def_readwrite("use_intermediate", &SimplifiedMPO<S>::use_intermediate)
         .def(
             py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
                       bool>())
+        .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
+                      bool, bool>())
         .def("simplify_expr", &SimplifiedMPO<S>::simplify_expr)
         .def("simplify_symbolic", &SimplifiedMPO<S>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S>::simplify);
@@ -1817,9 +1828,19 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("P", OpNames::P)
         .value("PD", OpNames::PD)
         .value("B", OpNames::B)
+        .value("BD", OpNames::BD)
         .value("Q", OpNames::Q)
         .value("Zero", OpNames::Zero)
-        .value("PDM1", OpNames::PDM1);
+        .value("PDM1", OpNames::PDM1)
+        .value("PDM2", OpNames::PDM2)
+        .value("CCDD", OpNames::CCDD)
+        .value("CCD", OpNames::CCD)
+        .value("CDC", OpNames::CDC)
+        .value("CDD", OpNames::CDD)
+        .value("DCC", OpNames::DCC)
+        .value("DCD", OpNames::DCD)
+        .value("DDC", OpNames::DDC)
+        .value("TEMP", OpNames::TEMP);
 
     py::enum_<DelayedOpNames>(m, "DelayedOpNames", py::arithmetic())
         .value("Nothing", DelayedOpNames::None)

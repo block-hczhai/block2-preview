@@ -43,11 +43,14 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
     // product of one symbol times a sum of symbols
     // (if there are common factors)
     // A x B + A x C + A x D => A x (B + C + D)
-    bool collect_terms;
+    bool collect_terms, use_intermediate;
     SimplifiedMPO(const shared_ptr<MPO<S>> &mpo,
-                  const shared_ptr<Rule<S>> &rule, bool collect_terms = true)
+                  const shared_ptr<Rule<S>> &rule, bool collect_terms = true,
+                  bool use_intermediate = false)
         : prim_mpo(mpo), rule(rule), MPO<S>(mpo->n_sites),
-          collect_terms(collect_terms) {
+          collect_terms(collect_terms), use_intermediate(use_intermediate) {
+        if (!collect_terms)
+            use_intermediate = false;
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::tensors = mpo->tensors;
@@ -733,6 +736,28 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         }
         name->data.resize(k);
         expr->data.resize(k);
+        if (use_intermediate) {
+            uint16_t idxi = 0, idxj = 0;
+            for (size_t j = 0; j < expr->data.size(); j++) {
+                if (expr->data[j]->get_type() == OpTypes::Sum) {
+                    shared_ptr<OpSum<S>> ex =
+                        dynamic_pointer_cast<OpSum<S>>(expr->data[j]);
+                    for (size_t k = 0; k < ex->strings.size(); k++)
+                        if (ex->strings[k]->get_type() == OpTypes::SumProd) {
+                            shared_ptr<OpSumProd<S>> op =
+                                dynamic_pointer_cast<OpSumProd<S>>(
+                                    ex->strings[k]);
+                            assert(op->ops.size() != 0);
+                            op->c = make_shared<OpElement<S>>(
+                                OpNames::TEMP, SiteIndex({idxj, idxi}, {}),
+                                op->ops[0]->q_label);
+                            idxi++;
+                            if (idxi == 1000)
+                                idxi = 0, idxj++;
+                        }
+                }
+            }
+        }
         if (name->get_type() == SymTypes::RVec)
             name->n = expr->n = (int)name->data.size();
         else

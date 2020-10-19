@@ -156,17 +156,18 @@ template <typename S> struct ParallelRule {
                 op_exprs[i] =
                     make_pair(op, dynamic_pointer_cast<OpExprRef<S>>(expr));
         }
+        shared_ptr<SparseMatrix<S>> xm = nullptr;
         for (size_t i = 0; i < exprs.size(); i++) {
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
                 partial(op) ? (expr_ref->is_local ? own(op) : true) : own(op);
             if (req) {
-                f(expr_ref->op, mats[i]);
+                f(expr_ref->op, mats.size() != 0 ? mats[i] : xm);
             }
         }
         g();
-        for (size_t i = 0; i < exprs.size(); i++) {
+        for (size_t i = 0; i < mats.size(); i++) {
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             if (partial(op) && !expr_ref->is_local)
@@ -243,7 +244,7 @@ template <typename S> struct ParallelRule {
                             conjs.flip(), cjx ^= 1 << 1;
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpSumProd<S>>(op->a, ops, conjs,
-                                                      op->factor, cjx),
+                                                      op->factor, cjx, op->c),
                             ops.size() == op->ops.size());
                     }
                 }
@@ -270,7 +271,7 @@ template <typename S> struct ParallelRule {
                             conjs.flip(), cjx ^= 1;
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpSumProd<S>>(ops, op->b, conjs,
-                                                      op->factor, cjx),
+                                                      op->factor, cjx, op->c),
                             ops.size() == op->ops.size());
                     }
                 }

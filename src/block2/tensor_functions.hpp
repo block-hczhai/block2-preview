@@ -274,8 +274,16 @@ template <typename S> struct TensorFunctions {
                 dynamic_pointer_cast<OpSumProd<S>>(expr);
             assert((op->a == nullptr) ^ (op->b == nullptr));
             assert(op->ops.size() != 0);
+            bool has_intermediate = false;
             shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
-            if (op->b == nullptr) {
+            if (op->c != nullptr && ((op->b == nullptr && rop.count(op->c)) ||
+                                     (op->a == nullptr && lop.count(op->c)))) {
+                has_intermediate = true;
+                if (op->b == nullptr && rop.count(op->c))
+                    tmp = rop.at(op->c);
+                else
+                    tmp = lop.at(op->c);
+            } else if (op->b == nullptr) {
                 shared_ptr<OpExpr<S>> opb =
                     abs_value((shared_ptr<OpExpr<S>>)op->ops[0]);
                 assert(lop.count(op->a) != 0 && rop.count(opb) != 0);
@@ -284,7 +292,7 @@ template <typename S> struct TensorFunctions {
                     opf->iadd(
                         tmp,
                         rop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
-                        op->factor * op->ops[i]->factor, op->conjs[i]);
+                        op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                 }
@@ -297,16 +305,19 @@ template <typename S> struct TensorFunctions {
                     opf->iadd(
                         tmp,
                         lop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
-                        op->factor * op->ops[i]->factor, op->conjs[i]);
+                        op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                 }
             }
             if (op->b == nullptr)
-                opf->tensor_product(op->conj, lop.at(op->a), tmp, mat, 1.0);
+                opf->tensor_product(op->conj, lop.at(op->a), tmp, mat,
+                                    op->factor);
             else
-                opf->tensor_product(op->conj, tmp, rop.at(op->b), mat, 1.0);
-            tmp->deallocate();
+                opf->tensor_product(op->conj, tmp, rop.at(op->b), mat,
+                                    op->factor);
+            if (!has_intermediate)
+                tmp->deallocate();
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
@@ -357,6 +368,44 @@ template <typename S> struct TensorFunctions {
             }
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
+    }
+    virtual void intermediates(const shared_ptr<Symbolic<S>> &names,
+                               const shared_ptr<Symbolic<S>> &exprs,
+                               const shared_ptr<OperatorTensor<S>> &a,
+                               bool left) const {
+        for (size_t i = 0; i < exprs->data.size(); i++)
+            if (exprs->data[i]->get_type() == OpTypes::Sum) {
+                shared_ptr<OpSum<S>> expr =
+                    dynamic_pointer_cast<OpSum<S>>(exprs->data[i]);
+                for (size_t j = 0; j < expr->strings.size(); j++)
+                    if (expr->strings[j]->get_type() == OpTypes::SumProd) {
+                        shared_ptr<OpSumProd<S>> ex =
+                            dynamic_pointer_cast<OpSumProd<S>>(
+                                expr->strings[j]);
+                        if ((left && ex->b == nullptr) ||
+                            (!left && ex->a == nullptr) || ex->c == nullptr)
+                            continue;
+                        if (a->ops.count(ex->c) != 0)
+                            continue;
+                        shared_ptr<SparseMatrix<S>> tmp =
+                            make_shared<SparseMatrix<S>>();
+                        shared_ptr<OpExpr<S>> opb =
+                            abs_value((shared_ptr<OpExpr<S>>)ex->ops[0]);
+                        assert(a->ops.count(opb) != 0);
+                        tmp->allocate(a->ops.at(opb)->info);
+                        for (size_t k = 0; k < ex->ops.size(); k++) {
+                            shared_ptr<SparseMatrix<S>> xmat = a->ops.at(
+                                abs_value((shared_ptr<OpExpr<S>>)ex->ops[k]));
+                            assert(xmat->get_type() !=
+                                   SparseMatrixTypes::Delayed);
+                            opf->iadd(tmp, xmat, ex->ops[k]->factor,
+                                      ex->conjs[k]);
+                            if (opf->seq->mode == SeqTypes::Simple)
+                                opf->seq->simple_perform();
+                        }
+                        a->ops[ex->c] = tmp;
+                    }
+            }
     }
     // Numerical transform from normal operators
     // to complementary operators near the middle site

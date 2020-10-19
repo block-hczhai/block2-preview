@@ -340,7 +340,17 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             assert((op->a == nullptr) ^ (op->b == nullptr));
             assert(op->ops.size() != 0);
             shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
-            if (op->b == nullptr) {
+            if (op->c != nullptr && ((op->b == nullptr && rop.count(op->c)) ||
+                                     (op->a == nullptr && lop.count(op->c)))) {
+                if (op->b == nullptr && rop.count(op->c))
+                    tmp = dynamic_pointer_cast<ArchivedSparseMatrix<S>>(
+                              rop.at(op->c))
+                              ->load_archive();
+                else
+                    tmp = dynamic_pointer_cast<ArchivedSparseMatrix<S>>(
+                              lop.at(op->c))
+                              ->load_archive();
+            } else if (op->b == nullptr) {
                 shared_ptr<OpExpr<S>> opb =
                     abs_value((shared_ptr<OpExpr<S>>)op->ops[0]);
                 assert(lop.count(op->a) != 0 && rop.count(opb) != 0);
@@ -351,8 +361,7 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                             rop.at(
                                 abs_value((shared_ptr<OpExpr<S>>)op->ops[i])))
                             ->load_archive();
-                    opf->iadd(tmp, rmat, op->factor * op->ops[i]->factor,
-                              op->conjs[i]);
+                    opf->iadd(tmp, rmat, op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                     rmat->deallocate();
@@ -368,8 +377,7 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                             lop.at(
                                 abs_value((shared_ptr<OpExpr<S>>)op->ops[i])))
                             ->load_archive();
-                    opf->iadd(tmp, lmat, op->factor * op->ops[i]->factor,
-                              op->conjs[i]);
+                    opf->iadd(tmp, lmat, op->ops[i]->factor, op->conjs[i]);
                     if (opf->seq->mode == SeqTypes::Simple)
                         opf->seq->simple_perform();
                     lmat->deallocate();
@@ -379,13 +387,13 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 shared_ptr<SparseMatrix<S>> lmat =
                     dynamic_pointer_cast<ArchivedSparseMatrix<S>>(lop.at(op->a))
                         ->load_archive();
-                opf->tensor_product(op->conj, lmat, tmp, omat, 1.0);
+                opf->tensor_product(op->conj, lmat, tmp, omat, op->factor);
                 lmat->deallocate();
             } else {
                 shared_ptr<SparseMatrix<S>> rmat =
                     dynamic_pointer_cast<ArchivedSparseMatrix<S>>(rop.at(op->b))
                         ->load_archive();
-                opf->tensor_product(op->conj, tmp, rmat, omat, 1.0);
+                opf->tensor_product(op->conj, tmp, rmat, omat, op->factor);
                 rmat->deallocate();
             }
             tmp->deallocate();
@@ -473,6 +481,52 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             }
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
+    }
+    void intermediates(const shared_ptr<Symbolic<S>> &names,
+                       const shared_ptr<Symbolic<S>> &exprs,
+                       const shared_ptr<OperatorTensor<S>> &a,
+                       bool left) const override {
+        for (size_t i = 0; i < exprs->data.size(); i++)
+            if (exprs->data[i]->get_type() == OpTypes::Sum) {
+                shared_ptr<OpSum<S>> expr =
+                    dynamic_pointer_cast<OpSum<S>>(exprs->data[i]);
+                for (size_t j = 0; j < expr->strings.size(); j++)
+                    if (expr->strings[j]->get_type() == OpTypes::SumProd) {
+                        shared_ptr<OpSumProd<S>> ex =
+                            dynamic_pointer_cast<OpSumProd<S>>(
+                                expr->strings[j]);
+                        if ((left && ex->b == nullptr) ||
+                            (!left && ex->a == nullptr) || ex->c == nullptr)
+                            continue;
+                        if (a->ops.count(ex->c) != 0)
+                            continue;
+                        shared_ptr<SparseMatrix<S>> tmp =
+                            make_shared<SparseMatrix<S>>();
+                        shared_ptr<OpExpr<S>> opb =
+                            abs_value((shared_ptr<OpExpr<S>>)ex->ops[0]);
+                        assert(a->ops.count(opb) != 0);
+                        tmp->allocate(a->ops.at(opb)->info);
+                        for (size_t k = 0; k < ex->ops.size(); k++) {
+                            shared_ptr<SparseMatrix<S>> xmat =
+                                dynamic_pointer_cast<ArchivedSparseMatrix<S>>(
+                                    a->ops.at(abs_value(
+                                        (shared_ptr<OpExpr<S>>)ex->ops[k])))
+                                    ->load_archive();
+                            opf->iadd(tmp, xmat, ex->ops[k]->factor,
+                                      ex->conjs[k]);
+                            if (opf->seq->mode == SeqTypes::Simple)
+                                opf->seq->simple_perform();
+                            xmat->deallocate();
+                        }
+                        shared_ptr<ArchivedSparseMatrix<S>> arc =
+                            make_shared<ArchivedSparseMatrix<S>>(filename,
+                                                                 offset);
+                        arc->save_archive(tmp);
+                        tmp->deallocate();
+                        a->ops[ex->c] = arc;
+                        offset += arc->total_memory;
+                    }
+            }
     }
     // Numerical transform from normal operators
     // to complementary operators near the middle site
