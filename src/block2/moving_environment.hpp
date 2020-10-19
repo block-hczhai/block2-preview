@@ -323,18 +323,21 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
-    // [bra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
-    // energy, nmult, nflop, tmult
-    tuple<double, int, size_t, double> imag_green_function(
-        double const_e, double omega, double eta, bool iprint = false,
-        double conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    // [ibra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
+    // [rbra] = -([H_eff] + omega) (1/eta) [bra]
+    // (real gf, imag gf), nmult, nflop, tmult
+    tuple<pair<double, double>, int, size_t, double>
+    greens_function(double const_e, double omega, double eta,
+                    const shared_ptr<SparseMatrix<S>> &real_bra,
+                    bool iprint = false, double conv_thrd = 5E-6,
+                    int max_iter = 5000, int soft_max_iter = -1,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int nmult = 0, numltx = 0;
         frame->activate(0);
         Timer t;
         t.get_time();
         MatrixRef mket(ket->data, ket->total_memory, 1);
-        MatrixRef mbra(bra->data, bra->total_memory, 1);
+        MatrixRef ibra(bra->data, bra->total_memory, 1);
         MatrixRef ktmp(nullptr, ket->total_memory, 1);
         ktmp.allocate();
         MatrixRef btmp(nullptr, bra->total_memory, 1);
@@ -352,17 +355,28 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             MatrixFunctions::iadd(c, b, eta * eta);
             nmult += 2;
         };
-        double r = MatrixFunctions::conjugate_gradient(
-            op, mbra, ktmp, numltx, 0.0, iprint,
-            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter);
+        // solve imag part -> ibra
+        double igf = MatrixFunctions::conjugate_gradient(
+                         op, ibra, ktmp, numltx, 0.0, iprint,
+                         para_rule == nullptr ? nullptr : para_rule->comm,
+                         conv_thrd, max_iter, soft_max_iter) /
+                     (-eta);
         btmp.deallocate();
         ktmp.deallocate();
+        // compute real part -> rbra
+        MatrixRef rbra(real_bra->data, real_bra->total_memory, 1);
+        rbra.clear();
+        (*this)(ibra, rbra);
+        MatrixFunctions::iadd(rbra, ibra, const_e + omega);
+        MatrixFunctions::iscale(rbra, -1 / eta);
+        // compute real part green's function
+        double rgf = MatrixFunctions::dot(rbra, mket);
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(r / (-eta), nmult, (size_t)nflop, t.get_time());
+        return make_tuple(make_pair(rgf, igf), nmult + 1, (size_t)nflop,
+                          t.get_time());
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
@@ -1803,7 +1817,9 @@ template <typename S> struct MovingEnvironment {
     // Density matrix of a MPS tensor
     static shared_ptr<SparseMatrix<S>>
     density_matrix(S vacuum, const shared_ptr<SparseMatrix<S>> &psi,
-                   bool trace_right, double noise, NoiseTypes noise_type) {
+                   bool trace_right, double noise, NoiseTypes noise_type,
+                   double scale = 1.0,
+                   const shared_ptr<SparseMatrixGroup<S>> &pkets = nullptr) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
@@ -1811,9 +1827,75 @@ template <typename S> struct MovingEnvironment {
             trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
+        assert(psi->factor == 1);
+        psi->factor = sqrt(scale);
         OperatorFunctions<S>::trans_product(psi, dm, trace_right, sqrt(noise),
                                             noise_type);
+        psi->factor = 1;
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
+            assert(pkets != nullptr);
+            scale_perturbative_noise(noise, noise_type, pkets);
+            for (int i = 1; i < pkets->n; i++)
+                OperatorFunctions<S>::trans_product(
+                    (*pkets)[i], dm, trace_right, 0.0, NoiseTypes::None);
+        }
         return dm;
+    }
+    // Density matrix of a MultiMPS tensor
+    // noise will be added several times (for each wfn)
+    static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
+        S opdq, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
+        const vector<double> weights, bool trace_right, double noise,
+        NoiseTypes noise_type) {
+        shared_ptr<SparseMatrixInfo<S>> dm_info =
+            make_shared<SparseMatrixInfo<S>>();
+        dm_info->initialize_dm(psi[0]->infos, opdq, trace_right);
+        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
+        dm->allocate(dm_info);
+        assert(weights.size() == psi.size());
+        for (size_t i = 0; i < psi.size(); i++)
+            for (int j = 0; j < psi[i]->n; j++) {
+                shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
+                wfn->factor = weights[i];
+                OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
+                                                    sqrt(noise), noise_type);
+            }
+        return dm;
+    }
+    // Add wavefunction to density matrix
+    static void density_matrix_add_wfn(const shared_ptr<SparseMatrix<S>> &dm,
+                                       const shared_ptr<SparseMatrix<S>> &psi,
+                                       bool trace_right, double scale = 1.0) {
+        assert(psi->factor == 1);
+        psi->factor = sqrt(scale);
+        OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
+                                            NoiseTypes::None);
+        psi->factor = 1;
+    }
+    // Density matrix with perturbed wavefunctions as noise
+    static void density_matrix_add_perturbative_noise(
+        const shared_ptr<SparseMatrix<S>> &dm, bool trace_right, double noise,
+        NoiseTypes noise_type, const shared_ptr<SparseMatrixGroup<S>> &mats) {
+        scale_perturbative_noise(noise, noise_type, mats);
+        for (int i = 1; i < mats->n; i++)
+            OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
+                                                0.0, NoiseTypes::None);
+    }
+    // Density matrix of several MPS tensors summed with weights
+    static void
+    density_matrix_add_matrices(const shared_ptr<SparseMatrix<S>> &dm,
+                                const shared_ptr<SparseMatrix<S>> &psi,
+                                bool trace_right, const vector<MatrixRef> &mats,
+                                const vector<double> &weights) {
+        double *ptr = psi->data;
+        assert(psi->factor == 1.0);
+        assert(mats.size() == weights.size() - 1);
+        for (size_t i = 1; i < weights.size(); i++) {
+            psi->data = mats[i - 1].data;
+            psi->factor = sqrt(weights[i]);
+            OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0);
+        }
+        psi->data = ptr, psi->factor = 1.0;
     }
     // Direct add noise to wavefunction (before svd)
     static void wavefunction_add_noise(const shared_ptr<SparseMatrix<S>> &psi,
@@ -1852,65 +1934,6 @@ template <typename S> struct MovingEnvironment {
             MatrixFunctions::iscale(
                 MatrixRef(mats->data, mats->total_memory, 1),
                 sqrt(noise) / norm);
-    }
-    // Density matrix of a MultiMPS tensor
-    static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
-        S opdq, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
-        const vector<double> weights, bool trace_right, double noise,
-        NoiseTypes noise_type) {
-        shared_ptr<SparseMatrixInfo<S>> dm_info =
-            make_shared<SparseMatrixInfo<S>>();
-        dm_info->initialize_dm(psi[0]->infos, opdq, trace_right);
-        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
-        dm->allocate(dm_info);
-        assert(weights.size() == psi.size());
-        for (size_t i = 0; i < psi.size(); i++)
-            for (int j = 0; j < psi[i]->n; j++) {
-                shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
-                wfn->factor = weights[i];
-                OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
-                                                    sqrt(noise), noise_type);
-            }
-        return dm;
-    }
-    // Density matrix with perturbed wavefunctions as noise
-    static shared_ptr<SparseMatrix<S>> density_matrix_with_perturbative_noise(
-        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
-        double noise, NoiseTypes noise_type,
-        const shared_ptr<SparseMatrixGroup<S>> &mats) {
-        shared_ptr<SparseMatrixInfo<S>> dm_info =
-            make_shared<SparseMatrixInfo<S>>();
-        dm_info->initialize_dm(
-            vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
-            trace_right);
-        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
-        dm->allocate(dm_info);
-        scale_perturbative_noise(noise, noise_type, mats);
-        for (int i = 1; i < mats->n; i++)
-            OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
-                                                0.0, NoiseTypes::None);
-        OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
-                                            NoiseTypes::None);
-        return dm;
-    }
-    // Density matrix of several MPS tensors summed with weights
-    static shared_ptr<SparseMatrix<S>> density_matrix_with_weights(
-        S vacuum, const shared_ptr<SparseMatrix<S>> &psi, bool trace_right,
-        double noise, const vector<MatrixRef> &mats,
-        const vector<double> &weights, NoiseTypes noise_type) {
-        double *ptr = psi->data;
-        assert(psi->factor == 1.0);
-        assert(mats.size() == weights.size() - 1);
-        psi->factor = sqrt(weights[0]);
-        shared_ptr<SparseMatrix<S>> dm =
-            density_matrix(vacuum, psi, trace_right, noise, noise_type);
-        for (size_t i = 1; i < weights.size(); i++) {
-            psi->data = mats[i - 1].data;
-            psi->factor = sqrt(weights[i]);
-            OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0);
-        }
-        psi->data = ptr, psi->factor = 1.0;
-        return dm;
     }
     // Diagonalize density matrix and truncate to k eigenvalues
     static double truncate_density_matrix(const shared_ptr<SparseMatrix<S>> &dm,
@@ -2239,18 +2262,38 @@ template <typename S> struct MovingEnvironment {
         bool normalize, shared_ptr<SparseMatrix<S>> &left,
         shared_ptr<SparseMatrix<S>> &right, double cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical,
-        DecompositionTypes decomp_type = DecompositionTypes::PureSVD,
-        const shared_ptr<SparseMatrixGroup<S>> &mwfn = nullptr) {
+        DecompositionTypes decomp_type = DecompositionTypes::SVD,
+        const shared_ptr<SparseMatrixGroup<S>> &mwfn = nullptr,
+        const vector<shared_ptr<SparseMatrix<S>>> &xwfns =
+            vector<shared_ptr<SparseMatrix<S>>>(),
+        const vector<double> &weights = vector<double>()) {
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
         // for perturbative SVD
         if (mwfn != nullptr) {
             vector<vector<shared_ptr<Tensor>>> xlr;
+            vector<shared_ptr<SparseMatrix<S>>> xxwfns = {wfn};
+            if (xwfns.size() != 0)
+                xxwfns.insert(xxwfns.end(), xwfns.begin(), xwfns.end());
             if (trace_right) {
-                mwfn->right_svd(qs, l, s, xlr, wfn);
+                mwfn->right_svd(qs, l, s, xlr, xxwfns, weights);
                 r = xlr.back();
             } else {
-                mwfn->left_svd(qs, xlr, s, r, wfn);
+                mwfn->left_svd(qs, xlr, s, r, xxwfns, weights);
+                l = xlr.back();
+            }
+        } else if (xwfns.size() != 0) {
+            vector<vector<shared_ptr<Tensor>>> xlr;
+            shared_ptr<SparseMatrixGroup<S>> xmwfn =
+                make_shared<SparseMatrixGroup<S>>();
+            xmwfn->allocate(vector<shared_ptr<SparseMatrixInfo<S>>>());
+            vector<shared_ptr<SparseMatrix<S>>> xxwfns = {wfn};
+            xxwfns.insert(xxwfns.end(), xwfns.begin(), xwfns.end());
+            if (trace_right) {
+                xmwfn->right_svd(qs, l, s, xlr, xxwfns, weights);
+                r = xlr.back();
+            } else {
+                xmwfn->left_svd(qs, xlr, s, r, xxwfns, weights);
                 l = xlr.back();
             }
         } else {

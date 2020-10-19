@@ -1028,7 +1028,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def("multiply", &EffectiveHamiltonian<S>::multiply)
         .def("inverse_multiply", &EffectiveHamiltonian<S>::inverse_multiply)
         .def("imag_green_function",
-             &EffectiveHamiltonian<S>::imag_green_function)
+             &EffectiveHamiltonian<S>::greens_function)
         .def("expect", &EffectiveHamiltonian<S>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S>::rk4_apply, py::arg("beta"),
              py::arg("const_e"), py::arg("eval_energy") = false,
@@ -1151,12 +1151,17 @@ template <typename S> void bind_partition(py::module &m) {
                     py::arg("noise"), py::arg("noise_type"), py::arg("mats"))
         .def_static("density_matrix", &MovingEnvironment<S>::density_matrix,
                     py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"), py::arg("noise_type"))
-        .def_static("density_matrix_with_weights",
-                    &MovingEnvironment<S>::density_matrix_with_weights,
-                    py::arg("vacuum"), py::arg("psi"), py::arg("trace_right"),
-                    py::arg("noise"), py::arg("mats"), py::arg("weights"),
-                    py::arg("noise_type"))
+                    py::arg("noise"), py::arg("noise_type"),
+                    py::arg("scale") = 1.0, py::arg("pkets") = nullptr)
+        .def_static("density_matrix_with_multi_target",
+                    &MovingEnvironment<S>::density_matrix_with_multi_target)
+        .def_static("density_matrix_add_wfn",
+                    &MovingEnvironment<S>::density_matrix_add_wfn)
+        .def_static(
+            "density_matrix_add_perturbative_noise",
+            &MovingEnvironment<S>::density_matrix_add_perturbative_noise)
+        .def_static("density_matrix_add_matrices",
+                    &MovingEnvironment<S>::density_matrix_add_matrices)
         .def_static("truncate_density_matrix",
                     [](const shared_ptr<SparseMatrix<S>> &dm, int k,
                        double cutoff, TruncationTypes trunc_type) {
@@ -1396,10 +1401,11 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename Linear<S>::Iteration,
                shared_ptr<typename Linear<S>::Iteration>>(m, "LinearIteration")
-        .def(py::init<double, double, int, int, size_t, double>())
-        .def(py::init<double, double, int, int>())
+        .def(py::init<const vector<double> &, double, int, int, size_t,
+                      double>())
+        .def(py::init<const vector<double> &, double, int, int>())
         .def_readwrite("mmps", &Linear<S>::Iteration::mmps)
-        .def_readwrite("norm", &Linear<S>::Iteration::norm)
+        .def_readwrite("targets", &Linear<S>::Iteration::targets)
         .def_readwrite("error", &Linear<S>::Iteration::error)
         .def_readwrite("nmult", &Linear<S>::Iteration::nmult)
         .def_readwrite("tmult", &Linear<S>::Iteration::tmult)
@@ -1442,7 +1448,11 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("target_bra_bond_dim", &Linear<S>::target_bra_bond_dim)
         .def_readwrite("target_ket_bond_dim", &Linear<S>::target_ket_bond_dim)
         .def_readwrite("noises", &Linear<S>::noises)
-        .def_readwrite("norms", &Linear<S>::norms)
+        .def_readwrite("targets", &Linear<S>::targets)
+        .def_readwrite("discarded_weights", &Linear<S>::discarded_weights)
+        .def_readwrite("sweep_targets", &Linear<S>::sweep_targets)
+        .def_readwrite("sweep_discarded_weights",
+                       &Linear<S>::sweep_discarded_weights)
         .def_readwrite("forward", &Linear<S>::forward)
         .def_readwrite("noise_type", &Linear<S>::noise_type)
         .def_readwrite("trunc_type", &Linear<S>::trunc_type)
@@ -1452,8 +1462,10 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
         .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
-        .def_readwrite("omega", &Linear<S>::omega)
-        .def_readwrite("eta", &Linear<S>::eta)
+        .def_readwrite("gf_omega", &Linear<S>::gf_omega)
+        .def_readwrite("gf_eta", &Linear<S>::gf_eta)
+        .def_readwrite("right_weight", &Linear<S>::right_weight)
+        .def_readwrite("complex_weights", &Linear<S>::complex_weights)
         .def("update_one_dot", &Linear<S>::update_one_dot)
         .def("update_two_dot", &Linear<S>::update_two_dot)
         .def("blocking", &Linear<S>::blocking)
@@ -1920,7 +1932,9 @@ template <typename S = void> void bind_types(py::module &m) {
 
     py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
         .value("Normal", EquationTypes::Normal)
-        .value("ImagGreenFunction", EquationTypes::ImagGreenFunction);
+        .value("PerturbativeCompression",
+               EquationTypes::PerturbativeCompression)
+        .value("GreensFunction", EquationTypes::GreensFunction);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

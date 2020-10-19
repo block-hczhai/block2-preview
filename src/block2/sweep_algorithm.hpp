@@ -191,15 +191,9 @@ template <typename S> struct DMRG {
                 shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
                 shared_ptr<SparseMatrix<S>> dm, left, right;
                 if (decomp_type == DecompositionTypes::DensityMatrix) {
-                    if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
-                        dm = MovingEnvironment<S>::
-                            density_matrix_with_perturbative_noise(
-                                me->ket->info->vacuum, me->ket->tensors[i],
-                                forward, noise, noise_type, pket);
-                    } else
-                        dm = MovingEnvironment<S>::density_matrix(
-                            me->ket->info->vacuum, me->ket->tensors[i], forward,
-                            noise, noise_type);
+                    dm = MovingEnvironment<S>::density_matrix(
+                        me->ket->info->vacuum, me->ket->tensors[i], forward,
+                        noise, noise_type, 1.0, pket);
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
                         left, right, cutoff, trunc_type);
@@ -369,15 +363,9 @@ template <typename S> struct DMRG {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<SparseMatrix<S>> dm;
             if (decomp_type == DecompositionTypes::DensityMatrix) {
-                if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
-                    dm = MovingEnvironment<S>::
-                        density_matrix_with_perturbative_noise(
-                            me->ket->info->vacuum, old_wfn, forward, noise,
-                            noise_type, pket);
-                } else
-                    dm = MovingEnvironment<S>::density_matrix(
-                        me->ket->info->vacuum, old_wfn, forward, noise,
-                        noise_type);
+                dm = MovingEnvironment<S>::density_matrix(
+                    me->ket->info->vacuum, old_wfn, forward, noise, noise_type,
+                    1.0, pket);
                 error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
@@ -820,7 +808,7 @@ template <typename S> struct DMRG {
         size_t idx =
             min_element(sweep_energies.begin(), sweep_energies.end(),
                         [](const vector<double> &x, const vector<double> &y) {
-                            return x[0] < y[0];
+                            return x.back() < y.back();
                         }) -
             sweep_energies.begin();
         return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
@@ -884,7 +872,6 @@ template <typename S> struct DMRG {
                          << scientific << energy_difference;
                 cout << endl;
             }
-
             if (converged)
                 break;
         }
@@ -1059,9 +1046,11 @@ template <typename S> struct ImaginaryTE {
                 prev_wfn->deallocate();
             }
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix_with_weights(
+                dm = MovingEnvironment<S>::density_matrix(
                     me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
-                    pdpf, weights, noise_type);
+                    noise_type, weights[0]);
+                MovingEnvironment<S>::density_matrix_add_matrices(
+                    dm, me->ket->tensors[i], forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
@@ -1289,9 +1278,11 @@ template <typename S> struct ImaginaryTE {
         shared_ptr<SparseMatrix<S>> dm;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix_with_weights(
-                    me->ket->info->vacuum, h_eff->ket, forward, noise, pdpf,
-                    weights, noise_type);
+                dm = MovingEnvironment<S>::density_matrix(
+                    me->ket->info->vacuum, h_eff->ket, forward, noise,
+                    noise_type, weights[0]);
+                MovingEnvironment<S>::density_matrix_add_matrices(
+                    dm, h_eff->ket, forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
@@ -1517,20 +1508,30 @@ template <typename S> struct ImaginaryTE {
     }
 };
 
-enum struct EquationTypes : uint8_t { Normal, ImagGreenFunction };
+enum struct EquationTypes : uint8_t {
+    Normal,
+    PerturbativeCompression,
+    GreensFunction
+};
 
 // Solve |x> in Linear Equation LHS|x> = RHS|r>
 // where |r> is a constant MPS
 // target quantity is calculated in tme
-// if lme == nullptr, LHS = 1
+// if lme == nullptr, LHS = 1 (compression)
 // if tme == lme == nullptr, target is sqrt(<x|x>)
 // if tme == nullptr, target is <x|RHS|r>
+// when lme != nullptr, eq_type == PerturbativeCompression
+//    then lme is only used to do perturbative noise
+//    the equation in this case is 1 |x> = RHS |r> (compression)
 template <typename S> struct Linear {
     // lme = LHS ME, rme = RHS ME, tme = Target ME
     shared_ptr<MovingEnvironment<S>> lme, rme, tme;
     vector<ubond_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
-    vector<double> norms;
+    vector<vector<double>> targets;
+    vector<double> discarded_weights;
+    vector<vector<double>> sweep_targets;
+    vector<double> sweep_discarded_weights;
     vector<double> minres_conv_thrds;
     int minres_max_iter = 5000;
     int minres_soft_max_iter = -1;
@@ -1542,12 +1543,16 @@ template <typename S> struct Linear {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
+    // weight for mixing rhs wavefunction in density matrix/svd
+    double right_weight = 0.0;
     // only useful when target contains some other
     // constant MPS not appeared in the equation
     int target_bra_bond_dim = -1;
     int target_ket_bond_dim = -1;
-    // imag Green function parameters
-    double omega = 0, eta = 0;
+    // Green's function parameters
+    double gf_omega = 0, gf_eta = 0;
+    // weights for real and imag parts
+    vector<double> complex_weights = {0.5, 0.5};
     Linear(const shared_ptr<MovingEnvironment<S>> &lme,
            const shared_ptr<MovingEnvironment<S>> &rme,
            const shared_ptr<MovingEnvironment<S>> &tme,
@@ -1579,22 +1584,31 @@ template <typename S> struct Linear {
         : Linear(lme, rme, nullptr, bra_bond_dims, ket_bond_dims, noises) {}
     virtual ~Linear() = default;
     struct Iteration {
+        vector<double> targets;
+        double error, tmult;
         int nmult, mmps;
-        double norm, error, tmult;
         size_t nflop;
-        Iteration(double norm, double error, int mmps, int nmult,
-                  size_t nflop = 0, double tmult = 1.0)
-            : norm(norm), error(error), mmps(mmps), nmult(nmult), nflop(nflop),
-              tmult(tmult) {}
+        Iteration(const vector<double> &targets, double error, int mmps,
+                  int nmult, size_t nflop = 0, double tmult = 1.0)
+            : targets(targets), error(error), mmps(mmps), nmult(nmult),
+              nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Mmps =" << setw(5) << r.mmps;
             os << " Nmult = " << setw(4) << r.nmult;
-            if (abs(r.norm) > 1E-3)
-                cout << fixed << setprecision(8);
-            else
-                cout << scientific << setprecision(8);
-            os << (r.nmult == 1 ? " Norm = " : " F = ") << setw(15) << r.norm;
+            if (r.targets.size() == 1) {
+                os << (abs(r.targets[0]) > 1E-3 ? fixed : scientific);
+                os << (abs(r.targets[0]) > 1E-3 ? setprecision(10)
+                                                : setprecision(7));
+                os << " F = " << setw(17) << r.targets[0];
+            } else {
+                os << " F = ";
+                for (auto x : r.targets) {
+                    os << (abs(x) > 1E-3 ? fixed : scientific);
+                    os << (abs(x) > 1E-3 ? setprecision(10) : setprecision(7));
+                    os << setw(17) << x;
+                }
+            }
             os << " Error = " << scientific << setw(8) << setprecision(2)
                << r.error << " FLOPS = " << scientific << setw(8)
                << setprecision(2) << (double)r.nflop / r.tmult
@@ -1648,58 +1662,91 @@ template <typename S> struct Linear {
                 prev_wfn->deallocate();
             }
         }
-        shared_ptr<SparseMatrix<S>> prev_bra = me->bra->tensors[i];
-        if (lme != nullptr) {
-            prev_bra = make_shared<SparseMatrix<S>>();
-            prev_bra->allocate(me->bra->tensors[i]->info);
+        shared_ptr<SparseMatrix<S>> right_bra = me->bra->tensors[i],
+                                    real_bra = nullptr;
+        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
+        if (lme != nullptr &&
+            eq_type != EquationTypes::PerturbativeCompression) {
+            right_bra = make_shared<SparseMatrix<S>>();
+            right_bra->allocate(me->bra->tensors[i]->info);
+            if (eq_type == EquationTypes::GreensFunction) {
+                real_bra = make_shared<SparseMatrix<S>>();
+                real_bra->allocate(me->bra->tensors[i]->info);
+            }
         }
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                        prev_bra, me->ket->tensors[i]);
+                        right_bra, me->ket->tensors[i]);
         auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
-        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
-        if (lme != nullptr) {
-            if (minres_soft_max_iter != 0 || noise != 0) {
+        if (eq_type == EquationTypes::PerturbativeCompression) {
+            assert(lme != nullptr);
+            if (noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                    me->bra->tensors[i], prev_bra);
-                tuple<double, int, size_t, double> lpdi;
-                if (eq_type == EquationTypes::Normal)
-                    lpdi = l_eff->inverse_multiply(
-                        lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
-                else if (eq_type == EquationTypes::ImagGreenFunction)
-                    lpdi = l_eff->imag_green_function(
-                        lme->mpo->const_e, omega, eta, iprint >= 3,
-                        minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
-                        me->para_rule);
-                else
-                    assert(false);
-                get<0>(pdi) = get<0>(lpdi);
-                get<1>(pdi) += get<1>(lpdi);
-                get<2>(pdi) += get<2>(lpdi);
-                get<3>(pdi) += get<3>(lpdi);
+                    lme->bra->tensors[i], lme->ket->tensors[i]);
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
                         forward, i, i,
                         fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         me->bra->info, noise_type, me->para_rule);
                 l_eff->deallocate();
+            }
+        } else if (lme != nullptr) {
+            shared_ptr<EffectiveHamiltonian<S>> l_eff =
+                lme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                             false, me->bra->tensors[i], right_bra);
+            if (eq_type == EquationTypes::Normal) {
+                tuple<double, int, size_t, double> lpdi;
+                lpdi = l_eff->inverse_multiply(
+                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                targets[0] = get<0>(lpdi);
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
+            } else if (eq_type == EquationTypes::GreensFunction) {
+                tuple<pair<double, double>, int, size_t, double> lpdi;
+                lpdi = l_eff->greens_function(
+                    lme->mpo->const_e, gf_omega, gf_eta, real_bra, iprint >= 3,
+                    minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
+                    me->para_rule);
+                targets =
+                    vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else
-                get<0>(pdi) = 0;
-            prev_bra->deallocate();
+                assert(false);
+            if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+                pbra = l_eff->perturbative_noise(
+                    forward, i, i,
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                    me->bra->info, noise_type, me->para_rule);
+            l_eff->deallocate();
         }
         if (tme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff =
                 tme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                              false, tme->bra->tensors[i], tme->ket->tensors[i]);
             auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
-            get<0>(pdi) = get<0>(tpdi)[0].second;
+            targets.clear();
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
+            targets.push_back(get<0>(tpdi)[0].second);
+            if (real_bra != nullptr) {
+                if (tme->bra->tensors[i] == me->bra->tensors[i])
+                    t_eff->bra = real_bra;
+                if (tme->ket->tensors[i] == me->bra->tensors[i])
+                    t_eff->ket = real_bra;
+            }
+            tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            targets.insert(targets.begin(), get<0>(tpdi)[0].second);
+            get<1>(pdi)++;
+            get<2>(pdi) += get<1>(tpdi);
+            get<3>(pdi) += get<2>(tpdi);
+            t_eff->deallocate();
         }
         double bra_error = 0.0;
         int bra_mmps = 0;
@@ -1715,6 +1762,34 @@ template <typename S> struct Linear {
             } else {
                 // change to fused form for splitting
                 if (fuse_left != forward) {
+                    if (real_bra != nullptr) {
+                        shared_ptr<SparseMatrix<S>> prev_wfn = real_bra;
+                        if (!fuse_left && forward)
+                            real_bra =
+                                MovingEnvironment<S>::swap_wfn_to_fused_left(
+                                    i, me->bra->info, prev_wfn,
+                                    me->mpo->tf->opf->cg);
+                        else if (fuse_left && !forward)
+                            real_bra =
+                                MovingEnvironment<S>::swap_wfn_to_fused_right(
+                                    i, me->bra->info, prev_wfn,
+                                    me->mpo->tf->opf->cg);
+                        prev_wfn->deallocate();
+                    }
+                    if (right_weight != 0 && right_bra != me->bra->tensors[i]) {
+                        shared_ptr<SparseMatrix<S>> prev_wfn = right_bra;
+                        if (!fuse_left && forward)
+                            right_bra =
+                                MovingEnvironment<S>::swap_wfn_to_fused_left(
+                                    i, me->bra->info, prev_wfn,
+                                    me->mpo->tf->opf->cg);
+                        else if (fuse_left && !forward)
+                            right_bra =
+                                MovingEnvironment<S>::swap_wfn_to_fused_right(
+                                    i, me->bra->info, prev_wfn,
+                                    me->mpo->tf->opf->cg);
+                        prev_wfn->deallocate();
+                    }
                     for (auto &mps : mpss) {
                         shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
                         if (!fuse_left && forward)
@@ -1757,7 +1832,8 @@ template <typename S> struct Linear {
                     shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
                     shared_ptr<SparseMatrix<S>> left, right;
                     shared_ptr<SparseMatrix<S>> dm = nullptr;
-                    int bond_dim = -1, error;
+                    int bond_dim = -1;
+                    double error;
                     if (mps == me->bra)
                         bond_dim = (int)bra_bond_dim;
                     else if (mps == me->ket)
@@ -1768,37 +1844,73 @@ template <typename S> struct Linear {
                         bond_dim = target_ket_bond_dim;
                     else
                         assert(false);
+                    assert(right_weight >= 0 && right_weight <= 1);
                     if (decomp_type == DecompositionTypes::DensityMatrix) {
-                        if ((noise_type & NoiseTypes::Perturbative) &&
-                            noise != 0 && mps == me->bra) {
-                            dm = MovingEnvironment<S>::
-                                density_matrix_with_perturbative_noise(
-                                    mps->info->vacuum, old_wfn, forward, noise,
-                                    noise_type, pbra);
-                        } else
+                        if (mps != me->bra) {
                             dm = MovingEnvironment<S>::density_matrix(
-                                mps->info->vacuum, old_wfn, forward,
-                                mps == me->bra ? noise : 0.0,
-                                mps == me->bra && noise != 0
-                                    ? noise_type
-                                    : NoiseTypes::None);
+                                mps->info->vacuum, old_wfn, forward, 0.0,
+                                NoiseTypes::None);
+                        } else {
+                            double weight = 1 - right_weight;
+                            if (real_bra != nullptr)
+                                weight *= complex_weights[1];
+                            dm = MovingEnvironment<S>::density_matrix(
+                                mps->info->vacuum, old_wfn, forward, noise,
+                                noise_type, weight, pbra);
+                            if (real_bra != nullptr) {
+                                weight =
+                                    complex_weights[0] * (1 - right_weight);
+                                MovingEnvironment<S>::density_matrix_add_wfn(
+                                    dm, real_bra, forward, weight);
+                            }
+                            if (right_weight != 0)
+                                MovingEnvironment<S>::density_matrix_add_wfn(
+                                    dm, right_bra, forward, right_weight);
+                        }
                         error = MovingEnvironment<S>::split_density_matrix(
                             dm, old_wfn, bond_dim, forward, false, left, right,
                             cutoff, trunc_type);
                     } else if (decomp_type == DecompositionTypes::SVD ||
                                decomp_type == DecompositionTypes::PureSVD) {
-                        if (noise != 0 && mps == me->bra) {
-                            if (noise_type == NoiseTypes::Wavefunction)
-                                MovingEnvironment<S>::wavefunction_add_noise(
-                                    old_wfn, noise);
-                            else if (noise_type & NoiseTypes::Perturbative)
-                                MovingEnvironment<S>::scale_perturbative_noise(
-                                    noise, noise_type, pbra);
+                        if (mps != me->bra) {
+                            error =
+                                MovingEnvironment<S>::split_wavefunction_svd(
+                                    mps->info->vacuum, old_wfn, bond_dim,
+                                    forward, false, left, right, cutoff,
+                                    trunc_type, decomp_type, nullptr);
+                        } else {
+                            if (noise != 0 && mps == me->bra) {
+                                if (noise_type == NoiseTypes::Wavefunction)
+                                    MovingEnvironment<
+                                        S>::wavefunction_add_noise(old_wfn,
+                                                                   noise);
+                                else if (noise_type & NoiseTypes::Perturbative)
+                                    MovingEnvironment<
+                                        S>::scale_perturbative_noise(noise,
+                                                                     noise_type,
+                                                                     pbra);
+                            }
+                            vector<double> weights = {1};
+                            vector<shared_ptr<SparseMatrix<S>>> xwfns = {};
+                            if (real_bra != nullptr) {
+                                weights =
+                                    vector<double>{sqrt(complex_weights[1]),
+                                                   sqrt(complex_weights[0])};
+                                xwfns.push_back(real_bra);
+                            }
+                            if (right_weight != 0) {
+                                for (auto w : weights)
+                                    w = sqrt(w * w * (1 - right_weight));
+                                weights.push_back(sqrt(right_weight));
+                                xwfns.push_back(right_bra);
+                            }
+                            error =
+                                MovingEnvironment<S>::split_wavefunction_svd(
+                                    mps->info->vacuum, old_wfn, bond_dim,
+                                    forward, false, left, right, cutoff,
+                                    trunc_type, decomp_type, pbra, xwfns,
+                                    weights);
                         }
-                        error = MovingEnvironment<S>::split_wavefunction_svd(
-                            mps->info->vacuum, old_wfn, bond_dim, forward,
-                            false, left, right, cutoff, trunc_type, decomp_type,
-                            mps == me->bra ? pbra : nullptr);
                     } else
                         assert(false);
                     if (mps == me->bra)
@@ -1905,10 +2017,16 @@ template <typename S> struct Linear {
             pbra->deallocate();
             pbra->deallocate_infos();
         }
+        if (lme != nullptr &&
+            eq_type != EquationTypes::PerturbativeCompression) {
+            if (eq_type == EquationTypes::GreensFunction)
+                real_bra->deallocate();
+            right_bra->deallocate();
+        }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
-                         get<2>(pdi), get<3>(pdi));
+        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi), get<2>(pdi),
+                         get<3>(pdi));
     }
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, double noise,
@@ -1926,57 +2044,88 @@ template <typename S> struct Linear {
         }
         for (auto &mps : mpss) {
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
-                MovingEnvironment<S>::contract_two_dot(i, mps, mps == me->ket);
+                MovingEnvironment<S>::contract_two_dot(i, mps);
             else {
                 mps->load_tensor(i);
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<SparseMatrix<S>> prev_bra = me->bra->tensors[i];
-        if (lme != nullptr) {
-            prev_bra = make_shared<SparseMatrix<S>>();
-            prev_bra->allocate(me->bra->tensors[i]->info);
+        shared_ptr<SparseMatrix<S>> right_bra = me->bra->tensors[i],
+                                    real_bra = nullptr;
+        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
+        if (lme != nullptr &&
+            eq_type != EquationTypes::PerturbativeCompression) {
+            right_bra = make_shared<SparseMatrix<S>>();
+            right_bra->allocate(me->bra->tensors[i]->info);
+            if (eq_type == EquationTypes::GreensFunction) {
+                real_bra = make_shared<SparseMatrix<S>>();
+                real_bra->allocate(me->bra->tensors[i]->info);
+            }
         }
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, false, prev_bra, me->ket->tensors[i]);
+            FuseTypes::FuseLR, false, right_bra, me->ket->tensors[i]);
         auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
-        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
-        if (lme != nullptr) {
-            if (minres_soft_max_iter != 0 || noise != 0) {
-                shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
-                    FuseTypes::FuseLR, false, me->bra->tensors[i], prev_bra);
-                tuple<double, int, size_t, double> lpdi;
-                if (eq_type == EquationTypes::Normal)
-                    lpdi = l_eff->inverse_multiply(
-                        lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
-                else if (eq_type == EquationTypes::ImagGreenFunction)
-                    lpdi = l_eff->imag_green_function(
-                        lme->mpo->const_e, omega, eta, iprint >= 3,
-                        minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
-                        me->para_rule);
-                else
-                    assert(false);
-                get<0>(pdi) = get<0>(lpdi);
-                get<1>(pdi) += get<1>(lpdi);
-                get<2>(pdi) += get<2>(lpdi);
-                get<3>(pdi) += get<3>(lpdi);
+        if (eq_type == EquationTypes::PerturbativeCompression) {
+            assert(lme != nullptr);
+            if (noise != 0) {
+                shared_ptr<EffectiveHamiltonian<S>> l_eff =
+                    lme->eff_ham(FuseTypes::FuseLR, false, lme->bra->tensors[i],
+                                 lme->ket->tensors[i]);
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
                         forward, i, i + 1, FuseTypes::FuseLR, me->bra->info,
                         noise_type, me->para_rule);
                 l_eff->deallocate();
+            }
+        } else if (lme != nullptr) {
+            shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+                FuseTypes::FuseLR, false, me->bra->tensors[i], right_bra);
+            if (eq_type == EquationTypes::Normal) {
+                tuple<double, int, size_t, double> lpdi;
+                lpdi = l_eff->inverse_multiply(
+                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                targets[0] = get<0>(lpdi);
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
+            } else if (eq_type == EquationTypes::GreensFunction) {
+                tuple<pair<double, double>, int, size_t, double> lpdi;
+                lpdi = l_eff->greens_function(
+                    lme->mpo->const_e, gf_omega, gf_eta, real_bra, iprint >= 3,
+                    minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
+                    me->para_rule);
+                targets =
+                    vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
+                get<1>(pdi) += get<1>(lpdi);
+                get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else
-                get<0>(pdi) = 0;
-            prev_bra->deallocate();
+                assert(false);
+            if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+                pbra = l_eff->perturbative_noise(
+                    forward, i, i + 1, FuseTypes::FuseLR, me->bra->info,
+                    noise_type, me->para_rule);
+            l_eff->deallocate();
         }
         if (tme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff =
                 tme->eff_ham(FuseTypes::FuseLR, false, tme->bra->tensors[i],
                              tme->ket->tensors[i]);
             auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
-            get<0>(pdi) = get<0>(tpdi)[0].second;
+            targets.clear();
+            get<1>(pdi)++;
+            get<2>(pdi) += get<1>(tpdi);
+            get<3>(pdi) += get<2>(tpdi);
+            targets.push_back(get<0>(tpdi)[0].second);
+            if (real_bra != nullptr) {
+                if (tme->bra->tensors[i] == me->bra->tensors[i])
+                    t_eff->bra = real_bra;
+                if (tme->ket->tensors[i] == me->bra->tensors[i])
+                    t_eff->ket = real_bra;
+            }
+            tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            targets.insert(targets.begin(), get<0>(tpdi)[0].second);
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
@@ -1993,7 +2142,8 @@ template <typename S> struct Linear {
             for (auto &mps : mpss) {
                 shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
                 shared_ptr<SparseMatrix<S>> dm = nullptr;
-                int bond_dim = -1, error;
+                int bond_dim = -1;
+                double error;
                 if (mps == me->bra)
                     bond_dim = (int)bra_bond_dim;
                 else if (mps == me->ket)
@@ -2004,37 +2154,65 @@ template <typename S> struct Linear {
                     bond_dim = target_ket_bond_dim;
                 else
                     assert(false);
+                assert(right_weight >= 0 && right_weight <= 1);
                 if (decomp_type == DecompositionTypes::DensityMatrix) {
-                    if ((noise_type & NoiseTypes::Perturbative) && noise != 0 &&
-                        mps == me->bra)
-                        dm = MovingEnvironment<S>::
-                            density_matrix_with_perturbative_noise(
-                                mps->info->vacuum, old_wfn, forward, noise,
-                                noise_type, pbra);
-                    else
+                    if (mps != me->bra) {
                         dm = MovingEnvironment<S>::density_matrix(
-                            mps->info->vacuum, old_wfn, forward,
-                            mps == me->bra ? noise : 0.0,
-                            mps == me->bra && noise != 0 ? noise_type
-                                                         : NoiseTypes::None);
+                            mps->info->vacuum, old_wfn, forward, 0.0,
+                            NoiseTypes::None);
+                    } else {
+                        double weight = 1 - right_weight;
+                        if (real_bra != nullptr)
+                            weight *= complex_weights[1];
+                        dm = MovingEnvironment<S>::density_matrix(
+                            mps->info->vacuum, old_wfn, forward, noise,
+                            noise_type, weight, pbra);
+                        if (real_bra != nullptr) {
+                            weight = complex_weights[0] * (1 - right_weight);
+                            MovingEnvironment<S>::density_matrix_add_wfn(
+                                dm, real_bra, forward, weight);
+                        }
+                        if (right_weight != 0)
+                            MovingEnvironment<S>::density_matrix_add_wfn(
+                                dm, right_bra, forward, right_weight);
+                    }
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
                         mps->tensors[i + 1], cutoff, trunc_type);
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
-                    if (noise != 0 && mps == me->bra) {
-                        if (noise_type == NoiseTypes::Wavefunction)
-                            MovingEnvironment<S>::wavefunction_add_noise(
-                                old_wfn, noise);
-                        else if (noise_type & NoiseTypes::Perturbative)
-                            MovingEnvironment<S>::scale_perturbative_noise(
-                                noise, noise_type, pbra);
+                    if (mps != me->bra) {
+                        error = MovingEnvironment<S>::split_wavefunction_svd(
+                            mps->info->vacuum, old_wfn, bond_dim, forward,
+                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
+                            trunc_type, decomp_type, nullptr);
+                    } else {
+                        if (noise != 0 && mps == me->bra) {
+                            if (noise_type == NoiseTypes::Wavefunction)
+                                MovingEnvironment<S>::wavefunction_add_noise(
+                                    old_wfn, noise);
+                            else if (noise_type & NoiseTypes::Perturbative)
+                                MovingEnvironment<S>::scale_perturbative_noise(
+                                    noise, noise_type, pbra);
+                        }
+                        vector<double> weights = {1};
+                        vector<shared_ptr<SparseMatrix<S>>> xwfns = {};
+                        if (real_bra != nullptr) {
+                            weights = vector<double>{sqrt(complex_weights[1]),
+                                                     sqrt(complex_weights[0])};
+                            xwfns.push_back(real_bra);
+                        }
+                        if (right_weight != 0) {
+                            for (auto w : weights)
+                                w = sqrt(w * w * (1 - right_weight));
+                            weights.push_back(sqrt(right_weight));
+                            xwfns.push_back(right_bra);
+                        }
+                        error = MovingEnvironment<S>::split_wavefunction_svd(
+                            mps->info->vacuum, old_wfn, bond_dim, forward,
+                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
+                            trunc_type, decomp_type, pbra, xwfns, weights);
                     }
-                    error = MovingEnvironment<S>::split_wavefunction_svd(
-                        mps->info->vacuum, old_wfn, bond_dim, forward, false,
-                        mps->tensors[i], mps->tensors[i + 1], cutoff,
-                        trunc_type, decomp_type,
-                        mps == me->bra ? pbra : nullptr);
                 } else
                     assert(false);
                 if (mps == me->bra)
@@ -2087,6 +2265,12 @@ template <typename S> struct Linear {
             pbra->deallocate();
             pbra->deallocate_infos();
         }
+        if (lme != nullptr &&
+            eq_type != EquationTypes::PerturbativeCompression) {
+            if (eq_type == EquationTypes::GreensFunction)
+                real_bra->deallocate();
+            right_bra->deallocate();
+        }
         for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S>>>(
                  old_wfns.rbegin(), old_wfns.rend())) {
             old_wfn->info->deallocate();
@@ -2094,8 +2278,8 @@ template <typename S> struct Linear {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi), bra_error, bra_mmps, get<1>(pdi),
-                         get<2>(pdi), get<3>(pdi));
+        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi), get<2>(pdi),
+                         get<3>(pdi));
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                                ubond_t ket_bond_dim, double noise,
@@ -2112,14 +2296,16 @@ template <typename S> struct Linear {
             return update_one_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
                                   minres_conv_thrd);
     }
-    double sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim,
-                 double noise, double minres_conv_thrd) {
+    tuple<vector<double>, double> sweep(bool forward, ubond_t bra_bond_dim,
+                                        ubond_t ket_bond_dim, double noise,
+                                        double minres_conv_thrd) {
         rme->prepare();
         if (lme != nullptr)
             lme->prepare();
         if (tme != nullptr)
             tme->prepare();
-        vector<double> norms;
+        sweep_targets.clear();
+        sweep_discarded_weights.clear();
         vector<int> sweep_range;
         if (forward)
             for (int it = rme->center; it < rme->n_sites - rme->dot + 1; it++)
@@ -2147,9 +2333,16 @@ template <typename S> struct Linear {
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
-            norms.push_back(r.norm);
+            sweep_targets.push_back(r.targets);
+            sweep_discarded_weights.push_back(r.error);
         }
-        return norms.back();
+        size_t idx =
+            min_element(sweep_targets.begin(), sweep_targets.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x.back() < y.back();
+                        }) -
+            sweep_targets.begin();
+        return make_tuple(sweep_targets[idx], sweep_discarded_weights[idx]);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bra_bond_dims.size() < n_sweeps)
@@ -2165,8 +2358,10 @@ template <typename S> struct Linear {
                     0.1);
         Timer start, current;
         start.get_time();
-        norms.clear();
+        targets.clear();
+        discarded_weights.clear();
         bool converged;
+        double target_difference;
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1) {
                 cout << "Sweep = " << setw(4) << iw
@@ -2181,13 +2376,16 @@ template <typename S> struct Linear {
                          << setprecision(2) << minres_conv_thrds[iw];
                 cout << endl;
             }
-            double norm = sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw],
-                                noises[iw], minres_conv_thrds[iw]);
-            double dnorm;
-            norms.push_back(norm);
-            if (norms.size() >= 2)
-                dnorm = norms[norms.size() - 1] - norms[norms.size() - 2];
-            converged = norms.size() >= 2 && tol > 0 && abs(dnorm) < tol &&
+            auto sweep_results =
+                sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw], noises[iw],
+                      minres_conv_thrds[iw]);
+            targets.push_back(get<0>(sweep_results));
+            discarded_weights.push_back(get<1>(sweep_results));
+            if (targets.size() >= 2)
+                target_difference = targets[targets.size() - 1].back() -
+                                    targets[targets.size() - 2].back();
+            converged = targets.size() >= 2 && tol > 0 &&
+                        abs(target_difference) < tol &&
                         noises[iw] == noises.back() &&
                         bra_bond_dims[iw] == bra_bond_dims.back();
             forward = !forward;
@@ -2195,15 +2393,26 @@ template <typename S> struct Linear {
             if (iprint >= 1) {
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current;
-                if (abs(norm) > 1E-3)
-                    cout << fixed << setprecision(8);
-                else
-                    cout << scientific << setprecision(8);
-                cout << (lme == nullptr ? " | Norm = " : " | F = ") << setw(15)
-                     << norm;
-                if (norms.size() >= 2)
-                    cout << (lme == nullptr ? " | DN = " : " | DF = ")
-                         << setw(6) << setprecision(2) << scientific << dnorm;
+                if (get<0>(sweep_results).size() == 1) {
+                    cout << (abs(get<0>(sweep_results)[0]) > 1E-3 ? fixed
+                                                                  : scientific);
+                    cout << (abs(get<0>(sweep_results)[0]) > 1E-3
+                                 ? setprecision(10)
+                                 : setprecision(7));
+                    cout << " | F = " << setw(15) << get<0>(sweep_results)[0];
+                } else {
+                    cout << " | F[" << setw(3) << get<0>(sweep_results).size()
+                         << "] = ";
+                    for (double x : get<0>(sweep_results)) {
+                        cout << (abs(x) > 1E-3 ? fixed : scientific);
+                        cout << (abs(x) > 1E-3 ? setprecision(10)
+                                               : setprecision(7));
+                        cout << setw(15) << x;
+                    }
+                }
+                if (targets.size() >= 2)
+                    cout << " | DF = " << setw(6) << setprecision(2)
+                         << scientific << target_difference;
                 cout << endl;
             }
             if (converged)
@@ -2214,7 +2423,7 @@ template <typename S> struct Linear {
             cout << "ATTENTION: Linear is not converged to desired tolerance "
                     "of "
                  << scientific << tol << endl;
-        return norms.back();
+        return targets.back()[0];
     }
 };
 
@@ -2463,7 +2672,7 @@ template <typename S> struct Expect {
                                : vector<shared_ptr<MPS<S>>>{me->bra, me->ket};
         for (auto &mps : mpss) {
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
-                MovingEnvironment<S>::contract_two_dot(i, mps, mps == me->ket);
+                MovingEnvironment<S>::contract_two_dot(i, mps, true);
             else {
                 mps->load_tensor(i);
                 mps->tensors[i + 1] = nullptr;

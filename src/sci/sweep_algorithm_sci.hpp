@@ -119,6 +119,7 @@ template <typename S> struct LinearSCI : Linear<S> {
     using Linear<S>::minres_soft_max_iter;
     using Linear<S>::noise_type;
     using Linear<S>::decomp_type;
+    using Linear<S>::targets;
     using typename Linear<S>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
@@ -203,7 +204,8 @@ template <typename S> struct LinearSCI : Linear<S> {
         Iteration r = Linear<S>::blocking(
             i, forward, bra_bond_dim, ket_bond_dim, noise, minres_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
-            r.norm = 0;
+            if (targets.size() != 0)
+                r.targets = targets.back();
             minres_soft_max_iter = dsmi;
             noise_type = nt;
             decomp_type = dt;

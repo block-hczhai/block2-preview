@@ -4,17 +4,17 @@
 
 using namespace block2;
 
-class TestGreenFunctionN2STO3G : public ::testing::Test {
+class TestGreenFunctionH10STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t isize = 1L << 28;
+    size_t dsize = 1L << 32;
 
     template <typename S>
     void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
                    int dot);
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_() = make_shared<DataFrame>(isize, dsize, "nodex", 0.7, 2);
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -24,14 +24,14 @@ class TestGreenFunctionN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestGreenFunctionN2STO3G::test_dmrg(S target,
-                                         const HamiltonianQC<S> &hamil,
-                                         const string &name, int dot) {
+void TestGreenFunctionH10STO6G::test_dmrg(S target,
+                                          const HamiltonianQC<S> &hamil,
+                                          const string &name, int dot) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
 
-    double pdm_std = -0.000012699067;
-    double energy_std = -107.654122447525;
+    double igf_std = -0.2286598562666365;
+    double energy_std = -5.424385375684663;
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
@@ -54,13 +54,13 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
     cout << "C/D MPO start" << endl;
     bool su2 = S(1, 1, 0).multiplicity() == 2;
     shared_ptr<OpElement<S>> c_op, d_op;
-    uint16_t isite = 4;
+    uint16_t isite = 5;
     if (su2) {
         c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {}),
                                          S(1, 1, hamil.orb_sym[isite]));
         d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({isite}, {}),
                                          S(-1, 1, hamil.orb_sym[isite]));
-        pdm_std *= -sqrt(2);
+        igf_std *= -sqrt(2);
     } else {
         c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {0}),
                                          S(1, 1, hamil.orb_sym[isite]));
@@ -98,9 +98,9 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
         lmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
     cout << "LMPO simplification end .. T = " << t.get_time() << endl;
 
-    ubond_t ket_bond_dim = 1000, bra_bond_dim = 1000;
+    ubond_t ket_bond_dim = 500, bra_bond_dim = 750;
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = {ket_bond_dim};
-    vector<double> noises = {1E-4, 1E-6, 1E-8, 0};
+    vector<double> noises = {1E-4, 1E-5, 1E-6, 0};
 
     t.get_time();
 
@@ -129,8 +129,9 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
 
     // DMRG
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, ket_bdims, noises);
-    dmrg->noise_type = NoiseTypes::Perturbative;
-    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->decomp_type = DecompositionTypes::SVD;
+    double energy = dmrg->solve(20, mps->center == 0, 1E-12);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
@@ -162,12 +163,18 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
         make_shared<MovingEnvironment<S>>(dmpo, dmps, mps, "CPS-D");
     dme->init_environments();
 
+    // LEFT ME
+    shared_ptr<MovingEnvironment<S>> llme =
+        make_shared<MovingEnvironment<S>>(lmpo, dmps, dmps, "LLHS");
+    llme->init_environments();
+
     // Compression
     shared_ptr<Linear<S>> cps =
-        make_shared<Linear<S>>(dme, bra_bdims, ket_bdims, noises);
-    cps->noise_type = NoiseTypes::DensityMatrix;
-    cps->decomp_type = DecompositionTypes::DensityMatrix;
-    double norm = cps->solve(10, mps->center == 0, 1E-10);
+        make_shared<Linear<S>>(llme, dme, bra_bdims, ket_bdims, noises);
+    cps->noise_type = NoiseTypes::ReducedPerturbative;
+    cps->decomp_type = DecompositionTypes::SVD;
+    cps->eq_type = EquationTypes::PerturbativeCompression;
+    double norm = cps->solve(20, mps->center == 0, 1E-12);
 
     // Y MPS
     shared_ptr<MPSInfo<S>> ymps_info = make_shared<MPSInfo<S>>(
@@ -186,7 +193,7 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
     ymps_info->save_mutable();
     ymps_info->deallocate_mutable();
 
-    double eta = 0.005, omega = -0.22;
+    double eta = 0.05, omega = -0.17;
 
     // LEFT ME
     shared_ptr<MovingEnvironment<S>> lme =
@@ -207,18 +214,23 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
     // Linear
     shared_ptr<Linear<S>> linear =
         make_shared<Linear<S>>(lme, rme, tme, bra_bdims, bra_bdims, noises);
-    linear->eq_type = EquationTypes::ImagGreenFunction;
-    linear->eta = eta;
+    linear->eq_type = EquationTypes::GreensFunction;
+    linear->gf_eta = eta;
+    linear->gf_omega = omega;
     linear->noise_type = NoiseTypes::ReducedPerturbative;
     linear->decomp_type = DecompositionTypes::SVD;
+    linear->right_weight = 0.2;
     linear->iprint = 2;
-    // linear->trunc_type = TruncationTypes::KeepOne * 100;
-    // linear->cutoff = 0;
-    for (auto xomega : vector<double>{-3.2,-3.1,-3.0, -2.9, -2.8, -2.7, -2.6, -2.5, -2.4, -2.3, -2.2, -2.1, -2.0}) {
-        linear->omega = xomega / 10;
-        double ex = linear->solve(5, ymps->center == 0, 1E-14);
-        cout << xomega / 10 << " " << ex << endl;
-    }
+    double igf = linear->solve(20, ymps->center == 0, 1E-8);
+    igf = linear->targets.back().back();
+
+    cout << "== " << name << " (IGF) ==" << setw(20) << target
+         << " E = " << fixed << setw(22) << setprecision(12) << igf
+         << " error = " << scientific << setprecision(3) << setw(10)
+         << (igf - igf_std) << " T = " << fixed << setw(10) << setprecision(3)
+         << t.get_time() << endl;
+
+    EXPECT_LT(abs(igf - igf_std), 1E-4);
 
     dmps_info->deallocate();
     mps_info->deallocate();
@@ -226,10 +238,10 @@ void TestGreenFunctionN2STO3G::test_dmrg(S target,
     mpo->deallocate();
 }
 
-TEST_F(TestGreenFunctionN2STO3G, TestSU2) {
+TEST_F(TestGreenFunctionH10STO6G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
-    string filename = "data/H8.STO6G.R1.8.FCIDUMP";
+    string filename = "data/H10.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -249,10 +261,10 @@ TEST_F(TestGreenFunctionN2STO3G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestGreenFunctionN2STO3G, TestSZ) {
+TEST_F(TestGreenFunctionH10STO6G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
-    string filename = "data/H8.STO6G.R1.8.FCIDUMP";
+    string filename = "data/H10.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
