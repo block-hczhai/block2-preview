@@ -165,28 +165,27 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
     // Symbolic expression of super block operator(s)
     shared_ptr<Symbolic<S>> mat;
     // SparseMatrix representation of symbols from left and right block
-    map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-        lops, rops;
+    shared_ptr<OperatorTensor<S>> lopt, ropt;
     DelayedOperatorTensor() : OperatorTensor<S>() {}
     const OperatorTensorTypes get_type() const override {
         return OperatorTensorTypes::Delayed;
     }
     void reallocate(bool clean) override {
-        for (auto &p : lops)
+        for (auto &p : lopt->ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
-        for (auto &p : rops)
+        for (auto &p : ropt->ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() override {
         // need to check order in parallel mode
         map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
-        for (auto it = rops.cbegin(); it != rops.cend(); it++)
+        for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
             mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
             for (const auto &t : it->second)
                 t->deallocate();
         mp.clear();
-        for (auto it = lops.cbegin(); it != lops.cend(); it++)
+        for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
             mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
             for (const auto &t : it->second)

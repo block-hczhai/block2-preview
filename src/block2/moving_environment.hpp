@@ -96,7 +96,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos,
                                        right_op_infos, diag->info, tf->opf->cg);
             diag->info->cinfo = diag_info;
-            tf->tensor_product_diagonal(op->mat->data[0], op->lops, op->rops,
+            tf->tensor_product_diagonal(op->mat->data[0], op->lopt, op->ropt,
                                         diag, opdq);
             if (tf->opf->seq->mode == SeqTypes::Auto)
                 tf->opf->seq->auto_perform();
@@ -117,7 +117,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // prepare batch gemm
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
-            tf->tensor_product_multiply(op->mat->data[0], op->lops, op->rops,
+            tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
@@ -242,10 +242,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // perturbative noise can be skipped
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
-        if ((!trace_right && op->lops.count(i_op)) ||
-            (trace_right && op->rops.count(i_op)))
+        if ((!trace_right && op->lopt->ops.count(i_op)) ||
+            (trace_right && op->ropt->ops.count(i_op)))
             tf->tensor_product_partial_multiply(
-                pexpr, op->lops, op->rops, trace_right, cmat, psubsl, cinfos,
+                pexpr, op->lopt, op->ropt, trace_right, cmat, psubsl, cinfos,
                 perturb_ket_labels, perturb_ket, vidx);
         if (!reduced)
             assert(vidx == perturb_ket->n);
@@ -290,7 +290,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         cmat->data = b.data;
         vmat->data = c.data;
         cmat->factor = factor;
-        tf->tensor_product_multiply(op->mat->data[idx], op->lops, op->rops,
+        tf->tensor_product_multiply(op->mat->data[idx], op->lopt, op->ropt,
                                     cmat, vmat, opdq, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
@@ -674,8 +674,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                     left_op_infos, right_op_infos, diag->infos[i], tf->opf->cg);
                 diag->infos[i]->cinfo = diag_info;
                 shared_ptr<SparseMatrix<S>> xdiag = (*diag)[i];
-                tf->tensor_product_diagonal(op->mat->data[0], op->lops,
-                                            op->rops, xdiag, opdq);
+                tf->tensor_product_diagonal(op->mat->data[0], op->lopt,
+                                            op->ropt, xdiag, opdq);
                 if (tf->opf->seq->mode == SeqTypes::Auto)
                     tf->opf->seq->auto_perform();
                 diag_info->deallocate();
@@ -700,7 +700,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multi_multiply(
-                op->mat->data[0], op->lops, op->rops, cmat, vmat, opdq, false);
+                op->mat->data[0], op->lopt, op->ropt, cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         }
@@ -735,8 +735,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
-        tf->tensor_product_multi_multiply(op->mat->data[idx], op->lops,
-                                          op->rops, cmat, vmat, opdq,
+        tf->tensor_product_multi_multiply(op->mat->data[idx], op->lopt,
+                                          op->ropt, cmat, vmat, opdq,
                                           all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
@@ -910,6 +910,7 @@ template <typename S> struct MovingEnvironment {
     double tctr = 0, trot = 0;
     Timer _t;
     bool iprint = false;
+    bool delayed_contration = false;
     int fuse_center;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
@@ -1375,7 +1376,8 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_left = Partition<S>::build_left(lmats, left_op_infos,
                                             mpo->sparse_form[iL] == 'S');
-        auto ctr = &TensorFunctions<S>::left_contract;
+        auto ctr = delayed ? &TensorFunctions<S>::delayed_left_contract
+                           : &TensorFunctions<S>::left_contract;
         (mpo->tf.get()->*ctr)(
             envs[iL]->left, envs[iL]->middle.front(), new_left,
             mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
@@ -1414,7 +1416,8 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_right = Partition<S>::build_right(rmats, right_op_infos,
                                               mpo->sparse_form[iR] == 'S');
-        auto ctr = &TensorFunctions<S>::right_contract;
+        auto ctr = delayed ? &TensorFunctions<S>::delayed_right_contract
+                           : &TensorFunctions<S>::right_contract;
         (mpo->tf.get()->*ctr)(envs[iR - dot + 1]->right,
                               envs[iR - dot + 1]->middle.back(), new_right,
                               mpo->right_operator_exprs.size() != 0
@@ -1492,14 +1495,23 @@ template <typename S> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
                 0;
         }
-        if (fuse_type & FuseTypes::FuseL)
-            left_contract(iL, left_op_infos, new_left, delay_left);
-        else
+        if (fuse_type & FuseTypes::FuseL) {
+            if (!delay_left || !delayed_contration)
+                left_contract(iL, left_op_infos, new_left, false);
+        } else
             left_copy(iL, left_op_infos, new_left);
-        if (fuse_type & FuseTypes::FuseR)
-            right_contract(iR, right_op_infos, new_right, !delay_left);
-        else
+        if (fuse_type & FuseTypes::FuseR) {
+            if (delay_left || !delayed_contration)
+                right_contract(iR, right_op_infos, new_right, false);
+        } else
             right_copy(iR, right_op_infos, new_right);
+        // make sure that the previous block is still in memory
+        if (delayed_contration) {
+            if ((fuse_type & FuseTypes::FuseL) && delay_left)
+                left_contract(iL, left_op_infos, new_left, true);
+            else if ((fuse_type & FuseTypes::FuseR) && !delay_left)
+                right_contract(iR, right_op_infos, new_right, true);
+        }
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
@@ -1508,7 +1520,6 @@ template <typename S> struct MovingEnvironment {
                                             mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
         frame->activate(0);
-        frame->reset(1);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(
@@ -1557,14 +1568,23 @@ template <typename S> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
                 0;
         }
-        if (fuse_type & FuseTypes::FuseL)
-            left_contract(iL, left_op_infos, new_left, delay_left);
-        else
+        if (fuse_type & FuseTypes::FuseL) {
+            if (!delay_left || !delayed_contration)
+                left_contract(iL, left_op_infos, new_left, false);
+        } else
             left_copy(iL, left_op_infos, new_left);
-        if (fuse_type & FuseTypes::FuseR)
-            right_contract(iR, right_op_infos, new_right, delay_left);
-        else
+        if (fuse_type & FuseTypes::FuseR) {
+            if (delay_left || !delayed_contration)
+                right_contract(iR, right_op_infos, new_right, false);
+        } else
             right_copy(iR, right_op_infos, new_right);
+        if (delayed_contration) {
+            // make sure that the previous block is still in memory
+            if ((fuse_type & FuseTypes::FuseL) && delay_left)
+                left_contract(iL, left_op_infos, new_left, true);
+            else if ((fuse_type & FuseTypes::FuseR) && !delay_left)
+                right_contract(iR, right_op_infos, new_right, true);
+        }
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
@@ -1573,7 +1593,6 @@ template <typename S> struct MovingEnvironment {
                                             mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
         frame->activate(0);
-        frame->reset(1);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(

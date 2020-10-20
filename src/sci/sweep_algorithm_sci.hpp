@@ -323,12 +323,12 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 // Shift non-reference ops
                 //
                 const auto shift = (1. - g_factor) * delta_e;
-                if (h_eff->op->rops[me->mpo->op]->get_type() !=
+                if (h_eff->op->ropt->ops[me->mpo->op]->get_type() !=
                     SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "MRCIAQCC: No CSRSparseMatrix is used?");
                 auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(
-                    h_eff->op->rops[me->mpo->op]);
+                    h_eff->op->ropt->ops[me->mpo->op]);
                 modify_H_mats(Hop, false, shift);
                 //
                 // Compute diagonal
@@ -350,8 +350,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         h_eff->tf->opf->cg);
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lops,
-                        h_eff->op->rops, h_eff->diag, h_eff->opdq);
+                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                     if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
                         h_eff->tf->opf->seq->auto_perform();
                     h_eff->compute_diag = true;
@@ -359,8 +359,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                     h_eff->diag->clear();
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lops,
-                        h_eff->op->rops, h_eff->diag, h_eff->opdq);
+                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                 }
                 //
                 // EIG and conv check

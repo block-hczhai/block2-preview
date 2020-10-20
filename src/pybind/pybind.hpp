@@ -909,6 +909,7 @@ template <typename S> void bind_operator(py::module &m) {
         .def_readwrite("lmat", &OperatorTensor<S>::lmat)
         .def_readwrite("rmat", &OperatorTensor<S>::rmat)
         .def_readwrite("ops", &OperatorTensor<S>::ops)
+        .def("get_type", &OperatorTensor<S>::get_type)
         .def("reallocate", &OperatorTensor<S>::reallocate, py::arg("clean"))
         .def("deallocate", &OperatorTensor<S>::deallocate)
         .def("copy", &OperatorTensor<S>::copy)
@@ -919,8 +920,8 @@ template <typename S> void bind_operator(py::module &m) {
         .def(py::init<>())
         .def_readwrite("dops", &DelayedOperatorTensor<S>::dops)
         .def_readwrite("mat", &DelayedOperatorTensor<S>::mat)
-        .def_readwrite("lops", &DelayedOperatorTensor<S>::lops)
-        .def_readwrite("rops", &DelayedOperatorTensor<S>::rops);
+        .def_readwrite("lopt", &DelayedOperatorTensor<S>::lopt)
+        .def_readwrite("ropt", &DelayedOperatorTensor<S>::ropt);
 
     py::bind_vector<vector<shared_ptr<OperatorTensor<S>>>>(m, "VectorOpTensor");
 
@@ -945,6 +946,10 @@ template <typename S> void bind_operator(py::module &m) {
         .def("tensor_product_diagonal",
              &TensorFunctions<S>::tensor_product_diagonal)
         .def("tensor_product", &TensorFunctions<S>::tensor_product)
+        .def("delayed_left_contract",
+             &TensorFunctions<S>::delayed_left_contract)
+        .def("delayed_right_contract",
+             &TensorFunctions<S>::delayed_right_contract)
         .def("left_rotate", &TensorFunctions<S>::left_rotate)
         .def("right_rotate", &TensorFunctions<S>::right_rotate)
         .def("intermediates", &TensorFunctions<S>::intermediates)
@@ -1096,6 +1101,10 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("para_rule", &MovingEnvironment<S>::para_rule)
         .def_readwrite("tctr", &MovingEnvironment<S>::tctr)
         .def_readwrite("trot", &MovingEnvironment<S>::trot)
+        .def_readwrite("iprint", &MovingEnvironment<S>::iprint)
+        .def_readwrite("delayed_contration",
+                       &MovingEnvironment<S>::delayed_contration)
+        .def_readwrite("fuse_center", &MovingEnvironment<S>::fuse_center)
         .def("left_contract_rotate",
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
@@ -1951,6 +1960,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Normal", TensorFunctionsTypes::Normal)
         .value("Archived", TensorFunctionsTypes::Archived)
         .value("Delayed", TensorFunctionsTypes::Delayed);
+
+    py::enum_<OperatorTensorTypes>(m, "OperatorTensorTypes", py::arithmetic())
+        .value("Normal", OperatorTensorTypes::Normal)
+        .value("Delayed", OperatorTensorTypes::Delayed);
 
     py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
         .value("Normal", EquationTypes::Normal)
