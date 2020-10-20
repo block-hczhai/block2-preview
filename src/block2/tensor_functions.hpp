@@ -468,7 +468,7 @@ template <typename S> struct TensorFunctions {
             make_shared<DelayedOperatorTensor<S>>();
         dopt->lops = a->ops;
         dopt->rops = b->ops;
-        dopt->ops.push_back(op);
+        dopt->dops.push_back(op);
         assert(a->lmat->data.size() == b->rmat->data.size());
         shared_ptr<Symbolic<S>> exprs = a->lmat * b->rmat;
         assert(exprs->data.size() == 1);
@@ -486,7 +486,7 @@ template <typename S> struct TensorFunctions {
             make_shared<DelayedOperatorTensor<S>>();
         dopt->lops = a->ops;
         dopt->rops = b->ops;
-        dopt->ops = ops->data;
+        dopt->dops = ops->data;
         dopt->mat = exprs;
         return dopt;
     }

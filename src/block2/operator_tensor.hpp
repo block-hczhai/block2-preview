@@ -33,6 +33,8 @@ using namespace std;
 
 namespace block2 {
 
+enum struct OperatorTensorTypes : uint8_t { Normal, Delayed };
+
 // Matrix/Vector of symbols representation a tensor in MPO or contracted MPO
 template <typename S> struct OperatorTensor {
     // Symbolic tensor for left blocking and right blocking
@@ -42,11 +44,15 @@ template <typename S> struct OperatorTensor {
     map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
         ops;
     OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
-    void reallocate(bool clean) {
+    virtual ~OperatorTensor() = default;
+    virtual const OperatorTensorTypes get_type() const {
+        return OperatorTensorTypes::Normal;
+    }
+    virtual void reallocate(bool clean) {
         for (auto &p : ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
-    void deallocate() {
+    virtual void deallocate() {
         // need to check order in parallel mode
         map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto it = ops.cbegin(); it != ops.cend(); it++)
@@ -152,22 +158,26 @@ template <typename S> struct OperatorTensor {
 };
 
 // Delayed contraction of left and right block MPO tensors
-template <typename S> struct DelayedOperatorTensor {
+// or left and dot / dot and right (for 3-index operations)
+template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
     // Symbol of super block operator(s)
-    vector<shared_ptr<OpExpr<S>>> ops;
+    vector<shared_ptr<OpExpr<S>>> dops;
     // Symbolic expression of super block operator(s)
     shared_ptr<Symbolic<S>> mat;
     // SparseMatrix representation of symbols from left and right block
     map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
         lops, rops;
-    DelayedOperatorTensor() {}
-    void reallocate(bool clean) {
+    DelayedOperatorTensor() : OperatorTensor<S>() {}
+    const OperatorTensorTypes get_type() const override {
+        return OperatorTensorTypes::Delayed;
+    }
+    void reallocate(bool clean) override {
         for (auto &p : lops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
         for (auto &p : rops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
-    void deallocate() {
+    void deallocate() override {
         // need to check order in parallel mode
         map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto it = rops.cbegin(); it != rops.cend(); it++)

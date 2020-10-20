@@ -459,7 +459,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         shared_ptr<DelayedOperatorTensor<S>> dopt =
             TensorFunctions<S>::delayed_contract(a, b, op);
         dopt->mat->data[0] =
-            rule->localize_expr(dopt->mat->data[0], rule->owner(dopt->ops[0]));
+            rule->localize_expr(dopt->mat->data[0], rule->owner(dopt->dops[0]));
         return dopt;
     }
     // delayed left and right block contraction
@@ -474,7 +474,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         for (size_t i = 0; i < dopt->mat->data.size(); i++)
             if (dopt->mat->data[i]->get_type() != OpTypes::ExprRef)
                 dopt->mat->data[i] = rule->localize_expr(
-                    dopt->mat->data[i], rule->owner(dopt->ops[i]));
+                    dopt->mat->data[i], rule->owner(dopt->dops[i]));
         return dopt;
     }
     // c = a x b (dot)

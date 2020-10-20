@@ -405,6 +405,10 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
                                    return Array<ubond_t>(self->n_states,
                                                          self->n);
                                })
+        .def("load_data",
+             (void (StateInfo<S>::*)(const string &)) & StateInfo<S>::load_data)
+        .def("save_data", (void (StateInfo<S>::*)(const string &) const) &
+                              StateInfo<S>::save_data)
         .def("allocate",
              [](StateInfo<S> *self, int length) { self->allocate(length); })
         .def("deallocate", &StateInfo<S>::deallocate)
@@ -910,16 +914,13 @@ template <typename S> void bind_operator(py::module &m) {
         .def("copy", &OperatorTensor<S>::copy)
         .def("deep_copy", &OperatorTensor<S>::deep_copy);
 
-    py::class_<DelayedOperatorTensor<S>, shared_ptr<DelayedOperatorTensor<S>>>(
-        m, "DelayedOperatorTensor")
+    py::class_<DelayedOperatorTensor<S>, shared_ptr<DelayedOperatorTensor<S>>,
+               OperatorTensor<S>>(m, "DelayedOperatorTensor")
         .def(py::init<>())
-        .def_readwrite("ops", &DelayedOperatorTensor<S>::ops)
+        .def_readwrite("dops", &DelayedOperatorTensor<S>::dops)
         .def_readwrite("mat", &DelayedOperatorTensor<S>::mat)
         .def_readwrite("lops", &DelayedOperatorTensor<S>::lops)
-        .def_readwrite("rops", &DelayedOperatorTensor<S>::rops)
-        .def("reallocate", &DelayedOperatorTensor<S>::reallocate,
-             py::arg("clean"))
-        .def("deallocate", &DelayedOperatorTensor<S>::deallocate);
+        .def_readwrite("rops", &DelayedOperatorTensor<S>::rops);
 
     py::bind_vector<vector<shared_ptr<OperatorTensor<S>>>>(m, "VectorOpTensor");
 
@@ -1104,7 +1105,7 @@ template <typename S> void bind_partition(py::module &m) {
             [](MovingEnvironment<S> *self, int iL,
                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_info) {
                 shared_ptr<OperatorTensor<S>> new_left = nullptr;
-                self->left_contract(iL, left_op_info, new_left);
+                self->left_contract(iL, left_op_info, new_left, false);
                 return new_left;
             })
         .def("right_contract",
@@ -1112,7 +1113,7 @@ template <typename S> void bind_partition(py::module &m) {
                 vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
                     &right_op_infos) {
                  shared_ptr<OperatorTensor<S>> new_right = nullptr;
-                 self->right_contract(iR, right_op_infos, new_right);
+                 self->right_contract(iR, right_op_infos, new_right, false);
                  return new_right;
              })
         .def(

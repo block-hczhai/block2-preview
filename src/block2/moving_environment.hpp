@@ -414,9 +414,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         bra->clear();
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
         if (const_e != 0) {
+            // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
                 OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
             if (para_rule == nullptr || para_rule->is_root())
                 op->mat->data[0] = expr + const_e * (iop * iop);
         }
@@ -445,7 +446,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             expr = op->mat->data[0];
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
                 OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
             if (para_rule == nullptr || para_rule->is_root())
                 op->mat->data[0] = expr + const_e * (iop * iop);
         }
@@ -463,20 +464,20 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         results.reserve(op->mat->data.size());
         results_idx.reserve(op->mat->data.size());
         for (size_t i = 0; i < op->mat->data.size(); i++) {
-            if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->name ==
+            if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
                 OpNames::Zero)
                 continue;
-            else if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->q_label !=
+            else if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label !=
                      opdq)
-                expectations.push_back(make_pair(op->ops[i], 0.0));
+                expectations.push_back(make_pair(op->dops[i], 0.0));
             else {
                 double r = 0.0;
-                if (para_rule == nullptr || !para_rule->number(op->ops[i])) {
+                if (para_rule == nullptr || !para_rule->number(op->dops[i])) {
                     btmp.clear();
                     (*this)(ktmp, btmp, i, 1.0, true);
                     r = MatrixFunctions::dot(btmp, rtmp);
                 } else {
-                    if (para_rule->own(op->ops[i])) {
+                    if (para_rule->own(op->dops[i])) {
                         btmp.clear();
                         (*this)(ktmp, btmp, i, 1.0, false);
                         r = MatrixFunctions::dot(btmp, rtmp);
@@ -484,7 +485,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                     results.push_back(r);
                     results_idx.push_back(expectations.size());
                 }
-                expectations.push_back(make_pair(op->ops[i], r));
+                expectations.push_back(make_pair(op->dops[i], r));
             }
         }
         btmp.deallocate();
@@ -778,7 +779,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             expr = op->mat->data[0];
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
                 OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->ops[0])->q_label);
+                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
             if (para_rule == nullptr || para_rule->is_root())
                 op->mat->data[0] = expr + const_e * (iop * iop);
         }
@@ -797,14 +798,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         results_idx.reserve(op->mat->data.size());
         for (size_t i = 0; i < op->mat->data.size(); i++) {
             vector<double> rr(ket.size(), 0);
-            if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->name ==
+            if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
                 OpNames::Zero)
                 continue;
-            else if (dynamic_pointer_cast<OpElement<S>>(op->ops[i])->q_label !=
+            else if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label !=
                      opdq)
-                expectations.push_back(make_pair(op->ops[i], rr));
+                expectations.push_back(make_pair(op->dops[i], rr));
             else {
-                if (para_rule == nullptr || !para_rule->number(op->ops[i])) {
+                if (para_rule == nullptr || !para_rule->number(op->dops[i])) {
                     for (int j = 0; j < (int)ket.size(); j++) {
                         ktmp.data = ket[j]->data;
                         rtmp.data = bra[j]->data;
@@ -813,7 +814,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                         rr[j] = MatrixFunctions::dot(btmp, rtmp);
                     }
                 } else {
-                    if (para_rule->own(op->ops[i])) {
+                    if (para_rule->own(op->dops[i])) {
                         for (int j = 0; j < (int)ket.size(); j++) {
                             ktmp.data = ket[j]->data;
                             rtmp.data = bra[j]->data;
@@ -825,7 +826,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                     results.insert(results.end(), rr.begin(), rr.end());
                     results_idx.push_back(expectations.size());
                 }
-                expectations.push_back(make_pair(op->ops[i], rr));
+                expectations.push_back(make_pair(op->dops[i], rr));
             }
         }
         btmp.deallocate();
@@ -909,6 +910,7 @@ template <typename S> struct MovingEnvironment {
     double tctr = 0, trot = 0;
     Timer _t;
     bool iprint = false;
+    int fuse_center;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
                       const shared_ptr<MPS<S>> &ket, const string &tag = "DMRG")
@@ -918,6 +920,9 @@ template <typename S> struct MovingEnvironment {
         assert(bra->center == ket->center && bra->dot == ket->dot);
         hop_mat = make_shared<SymbolicColumnVector<S>>(1);
         (*hop_mat)[0] = mpo->op;
+        fuse_center = mpo->schemer == nullptr
+                          ? n_sites / 2
+                          : mpo->schemer->left_trans_site - 1;
         if (mpo->get_parallel_type() == ParallelTypes::Distributed) {
             para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
             para_rule->comm->barrier();
@@ -1345,7 +1350,7 @@ template <typename S> struct MovingEnvironment {
     // site iL is the new site
     void left_contract(
         int iL, vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-        shared_ptr<OperatorTensor<S>> &new_left) {
+        shared_ptr<OperatorTensor<S>> &new_left, bool delayed) {
         // left contract infos
         vector<shared_ptr<Symbolic<S>>> lmats = {mpo->left_operator_names[iL]};
         if (mpo->schemer != nullptr && iL == mpo->schemer->left_trans_site &&
@@ -1370,7 +1375,8 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_left = Partition<S>::build_left(lmats, left_op_infos,
                                             mpo->sparse_form[iL] == 'S');
-        mpo->tf->left_contract(
+        auto ctr = &TensorFunctions<S>::left_contract;
+        (mpo->tf.get()->*ctr)(
             envs[iL]->left, envs[iL]->middle.front(), new_left,
             mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
                                                  : nullptr);
@@ -1384,7 +1390,7 @@ template <typename S> struct MovingEnvironment {
     void right_contract(
         int iR,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        shared_ptr<OperatorTensor<S>> &new_right) {
+        shared_ptr<OperatorTensor<S>> &new_right, bool delayed) {
         // right contract infos
         vector<shared_ptr<Symbolic<S>>> rmats = {mpo->right_operator_names[iR]};
         vector<S> rsl = Partition<S>::get_uniq_labels(rmats);
@@ -1408,11 +1414,12 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_right = Partition<S>::build_right(rmats, right_op_infos,
                                               mpo->sparse_form[iR] == 'S');
-        mpo->tf->right_contract(envs[iR - dot + 1]->right,
-                                envs[iR - dot + 1]->middle.back(), new_right,
-                                mpo->right_operator_exprs.size() != 0
-                                    ? mpo->right_operator_exprs[iR]
-                                    : nullptr);
+        auto ctr = &TensorFunctions<S>::right_contract;
+        (mpo->tf.get()->*ctr)(envs[iR - dot + 1]->right,
+                              envs[iR - dot + 1]->middle.back(), new_right,
+                              mpo->right_operator_exprs.size() != 0
+                                  ? mpo->right_operator_exprs[iR]
+                                  : nullptr);
     }
     // Copy left-most left block for constructing effective Hamiltonian
     // block to the left of site iL is copied
@@ -1452,6 +1459,7 @@ template <typename S> struct MovingEnvironment {
             const shared_ptr<SparseMatrix<S>> &ket_wfn) {
         assert(bra->info->get_multi_type() == MultiTypes::None);
         assert(ket->info->get_multi_type() == MultiTypes::None);
+        const bool delay_left = center <= fuse_center;
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
             right_op_infos;
         shared_ptr<OperatorTensor<S>> new_left, new_right;
@@ -1485,11 +1493,11 @@ template <typename S> struct MovingEnvironment {
                 0;
         }
         if (fuse_type & FuseTypes::FuseL)
-            left_contract(iL, left_op_infos, new_left);
+            left_contract(iL, left_op_infos, new_left, delay_left);
         else
             left_copy(iL, left_op_infos, new_left);
         if (fuse_type & FuseTypes::FuseR)
-            right_contract(iR, right_op_infos, new_right);
+            right_contract(iR, right_op_infos, new_right, !delay_left);
         else
             right_copy(iR, right_op_infos, new_right);
         // delayed left-right contract
@@ -1518,6 +1526,7 @@ template <typename S> struct MovingEnvironment {
     multi_eff_ham(FuseTypes fuse_type, bool compute_diag) {
         assert(bra->info->get_multi_type() == MultiTypes::Multi);
         assert(ket->info->get_multi_type() == MultiTypes::Multi);
+        const bool delay_left = center <= fuse_center;
         shared_ptr<MultiMPS<S>> mbra = dynamic_pointer_cast<MultiMPS<S>>(bra);
         shared_ptr<MultiMPS<S>> mket = dynamic_pointer_cast<MultiMPS<S>>(ket);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
@@ -1549,11 +1558,11 @@ template <typename S> struct MovingEnvironment {
                 0;
         }
         if (fuse_type & FuseTypes::FuseL)
-            left_contract(iL, left_op_infos, new_left);
+            left_contract(iL, left_op_infos, new_left, delay_left);
         else
             left_copy(iL, left_op_infos, new_left);
         if (fuse_type & FuseTypes::FuseR)
-            right_contract(iR, right_op_infos, new_right);
+            right_contract(iR, right_op_infos, new_right, delay_left);
         else
             right_copy(iR, right_op_infos, new_right);
         // delayed left-right contract
