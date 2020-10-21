@@ -1321,6 +1321,7 @@ template <typename S> void bind_algorithms(py::module &m) {
                       const vector<ubond_t> &, const vector<double> &>())
         .def_readwrite("iprint", &DMRG<S>::iprint)
         .def_readwrite("cutoff", &DMRG<S>::cutoff)
+        .def_readwrite("quanta_cutoff", &DMRG<S>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S>::me)
         .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
         .def_readwrite("noises", &DMRG<S>::noises)
