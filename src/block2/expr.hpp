@@ -68,7 +68,7 @@ inline ostream &operator<<(ostream &os, const OpNames c) {
     const static string repr[] = {
         "H",    "I",   "N",   "NN",  "C",   "D",   "R",    "RD",   "A",
         "AD",   "P",   "PD",  "B",   "BD",  "Q",   "Zero", "PDM1", "PDM2",
-        "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC", "TEMP"};
+        "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC",  "TEMP"};
     os << repr[(uint8_t)c];
     return os;
 }
@@ -303,6 +303,7 @@ template <typename S> struct OpProduct : OpExpr<S> {
 // (A) x {(B1) + (B2) + ...} or {(A1) + (A2) + ...} x (B)
 // first element in conjs must be 0
 // Optionally, c is the intermediate operator name for ops
+// if a b != nullptr, this is A * B * C; ops = (A, B) or (B, C)
 template <typename S> struct OpSumProd : OpProduct<S> {
     vector<shared_ptr<OpElement<S>>> ops;
     shared_ptr<OpElement<S>> c;
@@ -319,16 +320,33 @@ template <typename S> struct OpSumProd : OpProduct<S> {
               const shared_ptr<OpElement<S>> &c = nullptr)
         : ops(ops), conjs(conjs),
           c(c), OpProduct<S>(nullptr, rop, factor, conj) {}
+    OpSumProd(const shared_ptr<OpElement<S>> &a,
+              const shared_ptr<OpElement<S>> &b,
+              const vector<shared_ptr<OpElement<S>>> &ops,
+              const vector<bool> &conjs, double factor, uint8_t conj = 0)
+        : ops(ops), conjs(conjs), OpProduct<S>(a, b, factor, conj) {}
     const OpTypes get_type() const override { return OpTypes::SumProd; }
+    OpSumProd abs() const {
+        if (OpProduct<S>::a == nullptr)
+            return OpSumProd(ops, OpProduct<S>::b, conjs, 1.0,
+                             OpProduct<S>::conj, c);
+        else if (OpProduct<S>::b == nullptr)
+            return OpSumProd(OpProduct<S>::a, ops, conjs, 1.0,
+                             OpProduct<S>::conj, c);
+        else
+            return OpSumProd(OpProduct<S>::a, OpProduct<S>::b, ops, conjs, 1.0,
+                             OpProduct<S>::conj);
+    }
     OpSumProd operator*(double d) const {
         if (OpProduct<S>::a == nullptr)
             return OpSumProd(ops, OpProduct<S>::b, conjs,
                              OpProduct<S>::factor * d, OpProduct<S>::conj, c);
-        else {
-            assert(OpProduct<S>::b == nullptr);
+        else if (OpProduct<S>::b == nullptr)
             return OpSumProd(OpProduct<S>::a, ops, conjs,
                              OpProduct<S>::factor * d, OpProduct<S>::conj, c);
-        }
+        else
+            return OpSumProd(OpProduct<S>::a, OpProduct<S>::b, ops, conjs,
+                             OpProduct<S>::factor * d, OpProduct<S>::conj);
     }
     bool operator==(const OpSumProd &other) const {
         if (ops.size() != other.ops.size() ||
@@ -338,6 +356,8 @@ template <typename S> struct OpSumProd : OpProduct<S> {
         else if (OpProduct<S>::a == nullptr && !(*OpProduct<S>::b == *other.b))
             return false;
         else if (OpProduct<S>::b == nullptr && !(*OpProduct<S>::a == *other.a))
+            return false;
+        else if (OpProduct<S>::conj != other.conj)
             return false;
         else if (conjs != other.conjs)
             return false;
@@ -463,7 +483,8 @@ inline void save_expr(const shared_ptr<OpExpr<S>> &x, ofstream &ofs) {
         ofs.write((char *)&op->factor, sizeof(op->factor));
         ofs.write((char *)&op->conj, sizeof(op->conj));
         uint8_t has_abc =
-            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1) | ((op->c != nullptr) << 2));
+            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1) |
+                      ((op->c != nullptr) << 2));
         ofs.write((char *)&has_abc, sizeof(has_abc));
         if (has_abc & 1)
             save_expr<S>(op->a, ofs);
@@ -538,14 +559,17 @@ template <typename S> inline shared_ptr<OpExpr<S>> load_expr(ifstream &ifs) {
         ifs.read((char *)&conj, sizeof(conj));
         ifs.read((char *)&has_abc, sizeof(has_abc));
         shared_ptr<OpElement<S>> a =
-            (has_abc & 1) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                         : nullptr;
+            (has_abc & 1)
+                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                : nullptr;
         shared_ptr<OpElement<S>> b =
-            (has_abc & 2) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                         : nullptr;
+            (has_abc & 2)
+                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                : nullptr;
         shared_ptr<OpElement<S>> c =
-            (has_abc & 4) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                         : nullptr;
+            (has_abc & 4)
+                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
+                : nullptr;
         int sz;
         ifs.read((char *)&sz, sizeof(sz));
         vector<shared_ptr<OpElement<S>>> ops(sz);

@@ -178,8 +178,7 @@ template <typename S> struct Partition {
                 shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(opx);
                 for (auto &op : sop->strings) {
                     S bra, ket;
-                    if (op->get_type() == OpTypes::Prod) {
-                        assert(op->b != nullptr);
+                    if (op->a != nullptr && op->b != nullptr) {
                         bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                         ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
                     } else {

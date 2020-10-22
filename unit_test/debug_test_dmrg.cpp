@@ -73,8 +73,8 @@ TEST_F(TestDMRG, Test) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true, true);
+    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true,
+                                          true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -156,6 +156,7 @@ TEST_F(TestDMRG, Test) {
     // ME
     shared_ptr<MovingEnvironment<SU2>> me =
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+    me->delayed_contraction = true;
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);

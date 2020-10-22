@@ -954,6 +954,8 @@ template <typename S> void bind_operator(py::module &m) {
         .def("right_rotate", &TensorFunctions<S>::right_rotate)
         .def("intermediates", &TensorFunctions<S>::intermediates)
         .def("numerical_transform", &TensorFunctions<S>::numerical_transform)
+        .def("substitute_delayed_exprs",
+             &TensorFunctions<S>::substitute_delayed_exprs)
         .def("delayed_contract",
              (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
                  const shared_ptr<OperatorTensor<S>> &,
@@ -1102,8 +1104,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("tctr", &MovingEnvironment<S>::tctr)
         .def_readwrite("trot", &MovingEnvironment<S>::trot)
         .def_readwrite("iprint", &MovingEnvironment<S>::iprint)
-        .def_readwrite("delayed_contration",
-                       &MovingEnvironment<S>::delayed_contration)
+        .def_readwrite("delayed_contraction",
+                       &MovingEnvironment<S>::delayed_contraction)
         .def_readwrite("fuse_center", &MovingEnvironment<S>::fuse_center)
         .def("left_contract_rotate",
              &MovingEnvironment<S>::left_contract_rotate)
@@ -1363,6 +1365,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &DMRG<S>::trunc_type)
         .def_readwrite("decomp_type", &DMRG<S>::decomp_type)
         .def_readwrite("decomp_last_site", &DMRG<S>::decomp_last_site)
+        .def_readwrite("sweep_cumulative_nflop",
+                       &DMRG<S>::sweep_cumulative_nflop)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("update_one_dot", &DMRG<S>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
@@ -2331,6 +2335,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_readwrite("post_batch", &BatchGEMMSeq::post_batch)
         .def_readwrite("refs", &BatchGEMMSeq::refs)
         .def_readwrite("cumulative_nflop", &BatchGEMMSeq::cumulative_nflop)
+        .def_readwrite("peak_stack_memory", &BatchGEMMSeq::peak_stack_memory)
         .def_readwrite("mode", &BatchGEMMSeq::mode)
         .def(py::init<>())
         .def(py::init<size_t>())

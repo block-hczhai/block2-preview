@@ -61,6 +61,7 @@ template <typename S> struct DMRG {
     double cutoff = 1E-14;
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
+    size_t sweep_cumulative_nflop = 0;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -770,6 +771,7 @@ template <typename S> struct DMRG {
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
+        sweep_cumulative_nflop = 0;
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
@@ -794,6 +796,7 @@ template <typename S> struct DMRG {
             t.get_time();
             Iteration r =
                 blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
+            sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -866,6 +869,14 @@ template <typename S> struct DMRG {
                 if (energies.size() >= 2)
                     cout << " | DE = " << setw(6) << setprecision(2)
                          << scientific << energy_difference;
+                if (iprint >= 2) {
+                    cout << " | MEM = "
+                         << Parsing::to_size_string(
+                                me->mpo->tf->opf->seq->peak_stack_memory);
+                    cout << " | "
+                         << Parsing::to_size_string(sweep_cumulative_nflop,
+                                                    "FLOP/SWP");
+                }
                 cout << endl;
             }
             if (converged)
