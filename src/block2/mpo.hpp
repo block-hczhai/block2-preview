@@ -490,26 +490,25 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                 if (op.q_label != mpo->op->q_label)
                     p.second = zmat;
                 else if (p.second->get_type() == SparseMatrixTypes::Normal) {
+                    shared_ptr<VectorAllocator<double>> d_alloc =
+                        make_shared<VectorAllocator<double>>();
+                    shared_ptr<SparseMatrix<S>> mat =
+                        make_shared<SparseMatrix<S>>(d_alloc);
+                    mat->allocate(p.second->info);
+                    mat->factor = p.second->factor;
                     if (p.second->info->n == p.second->total_memory) {
-                        shared_ptr<SparseMatrix<S>> mat =
-                            make_shared<SparseMatrix<S>>(*p.second);
-                        mat->alloc = nullptr;
-                        p.second = mat;
+                        MatrixRef mmat(mat->data, mat->total_memory, 1),
+                            pmat(p.second->data, p.second->total_memory, 1);
+                        MatrixFunctions::copy(mmat, pmat);
                     } else {
-                        shared_ptr<VectorAllocator<double>> d_alloc =
-                            make_shared<VectorAllocator<double>>();
-                        shared_ptr<SparseMatrix<S>> mat =
-                            make_shared<SparseMatrix<S>>(d_alloc);
-                        mat->allocate(p.second->info);
-                        mat->factor = p.second->factor;
                         for (int i = 0; i < mat->info->n; i++) {
                             MatrixRef mmat = (*mat)[i], pmat = (*p.second)[i];
                             mmat.n = pmat.n = 1;
                             MatrixFunctions::copy(mmat, pmat, mmat.m + 1,
                                                   pmat.m + 1);
                         }
-                        p.second = mat;
                     }
+                    p.second = mat;
                 } else if (p.second->get_type() == SparseMatrixTypes::CSR) {
                     shared_ptr<CSRSparseMatrix<S>> pmat =
                         dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
