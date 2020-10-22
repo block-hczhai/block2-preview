@@ -119,8 +119,8 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("last_site_1site", &DMRGSCI<S>::last_site_1site)
         .def("blocking", &DMRGSCI<S>::blocking);
 
-    py::class_<LinearSCI<S>, shared_ptr<LinearSCI<S>>, Linear<S>>(
-        m, "LinearSCI")
+    py::class_<LinearSCI<S>, shared_ptr<LinearSCI<S>>, Linear<S>>(m,
+                                                                  "LinearSCI")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
                       const vector<double> &>())
@@ -159,6 +159,22 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("g_factor", &DMRGSCIAQCC<S>::g_factor)
         .def_readwrite("delta_e", &DMRGSCIAQCC<S>::delta_e)
         .def_readwrite("ref_energy", &DMRGSCIAQCC<S>::ref_energy);
+
+    py::class_<DMRGSCIAQCCNEW<S>, shared_ptr<DMRGSCIAQCCNEW<S>>, DMRGSCI<S>>(
+        m, "DMRGSCIAQCCNEW")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &, double,
+                      double>())
+        // vv will be added later not now
+        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+        //            const vector<ubond_t> &, const vector<double> &, double,
+        //            double, const std::vector<S> &, const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter", &DMRGSCIAQCCNEW<S>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGSCIAQCCNEW<S>::g_factor)
+        .def_readwrite("delta_e", &DMRGSCIAQCCNEW<S>::delta_e)
+        .def_readwrite("ref_energy", &DMRGSCIAQCCNEW<S>::ref_energy);
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
         .def_readwrite("mode", &MPOQCSCI<S>::mode)

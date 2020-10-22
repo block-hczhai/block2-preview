@@ -22,12 +22,14 @@
 
 template struct block2::EffectiveHamiltonian<block2::SZ,
                                              block2::MPS<block2::SZ>>;
+template struct block2::LinearEffectiveHamiltonian<block2::SZ>;
 template struct block2::EffectiveHamiltonian<block2::SZ,
                                              block2::MultiMPS<block2::SZ>>;
 template struct block2::MovingEnvironment<block2::SZ>;
 
 template struct block2::EffectiveHamiltonian<block2::SU2,
                                              block2::MPS<block2::SU2>>;
+template struct block2::LinearEffectiveHamiltonian<block2::SU2>;
 template struct block2::EffectiveHamiltonian<block2::SU2,
                                              block2::MultiMPS<block2::SU2>>;
 template struct block2::MovingEnvironment<block2::SU2>;

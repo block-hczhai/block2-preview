@@ -42,6 +42,7 @@ namespace block2 {
 // Density Matrix Renormalization Group
 template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
+    vector<shared_ptr<MovingEnvironment<S>>> ext_mes;
     vector<ubond_t> bond_dims;
     vector<double> noises;
     vector<vector<double>> energies;
@@ -346,19 +347,9 @@ template <typename S> struct DMRG {
         tuple<double, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
         // effective hamiltonian
-        if (davidson_soft_max_iter != 0 || noise != 0) {
-            shared_ptr<EffectiveHamiltonian<S>> h_eff =
-                me->eff_ham(FuseTypes::FuseLR, true, me->bra->tensors[i],
-                            me->ket->tensors[i]);
-            pdi =
-                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, me->para_rule);
-            if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
-                pket = h_eff->perturbative_noise(
-                    forward, i, i + 1, FuseTypes::FuseLR, me->ket->info,
-                    noise_type, me->para_rule);
-            h_eff->deallocate();
-        }
+        if (davidson_soft_max_iter != 0 || noise != 0)
+            pdi = two_dot_eigs_and_perturb(forward, i, davidson_conv_thrd,
+                                           noise, pket);
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<SparseMatrix<S>> dm;
             if (decomp_type == DecompositionTypes::DensityMatrix) {
@@ -442,6 +433,21 @@ template <typename S> struct DMRG {
             me->para_rule->comm->barrier();
         return Iteration(vector<double>{get<0>(pdi) + me->mpo->const_e}, error,
                          mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+    }
+    virtual tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
+        const bool forward, const int i, const double davidson_conv_thrd,
+        const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) {
+        tuple<double, int, size_t, double> pdi;
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_soft_max_iter, me->para_rule);
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pket = h_eff->perturbative_noise(forward, i, i + 1,
+                                             FuseTypes::FuseLR, me->ket->info,
+                                             noise_type, me->para_rule);
+        h_eff->deallocate();
+        return pdi;
     }
     // State-averaged one-site algorithm
     // canonical form for wavefunction: J = left-fused, T = right-fused
@@ -745,6 +751,8 @@ template <typename S> struct DMRG {
     virtual Iteration blocking(int i, bool forward, ubond_t bond_dim,
                                double noise, double davidson_conv_thrd) {
         me->move_to(i);
+        for (auto &xme : ext_mes)
+            xme->move_to(i);
         assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
@@ -768,6 +776,8 @@ template <typename S> struct DMRG {
     sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
         me->prepare();
+        for (auto &xme : ext_mes)
+            xme->prepare();
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();

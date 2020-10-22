@@ -69,6 +69,8 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
                          op_expr_less<SZ>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MovingEnvironment<SZ>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SZ>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
@@ -93,6 +95,8 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
                          op_expr_less<SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MovingEnvironment<SU2>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SU2>>>);
 
 template <typename T> struct Array {
     T *data;
@@ -1054,6 +1058,43 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("para_rule") = nullptr)
         .def("deallocate", &EffectiveHamiltonian<S>::deallocate);
 
+    py::bind_vector<vector<shared_ptr<EffectiveHamiltonian<S>>>>(
+        m, "VectorEffectiveHamiltonian");
+
+    py::class_<LinearEffectiveHamiltonian<S>,
+               shared_ptr<LinearEffectiveHamiltonian<S>>>(
+        m, "LinearEffectiveHamiltonian")
+        .def(py::init<const shared_ptr<EffectiveHamiltonian<S>> &>())
+        .def(py::init<const vector<shared_ptr<EffectiveHamiltonian<S>>> &,
+                      const vector<double> &>())
+        .def("__call__", &LinearEffectiveHamiltonian<S>::operator(),
+             py::arg("b"), py::arg("c"), py::arg("idx") = 0,
+             py::arg("factor") = 1.0, py::arg("all_reduce") = true)
+        .def("eigs", &LinearEffectiveHamiltonian<S>::eigs)
+        .def("deallocate", &LinearEffectiveHamiltonian<S>::deallocate)
+        .def_readwrite("h_effs", &LinearEffectiveHamiltonian<S>::h_effs)
+        .def_readwrite("coeffs", &LinearEffectiveHamiltonian<S>::coeffs)
+        .def("__mul__",
+             [](const shared_ptr<LinearEffectiveHamiltonian<S>> &self,
+                double d) { return self * d; })
+        .def("__rmul__",
+             [](const shared_ptr<LinearEffectiveHamiltonian<S>> &self,
+                double d) { return self * d; })
+        .def("__neg__",
+             [](const shared_ptr<LinearEffectiveHamiltonian<S>> &self) {
+                 return -self;
+             })
+        .def("__add__",
+             [](const shared_ptr<LinearEffectiveHamiltonian<S>> &self,
+                const shared_ptr<LinearEffectiveHamiltonian<S>> &other) {
+                 return self + other;
+             })
+        .def("__sub__",
+             [](const shared_ptr<LinearEffectiveHamiltonian<S>> &self,
+                const shared_ptr<LinearEffectiveHamiltonian<S>> &other) {
+                 return self - other;
+             });
+
     py::class_<EffectiveHamiltonian<S, MultiMPS<S>>,
                shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>>>(
         m, "EffectiveHamiltonianMultiMPS")
@@ -1290,6 +1331,9 @@ template <typename S> void bind_partition(py::module &m) {
         .def_static("propagate_multi_wfn", &MovingEnvironment<S>::propagate_wfn,
                     py::arg("i"), py::arg("n_sites"), py::arg("mps"),
                     py::arg("forward"), py::arg("cg"));
+
+    py::bind_vector<vector<shared_ptr<MovingEnvironment<S>>>>(
+        m, "VectorMovingEnvironment");
 }
 
 template <typename S> void bind_hamiltonian(py::module &m) {
@@ -1348,6 +1392,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("cutoff", &DMRG<S>::cutoff)
         .def_readwrite("quanta_cutoff", &DMRG<S>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S>::me)
+        .def_readwrite("ext_mes", &DMRG<S>::ext_mes)
         .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
         .def_readwrite("noises", &DMRG<S>::noises)
         .def_readwrite("davidson_conv_thrds", &DMRG<S>::davidson_conv_thrds)
@@ -1726,6 +1771,10 @@ template <typename S> void bind_mpo(py::module &m) {
         m, "ArchivedMPO")
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, const string &>());
+
+    py::class_<DiagonalMPO<S>, shared_ptr<DiagonalMPO<S>>, MPO<S>>(
+        m, "DiagonalMPO")
+        .def(py::init<const shared_ptr<MPO<S>> &>());
 }
 
 template <typename S> void bind_class(py::module &m, const string &name) {

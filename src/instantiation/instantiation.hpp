@@ -141,12 +141,14 @@ extern template struct block2::DelayedSparseMatrix<
 // moving_environment.hpp
 extern template struct block2::EffectiveHamiltonian<block2::SZ,
                                                     block2::MPS<block2::SZ>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SZ>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SZ, block2::MultiMPS<block2::SZ>>;
 extern template struct block2::MovingEnvironment<block2::SZ>;
 
 extern template struct block2::EffectiveHamiltonian<block2::SU2,
                                                     block2::MPS<block2::SU2>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SU2>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SU2, block2::MultiMPS<block2::SU2>>;
 extern template struct block2::MovingEnvironment<block2::SU2>;
@@ -154,10 +156,12 @@ extern template struct block2::MovingEnvironment<block2::SU2>;
 // mpo.hpp
 extern template struct block2::MPOSchemer<block2::SZ>;
 extern template struct block2::MPO<block2::SZ>;
+extern template struct block2::DiagonalMPO<block2::SZ>;
 extern template struct block2::AncillaMPO<block2::SZ>;
 
 extern template struct block2::MPOSchemer<block2::SU2>;
 extern template struct block2::MPO<block2::SU2>;
+extern template struct block2::DiagonalMPO<block2::SU2>;
 extern template struct block2::AncillaMPO<block2::SU2>;
 
 // mpo_fusing.hpp
