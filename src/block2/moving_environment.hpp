@@ -52,6 +52,7 @@ template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
 
 // Effective Hamiltonian
 template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
+    typedef S s_type;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
         right_op_infos;
     // Symbolic expression of effective H
@@ -63,6 +64,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     S opdq;
     // Whether diagonal element of effective H should be computed
     bool compute_diag;
+    shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> wfn_info;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -108,8 +110,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         *cmat = *ket;
         *vmat = *bra;
         // temp wavefunction info
-        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> wfn_info =
-            make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
+        wfn_info = make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
         wfn_info->initialize_wfn(cdq, vdq, opdq, msubsl[0], left_op_infos,
                                  right_op_infos, ket->info, bra->info,
                                  tf->opf->cg);
@@ -290,6 +291,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         cmat->data = b.data;
         vmat->data = c.data;
         cmat->factor = factor;
+        cmat->info->cinfo = wfn_info;
         tf->tensor_product_multiply(op->mat->data[idx], op->lopt, op->ropt,
                                     cmat, vmat, opdq, all_reduce);
     }
@@ -307,6 +309,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         frame->activate(0);
         Timer t;
         t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
                 ? MatrixFunctions::davidson(
@@ -355,6 +358,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             MatrixFunctions::iadd(c, b, eta * eta);
             nmult += 2;
         };
+        tf->opf->seq->cumulative_nflop = 0;
         // solve imag part -> ibra
         double igf = MatrixFunctions::conjugate_gradient(
                          op, ibra, ktmp, numltx, 0.0, iprint,
@@ -391,6 +395,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         t.get_time();
         MatrixRef mket(ket->data, ket->total_memory, 1);
         MatrixRef mbra(bra->data, bra->total_memory, 1);
+        tf->opf->seq->cumulative_nflop = 0;
         double r = tf->opf->seq->mode == SeqTypes::Auto
                        ? MatrixFunctions::minres(
                              *tf->opf->seq, mbra, mket, nmult, const_e, iprint,
@@ -425,6 +430,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         t.get_time();
         // Auto mode cannot add const_e term
         assert(tf->opf->seq->mode != SeqTypes::Auto);
+        tf->opf->seq->cumulative_nflop = 0;
         (*this)(MatrixRef(ket->data, ket->total_memory, 1),
                 MatrixRef(bra->data, bra->total_memory, 1));
         op->mat->data[0] = expr;
@@ -457,6 +463,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         MatrixRef btmp(nullptr, bra->total_memory, 1);
         btmp.allocate();
         assert(tf->opf->seq->mode != SeqTypes::Auto);
+        tf->opf->seq->cumulative_nflop = 0;
         vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
         expectations.reserve(op->mat->data.size());
         vector<double> results;
@@ -523,6 +530,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             k[i].allocate(), k[i].clear();
         }
         assert(tf->opf->seq->mode != SeqTypes::Auto);
+        tf->opf->seq->cumulative_nflop = 0;
         const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
         const vector<vector<double>> cs = vector<vector<double>>{
             vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
@@ -578,6 +586,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         MatrixRef v(ket->data, ket->total_memory, 1);
         Timer t;
         t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
         int nexpo = tf->opf->seq->mode == SeqTypes::Auto
                         ? MatrixFunctions::expo_apply(
                               *tf->opf->seq, beta, anorm, v, const_e, iprint,
@@ -607,22 +616,141 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             tf->opf->seq->deallocate();
             tf->opf->seq->clear();
         }
-        cmat->info->cinfo->deallocate();
+        wfn_info->deallocate();
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
-        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
-            if (right_op_infos[i].second->cinfo != nullptr)
-                right_op_infos[i].second->cinfo->deallocate();
-            right_op_infos[i].second->deallocate();
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos;
+        if (op->lopt->get_type() == OperatorTensorTypes::Delayed) {
+            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
+                            left_op_infos.crend());
+            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
+                            right_op_infos.crend());
+        } else {
+            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
+                            right_op_infos.crend());
+            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
+                            left_op_infos.crend());
         }
-        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
-            if (left_op_infos[i].second->cinfo != nullptr)
-                left_op_infos[i].second->cinfo->deallocate();
-            left_op_infos[i].second->deallocate();
+        for (const auto &info : op_infos) {
+            if (info.second->cinfo != nullptr)
+                info.second->cinfo->deallocate();
+            info.second->deallocate();
         }
     }
 };
+
+// Linear combination of Effective Hamiltonians
+template <typename S> struct LinearEffectiveHamiltonian {
+    typedef S s_type;
+    vector<shared_ptr<EffectiveHamiltonian<S>>> h_effs;
+    vector<double> coeffs;
+    S opdq;
+    LinearEffectiveHamiltonian(const shared_ptr<EffectiveHamiltonian<S>> &h_eff)
+        : h_effs{h_eff}, coeffs{1} {}
+    LinearEffectiveHamiltonian(
+        const vector<shared_ptr<EffectiveHamiltonian<S>>> &h_effs,
+        const vector<double> &coeffs)
+        : h_effs(h_effs), coeffs(coeffs) {}
+    static shared_ptr<LinearEffectiveHamiltonian<S>>
+    linearize(const shared_ptr<LinearEffectiveHamiltonian<S>> &x) {
+        return x;
+    }
+    static shared_ptr<LinearEffectiveHamiltonian<S>>
+    linearize(const shared_ptr<EffectiveHamiltonian<S>> &x) {
+        return make_shared<LinearEffectiveHamiltonian<S>>(x);
+    }
+    // [c] = [H_eff[idx]] x [b]
+    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
+                    double factor = 1.0, bool all_reduce = true) {
+        for (size_t ih = 0; ih < h_effs.size(); ih++)
+            h_effs[ih]->operator()(b, c, idx, factor *coeffs[ih], all_reduce);
+    }
+    // Find eigenvalues and eigenvectors of [H_eff]
+    // energy, ndav, nflop, tdav
+    tuple<double, int, size_t, double>
+    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+         int soft_max_iter = -1,
+         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int ndav = 0;
+        assert(h_effs.size() != 0);
+        const shared_ptr<TensorFunctions<S>> &tf = h_effs[0]->tf;
+        DiagonalMatrix aa(nullptr, h_effs[0]->diag->total_memory);
+        aa.allocate();
+        aa.clear();
+        for (size_t ih = 0; ih < h_effs.size(); ih++) {
+            assert(h_effs[ih]->compute_diag);
+            MatrixFunctions::iadd(MatrixRef(aa.data, aa.size(), 1),
+                                  MatrixRef(h_effs[ih]->diag->data,
+                                            h_effs[ih]->diag->total_memory, 1),
+                                  coeffs[ih]);
+        }
+        vector<MatrixRef> bs = vector<MatrixRef>{
+            MatrixRef(h_effs[0]->ket->data, h_effs[0]->ket->total_memory, 1)};
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        vector<double> eners = MatrixFunctions::davidson(
+            *this, aa, bs, ndav, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            max_iter, soft_max_iter);
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        aa.deallocate();
+        return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
+    }
+    void deallocate() {}
+};
+
+template <typename T>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
+operator*(double d, const shared_ptr<T> &x) {
+    shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>> xx =
+        LinearEffectiveHamiltonian<typename T::s_type>::linearize(x);
+    vector<double> new_coeffs;
+    for (auto &c : xx->coeffs)
+        new_coeffs.push_back(c * d);
+    return make_shared<LinearEffectiveHamiltonian<typename T::s_type>>(
+        xx->h_effs, new_coeffs);
+}
+
+template <typename T>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
+operator*(const shared_ptr<T> &x, double d) {
+    return d * x;
+}
+
+template <typename T>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
+operator-(const shared_ptr<T> &x) {
+    return (-1.0) * x;
+}
+
+template <typename T1, typename T2>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>>
+operator+(const shared_ptr<T1> &x, const shared_ptr<T2> &y) {
+    shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>> xx =
+        LinearEffectiveHamiltonian<typename T1::s_type>::linearize(x);
+    shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>> yy =
+        LinearEffectiveHamiltonian<typename T1::s_type>::linearize(y);
+    vector<shared_ptr<EffectiveHamiltonian<typename T1::s_type>>> h_effs =
+        xx->h_effs;
+    vector<double> coeffs = xx->coeffs;
+    h_effs.insert(h_effs.end(), yy->h_effs.begin(), yy->h_effs.end());
+    coeffs.insert(coeffs.end(), yy->coeffs.begin(), yy->coeffs.end());
+    return make_shared<LinearEffectiveHamiltonian<typename T1::s_type>>(h_effs,
+                                                                        coeffs);
+}
+
+template <typename T1, typename T2>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>>
+operator-(const shared_ptr<T1> &x, const shared_ptr<T2> &y) {
+    return x + (-1.0) * y;
+}
 
 // Effective Hamiltonian for MultiMPS
 template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
@@ -753,6 +881,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         frame->activate(0);
         Timer t;
         t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
         vector<double> eners =
             tf->opf->seq->mode == SeqTypes::Auto
                 ? MatrixFunctions::davidson(
@@ -790,6 +919,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         MatrixRef btmp(nullptr, bra[0]->total_memory, 1);
         btmp.allocate();
         assert(tf->opf->seq->mode != SeqTypes::Auto);
+        tf->opf->seq->cumulative_nflop = 0;
         vector<pair<shared_ptr<OpExpr<S>>, vector<double>>> expectations;
         expectations.reserve(op->mat->data.size());
         vector<double> results;
@@ -856,15 +986,22 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
-        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
-            if (right_op_infos[i].second->cinfo != nullptr)
-                right_op_infos[i].second->cinfo->deallocate();
-            right_op_infos[i].second->deallocate();
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos;
+        if (op->lopt->get_type() == OperatorTensorTypes::Delayed) {
+            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
+                            left_op_infos.crend());
+            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
+                            right_op_infos.crend());
+        } else {
+            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
+                            right_op_infos.crend());
+            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
+                            left_op_infos.crend());
         }
-        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
-            if (left_op_infos[i].second->cinfo != nullptr)
-                left_op_infos[i].second->cinfo->deallocate();
-            left_op_infos[i].second->deallocate();
+        for (const auto &info : op_infos) {
+            if (info.second->cinfo != nullptr)
+                info.second->cinfo->deallocate();
+            info.second->deallocate();
         }
     }
 };
@@ -910,7 +1047,7 @@ template <typename S> struct MovingEnvironment {
     double tctr = 0, trot = 0;
     Timer _t;
     bool iprint = false;
-    bool delayed_contration = false;
+    bool delayed_contraction = false;
     int fuse_center;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
@@ -1496,20 +1633,21 @@ template <typename S> struct MovingEnvironment {
                 0;
         }
         if (fuse_type & FuseTypes::FuseL) {
-            if (!delay_left || !delayed_contration)
+            if (!delay_left || !delayed_contraction || iL == 0)
                 left_contract(iL, left_op_infos, new_left, false);
         } else
             left_copy(iL, left_op_infos, new_left);
         if (fuse_type & FuseTypes::FuseR) {
-            if (delay_left || !delayed_contration)
+            if (delay_left || !delayed_contraction || iR == n_sites - 1)
                 right_contract(iR, right_op_infos, new_right, false);
         } else
             right_copy(iR, right_op_infos, new_right);
         // make sure that the previous block is still in memory
-        if (delayed_contration) {
-            if ((fuse_type & FuseTypes::FuseL) && delay_left)
+        if (delayed_contraction) {
+            if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
                 left_contract(iL, left_op_infos, new_left, true);
-            else if ((fuse_type & FuseTypes::FuseR) && !delay_left)
+            else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
+                     iR != n_sites - 1)
                 right_contract(iR, right_op_infos, new_right, true);
         }
         // delayed left-right contract
@@ -1569,20 +1707,21 @@ template <typename S> struct MovingEnvironment {
                 0;
         }
         if (fuse_type & FuseTypes::FuseL) {
-            if (!delay_left || !delayed_contration)
+            if (!delay_left || !delayed_contraction || iL == 0)
                 left_contract(iL, left_op_infos, new_left, false);
         } else
             left_copy(iL, left_op_infos, new_left);
         if (fuse_type & FuseTypes::FuseR) {
-            if (delay_left || !delayed_contration)
+            if (delay_left || !delayed_contraction || iR == n_sites - 1)
                 right_contract(iR, right_op_infos, new_right, false);
         } else
             right_copy(iR, right_op_infos, new_right);
-        if (delayed_contration) {
+        if (delayed_contraction) {
             // make sure that the previous block is still in memory
-            if ((fuse_type & FuseTypes::FuseL) && delay_left)
+            if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
                 left_contract(iL, left_op_infos, new_left, true);
-            else if ((fuse_type & FuseTypes::FuseR) && !delay_left)
+            else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
+                     iR != n_sites - 1)
                 right_contract(iR, right_op_infos, new_right, true);
         }
         // delayed left-right contract

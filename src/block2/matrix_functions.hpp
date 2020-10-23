@@ -163,36 +163,97 @@ struct MatrixFunctions {
         assert(info == 0);
         ialloc->deallocate(work, a.n);
     }
+    // c.n is used for ldc; a.n is used for lda
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
         if (!conja && !conjb) {
-            assert(a.n == b.m && c.m == a.m && c.n == b.n);
-            dgemm("n", "n", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
+            dgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else if (!conja && conjb) {
-            assert(a.n == b.n && c.m == a.m && c.n == b.m);
-            dgemm("t", "n", &c.n, &c.m, &a.n, &scale, b.data, &b.n, a.data,
+            assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
+            dgemm("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else if (conja && !conjb) {
-            assert(a.m == b.m && c.m == a.n && c.n == b.n);
-            dgemm("n", "t", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
+            dgemm("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else {
-            assert(a.m == b.n && c.m == a.n && c.n == b.m);
-            dgemm("t", "t", &c.n, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
+            dgemm("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         }
     }
     // c = bra * a * ket(.T)
-    static void rotate(const MatrixRef &a, const MatrixRef &c,
-                       const MatrixRef &bra, bool conj_bra,
-                       const MatrixRef &ket, bool conj_ket, double scale) {
+    // return nflop
+    static size_t rotate(const MatrixRef &a, const MatrixRef &c,
+                         const MatrixRef &bra, bool conj_bra,
+                         const MatrixRef &ket, bool conj_ket, double scale) {
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
         work.allocate();
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
         work.deallocate();
+        return (size_t)ket.m * ket.n * work.m + (size_t)work.m * work.n * c.m;
+    }
+    // dleft == true : c = bra (= da x db) * a * ket
+    // dleft == false: c = bra * a * ket (= da x db)
+    // return nflop
+    static size_t three_rotate(const MatrixRef &a, const MatrixRef &c,
+                               const MatrixRef &bra, bool conj_bra,
+                               const MatrixRef &ket, bool conj_ket,
+                               const MatrixRef &da, bool dconja,
+                               const MatrixRef &db, bool dconjb, bool dleft,
+                               double scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            int am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            MatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
+            work.allocate();
+            // work = a * ket
+            multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket, conj_ket, work,
+                     1.0, 0.0);
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * work
+                multiply(db, dconjb, work, false,
+                         MatrixRef(&c(cst, 0), cm, c.n), scale * *da.data, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * work
+                multiply(da, dconja, work, false,
+                         MatrixRef(&c(cst, 0), cm, c.n), scale * *db.data, 1.0);
+            else
+                assert(false);
+            work.deallocate();
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            int kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            MatrixRef work(nullptr, a.m, kn);
+            work.allocate();
+            if (da.m == 1 && da.n == 1)
+                // work = a * (1 x db)
+                multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db, dconjb,
+                         work, *da.data * scale, 0.0);
+            else if (db.m == 1 && db.n == 1)
+                // work = a * (da x 1)
+                multiply(MatrixRef(&a(0, ast), a.m, a.n), false, da, dconja,
+                         work, *db.data * scale, 0.0);
+            else
+                assert(false);
+            // c = bra * work
+            multiply(bra, conj_bra, work, false,
+                     MatrixRef(&c(0, cst), c.m, c.n), 1.0, 1.0);
+            work.deallocate();
+            return (size_t)km * kn * work.m + (size_t)work.m * work.n * c.m;
+        }
     }
     // only diagonal elements so no conj parameters
     static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
@@ -202,6 +263,55 @@ struct MatrixFunctions {
         const int k = 1, lda = a.n + 1, ldb = b.n + 1;
         dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
               &cfactor, c.data, &c.n);
+    }
+    // diagonal element of three-matrix tensor product
+    static void
+    three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                  const MatrixRef &c, const MatrixRef &da,
+                                  bool dconja, const MatrixRef &db, bool dconjb,
+                                  bool dleft, double scale, uint32_t stride) {
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        assert(da.m == da.n && db.m == db.n);
+        const double cfactor = 1.0;
+        const int dstrm = (int)stride / (dleft ? a.m : b.m);
+        const int dstrn = (int)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        const int ddstr = 0;
+        const int k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const int ldda = da.n + 1, lddb = db.n + 1;
+        if (da.m == 1 && da.n == 1) {
+            scale *= *da.data;
+            const int dn = db.n - abs(ddstr);
+            const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
+                                         : &db(max(ddstr, 0), max(-ddstr, 0));
+            if (dn > 0) {
+                if (dleft)
+                    // (1 x db) x b
+                    dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, bdata,
+                          &lddb, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                else
+                    // a x (1 x db)
+                    dgemm("t", "n", &dn, &a.n, &k, &scale, bdata, &lddb, a.data,
+                          &lda, &cfactor, &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            scale *= *db.data;
+            const int dn = da.n - abs(ddstr);
+            const double *adata = dconja ? &da(max(-ddstr, 0), max(ddstr, 0))
+                                         : &da(max(ddstr, 0), max(-ddstr, 0));
+            if (dn > 0) {
+                if (dleft)
+                    // (da x 1) x b
+                    dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, adata,
+                          &ldda, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                else
+                    // a x (da x 1)
+                    dgemm("t", "n", &dn, &a.n, &k, &scale, adata, &ldda, a.data,
+                          &lda, &cfactor, &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else
+            assert(false);
     }
     static void tensor_product(const MatrixRef &a, bool conja,
                                const MatrixRef &b, bool conjb,

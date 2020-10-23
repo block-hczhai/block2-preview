@@ -54,8 +54,7 @@ template <typename T> struct StackAllocator : Allocator<T> {
         assert(shift == 0);
         if (used + n >= size) {
             cout << "exceeding allowed memory"
-                 << " (size=" << size << ", trying to allocate "
-                 << n << ") "
+                 << " (size=" << size << ", trying to allocate " << n << ") "
                  << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
             abort();
             return 0;
@@ -247,6 +246,12 @@ struct DataFrame {
         delete[] dallocs[0]->data;
         iallocs.clear();
         dallocs.clear();
+    }
+    size_t memory_used() const {
+        size_t r = 0;
+        for (int i = 0; i < n_frames; i++)
+            r += dallocs[i]->used * 8 + iallocs[i]->used * 4;
+        return r;
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << "persistent memory used :: I = " << df.iallocs[0]->used << "("

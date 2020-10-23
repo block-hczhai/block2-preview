@@ -199,14 +199,59 @@ struct BatchGEMM {
     void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                   bool conjb, const MatrixRef &c, double scale,
                   double cfactor) {
-        this->dgemm(conja, conjb, c.m, c.n, conjb ? b.n : b.m, scale, a.data,
-                    a.n, b.data, b.n, cfactor, c.data, c.n);
+        this->dgemm(conja, conjb, c.m, conjb ? b.m : b.n, conjb ? b.n : b.m,
+                    scale, a.data, a.n, b.data, b.n, cfactor, c.data, c.n);
     }
     // [c] = diag(a) (out product) diag(b)
     void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
                                  const MatrixRef &c, double scale) {
         this->dgemm(false, true, a.n, b.n, 1, scale, a.data, a.n + 1, b.data,
                     b.n + 1, 1.0, c.data, c.n);
+    }
+    //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
+    // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
+    void three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                       const MatrixRef &c, const MatrixRef &da,
+                                       bool dconja, const MatrixRef &db,
+                                       bool dconjb, bool dleft, double scale,
+                                       uint32_t stride) {
+        const int dstrm = (int)stride / (dleft ? a.m : b.m);
+        const int dstrn = (int)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        const int ddstr = 0;
+        if (da.m == 1 && da.n == 1) {
+            const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
+                                         : &db(max(ddstr, 0), max(-ddstr, 0));
+            if (db.n > abs(ddstr)) {
+                if (dleft)
+                    // (1 x db) x b
+                    this->dgemm(false, true, db.n - abs(ddstr), b.n, 1,
+                                scale * *da.data, bdata, db.n + 1, b.data,
+                                b.n + 1, 1.0, &c(max(dstrn, dstrm), 0), c.n);
+                else
+                    // a x (1 x db)
+                    this->dgemm(false, true, a.n, db.n - abs(ddstr), 1,
+                                scale * *da.data, a.data, a.n + 1, bdata,
+                                db.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            const double *adata = dconja ? &da(max(-ddstr, 0), max(ddstr, 0))
+                                         : &da(max(ddstr, 0), max(-ddstr, 0));
+            if (da.n > abs(ddstr)) {
+                if (dleft)
+                    // (da x 1) x b
+                    this->dgemm(false, true, da.n - abs(ddstr), b.n, 1,
+                                scale * *db.data, adata, da.n + 1, b.data,
+                                b.n + 1, 1.0, &c(max(dstrn, dstrm), 0), c.n);
+                else
+                    // a x (da x 1)
+                    this->dgemm(false, true, a.n, da.n - abs(ddstr), 1,
+                                scale * *db.data, a.data, a.n + 1, adata,
+                                da.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else
+            assert(false);
     }
     // Execute DGEMM operation groups from index ii to ii + nn
     void perform(int ii = 0, int kk = 0, int nn = 0) {
@@ -274,6 +319,7 @@ struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> post_batch;
     vector<BatchGEMMRef> refs;
     size_t cumulative_nflop = 0;
+    size_t peak_stack_memory = 0;
     size_t max_batch_flops = 1LU << 30;
     size_t max_work, max_rwork;
     double *work, *rwork;
@@ -305,10 +351,76 @@ struct BatchGEMMSeq {
         batch[0]->work += work.size();
         batch[1]->work += work.size();
     }
+    //  dleft: [c] = scale * [bra] (= [da] x [db]) * [a] * [ket]
+    // !dleft: [c] = scale * [bra] * [a] * [ket] (= [da] x [db])
+    void three_rotate(const MatrixRef &a, const MatrixRef &c,
+                      const MatrixRef &bra, bool conj_bra, const MatrixRef &ket,
+                      bool conj_ket, const MatrixRef &da, bool dconja,
+                      const MatrixRef &db, bool dconjb, bool dleft,
+                      double scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            int am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            MatrixRef work((double *)0 + batch[0]->work, am,
+                           conj_ket ? ket.m : ket.n);
+            // work = a * ket
+            batch[0]->multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket,
+                               conj_ket, work, scale, 0.0);
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * work
+                batch[1]->multiply(db, dconjb, work, false,
+                                   MatrixRef(&c(cst, 0), cm, c.n), *da.data,
+                                   1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * work
+                batch[1]->multiply(da, dconja, work, false,
+                                   MatrixRef(&c(cst, 0), cm, c.n), *db.data,
+                                   1.0);
+            else
+                assert(false);
+            batch[0]->work += work.size();
+            batch[1]->work += work.size();
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            int kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            MatrixRef work((double *)0 + batch[0]->work, a.m, kn);
+            if (da.m == 1 && da.n == 1)
+                // work = a * (1 x db)
+                batch[0]->multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db,
+                                   dconjb, work, *da.data, 0.0);
+            else if (db.m == 1 && db.n == 1)
+                // work = a * (da x 1)
+                batch[0]->multiply(MatrixRef(&a(0, ast), a.m, a.n), false, da,
+                                   dconja, work, *db.data, 0.0);
+            else
+                assert(false);
+            // c = bra * work
+            batch[1]->multiply(bra, conj_bra, work, false,
+                               MatrixRef(&c(0, cst), c.m, c.n), scale, 1.0);
+            batch[0]->work += work.size();
+            batch[1]->work += work.size();
+        }
+    }
     // [c] = scale * diag(a) (out product) diag(b)
     void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
                                  const MatrixRef &c, double scale) {
         batch[1]->tensor_product_diagonal(a, b, c, scale);
+    }
+    //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
+    // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
+    void three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                       const MatrixRef &c, const MatrixRef &da,
+                                       bool dconja, const MatrixRef &db,
+                                       bool dconjb, bool dleft, double scale,
+                                       uint32_t stride) {
+        batch[1]->three_tensor_product_diagonal(a, b, c, da, dconja, db, dconjb,
+                                                dleft, scale, stride);
     }
     // [c + stride] = [a] * (scalar b) or [c] = (scalar a) * [b]
     void tensor_product(const MatrixRef &a, bool conja, const MatrixRef &b,
@@ -327,7 +439,7 @@ struct BatchGEMMSeq {
                    batch[1]->gp[i];
             if (batch[0]->gp.size() != 0) {
                 cur0 += (size_t)batch[0]->m[i] * batch[0]->n[i] *
-                        batch[0]->k[0] * batch[0]->gp[i];
+                        batch[0]->k[i] * batch[0]->gp[i];
                 cwork += (size_t)batch[0]->m[i] * batch[0]->n[i];
             }
             if (max_batch_flops != 0 && cur >= max_batch_flops) {
@@ -559,6 +671,9 @@ struct BatchGEMMSeq {
         divide_batch();
         assert(check());
         allocate();
+        peak_stack_memory = max(peak_stack_memory,
+                                (frame != nullptr ? frame->memory_used() : 0) +
+                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();
@@ -568,6 +683,9 @@ struct BatchGEMMSeq {
     void auto_perform() {
         prepare();
         allocate();
+        peak_stack_memory = max(peak_stack_memory,
+                                (frame != nullptr ? frame->memory_used() : 0) +
+                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();

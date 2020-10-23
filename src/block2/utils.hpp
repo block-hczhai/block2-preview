@@ -137,19 +137,19 @@ struct Parsing {
         ss << i;
         return ss.str();
     }
-    static string to_size_string(size_t i) {
+    static string to_size_string(size_t i, const string &suffix = "B") {
         stringstream ss;
         if (i < 1000) {
-            ss << i << " B";
+            ss << i << " " << suffix;
             return ss.str();
         } else {
             size_t a = 1024, b = 10;
-            string suffix = "KMGTPEZY";
-            for (size_t j = 0; j < suffix.size(); j++, a *= 1024) {
+            string prefix = "KMGTPEZY";
+            for (size_t j = 0; j < prefix.size(); j++, a *= 1024) {
                 for (int k = 10, p = 2; k <= 1000; k *= 10, p--)
                     if (i < k * a) {
                         ss << fixed << setprecision(p) << (i / (long double)a)
-                           << " " << suffix[j] << "B";
+                           << " " << prefix[j] << suffix;
                         return ss.str();
                     }
             }

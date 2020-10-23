@@ -171,6 +171,77 @@ template <typename S> struct OperatorFunctions {
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
+    virtual void three_tensor_product_diagonal(
+        uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
+        const shared_ptr<SparseMatrix<S>> &b,
+        const shared_ptr<SparseMatrix<S>> &c, uint8_t dconj,
+        const shared_ptr<SparseMatrix<S>> &da,
+        const shared_ptr<SparseMatrix<S>> &db, bool dleft, S opdq,
+        double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal &&
+               da->get_type() == SparseMatrixTypes::Normal &&
+               db->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * b->factor * da->factor * db->factor;
+        assert(c->factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        const shared_ptr<SparseMatrix<S>> dc = (dleft ? a : b);
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
+        S dadq = da->info->delta_quantum, dbdq = db->info->delta_quantum,
+          dcdq = dc->info->delta_quantum;
+        S dabdq = dcdq.combine((dconj & 1) ? -dadq : dadq,
+                               (dconj & 2) ? dbdq : -dbdq);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>
+            cinfo = c->info->cinfo,
+            dinfo = dc->info->cinfo;
+        assert(cinfo != nullptr && dinfo != nullptr);
+        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                 cinfo->quanta;
+        assert(ik < cinfo->n[conj + 1]);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        int idk = lower_bound(dinfo->quanta + dinfo->n[dconj],
+                              dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
+                  dinfo->quanta;
+        assert(idk < dinfo->n[dconj + 1]);
+        int idxa = dinfo->idx[idk];
+        int idxb = idk == dinfo->n[4] - 1 ? dinfo->nc : dinfo->idx[idk + 1];
+        for (int idp = 0; idp < idxb; idp++) {
+            bool found = false;
+            for (int il = ixa; il < ixb; il++) {
+                int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
+                double factor = cinfo->factor[il];
+                int idc = dleft ? ia : ib;
+                int idl = lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                          dinfo->ic + idp;
+                for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
+                    found = true;
+                    int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
+                    uint32_t stride = dinfo->stride[idl];
+                    double dfactor = dinfo->factor[idl];
+                    if (seq->mode != SeqTypes::None) {
+                        seq->three_tensor_product_diagonal(
+                            (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
+                            (*db)[idb], (dconj & 2) >> 1, dleft,
+                            scale * factor * dfactor, stride);
+                        break;
+                    } else
+                        MatrixFunctions::three_tensor_product_diagonal(
+                            (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
+                            (*db)[idb], (dconj & 2) >> 1, dleft,
+                            scale * factor * dfactor, stride);
+                }
+            }
+            if (seq->mode == SeqTypes::Simple)
+                seq->simple_perform();
+            if (!found || seq->mode == SeqTypes::None)
+                break;
+        }
+    }
     virtual void tensor_product_multiply(uint8_t conj,
                                          const shared_ptr<SparseMatrix<S>> &a,
                                          const shared_ptr<SparseMatrix<S>> &b,
@@ -206,18 +277,93 @@ template <typename S> struct OperatorFunctions {
             if (seq->mode != SeqTypes::None)
                 seq->rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
                             !(conj & 2), scale * factor);
-            else {
-                seq->cumulative_nflop +=
-                    (size_t)(*c)[ic].m * (*c)[ic].n *
-                        ((conj & 2) ? (*b)[ib].n : (*b)[ib].n) +
-                    (size_t)(*a)[ia].m * (*a)[ia].n *
-                        ((conj & 2) ? (*b)[ib].n : (*b)[ib].n);
-                MatrixFunctions::rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
-                                        (*b)[ib], !(conj & 2), scale * factor);
-            }
+            else
+                seq->cumulative_nflop += MatrixFunctions::rotate(
+                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
+                    !(conj & 2), scale * factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
+    }
+    virtual void three_tensor_product_multiply(
+        uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
+        const shared_ptr<SparseMatrix<S>> &b,
+        const shared_ptr<SparseMatrix<S>> &c,
+        const shared_ptr<SparseMatrix<S>> &v, uint8_t dconj,
+        const shared_ptr<SparseMatrix<S>> &da,
+        const shared_ptr<SparseMatrix<S>> &db, bool dleft, S opdq,
+        double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal &&
+               v->get_type() == SparseMatrixTypes::Normal &&
+               da->get_type() == SparseMatrixTypes::Normal &&
+               db->get_type() == SparseMatrixTypes::Normal);
+        scale =
+            scale * a->factor * b->factor * c->factor * da->factor * db->factor;
+        assert(v->factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        const shared_ptr<SparseMatrix<S>> dc = (dleft ? a : b);
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
+        S dadq = da->info->delta_quantum, dbdq = db->info->delta_quantum,
+          dcdq = dc->info->delta_quantum;
+        S dabdq = dcdq.combine((dconj & 1) ? -dadq : dadq,
+                               (dconj & 2) ? dbdq : -dbdq);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>
+            cinfo = c->info->cinfo,
+            dinfo = dc->info->cinfo;
+        assert(cinfo != nullptr && dinfo != nullptr);
+        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                 cinfo->quanta;
+        assert(ik < cinfo->n[conj + 1]);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        int idk = lower_bound(dinfo->quanta + dinfo->n[dconj],
+                              dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
+                  dinfo->quanta;
+        assert(idk < dinfo->n[dconj + 1]);
+        int idxa = dinfo->idx[idk];
+        int idxb = idk == dinfo->n[4] - 1 ? dinfo->nc : dinfo->idx[idk + 1];
+        for (int idp = 0; idp < idxb; idp++) {
+            bool found = false;
+            for (int il = ixa; il < ixb; il++) {
+                int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
+                    iv = cinfo->stride[il];
+                if (seq->mode == SeqTypes::Simple && il != ixa &&
+                    iv <= cinfo->stride[il - 1])
+                    seq->simple_perform();
+                double factor = cinfo->factor[il];
+                int idc = dleft ? ia : ib;
+                int idl = lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                          dinfo->ic + idp;
+                for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
+                    found = true;
+                    int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
+                    uint32_t stride = dinfo->stride[idl];
+                    double dfactor = dinfo->factor[idl];
+                    if (seq->mode != SeqTypes::None) {
+                        seq->three_rotate((*c)[ic], (*v)[iv], (*a)[ia],
+                                          conj & 1, (*b)[ib], !(conj & 2),
+                                          (*da)[ida], dconj & 1, (*db)[idb],
+                                          (dconj & 2) >> 1, dleft,
+                                          scale * factor * dfactor, stride);
+                        break;
+                    } else
+                        seq->cumulative_nflop += MatrixFunctions::three_rotate(
+                            (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
+                            !(conj & 2), (*da)[ida], dconj & 1, (*db)[idb],
+                            (dconj & 2) >> 1, dleft, scale * factor * dfactor,
+                            stride);
+                }
+            }
+            if (seq->mode == SeqTypes::Simple)
+                seq->simple_perform();
+            if (!found || seq->mode == SeqTypes::None)
+                break;
+        }
     }
     virtual void tensor_product(uint8_t conj,
                                 const shared_ptr<SparseMatrix<S>> &a,

@@ -31,6 +31,7 @@ namespace block2 {
 template <typename S> struct DMRGSCI : DMRG<S> {
     using DMRG<S>::iprint;
     using DMRG<S>::me;
+    using DMRG<S>::ext_mes;
     using DMRG<S>::davidson_soft_max_iter;
     using DMRG<S>::noise_type;
     using DMRG<S>::decomp_type;
@@ -58,6 +59,8 @@ template <typename S> struct DMRGSCI : DMRG<S> {
         if (last_site_1_and_forward) {
             assert(me->dot = 2);
             me->dot = 1;
+            for (auto &xme : ext_mes)
+                xme->dot = 1;
             me->ket->canonical_form[i] = 'K';
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
@@ -71,6 +74,8 @@ template <typename S> struct DMRGSCI : DMRG<S> {
             }
         } else if (last_site_1_and_backward) {
             me->dot = 1;
+            for (auto &xme : ext_mes)
+                xme->dot = 1;
             i = me->n_sites - 1;
             if (iprint >= 2) {
                 cout << "\r " << (forward ? "-->" : "<--")
@@ -95,6 +100,10 @@ template <typename S> struct DMRGSCI : DMRG<S> {
         if (last_site_1site && forward && i == me->n_sites - 1) {
             me->dot = 2;
             me->center = me->n_sites - 2;
+            for (auto &xme : ext_mes) {
+                xme->dot = 2;
+                xme->center = me->n_sites - 2;
+            }
         } else if (last_site_1site && !forward && i == me->n_sites - 1) {
             assert(me->dot = 1);
             davidson_soft_max_iter = 0;
@@ -104,6 +113,11 @@ template <typename S> struct DMRGSCI : DMRG<S> {
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
             me->dot = 2;
+            for (auto &xme : ext_mes) {
+                xme->envs[i - 1]->right_op_infos.clear();
+                xme->envs[i - 1]->right = nullptr;
+                xme->dot = 2;
+            }
             me->ket->canonical_form[i - 2] = 'C';
         }
         return r;
@@ -246,6 +260,178 @@ template <typename S> struct LinearSCI : Linear<S> {
             }
         }
         return r;
+    }
+};
+
+template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
+    using DMRGSCI<S>::iprint;
+    using DMRGSCI<S>::me;
+    using DMRGSCI<S>::ext_mes;
+    using DMRGSCI<S>::davidson_soft_max_iter;
+    using DMRGSCI<S>::davidson_max_iter;
+    using DMRGSCI<S>::noise_type;
+    using DMRGSCI<S>::decomp_type;
+    using DMRGSCI<S>::energies;
+    using DMRGSCI<S>::sweep_energies;
+    using DMRGSCI<S>::last_site_svd;
+    using DMRGSCI<S>::last_site_1site;
+
+    double g_factor = 1.0;   // G in +Q formula
+    double ref_energy = 1.0; // typically CAS-SCF/Reference energy of CAS
+    double delta_e =
+        0.0; // energy - ref_energy => will be modified during the sweep
+    int max_aqcc_iter = 5; // Max iter spent on last site. Convergence depends
+                           // on davidson conv. Note that this does not need to
+                           // be fully converged as we do sweeps anyways.
+    // vvv temporary variables should be removed!!!
+    DMRGSCIAQCCNEW(const shared_ptr<MovingEnvironment<S>> &me,
+                   const shared_ptr<MovingEnvironment<S>> &dme,
+                   const shared_ptr<MovingEnvironment<S>> &ddme,
+                   const vector<ubond_t> &bond_dims,
+                   const vector<double> &noises, double g_factor,
+                   double ref_energy)
+        : DMRGSCI<S>(me, bond_dims, noises),
+          // vv weird compile error -> cannot find member types -.-
+          //     last_site_svd{true}, last_site_1site{true},
+          g_factor{g_factor}, ref_energy{ref_energy} {
+        last_site_svd = true;
+        last_site_1site = me->dot == 2;
+
+        ext_mes.push_back(dme);
+        ext_mes.push_back(ddme);
+    }
+    tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
+        const bool forward, const int i, const double davidson_conv_thrd,
+        const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) override {
+        tuple<double, int, size_t, double> pdi;
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> d_eff = ext_mes[0]->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> dd_eff = ext_mes[1]->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        const auto shift = (1. - g_factor) * delta_e;
+        shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
+            h_eff + shift * (d_eff - dd_eff);
+        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                             davidson_soft_max_iter, me->para_rule);
+        dd_eff->deallocate();
+        d_eff->deallocate();
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pket = h_eff->perturbative_noise(forward, i, i + 1,
+                                             FuseTypes::FuseLR, me->ket->info,
+                                             noise_type, me->para_rule);
+        h_eff->deallocate();
+        return pdi;
+    }
+    tuple<double, int, size_t, double>
+    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
+                             const int i_site, const double davidson_conv_thrd,
+                             const double noise,
+                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
+        tuple<double, int, size_t, double> pdi{0., 0, 0,
+                                               0.}; // energy, ndav, nflop, tdav
+        const auto doAQCC =
+            i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        shared_ptr<EffectiveHamiltonian<S>> d_eff = ext_mes[0]->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        shared_ptr<EffectiveHamiltonian<S>> dd_eff = ext_mes[1]->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        if (doAQCC) {
+            // AQCC
+            if (sweep_energies.size() > 0) {
+                // vv taken from DRMG::sweep
+                size_t idx =
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x[0] < y[0];
+                        }) -
+                    sweep_energies.begin();
+                delta_e = sweep_energies[idx].at(0) - ref_energy;
+            }
+            double last_delta_e = delta_e;
+            if (iprint >= 2) {
+                cout << endl;
+            }
+            for (int itAQCC = 0; itAQCC < max_aqcc_iter; ++itAQCC) {
+                //
+                // Shift non-reference ops
+                //
+                const auto shift = (1. - g_factor) * delta_e;
+                shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
+                    h_eff + shift * (d_eff - dd_eff);
+                //
+                // EIG and conv check
+                //
+                // TODO The best would be to do the adaption of the diagonal
+                // directly in eigs
+                const auto pdi2 = aqcc_eff->eigs(
+                    iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                    davidson_soft_max_iter, me->para_rule);
+                const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
+                const auto ndav = std::get<1>(pdi2);
+                std::get<0>(pdi) = std::get<0>(pdi2);
+                std::get<1>(pdi) += std::get<1>(pdi2); // ndav
+                std::get<2>(pdi) += std::get<2>(pdi2); // nflop
+                std::get<3>(pdi) += std::get<3>(pdi2); // tdav
+                delta_e = energy - ref_energy;
+                const auto converged =
+                    abs(delta_e - last_delta_e) / abs(delta_e) <
+                    1.1 * max(davidson_conv_thrd,
+                              noise); // convergence can be loosely defined here
+                if (iprint >= 2) {
+                    cout << "\tAQCC: " << setw(2) << itAQCC << " E=" << fixed
+                         << setw(17) << setprecision(10) << energy
+                         << " Delta=" << fixed << setw(17) << setprecision(10)
+                         << delta_e << " nDav=" << setw(3) << ndav
+                         << " conv=" << (converged ? "T" : "F");
+                    if (itAQCC == 0) {
+                        cout << "; init Delta=" << fixed << setw(17)
+                             << setprecision(10) << last_delta_e << endl;
+                    } else {
+                        cout << endl;
+                    }
+                }
+                last_delta_e = delta_e;
+                if (converged) {
+                    break;
+                }
+            }
+            // vv restore printing
+            if (iprint >= 2) {
+                if (last_site_1site) {
+                    cout << (forward ? " -->" : " <--") << " Site = " << setw(4)
+                         << i_site << " LAST .. ";
+                } else {
+                    cout << (forward ? " -->" : " <--") << " Site = " << setw(4)
+                         << i_site << " .. ";
+                }
+                cout.flush();
+            }
+        } else {
+            const auto shift = (1. - g_factor) * delta_e;
+            shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
+                h_eff + shift * (d_eff - dd_eff);
+            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                                 davidson_max_iter, davidson_soft_max_iter,
+                                 me->para_rule);
+        }
+        dd_eff->deallocate();
+        d_eff->deallocate();
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
+            pket = h_eff->perturbative_noise(
+                forward, i_site, i_site,
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, me->ket->info,
+                noise_type, me->para_rule);
+        }
+        h_eff->deallocate();
+        return pdi;
     }
 };
 

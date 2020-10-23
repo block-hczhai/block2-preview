@@ -100,6 +100,126 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
     }
 }
 
+TEST_F(TestMatrix, TestThreeRotate) {
+    shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
+    const int sz = 200;
+    for (int i = 0; i < n_tests; i++) {
+        int ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
+        bool ll = Random::rand_int(0, 2);
+        int mda = Random::rand_int(1, sz), nda = Random::rand_int(1, sz);
+        int mdb = Random::rand_int(1, sz), ndb = Random::rand_int(1, sz);
+        int mx = Random::rand_int(1, sz), nx = Random::rand_int(1, sz);
+        if (ii == 0)
+            mda = nda = 1;
+        else if (ii == 1)
+            mdb = ndb = 1;
+        int mdc = mda * mdb * (jj + 1), ndc = nda * ndb * (jj + 1);
+        bool dconja = Random::rand_int(0, 2), dconjb = Random::rand_int(0, 2);
+        bool conjk = Random::rand_int(0, 2), conjb = Random::rand_int(0, 2);
+        MatrixRef da(dalloc_()->allocate(mda * nda), mda, nda);
+        MatrixRef db(dalloc_()->allocate(mdb * ndb), mdb, ndb);
+        MatrixRef dc(dalloc_()->allocate(mdc * ndc), mdc, ndc);
+        MatrixRef x(dalloc_()->allocate(mx * nx), mx, nx);
+        int mb = ll ? mdc : mx, nb = ll ? ndc : nx;
+        int mk = ll ? mx : mdc, nk = ll ? nx : ndc;
+        MatrixRef a(dalloc_()->allocate(nb * mk), nb, mk);
+        MatrixRef c(dalloc_()->allocate(mb * nk), mb, nk);
+        MatrixRef cc(dalloc_()->allocate(mb * nk), mb, nk);
+        Random::fill_rand_double(da.data, da.size());
+        Random::fill_rand_double(db.data, db.size());
+        Random::fill_rand_double(a.data, a.size());
+        int dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
+        int dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
+        if (conjb)
+            ll ? (dc = dc.flip_dims()) : (x = x.flip_dims());
+        if (conjk)
+            !ll ? (dc = dc.flip_dims()) : (x = x.flip_dims());
+        if (ll ? conjb : conjk)
+            swap(dcm_stride, dcn_stride);
+        if (dconja ^ (ll ? conjb : conjk))
+            da = da.flip_dims();
+        if (dconjb ^ (ll ? conjb : conjk))
+            db = db.flip_dims();
+        int dc_stride = dcm_stride * dc.n + dcn_stride;
+        c.clear();
+        MatrixFunctions::three_rotate(a, c, ll ? dc : x, conjb, ll ? x : dc,
+                                      conjk, da, dconja, db, dconjb, ll, 2.0,
+                                      dc_stride);
+        dc.clear(), cc.clear();
+        MatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
+                                        dc_stride);
+        MatrixFunctions::rotate(a, cc, ll ? dc : x, conjb, ll ? x : dc, conjk,
+                                2.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 1E-10));
+        c.clear();
+        seq->three_rotate(a, c, ll ? dc : x, conjb, ll ? x : dc, conjk, da,
+                          dconja, db, dconjb, ll, 2.0, dc_stride);
+        seq->simple_perform();
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 1E-10));
+        cc.deallocate();
+        c.deallocate();
+        a.deallocate();
+        x.deallocate();
+        dc.deallocate();
+        db.deallocate();
+        da.deallocate();
+    }
+}
+
+TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
+    shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
+    for (int i = 0; i < n_tests; i++) {
+        int ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
+        int ll = Random::rand_int(0, 2);
+        int mda = Random::rand_int(1, 400), nda = mda;
+        int mdb = Random::rand_int(1, 400), ndb = mdb;
+        int mx = Random::rand_int(1, 400), nx = mx;
+        if (ii == 0)
+            mda = nda = 1;
+        else if (ii == 1)
+            mdb = ndb = 1;
+        int mdc = mda * mdb * (jj + 1), ndc = nda * ndb * (jj + 1);
+        bool dconja = Random::rand_int(0, 2), dconjb = Random::rand_int(0, 2);
+        MatrixRef da(dalloc_()->allocate(mda * nda), mda, nda);
+        MatrixRef db(dalloc_()->allocate(mdb * ndb), mdb, ndb);
+        MatrixRef dc(dalloc_()->allocate(mdc * ndc), mdc, ndc);
+        MatrixRef x(dalloc_()->allocate(mx * nx), mx, nx);
+        MatrixRef c(dalloc_()->allocate(mdc * mx), mdc, mx);
+        MatrixRef cc(dalloc_()->allocate(mdc * mx), mdc, mx);
+        if (!ll)
+            c = c.flip_dims(), cc = cc.flip_dims();
+        Random::fill_rand_double(da.data, da.size());
+        Random::fill_rand_double(db.data, db.size());
+        int dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
+        int dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
+        dcn_stride = dcm_stride;
+        int dc_stride = dcm_stride * dc.n + dcn_stride;
+        c.clear();
+        MatrixFunctions::three_tensor_product_diagonal(
+            ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll, 2.0,
+            dc_stride);
+        dc.clear(), cc.clear();
+        MatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
+                                        dc_stride);
+        MatrixFunctions::tensor_product_diagonal(ll ? dc : x, ll ? x : dc, cc,
+                                                 2.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        c.clear();
+        batch->three_tensor_product_diagonal(ll ? dc : x, ll ? x : dc, c, da,
+                                             dconja, db, dconjb, ll, 2.0,
+                                             dc_stride);
+        batch->perform();
+        batch->clear();
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        cc.deallocate();
+        c.deallocate();
+        x.deallocate();
+        dc.deallocate();
+        db.deallocate();
+        da.deallocate();
+    }
+}
+
 TEST_F(TestMatrix, TestTensorProduct) {
     shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
     for (int i = 0; i < n_tests; i++) {
@@ -139,7 +259,7 @@ TEST_F(TestMatrix, TestTensorProduct) {
         int cm_stride = Random::rand_int(0, mc - ma * mb + 1);
         int cn_stride = Random::rand_int(0, nc - na * nb + 1);
         int c_stride = cm_stride * c.n + cn_stride;
-        if (Random::rand_int(0, 2) || ii == 2)
+        if (Random::rand_int(0, 2))
             MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, 2.0,
                                             c_stride);
         else {
@@ -249,7 +369,7 @@ TEST_F(TestMatrix, TestDavidson) {
 }
 
 TEST_F(TestMatrix, TestMinRes) {
-    for (int i = 0; i < n_tests * 100; i++) {
+    for (int i = 0; i < n_tests; i++) {
         int m = Random::rand_int(1, 200);
         int n = 1;
         int nmult = 0;
