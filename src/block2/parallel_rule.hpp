@@ -37,7 +37,7 @@ enum ParallelOpTypes : uint8_t {
 
 template <typename S> struct ParallelCommunicator {
     int size, rank, root;
-    double tcomm = 0.0;
+    double tcomm = 0.0; // Runtime for communication
     ParallelCommunicator() : size(1), rank(0), root(0) {}
     ParallelCommunicator(int size, int rank, int root)
         : size(size), rank(rank), root(root) {}

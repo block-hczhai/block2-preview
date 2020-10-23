@@ -30,6 +30,8 @@
 #include "sparse_matrix.hpp"
 #include <ios>
 #include <memory>
+#include <thread> // sleep
+#include <chrono> // timespan
 
 using namespace std;
 
@@ -44,13 +46,19 @@ struct MPI {
         assert(_ierr == 0);
         _ierr = MPI_Comm_size(MPI_COMM_WORLD, &_size);
         assert(_ierr == 0);
-        cout << "MPI INIT " << _rank << " " << _size << endl;
+        // Try to guard parallel print statement with barrier and sleep
+        _ierr = MPI_Barrier(MPI_COMM_WORLD);
+        assert(_ierr == 0);
+        cout << "MPI INIT: rank " << _rank << " of " << _size << endl;
+        std::this_thread::sleep_for(chrono::milliseconds(4));
+        _ierr = MPI_Barrier(MPI_COMM_WORLD);
+        assert(_ierr == 0);
         if (_rank != 0)
             cout.setstate(ios::failbit);
     }
     ~MPI() {
         cout.clear();
-        cout << "MPI FINALIZE " << _rank << " " << _size << endl;
+        cout << "MPI FINALIZE: rank " << _rank << " of " << _size << endl;
         MPI_Finalize();
     }
     static MPI &mpi() {
