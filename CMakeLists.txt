@@ -156,7 +156,7 @@ IF (${MPI})
     FIND_PACKAGE(MPI)
 
     IF (NOT MPI_FOUND)
-        MESSAGE(FATAL_ERROR "MPI not found. Make sute CMAKE_CXX_COMPILER, MPI_CXX_COMPILER and MPI_C_COMPILER are set.")
+        MESSAGE(FATAL_ERROR "MPI not found. Make sure CMAKE_CXX_COMPILER, MPI_CXX_COMPILER and MPI_C_COMPILER are set.")
         # This vv does not work
         #FIND_PATH(MPI_INCLUDE_PATH NAMES mpi.h HINTS $ENV{MPI_HOME}/include $ENV{MPIHOME}/include)
         #FIND_LIBRARY(MPI_LIB_MPICXX NAMES mpi_cxx PATHS $ENV{MPI_HOME}/lib $ENV{MPIHOME}/lib NO_DEFAULT_PATH)
