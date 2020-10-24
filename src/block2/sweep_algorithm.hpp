@@ -43,25 +43,21 @@ namespace block2 {
 //  named "BLOCK_STOP_CALCULATION" in the work dir
 //  if that file contains "STOP", the sweep will be
 //  aborted gracefully
-inline bool has_abort_file(){
+inline bool has_abort_file() {
     const string filename = "BLOCK_STOP_CALCULATION";
-    if(Parsing::file_exists(filename)){
+    bool stop = false;
+    if (Parsing::file_exists(filename)) {
         ifstream ifs(filename.c_str());
-        if (ifs.good()){
-            if (ifs.good()){
-                string line;
-                if(getline(ifs, line)){
-                    auto found = line.find("STOP");
-                    if(found != string::npos){
-                        cout << "ATTENTION: Found abort file! Aborting sweep."
-                             << endl;
-                        return true;
-                    }
-                }
+        if (ifs.good()) {
+            vector<string> lines = Parsing::readlines(&ifs);
+            if (lines.size() == 1 && lines[0] == "STOP") {
+                cout << "ATTENTION: Found abort file! Aborting sweep." << endl;
+                stop = true;
             }
         }
+        ifs.close();
     }
-    return false;
+    return stop;
 }
 
 // Density Matrix Renormalization Group

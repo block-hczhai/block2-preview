@@ -22,7 +22,9 @@
 
 #include <cassert>
 #include <cstdint>
+#include <fstream>
 #include <initializer_list>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <sstream>

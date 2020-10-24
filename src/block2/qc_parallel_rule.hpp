@@ -27,7 +27,7 @@ using namespace std;
 
 namespace block2 {
 
-// Rule for parallel dispatcher for quantum chemisty MPO
+// Rule for parallel dispatcher for quantum chemistry MPO
 template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
     ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm)
@@ -70,7 +70,7 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     }
 };
 
-// Rule for parallel dispatcher for quantum chemisty NPDM
+// Rule for parallel dispatcher for quantum chemistry NPDM
 template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
     ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm)

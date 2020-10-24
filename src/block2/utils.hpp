@@ -139,11 +139,11 @@ struct Parsing {
     }
     static string to_size_string(size_t i, const string &suffix = "B") {
         stringstream ss;
+        size_t a = 1024;
         if (i < 1000) {
             ss << i << " " << suffix;
             return ss.str();
         } else {
-            size_t a = 1024, b = 10;
             string prefix = "KMGTPEZY";
             for (size_t j = 0; j < prefix.size(); j++, a *= 1024) {
                 for (int k = 10, p = 2; k <= 1000; k *= 10, p--)
