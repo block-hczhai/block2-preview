@@ -30,7 +30,7 @@ namespace block2 {
 
 template <typename, typename = void> struct RuleQC;
 
-// Symmetry rules for simplifying quantum chemisty MPO (non-spin-adapted)
+// Symmetry rules for simplifying quantum chemistry MPO (non-spin-adapted)
 template <typename S> struct RuleQC<S, typename S::is_sz_t> : Rule<S> {
     uint8_t mask;
     const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
@@ -137,7 +137,7 @@ template <typename S> struct RuleQC<S, typename S::is_sz_t> : Rule<S> {
     }
 };
 
-// Symmetry rules for simplifying quantum chemisty MPO (spin-adapted)
+// Symmetry rules for simplifying quantum chemistry MPO (spin-adapted)
 template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
     uint8_t mask;
     const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
