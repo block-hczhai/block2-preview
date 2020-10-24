@@ -55,3 +55,11 @@ DMRG Options
 - **Efficiency:** `last_site_1site = true` provides faster speed.
 - **Indicator:** When `last_site_1site = true`, the affected site will print `Site = <n - 1> LAST`.
 - **Requirement:** Need `DMRGSCI`.
+
+Early DMRG stop
+-----------------
+
+To stop a DMRG run gracefully, e.g., in case of non-convergence, 
+create a file named `BLOCK_STOP_CALCULATION` with the text `STOP`.
+The DMRG run will then stop as it would be converged after the current sweep is over.
+

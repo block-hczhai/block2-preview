@@ -39,6 +39,31 @@ using namespace std;
 
 namespace block2 {
 
+//  hrl: Checks whether there is any file
+//  named "BLOCK_STOP_CALCULATION" in the work dir
+//  if that file contains "STOP", the sweep will be
+//  aborted gracefully
+inline bool has_abort_file(){
+    const string filename = "BLOCK_STOP_CALCULATION";
+    if(Parsing::file_exists(filename)){
+        ifstream ifs(filename.c_str());
+        if (ifs.good()){
+            if (ifs.good()){
+                string line;
+                if(getline(ifs, line)){
+                    auto found = line.find("STOP");
+                    if(found != string::npos){
+                        cout << "ATTENTION: Found abort file! Aborting sweep."
+                             << endl;
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // Density Matrix Renormalization Group
 template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
@@ -889,7 +914,7 @@ template <typename S> struct DMRG {
                 }
                 cout << endl;
             }
-            if (converged)
+            if (converged || has_abort_file())
                 break;
         }
         this->forward = forward;
