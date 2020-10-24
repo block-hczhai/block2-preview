@@ -93,7 +93,7 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
                               wfn ? mps->info->target - ket : ket),
                     make_shared<Tensor>(l.n_states[ibba], m.n_states[ibbb],
                                         mat->info->n_states_ket[i])));
-                memcpy(&ts->data[ibbb].back().second->data[0], mat->data + p,
+                memcpy(ts->data[ibbb].back().second->data.data(), mat->data + p,
                        lp * sizeof(double));
                 p += lp;
             }

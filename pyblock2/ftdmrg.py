@@ -38,11 +38,11 @@ SpinLabel = SZ
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, AncillaMPSInfo, MPS
     from block2.su2 import AncillaMPO, PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.su2 import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
+    from block2.su2 import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Linear
 else:
     from block2.sz import HamiltonianQC, AncillaMPSInfo, MPS
     from block2.sz import AncillaMPO, PDM1MPOQC, PDM2MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.sz import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Compress
+    from block2.sz import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Linear
 
 
 class FTDMRGError(Exception):
@@ -274,8 +274,8 @@ class FTDMRG:
         ime = MovingEnvironment(impo, mps, mps_thermal, "COMPRESS")
         ime.init_environments()
 
-        # Compress
-        cps = Compress(ime, VectorUBond(
+        # Linear
+        cps = Linear(ime, VectorUBond(
             [bond_dim]), VectorUBond([10]), VectorDouble([0.0]))
         cps.solve(30, False)
 

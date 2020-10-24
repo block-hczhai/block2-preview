@@ -209,7 +209,7 @@ TEST_F(TestNPDM, TestSU2) {
 
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
-        vector<double> noises = {1E-6, 0};
+        vector<double> noises =  {1E-8, 0.0};
         shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
@@ -776,7 +776,7 @@ TEST_F(TestNPDM, TestSZ) {
 
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
-        vector<double> noises = {1E-6, 0};
+        vector<double> noises = {1E-8, 0};
         shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;

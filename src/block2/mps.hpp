@@ -84,6 +84,7 @@ template <typename S> struct MPSInfo {
     // Actual (truncated) states for left/right block
     vector<shared_ptr<StateInfo<S>>> left_dims, right_dims;
     string tag = "KET";
+    MPSInfo(int n_sites) : n_sites(n_sites), bond_dim(0) {}
     MPSInfo(int n_sites, S vacuum, S target,
             const vector<shared_ptr<StateInfo<S>>> &basis, bool init_fci = true)
         : n_sites(n_sites), vacuum(vacuum), target(target), basis(basis),
@@ -103,6 +104,81 @@ template <typename S> struct MPSInfo {
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
+    virtual void load_data(ifstream &ifs) {
+        ifs.read((char *)&n_sites, sizeof(n_sites));
+        ifs.read((char *)&vacuum, sizeof(vacuum));
+        ifs.read((char *)&target, sizeof(target));
+        ifs.read((char *)&bond_dim, sizeof(bond_dim));
+        int ltag = 0;
+        ifs.read((char *)&ltag, sizeof(ltag));
+        tag = string(ltag, ' ');
+        ifs.read((char *)&tag[0], sizeof(char) * ltag);
+        basis.resize(n_sites);
+        left_dims_fci.resize(n_sites + 1);
+        right_dims_fci.resize(n_sites + 1);
+        left_dims.resize(n_sites + 1);
+        right_dims.resize(n_sites + 1);
+        for (int i = 0; i < n_sites; i++) {
+            basis[i] = make_shared<StateInfo<S>>();
+            basis[i]->load_data(ifs);
+        }
+        vector<vector<shared_ptr<StateInfo<S>>> *> arrs = {&left_dims_fci,
+                                                           &right_dims_fci};
+        for (auto *arr : arrs)
+            for (int i = 0; i <= n_sites; i++) {
+                (*arr)[i] = make_shared<StateInfo<S>>();
+                (*arr)[i]->load_data(ifs);
+            }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i] = make_shared<StateInfo<S>>();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i] = make_shared<StateInfo<S>>();
+    }
+    void load_data(const string &filename) {
+        ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPSInfo:load_data on '" + filename +
+                                "' failed.");
+        load_data(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPSInfo:load_data on '" + filename +
+                                "' failed.");
+        ifs.close();
+    }
+    virtual void save_data(ofstream &ofs) const {
+        ofs.write((char *)&n_sites, sizeof(n_sites));
+        ofs.write((char *)&vacuum, sizeof(vacuum));
+        ofs.write((char *)&target, sizeof(target));
+        ofs.write((char *)&bond_dim, sizeof(bond_dim));
+        int ltag = (int)tag.size();
+        ofs.write((char *)&ltag, sizeof(ltag));
+        ofs.write((char *)&tag[0], sizeof(char) * ltag);
+        assert((int)basis.size() == n_sites);
+        for (int i = 0; i < n_sites; i++) {
+            assert(basis[i] != nullptr);
+            basis[i]->save_data(ofs);
+        }
+        vector<const vector<shared_ptr<StateInfo<S>>> *> arrs = {
+            &left_dims_fci, &right_dims_fci};
+        for (const auto *arr : arrs) {
+            assert((int)arr->size() == n_sites + 1);
+            for (int i = 0; i <= n_sites; i++) {
+                assert((*arr)[i] != nullptr);
+                (*arr)[i]->save_data(ofs);
+            }
+        }
+    }
+    void save_data(const string &filename) const {
+        ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("MPSInfo:save_data on '" + filename +
+                                "' failed.");
+        save_data(ofs);
+        if (!ofs.good())
+            throw runtime_error("MPSInfo:save_data on '" + filename +
+                                "' failed.");
+        ofs.close();
+    }
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
@@ -364,6 +440,7 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)left_dims[i + 1]->n_states[k] *
                                         m / left_dims[i + 1]->n_states_total) +
                                    0.1);
+                    assert(new_n_states != 0);
                     left_dims[i + 1]->n_states[k] = (ubond_t)min(
                         new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += left_dims[i + 1]->n_states[k];
@@ -382,6 +459,7 @@ template <typename S> struct MPSInfo {
                         (uint32_t)(ceil((double)right_dims[i]->n_states[k] * m /
                                         right_dims[i]->n_states_total) +
                                    0.1);
+                    assert(new_n_states != 0);
                     right_dims[i]->n_states[k] = (ubond_t)min(
                         new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
                     new_total += right_dims[i]->n_states[k];
@@ -807,6 +885,60 @@ template <typename S> struct MPS {
             canonical_form[i] = 'R';
     }
     virtual ~MPS() = default;
+    // in bytes; 0 = peak memory, 1 = total disk storage
+    // only count lower bound of doubles
+    virtual vector<size_t>
+    estimate_storage(shared_ptr<MPSInfo<S>> info = nullptr) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        size_t peak = 0, total = 0;
+        shared_ptr<SparseMatrixInfo<S>> mat_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        if (info == nullptr)
+            info = this->info;
+        assert(info != nullptr);
+        vector<size_t> left_total(1, 0), right_total(1, 0);
+        for (int i = 0; i < n_sites; i++) {
+            StateInfo<S> t = StateInfo<S>::tensor_product(
+                *info->left_dims[i], *info->basis[i],
+                *info->left_dims_fci[i + 1]);
+            mat_info->initialize(t, *info->left_dims[i + 1], info->vacuum,
+                                 false);
+            left_total.push_back(left_total.back() +
+                                 mat_info->get_total_memory());
+            mat_info->deallocate();
+        }
+        for (int i = n_sites - 1; i >= 0; i--) {
+            StateInfo<S> t = StateInfo<S>::tensor_product(
+                *info->basis[i], *info->right_dims[i + 1],
+                *info->right_dims_fci[i]);
+            mat_info->initialize(*info->right_dims[i], t, info->vacuum, false);
+            right_total.push_back(right_total.back() +
+                                  mat_info->get_total_memory());
+            mat_info->deallocate();
+        }
+        if (dot == 2) {
+            for (int i = 0; i < n_sites - 1; i++) {
+                StateInfo<S> tl = StateInfo<S>::tensor_product(
+                    *info->left_dims[i], *info->basis[i],
+                    *info->left_dims_fci[i + 1]);
+                StateInfo<S> tr = StateInfo<S>::tensor_product(
+                    *info->basis[i + 1], *info->right_dims[i + 2],
+                    *info->right_dims_fci[i + 1]);
+                mat_info->initialize(tl, tr, info->target, false, true);
+                peak = max(peak, (size_t)mat_info->get_total_memory());
+                total = max(total, left_total[i] +
+                                       right_total[n_sites + 1 - (i + 2)] +
+                                       mat_info->get_total_memory());
+                mat_info->deallocate();
+            }
+        } else
+            for (int i = 1; i <= n_sites; i++) {
+                peak = max(peak, (size_t)(left_total[i] - left_total[i - 1]));
+                total = max(total, left_total[i] + right_total[n_sites - i]);
+            }
+        return vector<size_t>{peak * 8, total * 8};
+    }
     void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();

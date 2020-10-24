@@ -28,8 +28,10 @@
 #include "mpi.h"
 #include "parallel_rule.hpp"
 #include "sparse_matrix.hpp"
+#include <chrono>
 #include <ios>
 #include <memory>
+#include <thread>
 
 using namespace std;
 
@@ -38,19 +40,29 @@ namespace block2 {
 struct MPI {
     int _ierr, _rank, _size;
     MPI() {
-        _ierr = MPI_Init(nullptr, nullptr);
-        assert(_ierr == 0);
+        int flag = 1;
+        _ierr = MPI_Initialized(&flag);
+        if (!flag) {
+            _ierr = MPI_Init(nullptr, nullptr);
+            assert(_ierr == 0);
+        }
         _ierr = MPI_Comm_rank(MPI_COMM_WORLD, &_rank);
         assert(_ierr == 0);
         _ierr = MPI_Comm_size(MPI_COMM_WORLD, &_size);
         assert(_ierr == 0);
-        cout << "MPI INIT " << _rank << " " << _size << endl;
+        // Try to guard parallel print statement with barrier and sleep
+        _ierr = MPI_Barrier(MPI_COMM_WORLD);
+        assert(_ierr == 0);
+        cout << "MPI INIT: rank " << _rank << " of " << _size << endl;
+        std::this_thread::sleep_for(chrono::milliseconds(4));
+        _ierr = MPI_Barrier(MPI_COMM_WORLD);
+        assert(_ierr == 0);
         if (_rank != 0)
             cout.setstate(ios::failbit);
     }
     ~MPI() {
         cout.clear();
-        cout << "MPI FINALIZE " << _rank << " " << _size << endl;
+        cout << "MPI FINALIZE: rank " << _rank << " of " << _size << endl;
         MPI_Finalize();
     }
     static MPI &mpi() {
@@ -222,9 +234,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                 gnnzs.resize(mat->info->n * size);
             for (int i = 0; i < mat->info->n; i++)
                 nnzs[i] = cmat->csr_data[i]->nnz;
-            int ierr = MPI_Gather(nnzs.data(),
-                                  mat->info->n, MPI_INT, gnnzs.data(),
-                                  mat->info->n, MPI_INT, owner, MPI_COMM_WORLD);
+            int ierr =
+                MPI_Gather(nnzs.data(), mat->info->n, MPI_INT, gnnzs.data(),
+                           mat->info->n, MPI_INT, owner, MPI_COMM_WORLD);
             assert(ierr == 0);
             if (rank == owner) {
                 dz.resize(size, 0);

@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include "archived_sparse_matrix.hpp"
 #include "csr_sparse_matrix.hpp"
+#include "delayed_sparse_matrix.hpp"
 #include "sparse_matrix.hpp"
 #include "symbolic.hpp"
 #include <map>
@@ -31,6 +33,8 @@ using namespace std;
 
 namespace block2 {
 
+enum struct OperatorTensorTypes : uint8_t { Normal, Delayed };
+
 // Matrix/Vector of symbols representation a tensor in MPO or contracted MPO
 template <typename S> struct OperatorTensor {
     // Symbolic tensor for left blocking and right blocking
@@ -40,17 +44,22 @@ template <typename S> struct OperatorTensor {
     map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
         ops;
     OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
-    void reallocate(bool clean) {
+    virtual ~OperatorTensor() = default;
+    virtual const OperatorTensorTypes get_type() const {
+        return OperatorTensorTypes::Normal;
+    }
+    virtual void reallocate(bool clean) {
         for (auto &p : ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
-    void deallocate() {
+    virtual void deallocate() {
         // need to check order in parallel mode
-        map<double *, shared_ptr<SparseMatrix<S>>> mp;
+        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto it = ops.cbegin(); it != ops.cend(); it++)
-            mp[it->second->data] = it->second;
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
     }
     void load_data(ifstream &ifs) {
         bool lr;
@@ -99,6 +108,8 @@ template <typename S> struct OperatorTensor {
             save_expr(op.first, ofs);
             assert(op.second != nullptr);
             SparseMatrixTypes tp = op.second->get_type();
+            assert(tp == SparseMatrixTypes::Normal ||
+                   tp == SparseMatrixTypes::CSR);
             ofs.write((char *)&tp, sizeof(tp));
             op.second->info->save_data(ofs);
             op.second->save_data(ofs);
@@ -114,49 +125,71 @@ template <typename S> struct OperatorTensor {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
         for (auto &p : ops) {
-            assert(p.second->get_type() == SparseMatrixTypes::Normal);
-            shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>();
-            if (p.second->total_memory == 0)
-                mat->info = p.second->info;
-            else {
-                mat->allocate(p.second->info);
-                mat->copy_data_from(p.second);
-            }
-            mat->factor = p.second->factor;
-            r->ops[p.first] = mat;
+            if (p.second->get_type() == SparseMatrixTypes::Normal) {
+                shared_ptr<SparseMatrix<S>> mat =
+                    make_shared<SparseMatrix<S>>();
+                if (p.second->total_memory == 0)
+                    mat->info = p.second->info;
+                else {
+                    mat->allocate(p.second->info);
+                    mat->copy_data_from(p.second);
+                }
+                mat->factor = p.second->factor;
+                r->ops[p.first] = mat;
+            } else if (p.second->get_type() == SparseMatrixTypes::Archived) {
+                shared_ptr<ArchivedSparseMatrix<S>> pmat =
+                    dynamic_pointer_cast<ArchivedSparseMatrix<S>>(p.second);
+                shared_ptr<ArchivedSparseMatrix<S>> mat =
+                    make_shared<ArchivedSparseMatrix<S>>(
+                        pmat->filename, pmat->offset, pmat->alloc);
+                mat->info = pmat->info;
+                mat->factor = pmat->factor;
+                mat->sparse_type = pmat->sparse_type;
+                r->ops[p.first] = mat;
+            } else if (p.second->get_type() == SparseMatrixTypes::Delayed)
+                r->ops[p.first] =
+                    dynamic_pointer_cast<DelayedSparseMatrix<S>>(p.second)
+                        ->copy();
+            else
+                assert(false);
         }
         return r;
     }
 };
 
 // Delayed contraction of left and right block MPO tensors
-template <typename S> struct DelayedOperatorTensor {
+// or left and dot / dot and right (for 3-index operations)
+template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
     // Symbol of super block operator(s)
-    vector<shared_ptr<OpExpr<S>>> ops;
+    vector<shared_ptr<OpExpr<S>>> dops;
     // Symbolic expression of super block operator(s)
     shared_ptr<Symbolic<S>> mat;
     // SparseMatrix representation of symbols from left and right block
-    map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-        lops, rops;
-    DelayedOperatorTensor() {}
-    void reallocate(bool clean) {
-        for (auto &p : lops)
+    shared_ptr<OperatorTensor<S>> lopt, ropt;
+    DelayedOperatorTensor() : OperatorTensor<S>() {}
+    const OperatorTensorTypes get_type() const override {
+        return OperatorTensorTypes::Delayed;
+    }
+    void reallocate(bool clean) override {
+        for (auto &p : lopt->ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
-        for (auto &p : rops)
+        for (auto &p : ropt->ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
-    void deallocate() {
+    void deallocate() override {
         // need to check order in parallel mode
-        map<double *, shared_ptr<SparseMatrix<S>>> mp;
-        for (auto it = rops.cbegin(); it != rops.cend(); it++)
-            mp[it->second->data] = it->second;
+        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
+        for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
         mp.clear();
-        for (auto it = lops.cbegin(); it != lops.cend(); it++)
-            mp[it->second->data] = it->second;
+        for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
+            mp[it->second->data].push_back(it->second);
         for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            it->second->deallocate();
+            for (const auto &t : it->second)
+                t->deallocate();
     }
 };
 

@@ -55,6 +55,7 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    hamil.opf->seq->mode = SeqTypes::Simple;
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(8);
@@ -67,17 +68,18 @@ TEST_F(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<SU2>> mpo =
         make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    // mpo = make_shared<ArchivedMPO<SU2>>(mpo);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true,
+                                          true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 250;
+    ubond_t bond_dim = 200;
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
@@ -126,6 +128,17 @@ TEST_F(TestDMRG, Test) {
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
     shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    auto st = mps->estimate_storage(mps_info);
+    cout << "MPS memory = " << Parsing::to_size_string(st[0])
+         << "; storage = " << Parsing::to_size_string(st[1]) << endl;
+    auto st2 = mpo->estimate_storage(mps_info, 2);
+    cout << "2-site MPO term = " << Parsing::to_size_string(st2[0])
+         << "; memory = " << Parsing::to_size_string(st2[1])
+         << "; storage = " << Parsing::to_size_string(st2[2]) << endl;
+    auto st3 = mpo->estimate_storage(mps_info, 1);
+    cout << "1-site MPO term = " << Parsing::to_size_string(st3[0])
+         << "; memory = " << Parsing::to_size_string(st3[1])
+         << "; storage = " << Parsing::to_size_string(st3[2]) << endl;
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -141,9 +154,9 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SU2>> me =
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+    me->delayed_contraction = true;
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -156,16 +169,21 @@ TEST_F(TestDMRG, Test) {
     // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
-                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7,
+                             1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7};
+    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
+                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
+                              5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    // dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->decomp_type = DecompositionTypes::SVD;
     // dmrg->noise_type = NoiseTypes::Perturbative;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->solve(50, true, 0.0);
 
     // deallocate persistent stack memory

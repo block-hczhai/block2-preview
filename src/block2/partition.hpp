@@ -140,7 +140,8 @@ template <typename S> struct Partition {
     static vector<vector<pair<uint8_t, S>>>
     get_uniq_sub_labels(const shared_ptr<Symbolic<S>> &exprs,
                         const shared_ptr<Symbolic<S>> &mat, const vector<S> &sl,
-                        bool partial = false, bool left_only = true) {
+                        bool partial = false, bool left_only = true,
+                        bool uniq_sorted = true) {
         vector<vector<pair<uint8_t, S>>> subsl(sl.size());
         if (exprs == nullptr)
             return subsl;
@@ -159,8 +160,8 @@ template <typename S> struct Partition {
             case OpTypes::Zero:
                 break;
             case OpTypes::Prod: {
-                shared_ptr<OpString<S>> op =
-                    dynamic_pointer_cast<OpString<S>>(opx);
+                shared_ptr<OpProduct<S>> op =
+                    dynamic_pointer_cast<OpProduct<S>>(opx);
                 assert(op->b != nullptr);
                 S bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
@@ -177,8 +178,7 @@ template <typename S> struct Partition {
                 shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(opx);
                 for (auto &op : sop->strings) {
                     S bra, ket;
-                    if (op->get_type() == OpTypes::Prod) {
-                        assert(op->b != nullptr);
+                    if (op->a != nullptr && op->b != nullptr) {
                         bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                         ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
                     } else {
@@ -215,10 +215,13 @@ template <typename S> struct Partition {
                 assert(false);
             }
         }
-        for (size_t i = 0; i < subsl.size(); i++) {
-            sort(subsl[i].begin(), subsl[i].end());
-            subsl[i].resize(distance(subsl[i].begin(),
-                                     unique(subsl[i].begin(), subsl[i].end())));
+        if (uniq_sorted) {
+            for (size_t i = 0; i < subsl.size(); i++) {
+                sort(subsl[i].begin(), subsl[i].end());
+                subsl[i].resize(
+                    distance(subsl[i].begin(),
+                             unique(subsl[i].begin(), subsl[i].end())));
+            }
         }
         return subsl;
     }

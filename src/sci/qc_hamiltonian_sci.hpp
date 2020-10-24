@@ -82,6 +82,7 @@ public:
     using HamiltonianSCI<S>::site_norm_ops;
     using HamiltonianSCI<S>::opf;
     using HamiltonianSCI<S>::orb_sym;
+    using HamiltonianSCI<S>::delayed;
 
     map<OpNames, shared_ptr<SparseMatrix<S>>>
         op_prims_normal[4]; //!< Primitive operators for normal spatial orbitals
@@ -94,6 +95,7 @@ public:
     int nOrbLeft; //!> Number of spatial orbitals for left SCI space (small nOrb)
     int nOrbRight; //!> Number of spatial orbitals for right SCI space  (large nOrb)
     int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
+    bool sci_finalize = true;
     HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
@@ -105,17 +107,21 @@ public:
               nOrbRight{sciWrapperRight==nullptr?0:sciWrapperRight->nOrbThis},
               nOrbCas{getNOrbCas(nOrbTot, sciWrapperLeft,sciWrapperRight)}
         {
-        cout << " Hamiltonian: n_sites = " << (int)n_sites
-             << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
+        assert(sciWrapperLeft!= nullptr or sciWrapperRight != nullptr);
+        const auto verbose = sciWrapperLeft != nullptr ? sciWrapperLeft->verbose : sciWrapperRight->verbose;
+        if (verbose) {
+            cout << " Hamiltonian: n_sites = " << (int) n_sites
+                 << ", nOrbs = [" << nOrbLeft << ", " << nOrbCas << ", " << nOrbRight << "]" << endl;
+        }
         if(orb_sym.size() != nOrbLeft + nOrbCas + nOrbRight){
             cout << "Error! orb_sym.size()=" << orb_sym.size() << "!= nOrbTot=" <<
             nOrbLeft + nOrbCas + nOrbRight << endl;
             throw std::runtime_error("Wrong orb_sym size");
         }
-        if(nOrbLeft > nOrbRight){
+        if(nOrbLeft > nOrbRight and verbose){
             cout << "Warning: Left big site should have fewer orbitals than right one" << endl;
         }
-        if(nOrbLeft + nOrbCas > nOrbRight){
+        if(nOrbLeft + nOrbCas > nOrbRight and verbose){
             cout << "Warning: There should be more orbitals on the right big site "
                     "than on the other sites (NC scheme)" << endl;
         }
@@ -128,7 +134,7 @@ public:
         for (int iSite = iStart; iSite < iEnd; ++iSite) {
             basis[iSite] = make_shared<StateInfo<S>>();
             auto &bas = *basis[iSite];
-            auto iSym = orb_sym[iSite];
+            auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             bas.allocate(4);
             bas.quanta[0] = vacuum;
             bas.quanta[1] = S(1, -1, iSym);
@@ -184,13 +190,36 @@ public:
     void get_site_ops(uint16_t m,
                       map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
                           op_expr_less<S>> &ops) const override {
+        shared_ptr<HamiltonianQCSCI> ph = nullptr;
+        if (delayed != DelayedSCIOpNames::None) {
+            ph = make_shared<HamiltonianQCSCI>(*this);
+            ph->delayed = DelayedSCIOpNames::None;
+            ph->sci_finalize = false;
+        }
+        uint16_t pm = m;
         if (m == n_sites - 1 and sciWrapperRight != nullptr) {
-            get_site_ops_big_site(sciWrapperRight, ops, m);
+            if (!(delayed & DelayedSCIOpNames::RightBig))
+                get_site_ops_big_site(sciWrapperRight, ops, m);
+            else {
+                for (auto &p : ops) {
+                    OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                        ph, pm, p.first, find_site_op_info(op.q_label, pm));
+                }
+            }
             return;
         }else if(m == 0 and sciWrapperLeft != nullptr){
-            get_site_ops_big_site(sciWrapperLeft, ops, m);
+            if (!(delayed & DelayedSCIOpNames::LeftBig))
+                get_site_ops_big_site(sciWrapperLeft, ops, m);
+            else {
+                for (auto &p : ops) {
+                    OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                        ph, pm, p.first, find_site_op_info(op.q_label, pm));
+                }
+            }
             return;
-        }
+        } else m = nOrbLeft == 0 ? m : m + nOrbLeft - 1;
         uint16_t i, j, k;
         uint8_t s;
         shared_ptr<SparseMatrix<S>> zero = make_shared<SparseMatrix<S>>();
@@ -208,17 +237,20 @@ public:
             case OpNames::A:
             case OpNames::AD:
             case OpNames::B:
-                p.second = find_site_norm_op(p.first, m);
+                if (!(delayed & DelayedSCIOpNames::Normal))
+                    p.second = find_site_norm_op(p.first, pm);
                 break;
             case OpNames::H: // hrl: Here we need to take integrals into account
-                p.second = make_shared<SparseMatrix<S>>();
-                p.second->allocate(find_site_op_info(op.q_label, m));
-                (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
-                (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
-                (*p.second)[S(1, 1, orb_sym[m])](0, 0) = t(0, m, m);
-                (*p.second)[S(2, 0, 0)](0, 0) =
-                    t(0, m, m) + t(1, m, m) +
-                    0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
+                if (!(delayed & DelayedSCIOpNames::H)) {
+                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second->allocate(find_site_op_info(op.q_label, pm));
+                    (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
+                    (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
+                    (*p.second)[S(1, 1, orb_sym[m])](0, 0) = t(0, m, m);
+                    (*p.second)[S(2, 0, 0)](0, 0) =
+                        t(0, m, m) + t(1, m, m) +
+                        0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
+                }
                 break;
             case OpNames::R:
                 i = op.site_index[0];
@@ -229,12 +261,12 @@ public:
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedSCIOpNames::R)) {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m));
+                    p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
-                    tmp->allocate(find_site_op_info(op.q_label, m));
+                    tmp->allocate(find_site_op_info(op.q_label, pm));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
                             op_prims_normal[s + (sp << 1)].at(OpNames::R));
@@ -254,12 +286,12 @@ public:
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedSCIOpNames::RD)) {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m));
+                    p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
-                    tmp->allocate(find_site_op_info(op.q_label, m));
+                    tmp->allocate(find_site_op_info(op.q_label, pm));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
                             op_prims_normal[s + (sp << 1)].at(OpNames::RD));
@@ -277,10 +309,10 @@ public:
                 s = op.site_index.ss();
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedSCIOpNames::P)) {
                     p.second = make_shared<SparseMatrix<S>>();
                     p.second->allocate(
-                        find_site_op_info(op.q_label, m),
+                        find_site_op_info(op.q_label, pm),
                         op_prims_normal[s].at(OpNames::AD)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
                 }
@@ -291,9 +323,9 @@ public:
                 s = op.site_index.ss();
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
-                else {
+                else if (!(delayed & DelayedSCIOpNames::PD)) {
                     p.second = make_shared<SparseMatrix<S>>();
-                    p.second->allocate(find_site_op_info(op.q_label, m),
+                    p.second->allocate(find_site_op_info(op.q_label, pm),
                                        op_prims_normal[s].at(OpNames::A)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
                 }
@@ -309,14 +341,14 @@ public:
                         abs(v(s & 1, 0, i, j, m, m)) < TINY &&
                         abs(v(s & 1, 1, i, j, m, m)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedSCIOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>();
-                        p.second->allocate(find_site_op_info(op.q_label, m));
+                        p.second->allocate(find_site_op_info(op.q_label, pm));
                         p.second->copy_data_from(
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)].at(
                                 OpNames::B));
                         p.second->factor *= -v(s & 1, s >> 1, i, m, m, j);
-                        tmp->allocate(find_site_op_info(op.q_label, m));
+                        tmp->allocate(find_site_op_info(op.q_label, pm));
                         for (uint8_t sp = 0; sp < 2; sp++) {
                             tmp->copy_data_from(
                                 op_prims_normal[sp | (sp << 1)].at(OpNames::B));
@@ -332,10 +364,10 @@ public:
                 case 2U:
                     if (abs(v(s & 1, s >> 1, i, m, m, j)) < TINY)
                         p.second = zero;
-                    else {
+                    else if (!(delayed & DelayedSCIOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S>>();
                         p.second->allocate(
-                            find_site_op_info(op.q_label, m),
+                            find_site_op_info(op.q_label, pm),
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)]
                                 .at(OpNames::B)
                                 ->data);
@@ -347,6 +379,9 @@ public:
             default:
                 assert(false);
             }
+            if (p.second == nullptr)
+                p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                    ph, pm, p.first, find_site_op_info(op.q_label, pm));
         }
     }
 
@@ -383,8 +418,8 @@ public:
         init_site_op_infos();
 
         // pg symmetry for reference orbital
-        // op_prims_normal need normal site as reference => use first one (iStart)
-        const uint8_t ipg = orb_sym[iStart];
+        // op_prims_normal need normal site as reference => use first normal orbital
+        const uint8_t ipg = orb_sym[nOrbLeft];
         op_prims_normal[0][OpNames::I] = make_shared<SparseMatrix<S>>();
         op_prims_normal[0][OpNames::I]->allocate(
             find_site_op_info(S(0, 0, 0), iStart));
@@ -488,7 +523,8 @@ public:
                 ops[i][nn_op[s]] = nullptr;
         }
         // vv only for normal sites
-        for (uint16_t m = iStart; m < iEnd; m++) {
+        //                vvv needs to include all left and cas orbitals for NC scheme
+        for (uint16_t m = nOrbLeft; m < nOrbLeft + nOrbCas; m++) {
             for (uint8_t s = 0; s < 2; s++) {
                 ops[orb_sym[m]][make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =
@@ -515,7 +551,7 @@ public:
         }
         // vv only for normal sites
         for (uint16_t iSite = iStart; iSite < iEnd; ++iSite) {
-            const auto iSym = orb_sym[iSite];
+            const auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             site_norm_ops[iSite] = vector<
                 pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
                 ops[iSym].begin(), ops[iSym].end());
@@ -534,7 +570,7 @@ public:
         // number
         //  compare with qLabels in MPOQCSCI
         for (int iSite = 0; iSite < n_sites; ++iSite) {
-            const auto iSym = orb_sym[iSite];
+            const auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
             info[this->vacuum] = nullptr;
             for (auto n : {-1, 1})
@@ -688,8 +724,8 @@ public:
             sciWrapper->fillOp_Q(pairs.first, pairs.second);
             pairs.second.clear(); pairs.second.shrink_to_fit();
         }
-        auto verbose = true;
-        sciWrapper->finalize(verbose);
+        if (sci_finalize)
+            sciWrapper->finalize();
     }
 };
 

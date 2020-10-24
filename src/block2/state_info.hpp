@@ -35,15 +35,18 @@ namespace block2 {
 
 #ifdef _LARGE_BOND
 typedef uint32_t ubond_t;
+typedef int64_t total_bond_t;
 #define _SI_MEM_SIZE(n) ((n) << 1)
 #define _DBL_MEM_SIZE(n) ((n) << 1)
 #else
 #ifdef _SMALL_BOND
 typedef uint8_t ubond_t;
+typedef int32_t total_bond_t;
 #define _SI_MEM_SIZE(n) ((n) + (((n) + 3) >> 2))
 #define _DBL_MEM_SIZE(n) ((n) - ((n) >> 1))
 #else
 typedef uint16_t ubond_t;
+typedef int32_t total_bond_t;
 #define _SI_MEM_SIZE(n) (((n) << 1) - ((n) >> 1))
 #define _DBL_MEM_SIZE(n) (n)
 #endif
@@ -60,7 +63,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
     S *quanta;
     // Array for number of states
     ubond_t *n_states;
-    int n_states_total, n;
+    int n;
+    total_bond_t n_states_total;
     StateInfo()
         : quanta(nullptr), n_states(nullptr), n_states_total(0), n(0),
           vdata(nullptr) {}
@@ -271,7 +275,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         for (int ic = 0; ic < c.n; ic++) {
             vector<uint32_t> &v = mp.at(c.quanta[ic]);
             ci.n_states[ic] = iab;
-            memcpy(ci.quanta + iab, &v[0], v.size() * sizeof(uint32_t));
+            memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(uint32_t));
             iab += v.size();
         }
         ci.reallocate(iab);

@@ -994,8 +994,8 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 for (int i = 0; i < mshape; i++) {
                     shared_ptr<OpElement<S>> op =
                         dynamic_pointer_cast<OpElement<S>>((*pmop)[i]);
-                    shared_ptr<OpString<S>> ex =
-                        dynamic_pointer_cast<OpString<S>>((*pmexpr)[i]);
+                    shared_ptr<OpProduct<S>> ex =
+                        dynamic_pointer_cast<OpProduct<S>>((*pmexpr)[i]);
                     assert(op->q_label == ex->a->q_label + ex->b->q_label);
                 }
                 if (m > 0) {

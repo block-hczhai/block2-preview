@@ -20,8 +20,6 @@
 
 #pragma once
 
-#pragma once
-
 #include "csr_matrix.hpp"
 #include "csr_matrix_functions.hpp"
 #include "sparse_matrix.hpp"
@@ -118,7 +116,8 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         assert(idx != -1 and idx < csr_data.size());
         return *csr_data[idx];
     }
-    void copy_data_from(const shared_ptr<SparseMatrix<S>> &other) override {
+    void copy_data_from(const shared_ptr<SparseMatrix<S>> &other,
+                        bool ref = false) override {
         assert(other->get_type() == SparseMatrixTypes::CSR);
         shared_ptr<CSRSparseMatrix<S>> cother =
             dynamic_pointer_cast<CSRSparseMatrix<S>>(other);
@@ -126,20 +125,34 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         deallocate();
         csr_data.resize(info->n);
         for (int i = 0; i < info->n; i++)
-            csr_data[i] =
-                make_shared<CSRMatrixRef>(cother->csr_data[i]->deep_copy());
+            if (!ref)
+                csr_data[i] =
+                    make_shared<CSRMatrixRef>(cother->csr_data[i]->deep_copy());
+            else {
+                shared_ptr<CSRMatrixRef> mat = cother->csr_data[i];
+                csr_data[i] = make_shared<CSRMatrixRef>(
+                    mat->m, mat->n, mat->nnz, mat->data, mat->rows, mat->cols);
+            }
     }
-    void
-    selective_copy_from(const shared_ptr<SparseMatrix<S>> &other) override {
+    void selective_copy_from(const shared_ptr<SparseMatrix<S>> &other,
+                             bool ref = false) override {
         assert(other->get_type() == SparseMatrixTypes::CSR);
         shared_ptr<CSRSparseMatrix<S>> cother =
             dynamic_pointer_cast<CSRSparseMatrix<S>>(other);
         deallocate();
         csr_data.resize(info->n);
         for (int i = 0, k; i < other->info->n; i++)
-            if ((k = info->find_state(other->info->quanta[i])) != -1)
-                csr_data[k] =
-                    make_shared<CSRMatrixRef>(cother->csr_data[i]->deep_copy());
+            if ((k = info->find_state(other->info->quanta[i])) != -1) {
+                if (!ref)
+                    csr_data[k] = make_shared<CSRMatrixRef>(
+                        cother->csr_data[i]->deep_copy());
+                else {
+                    shared_ptr<CSRMatrixRef> mat = cother->csr_data[i];
+                    csr_data[k] = make_shared<CSRMatrixRef>(
+                        mat->m, mat->n, mat->nnz, mat->data, mat->rows,
+                        mat->cols);
+                }
+            }
     }
     void clear() override {
         deallocate();

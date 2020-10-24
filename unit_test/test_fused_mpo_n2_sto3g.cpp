@@ -78,6 +78,7 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     }
     mpo->tf = make_shared<TensorFunctions<S>>(
         make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+    mpo->tf->opf->seq = hamil.opf->seq;
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -87,7 +88,7 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 1E-7, 0.0};
+    vector<double> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 

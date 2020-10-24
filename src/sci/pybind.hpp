@@ -28,24 +28,23 @@
 namespace py = pybind11;
 using namespace block2;
 
-template <typename S> void bind_sci_wrapper(py::module &m){
-    py::class_<sci::AbstractSciWrapper<S>, shared_ptr<sci::AbstractSciWrapper<S>>>
-                                                        (m, "AbstractSciWrapper")
+template <typename S> void bind_sci_wrapper(py::module &m) {
+    py::class_<sci::AbstractSciWrapper<S>,
+               shared_ptr<sci::AbstractSciWrapper<S>>>(m, "AbstractSciWrapper")
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
-                     const std::vector<uint8_t>&,
-                     int, int, int>(),
-                           py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
-                           py::arg("fcidump"),
-                           py::arg("orbsym"),
-                           py::arg("nMaxAlphaEl"), py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
-                           "Initialization via generated CI space based on nMax*")
-        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
-                     const std::vector<uint8_t>&,
-                     const vector<vector<int>>&>(),
+                      const std::vector<uint8_t> &, int, int, int>(),
              py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
-             py::arg("fcidump"),
-             py::arg("orbsym"), py::arg("occs"),
+             py::arg("fcidump"), py::arg("orbsym"), py::arg("nMaxAlphaEl"),
+             py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
+             "Initialization via generated CI space based on nMax*")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+                      const std::vector<uint8_t> &,
+                      const vector<vector<int>> &>(),
+             py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
+             py::arg("fcidump"), py::arg("orbsym"), py::arg("occs"),
              "Initialization via externally given determinants in `occs`")
+        .def_readonly("quantumNumbers",
+                      &sci::AbstractSciWrapper<S>::quantumNumbers)
         .def_readonly("nOrbOther", &sci::AbstractSciWrapper<S>::nOrbOther)
         .def_readonly("nOrbThis", &sci::AbstractSciWrapper<S>::nOrbThis)
         .def_readonly("nOrb", &sci::AbstractSciWrapper<S>::nOrb)
@@ -54,55 +53,61 @@ template <typename S> void bind_sci_wrapper(py::module &m){
         .def_readonly("nMaxBetaEl", &sci::AbstractSciWrapper<S>::nMaxBetaEl)
         .def_readonly("nMaxEl", &sci::AbstractSciWrapper<S>::nMaxEl)
         .def_readonly("nDet", &sci::AbstractSciWrapper<S>::nDet)
-        .def_readwrite("sparsityThresh", &sci::AbstractSciWrapper<S>::sparsityThresh,
-                      "After > #zeros/#tot the sparse matrix is activated")
-        .def_readwrite("sparsityStart", &sci::AbstractSciWrapper<S>::sparsityStart,
-                      "After which matrix size (nCol * nRow) should sparse matrices be activated")
+        .def_readwrite("sparsityThresh",
+                       &sci::AbstractSciWrapper<S>::sparsityThresh,
+                       "After > #zeros/#tot the sparse matrix is activated")
+        .def_readwrite("sparsityStart",
+                       &sci::AbstractSciWrapper<S>::sparsityStart,
+                       "After which matrix size (nCol * nRow) should sparse "
+                       "matrices be activated")
         .def_readwrite("eps", &sci::AbstractSciWrapper<S>::eps,
-                      "Sparsity value threshold. Everything below eps will be set to 0.0");
+                       "Sparsity value threshold. Everything below eps will be "
+                       "set to 0.0");
 };
 
 template <typename S> void bind_hamiltonian_sci(py::module &m) {
 
-    py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(m, "HamiltonianSCI")
-            .def(py::init<S, int, const vector<uint8_t> &>())
-            .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
-            .def_readwrite("opf", &HamiltonianSCI<S>::opf)
-            .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
-            .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
-            .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
-            .def_readwrite("basis", &HamiltonianSCI<S>::basis)
-            .def("deallocate", &HamiltonianSCI<S>::deallocate);
-           //vv hrl: switched off as not really required (now protected)
-            /*.def_property_readonly(
-                    "site_op_infos",
-                    [](HamiltonianSCI<S> *self) {
-                        return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
-                                self->site_op_infos, self->n_syms);
-                    })
-            .def("get_site_ops", &HamiltonianSCI<S>::get_site_ops)
-            .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)
-            .def("find_site_op_info", &HamiltonianSCI<S>::find_site_op_info)
-            .def("find_site_norm_op", &HamiltonianSCI<S>::find_site_norm_op)
-            */
+    py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(
+        m, "HamiltonianSCI")
+        .def(py::init<S, int, const vector<uint8_t> &>())
+        .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
+        .def_readwrite("opf", &HamiltonianSCI<S>::opf)
+        .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
+        .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
+        .def_readwrite("vacuum", &HamiltonianSCI<S>::vacuum)
+        .def_readwrite("basis", &HamiltonianSCI<S>::basis)
+        .def_readwrite("delayed", &HamiltonianSCI<S>::delayed)
+        .def("deallocate", &HamiltonianSCI<S>::deallocate);
+    // vv hrl: switched off as not really required (now protected)
+    /*.def_property_readonly(
+            "site_op_infos",
+            [](HamiltonianSCI<S> *self) {
+                return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
+                        self->site_op_infos, self->n_syms);
+            })
+    .def("get_site_ops", &HamiltonianSCI<S>::get_site_ops)
+    .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)
+    .def("find_site_op_info", &HamiltonianSCI<S>::find_site_op_info)
+    .def("find_site_norm_op", &HamiltonianSCI<S>::find_site_norm_op)
+    */
 
-    py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>, HamiltonianSCI<S>>(
-            m, "HamiltonianQCSCI")
-            .def(py::init<S, int, const vector<uint8_t> &,
-                    const shared_ptr<FCIDUMP> &,
-                    const std::shared_ptr<sci::AbstractSciWrapper<S>> &,
-                    const std::shared_ptr<sci::AbstractSciWrapper<S>> &>(),
-                    py::arg("vacuum"), py::arg("nOrbTot"),
-                    py::arg("orb_Sym"), py::arg("fcidump"), py::arg("sciWrapperLeft")=nullptr,
-                    py::arg("sciWraperRight")=nullptr)
-            .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
-            .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
-            .def("v", &HamiltonianQCSCI<S>::v)
-            .def("t", &HamiltonianQCSCI<S>::t)
-            .def("e", &HamiltonianQCSCI<S>::e);
-            //vv hrl: switched off as not really required (now protected)
-            //.def("init_site_ops", &HamiltonianQCSCI<S>::init_site_ops)
-            //.def("get_site_ops", &HamiltonianQCSCI<S>::get_site_ops);
+    py::class_<HamiltonianQCSCI<S>, shared_ptr<HamiltonianQCSCI<S>>,
+               HamiltonianSCI<S>>(m, "HamiltonianQCSCI")
+        .def(py::init<S, int, const vector<uint8_t> &,
+                      const shared_ptr<FCIDUMP> &,
+                      const std::shared_ptr<sci::AbstractSciWrapper<S>> &,
+                      const std::shared_ptr<sci::AbstractSciWrapper<S>> &>(),
+             py::arg("vacuum"), py::arg("nOrbTot"), py::arg("orb_Sym"),
+             py::arg("fcidump"), py::arg("sciWrapperLeft") = nullptr,
+             py::arg("sciWraperRight") = nullptr)
+        .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
+        .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
+        .def("v", &HamiltonianQCSCI<S>::v)
+        .def("t", &HamiltonianQCSCI<S>::t)
+        .def("e", &HamiltonianQCSCI<S>::e);
+    // vv hrl: switched off as not really required (now protected)
+    //.def("init_site_ops", &HamiltonianQCSCI<S>::init_site_ops)
+    //.def("get_site_ops", &HamiltonianQCSCI<S>::get_site_ops);
 }
 
 template <typename S> void bind_mpo_sci(py::module &m) {
@@ -110,11 +115,85 @@ template <typename S> void bind_mpo_sci(py::module &m) {
     py::class_<DMRGSCI<S>, shared_ptr<DMRGSCI<S>>, DMRG<S>>(m, "DMRGSCI")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<double> &>())
+        .def_readwrite("last_site_svd", &DMRGSCI<S>::last_site_svd)
+        .def_readwrite("last_site_1site", &DMRGSCI<S>::last_site_1site)
         .def("blocking", &DMRGSCI<S>::blocking);
 
-    py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
-            .def_readwrite("mode", &MPOQCSCI<S>::mode)
-            .def(py::init<const HamiltonianQCSCI<S> &>())
-            .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
+    py::class_<LinearSCI<S>, shared_ptr<LinearSCI<S>>, Linear<S>>(m,
+                                                                  "LinearSCI")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &,
+                      const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<ubond_t> &>())
+        .def_readwrite("last_site_svd", &LinearSCI<S>::last_site_svd)
+        .def_readwrite("last_site_1site", &LinearSCI<S>::last_site_1site)
+        .def("blocking", &LinearSCI<S>::blocking);
 
+    py::class_<DMRGSCIAQCC<S>, shared_ptr<DMRGSCIAQCC<S>>, DMRGSCI<S>>(
+        m, "DMRGSCIAQCC")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &, double,
+                      double, const std::vector<S> &>())
+        // vv will be added later not now
+        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+        //            const vector<ubond_t> &, const vector<double> &, double,
+        //            double, const std::vector<S> &, const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter", &DMRGSCIAQCC<S>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGSCIAQCC<S>::g_factor)
+        .def_readwrite("delta_e", &DMRGSCIAQCC<S>::delta_e)
+        .def_readwrite("ref_energy", &DMRGSCIAQCC<S>::ref_energy);
+
+    py::class_<DMRGSCIAQCCNEW<S>, shared_ptr<DMRGSCIAQCCNEW<S>>, DMRGSCI<S>>(
+        m, "DMRGSCIAQCCNEW")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &, double,
+                      double>())
+        // vv will be added later not now
+        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+        //            const vector<ubond_t> &, const vector<double> &, double,
+        //            double, const std::vector<S> &, const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter", &DMRGSCIAQCCNEW<S>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGSCIAQCCNEW<S>::g_factor)
+        .def_readwrite("delta_e", &DMRGSCIAQCCNEW<S>::delta_e)
+        .def_readwrite("ref_energy", &DMRGSCIAQCCNEW<S>::ref_energy);
+
+    py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
+        .def_readwrite("mode", &MPOQCSCI<S>::mode)
+        .def(py::init<const HamiltonianQCSCI<S> &>())
+        .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
+}
+
+template <typename S = void> void bind_types_sci(py::module &m) {
+    py::enum_<DelayedSCIOpNames>(m, "DelayedSCIOpNames", py::arithmetic())
+        .value("Nothing", DelayedSCIOpNames::None)
+        .value("H", DelayedSCIOpNames::H)
+        .value("Normal", DelayedSCIOpNames::Normal)
+        .value("R", DelayedSCIOpNames::R)
+        .value("RD", DelayedSCIOpNames::RD)
+        .value("P", DelayedSCIOpNames::P)
+        .value("PD", DelayedSCIOpNames::PD)
+        .value("Q", DelayedSCIOpNames::Q)
+        .value("LeftBig", DelayedSCIOpNames::LeftBig)
+        .value("RightBig", DelayedSCIOpNames::RightBig)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 }

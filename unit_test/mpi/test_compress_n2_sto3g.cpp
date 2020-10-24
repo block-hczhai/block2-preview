@@ -32,7 +32,7 @@ struct MPITest {
     }
 };
 
-class TestCompressN2STO3G : public ::testing::Test {
+class TestLinearN2STO3G : public ::testing::Test {
     static bool _mpi;
 
   protected:
@@ -53,10 +53,10 @@ class TestCompressN2STO3G : public ::testing::Test {
     }
 };
 
-bool TestCompressN2STO3G::_mpi = MPITest::okay();
+bool TestLinearN2STO3G::_mpi = MPITest::okay();
 
 template <typename S>
-void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
+void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
                                     const string &name, int dot) {
 
     hamil.opf->seq->mode = SeqTypes::Simple;
@@ -124,7 +124,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     ubond_t bond_dim = 200, bra_bond_dim = 100;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 1E-7, 0.0};
+    vector<double> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -193,11 +193,11 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
         make_shared<MovingEnvironment<S>>(impo, imps, mps, "COMPRESS");
     ime->init_environments();
 
-    // Compress
+    // Linear
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
     noises = {0.0};
-    shared_ptr<Compress<S>> cps =
-        make_shared<Compress<S>>(ime, bra_bdims, ket_bdims, noises);
+    shared_ptr<Linear<S>> cps =
+        make_shared<Linear<S>>(ime, bra_bdims, ket_bdims, noises);
     double norm = cps->solve(10, mps->center == 0);
 
     EXPECT_LT(abs(norm - 1.0), 1E-7);
@@ -205,10 +205,11 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     // Energy ME
     shared_ptr<MovingEnvironment<S>> eme =
         make_shared<MovingEnvironment<S>>(ntr_mpo, imps, mps, "EXPECT");
+    ntr_mpo->const_e = 0;
     eme->init_environments(false);
 
     shared_ptr<Expect<S>> ex2 = make_shared<Expect<S>>(eme, bond_dim, bond_dim);
-    energy = ex2->solve(false) + mpo->const_e;
+    energy = ex2->solve(false);
 
     para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
     para_comm->tcomm /= para_comm->size;
@@ -216,6 +217,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     cout << "== " << name << " (CPS) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
+         << " STD = " << fixed << setw(22) << setprecision(12) << energy_std
          << " error = " << scientific << setprecision(3) << setw(10)
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << tt << " Tcomm = " << fixed << setw(10)
@@ -233,7 +235,7 @@ void TestCompressN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     mpo->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSU2) {
+TEST_F(TestLinearN2STO3G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
@@ -256,7 +258,7 @@ TEST_F(TestCompressN2STO3G, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestCompressN2STO3G, TestSZ) {
+TEST_F(TestLinearN2STO3G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";

@@ -24,6 +24,7 @@
 #include "../block2/mpo.hpp"
 #include "../block2/operator_tensor.hpp"
 #include "../block2/qc_mpo.hpp"
+#include "../block2/delayed_tensor_functions.hpp"
 #include "qc_hamiltonian_sci.hpp"
 #include "../block2/symbolic.hpp"
 #include "../block2/tensor_functions.hpp"
@@ -54,7 +55,6 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             sparse_form[0] = 'S'; // Big site will be sparse
             firstSiteIsSCI = true;
             nOrbFirst = hamil.sciWrapperLeft->nOrbThis;
-            throw std::runtime_error("Big left site is not properly implemented yet. ");
         }else{
             firstSiteIsSCI = false;
         }
@@ -68,28 +68,40 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        const auto nOrb = hamil.nOrbCas + hamil.nOrbRight;
+        const auto nOrb = hamil.nOrbLeft + hamil.nOrbCas + hamil.nOrbRight;
         if(nOrb > numeric_limits<uint16_t>::max()){
             cerr << "value of nOrb " << nOrb << endl;
             cerr << "max value of uint16_t" << numeric_limits<uint16_t>::max() << endl;
             throw std::runtime_error("SiteIndex and others require int16 type...");
         }
         const auto lastSite = hamil.n_sites - 1;
-        shared_ptr<OpExpr<S>> c_op[nOrb][2], d_op[nOrb][2]; // hrl: site; sz value
-        shared_ptr<OpExpr<S>> mc_op[nOrb][2], md_op[nOrb][2]; // hrl: mc stands for minus C
-        shared_ptr<OpExpr<S>> rd_op[nOrb][2], r_op[nOrb][2];
-        shared_ptr<OpExpr<S>> mrd_op[nOrb][2], mr_op[nOrb][2];
-        shared_ptr<OpExpr<S>> a_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> ad_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> b_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> p_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> pd_op[nOrb][nOrb][4];
-        shared_ptr<OpExpr<S>> q_op[nOrb][nOrb][4];
+        // vv nOrb x 2 matrices
+        using OpExprMat2 = vector< array<shared_ptr<OpExpr<S>>,2> >;
+        OpExprMat2 c_op(nOrb), d_op(nOrb); // hrl: site; sz value
+        OpExprMat2 mc_op(nOrb), md_op(nOrb); // hrl: mc stands for minus C
+        OpExprMat2 rd_op(nOrb), r_op(nOrb);
+        OpExprMat2 mrd_op(nOrb), mr_op(nOrb);
+        // vv nOrb x nOrb x 4 tensors
+        using OpExprMat4 = vector< array<shared_ptr<OpExpr<S>>,4> >;
+        using OpExprTens4 = vector<OpExprMat4>;
+        OpExprTens4 a_op(nOrb, OpExprMat4(nOrb)); //It would be so easy in fortran...
+        OpExprTens4 ad_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 b_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 p_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 pd_op(nOrb, OpExprMat4(nOrb));
+        OpExprTens4 q_op(nOrb, OpExprMat4(nOrb));
         this->op = dynamic_pointer_cast<OpElement<S>>(h_op);
         this->const_e = hamil.e();
         //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
         this->tf = make_shared<TensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        if (hamil.delayed == DelayedSCIOpNames::None)
+            this->tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        else
+            this->tf = make_shared<DelayedTensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        this->tf->opf->seq = hamil.opf->seq; // seq_type
         this->site_op_infos = hamil.site_op_infos;
         if(mode != QCTypes::NC){
             throw std::invalid_argument("Currently, only NC is implemented as mode. "
@@ -195,16 +207,18 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     mat[{0, 5}] = d_op[m][1];
                     p = 6;
                 }else{
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
-                        mat[{0, p++}] = c_op[iOrb][0];
-                        mat[{0, p++}] = c_op[iOrb][1];
+                    for (uint8_t s = 0; s < 2; s++) {
+                        for (int iOrb = 0; iOrb < nOrbFirst; ++iOrb) {
+                            mat[{0, p++}] = c_op[iOrb][s];
+                        }
                     }
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb){
-                        mat[{0, p++}] = d_op[iOrb][0];
-                        mat[{0, p++}] = d_op[iOrb][1];
+                    for (uint8_t s = 0; s < 2; s++) {
+                        for (int iOrb = 0; iOrb < nOrbFirst; ++iOrb) {
+                            mat[{0, p++}] = d_op[iOrb][s];
+                        }
                     }
                 }
-                for (uint8_t s = 0; s < 2; s++) { // R
+                for (uint8_t s = 0; s < 2; s++) { // R'
                     for (uint16_t j = mm + 1; j < nOrb; j++) {
                         mat[{0, p++}] = rd_op[j][s];
                     }
@@ -254,17 +268,17 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                     for (uint8_t s = 0; s < 4; s++)
                         mat[{0, p++}] = b_op[m][m][s];
                 }else{
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = a_op[iOrb][jOrb][s];
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = ad_op[iOrb][jOrb][s];
-                    for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
-                        for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
-                            for (uint8_t s = 0; s < 4; s++)
+                    for (uint8_t s = 0; s < 4; s++)
+                        for(int iOrb = 0; iOrb < nOrbFirst; ++iOrb)
+                            for(int jOrb = 0; jOrb < nOrbFirst; ++jOrb)
                                 mat[{0, p++}] = b_op[iOrb][jOrb][s];
                 }
                 assert(p == mat.n);
@@ -286,11 +300,11 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             mat[{p++, 0}] = mrd_op[j][s];
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        mat[{p, 0}] = d_op[m][s];
+                        mat[{p, 0}] = d_op[mm][s];
                         p += nOrb - mm;
                     }
                     for (uint8_t s = 0; s < 2; s++) {
-                        mat[{p, 0}] = c_op[m][s];
+                        mat[{p, 0}] = c_op[mm][s];
                         p += nOrb - mm;
                     }
                 }
@@ -299,18 +313,18 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 // P, P', Q
                 /////////////////////////////
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = 0.5 * p_op[j][k][s];
                     }
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = 0.5 * pd_op[j][k][s];
                     }
                 for (uint8_t s = 0; s < 4; s++)
-                    for (uint16_t j = 0; j < m; j++) {
-                        for (uint16_t k = 0; k < m; k++)
+                    for (uint16_t j = 0; j < mm; j++) {
+                        for (uint16_t k = 0; k < mm; k++)
                             mat[{p++, 0}] = q_op[j][k][s];
                     }
                 assert(p == mat.m);
@@ -371,7 +385,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = 0; j < mm; j++)
                                     for (uint16_t l = 0; l < mm; l++) {
-                                        double f = hamil.v(s, sp, i, j, m, l);
+                                        double f = hamil.v(s, sp, i, j, mm, l);
                                         mat[{pa[s | (sp << 1)] + j * mm + l, p}] =
                                                 f * d_op[mm][sp];
                                     }

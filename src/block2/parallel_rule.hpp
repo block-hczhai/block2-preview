@@ -37,7 +37,7 @@ enum ParallelOpTypes : uint8_t {
 
 template <typename S> struct ParallelCommunicator {
     int size, rank, root;
-    double tcomm = 0.0;
+    double tcomm = 0.0; // Runtime for communication
     ParallelCommunicator() : size(1), rank(0), root(0) {}
     ParallelCommunicator(int size, int rank, int root)
         : size(size), rank(rank), root(root) {}
@@ -105,8 +105,8 @@ template <typename S> struct ParallelRule {
         return ParallelProperty();
     }
     bool is_root() const noexcept { return comm->rank == comm->root; }
-    bool available(const shared_ptr<OpExpr<S>> &op, int node = -1) const
-        noexcept {
+    bool available(const shared_ptr<OpExpr<S>> &op,
+                   int node = -1) const noexcept {
         return (node == -1 ? own(op) : owner(op) == node) || repeat(op);
     }
     bool own(const shared_ptr<OpExpr<S>> &op) const noexcept {
@@ -156,17 +156,18 @@ template <typename S> struct ParallelRule {
                 op_exprs[i] =
                     make_pair(op, dynamic_pointer_cast<OpExprRef<S>>(expr));
         }
+        shared_ptr<SparseMatrix<S>> xm = nullptr;
         for (size_t i = 0; i < exprs.size(); i++) {
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
                 partial(op) ? (expr_ref->is_local ? own(op) : true) : own(op);
             if (req) {
-                f(expr_ref->op, mats[i]);
+                f(expr_ref->op, mats.size() != 0 ? mats[i] : xm);
             }
         }
         g();
-        for (size_t i = 0; i < exprs.size(); i++) {
+        for (size_t i = 0; i < mats.size(); i++) {
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             if (partial(op) && !expr_ref->is_local)
@@ -208,8 +209,8 @@ template <typename S> struct ParallelRule {
             else
                 return zero_ref;
         } else if (expr->get_type() == OpTypes::Prod) {
-            shared_ptr<OpString<S>> op =
-                dynamic_pointer_cast<OpString<S>>(expr);
+            shared_ptr<OpProduct<S>> op =
+                dynamic_pointer_cast<OpProduct<S>>(expr);
             bool aa = available(op->a, owner),
                  ab = op->b == nullptr ? true : available(op->b, owner);
             if (aa && ab)
@@ -233,9 +234,9 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpString<S>>(op->a, ops[0], op->factor,
-                                                     op->conj ^
-                                                         (conjs[0] << 1)),
+                            make_shared<OpProduct<S>>(op->a, ops[0], op->factor,
+                                                      op->conj ^
+                                                          (conjs[0] << 1)),
                             ops.size() == op->ops.size());
                     else {
                         uint8_t cjx = op->conj;
@@ -243,7 +244,7 @@ template <typename S> struct ParallelRule {
                             conjs.flip(), cjx ^= 1 << 1;
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpSumProd<S>>(op->a, ops, conjs,
-                                                      op->factor, cjx),
+                                                      op->factor, cjx, op->c),
                             ops.size() == op->ops.size());
                     }
                 }
@@ -261,8 +262,8 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpString<S>>(ops[0], op->b, op->factor,
-                                                     op->conj ^ conjs[0]),
+                            make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
+                                                      op->conj ^ conjs[0]),
                             ops.size() == op->ops.size());
                     else {
                         uint8_t cjx = op->conj;
@@ -270,7 +271,7 @@ template <typename S> struct ParallelRule {
                             conjs.flip(), cjx ^= 1;
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpSumProd<S>>(ops, op->b, conjs,
-                                                      op->factor, cjx),
+                                                      op->factor, cjx, op->c),
                             ops.size() == op->ops.size());
                     }
                 }

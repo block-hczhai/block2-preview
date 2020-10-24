@@ -56,6 +56,7 @@ PYBIND11_MODULE(block2, m) {
 #endif
     bind_hamiltonian_sci<SZ>(m_sz);
     bind_mpo_sci<SZ>(m_sz);
+    bind_types_sci<>(m);
 #endif
 
 }

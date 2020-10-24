@@ -22,6 +22,7 @@
 
 #include "ancilla.hpp"
 #include "csr_operator_functions.hpp"
+#include "mps.hpp"
 #include "operator_tensor.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"
@@ -48,10 +49,16 @@ template <typename S> struct MPOSchemer {
     shared_ptr<MPOSchemer> copy() const {
         shared_ptr<MPOSchemer> r =
             make_shared<MPOSchemer>(left_trans_site, right_trans_site);
-        r->left_new_operator_names = left_new_operator_names;
-        r->right_new_operator_names = right_new_operator_names;
-        r->left_new_operator_exprs = left_new_operator_exprs;
-        r->right_new_operator_exprs = right_new_operator_exprs;
+        r->left_new_operator_names = dynamic_pointer_cast<SymbolicRowVector<S>>(
+            left_new_operator_names->copy());
+        r->right_new_operator_names =
+            dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                right_new_operator_names->copy());
+        r->left_new_operator_exprs = dynamic_pointer_cast<SymbolicRowVector<S>>(
+            left_new_operator_exprs->copy());
+        r->right_new_operator_exprs =
+            dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                right_new_operator_exprs->copy());
         return r;
     }
     void load_data(ifstream &ifs) {
@@ -131,6 +138,112 @@ template <typename S> struct MPO {
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual ParallelTypes get_parallel_type() const {
         return ParallelTypes::Serial;
+    }
+    // in bytes; 0 = peak term, 1 = peak memory, 2 = total disk storage
+    // only count lower bound of doubles
+    virtual vector<size_t> estimate_storage(shared_ptr<MPSInfo<S>> info,
+                                            int dot) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        size_t peak = 0, total = 0, psz = 0;
+        shared_ptr<SparseMatrixInfo<S>> mat_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        vector<size_t> left_total(1, 0), right_total(1, 0);
+        for (int i = 0; i < n_sites; i++) {
+            size_t sz = 0;
+            map<S, size_t> mpsz;
+            for (auto xop : left_operator_names[i]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpsz.count(op->q_label)) {
+                    mat_info->initialize(*info->left_dims[i + 1],
+                                         *info->left_dims[i + 1], op->q_label,
+                                         op->q_label.is_fermion());
+                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpsz.at(op->q_label);
+            }
+            left_total.push_back(left_total.back() + sz);
+        }
+        for (int i = n_sites - 1; i >= 0; i--) {
+            size_t sz = 0;
+            map<S, size_t> mpsz;
+            for (auto xop : right_operator_names[i]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpsz.count(op->q_label)) {
+                    mat_info->initialize(*info->right_dims[i],
+                                         *info->right_dims[i], op->q_label,
+                                         op->q_label.is_fermion());
+                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpsz.at(op->q_label);
+            }
+            right_total.push_back(right_total.back() + sz);
+        }
+        for (int i = 0; i < n_sites; i++) {
+            if (dot == 2 && i == n_sites - 1)
+                break;
+            StateInfo<S> tl, tr;
+            int iL = -1, iR = -1;
+            if (dot == 2) {
+                tl = StateInfo<S>::tensor_product(*info->left_dims[i],
+                                                  *info->basis[i],
+                                                  *info->left_dims_fci[i + 1]);
+                tr = StateInfo<S>::tensor_product(*info->basis[i + 1],
+                                                  *info->right_dims[i + 2],
+                                                  *info->right_dims_fci[i + 1]);
+                iL = i, iR = i + 1;
+            } else {
+                bool fuse_left = schemer == nullptr
+                                     ? (i <= n_sites / 2)
+                                     : (i < schemer->left_trans_site);
+                iL = i, iR = i;
+                if (fuse_left) {
+                    tl = StateInfo<S>::tensor_product(
+                        *info->left_dims[i], *info->basis[i],
+                        *info->left_dims_fci[i + 1]);
+                    tr = *info->right_dims[i + 1];
+
+                } else {
+                    tl = *info->left_dims[i];
+                    tr = StateInfo<S>::tensor_product(*info->basis[i],
+                                                      *info->right_dims[i + 1],
+                                                      *info->right_dims_fci[i]);
+                }
+            }
+            size_t sz = 0;
+            map<S, size_t> mpszl, mpszr;
+            for (auto xop : left_operator_names[iL]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpszl.count(op->q_label)) {
+                    mat_info->initialize(tl, tl, op->q_label,
+                                         op->q_label.is_fermion());
+                    mpszl[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpszl.at(op->q_label);
+                psz = max(psz, mpszl.at(op->q_label));
+            }
+            for (auto xop : right_operator_names[iR]->data) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(xop);
+                if (!mpszr.count(op->q_label)) {
+                    mat_info->initialize(tr, tr, op->q_label,
+                                         op->q_label.is_fermion());
+                    mpszr[op->q_label] = mat_info->get_total_memory();
+                    mat_info->deallocate();
+                }
+                sz += mpszr.at(op->q_label);
+                psz = max(psz, mpszr.at(op->q_label));
+            }
+            peak = max(peak, sz);
+        }
+        total = left_total.back() + right_total.back();
+        return vector<size_t>{psz * 8, peak * 8, total * 8};
     }
     virtual void deallocate() {
         for (int16_t m = n_sites - 1; m >= 0; m--)
@@ -318,6 +431,172 @@ template <typename S> struct MPO {
         if (schemer != nullptr)
             ss << schemer->get_transform_formulas() << endl;
         return ss.str();
+    }
+};
+
+template <typename S>
+inline shared_ptr<MPO<S>> operator*(double d, const shared_ptr<MPO<S>> &mpo) {
+    shared_ptr<MPO<S>> rmpo = make_shared<MPO<S>>(*mpo);
+    assert(rmpo->middle_operator_exprs.size() != 0);
+    for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+        auto &x = rmpo->middle_operator_exprs[ix];
+        x = x->copy();
+        for (size_t j = 0; j < x->data.size(); j++)
+            x->data[j] = d * x->data[j];
+    }
+    rmpo->const_e = d * rmpo->const_e;
+    return rmpo;
+}
+
+template <typename S>
+inline shared_ptr<MPO<S>> operator*(const shared_ptr<MPO<S>> &mpo, double d) {
+    return d * mpo;
+}
+
+template <typename S>
+inline shared_ptr<MPO<S>> operator-(const shared_ptr<MPO<S>> &mpo) {
+    return (-1.0) * mpo;
+}
+
+// Diagonal part of MPO (will copy the diagonal elements)
+// MPO must be unsimplified
+template <typename S> struct DiagonalMPO : MPO<S> {
+    using MPO<S>::n_sites;
+    DiagonalMPO(const shared_ptr<MPO<S>> &mpo) : MPO<S>(mpo->n_sites) {
+        MPO<S>::const_e = mpo->const_e;
+        MPO<S>::op = mpo->op;
+        MPO<S>::tf = mpo->tf;
+        MPO<S>::basis = mpo->basis;
+        MPO<S>::site_op_infos = mpo->site_op_infos;
+        MPO<S>::sparse_form = mpo->sparse_form;
+        MPO<S>::schemer =
+            mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
+        MPO<S>::left_operator_names = mpo->left_operator_names;
+        MPO<S>::right_operator_names = mpo->right_operator_names;
+        assert(mpo->left_operator_exprs.size() == 0);
+        assert(mpo->right_operator_exprs.size() == 0);
+        shared_ptr<SparseMatrix<S>> zmat = make_shared<SparseMatrix<S>>();
+        zmat->factor = 0;
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        MPO<S>::tensors.resize(n_sites, nullptr);
+        for (int m = 0; m < n_sites; m++) {
+            shared_ptr<OperatorTensor<S>> r = make_shared<OperatorTensor<S>>();
+            r->lmat = mpo->tensors[m]->lmat->copy();
+            r->rmat = mpo->tensors[m]->rmat->copy();
+            r->ops = mpo->tensors[m]->ops;
+            MPO<S>::tensors[m] = r;
+            for (auto &p : r->ops) {
+                OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+                if (op.q_label != mpo->op->q_label)
+                    p.second = zmat;
+                else if (p.second->get_type() == SparseMatrixTypes::Normal) {
+                    shared_ptr<VectorAllocator<double>> d_alloc =
+                        make_shared<VectorAllocator<double>>();
+                    shared_ptr<SparseMatrix<S>> mat =
+                        make_shared<SparseMatrix<S>>(d_alloc);
+                    mat->allocate(p.second->info);
+                    mat->factor = p.second->factor;
+                    if (p.second->info->n == p.second->total_memory) {
+                        MatrixRef mmat(mat->data, mat->total_memory, 1),
+                            pmat(p.second->data, p.second->total_memory, 1);
+                        MatrixFunctions::copy(mmat, pmat);
+                    } else {
+                        for (int i = 0; i < mat->info->n; i++) {
+                            MatrixRef mmat = (*mat)[i], pmat = (*p.second)[i];
+                            mmat.n = pmat.n = 1;
+                            MatrixFunctions::copy(mmat, pmat, mmat.m + 1,
+                                                  pmat.m + 1);
+                        }
+                    }
+                    p.second = mat;
+                } else if (p.second->get_type() == SparseMatrixTypes::CSR) {
+                    shared_ptr<CSRSparseMatrix<S>> pmat =
+                        dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
+                    shared_ptr<VectorAllocator<double>> d_alloc =
+                        make_shared<VectorAllocator<double>>();
+                    shared_ptr<CSRSparseMatrix<S>> mat =
+                        make_shared<CSRSparseMatrix<S>>(d_alloc);
+                    mat->initialize(p.second->info);
+                    for (int i = 0; i < mat->info->n; i++) {
+                        shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                        assert(cmat->m == cmat->n);
+                        cmat->nnz = cmat->m;
+                        cmat->allocate();
+                        MatrixRef dmat(cmat->data, cmat->m, 1);
+                        pmat->csr_data[i]->diag(dmat);
+                        if (cmat->nnz != cmat->size()) {
+                            for (int j = 0; j < cmat->m; j++)
+                                cmat->rows[j] = j, cmat->cols[j] = j;
+                            cmat->rows[cmat->m] = cmat->nnz;
+                        }
+                    }
+                    p.second = mat;
+                } else
+                    assert(false);
+            }
+            vector<shared_ptr<Symbolic<S>>> pmats = {r->lmat, r->rmat};
+            size_t kk;
+            shared_ptr<OpSum<S>> px;
+            for (auto pmat : pmats)
+                for (auto &x : pmat->data) {
+                    shared_ptr<OpExpr<S>> xx;
+                    switch (x->get_type()) {
+                    case OpTypes::Zero:
+                        break;
+                    case OpTypes::Elem:
+                        xx = abs_value(x);
+                        if (r->ops[xx]->factor == 0.0 ||
+                            r->ops[xx]->info->n == 0 ||
+                            r->ops[xx]->norm() < TINY)
+                            x = zero;
+                        break;
+                    case OpTypes::Sum:
+                        kk = 0;
+                        px = make_shared<OpSum<S>>(
+                            dynamic_pointer_cast<OpSum<S>>(x)->strings);
+                        x = px;
+                        for (size_t i = 0; i < px->strings.size(); i++) {
+                            xx = abs_value((shared_ptr<OpExpr<S>>)px->strings[i]
+                                               ->get_op());
+                            shared_ptr<SparseMatrix<S>> &mat = r->ops[xx];
+                            if (!(mat->factor == 0.0 || mat->info->n == 0 ||
+                                  mat->norm() < TINY)) {
+                                if (i != kk)
+                                    px->strings[kk] = px->strings[i];
+                                kk++;
+                            }
+                        }
+                        if (kk == 0)
+                            x = zero;
+                        else if (kk != px->strings.size())
+                            px->strings.resize(kk);
+                        break;
+                    default:
+                        assert(false);
+                    }
+                }
+            for (auto pmat : pmats)
+                if (pmat->get_type() == SymTypes::Mat) {
+                    shared_ptr<SymbolicMatrix<S>> smat =
+                        dynamic_pointer_cast<SymbolicMatrix<S>>(pmat);
+                    size_t j = 0;
+                    for (size_t i = 0; i < smat->indices.size(); i++)
+                        if (smat->data[i]->get_type() != OpTypes::Zero) {
+                            if (i != j)
+                                smat->data[j] = smat->data[i],
+                                smat->indices[j] = smat->indices[i];
+                            j++;
+                        }
+                    smat->data.resize(j);
+                    smat->indices.resize(j);
+                }
+            for (auto it = r->ops.cbegin(); it != r->ops.cend();) {
+                if (it->second->factor == 0.0 || it->second->info->n == 0)
+                    r->ops.erase(it++);
+                else
+                    it++;
+            }
+        }
     }
 };
 

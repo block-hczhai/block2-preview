@@ -37,7 +37,7 @@ namespace block2 {
 // Compressed-Sparse-Row matrix
 struct CSRMatrixRef {
     shared_ptr<Allocator<double>> alloc = nullptr;
-    int m, n, nnz;
+    int m, n, nnz; // m is rows, n is cols, nnz is number of nonzeros
     double *data;
     int *rows, *cols;
     CSRMatrixRef()
@@ -75,7 +75,8 @@ struct CSRMatrixRef {
         ofs.write((char *)data, sizeof(double) * nnz);
         if (nnz != size()) {
             ofs.write((char *)cols, sizeof(int) * nnz);
-            ofs.write((char *)rows, sizeof(int) * (m + 1));
+            ofs.write((char *)rows, sizeof(int) * m);
+            ofs.write((char *)&nnz, sizeof(int));
         }
     }
     CSRMatrixRef
@@ -120,10 +121,9 @@ struct CSRMatrixRef {
         }
     }
     void deallocate() {
-        if (alloc == nullptr) {
-            assert(cols == nullptr && rows == nullptr);
+        if (alloc == nullptr)
             data = nullptr;
-        } else {
+        else {
             alloc->deallocate(data, memory_size());
             alloc = nullptr;
             data = nullptr;

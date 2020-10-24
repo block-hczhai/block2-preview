@@ -120,7 +120,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
 
     // DMRG
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-6, 0.0};
+    vector<double> noises = {1E-8, 0.0};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->solve(10, true, 1E-10);

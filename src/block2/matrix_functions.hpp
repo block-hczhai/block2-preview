@@ -155,36 +155,105 @@ struct MatrixFunctions {
                     return false;
         return true;
     }
+    // solve a^T x[i, :] = b[i, :] => output in b; a will be overwritten
+    static void linear(const MatrixRef &a, const MatrixRef &b) {
+        assert(a.m == a.n && a.m == b.n);
+        int *work = (int *)ialloc->allocate(a.n), info = -1;
+        dgesv(&a.m, &b.m, a.data, &a.n, work, b.data, &a.n, &info);
+        assert(info == 0);
+        ialloc->deallocate(work, a.n);
+    }
+    // c.n is used for ldc; a.n is used for lda
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
         if (!conja && !conjb) {
-            assert(a.n == b.m && c.m == a.m && c.n == b.n);
-            dgemm("n", "n", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
+            dgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else if (!conja && conjb) {
-            assert(a.n == b.n && c.m == a.m && c.n == b.m);
-            dgemm("t", "n", &c.n, &c.m, &a.n, &scale, b.data, &b.n, a.data,
+            assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
+            dgemm("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else if (conja && !conjb) {
-            assert(a.m == b.m && c.m == a.n && c.n == b.n);
-            dgemm("n", "t", &c.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
+            dgemm("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         } else {
-            assert(a.m == b.n && c.m == a.n && c.n == b.m);
-            dgemm("t", "t", &c.n, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
+            dgemm("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
         }
     }
     // c = bra * a * ket(.T)
-    static void rotate(const MatrixRef &a, const MatrixRef &c,
-                       const MatrixRef &bra, bool conj_bra,
-                       const MatrixRef &ket, bool conj_ket, double scale) {
+    // return nflop
+    static size_t rotate(const MatrixRef &a, const MatrixRef &c,
+                         const MatrixRef &bra, bool conj_bra,
+                         const MatrixRef &ket, bool conj_ket, double scale) {
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
         work.allocate();
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
         work.deallocate();
+        return (size_t)ket.m * ket.n * work.m + (size_t)work.m * work.n * c.m;
+    }
+    // dleft == true : c = bra (= da x db) * a * ket
+    // dleft == false: c = bra * a * ket (= da x db)
+    // return nflop
+    static size_t three_rotate(const MatrixRef &a, const MatrixRef &c,
+                               const MatrixRef &bra, bool conj_bra,
+                               const MatrixRef &ket, bool conj_ket,
+                               const MatrixRef &da, bool dconja,
+                               const MatrixRef &db, bool dconjb, bool dleft,
+                               double scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            int am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            MatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
+            work.allocate();
+            // work = a * ket
+            multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket, conj_ket, work,
+                     1.0, 0.0);
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * work
+                multiply(db, dconjb, work, false,
+                         MatrixRef(&c(cst, 0), cm, c.n), scale * *da.data, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * work
+                multiply(da, dconja, work, false,
+                         MatrixRef(&c(cst, 0), cm, c.n), scale * *db.data, 1.0);
+            else
+                assert(false);
+            work.deallocate();
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            int kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            int km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            MatrixRef work(nullptr, a.m, kn);
+            work.allocate();
+            if (da.m == 1 && da.n == 1)
+                // work = a * (1 x db)
+                multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db, dconjb,
+                         work, *da.data * scale, 0.0);
+            else if (db.m == 1 && db.n == 1)
+                // work = a * (da x 1)
+                multiply(MatrixRef(&a(0, ast), a.m, a.n), false, da, dconja,
+                         work, *db.data * scale, 0.0);
+            else
+                assert(false);
+            // c = bra * work
+            multiply(bra, conj_bra, work, false,
+                     MatrixRef(&c(0, cst), c.m, c.n), 1.0, 1.0);
+            work.deallocate();
+            return (size_t)km * kn * work.m + (size_t)work.m * work.n * c.m;
+        }
     }
     // only diagonal elements so no conj parameters
     static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
@@ -194,6 +263,55 @@ struct MatrixFunctions {
         const int k = 1, lda = a.n + 1, ldb = b.n + 1;
         dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
               &cfactor, c.data, &c.n);
+    }
+    // diagonal element of three-matrix tensor product
+    static void
+    three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
+                                  const MatrixRef &c, const MatrixRef &da,
+                                  bool dconja, const MatrixRef &db, bool dconjb,
+                                  bool dleft, double scale, uint32_t stride) {
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        assert(da.m == da.n && db.m == db.n);
+        const double cfactor = 1.0;
+        const int dstrm = (int)stride / (dleft ? a.m : b.m);
+        const int dstrn = (int)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        const int ddstr = 0;
+        const int k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const int ldda = da.n + 1, lddb = db.n + 1;
+        if (da.m == 1 && da.n == 1) {
+            scale *= *da.data;
+            const int dn = db.n - abs(ddstr);
+            const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
+                                         : &db(max(ddstr, 0), max(-ddstr, 0));
+            if (dn > 0) {
+                if (dleft)
+                    // (1 x db) x b
+                    dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, bdata,
+                          &lddb, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                else
+                    // a x (1 x db)
+                    dgemm("t", "n", &dn, &a.n, &k, &scale, bdata, &lddb, a.data,
+                          &lda, &cfactor, &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            scale *= *db.data;
+            const int dn = da.n - abs(ddstr);
+            const double *adata = dconja ? &da(max(-ddstr, 0), max(ddstr, 0))
+                                         : &da(max(ddstr, 0), max(-ddstr, 0));
+            if (dn > 0) {
+                if (dleft)
+                    // (da x 1) x b
+                    dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, adata,
+                          &ldda, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                else
+                    // a x (da x 1)
+                    dgemm("t", "n", &dn, &a.n, &k, &scale, adata, &ldda, a.data,
+                          &lda, &cfactor, &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else
+            assert(false);
     }
     static void tensor_product(const MatrixRef &a, bool conja,
                                const MatrixRef &b, bool conjb,
@@ -508,7 +626,7 @@ struct MatrixFunctions {
                 pcomm->broadcast(bs[ck].data, bs[ck].size(), pcomm->root);
             eigvals.resize(ck + 1);
             if (ck + 1 != 0)
-                memcpy(&eigvals[0], ld.data, (ck + 1) * sizeof(double));
+                memcpy(eigvals.data(), ld.data, (ck + 1) * sizeof(double));
             ld.deallocate();
             if (qq < conv_thrd) {
                 ck++;
@@ -884,6 +1002,206 @@ struct MatrixFunctions {
                                                  lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return nmult;
+    }
+    // Solve x in linear equation H x = b
+    // by applying linear CG method
+    // where H is symmetric and positive-definite
+    // H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double
+    conjugate_gradient(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
+                       double consta = 0.0, bool iprint = false,
+                       const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                       int max_iter = 5000, int soft_max_iter = -1) {
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        double old_error = 0.0;
+        r.allocate();
+        p.allocate();
+        r.clear();
+        p.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iadd(r, b, -1);
+            iscale(r, -1);
+            copy(p, r);
+            error = dot(r, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                func = dot(x, b);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            p.deallocate();
+            r.deallocate();
+            nmult = 1;
+            return func;
+        }
+        old_error = error;
+        if (pcomm != nullptr)
+            pcomm->broadcast(p.data, p.size(), pcomm->root);
+        MatrixRef hp(nullptr, x.m, x.n);
+        hp.allocate();
+        int xiter = 0;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            hp.clear();
+            op(p, hp);
+            if (consta != 0)
+                iadd(hp, p, consta);
+
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = old_error / dot(p, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                error = dot(r, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&error, 2, pcomm->root);
+            if (error < conv_thrd)
+                break;
+            else {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    double beta = error / old_error;
+                    old_error = error;
+                    iadd(p, r, 1 / beta);
+                    iscale(p, beta);
+                }
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (cg) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        hp.deallocate();
+        p.deallocate();
+        r.deallocate();
+        return func;
+    }
+    // Solve x in linear equation H x = b where H^T = H
+    // by applying linear CG method to equation (H H) x = H b
+    // where H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double minres(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
+                         double consta = 0.0, bool iprint = false,
+                         const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                         int max_iter = 5000, int soft_max_iter = -1) {
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        r.allocate();
+        r.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iadd(r, b, -1);
+            iscale(r, -1);
+            p.allocate();
+            copy(p, r);
+            error = dot(r, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                func = dot(x, b);
+                p.deallocate();
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            r.deallocate();
+            nmult = 1;
+            return func;
+        }
+        if (pcomm != nullptr)
+            pcomm->broadcast(r.data, r.size(), pcomm->root);
+        double beta = 0, prev_beta = 0;
+        MatrixRef hp(nullptr, x.m, x.n), hr(nullptr, x.m, x.n);
+        hr.allocate();
+        hr.clear();
+        op(r, hr);
+        if (consta != 0)
+            iadd(hr, r, consta);
+        prev_beta = dot(r, hr);
+        int xiter = 0;
+
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            hp.allocate();
+            copy(hp, hr);
+        }
+
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = dot(r, hr) / dot(hp, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                error = dot(r, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&error, 2, pcomm->root);
+                pcomm->broadcast(r.data, r.size(), pcomm->root);
+            }
+            if (error < conv_thrd)
+                break;
+            else {
+                hr.clear();
+                op(r, hr);
+                if (consta != 0)
+                    iadd(hr, r, consta);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    beta = dot(r, hr);
+                    iadd(p, r, prev_beta / beta);
+                    iscale(p, beta / prev_beta);
+                    iadd(hp, hr, prev_beta / beta);
+                    iscale(hp, beta / prev_beta);
+                    prev_beta = beta;
+                }
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (minres) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            hp.deallocate();
+        hr.deallocate();
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            p.deallocate();
+        r.deallocate();
+        return func;
     }
 };
 

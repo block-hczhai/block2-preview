@@ -126,7 +126,7 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
     // set the value for each determinant to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S>> &mps, double cutoff = 0) {
         vals.resize(dets.size());
-        memset(&vals[0], 0, sizeof(double) * vals.size());
+        memset(vals.data(), 0, sizeof(double) * vals.size());
         stack<tuple<int, int, int>> ptrs;
         vector<map<S, vector<double>>> partials;
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
