@@ -140,7 +140,7 @@ struct Parsing {
     static string to_size_string(size_t i, const string &suffix = "B") {
         stringstream ss;
         size_t a = 1024;
-        if (i < a) {
+        if (i < 1000) {
             ss << i << " " << suffix;
             return ss.str();
         } else {
