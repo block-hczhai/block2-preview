@@ -637,8 +637,8 @@ public:
             //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
             mat.initialize(find_site_op_info(op.q_label, iSite));
             if(useRuleQC and ruleQC(pop) != nullptr){
-                mat.factor = 0.0; // TODO  erratic dmrg dmrg (without the mat.deallocate)
-                mat.deallocate(); // TODO segfault
+       //         mat.factor = 0.0; // TODO  erratic dmrg dmrg (without the mat.deallocate)
+        //        mat.deallocate(); // TODO segfault
                 continue;
             }
             const auto& delta_qn = op.q_label;
