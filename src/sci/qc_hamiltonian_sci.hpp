@@ -96,6 +96,7 @@ public:
     int nOrbRight; //!> Number of spatial orbitals for right SCI space  (large nOrb)
     int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
     bool sci_finalize = true;
+    bool useRuleQC = true; // Use RuleQC for big sites
     HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
@@ -616,8 +617,16 @@ public:
         // Same for C and D, which is fast
         unordered_map< S, std::vector<fillTuple2>, sci::SHasher<S> > opsQ, opsP, opsPD;
         unordered_map< S, std::vector<fillTuple1>, sci::SHasher<S> > opsR, opsRD;
+        RuleQC<S> ruleQC;
         for (auto &p : ops) {
-            OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S>> pop = dynamic_pointer_cast<OpElement<S>>(p.first);
+            OpElement<S> &op = *pop;
+            if(useRuleQC and ruleQC(pop) != nullptr){
+                // Just ignoring op or setting it to zero (after mat.initialize) does not work
+                // TODO seg fault:
+      //          p.second = make_shared<DelayedSparseMatrix<S>>();
+     //           continue;
+            }
             auto pmat = make_shared<CSRSparseMatrix<S>>();
             auto &mat = *pmat;
             p.second = pmat;
@@ -627,6 +636,11 @@ public:
             //      of the individual matrices in the fillOp* routines.
             //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
             mat.initialize(find_site_op_info(op.q_label, iSite));
+            if(useRuleQC and ruleQC(pop) != nullptr){
+                mat.factor = 0.0; // TODO  erratic dmrg dmrg (without the mat.deallocate)
+                mat.deallocate(); // TODO segfault
+                continue;
+            }
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
                 cout << "m == " << iSite << "allocate" << op.name
