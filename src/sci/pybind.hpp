@@ -100,6 +100,10 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
              py::arg("vacuum"), py::arg("nOrbTot"), py::arg("orb_Sym"),
              py::arg("fcidump"), py::arg("sciWrapperLeft") = nullptr,
              py::arg("sciWraperRight") = nullptr)
+        .def_readonly("nOrbLeft", &HamiltonianQCSCI<S>::nOrbLeft)
+        .def_readonly("nOrbRight", &HamiltonianQCSCI<S>::nOrbRight)
+        .def_readonly("nOrbCas", &HamiltonianQCSCI<S>::nOrbCas)
+        .def_readwrite("useRuleQC", &HamiltonianQCSCI<S>::useRuleQC)
         .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
         .def("v", &HamiltonianQCSCI<S>::v)

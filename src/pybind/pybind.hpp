@@ -619,22 +619,29 @@ template <typename S> void bind_sparse(py::module &m) {
 
     py::class_<DelayedSparseMatrix<S, SparseMatrix<S>>,
                shared_ptr<DelayedSparseMatrix<S, SparseMatrix<S>>>,
-               SparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
+               DelayedSparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
         .def_readwrite("mat", &DelayedSparseMatrix<S, SparseMatrix<S>>::mat)
         .def(py::init<const shared_ptr<SparseMatrix<S>> &>());
 
     py::class_<DelayedSparseMatrix<S, CSRSparseMatrix<S>>,
                shared_ptr<DelayedSparseMatrix<S, CSRSparseMatrix<S>>>,
-               SparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
+               DelayedSparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
         .def_readwrite("mat", &DelayedSparseMatrix<S, CSRSparseMatrix<S>>::mat)
         .def(py::init<const shared_ptr<CSRSparseMatrix<S>> &>());
 
+    py::class_<DelayedSparseMatrix<S, OpExpr<S>>,
+               shared_ptr<DelayedSparseMatrix<S, OpExpr<S>>>,
+               DelayedSparseMatrix<S>>(m, "DelayedOpExprSparseMatrix")
+        .def_readwrite("m", &DelayedSparseMatrix<S, OpExpr<S>>::m)
+        .def_readwrite("op", &DelayedSparseMatrix<S, OpExpr<S>>::op)
+        .def(py::init<uint16_t, const shared_ptr<OpExpr<S>> &>())
+        .def(py::init<uint16_t, const shared_ptr<OpExpr<S>> &,
+                      const shared_ptr<SparseMatrixInfo<S>> &>());
+
     py::class_<DelayedSparseMatrix<S, Hamiltonian<S>>,
                shared_ptr<DelayedSparseMatrix<S, Hamiltonian<S>>>,
-               SparseMatrix<S>>(m, "DelayedHamilSparseMatrix")
+               DelayedSparseMatrix<S, OpExpr<S>>>(m, "DelayedHamilSparseMatrix")
         .def_readwrite("hamil", &DelayedSparseMatrix<S, Hamiltonian<S>>::hamil)
-        .def_readwrite("m", &DelayedSparseMatrix<S, Hamiltonian<S>>::m)
-        .def_readwrite("op", &DelayedSparseMatrix<S, Hamiltonian<S>>::op)
         .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
                       const shared_ptr<OpExpr<S>> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,

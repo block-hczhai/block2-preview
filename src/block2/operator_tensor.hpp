@@ -81,12 +81,16 @@ template <typename S> struct OperatorTensor {
             shared_ptr<OpExpr<S>> expr = load_expr<S>(ifs);
             SparseMatrixTypes tp;
             ifs.read((char *)&tp, sizeof(tp));
-            assert(tp == SparseMatrixTypes::Normal ||
-                   tp == SparseMatrixTypes::CSR);
-            shared_ptr<SparseMatrix<S>> mat =
-                tp == SparseMatrixTypes::Normal
-                    ? make_shared<SparseMatrix<S>>(d_alloc)
-                    : make_shared<CSRSparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S>> mat;
+            if (tp == SparseMatrixTypes::Normal)
+                mat = make_shared<SparseMatrix<S>>(d_alloc);
+            else if (tp == SparseMatrixTypes::CSR)
+                mat = make_shared<CSRSparseMatrix<S>>(d_alloc);
+            else if (tp == SparseMatrixTypes::Delayed)
+                mat = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(0, nullptr,
+                                                                     nullptr);
+            else
+                assert(false);
             mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
             mat->info->load_data(ifs);
             mat->load_data(ifs);
@@ -109,7 +113,8 @@ template <typename S> struct OperatorTensor {
             assert(op.second != nullptr);
             SparseMatrixTypes tp = op.second->get_type();
             assert(tp == SparseMatrixTypes::Normal ||
-                   tp == SparseMatrixTypes::CSR);
+                   tp == SparseMatrixTypes::CSR ||
+                   tp == SparseMatrixTypes::Delayed);
             ofs.write((char *)&tp, sizeof(tp));
             op.second->info->save_data(ofs);
             op.second->save_data(ofs);
