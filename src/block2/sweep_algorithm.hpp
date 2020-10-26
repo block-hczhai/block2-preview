@@ -803,6 +803,8 @@ template <typename S> struct DMRG {
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
         sweep_cumulative_nflop = 0;
+        if (me->mpo->tf->opf->seq != nullptr)
+            me->mpo->tf->opf->seq->peak_stack_memory = 0;
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
@@ -903,7 +905,9 @@ template <typename S> struct DMRG {
                 if (iprint >= 2) {
                     cout << " | MEM = "
                          << Parsing::to_size_string(
-                                me->mpo->tf->opf->seq->peak_stack_memory);
+                                me->mpo->tf->opf->seq != nullptr
+                                    ? me->mpo->tf->opf->seq->peak_stack_memory
+                                    : 0);
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP");
