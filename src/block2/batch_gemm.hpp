@@ -319,7 +319,6 @@ struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> post_batch;
     vector<BatchGEMMRef> refs;
     size_t cumulative_nflop = 0;
-    size_t peak_stack_memory = 0;
     size_t max_batch_flops = 1LU << 30;
     size_t max_work, max_rwork;
     double *work, *rwork;
@@ -671,9 +670,6 @@ struct BatchGEMMSeq {
         divide_batch();
         assert(check());
         allocate();
-        peak_stack_memory = max(peak_stack_memory,
-                                (frame != nullptr ? frame->memory_used() : 0) +
-                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();
@@ -683,9 +679,6 @@ struct BatchGEMMSeq {
     void auto_perform() {
         prepare();
         allocate();
-        peak_stack_memory = max(peak_stack_memory,
-                                (frame != nullptr ? frame->memory_used() : 0) +
-                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();

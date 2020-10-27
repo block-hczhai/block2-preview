@@ -23,6 +23,7 @@
 #include "utils.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -164,11 +165,13 @@ struct DataFrame {
     mutable Timer _t;
     vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
     vector<shared_ptr<StackAllocator<double>>> dallocs;
+    mutable vector<size_t> peak_used_memory;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double main_ratio = 0.7,
               int n_frames = 2)
         : n_frames(n_frames), save_dir(save_dir) {
+        peak_used_memory.resize(n_frames * 2);
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
         size_t imain = (size_t)(main_ratio * this->isize);
@@ -222,6 +225,7 @@ struct DataFrame {
                                 "' failed.");
         ifs.close();
         tread += _t.get_time();
+        update_peak_used_memory();
     }
     // Save one data frame to disk
     void save_data(int i, const string &filename) const {
@@ -240,6 +244,7 @@ struct DataFrame {
                                 "' failed.");
         ofs.close();
         twrite += _t.get_time();
+        update_peak_used_memory();
     }
     void deallocate() {
         delete[] iallocs[0]->data;
@@ -252,6 +257,18 @@ struct DataFrame {
         for (int i = 0; i < n_frames; i++)
             r += dallocs[i]->used * 8 + iallocs[i]->used * 4;
         return r;
+    }
+    void update_peak_used_memory() const {
+        for (int i = 0; i < n_frames; i++) {
+            peak_used_memory[i + 0 * n_frames] =
+                max(peak_used_memory[i + 0 * n_frames], dallocs[i]->used * 8);
+            peak_used_memory[i + 1 * n_frames] =
+                max(peak_used_memory[i + 1 * n_frames], iallocs[i]->used * 4);
+        }
+    }
+    void reset_peak_used_memory() const {
+        memset(peak_used_memory.data(), 0,
+               sizeof(size_t) * peak_used_memory.size());
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << "persistent memory used :: I = " << df.iallocs[0]->used << "("
