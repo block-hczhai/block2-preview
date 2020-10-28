@@ -271,12 +271,12 @@ struct MatrixFunctions {
                                   bool dconja, const MatrixRef &db, bool dconjb,
                                   bool dleft, double scale, uint32_t stride) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
-        assert(da.m == da.n && db.m == db.n);
         const double cfactor = 1.0;
         const int dstrm = (int)stride / (dleft ? a.m : b.m);
         const int dstrn = (int)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
             return;
+        assert(da.m == da.n && db.m == db.n);
         const int ddstr = 0;
         const int k = 1, lda = a.n + 1, ldb = b.n + 1;
         const int ldda = da.n + 1, lddb = db.n + 1;

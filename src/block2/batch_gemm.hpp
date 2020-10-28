@@ -219,6 +219,7 @@ struct BatchGEMM {
         const int dstrn = (int)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
             return;
+        assert(da.m == da.n && db.m == db.n);
         const int ddstr = 0;
         if (da.m == 1 && da.n == 1) {
             const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
