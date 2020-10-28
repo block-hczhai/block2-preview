@@ -2037,11 +2037,14 @@ template <typename S = void> void bind_io(py::module &m) {
 
     m.def(
         "init_memory",
-        [](size_t isize, size_t dsize, const string &save_dir) {
-            frame_() = make_shared<DataFrame>(isize, dsize, save_dir);
+        [](size_t isize, size_t dsize, const string &save_dir,
+           double main_ratio, int n_frames) {
+            frame_() = make_shared<DataFrame>(isize, dsize, save_dir,
+                                              main_ratio, n_frames);
         },
         py::arg("isize") = size_t(1L << 28),
-        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex");
+        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
+        py::arg("main_ratio") = 0.7, py::arg("n_frames") = 2);
 
     m.def("release_memory", []() {
         frame_()->activate(0);
