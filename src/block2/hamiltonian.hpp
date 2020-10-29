@@ -194,20 +194,20 @@ template <typename S> struct Hamiltonian {
 
 // Delayed site operator
 template <typename S>
-struct DelayedSparseMatrix<S, Hamiltonian<S>> : DelayedSparseMatrix<S> {
+struct DelayedSparseMatrix<S, Hamiltonian<S>>
+    : DelayedSparseMatrix<S, OpExpr<S>> {
+    using DelayedSparseMatrix<S, OpExpr<S>>::m;
+    using DelayedSparseMatrix<S, OpExpr<S>>::op;
     shared_ptr<Hamiltonian<S>> hamil;
-    uint16_t m;
-    shared_ptr<OpExpr<S>> op;
     DelayedSparseMatrix(const shared_ptr<Hamiltonian<S>> &hamil, uint16_t m,
                         const shared_ptr<OpExpr<S>> &op,
                         const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
-        : DelayedSparseMatrix<S>(), hamil(hamil), m(m), op(op) {
-        assert(hamil->delayed == DelayedOpNames::None);
-        this->info = info;
-    }
+        : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {}
     shared_ptr<SparseMatrix<S>> build() override {
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             ops;
+        assert(hamil != nullptr);
+        assert(hamil->delayed == DelayedOpNames::None);
         ops[op] = nullptr;
         hamil->get_site_ops(m, ops);
         if (this->info->n == ops.at(op)->info->n)
@@ -225,7 +225,6 @@ struct DelayedSparseMatrix<S, Hamiltonian<S>> : DelayedSparseMatrix<S> {
             return new_mat;
         }
     }
-    double norm() const override { return 1.0; }
     shared_ptr<DelayedSparseMatrix<S>> copy() override {
         return make_shared<DelayedSparseMatrix>(*this);
     }

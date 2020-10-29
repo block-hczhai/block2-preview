@@ -219,6 +219,7 @@ struct BatchGEMM {
         const int dstrn = (int)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
             return;
+        assert(da.m == da.n && db.m == db.n);
         const int ddstr = 0;
         if (da.m == 1 && da.n == 1) {
             const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
@@ -319,7 +320,6 @@ struct BatchGEMMSeq {
     vector<shared_ptr<BatchGEMM>> post_batch;
     vector<BatchGEMMRef> refs;
     size_t cumulative_nflop = 0;
-    size_t peak_stack_memory = 0;
     size_t max_batch_flops = 1LU << 30;
     size_t max_work, max_rwork;
     double *work, *rwork;
@@ -671,9 +671,6 @@ struct BatchGEMMSeq {
         divide_batch();
         assert(check());
         allocate();
-        peak_stack_memory = max(peak_stack_memory,
-                                (frame != nullptr ? frame->memory_used() : 0) +
-                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();
@@ -683,9 +680,6 @@ struct BatchGEMMSeq {
     void auto_perform() {
         prepare();
         allocate();
-        peak_stack_memory = max(peak_stack_memory,
-                                (frame != nullptr ? frame->memory_used() : 0) +
-                                    (max_work + max_rwork) * 8);
         perform();
         deallocate();
         clear();

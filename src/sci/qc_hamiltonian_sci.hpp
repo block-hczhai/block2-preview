@@ -621,11 +621,10 @@ public:
         for (auto &p : ops) {
             shared_ptr<OpElement<S>> pop = dynamic_pointer_cast<OpElement<S>>(p.first);
             OpElement<S> &op = *pop;
-            if(useRuleQC and ruleQC(pop) != nullptr){
-                // Just ignoring op or setting it to zero (after mat.initialize) does not work
-                // TODO seg fault:
-      //          p.second = make_shared<DelayedSparseMatrix<S>>();
-     //           continue;
+            if(useRuleQC and ruleQC(pop) != nullptr) {
+                p.second = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(
+                    iSite, p.first, find_site_op_info(op.q_label, iSite));
+                continue;
             }
             auto pmat = make_shared<CSRSparseMatrix<S>>();
             auto &mat = *pmat;
@@ -636,11 +635,6 @@ public:
             //      of the individual matrices in the fillOp* routines.
             //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
             mat.initialize(find_site_op_info(op.q_label, iSite));
-            if(useRuleQC and ruleQC(pop) != nullptr){
-       //         mat.factor = 0.0; // TODO  erratic dmrg dmrg (without the mat.deallocate)
-        //        mat.deallocate(); // TODO segfault
-                continue;
-            }
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
                 cout << "m == " << iSite << "allocate" << op.name

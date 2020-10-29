@@ -619,22 +619,29 @@ template <typename S> void bind_sparse(py::module &m) {
 
     py::class_<DelayedSparseMatrix<S, SparseMatrix<S>>,
                shared_ptr<DelayedSparseMatrix<S, SparseMatrix<S>>>,
-               SparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
+               DelayedSparseMatrix<S>>(m, "DelayedNormalSparseMatrix")
         .def_readwrite("mat", &DelayedSparseMatrix<S, SparseMatrix<S>>::mat)
         .def(py::init<const shared_ptr<SparseMatrix<S>> &>());
 
     py::class_<DelayedSparseMatrix<S, CSRSparseMatrix<S>>,
                shared_ptr<DelayedSparseMatrix<S, CSRSparseMatrix<S>>>,
-               SparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
+               DelayedSparseMatrix<S>>(m, "DelayedCSRSparseMatrix")
         .def_readwrite("mat", &DelayedSparseMatrix<S, CSRSparseMatrix<S>>::mat)
         .def(py::init<const shared_ptr<CSRSparseMatrix<S>> &>());
 
+    py::class_<DelayedSparseMatrix<S, OpExpr<S>>,
+               shared_ptr<DelayedSparseMatrix<S, OpExpr<S>>>,
+               DelayedSparseMatrix<S>>(m, "DelayedOpExprSparseMatrix")
+        .def_readwrite("m", &DelayedSparseMatrix<S, OpExpr<S>>::m)
+        .def_readwrite("op", &DelayedSparseMatrix<S, OpExpr<S>>::op)
+        .def(py::init<uint16_t, const shared_ptr<OpExpr<S>> &>())
+        .def(py::init<uint16_t, const shared_ptr<OpExpr<S>> &,
+                      const shared_ptr<SparseMatrixInfo<S>> &>());
+
     py::class_<DelayedSparseMatrix<S, Hamiltonian<S>>,
                shared_ptr<DelayedSparseMatrix<S, Hamiltonian<S>>>,
-               SparseMatrix<S>>(m, "DelayedHamilSparseMatrix")
+               DelayedSparseMatrix<S, OpExpr<S>>>(m, "DelayedHamilSparseMatrix")
         .def_readwrite("hamil", &DelayedSparseMatrix<S, Hamiltonian<S>>::hamil)
-        .def_readwrite("m", &DelayedSparseMatrix<S, Hamiltonian<S>>::m)
-        .def_readwrite("op", &DelayedSparseMatrix<S, Hamiltonian<S>>::op)
         .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
                       const shared_ptr<OpExpr<S>> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t,
@@ -2030,11 +2037,14 @@ template <typename S = void> void bind_io(py::module &m) {
 
     m.def(
         "init_memory",
-        [](size_t isize, size_t dsize, const string &save_dir) {
-            frame_() = make_shared<DataFrame>(isize, dsize, save_dir);
+        [](size_t isize, size_t dsize, const string &save_dir,
+           double main_ratio, int n_frames) {
+            frame_() = make_shared<DataFrame>(isize, dsize, save_dir,
+                                              main_ratio, n_frames);
         },
         py::arg("isize") = size_t(1L << 28),
-        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex");
+        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
+        py::arg("main_ratio") = 0.7, py::arg("n_frames") = 2);
 
     m.def("release_memory", []() {
         frame_()->activate(0);
@@ -2114,6 +2124,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("i_frame", &DataFrame::i_frame)
         .def_readwrite("iallocs", &DataFrame::iallocs)
         .def_readwrite("dallocs", &DataFrame::dallocs)
+        .def_readwrite("peak_used_memory", &DataFrame::peak_used_memory)
+        .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
+        .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)
         .def("activate", &DataFrame::activate)
         .def("load_data", &DataFrame::load_data)
         .def("save_data", &DataFrame::save_data)
@@ -2385,7 +2398,6 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_readwrite("post_batch", &BatchGEMMSeq::post_batch)
         .def_readwrite("refs", &BatchGEMMSeq::refs)
         .def_readwrite("cumulative_nflop", &BatchGEMMSeq::cumulative_nflop)
-        .def_readwrite("peak_stack_memory", &BatchGEMMSeq::peak_stack_memory)
         .def_readwrite("mode", &BatchGEMMSeq::mode)
         .def(py::init<>())
         .def(py::init<size_t>())

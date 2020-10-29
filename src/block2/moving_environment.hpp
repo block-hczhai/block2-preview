@@ -1667,6 +1667,7 @@ template <typename S> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S>>(left_op_infos, right_op_infos,
                                                  op, bra_wfn, ket_wfn, mpo->op,
                                                  hops, mpo->tf, compute_diag);
+        frame->update_peak_used_memory();
         return efh;
     }
     // Generate effective hamiltonian at current center site
@@ -1741,6 +1742,7 @@ template <typename S> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S, MultiMPS<S>>>(
                 left_op_infos, right_op_infos, op, mbra->wfns, mket->wfns,
                 mpo->op, hops, mpo->tf, compute_diag);
+        frame->update_peak_used_memory();
         return efh;
     }
     // Absorb wfn matrix into adjacent MPS tensor in one-site algorithm

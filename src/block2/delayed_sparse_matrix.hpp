@@ -22,6 +22,7 @@
 
 #include "csr_sparse_matrix.hpp"
 #include "sparse_matrix.hpp"
+#include "expr.hpp"
 
 using namespace std;
 
@@ -76,6 +77,42 @@ template <typename S> struct DelayedSparseMatrix<S> : SparseMatrix<S> {
     virtual shared_ptr<DelayedSparseMatrix<S>>
     selective_copy(const shared_ptr<SparseMatrixInfo<S>> &info) {
         return nullptr;
+    }
+};
+
+// Delayed site operator
+template <typename S>
+struct DelayedSparseMatrix<S, OpExpr<S>> : DelayedSparseMatrix<S> {
+    uint16_t m;
+    shared_ptr<OpExpr<S>> op;
+    DelayedSparseMatrix(uint16_t m, const shared_ptr<OpExpr<S>> &op,
+                        const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
+        : DelayedSparseMatrix<S>(), m(m), op(op) {
+        this->info = info;
+    }
+    void load_data(ifstream &ifs) override {
+        ifs.read((char *)&m, sizeof(m));
+        op = load_expr<S>(ifs);
+    }
+    void save_data(ofstream &ofs) const override {
+        ofs.write((char *)&m, sizeof(m));
+        assert(op != nullptr);
+        save_expr<S>(op, ofs);
+    }
+    shared_ptr<SparseMatrix<S>> build() override {
+        assert(false);
+        return nullptr;
+    }
+    double norm() const override { return 1.0; }
+    shared_ptr<DelayedSparseMatrix<S>> copy() override {
+        return make_shared<DelayedSparseMatrix>(*this);
+    }
+    shared_ptr<DelayedSparseMatrix<S>>
+    selective_copy(const shared_ptr<SparseMatrixInfo<S>> &info) override {
+        shared_ptr<DelayedSparseMatrix> mat =
+            make_shared<DelayedSparseMatrix>(*this);
+        mat->info = info;
+        return mat;
     }
 };
 

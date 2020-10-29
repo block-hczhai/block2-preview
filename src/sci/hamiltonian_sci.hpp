@@ -21,10 +21,10 @@
 
 #pragma once
 
+#include "../block2/delayed_sparse_matrix.hpp"
 #include "../block2/expr.hpp"
 #include "../block2/operator_functions.hpp"
 #include "../block2/sparse_matrix.hpp"
-#include "../block2/delayed_sparse_matrix.hpp"
 #include "../block2/symbolic.hpp"
 #include <algorithm>
 #include <cassert>
@@ -221,8 +221,8 @@ template <typename S> struct HamiltonianSCI {
         uint16_t m,
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             &ops) const {};
-  protected:
 
+  protected:
     // Find sparse matrix info for site operator with the given delta quantum q
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(S q,
                                                       uint16_t iSite) const {
@@ -230,8 +230,9 @@ template <typename S> struct HamiltonianSCI {
                              site_op_infos[iSite].end(), q,
                              SparseMatrixInfo<S>::cmp_op_info);
         if (p == site_op_infos[iSite].end() || p->first != q) {
-            cerr << "find_site_op_info cant find q:" << q << "iSite=" <<iSite<< endl;
-            cerr << "last site =" << n_sites-1<< endl;
+            cerr << "find_site_op_info cant find q:" << q << "iSite=" << iSite
+                 << endl;
+            cerr << "last site =" << n_sites - 1 << endl;
             throw std::runtime_error("oops");
             return nullptr;
         } else
@@ -244,10 +245,10 @@ template <typename S> struct HamiltonianSCI {
         auto p = lower_bound(site_norm_ops[iSite].begin(),
                              site_norm_ops[iSite].end(), q, cmp_site_norm_op);
         if (p == site_norm_ops[iSite].end() || !(p->first == q)) {
-            cout << "FIND SITE NORM OP FOR"<< iSite << endl;
+            cout << "FIND SITE NORM OP FOR" << iSite << endl;
             cout << "fail for site" << iSite << endl;
             auto opQ = dynamic_pointer_cast<OpElement<S>>(q);
-            cout << " that is:"<< *opQ << endl;
+            cout << " that is:" << *opQ << endl;
             throw std::runtime_error("Fail in find_site_norm_op");
             assert(false);
             return nullptr;
@@ -259,20 +260,20 @@ template <typename S> struct HamiltonianSCI {
 
 // Delayed site operator
 template <typename S>
-struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S> {
+struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, OpExpr<S>> {
     shared_ptr<HamiltonianSCI<S>> hamil;
-    uint16_t m;
-    shared_ptr<OpExpr<S>> op;
+    using DelayedSparseMatrix<S, OpExpr<S>>::m;
+    using DelayedSparseMatrix<S, OpExpr<S>>::op;
     DelayedSparseMatrix(const shared_ptr<HamiltonianSCI<S>> &hamil, uint16_t m,
                         const shared_ptr<OpExpr<S>> &op,
                         const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
-        : DelayedSparseMatrix<S>(), hamil(hamil), m(m), op(op) {
-        assert(hamil->delayed == DelayedSCIOpNames::None);
-        this->info = info;
+        : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {
     }
     shared_ptr<SparseMatrix<S>> build() override {
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
             ops;
+        assert(hamil != nullptr);
+        assert(hamil->delayed == DelayedSCIOpNames::None);
         ops[op] = nullptr;
         hamil->get_site_ops(m, ops);
         if (this->info->n == ops.at(op)->info->n)
@@ -290,7 +291,6 @@ struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S> {
             return new_mat;
         }
     }
-    double norm() const override { return 1.0; }
     shared_ptr<DelayedSparseMatrix<S>> copy() override {
         return make_shared<DelayedSparseMatrix>(*this);
     }
