@@ -734,6 +734,18 @@ public:
         }
         if (sci_finalize)
             sciWrapper->finalize();
+
+        if (useRuleQC)
+            // Take care operators are fully "symmetric" for simplification. E
+            // E.g. if P[i,j] is 0, PD[j,i] should be 0 as well
+            for (auto &p : ops)
+                if (p.second->get_type() == SparseMatrixTypes::Delayed) {
+                    auto ref_op = ruleQC(dynamic_pointer_cast<OpElement<S>>(p.first))->op;
+                    if (ops.count(ref_op) && (ops.at(ref_op)->factor == 0.0 ||
+                                              ops.at(ref_op)->norm() < TINY))
+                        p.second->factor = 0.0;
+                }
+
     }
 };
 
