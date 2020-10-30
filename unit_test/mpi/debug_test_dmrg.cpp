@@ -66,6 +66,7 @@ TEST_F(TestDMRG, Test) {
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    // string filename = "data/H8.STO6G.R1.8.FCIDUMP"; // E = -4.3450794024
     fcidump->read(filename);
 
     vector<uint8_t> ioccs;
@@ -112,7 +113,7 @@ TEST_F(TestDMRG, Test) {
     // MPO simplification
     cout << "MPO simplification start" << endl;
     mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true, true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
@@ -209,9 +210,11 @@ TEST_F(TestDMRG, Test) {
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    // dmrg->decomp_type = DecompositionTypes::SVD;
-    // dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->solve(50, true, 0.0);
+    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->me->delayed_contraction = true;
+    dmrg->me->fuse_center = 1;
+    dmrg->solve(10, true, 1E-12);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

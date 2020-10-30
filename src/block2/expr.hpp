@@ -120,6 +120,17 @@ struct SiteIndex {
             data |= (uint64_t)(*sit) << x;
         }
     }
+    SiteIndex(const vector<uint16_t> i, const vector<uint8_t> s) : data(0) {
+        data |= i.size() | (s.size() << 4);
+        int x = 8;
+        for (auto iit = i.begin(); iit != i.end(); iit++, x += 12)
+            data |= (uint64_t)(*iit) << x;
+        x = 56;
+        for (auto sit = s.begin(); sit != s.end(); sit++, x++) {
+            assert((*sit) == 0 || (*sit) == 1);
+            data |= (uint64_t)(*sit) << x;
+        }
+    }
     // Number of site indices
     uint8_t size() const noexcept { return (uint8_t)(data & 0xFU); }
     // Number of spin indices
@@ -438,9 +449,10 @@ template <typename S> struct OpSum : OpExpr<S> {
 // Reference to local or distributed sum
 template <typename S> struct OpExprRef : OpExpr<S> {
     bool is_local;
-    shared_ptr<OpExpr<S>> op;
-    OpExprRef(const shared_ptr<OpExpr<S>> &op, bool is_local)
-        : op(op), is_local(is_local) {}
+    shared_ptr<OpExpr<S>> op, orig;
+    OpExprRef(const shared_ptr<OpExpr<S>> &op, bool is_local,
+              const shared_ptr<OpExpr<S>> &orig = nullptr)
+        : op(op), is_local(is_local), orig(orig) {}
     const OpTypes get_type() const override { return OpTypes::ExprRef; }
 };
 
@@ -508,6 +520,10 @@ inline void save_expr(const shared_ptr<OpExpr<S>> &x, ofstream &ofs) {
         ofs.write((char *)&op->is_local, sizeof(op->is_local));
         assert(op->op != nullptr);
         save_expr<S>(op->op, ofs);
+        uint8_t has_orig = op->orig != nullptr;
+        ofs.write((char *)&has_orig, sizeof(has_orig));
+        if (has_orig & 1)
+            save_expr<S>(op->orig, ofs);
     } else
         assert(false);
 }
@@ -591,7 +607,11 @@ template <typename S> inline shared_ptr<OpExpr<S>> load_expr(ifstream &ifs) {
         bool is_local;
         ifs.read((char *)&is_local, sizeof(is_local));
         shared_ptr<OpExpr<S>> op = load_expr<S>(ifs);
-        return make_shared<OpExprRef<S>>(op, is_local);
+        uint8_t has_orig;
+        ifs.read((char *)&has_orig, sizeof(has_orig));
+        shared_ptr<OpExpr<S>> orig =
+            (has_orig & 1) ? load_expr<S>(ifs) : nullptr;
+        return make_shared<OpExprRef<S>>(op, is_local, orig);
     } else {
         assert(false);
         return nullptr;
@@ -613,7 +633,8 @@ inline shared_ptr<OpExpr<S>> abs_value(const shared_ptr<OpExpr<S>> &x) {
         return op->factor == 1.0 ? x : make_shared<OpElement<S>>(op->abs());
     } else if (x->get_type() == OpTypes::ExprRef) {
         shared_ptr<OpExprRef<S>> op = dynamic_pointer_cast<OpExprRef<S>>(x);
-        return abs_value(op->op);
+        return make_shared<OpExprRef<S>>(abs_value(op->op), op->is_local,
+                                         abs_value(op->orig));
     } else {
         assert(x->get_type() == OpTypes::Prod);
         shared_ptr<OpProduct<S>> op = dynamic_pointer_cast<OpProduct<S>>(x);
@@ -780,7 +801,10 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
     else if (x->get_type() == OpTypes::ExprRef)
         return make_shared<OpExprRef<S>>(
             dynamic_pointer_cast<OpExprRef<S>>(x)->op * d,
-            dynamic_pointer_cast<OpExprRef<S>>(x)->is_local);
+            dynamic_pointer_cast<OpExprRef<S>>(x)->is_local,
+            dynamic_pointer_cast<OpExprRef<S>>(x)->orig != nullptr
+                ? dynamic_pointer_cast<OpExprRef<S>>(x)->orig * d
+                : nullptr);
     assert(false);
     return nullptr;
 }

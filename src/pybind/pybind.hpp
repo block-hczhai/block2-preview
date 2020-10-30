@@ -2436,6 +2436,15 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<>())
         .def(py::init<uint16_t>())
         .def(py::init<uint16_t, uint16_t, uint8_t>())
+        .def(py::init([](py::tuple idxs, py::tuple sidxs) {
+            vector<uint16_t> x(idxs.size());
+            vector<uint8_t> sx(sidxs.size());
+            for (size_t i = 0; i < idxs.size(); i++)
+                x[i] = idxs[i].cast<uint16_t>();
+            for (size_t i = 0; i < sidxs.size(); i++)
+                sx[i] = sidxs[i].cast<uint8_t>();
+            return SiteIndex(x, sx);
+        }))
         .def("size", &SiteIndex::size)
         .def("spin_size", &SiteIndex::spin_size)
         .def("s", &SiteIndex::s, py::arg("i") = 0)

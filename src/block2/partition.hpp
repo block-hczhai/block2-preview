@@ -214,6 +214,12 @@ template <typename S> struct Partition {
             default:
                 assert(false);
             }
+            if (uniq_sorted) {
+                // needed for iop x iop in me delayed contraction with MPI
+                S p0 = l.combine(S(0), S(0));
+                if (p0 != S(S::invalid))
+                    subsl[idx].push_back(make_pair((uint8_t)0, p0));
+            }
         }
         if (uniq_sorted) {
             for (size_t i = 0; i < subsl.size(); i++) {

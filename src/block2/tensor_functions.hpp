@@ -588,6 +588,8 @@ template <typename S> struct TensorFunctions {
         vector<shared_ptr<OpExpr<S>>> rexpr(exprs->data.size());
         for (size_t i = 0; i < exprs->data.size(); i++) {
             shared_ptr<OpExpr<S>> expr = exprs->data[i];
+            if (expr->get_type() == OpTypes::ExprRef)
+                expr = dynamic_pointer_cast<OpExprRef<S>>(expr)->orig;
             vector<shared_ptr<OpProduct<S>>> prods;
             switch (expr->get_type()) {
             case OpTypes::Prod:
@@ -615,6 +617,43 @@ template <typename S> struct TensorFunctions {
                     assert(aops.count(prod->b) != 0);
                     hexpr = aops.at(prod->b);
                 }
+                // sometimes, terms in TEMP expr can be evaluated in different
+                // procs, which will change the conj of TEMP
+                // we need to use the conj from the localized expr of TEMP
+                map<shared_ptr<OpExpr<S>>, uint8_t, op_expr_less<S>> mpc;
+                if (hexpr->get_type() == OpTypes::ExprRef) {
+                    shared_ptr<OpExpr<S>> op_expr =
+                        dynamic_pointer_cast<OpExprRef<S>>(hexpr)->op;
+                    vector<shared_ptr<OpSumProd<S>>> mrs;
+                    switch (op_expr->get_type()) {
+                    case OpTypes::SumProd:
+                        mrs.push_back(
+                            dynamic_pointer_cast<OpSumProd<S>>(op_expr));
+                    case OpTypes::Sum: {
+                        shared_ptr<OpSum<S>> sop =
+                            dynamic_pointer_cast<OpSum<S>>(op_expr);
+                        for (auto &op : sop->strings)
+                            if (op->get_type() == OpTypes::SumProd)
+                                mrs.push_back(
+                                    dynamic_pointer_cast<OpSumProd<S>>(op));
+                    } break;
+                    case OpTypes::Zero:
+                        break;
+                    default:
+                        assert(false);
+                        break;
+                    }
+                    for (auto &op : mrs)
+                        if (op->c != nullptr) {
+                            uint8_t cj = op->b == nullptr ? (op->conj >> 1)
+                                                          : (op->conj & 1);
+                            if (mpc.count(op->c))
+                                assert(mpc.at(op->c) == cj);
+                            else
+                                mpc[op->c] = cj;
+                        }
+                    hexpr = dynamic_pointer_cast<OpExprRef<S>>(hexpr)->orig;
+                }
                 vector<shared_ptr<OpProduct<S>>> rk;
                 vector<shared_ptr<OpSumProd<S>>> rs;
                 switch (hexpr->get_type()) {
@@ -640,15 +679,23 @@ template <typename S> struct TensorFunctions {
                     break;
                 }
                 for (auto &op : rs) {
-                    if (op->c != nullptr &&
-                        ((op->b == nullptr && a->ropt->ops.count(op->c)) ||
-                         (op->a == nullptr && a->lopt->ops.count(op->c)))) {
-                        if (op->b == nullptr)
-                            rk.push_back(make_shared<OpProduct<S>>(
-                                op->a, op->c, op->factor, op->conj));
-                        else
-                            rk.push_back(make_shared<OpProduct<S>>(
-                                op->c, op->b, op->factor, op->conj));
+                    if (op->c != nullptr) {
+                        uint8_t cj = op->conj;
+                        if (mpc.size() != 0 && mpc.count(op->c))
+                            cj = op->b == nullptr
+                                     ? ((op->conj & 1) | (mpc.at(op->c) << 1))
+                                     : ((op->conj & 2) | mpc.at(op->c));
+                        if (op->b == nullptr) {
+                            // TEMP may not have terms in all procs
+                            if (a->ropt->ops.count(op->c))
+                                rk.push_back(make_shared<OpProduct<S>>(
+                                    op->a, op->c, op->factor, cj));
+                        } else {
+                            // TEMP may not have terms in all procs
+                            if (a->lopt->ops.count(op->c))
+                                rk.push_back(make_shared<OpProduct<S>>(
+                                    op->c, op->b, op->factor, cj));
+                        }
                     } else if (op->b == nullptr) {
                         for (size_t j = 0; j < op->ops.size(); j++)
                             rk.push_back(make_shared<OpProduct<S>>(
