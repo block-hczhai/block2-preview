@@ -1044,7 +1044,7 @@ template <typename S> struct MovingEnvironment {
     string tag;
     // Parallel execution control
     shared_ptr<ParallelRule<S>> para_rule;
-    double tctr = 0, trot = 0;
+    double tctr = 0, trot = 0, tint = 0, tmid = 0;
     Timer _t;
     bool iprint = false;
     bool delayed_contraction = false;
@@ -1126,10 +1126,12 @@ template <typename S> struct MovingEnvironment {
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
+        tmid += _t.get_time();
         if (i < mpo->left_operator_exprs.size())
             mpo->tf->intermediates(mpo->left_operator_names[i],
                                    mpo->left_operator_exprs[i], envs[i]->left,
                                    true);
+        tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i - 1);
@@ -1203,10 +1205,12 @@ template <typename S> struct MovingEnvironment {
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
+        tmid += _t.get_time();
         if (i + dot - 1 >= 0 && i + dot - 1 < mpo->right_operator_exprs.size())
             mpo->tf->intermediates(mpo->right_operator_names[i + dot - 1],
                                    mpo->right_operator_exprs[i + dot - 1],
                                    envs[i]->right, false);
+        tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i + dot);
@@ -1275,6 +1279,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Remove old environment for starting a new sweep
     void prepare() {
+        tctr = trot = tmid = tint = 0;
         if (dot == 2 && envs[0]->middle.size() == 1)
             throw runtime_error("switching from one-site algorithm to two-site "
                                 "algorithm is not allowed.");

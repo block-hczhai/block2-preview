@@ -487,6 +487,9 @@ template <typename S> struct TensorFunctions {
             if (exprs->data[i]->get_type() == OpTypes::Sum) {
                 shared_ptr<OpSum<S>> expr =
                     dynamic_pointer_cast<OpSum<S>>(exprs->data[i]);
+                vector<shared_ptr<OpSumProd<S>>> exs;
+                exs.reserve(expr->strings.size());
+                int maxk = 0;
                 for (size_t j = 0; j < expr->strings.size(); j++)
                     if (expr->strings[j]->get_type() == OpTypes::SumProd) {
                         shared_ptr<OpSumProd<S>> ex =
@@ -503,19 +506,27 @@ template <typename S> struct TensorFunctions {
                             abs_value((shared_ptr<OpExpr<S>>)ex->ops[0]);
                         assert(a->ops.count(opb) != 0);
                         tmp->allocate(a->ops.at(opb)->info);
-                        for (size_t k = 0; k < ex->ops.size(); k++) {
+                        a->ops[ex->c] = tmp;
+                        exs.push_back(ex);
+                        maxk = max(maxk, (int)ex->ops.size());
+                    }
+                for (int k = 0; k < maxk; k++) {
+                    for (auto &ex : exs) {
+                        if (k < ex->ops.size()) {
                             shared_ptr<SparseMatrix<S>> xmat = a->ops.at(
                                 abs_value((shared_ptr<OpExpr<S>>)ex->ops[k]));
                             assert(xmat->get_type() !=
                                    SparseMatrixTypes::Delayed);
-                            opf->iadd(tmp, xmat, ex->ops[k]->factor,
-                                      ex->conjs[k]);
-                            if (opf->seq->mode == SeqTypes::Simple)
-                                opf->seq->simple_perform();
+                            opf->iadd(a->ops.at(ex->c), xmat,
+                                      ex->ops[k]->factor, ex->conjs[k]);
                         }
-                        a->ops[ex->c] = tmp;
                     }
+                    if (opf->seq->mode == SeqTypes::Simple)
+                        opf->seq->simple_perform();
+                }
             }
+        if (opf->seq->mode == SeqTypes::Auto)
+            opf->seq->auto_perform();
     }
     // Numerical transform from normal operators
     // to complementary operators near the middle site
@@ -529,41 +540,46 @@ template <typename S> struct TensorFunctions {
             a->rmat = names;
         else
             a->lmat = names;
-        for (size_t i = 0; i < a->ops.size(); i++) {
-            bool found = false;
-            for (size_t k = 0; k < names->data.size(); k++) {
-                if (exprs->data[k]->get_type() == OpTypes::Zero)
-                    continue;
-                shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
-                shared_ptr<OpExpr<S>> expr =
-                    exprs->data[k] *
-                    (1 / dynamic_pointer_cast<OpElement<S>>(names->data[k])
-                             ->factor);
-                assert(a->ops.count(nop) != 0);
-                switch (expr->get_type()) {
-                case OpTypes::Sum: {
-                    shared_ptr<OpSum<S>> op =
-                        dynamic_pointer_cast<OpSum<S>>(expr);
-                    found |= i < op->strings.size();
-                    if (i < op->strings.size()) {
-                        shared_ptr<OpElement<S>> nexpr =
-                            op->strings[i]->get_op();
-                        assert(a->ops.count(nexpr) != 0);
-                        opf->iadd(a->ops.at(nop), a->ops.at(nexpr),
-                                  op->strings[i]->factor,
-                                  op->strings[i]->conj != 0);
-                    }
-                } break;
-                case OpTypes::Zero:
-                    break;
-                default:
-                    assert(false);
-                    break;
+        vector<pair<shared_ptr<SparseMatrix<S>>, shared_ptr<OpSum<S>>>> trs;
+        trs.reserve(names->data.size());
+        int maxi = 0;
+        for (size_t k = 0; k < names->data.size(); k++) {
+            if (exprs->data[k]->get_type() == OpTypes::Zero)
+                continue;
+            shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
+            shared_ptr<OpExpr<S>> expr =
+                exprs->data[k] *
+                (1 /
+                 dynamic_pointer_cast<OpElement<S>>(names->data[k])->factor);
+            assert(a->ops.count(nop) != 0);
+            shared_ptr<SparseMatrix<S>> anop = a->ops.at(nop);
+            switch (expr->get_type()) {
+            case OpTypes::Sum:
+                trs.push_back(
+                    make_pair(anop, dynamic_pointer_cast<OpSum<S>>(expr)));
+                maxi = max(
+                    maxi,
+                    (int)dynamic_pointer_cast<OpSum<S>>(expr)->strings.size());
+                break;
+            case OpTypes::Zero:
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        }
+        for (int i = 0; i < maxi; i++) {
+            for (auto &tr : trs) {
+                shared_ptr<OpSum<S>> op = tr.second;
+                if (i < op->strings.size()) {
+                    shared_ptr<OpElement<S>> nexpr = op->strings[i]->get_op();
+                    assert(a->ops.count(nexpr) != 0);
+                    opf->iadd(tr.first, a->ops.at(nexpr),
+                              op->strings[i]->factor,
+                              op->strings[i]->conj != 0);
                 }
             }
-            if (!found)
-                break;
-            else if (opf->seq->mode == SeqTypes::Simple)
+            if (opf->seq->mode == SeqTypes::Simple)
                 opf->seq->simple_perform();
         }
         if (opf->seq->mode == SeqTypes::Auto)
