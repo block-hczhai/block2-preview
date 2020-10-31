@@ -946,10 +946,11 @@ template <typename S> void bind_operator(py::module &m) {
         .def("right_assign", &TensorFunctions<S>::right_assign, py::arg("a"),
              py::arg("c"))
         .def("left_contract", &TensorFunctions<S>::left_contract, py::arg("a"),
-             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr)
+             py::arg("b"), py::arg("c"), py::arg("cexprs") = nullptr,
+             py::arg("delayed") = OpNamesSet())
         .def("right_contract", &TensorFunctions<S>::right_contract,
              py::arg("a"), py::arg("b"), py::arg("c"),
-             py::arg("cexprs") = nullptr)
+             py::arg("cexprs") = nullptr, py::arg("delayed") = OpNamesSet())
         .def("tensor_product_multi_multiply",
              &TensorFunctions<S>::tensor_product_multi_multiply)
         .def("tensor_product_multiply",
@@ -971,14 +972,14 @@ template <typename S> void bind_operator(py::module &m) {
              (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
                  const shared_ptr<OperatorTensor<S>> &,
                  const shared_ptr<OperatorTensor<S>> &,
-                 const shared_ptr<OpExpr<S>> &) const) &
+                 const shared_ptr<OpExpr<S>> &, OpNamesSet delayed) const) &
                  TensorFunctions<S>::delayed_contract)
         .def("delayed_contract_simplified",
              (shared_ptr<DelayedOperatorTensor<S>>(TensorFunctions<S>::*)(
                  const shared_ptr<OperatorTensor<S>> &,
                  const shared_ptr<OperatorTensor<S>> &,
                  const shared_ptr<Symbolic<S>> &,
-                 const shared_ptr<Symbolic<S>> &) const) &
+                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed) const) &
                  TensorFunctions<S>::delayed_contract);
 
     py::class_<ArchivedTensorFunctions<S>,
@@ -2431,6 +2432,21 @@ template <typename S = void> void bind_matrix(py::module &m) {
 }
 
 template <typename S = void> void bind_symmetry(py::module &m) {
+
+    py::class_<OpNamesSet>(m, "OpNamesSet")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init([](py::tuple names) {
+            vector<OpNames> x(names.size());
+            for (size_t i = 0; i < names.size(); i++)
+                x[i] = names[i].cast<OpNames>();
+            return OpNamesSet(x);
+        }))
+        .def_readwrite("data", &OpNamesSet::data)
+        .def("__call__", &OpNamesSet::operator())
+        .def("empty", &OpNamesSet::empty)
+        .def_static("normal_ops", &OpNamesSet::normal_ops)
+        .def_static("all_ops", &OpNamesSet::all_ops);
 
     py::class_<SiteIndex>(m, "SiteIndex")
         .def(py::init<>())

@@ -176,7 +176,7 @@ TEST_F(TestDMRG, Test) {
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
-    dmrg->me->delayed_contraction = false;
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;

@@ -357,9 +357,10 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     shared_ptr<DelayedOperatorTensor<S>>
     delayed_contract(const shared_ptr<OperatorTensor<S>> &a,
                      const shared_ptr<OperatorTensor<S>> &b,
-                     const shared_ptr<OpExpr<S>> &op) const override {
+                     const shared_ptr<OpExpr<S>> &op,
+                     OpNamesSet delayed) const override {
         shared_ptr<DelayedOperatorTensor<S>> dopt =
-            TensorFunctions<S>::delayed_contract(a, b, op);
+            TensorFunctions<S>::delayed_contract(a, b, op, delayed);
         bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
         dopt->mat->data[0] = rule->localize_expr(
             dopt->mat->data[0], rule->owner(dopt->dops[0]), dleft);
@@ -371,9 +372,10 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     delayed_contract(const shared_ptr<OperatorTensor<S>> &a,
                      const shared_ptr<OperatorTensor<S>> &b,
                      const shared_ptr<Symbolic<S>> &ops,
-                     const shared_ptr<Symbolic<S>> &exprs) const override {
+                     const shared_ptr<Symbolic<S>> &exprs,
+                     OpNamesSet delayed) const override {
         shared_ptr<DelayedOperatorTensor<S>> dopt =
-            TensorFunctions<S>::delayed_contract(a, b, ops, exprs);
+            TensorFunctions<S>::delayed_contract(a, b, ops, exprs, delayed);
         bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
         for (size_t i = 0; i < dopt->mat->data.size(); i++)
             if (dopt->mat->data[i]->get_type() != OpTypes::ExprRef)
@@ -382,11 +384,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         return dopt;
     }
     // c = a x b (dot)
-    void left_contract(
-        const shared_ptr<OperatorTensor<S>> &a,
-        const shared_ptr<OperatorTensor<S>> &b,
-        shared_ptr<OperatorTensor<S>> &c,
-        const shared_ptr<Symbolic<S>> &cexprs = nullptr) const override {
+    void left_contract(const shared_ptr<OperatorTensor<S>> &a,
+                       const shared_ptr<OperatorTensor<S>> &b,
+                       shared_ptr<OperatorTensor<S>> &c,
+                       const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                       OpNamesSet delayed = OpNamesSet()) const override {
         if (a == nullptr)
             left_assign(b, c);
         else {
@@ -394,8 +396,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 cexprs == nullptr ? a->lmat * b->lmat : cexprs;
             assert(exprs->data.size() == c->lmat->data.size());
             vector<shared_ptr<SparseMatrix<S>>> mats(exprs->data.size());
-            for (size_t i = 0; i < exprs->data.size(); i++)
-                mats[i] = c->ops.at(abs_value(c->lmat->data[i]));
+            for (size_t i = 0; i < exprs->data.size(); i++) {
+                shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
+                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name))
+                    mats[i] = c->ops.at(op);
+            }
             auto f = [&a, &b, this](const shared_ptr<OpExpr<S>> &expr,
                                     shared_ptr<SparseMatrix<S>> &mat) {
                 assert(mat->data == nullptr);
@@ -410,11 +415,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         }
     }
     // c = b (dot) x a
-    void right_contract(
-        const shared_ptr<OperatorTensor<S>> &a,
-        const shared_ptr<OperatorTensor<S>> &b,
-        shared_ptr<OperatorTensor<S>> &c,
-        const shared_ptr<Symbolic<S>> &cexprs = nullptr) const override {
+    void right_contract(const shared_ptr<OperatorTensor<S>> &a,
+                        const shared_ptr<OperatorTensor<S>> &b,
+                        shared_ptr<OperatorTensor<S>> &c,
+                        const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                        OpNamesSet delayed = OpNamesSet()) const override {
         if (a == nullptr)
             right_assign(b, c);
         else {
@@ -422,8 +427,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 cexprs == nullptr ? b->rmat * a->rmat : cexprs;
             assert(exprs->data.size() == c->rmat->data.size());
             vector<shared_ptr<SparseMatrix<S>>> mats(exprs->data.size());
-            for (size_t i = 0; i < exprs->data.size(); i++)
-                mats[i] = c->ops.at(abs_value(c->rmat->data[i]));
+            for (size_t i = 0; i < exprs->data.size(); i++) {
+                shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
+                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name))
+                    mats[i] = c->ops.at(op);
+            }
             auto f = [&a, &b, this](const shared_ptr<OpExpr<S>> &expr,
                                     shared_ptr<SparseMatrix<S>> &mat) {
                 assert(mat->data == nullptr);

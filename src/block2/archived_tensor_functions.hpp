@@ -595,11 +595,11 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             opf->seq->auto_perform();
     }
     // c = a x b (dot)
-    void left_contract(
-        const shared_ptr<OperatorTensor<S>> &a,
-        const shared_ptr<OperatorTensor<S>> &b,
-        shared_ptr<OperatorTensor<S>> &c,
-        const shared_ptr<Symbolic<S>> &cexprs = nullptr) const override {
+    void left_contract(const shared_ptr<OperatorTensor<S>> &a,
+                       const shared_ptr<OperatorTensor<S>> &b,
+                       shared_ptr<OperatorTensor<S>> &c,
+                       const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                       OpNamesSet delayed = OpNamesSet()) const override {
         if (a == nullptr)
             left_assign(b, c);
         else {
@@ -611,25 +611,27 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                     dynamic_pointer_cast<OpElement<S>>(c->lmat->data[i]);
                 shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
                 shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
-                c->ops.at(op)->allocate(c->ops.at(op)->info);
-                tensor_product(expr, a->ops, b->ops, c->ops.at(op));
-                shared_ptr<ArchivedSparseMatrix<S>> arc =
-                    make_shared<ArchivedSparseMatrix<S>>(filename, offset);
-                arc->save_archive(c->ops.at(op));
-                c->ops.at(op)->deallocate();
-                c->ops.at(op) = arc;
-                offset += arc->total_memory;
+                if (!delayed(cop->name)) {
+                    c->ops.at(op)->allocate(c->ops.at(op)->info);
+                    tensor_product(expr, a->ops, b->ops, c->ops.at(op));
+                    shared_ptr<ArchivedSparseMatrix<S>> arc =
+                        make_shared<ArchivedSparseMatrix<S>>(filename, offset);
+                    arc->save_archive(c->ops.at(op));
+                    c->ops.at(op)->deallocate();
+                    c->ops.at(op) = arc;
+                    offset += arc->total_memory;
+                }
             }
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
         }
     }
     // c = b (dot) x a
-    void right_contract(
-        const shared_ptr<OperatorTensor<S>> &a,
-        const shared_ptr<OperatorTensor<S>> &b,
-        shared_ptr<OperatorTensor<S>> &c,
-        const shared_ptr<Symbolic<S>> &cexprs = nullptr) const override {
+    void right_contract(const shared_ptr<OperatorTensor<S>> &a,
+                        const shared_ptr<OperatorTensor<S>> &b,
+                        shared_ptr<OperatorTensor<S>> &c,
+                        const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                        OpNamesSet delayed = OpNamesSet()) const override {
         if (a == nullptr)
             right_assign(b, c);
         else {
@@ -641,14 +643,16 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                     dynamic_pointer_cast<OpElement<S>>(c->rmat->data[i]);
                 shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
                 shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
-                c->ops.at(op)->allocate(c->ops.at(op)->info);
-                tensor_product(expr, b->ops, a->ops, c->ops.at(op));
-                shared_ptr<ArchivedSparseMatrix<S>> arc =
-                    make_shared<ArchivedSparseMatrix<S>>(filename, offset);
-                arc->save_archive(c->ops.at(op));
-                c->ops.at(op)->deallocate();
-                c->ops.at(op) = arc;
-                offset += arc->total_memory;
+                if (!delayed(cop->name)) {
+                    c->ops.at(op)->allocate(c->ops.at(op)->info);
+                    tensor_product(expr, b->ops, a->ops, c->ops.at(op));
+                    shared_ptr<ArchivedSparseMatrix<S>> arc =
+                        make_shared<ArchivedSparseMatrix<S>>(filename, offset);
+                    arc->save_archive(c->ops.at(op));
+                    c->ops.at(op)->deallocate();
+                    c->ops.at(op) = arc;
+                    offset += arc->total_memory;
+                }
             }
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();

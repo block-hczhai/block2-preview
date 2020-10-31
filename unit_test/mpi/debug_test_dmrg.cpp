@@ -212,7 +212,7 @@ TEST_F(TestDMRG, Test) {
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    dmrg->me->delayed_contraction = false;
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     // dmrg->me->fuse_center = 1;
     dmrg->solve(10, true, 1E-12);
 
