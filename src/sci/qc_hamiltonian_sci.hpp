@@ -97,6 +97,7 @@ public:
     int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
     bool sci_finalize = true;
     bool useRuleQC = true; // Use RuleQC for big sites
+    std::shared_ptr<ParallelRuleQC<S>> parallelRule = nullptr; // Enable it for big site in useRuleQC
     HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
@@ -621,9 +622,11 @@ public:
         for (auto &p : ops) {
             shared_ptr<OpElement<S>> pop = dynamic_pointer_cast<OpElement<S>>(p.first);
             OpElement<S> &op = *pop;
-            if(useRuleQC and ruleQC(pop) != nullptr) {
-                p.second = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(
-                    iSite, p.first, find_site_op_info(op.q_label, iSite));
+            auto canBeSkipped = parallelRule != nullptr and not parallelRule->available(pop);
+            canBeSkipped = canBeSkipped or (useRuleQC and ruleQC(pop) != nullptr);
+            if(canBeSkipped){
+                p.second = make_shared<DelayedSparseMatrix < S, OpExpr < S>>>(
+                        iSite, p.first, find_site_op_info(op.q_label, iSite));
                 continue;
             }
             auto pmat = make_shared<CSRSparseMatrix<S>>();
@@ -736,16 +739,20 @@ public:
             sciWrapper->finalize();
 
         if (useRuleQC)
-            // Take care operators are fully "symmetric" for simplification. E
+            // Take care operators are fully "symmetric" for simplification.
             // E.g. if P[i,j] is 0, PD[j,i] should be 0 as well
-            for (auto &p : ops)
+            for (auto &p : ops) {
+                auto pop = dynamic_pointer_cast<OpElement<S>>(p.first);
+                if(parallelRule != nullptr and not parallelRule->available(pop)){
+                    continue;
+                }
                 if (p.second->get_type() == SparseMatrixTypes::Delayed) {
-                    auto ref_op = ruleQC(dynamic_pointer_cast<OpElement<S>>(p.first))->op;
+                    auto ref_op = ruleQC(pop)->op;
                     if (ops.count(ref_op) && (ops.at(ref_op)->factor == 0.0 ||
                                               ops.at(ref_op)->norm() < TINY))
                         p.second->factor = 0.0;
                 }
-
+            }
     }
 };
 

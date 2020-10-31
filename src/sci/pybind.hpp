@@ -104,6 +104,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
         .def_readonly("nOrbRight", &HamiltonianQCSCI<S>::nOrbRight)
         .def_readonly("nOrbCas", &HamiltonianQCSCI<S>::nOrbCas)
         .def_readwrite("useRuleQC", &HamiltonianQCSCI<S>::useRuleQC)
+        .def_readwrite("parallelRule", &HamiltonianQCSCI<S>::parallelRule)
         .def_readwrite("fcidump", &HamiltonianQCSCI<S>::fcidump)
         .def_readwrite("mu", &HamiltonianQCSCI<S>::mu)
         .def("v", &HamiltonianQCSCI<S>::v)
