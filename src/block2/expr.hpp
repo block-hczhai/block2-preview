@@ -38,6 +38,7 @@ enum struct ParallelTypes : uint8_t { Serial = 0, Distributed = 1 };
 
 // Operator names
 enum struct OpNames : uint8_t {
+    Zero,
     H,
     I,
     N,
@@ -53,7 +54,6 @@ enum struct OpNames : uint8_t {
     B,
     BD,
     Q,
-    Zero,
     PDM1,
     PDM2,
     CCDD,
@@ -68,9 +68,9 @@ enum struct OpNames : uint8_t {
 
 inline ostream &operator<<(ostream &os, const OpNames c) {
     const static string repr[] = {
-        "H",    "I",   "N",   "NN",  "C",   "D",   "R",    "RD",   "A",
-        "AD",   "P",   "PD",  "B",   "BD",  "Q",   "Zero", "PDM1", "PDM2",
-        "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC",  "TEMP"};
+        "Zero", "H",   "I",   "N",   "NN",  "C",   "D",   "R",    "RD",
+        "A",    "AD",  "P",   "PD",  "B",   "BD",  "Q",   "PDM1", "PDM2",
+        "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC", "TEMP"};
     os << repr[(uint8_t)c];
     return os;
 }
@@ -84,6 +84,35 @@ enum struct OpTypes : uint8_t {
     ElemRef,
     SumProd,
     ExprRef
+};
+
+struct OpNamesSet {
+    uint32_t data;
+    OpNamesSet() : data(0) {}
+    OpNamesSet(uint32_t data) : data(data) {}
+    OpNamesSet(const initializer_list<OpNames> names) : data(0) {
+        for (auto iit = names.begin(); iit != names.end(); iit++)
+            data |= (1 << (uint8_t)*iit);
+    }
+    OpNamesSet(const vector<OpNames> &names) : data(0) {
+        for (auto iit = names.begin(); iit != names.end(); iit++)
+            data |= (1 << (uint8_t)*iit);
+    }
+    static OpNamesSet normal_ops() noexcept {
+        return OpNamesSet({OpNames::I, OpNames::N, OpNames::NN, OpNames::C,
+                           OpNames::D, OpNames::A, OpNames::AD, OpNames::B,
+                           OpNames::BD});
+    }
+    static OpNamesSet all_ops() noexcept {
+        return OpNamesSet({OpNames::H, OpNames::I, OpNames::N, OpNames::NN,
+                           OpNames::C, OpNames::D, OpNames::A, OpNames::AD,
+                           OpNames::B, OpNames::BD, OpNames::R, OpNames::RD,
+                           OpNames::P, OpNames::PD, OpNames::Q});
+    }
+    bool operator()(OpNames name) const noexcept {
+        return data & (1 << (uint8_t)name);
+    }
+    bool empty() const noexcept { return data == 0; }
 };
 
 // Expression zero
@@ -120,7 +149,7 @@ struct SiteIndex {
             data |= (uint64_t)(*sit) << x;
         }
     }
-    SiteIndex(const vector<uint16_t> i, const vector<uint8_t> s) : data(0) {
+    SiteIndex(const vector<uint16_t> &i, const vector<uint8_t> &s) : data(0) {
         data |= i.size() | (s.size() << 4);
         int x = 8;
         for (auto iit = i.begin(); iit != i.end(); iit++, x += 12)

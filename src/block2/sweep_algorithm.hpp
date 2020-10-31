@@ -857,6 +857,7 @@ template <typename S> struct DMRG {
                     0.1);
         Timer start, current;
         start.get_time();
+        current.get_time();
         energies.clear();
         discarded_weights.clear();
         mps_quanta.clear();
@@ -885,7 +886,7 @@ template <typename S> struct DMRG {
                         noises[iw] == noises.back() &&
                         bond_dims[iw] == bond_dims.back();
             forward = !forward;
-            current.get_time();
+            double tswp = current.get_time();
             if (iprint >= 1) {
                 cout << "Time elapsed = " << setw(10) << setprecision(3)
                      << current.current - start.current;
@@ -915,6 +916,10 @@ template <typename S> struct DMRG {
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP");
+                    cout << endl << fixed << setw(10) << setprecision(3);
+                    cout << "Time sweep = " << tswp << " | Trot = " << me->trot
+                         << " | Tctr = " << me->tctr << " | Tint = " << me->tint
+                         << " | Tmid = " << me->tmid;
                 }
                 cout << endl;
             }

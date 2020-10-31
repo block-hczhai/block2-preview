@@ -156,7 +156,6 @@ TEST_F(TestDMRG, Test) {
     // ME
     shared_ptr<MovingEnvironment<SU2>> me =
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
-    me->delayed_contraction = true;
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -177,6 +176,7 @@ TEST_F(TestDMRG, Test) {
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;

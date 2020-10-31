@@ -620,22 +620,15 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
-        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos;
-        if (op->lopt->get_type() == OperatorTensorTypes::Delayed) {
-            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
-                            left_op_infos.crend());
-            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
-                            right_op_infos.crend());
-        } else {
-            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
-                            right_op_infos.crend());
-            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
-                            left_op_infos.crend());
+        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
+            if (right_op_infos[i].second->cinfo != nullptr)
+                right_op_infos[i].second->cinfo->deallocate();
+            right_op_infos[i].second->deallocate();
         }
-        for (const auto &info : op_infos) {
-            if (info.second->cinfo != nullptr)
-                info.second->cinfo->deallocate();
-            info.second->deallocate();
+        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
+            if (left_op_infos[i].second->cinfo != nullptr)
+                left_op_infos[i].second->cinfo->deallocate();
+            left_op_infos[i].second->deallocate();
         }
     }
 };
@@ -986,22 +979,15 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
-        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos;
-        if (op->lopt->get_type() == OperatorTensorTypes::Delayed) {
-            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
-                            left_op_infos.crend());
-            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
-                            right_op_infos.crend());
-        } else {
-            op_infos.insert(op_infos.end(), right_op_infos.crbegin(),
-                            right_op_infos.crend());
-            op_infos.insert(op_infos.end(), left_op_infos.crbegin(),
-                            left_op_infos.crend());
+        for (int i = right_op_infos.size() - 1; i >= 0; i--) {
+            if (right_op_infos[i].second->cinfo != nullptr)
+                right_op_infos[i].second->cinfo->deallocate();
+            right_op_infos[i].second->deallocate();
         }
-        for (const auto &info : op_infos) {
-            if (info.second->cinfo != nullptr)
-                info.second->cinfo->deallocate();
-            info.second->deallocate();
+        for (int i = left_op_infos.size() - 1; i >= 0; i--) {
+            if (left_op_infos[i].second->cinfo != nullptr)
+                left_op_infos[i].second->cinfo->deallocate();
+            left_op_infos[i].second->deallocate();
         }
     }
 };
@@ -1044,10 +1030,10 @@ template <typename S> struct MovingEnvironment {
     string tag;
     // Parallel execution control
     shared_ptr<ParallelRule<S>> para_rule;
-    double tctr = 0, trot = 0;
+    double tctr = 0, trot = 0, tint = 0, tmid = 0;
     Timer _t;
     bool iprint = false;
-    bool delayed_contraction = false;
+    OpNamesSet delayed_contraction = OpNamesSet();
     int fuse_center;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
                       const shared_ptr<MPS<S>> &bra,
@@ -1058,9 +1044,8 @@ template <typename S> struct MovingEnvironment {
         assert(bra->center == ket->center && bra->dot == ket->dot);
         hop_mat = make_shared<SymbolicColumnVector<S>>(1);
         (*hop_mat)[0] = mpo->op;
-        fuse_center = mpo->schemer == nullptr
-                          ? n_sites / 2
-                          : mpo->schemer->left_trans_site - 1;
+        fuse_center = mpo->schemer == nullptr ? n_sites - 2
+                                              : mpo->schemer->left_trans_site;
         if (mpo->get_parallel_type() == ParallelTypes::Distributed) {
             para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
             para_rule->comm->barrier();
@@ -1126,10 +1111,12 @@ template <typename S> struct MovingEnvironment {
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
+        tmid += _t.get_time();
         if (i < mpo->left_operator_exprs.size())
             mpo->tf->intermediates(mpo->left_operator_names[i],
                                    mpo->left_operator_exprs[i], envs[i]->left,
                                    true);
+        tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i - 1);
@@ -1203,10 +1190,12 @@ template <typename S> struct MovingEnvironment {
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
+        tmid += _t.get_time();
         if (i + dot - 1 >= 0 && i + dot - 1 < mpo->right_operator_exprs.size())
             mpo->tf->intermediates(mpo->right_operator_names[i + dot - 1],
                                    mpo->right_operator_exprs[i + dot - 1],
                                    envs[i]->right, false);
+        tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
             ket->unload_tensor(i + dot);
@@ -1275,6 +1264,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Remove old environment for starting a new sweep
     void prepare() {
+        tctr = trot = tmid = tint = 0;
         if (dot == 2 && envs[0]->middle.size() == 1)
             throw runtime_error("switching from one-site algorithm to two-site "
                                 "algorithm is not allowed.");
@@ -1513,16 +1503,25 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_left = Partition<S>::build_left(lmats, left_op_infos,
                                             mpo->sparse_form[iL] == 'S');
-        auto ctr = delayed ? &TensorFunctions<S>::delayed_left_contract
-                           : &TensorFunctions<S>::left_contract;
-        (mpo->tf.get()->*ctr)(
+        mpo->tf->left_contract(
             envs[iL]->left, envs[iL]->middle.front(), new_left,
             mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
-                                                 : nullptr);
+                                                 : nullptr,
+            delayed ? delayed_contraction : OpNamesSet());
         if (mpo->schemer != nullptr && iL == mpo->schemer->left_trans_site &&
             mpo->schemer->right_trans_site - mpo->schemer->left_trans_site <= 1)
             mpo->tf->numerical_transform(new_left, lmats[1],
                                          mpo->schemer->left_new_operator_exprs);
+    }
+    void delayed_left_contract(int iL,
+                               shared_ptr<OperatorTensor<S>> &new_left) {
+        if (envs[iL]->left != nullptr)
+            frame->load_data(1, get_left_partition_filename(iL));
+        frame->activate(0);
+        mpo->tf->delayed_left_contract(
+            envs[iL]->left, envs[iL]->middle.front(), new_left,
+            mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
+                                                 : nullptr);
     }
     // Contract right block for constructing effective Hamiltonian
     // site iR is the new site
@@ -1553,13 +1552,24 @@ template <typename S> struct MovingEnvironment {
         frame->activate(0);
         new_right = Partition<S>::build_right(rmats, right_op_infos,
                                               mpo->sparse_form[iR] == 'S');
-        auto ctr = delayed ? &TensorFunctions<S>::delayed_right_contract
-                           : &TensorFunctions<S>::right_contract;
-        (mpo->tf.get()->*ctr)(envs[iR - dot + 1]->right,
-                              envs[iR - dot + 1]->middle.back(), new_right,
-                              mpo->right_operator_exprs.size() != 0
-                                  ? mpo->right_operator_exprs[iR]
-                                  : nullptr);
+        mpo->tf->right_contract(envs[iR - dot + 1]->right,
+                                envs[iR - dot + 1]->middle.back(), new_right,
+                                mpo->right_operator_exprs.size() != 0
+                                    ? mpo->right_operator_exprs[iR]
+                                    : nullptr,
+                                delayed ? delayed_contraction : OpNamesSet());
+    }
+    void delayed_right_contract(int iR,
+                                shared_ptr<OperatorTensor<S>> &new_right) {
+        if (envs[iR - dot + 1]->right != nullptr)
+            frame->load_data(1, get_right_partition_filename(iR - dot + 1));
+        frame->activate(0);
+        mpo->tf->delayed_right_contract(envs[iR - dot + 1]->right,
+                                        envs[iR - dot + 1]->middle.back(),
+                                        new_right,
+                                        mpo->right_operator_exprs.size() != 0
+                                            ? mpo->right_operator_exprs[iR]
+                                            : nullptr);
     }
     // Copy left-most left block for constructing effective Hamiltonian
     // block to the left of site iL is copied
@@ -1632,31 +1642,31 @@ template <typename S> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
                 0;
         }
-        if (fuse_type & FuseTypes::FuseL) {
-            if (!delay_left || !delayed_contraction || iL == 0)
-                left_contract(iL, left_op_infos, new_left, false);
-        } else
+        if (fuse_type & FuseTypes::FuseL)
+            left_contract(iL, left_op_infos, new_left, delay_left && iL != 0);
+        else
             left_copy(iL, left_op_infos, new_left);
-        if (fuse_type & FuseTypes::FuseR) {
-            if (delay_left || !delayed_contraction || iR == n_sites - 1)
-                right_contract(iR, right_op_infos, new_right, false);
-        } else
+        if (fuse_type & FuseTypes::FuseR)
+            right_contract(iR, right_op_infos, new_right,
+                           !delay_left && iR != n_sites - 1);
+        else
             right_copy(iR, right_op_infos, new_right);
         // make sure that the previous block is still in memory
-        if (delayed_contraction) {
+        if (!delayed_contraction.empty()) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
-                left_contract(iL, left_op_infos, new_left, true);
+                delayed_left_contract(iL, new_left);
             else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
                      iR != n_sites - 1)
-                right_contract(iR, right_op_infos, new_right, true);
+                delayed_right_contract(iR, new_right);
         }
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
-                ? mpo->tf->delayed_contract(new_left, new_right,
-                                            mpo->middle_operator_names[iM],
-                                            mpo->middle_operator_exprs[iM])
-                : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
+                ? mpo->tf->delayed_contract(
+                      new_left, new_right, mpo->middle_operator_names[iM],
+                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
+                                            delayed_contraction);
         frame->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
@@ -1707,31 +1717,31 @@ template <typename S> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
                 0;
         }
-        if (fuse_type & FuseTypes::FuseL) {
-            if (!delay_left || !delayed_contraction || iL == 0)
-                left_contract(iL, left_op_infos, new_left, false);
-        } else
+        if (fuse_type & FuseTypes::FuseL)
+            left_contract(iL, left_op_infos, new_left, delay_left && iL != 0);
+        else
             left_copy(iL, left_op_infos, new_left);
-        if (fuse_type & FuseTypes::FuseR) {
-            if (delay_left || !delayed_contraction || iR == n_sites - 1)
-                right_contract(iR, right_op_infos, new_right, false);
-        } else
+        if (fuse_type & FuseTypes::FuseR)
+            right_contract(iR, right_op_infos, new_right,
+                           !delay_left && iR != n_sites - 1);
+        else
             right_copy(iR, right_op_infos, new_right);
-        if (delayed_contraction) {
-            // make sure that the previous block is still in memory
+        // make sure that the previous block is still in memory
+        if (!delayed_contraction.empty()) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
-                left_contract(iL, left_op_infos, new_left, true);
+                delayed_left_contract(iL, new_left);
             else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
                      iR != n_sites - 1)
-                right_contract(iR, right_op_infos, new_right, true);
+                delayed_right_contract(iR, new_right);
         }
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
-                ? mpo->tf->delayed_contract(new_left, new_right,
-                                            mpo->middle_operator_names[iM],
-                                            mpo->middle_operator_exprs[iM])
-                : mpo->tf->delayed_contract(new_left, new_right, mpo->op);
+                ? mpo->tf->delayed_contract(
+                      new_left, new_right, mpo->middle_operator_names[iM],
+                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
+                                            delayed_contraction);
         frame->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0

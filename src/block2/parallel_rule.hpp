@@ -143,6 +143,8 @@ template <typename S> struct ParallelRule {
         vector<pair<shared_ptr<OpElement<S>>, shared_ptr<OpExprRef<S>>>>
             op_exprs(exprs.size());
         for (size_t i = 0; i < exprs.size(); i++) {
+            if (i < mats.size() && mats[i] == nullptr)
+                continue;
             shared_ptr<OpElement<S>> cop =
                 dynamic_pointer_cast<OpElement<S>>(ops[i]);
             shared_ptr<OpElement<S>> op =
@@ -159,6 +161,8 @@ template <typename S> struct ParallelRule {
         }
         shared_ptr<SparseMatrix<S>> xm = nullptr;
         for (size_t i = 0; i < exprs.size(); i++) {
+            if (i < mats.size() && mats[i] == nullptr)
+                continue;
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
@@ -169,6 +173,8 @@ template <typename S> struct ParallelRule {
         }
         g();
         for (size_t i = 0; i < mats.size(); i++) {
+            if (mats[i] == nullptr)
+                continue;
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             if (partial(op) && !expr_ref->is_local)
@@ -228,8 +234,7 @@ template <typename S> struct ParallelRule {
                      pdb = op->ops[1]->name == OpNames::TEMP;
                 bool ada = available(op->ops[0], owner) || pda,
                      adb = available(op->ops[1], owner) || pdb;
-                if ((dleft && ada && adb && ab) ||
-                    (!dleft && ada && adb && aa))
+                if ((dleft && ada && adb && ab) || (!dleft && ada && adb && aa))
                     return make_shared<OpExprRef<S>>(expr, !(pda || pdb), expr);
                 else
                     return zero_ref;
