@@ -50,7 +50,7 @@ inline bool has_abort_file() {
         ifstream ifs(filename.c_str());
         if (ifs.good()) {
             vector<string> lines = Parsing::readlines(&ifs);
-            if (lines.size() == 1 && lines[0] == "STOP") {
+            if (lines.size() >= 1 && lines[0] == "STOP") {
                 cout << "ATTENTION: Found abort file! Aborting sweep." << endl;
                 stop = true;
             }
