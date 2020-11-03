@@ -193,7 +193,7 @@ TEST_F(TestOneSiteAncillaH8STO6G, TestSU2) {
 
     HamiltonianQC<SU2> hamil(vacuum, n_physical_sites, orbsym, fcidump);
     hamil.mu = -1.0;
-    hamil.fcidump->e = 0.0;
+    hamil.fcidump->const_e = 0.0;
 
     test_imag_te<SU2>(n_sites, n_physical_sites, target, energies_fted,
                       energies_m500, hamil, "SU2");
@@ -230,7 +230,7 @@ TEST_F(TestOneSiteAncillaH8STO6G, TestSZ) {
 
     HamiltonianQC<SZ> hamil(vacuum, n_physical_sites, orbsym, fcidump);
     hamil.mu = -1.0;
-    hamil.fcidump->e = 0.0;
+    hamil.fcidump->const_e = 0.0;
     hamil.opf->seq->mode = SeqTypes::Simple;
 
     test_imag_te<SZ>(n_sites, n_physical_sites, target, energies_fted,
