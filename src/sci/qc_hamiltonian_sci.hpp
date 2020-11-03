@@ -756,7 +756,6 @@ public:
 #ifdef _HAS_MPI
         // Take care of zeros in MPI...
         if(parallelRule != nullptr){
-            cout << "HELLO! REDUCE MPI" <<endl;
             vector<char> isZero(ops.size()); // bool is not fully mpi compatible -.-
             int ii = 0;
             for (auto &p : ops) {
