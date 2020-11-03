@@ -636,7 +636,7 @@ public:
             //                      deallocation routine in MPOQCSCI
             // Also, the CSR stuff is more complicated and I will do the actual allocation
             //      of the individual matrices in the fillOp* routines.
-            //      So here, the CSRMatrices are only initialzied (i.e., their sizes are set)
+            //      So here, the CSRMatrices are only initialized (i.e., their sizes are set)
             mat.initialize(find_site_op_info(op.q_label, iSite));
             const auto& delta_qn = op.q_label;
             if (false and op.name == OpNames::R) { // DEBUG
@@ -753,6 +753,26 @@ public:
                         p.second->factor = 0.0;
                 }
             }
+#ifdef _HAS_MPI
+        // Take care of zeros in MPI...
+        if(parallelRule != nullptr){
+            vector<char> isZero(ops.size()); // bool is not fully mpi compatible -.-
+            int ii = 0;
+            for (auto &p : ops) {
+                isZero[ii++] = p.second->factor == 0.0;
+            }
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, isZero.data(), isZero.size(),
+                                     MPI_CHAR, MPI_LOR,
+                                     MPI_COMM_WORLD);
+            assert(ierr == 0);
+            ii = 0;
+            for (auto &p : ops) {
+                if(isZero[ii++]){
+                        p.second->factor = 0.0;
+                }
+            }
+        }
+#endif
     }
 };
 
