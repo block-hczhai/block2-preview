@@ -54,6 +54,8 @@ enum struct OpNames : uint8_t {
     B,
     BD,
     Q,
+    TR,
+    TS,
     PDM1,
     PDM2,
     CCDD,
@@ -68,8 +70,8 @@ enum struct OpNames : uint8_t {
 
 inline ostream &operator<<(ostream &os, const OpNames c) {
     const static string repr[] = {
-        "Zero", "H",   "I",   "N",   "NN",  "C",   "D",   "R",    "RD",
-        "A",    "AD",  "P",   "PD",  "B",   "BD",  "Q",   "PDM1", "PDM2",
+        "Zero", "H",   "I",   "N",   "NN",  "C",   "D",   "R",   "RD",   "A",
+        "AD",   "P",   "PD",  "B",   "BD",  "Q",   "TR",  "TS",  "PDM1", "PDM2",
         "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC", "TEMP"};
     os << repr[(uint8_t)c];
     return os;
@@ -107,7 +109,8 @@ struct OpNamesSet {
         return OpNamesSet({OpNames::H, OpNames::I, OpNames::N, OpNames::NN,
                            OpNames::C, OpNames::D, OpNames::A, OpNames::AD,
                            OpNames::B, OpNames::BD, OpNames::R, OpNames::RD,
-                           OpNames::P, OpNames::PD, OpNames::Q});
+                           OpNames::P, OpNames::PD, OpNames::Q, OpNames::TR,
+                           OpNames::TS});
     }
     bool operator()(OpNames name) const noexcept {
         return data & (1 << (uint8_t)name);
@@ -329,6 +332,13 @@ template <typename S> struct OpProduct : OpExpr<S> {
                              : (other.b != nullptr && *b == *other.b)) &&
                factor == other.factor && conj == other.conj;
     }
+    size_t hash() const noexcept {
+        size_t h = std::hash<double>{}(factor);
+        h ^= (a == nullptr ? 0 : a->hash()) + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= (b == nullptr ? 0 : b->hash()) + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= conj + 0x9E3779B9 + (h << 6) + (h >> 2);
+        return h;
+    }
     friend ostream &operator<<(ostream &os, const OpProduct<S> &c) {
         if (c.factor != 1.0)
             os << "(" << c.factor << " " << c.abs() << ")";
@@ -402,6 +412,8 @@ template <typename S> struct OpSumProd : OpProduct<S> {
         else if (OpProduct<S>::conj != other.conj)
             return false;
         else if (conjs != other.conjs)
+            return false;
+        else if (OpProduct<S>::factor != other.factor)
             return false;
         else
             for (size_t i = 0; i < ops.size(); i++)
@@ -648,8 +660,13 @@ template <typename S> inline shared_ptr<OpExpr<S>> load_expr(ifstream &ifs) {
 }
 
 template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
-    assert(x->get_type() == OpTypes::Elem);
-    return dynamic_pointer_cast<OpElement<S>>(x)->hash();
+    if (x->get_type() == OpTypes::Elem)
+        return dynamic_pointer_cast<OpElement<S>>(x)->hash();
+    else if (x->get_type() == OpTypes::Prod)
+        return dynamic_pointer_cast<OpProduct<S>>(x)->hash();
+    else
+        assert(false);
+    return 0;
 }
 
 // Absolute value
@@ -798,6 +815,30 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
                         dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
             return make_shared<OpSum<S>>(strs);
         }
+    } else if (a->get_type() == OpTypes::ExprRef &&
+               b->get_type() == OpTypes::ExprRef) {
+        bool is_local = dynamic_pointer_cast<OpExprRef<S>>(a)->is_local &&
+                        dynamic_pointer_cast<OpExprRef<S>>(b)->is_local;
+        shared_ptr<OpExpr<S>> op = dynamic_pointer_cast<OpExprRef<S>>(a)->op +
+                                   dynamic_pointer_cast<OpExprRef<S>>(b)->op;
+        shared_ptr<OpExpr<S>> orig =
+            dynamic_pointer_cast<OpExprRef<S>>(a)->orig +
+            dynamic_pointer_cast<OpExprRef<S>>(b)->orig;
+        return make_shared<OpExprRef<S>>(op, is_local, orig);
+    } else if (a->get_type() == OpTypes::ExprRef) {
+        bool is_local = dynamic_pointer_cast<OpExprRef<S>>(a)->is_local;
+        shared_ptr<OpExpr<S>> op =
+            dynamic_pointer_cast<OpExprRef<S>>(a)->op + b;
+        shared_ptr<OpExpr<S>> orig =
+            dynamic_pointer_cast<OpExprRef<S>>(a)->orig + b;
+        return make_shared<OpExprRef<S>>(op, is_local, orig);
+    } else if (b->get_type() == OpTypes::ExprRef) {
+        bool is_local = dynamic_pointer_cast<OpExprRef<S>>(b)->is_local;
+        shared_ptr<OpExpr<S>> op =
+            a + dynamic_pointer_cast<OpExprRef<S>>(b)->op;
+        shared_ptr<OpExpr<S>> orig =
+            a + dynamic_pointer_cast<OpExprRef<S>>(b)->orig;
+        return make_shared<OpExprRef<S>>(op, is_local, orig);
     }
     assert(false);
     return nullptr;
@@ -953,6 +994,12 @@ namespace std {
 
 template <typename S> struct hash<block2::OpElement<S>> {
     size_t operator()(const block2::OpElement<S> &s) const noexcept {
+        return s.hash();
+    }
+};
+
+template <typename S> struct hash<block2::OpProduct<S>> {
+    size_t operator()(const block2::OpProduct<S> &s) const noexcept {
         return s.hash();
     }
 };

@@ -242,6 +242,11 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
         .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
         .def(py::init<const Hamiltonian<S> &, uint16_t>(), py::arg("hamil"),
              py::arg("mask"));
+
+    py::class_<SumMPOQC<S>, shared_ptr<SumMPOQC<S>>, MPO<S>>(m, "SumMPOQC")
+        .def_readwrite("ts", &SumMPOQC<S>::ts)
+        .def(py::init<const HamiltonianQC<S> &, const vector<uint16_t> &>(),
+             py::arg("hamil"), py::arg("pts"));
 }
 
 template <typename S> void bind_expr(py::module &m) {
@@ -286,7 +291,8 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("factor", &OpProduct<S>::factor)
         .def_readwrite("conj", &OpProduct<S>::conj)
         .def_readwrite("a", &OpProduct<S>::a)
-        .def_readwrite("b", &OpProduct<S>::b);
+        .def_readwrite("b", &OpProduct<S>::b)
+        .def("__hash__", &OpProduct<S>::hash);
 
     py::class_<OpSumProd<S>, shared_ptr<OpSumProd<S>>, OpProduct<S>>(
         m, "OpSumProd")
@@ -1631,6 +1637,43 @@ template <typename S> void bind_parallel(py::module &m) {
         .def("repeat", &ParallelRule<S>::repeat)
         .def("partial", &ParallelRule<S>::partial);
 
+    py::class_<ParallelRuleSumMPO<S>, shared_ptr<ParallelRuleSumMPO<S>>,
+               ParallelRule<S>>(m, "ParallelRuleSumMPO")
+        .def_readwrite("n_sites", &ParallelRuleSumMPO<S>::n_sites)
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(
+            "index_available",
+            [](ParallelRuleSumMPO<S> *self, py::args &args) -> bool {
+                if (args.size() == 0)
+                    return self->index_available();
+                else if (args.size() == 1)
+                    return self->index_available((uint16_t)args[0].cast<int>());
+                else if (args.size() == 2)
+                    return self->index_available((uint16_t)args[0].cast<int>(),
+                                                 (uint16_t)args[1].cast<int>());
+                else if (args.size() == 4)
+                    return self->index_available((uint16_t)args[0].cast<int>(),
+                                                 (uint16_t)args[1].cast<int>(),
+                                                 (uint16_t)args[2].cast<int>(),
+                                                 (uint16_t)args[3].cast<int>());
+                else {
+                    assert(false);
+                    return false;
+                }
+            });
+
+    py::class_<SumMPORule<S>, shared_ptr<SumMPORule<S>>, Rule<S>>(m,
+                                                                  "SumMPORule")
+        .def_readwrite("prim_rule", &SumMPORule<S>::prim_rule)
+        .def_readwrite("para_rule", &SumMPORule<S>::para_rule)
+        .def(py::init<const shared_ptr<Rule<S>> &,
+                      const shared_ptr<ParallelRuleSumMPO<S>> &>());
+
+    py::class_<ParallelFCIDUMP<S>, shared_ptr<ParallelFCIDUMP<S>>, FCIDUMP>(
+        m, "ParallelFCIDUMP")
+        .def_readwrite("rule", &ParallelFCIDUMP<S>::rule)
+        .def(py::init<const shared_ptr<ParallelRuleSumMPO<S>> &>());
+
     py::class_<ParallelRuleQC<S>, shared_ptr<ParallelRuleQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleQC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>());
@@ -1902,6 +1945,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("B", OpNames::B)
         .value("BD", OpNames::BD)
         .value("Q", OpNames::Q)
+        .value("TR", OpNames::TR)
+        .value("TS", OpNames::TS)
         .value("Zero", OpNames::Zero)
         .value("PDM1", OpNames::PDM1)
         .value("PDM2", OpNames::PDM2)
@@ -1926,6 +1971,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("CCDD", DelayedOpNames::CCDD)
         .value("CCD", DelayedOpNames::CCD)
         .value("CDD", DelayedOpNames::CDD)
+        .value("TR", DelayedOpNames::TR)
+        .value("TS", DelayedOpNames::TS)
         .def(py::self & py::self)
         .def(py::self | py::self);
 
@@ -2337,6 +2384,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
              "Returns summed error in symmetrization\n\n"
              "    Args:\n"
              "        orbsym : in XOR convention")
+        .def("e", &FCIDUMP::e)
         .def(
             "t",
             [](FCIDUMP *self, py::args &args) -> double {
@@ -2390,7 +2438,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_readwrite("ts", &FCIDUMP::ts)
         .def_readwrite("vs", &FCIDUMP::vs)
         .def_readwrite("vabs", &FCIDUMP::vabs)
-        .def_readwrite("e", &FCIDUMP::e)
+        .def_readwrite("const_e", &FCIDUMP::const_e)
         .def_readwrite("total_memory", &FCIDUMP::total_memory)
         .def_readwrite("uhf", &FCIDUMP::uhf);
 

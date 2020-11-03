@@ -34,6 +34,7 @@ struct MPITest {
 
 class TestDMRG : public ::testing::Test {
     static bool _mpi;
+
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
@@ -51,7 +52,23 @@ class TestDMRG : public ::testing::Test {
 bool TestDMRG::_mpi = MPITest::okay();
 
 TEST_F(TestDMRG, Test) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+
+#ifdef _HAS_INTEL_MKL
+    mkl_set_num_threads(4);
+    mkl_set_dynamic(0);
+#endif
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<SZ>> para_comm =
+        make_shared<MPICommunicator<SZ>>();
+#else
+    shared_ptr<ParallelCommunicator<SZ>> para_comm =
+        make_shared<ParallelCommunicator<SZ>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRuleSumMPO<SZ>> para_rule =
+        make_shared<ParallelRuleSumMPO<SZ>>(para_comm);
+
+    shared_ptr<FCIDUMP> fcidump = make_shared<ParallelFCIDUMP<SZ>>(para_rule);
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
 
@@ -66,7 +83,8 @@ TEST_F(TestDMRG, Test) {
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
-    // string filename = "data/H8.STO6G.R1.8.FCIDUMP"; // E = -4.3450794024 (-12.3741579456)
+    // string filename = "data/H8.STO6G.R1.8.FCIDUMP"; // E = -4.3450794024
+    // (-12.3741579456)
     // string filename = "data/H4.STO6G.R1.8.FCIDUMP"; // E = -2.1903842183
     fcidump->read(filename);
 
@@ -81,59 +99,66 @@ TEST_F(TestDMRG, Test) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    SU2 vacuum(0);
-    SU2 target(fcidump->n_elec(), fcidump->twos(),
-               PointGroup::swap_pg(pg)(fcidump->isym()));
+    SZ vacuum(0);
+    SZ target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(4);
-    mkl_set_dynamic(0);
-#endif
-
-#ifdef _HAS_MPI
-    shared_ptr<ParallelCommunicator<SU2>> para_comm =
-        make_shared<MPICommunicator<SU2>>();
-#else
-    shared_ptr<ParallelCommunicator<SU2>> para_comm =
-        make_shared<ParallelCommunicator<SU2>>(1, 0, 0);
-#endif
-    shared_ptr<ParallelRule<SU2>> para_rule =
-        make_shared<ParallelRuleQC<SU2>>(para_comm);
+    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
     Timer t;
     t.get_time();
+
+    vector<uint16_t> ts;
+    para_rule->n_sites = hamil.n_sites;
+    for (int i = 0; i < hamil.n_sites; i++)
+        if (para_rule->index_available(i))
+            ts.push_back(i);
+
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SU2>> mpo =
-        make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SZ>> mpo = make_shared<SumMPOQC<SZ>>(hamil, ts);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true, true);
+    mpo = make_shared<SimplifiedMPO<SZ>>(
+        mpo, make_shared<SumMPORule<SZ>>(make_shared<RuleQC<SZ>>(), para_rule),
+        true, true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
     cout << "MPO parallelization start" << endl;
-    mpo = make_shared<ParallelMPO<SU2>>(mpo, para_rule);
+    mpo = make_shared<ParallelMPO<SZ>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
-    // cout << mpo->get_blocking_formulas() << endl;
+    for (int i = 0; i < para_comm->size; i++) {
+        para_comm->barrier();
+        if (i == para_comm->rank) {
+            cerr << "RANK = " << i << " MPO = ";
+            for (int i = 0; i < norb; i++)
+                cerr << mpo->left_operator_names[i]->data.size() << " ";
+            cerr << endl;
+        }
+        para_comm->barrier();
+    }
+
+    // if (para_comm->rank == 0) {
+    //     cerr << mpo->get_blocking_formulas() << endl;
+    //     cerr.flush();
+    // }
+    // para_comm->barrier();
     // abort();
 
     ubond_t bond_dim = 250;
 
     // MPSInfo
-    // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
+    // shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
     //     norb, vacuum, target, hamil.basis);
 
     // CCSD init
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis);
+    shared_ptr<MPSInfo<SZ>> mps_info =
+        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -145,15 +170,16 @@ TEST_F(TestDMRG, Test) {
     }
 
     // Local init
-    // shared_ptr<DynamicMPSInfo<SU2>> mps_info =
-    //     make_shared<DynamicMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
+    // shared_ptr<DynamicMPSInfo<SZ>> mps_info =
+    //     make_shared<DynamicMPSInfo<SZ>>(norb, vacuum, target, hamil.basis,
     //                                      hamil.orb_sym, ioccs);
     // mps_info->n_local = 4;
     // mps_info->set_bond_dimension(bond_dim);
 
     // Determinant init
-    // shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
-    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
+    // shared_ptr<DeterminantMPSInfo<SZ>> mps_info =
+    //     make_shared<DeterminantMPSInfo<SZ>>(norb, vacuum, target,
+    //     hamil.basis,
     //                                      hamil.orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
 
@@ -172,7 +198,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -189,8 +215,8 @@ TEST_F(TestDMRG, Test) {
 
     // ME
     hamil.opf->seq->mode = SeqTypes::Simple;
-    shared_ptr<MovingEnvironment<SU2>> me =
-        make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<SZ>> me =
+        make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -201,20 +227,20 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-                              500, 500, 750, 750, 750, 750, 750};
+                             500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
                              1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
     // noises = vector<double>{1E-5};
     // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
-    shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
-    // dmrg->me->fuse_center = 1;
+    dmrg->me->fuse_center = hamil.n_sites / 2;
     dmrg->solve(10, true, 1E-12);
 
     // deallocate persistent stack memory

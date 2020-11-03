@@ -47,7 +47,9 @@ enum struct DelayedOpNames : uint32_t {
     Q = 64,
     CCDD = 128,
     CCD = 256,
-    CDD = 512
+    CDD = 512,
+    TR = 1024,
+    TS = 2048
 };
 
 inline DelayedOpNames operator|(DelayedOpNames a, DelayedOpNames b) {

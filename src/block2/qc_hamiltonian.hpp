@@ -171,11 +171,13 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         }
         // low (&1): R index, high (>>1): B index
         for (uint8_t s = 0; s < 4; s++) {
+            // C (s & 2) D (s & 2) D (s & 1)
             op_prims[s][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::R]->allocate(
                 find_site_op_info(0, S(-1, -sz[s & 1], ipg)));
             opf->product(0, op_prims[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims[s & 1][OpNames::D], op_prims[s][OpNames::R]);
+            // C (s & 1) C (s & 2) D (s & 2)
             op_prims[s][OpNames::RD] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[s][OpNames::RD]->allocate(
                 find_site_op_info(0, S(1, sz[s & 1], ipg)));
@@ -392,6 +394,72 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                     tmp->deallocate();
                 }
                 break;
+            case OpNames::TR:
+                i = op.site_index[0];
+                s = op.site_index.ss();
+                if (orb_sym[i] != orb_sym[m] ||
+                    (abs(t(s, i, m)) < TINY &&
+                     abs(v(s, 0, i, m, m, m)) < TINY &&
+                     abs(v(s, 1, i, m, m, m)) < TINY &&
+                     abs(v(0, s, m, m, i, m)) < TINY &&
+                     abs(v(1, s, m, m, i, m)) < TINY))
+                    p.second = zero;
+                else if (!(delayed & DelayedOpNames::TR)) {
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    p.second->copy_data_from(op_prims[s].at(OpNames::D));
+                     p.second->iscale(-2.0 * t(s, i, m));
+                    for (uint8_t sp = 0; sp < 2; sp++) {
+                        // q_label is not used for comparison
+                        opf->product(
+                            0,
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::B, SiteIndex({m, m}, {sp, sp}), vacuum)),
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::D, SiteIndex({m}, {s}), vacuum)),
+                            p.second, -v(s, sp, i, m, m, m));
+                        opf->product(
+                            0,
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::B, SiteIndex({m, m}, {sp, s}), vacuum)),
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::D, SiteIndex({m}, {sp}), vacuum)),
+                            p.second, v(sp, s, m, m, i, m));
+                    }
+                }
+                break;
+            case OpNames::TS:
+                i = op.site_index[0];
+                s = op.site_index.ss();
+                if (orb_sym[i] != orb_sym[m] ||
+                    (abs(v(s, 0, m, i, m, m)) < TINY &&
+                     abs(v(s, 1, m, i, m, m)) < TINY &&
+                     abs(v(0, s, m, m, m, i)) < TINY &&
+                     abs(v(1, s, m, m, m, i)) < TINY))
+                    p.second = zero;
+                else if (!(delayed & DelayedOpNames::TS)) {
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    for (uint8_t sp = 0; sp < 2; sp++) {
+                        // q_label is not used for comparison
+                        opf->product(
+                            0,
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::C, SiteIndex({m}, {s}), vacuum)),
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::B, SiteIndex({m, m}, {sp, sp}), vacuum)),
+                            p.second, v(s, sp, m, i, m, m));
+                        opf->product(
+                            0,
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::C, SiteIndex({m}, {sp}), vacuum)),
+                            site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                OpNames::B, SiteIndex({m, m}, {s, sp}),
+                                vacuum)),
+                            p.second, -v(sp, s, m, m, m, i));
+                    }
+                }
+                break;
             case OpNames::P:
                 i = op.site_index[0];
                 k = op.site_index[1];
@@ -487,7 +555,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     double t(uint8_t s, uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
     }
-    double e() const { return fcidump->e; }
+    double e() const { return fcidump->e(); }
 };
 
 // Quantum chemistry Hamiltonian (spin-adapted)
@@ -816,7 +884,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     double t(uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(i, i) - mu : fcidump->t(i, j);
     }
-    double e() const { return fcidump->e; }
+    double e() const { return fcidump->e(); }
 };
 
 } // namespace block2

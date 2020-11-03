@@ -238,16 +238,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        // if no identity operator found in one side,
-        // then the site does not have to be optimized.
-        // perturbative noise can be skipped
-        const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
-        if ((!trace_right && op->lopt->ops.count(i_op)) ||
-            (trace_right && op->ropt->ops.count(i_op)))
-            tf->tensor_product_partial_multiply(
-                pexpr, op->lopt, op->ropt, trace_right, cmat, psubsl, cinfos,
-                perturb_ket_labels, perturb_ket, vidx);
+        tf->tensor_product_partial_multiply(
+            pexpr, op->lopt, op->ropt, trace_right, cmat, psubsl, cinfos,
+            perturb_ket_labels, perturb_ket, vidx);
         if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {

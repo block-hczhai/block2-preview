@@ -186,7 +186,7 @@ public:
         return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
     }
 
-    double e() const { return fcidump->e; }
+    double e() const { return fcidump->e(); }
 
   protected:
     void get_site_ops(uint16_t m,

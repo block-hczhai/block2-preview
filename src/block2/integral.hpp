@@ -175,14 +175,15 @@ struct FCIDUMP {
     vector<V8Int> vs;
     vector<V4Int> vabs;
     vector<V1Int> vgs;
-    double e;
+    double const_e;
     double *data;
     size_t total_memory;
     bool uhf, general;
-    FCIDUMP() : e(0.0), uhf(false), total_memory(0), vdata(nullptr) {}
+    FCIDUMP() : const_e(0.0), uhf(false), total_memory(0), vdata(nullptr) {}
     // Initialize integrals: U(1) case
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
+    virtual ~FCIDUMP() = default;
     void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
                        uint16_t isym, double e, const double *ta, size_t lta,
                        const double *tb, size_t ltb, const double *va,
@@ -193,7 +194,7 @@ struct FCIDUMP {
         vs.clear();
         vabs.clear();
         vgs.clear();
-        this->e = e;
+        this->const_e = e;
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_elec);
         params["ms2"] = Parsing::to_string(twos);
@@ -256,7 +257,7 @@ struct FCIDUMP {
         vs.clear();
         vabs.clear();
         vgs.clear();
-        this->e = e;
+        this->const_e = e;
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_elec);
         params["ms2"] = Parsing::to_string(twos);
@@ -315,7 +316,7 @@ struct FCIDUMP {
             else
                 ofs << vs[0];
             ofs << ts[0];
-            write_const(ofs, this->e);
+            write_const(ofs, this->const_e);
         } else {
             if (general) {
                 for (size_t i = 0; i < vgs.size(); i++)
@@ -327,7 +328,7 @@ struct FCIDUMP {
             }
             for (size_t i = 0; i < ts.size(); i++)
                 ofs << ts[i], write_const(ofs, 0.0);
-            write_const(ofs, this->e);
+            write_const(ofs, this->const_e);
         }
         if (!ofs.good())
             throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
@@ -339,7 +340,7 @@ struct FCIDUMP {
         ts.clear();
         vs.clear();
         vabs.clear();
-        e = 0.0;
+        const_e = 0.0;
         ifstream ifs(filename.c_str());
         if (!ifs.good())
             throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
@@ -422,7 +423,7 @@ struct FCIDUMP {
                 if (int_idx[i][0] + int_idx[i][1] + int_idx[i][2] +
                         int_idx[i][3] ==
                     0)
-                    e = int_val[i];
+                    const_e = int_val[i];
                 else if (int_idx[i][2] + int_idx[i][3] == 0)
                     ts[0](int_idx[i][0] - 1, int_idx[i][1] - 1) = int_val[i];
                 else if (!general)
@@ -471,7 +472,7 @@ struct FCIDUMP {
                     0) {
                     ip++;
                     if (ip == 6)
-                        e = int_val[i];
+                        const_e = int_val[i];
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];
@@ -525,7 +526,8 @@ struct FCIDUMP {
                 for (int j = 0; j <= i; j++, ij++)
                     for (int k = 0, kl = 0; k <= i; k++)
                         for (int l = 0; l <= k; l++, kl++)
-                            if (ij >= kl && (orbsym[i] ^ orbsym[j] ^ orbsym[k] ^ orbsym[l]))
+                            if (ij >= kl &&
+                                (orbsym[i] ^ orbsym[j] ^ orbsym[k] ^ orbsym[l]))
                                 error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
         return error;
     }
@@ -603,18 +605,18 @@ struct FCIDUMP {
         return r;
     }
     // One-electron integral element (SU(2))
-    double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
+    virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
     // One-electron integral element (SZ)
-    double t(uint8_t s, uint16_t i, uint16_t j) const {
+    virtual double t(uint8_t s, uint16_t i, uint16_t j) const {
         return uhf ? ts[s](i, j) : ts[0](i, j);
     }
     // Two-electron integral element (SU(2))
-    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+    virtual double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
     // Two-electron integral element (SZ)
-    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
-             uint16_t l) const {
+    virtual double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+                     uint16_t l) const {
         if (uhf) {
             if (sl == sr)
                 return general ? vgs[sl](i, j, k, l) : vs[sl](i, j, k, l);
@@ -625,6 +627,7 @@ struct FCIDUMP {
         } else
             return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
+    virtual double e() const { return const_e; }
     void deallocate() {
         assert(total_memory != 0);
         vdata = nullptr;
