@@ -50,7 +50,7 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
 
     // Ancilla MPO construction
     cout << "Ancilla MPO start" << endl;
-    mpo = make_shared<AncillaMPO<S>>(mpo);
+    mpo = make_shared<AncillaMPO<S>>(mpo, false, true);
     cout << "Ancilla MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification

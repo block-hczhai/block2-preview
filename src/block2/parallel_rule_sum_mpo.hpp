@@ -39,7 +39,7 @@ template <typename S> struct ParallelRuleSumMPO : ParallelRule<S> {
     operator()(const shared_ptr<OpElement<S>> &op) const override {
         return ParallelProperty(comm->rank, ParallelOpTypes::None);
     }
-    bool index_available() const noexcept { return comm->rank == 0; }
+    bool index_available() const noexcept { return comm->rank == comm->root; }
     bool index_available(uint16_t i) const noexcept {
         // return comm->rank == i * comm->size / n_sites;
         return comm->rank == i % comm->size;

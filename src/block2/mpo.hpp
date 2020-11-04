@@ -605,7 +605,8 @@ template <typename S> struct DiagonalMPO : MPO<S> {
 template <typename S> struct AncillaMPO : MPO<S> {
     int n_physical_sites;
     shared_ptr<MPO<S>> prim_mpo;
-    AncillaMPO(const shared_ptr<MPO<S>> &mpo, bool npdm = false)
+    AncillaMPO(const shared_ptr<MPO<S>> &mpo, bool npdm = false,
+               bool trace_right = true)
         : n_physical_sites(mpo->n_sites),
           prim_mpo(mpo), MPO<S>(mpo->n_sites << 1) {
         const auto n_sites = MPO<S>::n_sites;
@@ -616,26 +617,46 @@ template <typename S> struct AncillaMPO : MPO<S> {
         MPO<S>::tf = mpo->tf;
         MPO<S>::site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
-        MPO<S>::sparse_form = mpo->sparse_form;
+        MPO<S>::sparse_form = string(n_sites, 'N');
         for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
             MPO<S>::site_op_infos[j] = mpo->site_op_infos[i];
             MPO<S>::site_op_infos[j + 1] = mpo->site_op_infos[i];
+            MPO<S>::sparse_form[trace_right ? j : j + 1] =
+                MPO<S>::sparse_form[i];
         }
         // operator names
         MPO<S>::left_operator_names.resize(n_sites, nullptr);
         MPO<S>::right_operator_names.resize(n_sites, nullptr);
-        for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
-            MPO<S>::left_operator_names[j] = mpo->left_operator_names[i];
-            MPO<S>::left_operator_names[j + 1] =
-                MPO<S>::left_operator_names[j]->copy();
-            MPO<S>::right_operator_names[j] = mpo->right_operator_names[i];
-            if (j - 1 >= 0)
-                MPO<S>::right_operator_names[j - 1] =
-                    MPO<S>::right_operator_names[j]->copy();
+        if (trace_right) {
+            for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
+                MPO<S>::left_operator_names[j] = mpo->left_operator_names[i];
+                MPO<S>::left_operator_names[j + 1] =
+                    MPO<S>::left_operator_names[j]->copy();
+                MPO<S>::right_operator_names[j] = mpo->right_operator_names[i];
+                if (j - 1 >= 0)
+                    MPO<S>::right_operator_names[j - 1] =
+                        MPO<S>::right_operator_names[j]->copy();
+            }
+            MPO<S>::right_operator_names[n_sites - 1] =
+                make_shared<SymbolicColumnVector<S>>(1);
+            MPO<S>::right_operator_names[n_sites - 1]->data[0] = i_op;
+        } else {
+            for (int i = n_physical_sites - 1, j = n_sites - 2; i >= 0;
+                 i--, j -= 2) {
+                MPO<S>::right_operator_names[j + 1] =
+                    mpo->right_operator_names[i];
+                MPO<S>::right_operator_names[j] =
+                    MPO<S>::right_operator_names[j + 1]->copy();
+                MPO<S>::left_operator_names[j + 1] =
+                    mpo->left_operator_names[i];
+                if (j + 2 < n_sites)
+                    MPO<S>::left_operator_names[j + 2] =
+                        MPO<S>::left_operator_names[j + 1]->copy();
+            }
+            MPO<S>::left_operator_names[0] =
+                make_shared<SymbolicRowVector<S>>(1);
+            MPO<S>::left_operator_names[0]->data[0] = i_op;
         }
-        MPO<S>::right_operator_names[n_sites - 1] =
-            make_shared<SymbolicColumnVector<S>>(1);
-        MPO<S>::right_operator_names[n_sites - 1]->data[0] = i_op;
         // middle operators
         if (mpo->middle_operator_names.size() != 0) {
             assert(mpo->schemer == nullptr);
@@ -648,7 +669,8 @@ template <typename S> struct AncillaMPO : MPO<S> {
             shared_ptr<SymbolicColumnVector<S>> zero_expr =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*zero_expr)[0] = make_shared<OpExpr<S>>();
-            for (int i = 0, j = 0; i < n_physical_sites - 1; i++, j += 2) {
+            for (int i = 0, j = trace_right ? 0 : 1; i < n_physical_sites - 1;
+                 i++, j += 2) {
                 MPO<S>::middle_operator_names[j] =
                     mpo->middle_operator_names[i];
                 MPO<S>::middle_operator_exprs[j] =
@@ -663,27 +685,44 @@ template <typename S> struct AncillaMPO : MPO<S> {
                     MPO<S>::middle_operator_exprs[j + 1] = zero_expr;
                 }
             }
-            if (mpo->op != nullptr && mpo->op->name != OpNames::Zero) {
-                shared_ptr<SymbolicColumnVector<S>> hop_mat =
-                    make_shared<SymbolicColumnVector<S>>(1);
-                (*hop_mat)[0] = mpo->op;
-                shared_ptr<SymbolicColumnVector<S>> hop_expr =
-                    make_shared<SymbolicColumnVector<S>>(1);
-                (*hop_expr)[0] = (shared_ptr<OpExpr<S>>)mpo->op * i_op;
-                MPO<S>::middle_operator_names[n_sites - 2] = hop_mat;
-                MPO<S>::middle_operator_exprs[n_sites - 2] = hop_expr;
+            if (trace_right) {
+                if (mpo->op != nullptr && mpo->op->name != OpNames::Zero) {
+                    shared_ptr<SymbolicColumnVector<S>> hop_mat =
+                        make_shared<SymbolicColumnVector<S>>(1);
+                    (*hop_mat)[0] = mpo->op;
+                    shared_ptr<SymbolicColumnVector<S>> hop_expr =
+                        make_shared<SymbolicColumnVector<S>>(1);
+                    (*hop_expr)[0] = (shared_ptr<OpExpr<S>>)mpo->op * i_op;
+                    MPO<S>::middle_operator_names[n_sites - 2] = hop_mat;
+                    MPO<S>::middle_operator_exprs[n_sites - 2] = hop_expr;
+                } else {
+                    MPO<S>::middle_operator_names[n_sites - 2] = zero_mat;
+                    MPO<S>::middle_operator_exprs[n_sites - 2] = zero_expr;
+                }
             } else {
-                MPO<S>::middle_operator_names[n_sites - 2] = zero_mat;
-                MPO<S>::middle_operator_exprs[n_sites - 2] = zero_expr;
+                if (mpo->op != nullptr && mpo->op->name != OpNames::Zero) {
+                    shared_ptr<SymbolicRowVector<S>> hop_mat =
+                        make_shared<SymbolicRowVector<S>>(1);
+                    (*hop_mat)[0] = mpo->op;
+                    shared_ptr<SymbolicRowVector<S>> hop_expr =
+                        make_shared<SymbolicRowVector<S>>(1);
+                    (*hop_expr)[0] = i_op * (shared_ptr<OpExpr<S>>)mpo->op;
+                    MPO<S>::middle_operator_names[0] = hop_mat;
+                    MPO<S>::middle_operator_exprs[0] = hop_expr;
+                } else {
+                    MPO<S>::middle_operator_names[0] = zero_mat;
+                    MPO<S>::middle_operator_exprs[0] = zero_expr;
+                }
             }
         }
         // operator tensors
         MPO<S>::tensors.resize(n_sites, nullptr);
-        for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
-            MPO<S>::tensors[j + 1] = make_shared<OperatorTensor<S>>();
-            if (j + 1 != n_sites - 1) {
+        for (int i = 0, j = trace_right ? 0 : 1; i < n_physical_sites;
+             i++, j += 2) {
+            if (j + 1 < n_sites - 1) {
                 MPO<S>::tensors[j] = mpo->tensors[i];
                 int rshape = MPO<S>::tensors[j]->lmat->n;
+                MPO<S>::tensors[j + 1] = make_shared<OperatorTensor<S>>();
                 MPO<S>::tensors[j + 1]->lmat = MPO<S>::tensors[j + 1]->rmat =
                     make_shared<SymbolicMatrix<S>>(rshape, rshape);
                 for (int k = 0; k < rshape; k++)
@@ -699,7 +738,7 @@ template <typename S> struct AncillaMPO : MPO<S> {
                     for (int k = 0; k < lshape; k++)
                         (*MPO<S>::tensors[j + 1]->rmat)[{k, k}] = i_op;
                 }
-            } else {
+            } else if (j == n_sites - 2) {
                 int lshape = mpo->tensors[i]->lmat->m;
                 MPO<S>::tensors[j] = make_shared<OperatorTensor<S>>();
                 MPO<S>::tensors[j]->lmat = MPO<S>::tensors[j]->rmat =
@@ -716,24 +755,63 @@ template <typename S> struct AncillaMPO : MPO<S> {
                             mpo->tensors[i]->rmat->data[k];
                 }
                 MPO<S>::tensors[j]->ops = mpo->tensors[i]->ops;
+                MPO<S>::tensors[j + 1] = make_shared<OperatorTensor<S>>();
                 MPO<S>::tensors[j + 1]->lmat = MPO<S>::tensors[j + 1]->rmat =
                     make_shared<SymbolicColumnVector<S>>(1);
                 MPO<S>::tensors[j + 1]->lmat->data[0] = i_op;
+            } else {
+                MPO<S>::tensors[j] = mpo->tensors[i];
+                MPO<S>::tensors[0] = make_shared<OperatorTensor<S>>();
+                MPO<S>::tensors[0]->lmat = MPO<S>::tensors[0]->rmat =
+                    make_shared<SymbolicRowVector<S>>(1);
+                MPO<S>::tensors[0]->lmat->data[0] = i_op;
+                MPO<S>::tensors[0]->ops[i_op] =
+                    MPO<S>::tensors[1]->ops.at(i_op);
+                int rshape = mpo->tensors[0]->lmat->n;
+                MPO<S>::tensors[1] = make_shared<OperatorTensor<S>>();
+                MPO<S>::tensors[1]->lmat = MPO<S>::tensors[1]->rmat =
+                    make_shared<SymbolicMatrix<S>>(1, rshape);
+                for (int k = 0; k < rshape; k++)
+                    (*MPO<S>::tensors[1]->lmat)[{0, k}] =
+                        mpo->tensors[0]->lmat->data[k];
+                if (mpo->tensors[0]->lmat != mpo->tensors[0]->rmat) {
+                    rshape = mpo->tensors[0]->rmat->n;
+                    MPO<S>::tensors[1]->rmat =
+                        make_shared<SymbolicMatrix<S>>(1, rshape);
+                    for (int k = 0; k < rshape; k++)
+                        (*MPO<S>::tensors[1]->rmat)[{0, k}] =
+                            mpo->tensors[0]->rmat->data[k];
+                }
+                MPO<S>::tensors[1]->ops = mpo->tensors[0]->ops;
             }
-            MPO<S>::tensors[j + 1]->ops[i_op] =
-                MPO<S>::tensors[j]->ops.at(i_op);
+            if (trace_right)
+                MPO<S>::tensors[j + 1]->ops[i_op] =
+                    MPO<S>::tensors[j]->ops.at(i_op);
+            else if (j - 1 != 0)
+                MPO<S>::tensors[j - 1]->ops[i_op] =
+                    MPO<S>::tensors[j]->ops.at(i_op);
         }
         // numerical transform
         if (mpo->schemer != nullptr &&
             mpo->schemer->right_trans_site - mpo->schemer->left_trans_site ==
                 2) {
             MPO<S>::schemer = mpo->schemer->copy();
-            if (n_physical_sites & 1) {
-                MPO<S>::schemer->left_trans_site = n_physical_sites - 2;
-                MPO<S>::schemer->right_trans_site = n_physical_sites;
+            if (trace_right) {
+                if (n_physical_sites & 1) {
+                    MPO<S>::schemer->left_trans_site = n_physical_sites - 2;
+                    MPO<S>::schemer->right_trans_site = n_physical_sites;
+                } else {
+                    MPO<S>::schemer->left_trans_site = n_physical_sites - 1;
+                    MPO<S>::schemer->right_trans_site = n_physical_sites + 1;
+                }
             } else {
-                MPO<S>::schemer->left_trans_site = n_physical_sites - 1;
-                MPO<S>::schemer->right_trans_site = n_physical_sites + 1;
+                if (n_physical_sites & 1) {
+                    MPO<S>::schemer->left_trans_site = n_physical_sites - 1;
+                    MPO<S>::schemer->right_trans_site = n_physical_sites + 1;
+                } else {
+                    MPO<S>::schemer->left_trans_site = n_physical_sites;
+                    MPO<S>::schemer->right_trans_site = n_physical_sites + 2;
+                }
             }
         } else if (mpo->schemer != nullptr)
             assert(false);

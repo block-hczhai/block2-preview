@@ -1013,16 +1013,16 @@ template <typename S> struct ImaginaryTE {
             prev_wfn->info->deallocate();
             prev_wfn->deallocate();
         }
-        // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                        me->bra->tensors[i], me->ket->tensors[i]);
-        tuple<double, double, int, size_t, double> pdi;
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
+        tuple<double, double, int, size_t, double> pdi;
+        // effective hamiltonian
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                        me->bra->tensors[i], me->ket->tensors[i]);
         if (!advance &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -1285,8 +1285,6 @@ template <typename S> struct ImaginaryTE {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         tuple<double, double, int, size_t, double> pdi;
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         TETypes effective_mode = mode;
@@ -1294,6 +1292,8 @@ template <typename S> struct ImaginaryTE {
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
