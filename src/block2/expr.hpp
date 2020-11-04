@@ -123,6 +123,7 @@ template <typename S> struct OpExpr {
     virtual ~OpExpr() = default;
     virtual const OpTypes get_type() const { return OpTypes::Zero; }
     bool operator==(const OpExpr &other) const { return true; }
+    virtual string get_name() const { return ""; }
 };
 
 // Site index in operator symbol
@@ -278,7 +279,7 @@ template <typename S> struct OpElement : OpExpr<S> {
             os << c.name << c.site_index;
         return os;
     }
-    string get_name() const {
+    string get_name() const override {
         stringstream ss;
         if (factor != 1.0)
             ss << scientific << setprecision(6) << factor;
