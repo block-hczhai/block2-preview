@@ -531,7 +531,11 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                         }
                     }
                     p.second = mat;
-                } else
+                } else if (p.second->get_type() == SparseMatrixTypes::Delayed)
+                    p.second =
+                        dynamic_pointer_cast<DelayedSparseMatrix<S>>(p.second)
+                            ->copy();
+                else
                     assert(false);
             }
             vector<shared_ptr<Symbolic<S>>> pmats = {r->lmat, r->rmat};
