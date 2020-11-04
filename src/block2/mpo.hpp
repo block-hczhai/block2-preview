@@ -24,6 +24,7 @@
 #include "csr_operator_functions.hpp"
 #include "mps.hpp"
 #include "operator_tensor.hpp"
+#include "rule.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"
 #include <iomanip>
@@ -462,7 +463,9 @@ inline shared_ptr<MPO<S>> operator-(const shared_ptr<MPO<S>> &mpo) {
 // MPO must be unsimplified
 template <typename S> struct DiagonalMPO : MPO<S> {
     using MPO<S>::n_sites;
-    DiagonalMPO(const shared_ptr<MPO<S>> &mpo) : MPO<S>(mpo->n_sites) {
+    DiagonalMPO(const shared_ptr<MPO<S>> &mpo,
+                const shared_ptr<Rule<S>> &rule = nullptr)
+        : MPO<S>(mpo->n_sites) {
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::op = mpo->op;
         MPO<S>::tf = mpo->tf;
@@ -537,6 +540,22 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                             ->copy();
                 else
                     assert(false);
+            }
+            if (rule != nullptr) {
+                for (auto &p : r->ops) {
+                    auto pop = dynamic_pointer_cast<OpElement<S>>(p.first);
+                    if (p.second->get_type() == SparseMatrixTypes::Delayed) {
+                        auto rop = (*rule)(pop);
+                        if (rop != nullptr) {
+                            auto ref_op = rop->op;
+                            if (r->ops.count(ref_op) &&
+                                (r->ops.at(ref_op)->factor == 0 ||
+                                 r->ops.at(ref_op)->info->n == 0 ||
+                                 r->ops.at(ref_op)->norm() < TINY))
+                                p.second = zmat;
+                        }
+                    }
+                }
             }
             vector<shared_ptr<Symbolic<S>>> pmats = {r->lmat, r->rmat};
             size_t kk;

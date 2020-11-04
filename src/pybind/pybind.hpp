@@ -1825,7 +1825,9 @@ template <typename S> void bind_mpo(py::module &m) {
 
     py::class_<DiagonalMPO<S>, shared_ptr<DiagonalMPO<S>>, MPO<S>>(
         m, "DiagonalMPO")
-        .def(py::init<const shared_ptr<MPO<S>> &>());
+        .def(py::init<const shared_ptr<MPO<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S>> &,
+                      const shared_ptr<Rule<S>> &>());
 }
 
 template <typename S> void bind_class(py::module &m, const string &name) {
