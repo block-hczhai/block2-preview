@@ -1796,8 +1796,6 @@ template <typename S> void bind_mpo(py::module &m) {
     py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
         .def(py::init<const Hamiltonian<S> &,
                       const shared_ptr<OpElement<S>> &>())
-        .def(py::init<const HamiltonianSCI<S> &,
-                    const shared_ptr<OpElement<S>> &>())
         .def(py::init<const Hamiltonian<S> &, const shared_ptr<OpElement<S>> &,
                       int>());
 
