@@ -187,9 +187,9 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def(py::init<const HamiltonianQCSCI<S> &, QCTypes>());
 
     py::class_<SiteMPOSCI<S>, shared_ptr<SiteMPOSCI<S>>, MPO<S>>(m, "SiteMPOSCI")
-            .def(py::init<const HamiltonianSCI<S> &,
+            .def(py::init<const HamiltonianQCSCI<S> &,
                     const shared_ptr<OpElement<S>> &>())
-            .def(py::init<const HamiltonianSCI<S> &, const shared_ptr<OpElement<S>> &,
+            .def(py::init<const HamiltonianQCSCI<S> &, const shared_ptr<OpElement<S>> &,
                     int>());
 }
 

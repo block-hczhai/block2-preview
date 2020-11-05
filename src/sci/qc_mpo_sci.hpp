@@ -646,13 +646,18 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
 
 // MPO of single site operator
 template <typename S> struct SiteMPOSCI : MPO<S> {
+    using MPO<S>::sparse_form;
     using MPO<S>::n_sites;
     using MPO<S>::site_op_infos;
-    SiteMPOSCI(const HamiltonianSCI<S> &hamil, const shared_ptr<OpElement<S>> &op,
-    int k = -1)
-    : MPO<S>(hamil.n_sites) {
-        shared_ptr<OpElement<S>> i_op =
-                                         make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+    SiteMPOSCI(const HamiltonianQCSCI<S> &hamil, const shared_ptr<OpElement<S>> &op,
+               int k = -1)
+        : MPO<S>(hamil.n_sites) {
+            shared_ptr<OpElement<S>> i_op = make_shared<OpElement<S>>(
+                    OpNames::I, SiteIndex(), hamil.vacuum);
+        if (hamil.sciWrapperLeft != nullptr)
+            sparse_form[0] = 'S';
+        if (hamil.sciWrapperRight != nullptr)
+            sparse_form[hamil.n_sites - 1] = 'S';
         MPO<S>::op = op;
         MPO<S>::const_e = 0.0;
         MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
