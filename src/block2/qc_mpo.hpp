@@ -24,6 +24,7 @@
 #include "mpo.hpp"
 #include "operator_tensor.hpp"
 #include "qc_hamiltonian.hpp"
+#include "../sci/hamiltonian_sci.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"
 #include <cassert>
@@ -210,6 +211,46 @@ template <typename S> struct SiteMPO : MPO<S> {
             this->tensors.push_back(opt);
         }
     }
+    SiteMPO(const HamiltonianSCI<S> &hamil, const shared_ptr<OpElement<S>> &op,
+                int k = -1)
+                : MPO<S>(hamil.n_sites) {
+            shared_ptr<OpElement<S>> i_op =
+                    make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+            MPO<S>::op = op;
+            MPO<S>::const_e = 0.0;
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+            if (k == -1) {
+                assert(op->site_index.size() >= 1);
+                k = op->site_index[0];
+            }
+            MPO<S>::site_op_infos = hamil.site_op_infos;
+            for (uint16_t m = 0; m < hamil.n_sites; m++) {
+                // site tensor
+                shared_ptr<Symbolic<S>> pmat;
+                if (m == 0)
+                    pmat = make_shared<SymbolicRowVector<S>>(1);
+                else if (m == hamil.n_sites - 1)
+                    pmat = make_shared<SymbolicColumnVector<S>>(1);
+                else
+                    pmat = make_shared<SymbolicMatrix<S>>(1, 1);
+                (*pmat)[{0, 0}] = m == k ? op : i_op;
+                shared_ptr<OperatorTensor<S>> opt =
+                        make_shared<OperatorTensor<S>>();
+                opt->lmat = opt->rmat = pmat;
+                // operator names
+                shared_ptr<SymbolicRowVector<S>> plop =
+                        make_shared<SymbolicRowVector<S>>(1);
+                (*plop)[0] = m >= k ? op : i_op;
+                this->left_operator_names.push_back(plop);
+                shared_ptr<SymbolicColumnVector<S>> prop =
+                        make_shared<SymbolicColumnVector<S>>(1);
+                (*prop)[0] = m <= k ? op : i_op;
+                this->right_operator_names.push_back(prop);
+                // site operators
+                hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+                this->tensors.push_back(opt);
+            }
+        }
 };
 
 // Quantum Chemistry MPO schemes
