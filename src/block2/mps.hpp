@@ -497,6 +497,60 @@ template <typename S> struct MPSInfo {
             t.deallocate();
         }
     }
+    shared_ptr<SparseMatrix<S>>
+    swap_wfn_to_fused_left(int i, const shared_ptr<SparseMatrix<S>> &old_wfn,
+                           const shared_ptr<CG<S>> &cg) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        shared_ptr<SparseMatrixInfo<S>> wfn_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
+        load_left_dims(i);
+        load_right_dims(i + 1);
+        l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
+        lm = StateInfo<S>::tensor_product(l, m, *left_dims_fci[i + 1]);
+        lmc = StateInfo<S>::get_connection_info(l, m, lm);
+        mr = StateInfo<S>::tensor_product(m, r, *right_dims_fci[i]);
+        mrc = StateInfo<S>::get_connection_info(m, r, mr);
+        shared_ptr<SparseMatrixInfo<S>> owinfo = old_wfn->info;
+        wfn_info->initialize(lm, r, owinfo->delta_quantum, owinfo->is_fermion,
+                             owinfo->is_wavefunction);
+        wfn->allocate(wfn_info);
+        wfn->swap_to_fused_left(old_wfn, l, m, r, mr, mrc, lm, lmc, cg);
+        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
+        lm.deallocate(), r.deallocate(), l.deallocate();
+        return wfn;
+    }
+    shared_ptr<SparseMatrix<S>>
+    swap_wfn_to_fused_right(int i, const shared_ptr<SparseMatrix<S>> &old_wfn,
+                            const shared_ptr<CG<S>> &cg) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        shared_ptr<SparseMatrixInfo<S>> wfn_info =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
+        load_left_dims(i);
+        load_right_dims(i + 1);
+        l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
+        lm = StateInfo<S>::tensor_product(l, m, *left_dims_fci[i + 1]);
+        lmc = StateInfo<S>::get_connection_info(l, m, lm);
+        mr = StateInfo<S>::tensor_product(m, r, *right_dims_fci[i]);
+        mrc = StateInfo<S>::get_connection_info(m, r, mr);
+        shared_ptr<SparseMatrixInfo<S>> owinfo = old_wfn->info;
+        wfn_info->initialize(l, mr, owinfo->delta_quantum, owinfo->is_fermion,
+                             owinfo->is_wavefunction);
+        wfn->allocate(wfn_info);
+        wfn->swap_to_fused_right(old_wfn, l, m, r, lm, lmc, mr, mrc, cg);
+        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
+        lm.deallocate(), r.deallocate(), l.deallocate();
+        return wfn;
+    }
     string get_filename(bool left, int i) const {
         stringstream ss;
         ss << frame->save_dir << "/" << frame->prefix << ".MPS.INFO." << tag
@@ -1049,6 +1103,128 @@ template <typename S> struct MPS {
                     }
                 }
             }
+    }
+    // CC -> KR or K -> S or LS -> KR or LK -> KR
+    void move_left(const shared_ptr<CG<S>> &cg) {
+        if (canonical_form[center] == 'C') {
+            assert(center + 1 < n_sites);
+            assert(dot == 2 && tensors[center + 1] == nullptr);
+            shared_ptr<SparseMatrix<S>> left, right;
+            load_tensor(center);
+            tensors[center]->right_split(left, right);
+            info->right_dims[center + 1] =
+                right->info->extract_state_info(false);
+            info->save_right_dims(center + 1);
+            unload_tensor(center);
+            tensors[center] = left;
+            tensors[center + 1] = right;
+            canonical_form[center] = 'K';
+            canonical_form[center + 1] = 'R';
+            save_tensor(center);
+            save_tensor(center + 1);
+            unload_tensor(center + 1);
+            unload_tensor(center);
+        } else if (canonical_form[center] == 'S' ||
+                   canonical_form[center] == 'K') {
+            load_tensor(center);
+            if (canonical_form[center] == 'K') {
+                tensors[center] =
+                    info->swap_wfn_to_fused_right(center, tensors[center], cg);
+                if (center == 0) {
+                    canonical_form[center] = 'S';
+                    save_tensor(center);
+                    unload_tensor(center);
+                    return;
+                }
+            }
+            assert(canonical_form[center - 1] == 'L');
+            shared_ptr<SparseMatrix<S>> left, right;
+            tensors[center]->right_split(left, right);
+            info->right_dims[center] = right->info->extract_state_info(false);
+            info->save_right_dims(center);
+            unload_tensor(center);
+            canonical_form[center] = 'R';
+            canonical_form[center - 1] = 'K';
+            tensors[center] = right;
+            save_tensor(center);
+            load_tensor(center - 1);
+            shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+                make_shared<VectorAllocator<uint32_t>>();
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            shared_ptr<SparseMatrix<S>> wfn =
+                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrixInfo<S>> winfo =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            winfo->initialize_contract(tensors[center - 1]->info, left->info);
+            wfn->allocate(winfo);
+            wfn->contract(tensors[center - 1], left);
+            tensors[center - 1] = wfn;
+            save_tensor(center - 1);
+            center--;
+        } else
+            assert(false);
+    }
+    // CC -> LS or S -> K or KR -> LS or SR -> LS
+    void move_right(const shared_ptr<CG<S>> &cg) {
+        if (canonical_form[center] == 'C') {
+            assert(center + 1 < n_sites);
+            assert(dot == 2 && tensors[center + 1] == nullptr);
+            shared_ptr<SparseMatrix<S>> left, right;
+            load_tensor(center);
+            tensors[center]->left_split(left, right);
+            info->left_dims[center + 1] = left->info->extract_state_info(true);
+            info->save_left_dims(center + 1);
+            unload_tensor(center);
+            tensors[center] = left;
+            tensors[center + 1] = right;
+            canonical_form[center] = 'L';
+            canonical_form[center + 1] = 'S';
+            save_tensor(center);
+            save_tensor(center + 1);
+            unload_tensor(center + 1);
+            unload_tensor(center);
+            center++;
+        } else if (canonical_form[center] == 'S' ||
+                   canonical_form[center] == 'K') {
+            load_tensor(center);
+            if (canonical_form[center] == 'S') {
+                tensors[center] =
+                    info->swap_wfn_to_fused_left(center, tensors[center], cg);
+                if (center == n_sites - 1) {
+                    canonical_form[center] = 'K';
+                    save_tensor(center);
+                    unload_tensor(center);
+                    return;
+                }
+            }
+            assert(canonical_form[center + 1] == 'R');
+            shared_ptr<SparseMatrix<S>> left, right;
+            tensors[center]->left_split(left, right);
+            info->left_dims[center + 1] = left->info->extract_state_info(true);
+            info->save_left_dims(center + 1);
+            unload_tensor(center);
+            canonical_form[center] = 'L';
+            canonical_form[center + 1] = 'S';
+            tensors[center] = left;
+            save_tensor(center);
+            load_tensor(center + 1);
+            shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+                make_shared<VectorAllocator<uint32_t>>();
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            shared_ptr<SparseMatrix<S>> wfn =
+                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrixInfo<S>> winfo =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            winfo->initialize_contract(right->info, tensors[center + 1]->info);
+            wfn->allocate(winfo);
+            wfn->contract(right, tensors[center + 1]);
+            tensors[center + 1] = wfn;
+            save_tensor(center + 1);
+            center++;
+        } else
+            assert(false);
     }
     void canonicalize() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =

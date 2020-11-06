@@ -130,6 +130,13 @@ Test Low-Temperature (LT)-DMRG (need `pyscf` module):
 
     python3 -m pyblock2.ltdmrg
 
+GF-DMRG
+-------
+
+Test Green's-Function (GF)-DMRG (DDMRG++) (need `pyscf` module):
+
+    python3 -m pyblock2.gfdmrg
+
 Input File
 ----------
 

@@ -921,11 +921,179 @@ template <typename S> struct SparseMatrix {
         MatrixFunctions::iscale(MatrixRef(data, total_memory, 1), d);
     }
     void normalize() const { iscale(1 / norm()); }
+    // K = L(l)C or C = L(l)S
+    void left_split(shared_ptr<SparseMatrix<S>> &left,
+                    shared_ptr<SparseMatrix<S>> &right) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<shared_ptr<Tensor>> l, s, r;
+        vector<S> qs;
+        right_svd(qs, l, s, r);
+        shared_ptr<SparseMatrixInfo<S>> winfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<SparseMatrixInfo<S>> linfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        winfo->is_fermion = info->is_fermion;
+        winfo->is_wavefunction = info->is_wavefunction;
+        winfo->delta_quantum = info->delta_quantum;
+        winfo->allocate(info->n);
+        for (int i = 0; i < winfo->n; i++) {
+            winfo->quanta[i] = info->quanta[i];
+            winfo->n_states_bra[i] = r[i]->shape[0];
+            winfo->n_states_ket[i] = r[i]->shape[1];
+        }
+        winfo->sort_states();
+        linfo->is_fermion = false;
+        linfo->is_wavefunction = false;
+        linfo->delta_quantum = S();
+        linfo->allocate(l.size());
+        for (int i = 0; i < linfo->n; i++) {
+            linfo->quanta[i] = qs[i];
+            linfo->n_states_bra[i] = l[i]->shape[0];
+            linfo->n_states_ket[i] = l[i]->shape[1];
+        }
+        linfo->sort_states();
+        left = make_shared<SparseMatrix<S>>(d_alloc);
+        right = make_shared<SparseMatrix<S>>(d_alloc);
+        left->allocate(linfo);
+        right->allocate(winfo);
+        for (int i = 0; i < winfo->n; i++) {
+            MatrixRef mm = (*right)[info->quanta[i]];
+            MatrixFunctions::copy(mm, r[i]->ref());
+            int k =
+                linfo->find_state(info->quanta[i].get_bra(info->delta_quantum));
+            assert(s[k]->shape[0] == r[i]->shape[0]);
+            for (int j = 0; j < r[i]->shape[0]; j++)
+                MatrixFunctions::iscale(MatrixRef(&mm(j, 0), 1, mm.n),
+                                        s[k]->data[j], 1);
+        }
+        for (int i = 0; i < linfo->n; i++)
+            MatrixFunctions::copy((*left)[qs[i]], l[i]->ref());
+    }
+    // S = C(r)R or C = K(r)R
+    void right_split(shared_ptr<SparseMatrix<S>> &left,
+                     shared_ptr<SparseMatrix<S>> &right) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<shared_ptr<Tensor>> l, s, r;
+        vector<S> qs;
+        left_svd(qs, l, s, r);
+        shared_ptr<SparseMatrixInfo<S>> winfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<SparseMatrixInfo<S>> rinfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        winfo->is_fermion = info->is_fermion;
+        winfo->is_wavefunction = info->is_wavefunction;
+        winfo->delta_quantum = info->delta_quantum;
+        winfo->allocate(info->n);
+        for (int i = 0; i < winfo->n; i++) {
+            winfo->quanta[i] = info->quanta[i];
+            winfo->n_states_bra[i] = l[i]->shape[0];
+            winfo->n_states_ket[i] = l[i]->shape[1];
+        }
+        winfo->sort_states();
+        rinfo->is_fermion = false;
+        rinfo->is_wavefunction = false;
+        rinfo->delta_quantum = S();
+        rinfo->allocate(r.size());
+        for (int i = 0; i < rinfo->n; i++) {
+            rinfo->quanta[i] = qs[i];
+            rinfo->n_states_bra[i] = r[i]->shape[0];
+            rinfo->n_states_ket[i] = r[i]->shape[1];
+        }
+        rinfo->sort_states();
+        left = make_shared<SparseMatrix<S>>(d_alloc);
+        right = make_shared<SparseMatrix<S>>(d_alloc);
+        left->allocate(winfo);
+        right->allocate(rinfo);
+        for (int i = 0; i < winfo->n; i++) {
+            MatrixRef mm = (*left)[info->quanta[i]];
+            MatrixFunctions::copy(mm, l[i]->ref());
+            int k = rinfo->find_state(-info->quanta[i].get_ket());
+            assert(s[k]->shape[0] == l[i]->shape[1]);
+            for (int j = 0; j < l[i]->shape[1]; j++)
+                MatrixFunctions::iscale(MatrixRef(&mm(0, j), mm.m, 1),
+                                        s[k]->data[j], mm.n);
+        }
+        for (int i = 0; i < rinfo->n; i++)
+            MatrixFunctions::copy((*right)[qs[i]], r[i]->ref());
+    }
+    // S = C(r)R => C + C^(-1)
+    void left_inverse(shared_ptr<SparseMatrix<S>> &left,
+                      shared_ptr<SparseMatrix<S>> &right) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<shared_ptr<Tensor>> l, s, r;
+        vector<S> qs;
+        left_svd(qs, l, s, r);
+        shared_ptr<SparseMatrixInfo<S>> winfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<SparseMatrixInfo<S>> rinfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        winfo->is_fermion = info->is_fermion;
+        winfo->is_wavefunction = info->is_wavefunction;
+        winfo->delta_quantum = info->delta_quantum;
+        winfo->allocate(info->n);
+        for (int i = 0; i < winfo->n; i++) {
+            winfo->quanta[i] = info->quanta[i];
+            winfo->n_states_bra[i] = l[i]->shape[0];
+            winfo->n_states_ket[i] = l[i]->shape[1];
+        }
+        winfo->sort_states();
+        rinfo->is_fermion = info->is_fermion;
+        rinfo->is_wavefunction = info->is_wavefunction;
+        rinfo->delta_quantum = info->delta_quantum;
+        assert(info->is_wavefunction);
+        rinfo->allocate(info->n);
+        for (int i = 0; i < rinfo->n; i++) {
+            rinfo->quanta[i] = info->delta_quantum.combine(
+                -info->quanta[i].get_ket(),
+                -info->quanta[i].get_bra(info->delta_quantum));
+            rinfo->n_states_bra[i] = l[i]->shape[1];
+            rinfo->n_states_ket[i] = l[i]->shape[0];
+        }
+        rinfo->sort_states();
+        left = make_shared<SparseMatrix<S>>(d_alloc);
+        right = make_shared<SparseMatrix<S>>(d_alloc);
+        left->allocate(winfo);
+        right->allocate(rinfo);
+        for (int i = 0; i < winfo->n; i++) {
+            MatrixRef mm = (*left)[winfo->quanta[i]];
+            MatrixFunctions::copy(mm, l[i]->ref());
+            int k =
+                lower_bound(qs.begin(), qs.end(), -info->quanta[i].get_ket()) -
+                qs.begin();
+            assert(s[k]->shape[0] == l[i]->shape[1]);
+            for (int j = 0; j < l[i]->shape[1]; j++)
+                MatrixFunctions::iscale(MatrixRef(&mm(0, j), mm.m, 1),
+                                        s[k]->data[j], mm.n);
+        }
+        for (int i = 0; i < winfo->n; i++) {
+            S q = info->delta_quantum.combine(
+                -info->quanta[i].get_ket(),
+                -info->quanta[i].get_bra(info->delta_quantum));
+            MatrixRef mm = (*right)[q];
+            MatrixFunctions::iadd(mm, l[i]->ref(), 1.0, true);
+            int k =
+                lower_bound(qs.begin(), qs.end(), -info->quanta[i].get_ket()) -
+                qs.begin();
+            for (int j = 0; j < l[i]->shape[1]; j++)
+                if (abs(s[k]->data[j]) > 1E-12)
+                    MatrixFunctions::iscale(MatrixRef(&mm(j, 0), mm.n, 1),
+                                            1 / s[k]->data[j], 1);
+        }
+    }
     // l will have the same number of non-zero blocks as this matrix
     // s will be labelled by right q labels
     void left_svd(vector<S> &rqs, vector<shared_ptr<Tensor>> &l,
                   vector<shared_ptr<Tensor>> &s,
-                  vector<shared_ptr<Tensor>> &r) {
+                  vector<shared_ptr<Tensor>> &r) const {
         map<S, uint32_t> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
@@ -992,7 +1160,7 @@ template <typename S> struct SparseMatrix {
     // s will be labelled by left q labels
     void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
                    vector<shared_ptr<Tensor>> &s,
-                   vector<shared_ptr<Tensor>> &r) {
+                   vector<shared_ptr<Tensor>> &r) const {
         map<S, uint32_t> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
