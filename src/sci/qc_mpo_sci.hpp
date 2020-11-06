@@ -44,6 +44,10 @@ template <typename, typename = void> struct MPOQCSCI;
 template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     using MPO<S>::n_sites;
     using MPO<S>::sparse_form;
+    using MPO<S>::site_op_infos;
+    using MPO<S>::op;
+    using MPO<S>::const_e;
+    using MPO<S>::tf;
     QCTypes mode;
     bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
     bool firstSiteIsSCI, lastSiteIsSCI;
@@ -90,19 +94,19 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         OpExprTens4 p_op(nOrb, OpExprMat4(nOrb));
         OpExprTens4 pd_op(nOrb, OpExprMat4(nOrb));
         OpExprTens4 q_op(nOrb, OpExprMat4(nOrb));
-        this->op = dynamic_pointer_cast<OpElement<S>>(h_op);
-        this->const_e = hamil.e();
-        //this->tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        this->tf = make_shared<TensorFunctions<S>>(
+        op = dynamic_pointer_cast<OpElement<S>>(h_op);
+        const_e = hamil.e();
+        //tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        tf = make_shared<TensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
         if (hamil.delayed == DelayedSCIOpNames::None)
-            this->tf = make_shared<TensorFunctions<S>>(
+            tf = make_shared<TensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
         else
-            this->tf = make_shared<DelayedTensorFunctions<S>>(
+            tf = make_shared<DelayedTensorFunctions<S>>(
                 make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
-        this->tf->opf->seq = hamil.opf->seq; // seq_type
-        this->site_op_infos = hamil.site_op_infos;
+        tf->opf->seq = hamil.opf->seq; // seq_type
+        site_op_infos = hamil.site_op_infos;
         if(mode != QCTypes::NC){
             throw std::invalid_argument("Currently, only NC is implemented as mode. "
                                         "This is what typically makes most sense in MRCI");
@@ -642,6 +646,68 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             }
         }
     }
-    };
+};
+
+// MPO of single site operator
+template <typename S> struct SiteMPOSCI : MPO<S> {
+    using MPO<S>::sparse_form;
+    using MPO<S>::n_sites;
+    using MPO<S>::site_op_infos;
+    using MPO<S>::op;
+    using MPO<S>::const_e;
+    using MPO<S>::tf;
+    SiteMPOSCI(const HamiltonianQCSCI<S> &hamil, const shared_ptr<OpElement<S>> &op_,
+               int k = -1)
+        : MPO<S>(hamil.n_sites) {
+            shared_ptr<OpElement<S>> i_op = make_shared<OpElement<S>>(
+                    OpNames::I, SiteIndex(), hamil.vacuum);
+        if (hamil.sciWrapperLeft != nullptr)
+            sparse_form[0] = 'S';
+        if (hamil.sciWrapperRight != nullptr)
+            sparse_form[hamil.n_sites - 1] = 'S';
+        op = op_;
+        const_e = 0.0;
+        tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        if (hamil.delayed == DelayedSCIOpNames::None)
+            tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        else
+            tf = make_shared<DelayedTensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        tf->opf->seq = hamil.opf->seq; // seq_type
+        if (k == -1) {
+            assert(op->site_index.size() >= 1);
+            k = op->site_index[0];
+        }
+        site_op_infos = hamil.site_op_infos;
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+            // site tensor
+            shared_ptr<Symbolic<S>> pmat;
+            if (m == 0)
+                pmat = make_shared<SymbolicRowVector<S>>(1);
+            else if (m == hamil.n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S>>(1);
+            else
+            pmat = make_shared<SymbolicMatrix<S>>(1, 1);
+            (*pmat)[{0, 0}] = m == k ? op : i_op;
+            shared_ptr<OperatorTensor<S>> opt =
+                                                  make_shared<OperatorTensor<S>>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector<S>> plop =
+                                                     make_shared<SymbolicRowVector<S>>(1);
+            (*plop)[0] = m >= k ? op : i_op;
+            this->left_operator_names.push_back(plop);
+            shared_ptr<SymbolicColumnVector<S>> prop =
+                                                        make_shared<SymbolicColumnVector<S>>(1);
+            (*prop)[0] = m <= k ? op : i_op;
+            this->right_operator_names.push_back(prop);
+            // site operators
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            this->tensors.push_back(opt);
+        }
+    }
+};
 
 } // namespace block2
