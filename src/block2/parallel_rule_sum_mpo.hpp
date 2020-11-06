@@ -113,4 +113,44 @@ template <typename S> struct ParallelFCIDUMP : FCIDUMP {
     double e() const override { return rule->index_available() ? const_e : 0; }
 };
 
+// One- and two-electron integrals
+// gijkl = 2(vijkl - vkjil)
+// i <= k; j <= l
+struct SymmetricFCIDUMP : FCIDUMP {
+    using FCIDUMP::const_e;
+    using FCIDUMP::e;
+    using FCIDUMP::n_sites;
+    using FCIDUMP::t;
+    using FCIDUMP::v;
+    SymmetricFCIDUMP() : FCIDUMP() {}
+    // Two-electron integral element (SU(2))
+    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
+        if (i < k && j < l)
+            return 2 * (FCIDUMP::v(i, j, k, l) - FCIDUMP::v(k, j, i, l));
+        else if (i < k && j == l)
+            return FCIDUMP::v(i, j, k, l) - FCIDUMP::v(k, j, i, l);
+        else if (i == k && j < l)
+            return FCIDUMP::v(i, j, k, l) - FCIDUMP::v(i, l, k, j);
+        else if (i == k && j == l)
+            return FCIDUMP::v(i, j, k, l);
+        else
+            return 0;
+    }
+    // Two-electron integral element (SZ)
+    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+             uint16_t l) const override {
+        if (i < k && j < l)
+            return 2 * (FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, k, j, i, l));
+        else if (i < k && j == l)
+            return FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, k, j, i, l);
+        else if (i == k && j < l)
+            return FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, i, l, k, j);
+        else if (i == k && j == l)
+            return FCIDUMP::v(sl, sr, i, j, k, l);
+        else
+            return 0;
+    }
+    double e() const override { return const_e; }
+};
+
 } // namespace block2

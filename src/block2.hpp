@@ -51,6 +51,7 @@
 #include "block2/parallel_mpo.hpp"
 #include "block2/parallel_rule_sum_mpo.hpp"
 #include "block2/parallel_rule.hpp"
+#include "block2/parallel_sweep.hpp"
 #include "block2/parallel_tensor_functions.hpp"
 #include "block2/partition.hpp"
 #include "block2/point_group.hpp"

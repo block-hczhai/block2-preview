@@ -793,9 +793,13 @@ template <typename S> struct DMRG {
                                       davidson_conv_thrd);
         }
     }
-    tuple<vector<double>, double, vector<vector<pair<S, double>>>>
-    sweep(bool forward, ubond_t bond_dim, double noise,
-          double davidson_conv_thrd) {
+    tuple<
+        vector<double>, double,
+        vector<vector<pair<S, double>>>> virtual sweep(bool forward,
+                                                       ubond_t bond_dim,
+                                                       double noise,
+                                                       double
+                                                           davidson_conv_thrd) {
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();
@@ -888,8 +892,8 @@ template <typename S> struct DMRG {
             forward = !forward;
             double tswp = current.get_time();
             if (iprint >= 1) {
-                cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current;
+                cout << "Time elapsed = " << fixed << setw(10)
+                     << setprecision(3) << current.current - start.current;
                 cout << fixed << setprecision(8);
                 if (get<0>(sweep_results).size() == 1)
                     cout << " | E = " << setw(15) << get<0>(sweep_results)[0];
@@ -1543,8 +1547,9 @@ template <typename S> struct ImaginaryTE {
                          << get<2>(r) << " ";
                 }
                 if (iprint >= 1)
-                    cout << "Time elapsed = " << setw(10) << setprecision(3)
-                         << current.current - start.current << endl;
+                    cout << "Time elapsed = " << fixed << setw(10)
+                         << setprecision(3) << current.current - start.current
+                         << endl;
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));
                     normsqs.push_back(get<1>(r));
@@ -2438,8 +2443,8 @@ template <typename S> struct Linear {
             forward = !forward;
             current.get_time();
             if (iprint >= 1) {
-                cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current;
+                cout << "Time elapsed = " << fixed << setw(10)
+                     << setprecision(3) << current.current - start.current;
                 if (get<0>(sweep_results).size() == 1) {
                     cout << (abs(get<0>(sweep_results)[0]) > 1E-3 ? fixed
                                                                   : scientific);
@@ -3218,8 +3223,9 @@ template <typename S> struct Expect {
             forward = !forward;
             current.get_time();
             if (iprint >= 1)
-                cout << "Time elapsed = " << setw(10) << setprecision(3)
-                     << current.current - start.current << endl;
+                cout << "Time elapsed = " << fixed << setw(10)
+                     << setprecision(3) << current.current - start.current
+                     << endl;
             this->forward = forward;
             return 0.0;
         } else {

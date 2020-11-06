@@ -1255,6 +1255,18 @@ template <typename S> struct MovingEnvironment {
         }
         frame->reset(1);
     }
+    void partial_prepare(int a, int b) {
+        assert(a >= 0 && b <= n_sites);
+        tctr = trot = tmid = tint = 0;
+        for (int i = b - dot; i > center; i--) {
+            envs[i]->left_op_infos.clear();
+            envs[i]->left = nullptr;
+        }
+        for (int i = a; i < center; i++) {
+            envs[i]->right_op_infos.clear();
+            envs[i]->right = nullptr;
+        }
+    }
     // Remove old environment for starting a new sweep
     void prepare() {
         tctr = trot = tmid = tint = 0;
@@ -2817,61 +2829,13 @@ template <typename S> struct MovingEnvironment {
     swap_wfn_to_fused_left(int i, const shared_ptr<MPSInfo<S>> &mps_info,
                            const shared_ptr<SparseMatrix<S>> &old_wfn,
                            const shared_ptr<CG<S>> &cg) {
-        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
-            make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
-        shared_ptr<SparseMatrixInfo<S>> wfn_info =
-            make_shared<SparseMatrixInfo<S>>(i_alloc);
-        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
-        mps_info->load_left_dims(i);
-        mps_info->load_right_dims(i + 1);
-        l = *mps_info->left_dims[i], m = *mps_info->basis[i],
-        r = *mps_info->right_dims[i + 1];
-        lm =
-            StateInfo<S>::tensor_product(l, m, *mps_info->left_dims_fci[i + 1]);
-        lmc = StateInfo<S>::get_connection_info(l, m, lm);
-        mr = StateInfo<S>::tensor_product(m, r, *mps_info->right_dims_fci[i]);
-        mrc = StateInfo<S>::get_connection_info(m, r, mr);
-        shared_ptr<SparseMatrixInfo<S>> owinfo = old_wfn->info;
-        wfn_info->initialize(lm, r, owinfo->delta_quantum, owinfo->is_fermion,
-                             owinfo->is_wavefunction);
-        wfn->allocate(wfn_info);
-        wfn->swap_to_fused_left(old_wfn, l, m, r, mr, mrc, lm, lmc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
-        return wfn;
+        return mps_info->swap_wfn_to_fused_left(i, old_wfn, cg);
     }
     static shared_ptr<SparseMatrix<S>>
     swap_wfn_to_fused_right(int i, const shared_ptr<MPSInfo<S>> &mps_info,
                             const shared_ptr<SparseMatrix<S>> &old_wfn,
                             const shared_ptr<CG<S>> &cg) {
-        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
-            make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
-        shared_ptr<SparseMatrixInfo<S>> wfn_info =
-            make_shared<SparseMatrixInfo<S>>(i_alloc);
-        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
-        mps_info->load_left_dims(i);
-        mps_info->load_right_dims(i + 1);
-        l = *mps_info->left_dims[i], m = *mps_info->basis[i],
-        r = *mps_info->right_dims[i + 1];
-        lm =
-            StateInfo<S>::tensor_product(l, m, *mps_info->left_dims_fci[i + 1]);
-        lmc = StateInfo<S>::get_connection_info(l, m, lm);
-        mr = StateInfo<S>::tensor_product(m, r, *mps_info->right_dims_fci[i]);
-        mrc = StateInfo<S>::get_connection_info(m, r, mr);
-        shared_ptr<SparseMatrixInfo<S>> owinfo = old_wfn->info;
-        wfn_info->initialize(l, mr, owinfo->delta_quantum, owinfo->is_fermion,
-                             owinfo->is_wavefunction);
-        wfn->allocate(wfn_info);
-        wfn->swap_to_fused_right(old_wfn, l, m, r, lm, lmc, mr, mrc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
-        return wfn;
+        return mps_info->swap_wfn_to_fused_right(i, old_wfn, cg);
     }
     static vector<shared_ptr<SparseMatrixGroup<S>>>
     swap_multi_wfn_to_fused_left(

@@ -862,6 +862,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
         .def("canonicalize", &MPS<S>::canonicalize)
         .def("random_canonicalize", &MPS<S>::random_canonicalize)
+        .def("move_left", &MPS<S>::move_left)
+        .def("move_right", &MPS<S>::move_right)
         .def("get_filename", &MPS<S>::get_filename)
         .def("load_data", &MPS<S>::load_data)
         .def("save_data", &MPS<S>::save_data)
