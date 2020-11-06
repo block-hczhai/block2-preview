@@ -387,8 +387,8 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
     Args:
         mf : scf object
         freqs : np.ndarray of frequencies (real)
-        delta : broading (real)
-        mo_orbs : list of index of molecular orbtials
+        delta : broadening (real)
+        mo_orbs : list of indices of molecular orbtials
         gmres_tol : conjugate gradient (min res) conv tol (if too low will be extemely time-consuming)
         add_rem : '+' (addition) or '-' (removal) or '+-' (both)
         n_threads : number of threads (need parallel MKL library)
