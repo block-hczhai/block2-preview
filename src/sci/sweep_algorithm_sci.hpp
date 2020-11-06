@@ -22,6 +22,7 @@
 #pragma once
 
 #include "../block2/sweep_algorithm.hpp"
+#include <limits>
 
 using namespace std;
 
@@ -263,7 +264,7 @@ template <typename S> struct LinearSCI : Linear<S> {
     }
 };
 
-template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
+template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
     using DMRGSCI<S>::iprint;
     using DMRGSCI<S>::me;
     using DMRGSCI<S>::ext_mes;
@@ -277,18 +278,23 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
     using DMRGSCI<S>::last_site_1site;
 
     double g_factor = 1.0;   // G in +Q formula
-    double ref_energy = 1.0; // typically CAS-SCF/Reference energy of CAS
-    double delta_e =
-        0.0; // energy - ref_energy => will be modified during the sweep
+    double g_factor2 = 0.0;   // G2 in ACPF2
+    bool ACPF2_mode = false;
+    bool RAS_mode = false; // 2 sites at both ends: Thawed orbitals
+    double ref_energy = 1.0; // Typically CAS-SCF/Reference energy of CAS
+    double delta_e = 0.0; // energy - ref_energy => will be modified during the sweep
     int max_aqcc_iter = 5; // Max iter spent on last site. Convergence depends
                            // on davidson conv. Note that this does not need to
                            // be fully converged as we do sweeps anyways.
-    // vvv temporary variables should be removed!!!
-    DMRGSCIAQCCNEW(const shared_ptr<MovingEnvironment<S>> &me,
-                   const shared_ptr<MovingEnvironment<S>> &dme,
-                   const shared_ptr<MovingEnvironment<S>> &ddme,
+    double smallest_energy = numeric_limits<double>::max(); // Smallest energy during sweep
+
+    /** Frozen/CAS mode: Only one big site at the end
+     * => ME + S * SME  **/
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment < S>> &me,
+                   double g_factor,
+                   const shared_ptr<MovingEnvironment<S>> &sme,
                    const vector<ubond_t> &bond_dims,
-                   const vector<double> &noises, double g_factor,
+                   const vector<double> &noises,
                    double ref_energy)
         : DMRGSCI<S>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
@@ -297,31 +303,142 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
         last_site_svd = true;
         last_site_1site = me->dot == 2;
 
-        ext_mes.push_back(dme);
-        ext_mes.push_back(ddme);
+        ext_mes.push_back(sme);
     }
+
+    /** Frozen/CAS mode ACPF2: Only one big site at the end
+     * => ME + S * SME + S2 * SME2 **/
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment < S>> &me,
+                   double g_factor,
+                   const shared_ptr<MovingEnvironment<S>> &sme,
+                   double g_factor2,
+                   const shared_ptr<MovingEnvironment<S>> &sme2,
+                   const vector<ubond_t> &bond_dims,
+                   const vector<double> &noises, 
+                   double ref_energy)
+        : DMRGSCI<S>(me, bond_dims, noises),
+          // vv weird compile error -> cannot find member types -.-
+          //     last_site_svd{true}, last_site_1site{true},
+          g_factor{g_factor}, g_factor2{g_factor2}, ACPF2_mode{true},
+          ref_energy{ref_energy} {
+        last_site_svd = true;
+        last_site_1site = me->dot == 2;
+
+        ext_mes.push_back(sme);
+        ext_mes.push_back(sme2);
+    }
+
+    /** RAS mode: Big sites on both ends
+     * => ME + S * (SME1 - SME2)  **/
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment < S>> &me,
+                   double g_factor,
+                   const shared_ptr<MovingEnvironment<S>> &sme1,
+                   const shared_ptr<MovingEnvironment<S>> &sme2,
+                   const vector<ubond_t> &bond_dims,
+                   const vector<double> &noises,
+                   double ref_energy)
+        : DMRGSCI<S>(me, bond_dims, noises),
+          // vv weird compile error -> cannot find member types -.-
+          //     last_site_svd{true}, last_site_1site{true},
+          g_factor{g_factor}, ref_energy{ref_energy}, RAS_mode{true} {
+        last_site_svd = true;
+        last_site_1site = me->dot == 2;
+
+        ext_mes.push_back(sme1);
+        ext_mes.push_back(sme2);
+    }
+
+    /** RAS ACPF2 mode: Big sites on both ends
+     * => ME + S * (SME1 - SME2) + S2 * (SME3-SME4)  **/
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment < S>> &me,
+                   double g_factor,
+                   const shared_ptr<MovingEnvironment<S>> &sme1,
+                   const shared_ptr<MovingEnvironment<S>> &sme2,
+                   double g_factor2,
+                   const shared_ptr<MovingEnvironment<S>> &sme3,
+                   const shared_ptr<MovingEnvironment<S>> &sme4,
+                   const vector<ubond_t> &bond_dims,
+                   const vector<double> &noises,
+                   double ref_energy)
+        : DMRGSCI<S>(me, bond_dims, noises),
+          // vv weird compile error -> cannot find member types -.-
+          //     last_site_svd{true}, last_site_1site{true},
+          g_factor{g_factor}, g_factor2{g_factor2}, ACPF2_mode{true},
+          ref_energy{ref_energy}, RAS_mode{true} {
+        last_site_svd = true;
+        last_site_1site = me->dot == 2;
+
+        ext_mes.push_back(sme1);
+        ext_mes.push_back(sme2);
+        ext_mes.push_back(sme3);
+        ext_mes.push_back(sme4);
+    }
+
+    shared_ptr<LinearEffectiveHamiltonian<S>> get_aqcc_eff(
+            shared_ptr<EffectiveHamiltonian<S>> h_eff,
+            shared_ptr<EffectiveHamiltonian<S>> d_eff1,
+            shared_ptr<EffectiveHamiltonian<S>> d_eff2,
+            shared_ptr<EffectiveHamiltonian<S>> d_eff3,
+            shared_ptr<EffectiveHamiltonian<S>> d_eff4){
+        delta_e = smallest_energy - ref_energy;
+        const auto shift = (1. - g_factor) * delta_e;
+        const auto shift2 = (1. - g_factor2) * delta_e;
+        shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff;
+        if(not RAS_mode){
+            aqcc_eff = h_eff + shift * d_eff1;
+            if(ACPF2_mode){
+                aqcc_eff = h_eff + shift * d_eff1 + shift2 * d_eff2;
+            }else{
+                aqcc_eff = h_eff + shift * d_eff1;
+            }
+        }else{
+            if(ACPF2_mode){
+                aqcc_eff = h_eff + shift * (d_eff1 - d_eff2) + shift2 * (d_eff3-d_eff4);
+            }else{
+                aqcc_eff = h_eff + shift * (d_eff1 - d_eff2);
+            }
+        }
+        return aqcc_eff;
+    }
+
+
     tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
         const bool forward, const int i, const double davidson_conv_thrd,
         const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) override {
         tuple<double, int, size_t, double> pdi;
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
-        shared_ptr<EffectiveHamiltonian<S>> d_eff = ext_mes[0]->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        d_eff1 = ext_mes.at(0)->eff_ham(
             FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
-        shared_ptr<EffectiveHamiltonian<S>> dd_eff = ext_mes[1]->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
-        const auto shift = (1. - g_factor) * delta_e;
-        shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
-            h_eff + shift * (d_eff - dd_eff);
+        if(RAS_mode or ACPF2_mode){
+            d_eff2 = ext_mes.at(1)->eff_ham(
+                    FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        }
+        if(RAS_mode and ACPF2_mode){
+            d_eff3 = ext_mes.at(2)->eff_ham(
+                    FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+            d_eff4 = ext_mes.at(3)->eff_ham(
+                    FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        }
+        auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
+        // TODO: For RAS mode, it might be good to do several iterations
+        //       for the first site as well.
         pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                              davidson_soft_max_iter, me->para_rule);
-        dd_eff->deallocate();
-        d_eff->deallocate();
+        for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
+            if(d_eff != nullptr) {
+                d_eff->deallocate();
+            }
+        }
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, me->ket->info,
                                              noise_type, me->para_rule);
         h_eff->deallocate();
+        const auto energy = std::get<0>(pdi) + me->mpo->const_e;
+        smallest_energy = min(energy, smallest_energy);
+        delta_e = smallest_energy - ref_energy;
         return pdi;
     }
     tuple<double, int, size_t, double>
@@ -331,19 +448,32 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
                              shared_ptr<SparseMatrixGroup<S>> &pket) override {
         tuple<double, int, size_t, double> pdi{0., 0, 0,
                                                0.}; // energy, ndav, nflop, tdav
-        const auto doAQCC =
-            i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
+        const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0)
+                            and abs(davidson_soft_max_iter) > 0;
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
             true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
-        shared_ptr<EffectiveHamiltonian<S>> d_eff = ext_mes[0]->eff_ham(
-            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
-        shared_ptr<EffectiveHamiltonian<S>> dd_eff = ext_mes[1]->eff_ham(
-            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        d_eff1 = ext_mes.at(0)->eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        if(RAS_mode or ACPF2_mode){
+            d_eff2 = ext_mes.at(1)->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                    true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        }
+        if(RAS_mode and ACPF2_mode){
+            d_eff3 = ext_mes.at(2)->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                    true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+            d_eff4 = ext_mes.at(3)->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                    true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        }
         if (doAQCC) {
             // AQCC
+            // Here, we actually do several iterations
+            // as the last site with virt. space should be most important.
             if (sweep_energies.size() > 0) {
                 // vv taken from DRMG::sweep
                 size_t idx =
@@ -353,7 +483,8 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
                             return x[0] < y[0];
                         }) -
                     sweep_energies.begin();
-                delta_e = sweep_energies[idx].at(0) - ref_energy;
+                smallest_energy = min(sweep_energies[idx].at(0), smallest_energy);
+                delta_e = smallest_energy - ref_energy;
             }
             double last_delta_e = delta_e;
             if (iprint >= 2) {
@@ -363,9 +494,7 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
                 //
                 // Shift non-reference ops
                 //
-                const auto shift = (1. - g_factor) * delta_e;
-                shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
-                    h_eff + shift * (d_eff - dd_eff);
+                auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
                 //
                 // EIG and conv check
                 //
@@ -380,11 +509,15 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
                 std::get<1>(pdi) += std::get<1>(pdi2); // ndav
                 std::get<2>(pdi) += std::get<2>(pdi2); // nflop
                 std::get<3>(pdi) += std::get<3>(pdi2); // tdav
-                delta_e = energy - ref_energy;
-                const auto converged =
-                    abs(delta_e - last_delta_e) / abs(delta_e) <
-                    1.1 * max(davidson_conv_thrd,
-                              noise); // convergence can be loosely defined here
+                auto converged = smallest_energy < energy;
+                if(not converged) {
+                    smallest_energy = energy;
+                    // convergence can be loosely defined here
+                    converged =
+                            abs(delta_e - last_delta_e) /
+                            abs(delta_e) < 1.1 * max(davidson_conv_thrd, noise);
+                }
+                delta_e = smallest_energy - ref_energy;
                 if (iprint >= 2) {
                     cout << "\tAQCC: " << setw(2) << itAQCC << " E=" << fixed
                          << setw(17) << setprecision(10) << energy
@@ -415,15 +548,19 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
                 cout.flush();
             }
         } else {
-            const auto shift = (1. - g_factor) * delta_e;
-            shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff =
-                h_eff + shift * (d_eff - dd_eff);
+            auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
             pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                  davidson_max_iter, davidson_soft_max_iter,
                                  me->para_rule);
+            const auto energy = std::get<0>(pdi) + me->mpo->const_e;
+            smallest_energy = min(energy, smallest_energy);
+            delta_e = smallest_energy - ref_energy;
         }
-        dd_eff->deallocate();
-        d_eff->deallocate();
+        for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
+            if(d_eff != nullptr) {
+                d_eff->deallocate();
+            }
+        }
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
             pket = h_eff->perturbative_noise(
                 forward, i_site, i_site,
@@ -436,8 +573,7 @@ template <typename S> struct DMRGSCIAQCCNEW : DMRGSCI<S> {
 };
 
 // hrl: DMRG-CI-AQCC and related methods
-// ATTENTION: last_site_1_site must be activated!
-template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
+template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
     using DMRGSCI<S>::iprint;
     using DMRGSCI<S>::me;
     using DMRGSCI<S>::davidson_soft_max_iter;
@@ -457,8 +593,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     int max_aqcc_iter = 5;  // Max iter spent on last site. Convergence depends
                             // on davidson conv. Note that this does not need to
                             // be fully converged as we do sweeps anyways.
-    // vvv temporary variables should be removed!!!
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me,
+    DMRGSCIAQCCOLD(const shared_ptr<MovingEnvironment < S>> &me,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double g_factor, double ref_energy,
                 const std::vector<S> &mod_qns)
@@ -564,10 +699,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 std::get<2>(pdi) += std::get<2>(pdi2); // nflop
                 std::get<3>(pdi) += std::get<3>(pdi2); // tdav
                 delta_e = energy - ref_energy;
+                // convergence can be loosely defined here
                 const auto converged =
-                    abs(delta_e - last_delta_e) / abs(delta_e) <
-                    1.1 * max(davidson_conv_thrd,
-                              noise); // convergence can be loosely defined here
+                        abs(delta_e - last_delta_e) /
+                        abs(delta_e) < 1.1 * max(davidson_conv_thrd,noise);
                 if (iprint >= 2) {
                     cout << "\tAQCC: " << setw(2) << itAQCC << " E=" << fixed
                          << setw(17) << setprecision(10) << energy
@@ -674,7 +809,6 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                         pqn.second.emplace_back(dmat(iRow, iRow));
                     } else {
                         auto origVal = pqn.second[iRow];
-                        auto prev = dmat(iRow, iRow);
                         dmat(iRow, iRow) = origVal + diag_shift;
                         assert(abs(mat.dense_ref()(iRow, iRow) - origVal -
                                    diag_shift) < 1e-13);
@@ -702,7 +836,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 if (nCounts != mat.m and save) { // Do this only once in Ctor!
                     // This is the diagonal so I assume for now that this rarely
                     // appears.
-                    cerr << "DMRGSCIAQCC: ATTENTION! for qn" << pqn.first
+                    cerr << "DMRGSCIAQCCOLD: ATTENTION! for qn" << pqn.first
                          << " only " << nCounts << " of " << mat.m
                          << "diagonals are shifted. Change code!" << endl;
                 }
