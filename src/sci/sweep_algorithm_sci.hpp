@@ -426,16 +426,16 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
         //       for the first site as well.
         pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                              davidson_soft_max_iter, me->para_rule);
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pket = h_eff->perturbative_noise(forward, i, i + 1,
+                                             FuseTypes::FuseLR, me->ket->info,
+                                             noise_type, me->para_rule);
         h_eff->deallocate();
         for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
             if(d_eff != nullptr) {
                 d_eff->deallocate();
             }
         }
-        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
-            pket = h_eff->perturbative_noise(forward, i, i + 1,
-                                             FuseTypes::FuseLR, me->ket->info,
-                                             noise_type, me->para_rule);
         const auto energy = std::get<0>(pdi) + me->mpo->const_e;
         smallest_energy = min(energy, smallest_energy);
         delta_e = smallest_energy - ref_energy;
@@ -557,17 +557,17 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
             smallest_energy = min(energy, smallest_energy);
             delta_e = smallest_energy - ref_energy;
         }
-        h_eff->deallocate();
-        for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
-            if(d_eff != nullptr) {
-                d_eff->deallocate();
-            }
-        }
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
             pket = h_eff->perturbative_noise(
                 forward, i_site, i_site,
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, me->ket->info,
                 noise_type, me->para_rule);
+        }
+        h_eff->deallocate();
+        for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
+            if(d_eff != nullptr) {
+                d_eff->deallocate();
+            }
         }
         return pdi;
     }
