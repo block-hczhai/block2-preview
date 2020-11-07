@@ -151,35 +151,53 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def_readwrite("last_site_1site", &LinearSCI<S>::last_site_1site)
         .def("blocking", &LinearSCI<S>::blocking);
 
-    py::class_<DMRGSCIAQCC<S>, shared_ptr<DMRGSCIAQCC<S>>, DMRGSCI<S>>(
-        m, "DMRGSCIAQCC")
+    py::class_<DMRGSCIAQCCOLD<S>, shared_ptr<DMRGSCIAQCCOLD<S>>, DMRGSCI<S>>(
+        m, "DMRGSCIAQCCOLD")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<double> &, double,
                       double, const std::vector<S> &>())
-        // vv will be added later not now
-        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-        //            const vector<ubond_t> &, const vector<double> &, double,
-        //            double, const std::vector<S> &, const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter", &DMRGSCIAQCCOLD<S>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGSCIAQCCOLD<S>::g_factor)
+        .def_readwrite("delta_e", &DMRGSCIAQCCOLD<S>::delta_e)
+        .def_readwrite("ref_energy", &DMRGSCIAQCCOLD<S>::ref_energy);
+
+    py::class_<DMRGSCIAQCC<S>, shared_ptr<DMRGSCIAQCC<S>>, DMRGSCI<S>>(
+        m, "DMRGSCIAQCC")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &,
+                      double>(), "Frozen/CAS mode: Only one big site at the end")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &,
+                      double>(), "Frozen/CAS mode ACPF2: Only one big site at the end")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &,
+                      double>(), "RAS mode: Big sites on both ends")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      double,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &,
+                      double>(), "RAS ACPF2 mode: Big sites on both ends")
+        .def_readwrite("smallest_energy", &DMRGSCIAQCC<S>::smallest_energy)
         .def_readwrite("max_aqcc_iter", &DMRGSCIAQCC<S>::max_aqcc_iter)
         .def_readwrite("g_factor", &DMRGSCIAQCC<S>::g_factor)
+        .def_readwrite("g_factor2", &DMRGSCIAQCC<S>::g_factor2)
+        .def_readwrite("ACPF2_mode", &DMRGSCIAQCC<S>::ACPF2_mode)
+        .def_readwrite("RAS_mode", &DMRGSCIAQCC<S>::RAS_mode)
         .def_readwrite("delta_e", &DMRGSCIAQCC<S>::delta_e)
         .def_readwrite("ref_energy", &DMRGSCIAQCC<S>::ref_energy);
-
-    py::class_<DMRGSCIAQCCNEW<S>, shared_ptr<DMRGSCIAQCCNEW<S>>, DMRGSCI<S>>(
-        m, "DMRGSCIAQCCNEW")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<ubond_t> &, const vector<double> &, double,
-                      double>())
-        // vv will be added later not now
-        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-        //            const vector<ubond_t> &, const vector<double> &, double,
-        //            double, const std::vector<S> &, const std::vector<S> &>())
-        .def_readwrite("max_aqcc_iter", &DMRGSCIAQCCNEW<S>::max_aqcc_iter)
-        .def_readwrite("g_factor", &DMRGSCIAQCCNEW<S>::g_factor)
-        .def_readwrite("delta_e", &DMRGSCIAQCCNEW<S>::delta_e)
-        .def_readwrite("ref_energy", &DMRGSCIAQCCNEW<S>::ref_energy);
 
     py::class_<MPOQCSCI<S>, shared_ptr<MPOQCSCI<S>>, MPO<S>>(m, "MPOQCSCI")
         .def_readwrite("mode", &MPOQCSCI<S>::mode)
@@ -191,6 +209,9 @@ template <typename S> void bind_mpo_sci(py::module &m) {
                     const shared_ptr<OpElement<S>> &>())
             .def(py::init<const HamiltonianQCSCI<S> &, const shared_ptr<OpElement<S>> &,
                     int>());
+
+    py::class_<IdentityMPOSCI<S>, shared_ptr<IdentityMPOSCI<S>>, MPO<S>>(m, "IdentityMPOSCI")
+            .def(py::init<const HamiltonianQCSCI<S> &>());
 }
 
 template <typename S = void> void bind_types_sci(py::module &m) {

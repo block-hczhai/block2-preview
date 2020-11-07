@@ -124,6 +124,7 @@ struct CSRMatrixRef {
         if (alloc == nullptr)
             data = nullptr;
         else {
+            assert(data != nullptr);
             alloc->deallocate(data, memory_size());
             alloc = nullptr;
             data = nullptr;
@@ -203,12 +204,13 @@ struct CSRMatrixRef {
             dcopy(&m, data, &ind, x.data, &inc);
         } else {
             x.clear();
-            for (int i = 0; i < m; i++) {
-                int rows_end = i == m - 1 ? nnz : rows[i + 1];
-                int ic = lower_bound(cols + rows[i], cols + rows_end, i) - cols;
-                if (ic != rows_end && cols[ic] == i)
-                    x.data[i] = data[ic];
-            }
+            if(nnz != 0)
+                for (int i = 0; i < m; i++) {
+                    int rows_end = i == m - 1 ? nnz : rows[i + 1];
+                    int ic = lower_bound(cols + rows[i], cols + rows_end, i) - cols;
+                    if (ic != rows_end && cols[ic] == i)
+                        x.data[i] = data[ic];
+                }
         }
     }
     double trace() const {
