@@ -156,10 +156,6 @@ template <typename S> void bind_mpo_sci(py::module &m) {
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, const vector<double> &, double,
                       double, const std::vector<S> &>())
-        // vv will be added later not now
-        //.def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-        //            const vector<ubond_t> &, const vector<double> &, double,
-        //            double, const std::vector<S> &, const std::vector<S> &>())
         .def_readwrite("max_aqcc_iter", &DMRGSCIAQCCOLD<S>::max_aqcc_iter)
         .def_readwrite("g_factor", &DMRGSCIAQCCOLD<S>::g_factor)
         .def_readwrite("delta_e", &DMRGSCIAQCCOLD<S>::delta_e)
