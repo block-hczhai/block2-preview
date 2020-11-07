@@ -405,8 +405,6 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
         const bool forward, const int i, const double davidson_conv_thrd,
         const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) override {
         tuple<double, int, size_t, double> pdi;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
             FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
@@ -420,11 +418,15 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
             d_eff4 = ext_mes.at(3)->eff_ham(
                     FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         }
+        // h_eff needs to be done *last* for 3idx stuff
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
         auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
         pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                              davidson_soft_max_iter, me->para_rule);
+        h_eff->deallocate();
         for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
             if(d_eff != nullptr) {
                 d_eff->deallocate();
@@ -434,7 +436,6 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
             pket = h_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, me->ket->info,
                                              noise_type, me->para_rule);
-        h_eff->deallocate();
         const auto energy = std::get<0>(pdi) + me->mpo->const_e;
         smallest_energy = min(energy, smallest_energy);
         delta_e = smallest_energy - ref_energy;
@@ -449,9 +450,6 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
                                                0.}; // energy, ndav, nflop, tdav
         const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0)
                             and abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-            true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
         shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -469,6 +467,10 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                     true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
+        // h_eff needs to be done *last* for 3idx stuff
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                true, me->bra->tensors[i_site], me->ket->tensors[i_site]);
         if (doAQCC) {
             // AQCC
             // Here, we actually do several iterations
@@ -555,6 +557,7 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
             smallest_energy = min(energy, smallest_energy);
             delta_e = smallest_energy - ref_energy;
         }
+        h_eff->deallocate();
         for(auto& d_eff : {d_eff4, d_eff3, d_eff2, d_eff1}){
             if(d_eff != nullptr) {
                 d_eff->deallocate();
@@ -566,7 +569,6 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, me->ket->info,
                 noise_type, me->para_rule);
         }
-        h_eff->deallocate();
         return pdi;
     }
 };
