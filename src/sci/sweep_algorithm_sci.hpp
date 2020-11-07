@@ -380,7 +380,6 @@ template <typename S> struct DMRGSCIAQCC: DMRGSCI<S> {
             shared_ptr<EffectiveHamiltonian<S>> d_eff2,
             shared_ptr<EffectiveHamiltonian<S>> d_eff3,
             shared_ptr<EffectiveHamiltonian<S>> d_eff4){
-        delta_e = smallest_energy - ref_energy;
         const auto shift = (1. - g_factor) * delta_e;
         const auto shift2 = (1. - g_factor2) * delta_e;
         shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff;
