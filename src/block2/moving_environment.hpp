@@ -1197,6 +1197,24 @@ template <typename S> struct MovingEnvironment {
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
     }
+    void left_contract_rotate_unordered(int i) {
+        if (i != 0) {
+            envs[i]->left_op_infos.clear();
+            envs[i]->left = nullptr;
+            if (envs[i - 1]->left != nullptr)
+                frame->load_data(1, get_left_partition_filename(i - 1));
+            left_contract_rotate(i);
+        }
+    }
+    void right_contract_rotate_unordered(int i) {
+        if (i >= 0 && i + 1 < n_sites) {
+            envs[i]->right_op_infos.clear();
+            envs[i]->right = nullptr;
+            if (envs[i + 1]->right != nullptr)
+                frame->load_data(1, get_right_partition_filename(i + 1));
+            right_contract_rotate(i);
+        }
+    }
     string get_left_archive_filename(int i) const {
         stringstream ss;
         ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag

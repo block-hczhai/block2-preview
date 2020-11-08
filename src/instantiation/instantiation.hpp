@@ -44,6 +44,7 @@
 #include "../block2/parallel_mpo.hpp"
 #include "../block2/parallel_rule_sum_mpo.hpp"
 #include "../block2/parallel_rule.hpp"
+#include "../block2/parallel_sweep.hpp"
 #include "../block2/parallel_tensor_functions.hpp"
 #include "../block2/partition.hpp"
 #include "../block2/qc_hamiltonian.hpp"
@@ -231,6 +232,13 @@ extern template struct block2::ParallelRule<block2::SZ>;
 
 extern template struct block2::ParallelCommunicator<block2::SU2>;
 extern template struct block2::ParallelRule<block2::SU2>;
+
+// parallel_sweep.hpp
+extern template struct block2::ParallelMPS<block2::SZ>;
+extern template struct block2::ParallelDMRG<block2::SZ>;
+
+extern template struct block2::ParallelMPS<block2::SU2>;
+extern template struct block2::ParallelDMRG<block2::SU2>;
 
 // parallel_tensor_functions.hpp
 extern template struct block2::ParallelTensorFunctions<block2::SZ>;

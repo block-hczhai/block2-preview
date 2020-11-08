@@ -496,6 +496,10 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("initialize", &SparseMatrixInfo<S>::initialize, py::arg("bra"),
              py::arg("ket"), py::arg("dq"), py::arg("is_fermion"),
              py::arg("wfn") = false)
+        .def("initialize_trans_contract",
+             &SparseMatrixInfo<S>::initialize_trans_contract)
+        .def("initialize_contract", &SparseMatrixInfo<S>::initialize_contract)
+        .def("initialize_dm", &SparseMatrixInfo<S>::initialize_dm)
         .def("find_state", &SparseMatrixInfo<S>::find_state, py::arg("q"),
              py::arg("start") = 0)
         .def_property_readonly("total_memory",
@@ -559,6 +563,24 @@ template <typename S> void bind_sparse(py::module &m) {
                  assert(v.size() == (*self)[idx].size());
                  memcpy((*self)[idx].data, v.data(), sizeof(double) * v.size());
              })
+        .def("left_split",
+             [](SparseMatrix<S> *self) {
+                 shared_ptr<SparseMatrix<S>> left, right;
+                 self->left_split(left, right);
+                 return make_tuple(left, right);
+             })
+        .def("right_split",
+             [](SparseMatrix<S> *self) {
+                 shared_ptr<SparseMatrix<S>> left, right;
+                 self->right_split(left, right);
+                 return make_tuple(left, right);
+             })
+        .def("left_inverse",
+             [](SparseMatrix<S> *self) {
+                 shared_ptr<SparseMatrix<S>> left, middle, right;
+                 self->left_inverse(left, middle, right);
+                 return make_tuple(left, middle, right);
+             })
         .def("left_svd",
              [](SparseMatrix<S> *self) {
                  vector<S> qs;
@@ -585,7 +607,8 @@ template <typename S> void bind_sparse(py::module &m) {
              py::arg("mr"), py::arg("mr_cinfo"))
         .def("randomize", &SparseMatrix<S>::randomize, py::arg("a") = 0.0,
              py::arg("b") = 1.0)
-        .def("contract", &SparseMatrix<S>::contract)
+        .def("contract", &SparseMatrix<S>::contract, py::arg("lmat"),
+             py::arg("rmat"), py::arg("trace_right") = false)
         .def("swap_to_fused_left", &SparseMatrix<S>::swap_to_fused_left)
         .def("swap_to_fused_right", &SparseMatrix<S>::swap_to_fused_right)
         .def("__repr__", [](SparseMatrix<S> *self) {
@@ -771,6 +794,8 @@ template <typename S> void bind_mps(py::module &m) {
              &MPSInfo<S>::set_bond_dimension_using_hf, py::arg("m"),
              py::arg("occ"), py::arg("n_local") = 0)
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
+        .def("swap_wfn_to_fused_left", &MPSInfo<S>::swap_wfn_to_fused_left)
+        .def("swap_wfn_to_fused_right", &MPSInfo<S>::swap_wfn_to_fused_right)
         .def("get_filename", &MPSInfo<S>::get_filename)
         .def("save_mutable", &MPSInfo<S>::save_mutable)
         .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
@@ -864,6 +889,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def("random_canonicalize", &MPS<S>::random_canonicalize)
         .def("move_left", &MPS<S>::move_left)
         .def("move_right", &MPS<S>::move_right)
+        .def("flip_fused_form", &MPS<S>::flip_fused_form)
         .def("get_filename", &MPS<S>::get_filename)
         .def("load_data", &MPS<S>::load_data)
         .def("save_data", &MPS<S>::save_data)
@@ -886,6 +912,18 @@ template <typename S> void bind_mps(py::module &m) {
         .def("save_wavefunction", &MultiMPS<S>::save_wavefunction)
         .def("load_wavefunction", &MultiMPS<S>::load_wavefunction)
         .def("unload_wavefunction", &MultiMPS<S>::unload_wavefunction);
+
+    py::class_<ParallelMPS<S>, shared_ptr<ParallelMPS<S>>, MPS<S>>(
+        m, "ParallelMPS")
+        .def(py::init<const shared_ptr<MPSInfo<S>> &>())
+        .def(py::init<int, int, int>())
+        .def_readwrite("conn_centers", &ParallelMPS<S>::conn_centers)
+        .def_readwrite("conn_matrices", &ParallelMPS<S>::conn_matrices)
+        .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
+        .def("parallelize", &ParallelMPS<S>::parallelize)
+        .def("serialize", &ParallelMPS<S>::serialize)
+        .def("para_merge", &ParallelMPS<S>::para_merge)
+        .def("para_split", &ParallelMPS<S>::para_split);
 }
 
 template <typename S> void bind_operator(py::module &m) {
@@ -1168,6 +1206,10 @@ template <typename S> void bind_partition(py::module &m) {
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
              &MovingEnvironment<S>::right_contract_rotate)
+        .def("left_contract_rotate_unordered",
+             &MovingEnvironment<S>::left_contract_rotate_unordered)
+        .def("right_contract_rotate_unordered",
+             &MovingEnvironment<S>::right_contract_rotate_unordered)
         .def(
             "left_contract",
             [](MovingEnvironment<S> *self, int iL,
@@ -1204,6 +1246,7 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("iprint") = false)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
+        .def("partial_prepare", &MovingEnvironment<S>::partial_prepare)
         .def("get_left_archive_filename",
              &MovingEnvironment<S>::get_left_archive_filename)
         .def("get_middle_archive_filename",
@@ -1437,6 +1480,14 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("sweep", &DMRG<S>::sweep)
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
+
+    py::class_<ParallelDMRG<S>, shared_ptr<ParallelDMRG<S>>, DMRG<S>>(
+        m, "ParallelDMRG")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &>())
+        .def_readwrite("para_mps", &ParallelDMRG<S>::para_mps)
+        .def("partial_sweep", &ParallelDMRG<S>::partial_sweep)
+        .def("connection_sweep", &ParallelDMRG<S>::connection_sweep);
 
     py::class_<typename ImaginaryTE<S>::Iteration,
                shared_ptr<typename ImaginaryTE<S>::Iteration>>(

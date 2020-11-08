@@ -1104,6 +1104,20 @@ template <typename S> struct MPS {
                 }
             }
     }
+    void flip_fused_form(int center, const shared_ptr<CG<S>> &cg) {
+        load_tensor(center);
+        if (canonical_form[center] == 'S') {
+            tensors[center] =
+                info->swap_wfn_to_fused_left(center, tensors[center], cg);
+            canonical_form[center] = 'K';
+        } else if (canonical_form[center] == 'K') {
+            tensors[center] =
+                info->swap_wfn_to_fused_right(center, tensors[center], cg);
+            canonical_form[center] = 'S';
+        } else assert(false);
+        save_tensor(center);
+        unload_tensor(center);
+    }
     // CC -> KR or K -> S or LS -> KR or LK -> KR
     void move_left(const shared_ptr<CG<S>> &cg) {
         if (canonical_form[center] == 'C') {

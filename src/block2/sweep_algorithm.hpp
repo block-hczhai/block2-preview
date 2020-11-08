@@ -793,13 +793,9 @@ template <typename S> struct DMRG {
                                       davidson_conv_thrd);
         }
     }
-    tuple<
-        vector<double>, double,
-        vector<vector<pair<S, double>>>> virtual sweep(bool forward,
-                                                       ubond_t bond_dim,
-                                                       double noise,
-                                                       double
-                                                           davidson_conv_thrd) {
+    virtual tuple<vector<double>, double, vector<vector<pair<S, double>>>>
+    sweep(bool forward, ubond_t bond_dim, double noise,
+          double davidson_conv_thrd) {
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();

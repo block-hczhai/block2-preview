@@ -545,6 +545,47 @@ struct SparseMatrixInfo<
         ofs.write((char *)&is_fermion, sizeof(is_fermion));
         ofs.write((char *)&is_wavefunction, sizeof(is_wavefunction));
     }
+    // L (wfn) x R (wfn)^T = rot
+    void initialize_trans_contract(const shared_ptr<SparseMatrixInfo> &linfo,
+                                   const shared_ptr<SparseMatrixInfo> &rinfo,
+                                   S dq, bool trace_right) {
+        this->is_fermion = false;
+        this->is_wavefunction = false;
+        delta_quantum = dq;
+        map<S, pair<int, int>> mqs;
+        vector<S> qs;
+        if (trace_right) {
+            for (int i = 0; i < linfo->n; i++) {
+                S q = linfo->quanta[i].get_bra(linfo->delta_quantum);
+                mqs[q].first = linfo->n_states_bra[i];
+            }
+            for (int i = 0; i < rinfo->n; i++) {
+                S q = rinfo->quanta[i].get_bra(rinfo->delta_quantum);
+                mqs[q].second = rinfo->n_states_bra[i];
+            }
+        } else {
+            for (int i = 0; i < linfo->n; i++) {
+                S q = -linfo->quanta[i].get_ket();
+                mqs[q].first = linfo->n_states_ket[i];
+            }
+            for (int i = 0; i < rinfo->n; i++) {
+                S q = -rinfo->quanta[i].get_ket();
+                mqs[q].second = rinfo->n_states_ket[i];
+            }
+        }
+        for (auto &q : mqs)
+            if (q.second.first != 0 && q.second.second != 0)
+                qs.push_back(q.first);
+        n = qs.size();
+        allocate(n);
+        if (n != 0) {
+            memcpy(quanta, qs.data(), n * sizeof(S));
+            for (int i = 0; i < n; i++)
+                n_states_bra[i] = mqs[qs[i]].first,
+                n_states_ket[i] = mqs[qs[i]].second;
+            sort_states();
+        }
+    }
     // Generate minimal SparseMatrixInfo from contracting two SparseMatrix
     void initialize_contract(const shared_ptr<SparseMatrixInfo> &linfo,
                              const shared_ptr<SparseMatrixInfo> &rinfo) {
@@ -1024,6 +1065,7 @@ template <typename S> struct SparseMatrix {
     }
     // S = C(r)R => C + C^(-1)
     void left_inverse(shared_ptr<SparseMatrix<S>> &left,
+                      shared_ptr<SparseMatrix<S>> &middle,
                       shared_ptr<SparseMatrix<S>> &right) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -1046,22 +1088,22 @@ template <typename S> struct SparseMatrix {
             winfo->n_states_ket[i] = l[i]->shape[1];
         }
         winfo->sort_states();
-        rinfo->is_fermion = info->is_fermion;
-        rinfo->is_wavefunction = info->is_wavefunction;
-        rinfo->delta_quantum = info->delta_quantum;
-        assert(info->is_wavefunction);
-        rinfo->allocate(info->n);
+        rinfo->is_fermion = false;
+        rinfo->is_wavefunction = false;
+        rinfo->delta_quantum = S();
+        rinfo->allocate(r.size());
         for (int i = 0; i < rinfo->n; i++) {
-            rinfo->quanta[i] = info->delta_quantum.combine(
-                -info->quanta[i].get_ket(),
-                -info->quanta[i].get_bra(info->delta_quantum));
-            rinfo->n_states_bra[i] = l[i]->shape[1];
-            rinfo->n_states_ket[i] = l[i]->shape[0];
+            rinfo->quanta[i] = qs[i];
+            rinfo->n_states_bra[i] = r[i]->shape[0];
+            rinfo->n_states_ket[i] = r[i]->shape[1];
         }
         rinfo->sort_states();
         left = make_shared<SparseMatrix<S>>(d_alloc);
+        middle = make_shared<SparseMatrix<S>>(d_alloc);
         right = make_shared<SparseMatrix<S>>(d_alloc);
         left->allocate(winfo);
+        middle->allocate(
+            make_shared<SparseMatrixInfo<S>>(winfo->deep_copy(i_alloc)));
         right->allocate(rinfo);
         for (int i = 0; i < winfo->n; i++) {
             MatrixRef mm = (*left)[winfo->quanta[i]];
@@ -1075,19 +1117,18 @@ template <typename S> struct SparseMatrix {
                                         s[k]->data[j], mm.n);
         }
         for (int i = 0; i < winfo->n; i++) {
-            S q = info->delta_quantum.combine(
-                -info->quanta[i].get_ket(),
-                -info->quanta[i].get_bra(info->delta_quantum));
-            MatrixRef mm = (*right)[q];
-            MatrixFunctions::iadd(mm, l[i]->ref(), 1.0, true);
+            MatrixRef mm = (*middle)[winfo->quanta[i]];
+            MatrixFunctions::copy(mm, l[i]->ref());
             int k =
                 lower_bound(qs.begin(), qs.end(), -info->quanta[i].get_ket()) -
                 qs.begin();
             for (int j = 0; j < l[i]->shape[1]; j++)
                 if (abs(s[k]->data[j]) > 1E-12)
-                    MatrixFunctions::iscale(MatrixRef(&mm(j, 0), mm.n, 1),
-                                            1 / s[k]->data[j], 1);
+                    MatrixFunctions::iscale(MatrixRef(&mm(0, j), mm.m, 1),
+                                            1 / s[k]->data[j], mm.n);
         }
+        for (int i = 0; i < rinfo->n; i++)
+            MatrixFunctions::copy((*right)[qs[i]], r[i]->ref());
     }
     // l will have the same number of non-zero blocks as this matrix
     // s will be labelled by right q labels
@@ -1402,27 +1443,46 @@ template <typename S> struct SparseMatrix {
     }
     // Contract two SparseMatrix
     void contract(const shared_ptr<SparseMatrix> &lmat,
-                  const shared_ptr<SparseMatrix> &rmat) {
-        assert(info->is_wavefunction);
-        if (lmat->info->is_wavefunction)
-            for (int i = 0; i < info->n; i++) {
-                int il = lmat->info->find_state(info->quanta[i]);
-                int ir = rmat->info->find_state(-info->quanta[i].get_ket());
-                if (il != -1 && ir != -1)
-                    MatrixFunctions::multiply((*lmat)[il], false, (*rmat)[ir],
-                                              false, (*this)[i],
-                                              lmat->factor * rmat->factor, 0.0);
+                  const shared_ptr<SparseMatrix> &rmat,
+                  bool trace_right = false) {
+        if (info->is_wavefunction) {
+            // wfn = wfn x rot
+            if (lmat->info->is_wavefunction)
+                for (int i = 0; i < info->n; i++) {
+                    int il = lmat->info->find_state(info->quanta[i]);
+                    int ir = rmat->info->find_state(-info->quanta[i].get_ket());
+                    if (il != -1 && ir != -1)
+                        MatrixFunctions::multiply(
+                            (*lmat)[il], false, (*rmat)[ir], false, (*this)[i],
+                            lmat->factor * rmat->factor, 0.0);
+                }
+            // wfn = rot x wfn
+            else
+                for (int i = 0; i < info->n; i++) {
+                    int il = lmat->info->find_state(
+                        info->quanta[i].get_bra(info->delta_quantum));
+                    int ir = rmat->info->find_state(info->quanta[i]);
+                    if (il != -1 && ir != -1)
+                        MatrixFunctions::multiply(
+                            (*lmat)[il], false, (*rmat)[ir], false, (*this)[i],
+                            lmat->factor * rmat->factor, 0.0);
+                }
+        } else {
+            // rot = trace_right ? wfn x wfn.T : wfn.T x wfn
+            assert(lmat->info->is_wavefunction && rmat->info->is_wavefunction);
+            clear();
+            for (int il = 0; il < lmat->info->n; il++) {
+                int ir = rmat->info->find_state(lmat->info->quanta[il]);
+                int i = info->find_state(
+                    trace_right ? lmat->info->quanta[il].get_bra(
+                                      lmat->info->delta_quantum)
+                                : -lmat->info->quanta[il].get_ket());
+                if (ir != -1 && i != -1)
+                    MatrixFunctions::multiply(
+                        (*lmat)[il], !trace_right, (*rmat)[ir], trace_right,
+                        (*this)[i], lmat->factor * rmat->factor, 1.0);
             }
-        else
-            for (int i = 0; i < info->n; i++) {
-                int il = lmat->info->find_state(
-                    info->quanta[i].get_bra(info->delta_quantum));
-                int ir = rmat->info->find_state(info->quanta[i]);
-                if (il != -1 && ir != -1)
-                    MatrixFunctions::multiply((*lmat)[il], false, (*rmat)[ir],
-                                              false, (*this)[i],
-                                              lmat->factor * rmat->factor, 0.0);
-            }
+        }
     }
     // Change from [l x (fused m and r)] to [(fused l and m) x r]
     void swap_to_fused_left(const shared_ptr<SparseMatrix<S>> &mat,
