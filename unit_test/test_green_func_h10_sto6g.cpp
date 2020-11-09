@@ -100,7 +100,7 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
 
     ubond_t ket_bond_dim = 500, bra_bond_dim = 750;
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = {ket_bond_dim};
-    vector<double> noises = {1E-4, 1E-5, 1E-6, 0};
+    vector<double> noises = {1E-6, 1E-8, 1E-10, 0};
 
     t.get_time();
 
@@ -217,11 +217,12 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
     linear->eq_type = EquationTypes::GreensFunction;
     linear->gf_eta = eta;
     linear->gf_omega = omega;
+    linear->precondition_cg = true;
     linear->noise_type = NoiseTypes::ReducedPerturbative;
     linear->decomp_type = DecompositionTypes::SVD;
     linear->right_weight = 0.2;
     linear->iprint = 2;
-    double igf = linear->solve(20, ymps->center == 0, 1E-8);
+    double igf = linear->solve(20, ymps->center == 0, 1E-12);
     igf = linear->targets.back().back();
 
     cout << "== " << name << " (IGF) ==" << setw(20) << target

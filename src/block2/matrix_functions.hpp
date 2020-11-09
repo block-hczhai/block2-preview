@@ -499,6 +499,17 @@ struct MatrixFunctions {
         assert(info == 0);
         dalloc->deallocate(work, lwork);
     }
+    // z = r / aa
+    static void precondition(const MatrixRef &z, const MatrixRef &r,
+                             const DiagonalMatrix &aa) {
+        copy(z, r);
+        if (aa.size() != 0) {
+            assert(aa.size() == r.size() && r.size() == z.size());
+            for (int i = 0; i < aa.n; i++)
+                if (abs(aa.data[i]) > 1E-12)
+                    z.data[i] /= aa.data[i];
+        }
+    }
     static void olsen_precondition(const MatrixRef &q, const MatrixRef &c,
                                    double ld, const DiagonalMatrix &aa) {
         assert(aa.size() == c.size());
@@ -1009,10 +1020,11 @@ struct MatrixFunctions {
     // H x := op(x) + consta * x
     template <typename MatMul, typename PComm>
     static double
-    conjugate_gradient(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
-                       double consta = 0.0, bool iprint = false,
-                       const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
-                       int max_iter = 5000, int soft_max_iter = -1) {
+    conjugate_gradient(MatMul op, const DiagonalMatrix &aa, MatrixRef x,
+                       MatrixRef b, int &nmult, double consta = 0.0,
+                       bool iprint = false, const PComm &pcomm = nullptr,
+                       double conv_thrd = 5E-6, int max_iter = 5000,
+                       int soft_max_iter = -1) {
         MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
@@ -1025,10 +1037,10 @@ struct MatrixFunctions {
         if (consta != 0)
             iadd(r, x, consta);
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-            iadd(r, b, -1);
             iscale(r, -1);
-            copy(p, r);
-            error = dot(r, r);
+            iadd(r, b, 1); // r = b - Ax
+            precondition(p, r, aa);
+            error = dot(p, r);
         }
         if (iprint)
             cout << endl;
@@ -1051,8 +1063,9 @@ struct MatrixFunctions {
         old_error = error;
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
-        MatrixRef hp(nullptr, x.m, x.n);
+        MatrixRef hp(nullptr, x.m, x.n), z(nullptr, x.m, x.n);
         hp.allocate();
+        z.allocate();
         int xiter = 0;
         while (xiter < max_iter &&
                (soft_max_iter == -1 || xiter < soft_max_iter)) {
@@ -1066,7 +1079,8 @@ struct MatrixFunctions {
                 double alpha = old_error / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
-                error = dot(r, r);
+                precondition(z, r, aa);
+                error = dot(z, r);
                 func = dot(x, b);
                 if (iprint)
                     cout << setw(6) << xiter << fixed << setw(15)
@@ -1081,9 +1095,11 @@ struct MatrixFunctions {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     double beta = error / old_error;
                     old_error = error;
-                    iadd(p, r, 1 / beta);
+                    iadd(p, z, 1 / beta);
                     iscale(p, beta);
                 }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(p.data, p.size(), pcomm->root);
             }
         }
         if (xiter == max_iter && error >= conv_thrd) {
@@ -1091,6 +1107,7 @@ struct MatrixFunctions {
             assert(false);
         }
         nmult = xiter + 1;
+        z.deallocate();
         hp.deallocate();
         p.deallocate();
         r.deallocate();

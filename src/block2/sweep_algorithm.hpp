@@ -1593,6 +1593,7 @@ template <typename S> struct Linear {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
+    bool precondition_cg = true;
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
     // only useful when target contains some other
@@ -1745,7 +1746,7 @@ template <typename S> struct Linear {
         } else if (lme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> l_eff =
                 lme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                             false, me->bra->tensors[i], right_bra);
+                             precondition_cg, me->bra->tensors[i], right_bra);
             if (eq_type == EquationTypes::Normal) {
                 tuple<double, int, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
@@ -2128,8 +2129,9 @@ template <typename S> struct Linear {
                 l_eff->deallocate();
             }
         } else if (lme != nullptr) {
-            shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
-                FuseTypes::FuseLR, false, me->bra->tensors[i], right_bra);
+            shared_ptr<EffectiveHamiltonian<S>> l_eff =
+                lme->eff_ham(FuseTypes::FuseLR, precondition_cg,
+                             me->bra->tensors[i], right_bra);
             if (eq_type == EquationTypes::Normal) {
                 tuple<double, int, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
@@ -2387,7 +2389,7 @@ template <typename S> struct Linear {
         size_t idx =
             min_element(sweep_targets.begin(), sweep_targets.end(),
                         [](const vector<double> &x, const vector<double> &y) {
-                            return x.back() < y.back();
+                            return x[0] < y[0];
                         }) -
             sweep_targets.begin();
         return make_tuple(sweep_targets[idx], sweep_discarded_weights[idx]);
@@ -2430,8 +2432,8 @@ template <typename S> struct Linear {
             targets.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             if (targets.size() >= 2)
-                target_difference = targets[targets.size() - 1].back() -
-                                    targets[targets.size() - 2].back();
+                target_difference = targets[targets.size() - 1][0] -
+                                    targets[targets.size() - 2][0];
             converged = targets.size() >= 2 && tol > 0 &&
                         abs(target_difference) < tol &&
                         noises[iw] == noises.back() &&

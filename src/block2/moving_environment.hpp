@@ -79,7 +79,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
           compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
-            assert(bra == ket);
+            assert(bra->info == ket->info);
             diag = make_shared<SparseMatrix<S>>();
             diag->allocate(ket->info);
         }
@@ -340,6 +340,15 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         btmp.allocate();
         ktmp.clear();
         MatrixFunctions::iadd(ktmp, mket, -eta);
+        DiagonalMatrix aa(nullptr, 0);
+        if (compute_diag) {
+            aa = DiagonalMatrix(nullptr, diag->total_memory);
+            aa.allocate();
+            for (int i = 0; i < aa.size(); i++) {
+                aa.data[i] = diag->data[i] + const_e + omega;
+                aa.data[i] = aa.data[i] * aa.data[i] + eta * eta;
+            }
+        }
         assert(tf->opf->seq->mode != SeqTypes::Auto);
         auto op = [omega, eta, const_e, this, &btmp,
                    &nmult](const MatrixRef &b, const MatrixRef &c) -> void {
@@ -354,10 +363,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         // solve imag part -> ibra
         double igf = MatrixFunctions::conjugate_gradient(
-                         op, ibra, ktmp, numltx, 0.0, iprint,
+                         op, aa, ibra, ktmp, numltx, 0.0, iprint,
                          para_rule == nullptr ? nullptr : para_rule->comm,
                          conv_thrd, max_iter, soft_max_iter) /
                      (-eta);
+        if (compute_diag)
+            aa.deallocate();
         btmp.deallocate();
         ktmp.deallocate();
         // compute real part -> rbra

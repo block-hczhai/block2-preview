@@ -1588,6 +1588,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &Linear<S>::trunc_type)
         .def_readwrite("decomp_type", &Linear<S>::decomp_type)
         .def_readwrite("eq_type", &Linear<S>::eq_type)
+        .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)

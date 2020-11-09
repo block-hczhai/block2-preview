@@ -496,6 +496,7 @@ if __name__ == "__main__":
     hf_type = "RHF"  # RHF or UHF
     mpg = 'c1'  # point group: d2h or c1
     scratch = './tmp'
+    lowdin = False
 
     import os
     if not os.path.isdir(scratch):
@@ -505,7 +506,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf
 
     # H chain
-    N = 10
+    N = 6
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (0, 0, i * R)] for i in range(N)],
@@ -523,30 +524,38 @@ if __name__ == "__main__":
     print("SCF Energy = %20.15f" % ener)
     print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
 
-    eta = 0.005
-    freqs = np.arange(-0.8, -0.2, 0.01)
-    accurate = False  # True can only be used for H4
-    mo_orbs = [4]
-    t = time.perf_counter()
-    if not accurate:
+    if lowdin:
+
+        eta = 0.005
+        freqs = np.arange(-0.8, -0.2, 0.01)
+        mo_orbs = [4]
+        t = time.perf_counter()
         gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
-                           gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
-                           gmres_tol=1E-6, lowdin=True, ignore_ecore=False)
+                        gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
+                        gmres_tol=1E-8, lowdin=True, ignore_ecore=False)
+
+        print(gfmat) # alpha only
+
+        # alpha + beta
+        pdos = (-2 / np.pi) * gfmat.imag.trace(axis1=0, axis2=1)
+        print("PDOS = ", pdos)
+        print("TIME = ", time.perf_counter() - t)
+
+        import matplotlib.pyplot as plt
+
+        plt.plot(freqs, pdos, 'o-', markersize=2)
+        plt.xlabel('Frequency $\\omega$ (a.u.)')
+        plt.ylabel('LDOS (a.u.)')
+        plt.savefig('gf-figure.png', dpi=600)
+    
     else:
-        gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
-                           gf_bond_dims=[750], gf_noises=[1E-3, 5E-4, 1E-5, 1E-6, 0], gf_tol=1E-14,
-                           gmres_tol=1E-14, lowdin=True, ignore_ecore=False)
 
-    print(gfmat) # alpha only
-
-    # alpha + beta
-    pdos = (-2 / np.pi) * gfmat.imag.trace(axis1=0, axis2=1)
-    print("PDOS = ", pdos)
-    print("TIME = ", time.perf_counter() - t)
-
-    import matplotlib.pyplot as plt
-
-    plt.plot(freqs, pdos, 'o-', markersize=2)
-    plt.xlabel('Frequency $\\omega$ (a.u.)')
-    plt.ylabel('LDOS (a.u.)')
-    plt.savefig('gf-figure.png', dpi=600)
+        eta = 0.005
+        freqs = [-0.2]
+        t = time.perf_counter()
+        gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
+                            gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
+                            gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
+                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False)
+        gfmat = np.einsum('ip,pqr,jq->ijr',mf.mo_coeff, gfmat, mf.mo_coeff)
+        print(gfmat)
