@@ -164,9 +164,9 @@ template <typename S> struct ParallelMPS : MPS<S> {
         assert(canonical_form[center] == 'S');
         assert(canonical_form[center - 1] == 'L');
         load_tensor(center);
-        shared_ptr<SparseMatrix<S>> left, middle, right;
-        tensors[center]->left_inverse(left, middle, right);
-        conn_matrices[pidx] = middle;
+        shared_ptr<SparseMatrix<S>> left, right;
+        tensors[center]->right_split(left, right);
+        conn_matrices[pidx] = left->pseudo_inverse();
         info->right_dims[center] = right->info->extract_state_info(false);
         info->save_right_dims(center);
         shared_ptr<SparseMatrix<S>> rmat = tensors[center];

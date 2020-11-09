@@ -575,12 +575,7 @@ template <typename S> void bind_sparse(py::module &m) {
                  self->right_split(left, right);
                  return make_tuple(left, right);
              })
-        .def("left_inverse",
-             [](SparseMatrix<S> *self) {
-                 shared_ptr<SparseMatrix<S>> left, middle, right;
-                 self->left_inverse(left, middle, right);
-                 return make_tuple(left, middle, right);
-             })
+        .def("pseudo_inverse", &SparseMatrix<S>::pseudo_inverse)
         .def("left_svd",
              [](SparseMatrix<S> *self) {
                  vector<S> qs;
