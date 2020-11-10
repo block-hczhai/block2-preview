@@ -22,6 +22,9 @@
 
 #include "utils.hpp"
 #include <algorithm>
+#ifdef __unix__
+#include <execinfo.h>
+#endif
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -33,6 +36,18 @@
 using namespace std;
 
 namespace block2 {
+
+inline void print_trace() {
+#ifdef __unix__
+    void *array[32];
+    size_t size = backtrace(array, 32);
+    char **strings = backtrace_symbols(array, size);
+
+    for (size_t i = 0; i < size; i++)
+        fprintf(stderr, "%s\n", strings[i]);
+#endif
+    abort();
+}
 
 // Abstract memory allocator
 template <typename T> struct Allocator {
@@ -57,7 +72,7 @@ template <typename T> struct StackAllocator : Allocator<T> {
             cout << "exceeding allowed memory"
                  << " (size=" << size << ", trying to allocate " << n << ") "
                  << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
-            abort();
+            print_trace();
             return 0;
         } else
             return data + (used += n) - n;
@@ -67,7 +82,7 @@ template <typename T> struct StackAllocator : Allocator<T> {
             return;
         if (used < n || ptr != data + used - n) {
             cout << "deallocation not happening in reverse order" << endl;
-            abort();
+            print_trace();
         } else
             used -= n;
     }
