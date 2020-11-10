@@ -97,6 +97,7 @@ public:
     int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
     bool sci_finalize = true;
     bool useRuleQC = true; // Use RuleQC for big sites
+    mutable std::shared_ptr<Rule<S>> ruleQC = nullptr; // Will be changed in const method
     std::shared_ptr<ParallelRuleQC<S>> parallelRule = nullptr; // Enable it for big site in useRuleQC
     HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
         const shared_ptr<FCIDUMP> &fcidump,
@@ -618,12 +619,17 @@ public:
         // Same for C and D, which is fast
         unordered_map< S, std::vector<fillTuple2>, sci::SHasher<S> > opsQ, opsP, opsPD;
         unordered_map< S, std::vector<fillTuple1>, sci::SHasher<S> > opsR, opsRD;
-        RuleQC<S> ruleQC;
+        if(not useRuleQC and ruleQC != nullptr){
+            throw std::invalid_argument("HamiltonianQCSCI: ruleQC is set but useRuleQC is false");
+        }
+        if(useRuleQC and ruleQC == nullptr){
+            ruleQC = std::make_shared<RuleQC<S>>();
+        }
         for (auto &p : ops) {
             shared_ptr<OpElement<S>> pop = dynamic_pointer_cast<OpElement<S>>(p.first);
             OpElement<S> &op = *pop;
             auto canBeSkipped = parallelRule != nullptr and not parallelRule->available(pop);
-            canBeSkipped = canBeSkipped or (useRuleQC and ruleQC(pop) != nullptr);
+            canBeSkipped = canBeSkipped or (useRuleQC and (*ruleQC)(pop) != nullptr);
             if(canBeSkipped){
                 p.second = make_shared<DelayedSparseMatrix < S, OpExpr < S>>>(
                         iSite, p.first, find_site_op_info(op.q_label, iSite));
@@ -747,7 +753,7 @@ public:
                     continue;
                 }
                 if (p.second->get_type() == SparseMatrixTypes::Delayed) {
-                    auto ref_op = ruleQC(pop)->op;
+                    auto ref_op = (*ruleQC)(pop)->op;
                     if (ops.count(ref_op) && (ops.at(ref_op)->factor == 0.0 ||
                                               ops.at(ref_op)->norm() < TINY))
                         p.second->factor = 0.0;
