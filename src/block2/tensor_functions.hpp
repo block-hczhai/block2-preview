@@ -106,6 +106,12 @@ template <typename S> struct TensorFunctions {
         int &vidx) const {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
+        // if no identity operator found in one side,
+        // then the site does not have to be optimized.
+        // perturbative noise can be skipped
+        if ((!trace_right && lopt->ops.count(i_op) == 0) ||
+            (trace_right && ropt->ops.count(i_op) == 0))
+            return;
         switch (expr->get_type()) {
         case OpTypes::SumProd: {
             shared_ptr<OpSumProd<S>> op =

@@ -106,28 +106,18 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             &cinfos,
         const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
         int &vidx) const override {
-        // if no identity operator found in one side,
-        // then the site does not have to be optimized.
-        // perturbative noise can be skipped
-        const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         if (expr->get_type() == OpTypes::ExprRef) {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
-            if ((!trace_right && lopt->ops.count(i_op)) ||
-                (trace_right && ropt->ops.count(i_op)))
-                TensorFunctions<S>::tensor_product_partial_multiply(
-                    op->op, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                    vmats, vidx);
+            TensorFunctions<S>::tensor_product_partial_multiply(
+                op->op, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
+                vmats, vidx);
             if (opf->seq->mode != SeqTypes::Auto)
                 rule->comm->reduce_sum(vmats, rule->comm->root);
-        } else {
-            if ((!trace_right && lopt->ops.count(i_op)) ||
-                (trace_right && ropt->ops.count(i_op)))
-                TensorFunctions<S>::tensor_product_partial_multiply(
-                    expr, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                    vmats, vidx);
-        }
+        } else
+            TensorFunctions<S>::tensor_product_partial_multiply(
+                expr, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
+                vmats, vidx);
     }
     // vmats = expr x cmats
     void

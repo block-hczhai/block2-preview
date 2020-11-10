@@ -136,6 +136,9 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         int &vidx) const override {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
+        if ((!trace_right && lopt->ops.count(i_op) == 0) ||
+            (trace_right && ropt->ops.count(i_op) == 0))
+            return;
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S>> op =
