@@ -177,20 +177,31 @@ template <typename S> struct LinearSCI : Linear<S> {
         if (last_site_1_and_forward) {
             assert(me->dot = 2);
             me->dot = 1;
-            me->ket->canonical_form[i] = 'K';
+            me->move_to(i);
+            if (me->ket->canonical_form[i] == 'C') {
+                me->ket->canonical_form[i] = 'K';
+                me->ket->move_right(me->mpo->tf->opf->cg, me->para_rule);
+            }
             if (lme != nullptr) {
                 lme->dot = 1;
-                lme->ket->canonical_form[i] = 'K';
+                lme->move_to(i);
+                if (lme->ket->canonical_form[i] == 'C') {
+                    lme->ket->canonical_form[i] = 'K';
+                    lme->ket->move_right(lme->mpo->tf->opf->cg, lme->para_rule);
+                }
             }
             if (tme != nullptr) {
                 tme->dot = 1;
-                tme->ket->canonical_form[i] = 'K';
+                tme->move_to(i);
+                if (tme->ket->canonical_form[i] == 'C') {
+                    tme->ket->canonical_form[i] = 'K';
+                    tme->ket->move_right(tme->mpo->tf->opf->cg, tme->para_rule);
+                }
+                if (tme->bra->canonical_form[i] == 'C') {
+                    tme->bra->canonical_form[i] = 'K';
+                    tme->bra->move_right(tme->mpo->tf->opf->cg, tme->para_rule);
+                }
             }
-            minres_soft_max_iter = 0;
-            // skip this site (only do canonicalization)
-            Linear<S>::blocking(i, forward, bra_bond_dim, ket_bond_dim, 0,
-                                minres_conv_thrd);
-            minres_soft_max_iter = dsmi;
             i++;
             if (iprint >= 2) {
                 cout << "\r " << (forward ? "-->" : "<--")
