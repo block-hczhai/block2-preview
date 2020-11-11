@@ -24,7 +24,7 @@ using pyscf and block2.
 Author: Huanchen Zhai, Nov 5, 2020
 """
 
-from block2 import SU2, SZ
+from block2 import SU2, SZ, Global
 from block2 import init_memory, release_memory, set_mkl_num_threads, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
@@ -54,7 +54,7 @@ class GFDMRG:
     DDMRG++ for Green's Function for molecules.
     """
 
-    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2):
+    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2, print_statistics=True):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 1 (per sweep), 2 (per iteration)
@@ -69,6 +69,7 @@ class GFDMRG:
         self.verbose = verbose
         self.scratch = scratch
         self.mpo_orig = None
+        self.print_statistics = print_statistics
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file."""
@@ -140,6 +141,21 @@ class GFDMRG:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)
             self.fcidump.write(save_fcidump)
         assert pg in ["d2h", "c1"]
+    
+    @staticmethod
+    def fmt_size(i, suffix='B'):
+        if i < 1000:
+            return "%d %s" % (i, suffix)
+        else:
+            a = 1024
+            for pf in "KMGTPEZY":
+                p = 2
+                for k in [10, 100, 1000]:
+                    if i < k * a:
+                        return "%%.%df %%s%%s" % p % (i / a, pf, suffix)
+                    p -= 1
+                a *= 1024
+        return "??? " + suffix
 
     def dmrg(self, bond_dims, noises, n_steps=30, conv_tol=1E-7, cutoff=1E-14):
         """Ground-State DMRG."""
@@ -169,6 +185,17 @@ class GFDMRG:
         self.mpo_orig = mpo
         if self.verbose >= 3:
             print('MPO time = ', time.perf_counter() - tx)
+        
+        if self.print_statistics:
+            print('GS MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+            max_d = max(bond_dims)
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum, self.target, self.hamil.basis)
+            mps_info2.set_bond_dimension(max_d)
+            _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
+            print("GS EST MAX MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info2.left_dims]))
+            print("GS EST PEAK MEM = ", GFDMRG.fmt_size(mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
+            mps_info2.deallocate_mutable()
+            mps_info2.deallocate()
 
         # DMRG
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
@@ -189,6 +216,14 @@ class GFDMRG:
         mps.save_data()
         mps_info.save_data(self.scratch + "/GS_MPS_INFO")
         mps_info.deallocate()
+
+        if self.print_statistics:
+            dmain, dseco, imain, iseco = Global.frame.peak_used_memory
+            print("GS PEAK MEM USAGE:", 
+                "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         if self.verbose >= 1:
             print("=== GS Energy = %20.15f" % self.gs_energy)
@@ -216,6 +251,17 @@ class GFDMRG:
         else:
             mpo = 1.0 * self.mpo_orig
             mpo.const_e -= self.gs_energy
+
+        if self.print_statistics:
+            print('GF MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+            max_d = max(bond_dims)
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum, self.target, self.hamil.basis)
+            mps_info2.set_bond_dimension(max_d)
+            _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
+            print("GF EST MAX MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info2.left_dims]))
+            print("GF EST PEAK MEM = ", GFDMRG.fmt_size(mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
+            mps_info2.deallocate_mutable()
+            mps_info2.deallocate()
 
         impo = SimplifiedMPO(IdentityMPO(self.hamil),
                              NoTransposeRule(RuleQC()), True)
@@ -324,6 +370,8 @@ class GFDMRG:
                 rgf, igf = linear.targets[-1]
                 gf_mat[ii, ii, iw] = rgf + 1j * igf
 
+                dmain, dseco, imain, iseco = Global.frame.peak_used_memory
+
                 if self.verbose >= 1:
                     print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
                           ("ADD" if addition else "REM", idx, idx, w, rgf, igf, time.perf_counter() - t))
@@ -364,6 +412,13 @@ class GFDMRG:
         mps.save_data()
         mps_info.save_data(self.scratch + "/GS_MPS_INFO")
         mps_info.deallocate()
+
+        if self.print_statistics:
+            print("GF PEAK MEM USAGE:", 
+                "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         return gf_mat
 

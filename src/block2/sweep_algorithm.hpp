@@ -1593,6 +1593,7 @@ template <typename S> struct Linear {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
+    size_t sweep_cumulative_nflop = 0;
     bool precondition_cg = true;
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
@@ -2356,6 +2357,8 @@ template <typename S> struct Linear {
             tme->prepare();
         sweep_targets.clear();
         sweep_discarded_weights.clear();
+        sweep_cumulative_nflop = 0;
+        frame->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
             for (int it = rme->center; it < rme->n_sites - rme->dot + 1; it++)
@@ -2380,6 +2383,7 @@ template <typename S> struct Linear {
             t.get_time();
             Iteration r = blocking(i, forward, bra_bond_dim, ket_bond_dim,
                                    noise, minres_conv_thrd);
+            sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -2408,6 +2412,7 @@ template <typename S> struct Linear {
                     0.1);
         Timer start, current;
         start.get_time();
+        current.get_time();
         targets.clear();
         discarded_weights.clear();
         bool converged;
@@ -2439,7 +2444,7 @@ template <typename S> struct Linear {
                         noises[iw] == noises.back() &&
                         bra_bond_dims[iw] == bra_bond_dims.back();
             forward = !forward;
-            current.get_time();
+            double tswp = current.get_time();
             if (iprint >= 1) {
                 cout << "Time elapsed = " << fixed << setw(10)
                      << setprecision(3) << current.current - start.current;
@@ -2463,6 +2468,28 @@ template <typename S> struct Linear {
                 if (targets.size() >= 2)
                     cout << " | DF = " << setw(6) << setprecision(2)
                          << scientific << target_difference;
+                if (iprint >= 2) {
+                    size_t dmain = frame->peak_used_memory[0];
+                    size_t dseco = frame->peak_used_memory[1];
+                    size_t imain = frame->peak_used_memory[2];
+                    size_t iseco = frame->peak_used_memory[3];
+                    cout << " | DMEM = "
+                         << Parsing::to_size_string(dmain + dseco) << " ("
+                         << (dmain * 100 / (dmain + dseco)) << "%)";
+                    cout << " | IMEM = "
+                         << Parsing::to_size_string(imain + iseco) << " ("
+                         << (imain * 100 / (imain + iseco)) << "%)";
+                    cout << " | "
+                         << Parsing::to_size_string(sweep_cumulative_nflop,
+                                                    "FLOP/SWP");
+                    cout << endl << fixed << setw(10) << setprecision(3);
+                    cout << "Time sweep = " << tswp;
+                    if (lme != nullptr)
+                        cout << " | Trot = " << lme->trot
+                             << " | Tctr = " << lme->tctr
+                             << " | Tint = " << lme->tint
+                             << " | Tmid = " << lme->tmid;
+                }
                 cout << endl;
             }
             if (converged)
