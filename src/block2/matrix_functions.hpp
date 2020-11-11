@@ -1111,6 +1111,8 @@ struct MatrixFunctions {
         hp.deallocate();
         p.deallocate();
         r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;
     }
     // Solve x in linear equation H x = b where H^T = H
@@ -1218,6 +1220,8 @@ struct MatrixFunctions {
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             p.deallocate();
         r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;
     }
 };

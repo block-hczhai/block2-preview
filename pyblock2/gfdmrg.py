@@ -24,7 +24,7 @@ using pyscf and block2.
 Author: Huanchen Zhai, Nov 5, 2020
 """
 
-from block2 import SU2, SZ, Global
+from block2 import SU2, SZ, Global, OpNamesSet
 from block2 import init_memory, release_memory, set_mkl_num_threads, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
@@ -54,11 +54,18 @@ class GFDMRG:
     DDMRG++ for Green's Function for molecules.
     """
 
-    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2, print_statistics=True):
+    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2,
+        print_statistics=True, mpi=None, dctr=True):
         """
         Memory is in bytes.
-        verbose = 0 (quiet), 1 (per sweep), 2 (per iteration)
+        verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
         """
+
+        if mpi is not None:
+            memory = memory / mpi.size
+            if mpi.rank != 0:
+                verbose = 0
+                print_statistics = False
 
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
@@ -70,6 +77,17 @@ class GFDMRG:
         self.scratch = scratch
         self.mpo_orig = None
         self.print_statistics = print_statistics
+        self.mpi = mpi
+        self.dctr = dctr
+
+        if mpi is not None:
+            if SpinLabel == SU2:
+                from block2.su2 import ParallelRuleQC
+            else:
+                from block2.sz import ParallelRuleQC
+            self.prule = ParallelRuleQC(mpi)
+        else:
+            self.prule = None
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file."""
@@ -183,6 +201,14 @@ class GFDMRG:
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
         mpo = SimplifiedMPO(mpo, RuleQC(), True)
         self.mpo_orig = mpo
+
+        if self.mpi is not None:
+            if SpinLabel == SU2:
+                from block2.su2 import ParallelMPO
+            else:
+                from block2.sz import ParallelMPO
+            mpo = ParallelMPO(mpo, self.prule)
+
         if self.verbose >= 3:
             print('MPO time = ', time.perf_counter() - tx)
         
@@ -199,6 +225,8 @@ class GFDMRG:
 
         # DMRG
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
+        if self.dctr:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 4)
         if self.verbose >= 3:
@@ -234,7 +262,7 @@ class GFDMRG:
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
-                        eta, freqs, addition, cutoff=1E-14):
+                        eta, freqs, addition, cutoff=1E-14, diag_only=False):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -245,12 +273,21 @@ class GFDMRG:
         mps = MPS(mps_info)
         mps.load_data()
 
+        if self.mpi is not None:
+            if SpinLabel == SU2:
+                from block2.su2 import ParallelMPO
+            else:
+                from block2.sz import ParallelMPO
+
         if addition:
             mpo = -1.0 * self.mpo_orig
             mpo.const_e += self.gs_energy
         else:
             mpo = 1.0 * self.mpo_orig
             mpo.const_e -= self.gs_energy
+
+        if self.mpi is not None:
+            mpo = ParallelMPO(mpo, self.prule)
 
         if self.print_statistics:
             print('GF MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
@@ -266,17 +303,20 @@ class GFDMRG:
         impo = SimplifiedMPO(IdentityMPO(self.hamil),
                              NoTransposeRule(RuleQC()), True)
 
+        if self.mpi is not None:
+            impo = ParallelMPO(impo, self.prule)
+
         def align_mps_center(ket, ref):
             cf = ket.canonical_form
             if ref.center == 0:
                 ket.center += 1
                 ket.canonical_form = ket.canonical_form[:-1] + 'S'
                 while ket.center != 0:
-                    ket.move_left(mpo.tf.opf.cg)
+                    ket.move_left(mpo.tf.opf.cg, self.prule)
             else:
                 ket.canonical_form = 'K' + ket.canonical_form[1:]
                 while ket.center != ket.n_sites - 1:
-                    ket.move_right(mpo.tf.opf.cg)
+                    ket.move_right(mpo.tf.opf.cg, self.prule)
                 ket.center -= 1
             if self.verbose >= 2:
                 print('CF = %s --> %s' % (cf, ket.canonical_form))
@@ -317,10 +357,16 @@ class GFDMRG:
             rmpos[ii] = SimplifiedMPO(
                 SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True)
 
+            if self.mpi is not None:
+                rmpos[ii] = ParallelMPO(rmpos[ii], self.prule)
+
             pme = MovingEnvironment(mpo, rkets[ii], rkets[ii], "PERT")
             pme.init_environments(False)
             rme = MovingEnvironment(rmpos[ii], rkets[ii], mps, "RHS")
             rme.init_environments(False)
+            if self.dctr:
+                pme.delayed_contraction = OpNamesSet.normal_ops()
+                rme.delayed_contraction = OpNamesSet.normal_ops()
 
             cps = Linear(pme, rme, VectorUBond(gs_bond_dims),
                          VectorUBond([mps.info.bond_dim]), VectorDouble(gs_noises))
@@ -345,6 +391,9 @@ class GFDMRG:
             lme.init_environments(False)
             rme = MovingEnvironment(rmpos[ii], rkets[ii], mps, "RHS")
             rme.init_environments(False)
+            if self.dctr:
+                lme.delayed_contraction = OpNamesSet.normal_ops()
+                rme.delayed_contraction = OpNamesSet.normal_ops()
 
             linear = Linear(lme, rme, VectorUBond(bond_dims),
                             VectorUBond(bond_dims), VectorDouble(noises))
@@ -380,6 +429,9 @@ class GFDMRG:
                     print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
                           (w, idx, idx, time.perf_counter() - t))
 
+                if diag_only:
+                    continue
+
                 for jj, idx2 in enumerate(idxs):
 
                     if jj > ii and rkets[jj].info.target == rkets[ii].info.target:
@@ -395,6 +447,8 @@ class GFDMRG:
                         tme = MovingEnvironment(
                             impo, rkets[jj], rkets[ii], "GF")
                         tme.init_environments(False)
+                        if self.dctr:
+                            tme.delayed_contraction = OpNamesSet.normal_ops()
                         linear.noises[0] = noises[-1]
                         linear.tme = tme
                         linear.solve(1, mps.center != 0, 0)
@@ -435,7 +489,8 @@ class GFDMRG:
 def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
-               gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp', lowdin=False):
+               gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
+               lowdin=False, diag_only=False, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
 
@@ -460,6 +515,8 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         gf_n_steps : int. Green's function max number of sweeps.
         scratch : scratch folder for temporary files.
         lowdin : if True, will use lowdin orbitals instead of molecular orbitals
+        diag_only : if True, only calculate diagonal GF elements.
+        mpi : if not None, MPI is used
 
     Returns:
         gfmat : np.ndarray of dims (len(mo_orbs), len(mo_orbs), len(freqs)) (complex)
@@ -527,7 +584,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         mo_orbs = range(n_mo)
 
     dmrg = GFDMRG(scratch=scratch, memory=memory,
-                  verbose=verbose, omp_threads=n_threads)
+                  verbose=verbose, omp_threads=n_threads, mpi=mpi)
     dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
                           orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
@@ -537,7 +594,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         # only calculate alpha spin
         gf += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
                                    gs_bond_dims, gs_noises, gs_tol, gs_n_steps, idxs=mo_orbs,
-                                   eta=delta, freqs=freqs, addition=addit)
+                                   eta=delta, freqs=freqs, addition=addit, diag_only=diag_only)
 
     del dmrg
 
