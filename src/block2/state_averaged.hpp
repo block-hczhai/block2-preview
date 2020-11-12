@@ -164,16 +164,16 @@ template <typename S> struct MultiMPS : MPS<S> {
         for (int j = 0; j < nroots; j++)
             wfns[j]->randomize();
     }
-    string get_filename(int i) const override {
+    string get_filename(int i, const string &dir = "") const override {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".MMPS." << info->tag
-           << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
+           << ".MMPS." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
-    string get_wfn_filename(int i) const {
+    string get_wfn_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".MMPS-WFN."
-           << info->tag << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
+           << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S>> &mps) const {
@@ -190,6 +190,18 @@ template <typename S> struct MultiMPS : MPS<S> {
         shallow_copy_to(mps);
         shallow_copy_wfn_to(mps);
         return mps;
+    }
+    void copy_data(const string &dir) const override {
+        if (frame->prefix_can_write) {
+            for (int i = 0; i < n_sites; i++)
+                if (tensors[i] != nullptr)
+                    Parsing::copy_file(get_filename(i), get_filename(i, dir));
+                else if (i == center)
+                    for (int j = 0; j < nroots; j++)
+                        Parsing::copy_file(get_wfn_filename(j),
+                                           get_wfn_filename(j, dir));
+            Parsing::copy_file(get_filename(-1), get_filename(-1, dir));
+        }
     }
     void load_data() override {
         shared_ptr<VectorAllocator<double>> d_alloc =

@@ -112,7 +112,8 @@ template <typename S> struct TDDMRG {
     }
     tuple<double, double, double> sweep(bool forward, bool advance, double beta,
                                         ubond_t bond_dim, double noise) {
-        me->prepare();
+        lme->prepare();
+        rme->prepare();
         vector<double> energies, normsqs;
         vector<int> sweep_range;
         double largest_error = 0.0;
@@ -590,6 +591,7 @@ template <typename S> struct ImaginaryTE {
             } else
                 me->ket->canonical_form[i] = 'S';
         }
+        me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(get<0>(pdi) + me->mpo->const_e,
@@ -764,6 +766,7 @@ template <typename S> struct ImaginaryTE {
         if (me->para_rule == nullptr || me->para_rule->is_root())
             MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket,
                                                 forward, me->mpo->tf->opf->cg);
+        me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(get<0>(pdi) + me->mpo->const_e,

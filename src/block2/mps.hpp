@@ -552,10 +552,11 @@ template <typename S> struct MPSInfo {
         lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
-    string get_filename(bool left, int i) const {
+    string get_filename(bool left, int i, const string &dir = "") const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".MPS.INFO." << tag
-           << (left ? ".LEFT." : ".RIGHT.") << Parsing::to_string(i);
+        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
+           << ".MPS.INFO." << tag << (left ? ".LEFT." : ".RIGHT.")
+           << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MPSInfo<S>> &info) const {
@@ -572,6 +573,15 @@ template <typename S> struct MPSInfo {
         info->tag = new_tag;
         shallow_copy_to(info);
         return info;
+    }
+    void copy_mutable(const string &dir) const {
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites + 1; i++) {
+                Parsing::copy_file(get_filename(true, i),
+                                   get_filename(true, i, dir));
+                Parsing::copy_file(get_filename(false, i),
+                                   get_filename(false, i, dir));
+            }
     }
     void save_mutable() const {
         if (frame->prefix_can_write)
@@ -1451,10 +1461,10 @@ template <typename S> struct MPS {
         for (int i = 0; i < n_sites; i++)
             random_canonicalize_tensor(i);
     }
-    virtual string get_filename(int i) const {
+    virtual string get_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag
-           << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
+           << ".MPS." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MPS<S>> &mps) const {
@@ -1468,6 +1478,14 @@ template <typename S> struct MPS {
         mps->info = new_info;
         shallow_copy_to(mps);
         return mps;
+    }
+    virtual void copy_data(const string &dir) const {
+        if (frame->prefix_can_write) {
+            for (int i = 0; i < n_sites; i++)
+                if (tensors[i] != nullptr)
+                    Parsing::copy_file(get_filename(i), get_filename(i, dir));
+            Parsing::copy_file(get_filename(-1), get_filename(-1, dir));
+        }
     }
     void load_data_from(ifstream &ifs) {
         shared_ptr<VectorAllocator<double>> d_alloc =

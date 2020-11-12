@@ -24,6 +24,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <iomanip>
 #include <random>
 #include <sstream>
@@ -167,6 +168,21 @@ struct Parsing {
         if (file_exists(name))
             remove_file(name);
         return symlink(source.c_str(), name.c_str()) == 0;
+    }
+    static void copy_file(const string &source, const string &dest) {
+        ifstream ifs(source.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("copy_file source '" + source + "' failed.");
+        ofstream ofs(dest.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("copy_file dest '" + dest + "' failed.");
+        ofs << ifs.rdbuf();
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("copy_file source '" + source + "' failed.");
+        if (!ofs.good())
+            throw runtime_error("copy_file dest '" + dest + "' failed.");
+        ifs.close();
+        ofs.close();
     }
     static bool link_exists(const string &name) {
         struct stat buffer;

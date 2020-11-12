@@ -84,6 +84,7 @@ template <typename S> struct DMRG {
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
+    string restart_dir = "";
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -301,6 +302,7 @@ template <typename S> struct DMRG {
                 old_wfn->info->deallocate();
                 old_wfn->deallocate();
             }
+            me->ket->save_data();
         } else {
             me->ket->unload_tensor(i);
             if (!decomp_last_site &&
@@ -434,6 +436,7 @@ template <typename S> struct DMRG {
             old_wfn->deallocate();
             MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket,
                                                 forward, me->mpo->tf->opf->cg);
+            me->ket->save_data();
         } else {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
@@ -630,6 +633,7 @@ template <typename S> struct DMRG {
                 old_wfns[j]->deallocate();
             if (old_wfns.size() != 0)
                 old_wfns[0]->deallocate_infos();
+            mket->save_data();
         } else {
             mket->unload_tensor(i);
             if (forward) {
@@ -744,6 +748,7 @@ template <typename S> struct DMRG {
             old_wfns[0]->deallocate_infos();
             MovingEnvironment<S>::propagate_multi_wfn(
                 i, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
+            mket->save_data();
         } else {
             for (int k = mket->nroots - 1; k >= 0; k--)
                 old_wfns[k]->deallocate();
@@ -842,6 +847,12 @@ template <typename S> struct DMRG {
                             return x.back() < y.back();
                         }) -
             sweep_energies.begin();
+        if (restart_dir != "") {
+            if (!Parsing::path_exists(restart_dir))
+                Parsing::mkdir(restart_dir);
+            me->ket->info->copy_mutable(restart_dir);
+            me->ket->copy_data(restart_dir);
+        }
         return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
                           sweep_quanta[idx]);
     }
@@ -970,6 +981,7 @@ template <typename S> struct Linear {
     double cutoff = 1E-14;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
+    string restart_dir = "";
     bool precondition_cg = true;
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
@@ -1413,6 +1425,8 @@ template <typename S> struct Linear {
                     old_wfn->deallocate();
                 }
             }
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             if (!decomp_last_site &&
                 ((forward && i == me->n_sites - 1 && !fuse_left) ||
@@ -1676,6 +1690,8 @@ template <typename S> struct Linear {
                 MovingEnvironment<S>::propagate_wfn(
                     i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
             }
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             for (auto &mps : mpss) {
                 mps->tensors[i + 1] = make_shared<SparseMatrix<S>>();
@@ -1772,6 +1788,12 @@ template <typename S> struct Linear {
                             return x[0] < y[0];
                         }) -
             sweep_targets.begin();
+        if (restart_dir != "") {
+            if (!Parsing::path_exists(restart_dir))
+                Parsing::mkdir(restart_dir);
+            rme->bra->info->copy_mutable(restart_dir);
+            rme->bra->copy_data(restart_dir);
+        }
         return make_tuple(sweep_targets[idx], sweep_discarded_weights[idx]);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
@@ -2088,6 +2110,8 @@ template <typename S> struct Expect {
                 old_wfn->info->deallocate();
                 old_wfn->deallocate();
             }
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             if (propagate) {
                 for (auto &mps : mpss) {
@@ -2185,6 +2209,8 @@ template <typename S> struct Expect {
             } else
                 for (auto &mps : mpss)
                     mps->save_tensor(i);
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             if (propagate) {
                 for (auto &mps : mpss) {
@@ -2379,6 +2405,8 @@ template <typename S> struct Expect {
                     old_wfns[k]->deallocate();
                 old_wfns[0]->deallocate_infos();
             }
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
                 me->bra == me->ket
@@ -2513,6 +2541,8 @@ template <typename S> struct Expect {
                 for (auto &mps : mpss)
                     mps->save_tensor(i);
             }
+            for (auto &mps : mpss)
+                mps->save_data();
         } else {
             if (propagate) {
                 for (auto &mps : mpss) {

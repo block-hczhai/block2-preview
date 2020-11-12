@@ -1258,6 +1258,7 @@ template <typename S> struct MovingEnvironment {
     }
     void shallow_copy_to(const shared_ptr<MovingEnvironment<S>> &me) const {
         for (int i = 0; i < n_sites; i++) {
+            me->envs[i] = make_shared<Partition<S>>(*envs[i]);
             if (envs[i]->left != nullptr)
                 Parsing::link_file(get_left_partition_filename(i),
                                    me->get_left_partition_filename(i));

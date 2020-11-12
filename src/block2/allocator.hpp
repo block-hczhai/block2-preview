@@ -172,7 +172,7 @@ inline shared_ptr<StackAllocator<double>> &dalloc_() {
 // and one double stack memory
 // Using frames alternatively to avoid data copying
 struct DataFrame {
-    string save_dir, prefix = "F", prefix_distri = "F0";
+    string save_dir, mps_dir, prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
     size_t isize, dsize;
     int n_frames, i_frame;
@@ -185,7 +185,7 @@ struct DataFrame {
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double main_ratio = 0.7,
               int n_frames = 2)
-        : n_frames(n_frames), save_dir(save_dir) {
+        : n_frames(n_frames), save_dir(save_dir), mps_dir(save_dir) {
         peak_used_memory.resize(n_frames * 2);
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
@@ -208,6 +208,8 @@ struct DataFrame {
         activate(0);
         if (!Parsing::path_exists(save_dir))
             Parsing::mkdir(save_dir);
+        if (!Parsing::path_exists(mps_dir))
+            Parsing::mkdir(mps_dir);
     }
     ~DataFrame() { deallocate(); }
     void activate(int i) {
