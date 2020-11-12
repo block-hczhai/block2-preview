@@ -1256,6 +1256,24 @@ template <typename S> struct MovingEnvironment {
            << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
+    void shallow_copy_to(const shared_ptr<MovingEnvironment<S>> &me) const {
+        for (int i = 0; i < n_sites; i++) {
+            if (envs[i]->left != nullptr)
+                Parsing::link_file(get_left_partition_filename(i),
+                                   me->get_left_partition_filename(i));
+            if (envs[i]->right != nullptr)
+                Parsing::link_file(get_right_partition_filename(i),
+                                   me->get_right_partition_filename(i));
+        }
+    }
+    virtual shared_ptr<MovingEnvironment<S>>
+    shallow_copy(const string &new_tag) const {
+        shared_ptr<MovingEnvironment<S>> me =
+            make_shared<MovingEnvironment<S>>(*this);
+        me->tag = new_tag;
+        shallow_copy_to(me);
+        return me;
+    }
     // Generate contracted environment blocks for all center sites
     virtual void init_environments(bool iprint = false) {
         this->iprint = iprint;

@@ -67,6 +67,7 @@
 #include "block2/sparse_matrix.hpp"
 #include "block2/state_averaged.hpp"
 #include "block2/state_info.hpp"
+#include "block2/sweep_algorithm_td.hpp"
 #include "block2/sweep_algorithm.hpp"
 #include "block2/symbolic.hpp"
 #include "block2/symmetry.hpp"

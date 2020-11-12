@@ -526,6 +526,8 @@ struct SparseMatrixInfo<
         cinfo = nullptr;
     }
     void save_data(const string &filename) const {
+        if (Parsing::link_exists(filename))
+            Parsing::remove_file(filename);
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("SparseMatrixInfo::save_data on '" + filename +
@@ -964,14 +966,15 @@ template <typename S> struct SparseMatrix {
     void normalize() const { iscale(1 / norm()); }
     // K = L(l)C or C = L(l)S
     void left_split(shared_ptr<SparseMatrix<S>> &left,
-                    shared_ptr<SparseMatrix<S>> &right) const {
+                    shared_ptr<SparseMatrix<S>> &right,
+                    ubond_t bond_dim) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
-        right_svd(qs, l, s, r);
+        right_svd(qs, l, s, r, bond_dim);
         shared_ptr<SparseMatrixInfo<S>> winfo =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         shared_ptr<SparseMatrixInfo<S>> linfo =
@@ -1015,14 +1018,15 @@ template <typename S> struct SparseMatrix {
     }
     // S = C(r)R or C = K(r)R
     void right_split(shared_ptr<SparseMatrix<S>> &left,
-                     shared_ptr<SparseMatrix<S>> &right) const {
+                     shared_ptr<SparseMatrix<S>> &right,
+                     ubond_t bond_dim) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
-        left_svd(qs, l, s, r);
+        left_svd(qs, l, s, r, bond_dim);
         shared_ptr<SparseMatrixInfo<S>> winfo =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         shared_ptr<SparseMatrixInfo<S>> rinfo =
@@ -1065,14 +1069,14 @@ template <typename S> struct SparseMatrix {
     }
     // return p = pinv(mat).T
     // only right pseudo: mat @ p.T = I
-    shared_ptr<SparseMatrix<S>> pseudo_inverse() const {
+    shared_ptr<SparseMatrix<S>> pseudo_inverse(ubond_t bond_dim) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
-        right_svd(qs, l, s, r);
+        right_svd(qs, l, s, r, bond_dim);
         shared_ptr<SparseMatrix<S>> pinv =
             make_shared<SparseMatrix<S>>(d_alloc);
         pinv->allocate(
@@ -1097,8 +1101,8 @@ template <typename S> struct SparseMatrix {
     // l will have the same number of non-zero blocks as this matrix
     // s will be labelled by right q labels
     void left_svd(vector<S> &rqs, vector<shared_ptr<Tensor>> &l,
-                  vector<shared_ptr<Tensor>> &s,
-                  vector<shared_ptr<Tensor>> &r) const {
+                  vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
+                  ubond_t bond_dim = 0) const {
         map<S, uint32_t> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
@@ -1132,6 +1136,7 @@ template <typename S> struct SparseMatrix {
         vector<shared_ptr<Tensor>> merged_l;
         r.clear();
         s.clear();
+        vector<double> svals;
         for (int ir = 0; ir < nr; ir++) {
             int nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
@@ -1141,9 +1146,22 @@ template <typename S> struct SparseMatrix {
             shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
+            svals.insert(svals.end(), tss->data.begin(), tss->data.end());
             merged_l.push_back(tsl);
             s.push_back(tss);
             r.push_back(tsr);
+        }
+        if (bond_dim != 0 && svals.size() > bond_dim) {
+            sort(svals.begin(), svals.end());
+            double small = svals[svals.size() - bond_dim];
+            for (int ir = 0; ir < nr; ir++)
+                for (int j = 1; j < (int)s[ir]->data.size(); j++)
+                    if (s[ir]->data[j] < small) {
+                        merged_l[ir]->truncate_right(j);
+                        s[ir]->truncate(j);
+                        r[ir]->truncate_left(j);
+                        break;
+                    }
         }
         memset(it, 0, sizeof(uint32_t) * nr);
         for (int i = 0; i < info->n; i++) {
@@ -1164,8 +1182,8 @@ template <typename S> struct SparseMatrix {
     // r will have the same number of non-zero blocks as this matrix
     // s will be labelled by left q labels
     void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
-                   vector<shared_ptr<Tensor>> &s,
-                   vector<shared_ptr<Tensor>> &r) const {
+                   vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
+                   ubond_t bond_dim = 0) const {
         map<S, uint32_t> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
@@ -1201,6 +1219,7 @@ template <typename S> struct SparseMatrix {
         vector<shared_ptr<Tensor>> merged_r;
         l.clear();
         s.clear();
+        vector<double> svals;
         for (int il = 0; il < nl; il++) {
             int nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
@@ -1210,9 +1229,22 @@ template <typename S> struct SparseMatrix {
             shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
+            svals.insert(svals.end(), tss->data.begin(), tss->data.end());
             l.push_back(tsl);
             s.push_back(tss);
             merged_r.push_back(tsr);
+        }
+        if (bond_dim != 0 && svals.size() > bond_dim) {
+            sort(svals.begin(), svals.end());
+            double small = svals[svals.size() - bond_dim];
+            for (int il = 0; il < nl; il++)
+                for (int j = 1; j < (int)s[il]->data.size(); j++)
+                    if (s[il]->data[j] < small) {
+                        l[il]->truncate_right(j);
+                        s[il]->truncate(j);
+                        merged_r[il]->truncate_left(j);
+                        break;
+                    }
         }
         memset(it, 0, sizeof(uint32_t) * nl);
         for (int i = 0; i < info->n; i++) {

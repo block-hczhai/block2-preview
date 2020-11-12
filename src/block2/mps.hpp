@@ -558,6 +558,21 @@ template <typename S> struct MPSInfo {
            << (left ? ".LEFT." : ".RIGHT.") << Parsing::to_string(i);
         return ss.str();
     }
+    void shallow_copy_to(const shared_ptr<MPSInfo<S>> &info) const {
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites + 1; i++) {
+                Parsing::link_file(get_filename(true, i),
+                                   info->get_filename(true, i));
+                Parsing::link_file(get_filename(false, i),
+                                   info->get_filename(false, i));
+            }
+    }
+    virtual shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const {
+        shared_ptr<MPSInfo<S>> info = make_shared<MPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
     void save_mutable() const {
         if (frame->prefix_can_write)
             for (int i = 0; i < n_sites + 1; i++) {
@@ -623,6 +638,7 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::right_dims_fci;
     using MPSInfo<S>::left_dims;
     using MPSInfo<S>::right_dims;
+    using MPSInfo<S>::shallow_copy_to;
     vector<uint8_t> iocc;
     uint16_t n_local = 0; // number of nearset sites using FCI quantum numbers
     DynamicMPSInfo(int n_sites, S vacuum, S target,
@@ -684,6 +700,12 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
         for (int k = i - 1; k >= 0; k--)
             right_dims[k]->n = 0;
     }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<DynamicMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
 };
 
 enum struct ActiveTypes : uint8_t { Empty, Active, Frozen };
@@ -697,6 +719,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::basis;
     using MPSInfo<S>::left_dims_fci;
     using MPSInfo<S>::right_dims_fci;
+    using MPSInfo<S>::shallow_copy_to;
     vector<ActiveTypes> casci_mask;
     static vector<ActiveTypes> active_space(int n_sites, S target,
                                             int n_active_sites,
@@ -793,6 +816,12 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i]->collect();
     }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<CASCIMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
 };
 
 /** Restrict quantum numbers to describe an uncontracted MRCI wavefunction.
@@ -810,6 +839,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::target;
     using MPSInfo<S>::n_sites;
     using MPSInfo<S>::basis;
+    using MPSInfo<S>::shallow_copy_to;
     int n_ext;    //!> Number of external orbitals: CI space
     int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2
                   //! gives MR-CISD
@@ -862,6 +892,12 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i]->collect();
     }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<MRCIMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
 };
 
 // Adding tensors for ancilla sites to a MPS
@@ -876,6 +912,7 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::right_dims;
     using MPSInfo<S>::left_dims_fci;
     using MPSInfo<S>::right_dims_fci;
+    using MPSInfo<S>::shallow_copy_to;
     int n_physical_sites;
     static vector<shared_ptr<StateInfo<S>>>
     trans_basis(const vector<shared_ptr<StateInfo<S>>> &a, int n_sites) {
@@ -917,6 +954,12 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
                 assert(q.count() == 1);
                 right_dims[i] = make_shared<StateInfo<S>>(q);
             }
+    }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<AncillaMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
     }
 };
 
@@ -1129,7 +1172,7 @@ template <typename S> struct MPS {
             if (para_rule == nullptr || para_rule->is_root()) {
                 shared_ptr<SparseMatrix<S>> left, right;
                 load_tensor(center);
-                tensors[center]->right_split(left, right);
+                tensors[center]->right_split(left, right, info->bond_dim);
                 info->right_dims[center + 1] =
                     right->info->extract_state_info(false);
                 info->save_right_dims(center + 1);
@@ -1166,7 +1209,7 @@ template <typename S> struct MPS {
                 }
                 assert(canonical_form[center - 1] == 'L');
                 shared_ptr<SparseMatrix<S>> left, right;
-                tensors[center]->right_split(left, right);
+                tensors[center]->right_split(left, right, info->bond_dim);
                 info->right_dims[center] =
                     right->info->extract_state_info(false);
                 info->save_right_dims(center);
@@ -1215,7 +1258,7 @@ template <typename S> struct MPS {
             if (para_rule == nullptr || para_rule->is_root()) {
                 shared_ptr<SparseMatrix<S>> left, right;
                 load_tensor(center);
-                tensors[center]->left_split(left, right);
+                tensors[center]->left_split(left, right, info->bond_dim);
                 info->left_dims[center + 1] =
                     left->info->extract_state_info(true);
                 info->save_left_dims(center + 1);
@@ -1253,7 +1296,7 @@ template <typename S> struct MPS {
                 }
                 assert(canonical_form[center + 1] == 'R');
                 shared_ptr<SparseMatrix<S>> left, right;
-                tensors[center]->left_split(left, right);
+                tensors[center]->left_split(left, right, info->bond_dim);
                 info->left_dims[center + 1] =
                     left->info->extract_state_info(true);
                 info->save_left_dims(center + 1);
@@ -1413,6 +1456,18 @@ template <typename S> struct MPS {
         ss << frame->save_dir << "/" << frame->prefix << ".MPS." << info->tag
            << "." << Parsing::to_string(i);
         return ss.str();
+    }
+    void shallow_copy_to(const shared_ptr<MPS<S>> &mps) const {
+        if (frame->prefix_can_write)
+            for (int i = 0; i < n_sites; i++)
+                Parsing::link_file(get_filename(i), mps->get_filename(i));
+    }
+    virtual shared_ptr<MPS<S>> shallow_copy(const string &new_tag) const {
+        shared_ptr<MPSInfo<S>> new_info = info->shallow_copy(new_tag);
+        shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(*this);
+        mps->info = new_info;
+        shallow_copy_to(mps);
+        return mps;
     }
     void load_data_from(ifstream &ifs) {
         shared_ptr<VectorAllocator<double>> d_alloc =

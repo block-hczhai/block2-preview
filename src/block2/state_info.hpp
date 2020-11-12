@@ -98,6 +98,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
         ofs.write((char *)quanta, sizeof(uint32_t) * _SI_MEM_SIZE(n));
     }
     void save_data(const string &filename) const {
+        if (Parsing::link_exists(filename))
+            Parsing::remove_file(filename);
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("StateInfo::save_data on '" + filename +

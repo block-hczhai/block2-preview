@@ -245,6 +245,8 @@ struct DataFrame {
     // Save one data frame to disk
     void save_data(int i, const string &filename) const {
         _t.get_time();
+        if (Parsing::link_exists(filename))
+            Parsing::remove_file(filename);
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("DataFrame::save_data on '" + filename +

@@ -37,6 +37,7 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::vacuum;
     using MPSInfo<S>::n_sites;
     using MPSInfo<S>::basis;
+    using MPSInfo<S>::shallow_copy_to;
     vector<S> targets;
     MultiMPSInfo(int n_sites, S vacuum, const vector<S> &targets,
                  const vector<shared_ptr<StateInfo<S>>> &basis,
@@ -80,6 +81,12 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i]->collect();
     }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<MultiMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
 };
 
 // Matrix Product State for multiple targets and multiple wavefunctions
@@ -90,6 +97,7 @@ template <typename S> struct MultiMPS : MPS<S> {
     using MPS<S>::info;
     using MPS<S>::tensors;
     using MPS<S>::canonical_form;
+    using MPS<S>::shallow_copy_to;
     // numebr of wavefunctions
     int nroots;
     // wavefunctions
@@ -167,6 +175,21 @@ template <typename S> struct MultiMPS : MPS<S> {
         ss << frame->save_dir << "/" << frame->prefix << ".MMPS-WFN."
            << info->tag << "." << Parsing::to_string(i);
         return ss.str();
+    }
+    void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S>> &mps) const {
+        if (frame->prefix_can_write) {
+            for (int j = 0; j < nroots; j++)
+                Parsing::link_file(get_wfn_filename(j),
+                                   mps->get_wfn_filename(j));
+        }
+    }
+    shared_ptr<MPS<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> new_info = info->shallow_copy(new_tag);
+        shared_ptr<MultiMPS<S>> mps = make_shared<MultiMPS<S>>(*this);
+        mps->info = new_info;
+        shallow_copy_to(mps);
+        shallow_copy_wfn_to(mps);
+        return mps;
     }
     void load_data() override {
         shared_ptr<VectorAllocator<double>> d_alloc =

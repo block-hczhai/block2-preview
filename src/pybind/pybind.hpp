@@ -564,15 +564,15 @@ template <typename S> void bind_sparse(py::module &m) {
                  memcpy((*self)[idx].data, v.data(), sizeof(double) * v.size());
              })
         .def("left_split",
-             [](SparseMatrix<S> *self) {
+             [](SparseMatrix<S> *self, ubond_t bond_dim) {
                  shared_ptr<SparseMatrix<S>> left, right;
-                 self->left_split(left, right);
+                 self->left_split(left, right, bond_dim);
                  return make_tuple(left, right);
              })
         .def("right_split",
-             [](SparseMatrix<S> *self) {
+             [](SparseMatrix<S> *self, ubond_t bond_dim) {
                  shared_ptr<SparseMatrix<S>> left, right;
-                 self->right_split(left, right);
+                 self->right_split(left, right, bond_dim);
                  return make_tuple(left, right);
              })
         .def("pseudo_inverse", &SparseMatrix<S>::pseudo_inverse)

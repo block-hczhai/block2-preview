@@ -30,6 +30,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include <vector>
 
 using namespace std;
@@ -158,6 +159,19 @@ struct Parsing {
     }
     static bool rename_file(const string &old_name, const string &new_name) {
         return rename(old_name.c_str(), new_name.c_str()) == 0;
+    }
+    static bool remove_file(const string &name) {
+        return remove(name.c_str()) == 0;
+    }
+    static bool link_file(const string &source, const string &name) {
+        if (file_exists(name))
+            remove_file(name);
+        return symlink(source.c_str(), name.c_str()) == 0;
+    }
+    static bool link_exists(const string &name) {
+        struct stat buffer;
+        return lstat(name.c_str(), &buffer) == 0 &&
+               (buffer.st_mode & S_IFLNK) == S_IFLNK;
     }
     static bool file_exists(const string &name) {
         struct stat buffer;

@@ -59,6 +59,7 @@
 #include "../block2/sparse_matrix.hpp"
 #include "../block2/state_averaged.hpp"
 #include "../block2/state_info.hpp"
+#include "../block2/sweep_algorithm_td.hpp"
 #include "../block2/sweep_algorithm.hpp"
 #include "../block2/symbolic.hpp"
 #include "../block2/tensor_functions.hpp"
@@ -316,14 +317,17 @@ extern template struct block2::StateProbability<block2::SZ>;
 extern template struct block2::StateInfo<block2::SU2>;
 extern template struct block2::StateProbability<block2::SU2>;
 
+// sweep_algorithm_td.hpp
+extern template struct block2::ImaginaryTE<block2::SZ>;
+
+extern template struct block2::ImaginaryTE<block2::SU2>;
+
 // sweep_algorithm.hpp
 extern template struct block2::DMRG<block2::SZ>;
-extern template struct block2::ImaginaryTE<block2::SZ>;
 extern template struct block2::Linear<block2::SZ>;
 extern template struct block2::Expect<block2::SZ>;
 
 extern template struct block2::DMRG<block2::SU2>;
-extern template struct block2::ImaginaryTE<block2::SU2>;
 extern template struct block2::Linear<block2::SU2>;
 extern template struct block2::Expect<block2::SU2>;
 

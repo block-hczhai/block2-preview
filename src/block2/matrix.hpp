@@ -110,6 +110,24 @@ struct Tensor {
     }
     size_t size() const { return data.size(); }
     void clear() { memset(data.data(), 0, size() * sizeof(double)); }
+    void truncate(int n) {
+        assert(shape.size() == 1);
+        data.resize(n);
+        shape[0] = n;
+    }
+    void truncate_left(int nl) {
+        assert(shape.size() == 2);
+        data.resize(nl * shape[1]);
+        shape[0] = nl;
+    }
+    void truncate_right(int nr) {
+        assert(shape.size() == 2);
+        for (int i = 1; i < shape[0]; i++)
+            memcpy(data.data() + i * nr, data.data() + i * shape[1],
+                   nr * sizeof(double));
+        data.resize(shape[0] * nr);
+        shape[1] = nr;
+    }
     MatrixRef ref() {
         if (shape.size() == 3 && shape[1] == 1)
             return MatrixRef(data.data(), shape[0], shape[2]);
