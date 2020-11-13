@@ -84,7 +84,6 @@ template <typename S> struct DMRG {
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
-    string restart_dir = "";
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
@@ -847,11 +846,12 @@ template <typename S> struct DMRG {
                             return x.back() < y.back();
                         }) -
             sweep_energies.begin();
-        if (restart_dir != "") {
-            if (!Parsing::path_exists(restart_dir))
-                Parsing::mkdir(restart_dir);
-            me->ket->info->copy_mutable(restart_dir);
-            me->ket->copy_data(restart_dir);
+        if (frame->restart_dir != "" &&
+            (me->para_rule == nullptr || me->para_rule->is_root())) {
+            if (!Parsing::path_exists(frame->restart_dir))
+                Parsing::mkdir(frame->restart_dir);
+            me->ket->info->copy_mutable(frame->restart_dir);
+            me->ket->copy_data(frame->restart_dir);
         }
         return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
                           sweep_quanta[idx]);
@@ -981,7 +981,6 @@ template <typename S> struct Linear {
     double cutoff = 1E-14;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
-    string restart_dir = "";
     bool precondition_cg = true;
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
@@ -1788,11 +1787,12 @@ template <typename S> struct Linear {
                             return x[0] < y[0];
                         }) -
             sweep_targets.begin();
-        if (restart_dir != "") {
-            if (!Parsing::path_exists(restart_dir))
-                Parsing::mkdir(restart_dir);
-            rme->bra->info->copy_mutable(restart_dir);
-            rme->bra->copy_data(restart_dir);
+        if (frame->restart_dir != "" &&
+            (rme->para_rule == nullptr || rme->para_rule->is_root())) {
+            if (!Parsing::path_exists(frame->restart_dir))
+                Parsing::mkdir(frame->restart_dir);
+            rme->bra->info->copy_mutable(frame->restart_dir);
+            rme->bra->copy_data(frame->restart_dir);
         }
         return make_tuple(sweep_targets[idx], sweep_discarded_weights[idx]);
     }

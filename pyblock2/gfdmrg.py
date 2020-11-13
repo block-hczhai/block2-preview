@@ -199,7 +199,7 @@ class GFDMRG:
         # MPO
         tx = time.perf_counter()
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(mpo, RuleQC(), True)
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True)
         self.mpo_orig = mpo
 
         if self.mpi is not None:
@@ -301,7 +301,7 @@ class GFDMRG:
             mps_info2.deallocate()
 
         impo = SimplifiedMPO(IdentityMPO(self.hamil),
-                             NoTransposeRule(RuleQC()), True)
+                             NoTransposeRule(RuleQC()), True, True)
 
         if self.mpi is not None:
             impo = ParallelMPO(impo, self.prule)
@@ -355,7 +355,7 @@ class GFDMRG:
             rket_info.deallocate_mutable()
 
             rmpos[ii] = SimplifiedMPO(
-                SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True)
+                SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True, True)
 
             if self.mpi is not None:
                 rmpos[ii] = ParallelMPO(rmpos[ii], self.prule)

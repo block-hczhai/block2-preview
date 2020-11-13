@@ -791,8 +791,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
         .def("swap_wfn_to_fused_left", &MPSInfo<S>::swap_wfn_to_fused_left)
         .def("swap_wfn_to_fused_right", &MPSInfo<S>::swap_wfn_to_fused_right)
-        .def("get_filename", &MPSInfo<S>::get_filename,
-             py::arg("left"), py::arg("i"), py::arg("dir")="")
+        .def("get_filename", &MPSInfo<S>::get_filename, py::arg("left"),
+             py::arg("i"), py::arg("dir") = "")
         .def("save_mutable", &MPSInfo<S>::save_mutable)
         .def("copy_mutable", &MPSInfo<S>::copy_mutable)
         .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
@@ -889,8 +889,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("move_right", &MPS<S>::move_right, py::arg("cg"),
              py::arg("para_rule") = nullptr)
         .def("flip_fused_form", &MPS<S>::flip_fused_form)
-        .def("get_filename", &MPS<S>::get_filename,
-                  py::arg("i"), py::arg("dir")="")
+        .def("get_filename", &MPS<S>::get_filename, py::arg("i"),
+             py::arg("dir") = "")
         .def("load_data", &MPS<S>::load_data)
         .def("save_data", &MPS<S>::save_data)
         .def("copy_data", &MPS<S>::copy_data)
@@ -1473,7 +1473,6 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("decomp_last_site", &DMRG<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &DMRG<S>::sweep_cumulative_nflop)
-        .def_readwrite("restart_dir", &DMRG<S>::restart_dir)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("update_one_dot", &DMRG<S>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
@@ -1599,7 +1598,6 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &Linear<S>::sweep_cumulative_nflop)
-        .def_readwrite("restart_dir", &Linear<S>::restart_dir)
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
         .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
@@ -2225,6 +2223,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<size_t, size_t, const string &, double>())
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("mps_dir", &DataFrame::mps_dir)
+        .def_readwrite("restart_dir", &DataFrame::restart_dir)
         .def_readwrite("prefix", &DataFrame::prefix)
         .def_readwrite("prefix_distri", &DataFrame::prefix_distri)
         .def_readwrite("isize", &DataFrame::isize)

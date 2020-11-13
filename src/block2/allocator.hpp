@@ -172,7 +172,8 @@ inline shared_ptr<StackAllocator<double>> &dalloc_() {
 // and one double stack memory
 // Using frames alternatively to avoid data copying
 struct DataFrame {
-    string save_dir, mps_dir, prefix = "F", prefix_distri = "F0";
+    string save_dir, mps_dir, restart_dir = "";
+    string prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
     size_t isize, dsize;
     int n_frames, i_frame;

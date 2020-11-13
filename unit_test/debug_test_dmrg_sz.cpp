@@ -40,7 +40,7 @@ TEST_F(TestDMRG, Test) {
     // abort();
 
 #ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(2);
+    mkl_set_num_threads(16);
     mkl_set_dynamic(0);
 #endif
 
@@ -53,12 +53,12 @@ TEST_F(TestDMRG, Test) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true);
+    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true, true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 100;
+    ubond_t bond_dim = 250;
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
@@ -140,11 +140,16 @@ TEST_F(TestDMRG, Test) {
     // DMRG
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                               500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<double> davthrs = {2.5E-5, 2.5E-5, 2.5E-5, 2.5E-5, 1E-6, 1E-6, 1E-6, 1E-8, 1E-8, 1E-8, 1E-8};
     // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
+    dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
+    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->solve(30, true);
 
     // deallocate persistent stack memory
