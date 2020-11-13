@@ -38,11 +38,11 @@ SpinLabel = SU2
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
-    from block2.su2 import OpElement, SiteMPO, NoTransposeRule
+    from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
 else:
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
-    from block2.sz import OpElement, SiteMPO, NoTransposeRule
+    from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
 
 
 class GFDMRGError(Exception):
@@ -82,12 +82,14 @@ class GFDMRG:
 
         if mpi is not None:
             if SpinLabel == SU2:
-                from block2.su2 import ParallelRuleQC
+                from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC
             else:
-                from block2.sz import ParallelRuleQC
+                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
             self.prule = ParallelRuleQC(mpi)
+            self.pdmrule = ParallelRuleNPDMQC(mpi)
         else:
             self.prule = None
+            self.pdmrule = None
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file."""
@@ -259,6 +261,66 @@ class GFDMRG:
         if self.verbose >= 2:
             print('>>> COMPLETE GS-DMRG | Time = %.2f <<<' %
                   (time.perf_counter() - t))
+    
+    # one-particle density matrix
+    # return value:
+    #     pdm[0, :, :] -> <AD_{i,alpha} A_{j,alpha}>
+    #     pdm[1, :, :] -> < AD_{i,beta}  A_{j,beta}>
+    def get_one_pdm(self, ridx=None):
+        if self.verbose >= 2:
+            print('>>> START one-pdm <<<')
+        t = time.perf_counter()
+
+        mps_info = MPSInfo(0)
+        mps_info.load_data(self.scratch + "/GS_MPS_INFO")
+        mps = MPS(mps_info)
+        mps.load_data()
+
+        if self.mpi is not None:
+            if SpinLabel == SU2:
+                from block2.su2 import ParallelMPO
+            else:
+                from block2.sz import ParallelMPO
+
+        # 1PDM MPO
+        pmpo = PDM1MPOQC(self.hamil)
+        pmpo = SimplifiedMPO(pmpo, RuleQC())
+
+        if self.mpi is not None:
+            pmpo = ParallelMPO(pmpo, self.pdmrule)
+
+        # 1PDM
+        pme = MovingEnvironment(pmpo, mps, mps, "1PDM")
+        pme.init_environments(False)
+        expect = Expect(pme, mps.info.bond_dim, mps.info.bond_dim)
+        expect.iprint = max(self.verbose - 1, 0)
+        expect.solve(True, mps.center == 0)
+        if SpinLabel == SU2:
+            dmr = expect.get_1pdm_spatial(self.n_sites)
+            dm = np.array(dmr).copy()
+        else:
+            dmr = expect.get_1pdm(self.n_sites)
+            dm = np.array(dmr).copy()
+            dm = dm.reshape((self.n_sites, 2,
+                             self.n_sites, 2))
+            dm = np.transpose(dm, (0, 2, 1, 3))
+
+        if ridx is not None:
+            dm[:, :] = dm[ridx, :][:, ridx]
+
+        mps.save_data()
+        mps_info.deallocate()
+        dmr.deallocate()
+        pmpo.deallocate()
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE one-pdm | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
+
+        if SpinLabel == SU2:
+            return np.concatenate([dm[None, :, :], dm[None, :, :]], axis=0) / 2
+        else:
+            return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
@@ -464,7 +526,6 @@ class GFDMRG:
                             print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
                                   (w, idx2, idx, time.perf_counter() - t))
         mps.save_data()
-        mps_info.save_data(self.scratch + "/GS_MPS_INFO")
         mps_info.deallocate()
 
         if self.print_statistics:
@@ -589,6 +650,8 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                           orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
               n_steps=gs_n_steps, conv_tol=gs_tol)
+    pdm = dmrg.get_one_pdm()
+    print('pdm = ', pdm)
     gf = 0
     for addit in [x == '+' for x in add_rem]:
         # only calculate alpha spin
@@ -598,7 +661,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
 
     del dmrg
 
-    return gf
+    return pdm, gf
 
 
 if __name__ == "__main__":
@@ -642,7 +705,7 @@ if __name__ == "__main__":
         freqs = np.arange(-0.8, -0.2, 0.01)
         mo_orbs = [4]
         t = time.perf_counter()
-        gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
+        pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
                         gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
                         gmres_tol=1E-8, lowdin=True, ignore_ecore=False)
 
@@ -665,7 +728,7 @@ if __name__ == "__main__":
         eta = 0.005
         freqs = [-0.2]
         t = time.perf_counter()
-        gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
+        pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                             gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                             gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                             gmres_tol=1E-20, lowdin=False, ignore_ecore=False)
