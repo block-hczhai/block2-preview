@@ -791,7 +791,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
         .def("swap_wfn_to_fused_left", &MPSInfo<S>::swap_wfn_to_fused_left)
         .def("swap_wfn_to_fused_right", &MPSInfo<S>::swap_wfn_to_fused_right)
-        .def("get_filename", &MPSInfo<S>::get_filename)
+        .def("get_filename", &MPSInfo<S>::get_filename,
+             py::arg("left"), py::arg("i"), py::arg("dir")="")
         .def("save_mutable", &MPSInfo<S>::save_mutable)
         .def("copy_mutable", &MPSInfo<S>::copy_mutable)
         .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
@@ -888,7 +889,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("move_right", &MPS<S>::move_right, py::arg("cg"),
              py::arg("para_rule") = nullptr)
         .def("flip_fused_form", &MPS<S>::flip_fused_form)
-        .def("get_filename", &MPS<S>::get_filename)
+        .def("get_filename", &MPS<S>::get_filename,
+                  py::arg("i"), py::arg("dir")="")
         .def("load_data", &MPS<S>::load_data)
         .def("save_data", &MPS<S>::save_data)
         .def("copy_data", &MPS<S>::copy_data)
