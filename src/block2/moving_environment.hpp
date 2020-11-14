@@ -344,7 +344,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (compute_diag) {
             aa = DiagonalMatrix(nullptr, diag->total_memory);
             aa.allocate();
-            for (int i = 0; i < aa.size(); i++) {
+            for (MKL_INT i = 0; i < aa.size(); i++) {
                 aa.data[i] = diag->data[i] + const_e + omega;
                 aa.data[i] = aa.data[i] * aa.data[i] + eta * eta;
             }
@@ -971,7 +971,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, diag->total_memory);
         vector<MatrixRef> bs;
-        for (int i = 0; i < min((int)ket.size(), aa.n); i++)
+        for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(MatrixRef(ket[i]->data, ket[i]->total_memory, 1));
         frame->activate(0);
         Timer t;

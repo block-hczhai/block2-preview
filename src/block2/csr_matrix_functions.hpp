@@ -84,7 +84,7 @@ struct MKLSparseAllocator : Allocator<double> {
     from_mkl_sparse_matrix(const shared_ptr<sparse_matrix_t> &spa) {
         CSRMatrixRef mat;
         sparse_index_base_t ibt;
-        int *rows_end;
+        MKL_INT *rows_end;
         sparse_status_t st =
             mkl_sparse_d_export_csr(*spa, &ibt, &mat.m, &mat.n, &mat.rows,
                                     &rows_end, &mat.cols, &mat.data);
@@ -102,21 +102,21 @@ struct MKLSparseAllocator : Allocator<double> {
 struct CSRMatrixFunctions {
     // a = b
     static void copy(const CSRMatrixRef &a, const CSRMatrixRef &b) {
-        const int na = a.memory_size(), nb = b.memory_size(), inc = 1;
+        const MKL_INT na = a.memory_size(), nb = b.memory_size(), inc = 1;
         assert(na == nb);
         dcopy(&na, b.data, &inc, a.data, &inc);
     }
     static void iscale(const CSRMatrixRef &a, double scale) {
-        const int inc = 1;
+        const MKL_INT inc = 1;
         dscal(&a.nnz, &scale, a.data, &inc);
     }
     static double norm(const CSRMatrixRef &a) {
-        const int inc = 1;
+        const MKL_INT inc = 1;
         return dnrm2(&a.nnz, a.data, &inc);
     }
     static double dot(const CSRMatrixRef &a, const CSRMatrixRef &b) {
         assert(a.m == b.m && a.n == b.n && a.nnz == b.nnz);
-        const int inc = 1;
+        const MKL_INT inc = 1;
         return ddot(&a.nnz, a.data, &inc, b.data, &inc);
     }
     // a = a + scale * op(b)
@@ -157,22 +157,23 @@ struct CSRMatrixFunctions {
         a = MKLSparseAllocator::from_mkl_sparse_matrix(spc);
 #else
         CSRMatrixRef tmp;
-        int *arows = a.rows, *acols = a.cols, *brows = b.rows, *bcols = b.cols;
+        MKL_INT *arows = a.rows, *acols = a.cols, *brows = b.rows,
+                *bcols = b.cols;
         double *adata = a.data, *bdata = b.data;
-        const int am = a.m, an = a.n;
-        const int bm = conj ? b.n : b.m, bn = conj ? b.m : b.n;
+        const MKL_INT am = a.m, an = a.n;
+        const MKL_INT bm = conj ? b.n : b.m, bn = conj ? b.m : b.n;
         assert(am == bm && an == bn);
         if (conj)
             tmp = b.transpose(dalloc), brows = tmp.rows, bcols = tmp.cols,
             bdata = tmp.data;
-        int *rrows = (int *)ialloc->allocate(a.m + 1);
-        int *rcols = (int *)ialloc->allocate(a.nnz + b.nnz);
+        MKL_INT *rrows = (MKL_INT *)ialloc->allocate((a.m + 1) * _MINTSZ);
+        MKL_INT *rcols = (MKL_INT *)ialloc->allocate((a.nnz + b.nnz) * _MINTSZ);
         double *rdata = dalloc->allocate(a.nnz + b.nnz);
-        int k = 0;
-        for (int i = 0; i < am; i++) {
+        MKL_INT k = 0;
+        for (MKL_INT i = 0; i < am; i++) {
             rrows[i] = k;
-            int ja = arows[i], jar = arows[i + 1];
-            int jb = brows[i], jbr = brows[i + 1];
+            MKL_INT ja = arows[i], jar = arows[i + 1];
+            MKL_INT jb = brows[i], jbr = brows[i + 1];
             for (; ja < jar || jb < jbr; k++) {
                 if (ja >= jar)
                     rcols[k] = bcols[jb], rdata[k] = bdata[jb] * scale, jb++;
@@ -197,13 +198,13 @@ struct CSRMatrixFunctions {
         r.alloc = d_alloc;
         r.allocate();
         if (r.nnz != r.size()) {
-            memcpy(r.rows, rrows, (r.m + 1) * sizeof(int));
-            memcpy(r.cols, rcols, r.nnz * sizeof(int));
+            memcpy(r.rows, rrows, (r.m + 1) * sizeof(MKL_INT));
+            memcpy(r.cols, rcols, r.nnz * sizeof(MKL_INT));
         }
         memcpy(r.data, rdata, r.nnz * sizeof(double));
         dalloc->deallocate(rdata, a.nnz + b.nnz);
-        ialloc->deallocate(rcols, a.nnz + b.nnz);
-        ialloc->deallocate(rrows, a.m + 1);
+        ialloc->deallocate(rcols, (a.nnz + b.nnz) * _MINTSZ);
+        ialloc->deallocate(rrows, (a.m + 1) * _MINTSZ);
         a.deallocate();
         a = r;
         if (conj)
@@ -251,10 +252,11 @@ struct CSRMatrixFunctions {
             return;
         }
         vector<CSRMatrixRef> tmps;
-        int *arows = a.rows, *acols = a.cols, *brows = b.rows, *bcols = b.cols;
+        MKL_INT *arows = a.rows, *acols = a.cols, *brows = b.rows,
+                *bcols = b.cols;
         double *adata = a.data, *bdata = b.data;
-        const int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        const int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         assert(am == c.m && bn == c.n && an == bm);
         if (conja)
             tmps.push_back(a.transpose(dalloc)), arows = tmps.back().rows,
@@ -264,37 +266,38 @@ struct CSRMatrixFunctions {
             tmps.push_back(b.transpose(dalloc)), brows = tmps.back().rows,
                                                  bcols = tmps.back().cols,
                                                  bdata = tmps.back().data;
-        int *r_idx = (int *)ialloc->allocate(c.m + 1);
-        vector<int> tcols, rcols;
+        MKL_INT *r_idx = (MKL_INT *)ialloc->allocate((c.m + 1) * _MINTSZ);
+        vector<MKL_INT> tcols, rcols;
         vector<double> tdata, rdata;
-        for (int i = 0, jp, jr, inc = 1; i < am; i++) {
-            r_idx[i] = (int)rcols.size();
+        for (MKL_INT i = 0, jp, jr, inc = 1; i < am; i++) {
+            r_idx[i] = (MKL_INT)rcols.size();
             jp = c.rows[i], jr = i == c.m - 1 ? c.nnz : c.rows[i + 1];
             jr = jr - jp;
             tcols.clear(), tdata.clear();
             if (jr != 0 && cfactor != 0) {
                 tcols.resize(jr), tdata.resize(jr);
-                memcpy(tcols.data(), c.cols + jp, jr * sizeof(int));
+                memcpy(tcols.data(), c.cols + jp, jr * sizeof(MKL_INT));
                 memcpy(tdata.data(), c.data + jp, jr * sizeof(double));
                 dscal(&jr, &cfactor, tdata.data(), &inc);
             }
             jp = arows[i], jr = i == am - 1 ? a.nnz : arows[i + 1];
-            for (int j = jp; j < jr; j++) {
-                int kp = brows[acols[j]],
-                    kr = acols[j] == bm - 1 ? b.nnz : brows[acols[j] + 1];
-                for (int k = kp; k < kr; k++)
+            for (MKL_INT j = jp; j < jr; j++) {
+                MKL_INT kp = brows[acols[j]],
+                        kr = acols[j] == bm - 1 ? b.nnz : brows[acols[j] + 1];
+                for (MKL_INT k = kp; k < kr; k++)
                     tcols.push_back(bcols[k]),
                         tdata.push_back(adata[j] * bdata[k] * scale);
             }
             if (tcols.size() != 0) {
-                int *idx = (int *)ialloc->allocate(tcols.size());
-                for (int l = 0; l < (int)tcols.size(); l++)
+                MKL_INT *idx =
+                    (MKL_INT *)ialloc->allocate(tcols.size() * _MINTSZ);
+                for (MKL_INT l = 0; l < (MKL_INT)tcols.size(); l++)
                     idx[l] = l;
-                sort(idx, idx + tcols.size(), [&tcols](int ti, int tj) {
+                sort(idx, idx + tcols.size(), [&tcols](MKL_INT ti, MKL_INT tj) {
                     return tcols[ti] < tcols[tj];
                 });
                 rcols.push_back(tcols[idx[0]]), rdata.push_back(tdata[idx[0]]);
-                for (int l = 1; l < (int)tcols.size(); l++)
+                for (MKL_INT l = 1; l < (MKL_INT)tcols.size(); l++)
                     if (rcols.back() == tcols[idx[l]])
                         rdata.back() += tdata[idx[l]];
                     else if (abs(rdata.back()) < TINY)
@@ -303,24 +306,24 @@ struct CSRMatrixFunctions {
                     else
                         rcols.push_back(tcols[idx[l]]),
                             rdata.push_back(tdata[idx[l]]);
-                ialloc->deallocate(idx, tcols.size());
+                ialloc->deallocate(idx, tcols.size() * _MINTSZ);
             }
         }
-        r_idx[am] = (int)rcols.size();
+        r_idx[am] = (MKL_INT)rcols.size();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, r_idx[am], nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
         if (r.nnz != r.size()) {
-            memcpy(r.rows, r_idx, (r.m + 1) * sizeof(int));
-            memcpy(r.cols, rcols.data(), r.nnz * sizeof(int));
+            memcpy(r.rows, r_idx, (r.m + 1) * sizeof(MKL_INT));
+            memcpy(r.cols, rcols.data(), r.nnz * sizeof(MKL_INT));
         }
         memcpy(r.data, rdata.data(), r.nnz * sizeof(double));
         c.deallocate();
         c = r;
-        ialloc->deallocate(r_idx, c.m + 1);
-        for (int it = conja + conjb - 1; it >= 0; it--)
+        ialloc->deallocate(r_idx, (c.m + 1) * _MINTSZ);
+        for (MKL_INT it = conja + conjb - 1; it >= 0; it--)
             tmps[it].deallocate();
     }
     static void multiply(const MatrixRef &a, bool conja, const CSRMatrixRef &b,
@@ -347,7 +350,7 @@ struct CSRMatrixFunctions {
         } else {
             MatrixRef at(nullptr, a.n, a.m);
             at.allocate();
-            for (int i = 0, inc = 1; i < at.m; i++)
+            for (MKL_INT i = 0, inc = 1; i < at.m; i++)
                 dcopy(&at.n, a.data + i, &at.m, at.data + i * at.n, &inc);
             sparse_status_t st =
                 mkl_sparse_d_mm(!conjb ? SPARSE_OPERATION_TRANSPOSE
@@ -358,44 +361,44 @@ struct CSRMatrixFunctions {
             at.deallocate();
         }
 #else
-        const int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        const int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         assert(am == c.m && bn == c.n && an == bm);
         if (cfactor != 1)
             MatrixFunctions::iscale(c, cfactor);
         if (!conja && !conjb) {
-            for (int ib = 0; ib < b.m; ib++) {
-                const int jbp = b.rows[ib], jbr = b.rows[ib + 1];
-                for (int jb = jbp; jb < jbr; jb++) {
+            for (MKL_INT ib = 0; ib < b.m; ib++) {
+                const MKL_INT jbp = b.rows[ib], jbr = b.rows[ib + 1];
+                for (MKL_INT jb = jbp; jb < jbr; jb++) {
                     const double factor = scale * b.data[jb];
                     daxpy(&a.m, &factor, &a(0, ib), &a.n, &c(0, b.cols[jb]),
                           &c.n);
                 }
             }
         } else if (conja && !conjb) {
-            const int inc = 1;
-            for (int ib = 0; ib < b.m; ib++) {
-                const int jbp = b.rows[ib], jbr = b.rows[ib + 1];
-                for (int jb = jbp; jb < jbr; jb++) {
+            const MKL_INT inc = 1;
+            for (MKL_INT ib = 0; ib < b.m; ib++) {
+                const MKL_INT jbp = b.rows[ib], jbr = b.rows[ib + 1];
+                for (MKL_INT jb = jbp; jb < jbr; jb++) {
                     const double factor = scale * b.data[jb];
                     daxpy(&a.n, &factor, &a(ib, 0), &inc, &c(0, b.cols[jb]),
                           &c.n);
                 }
             }
         } else if (!conja && conjb) {
-            for (int ib = 0; ib < b.m; ib++) {
-                const int jbp = b.rows[ib], jbr = b.rows[ib + 1];
-                for (int jb = jbp; jb < jbr; jb++) {
+            for (MKL_INT ib = 0; ib < b.m; ib++) {
+                const MKL_INT jbp = b.rows[ib], jbr = b.rows[ib + 1];
+                for (MKL_INT jb = jbp; jb < jbr; jb++) {
                     const double factor = scale * b.data[jb];
                     daxpy(&a.m, &factor, &a(0, b.cols[jb]), &a.n, &c(0, ib),
                           &c.n);
                 }
             }
         } else {
-            const int inc = 1;
-            for (int ib = 0; ib < b.m; ib++) {
-                const int jbp = b.rows[ib], jbr = b.rows[ib + 1];
-                for (int jb = jbp; jb < jbr; jb++) {
+            const MKL_INT inc = 1;
+            for (MKL_INT ib = 0; ib < b.m; ib++) {
+                const MKL_INT jbp = b.rows[ib], jbr = b.rows[ib + 1];
+                for (MKL_INT jb = jbp; jb < jbr; jb++) {
                     const double factor = scale * b.data[jb];
                     daxpy(&a.n, &factor, &a(b.cols[jb], 0), &inc, &c(0, ib),
                           &c.n);
@@ -427,7 +430,7 @@ struct CSRMatrixFunctions {
         } else {
             MatrixRef bt(nullptr, b.n, b.m);
             bt.allocate();
-            for (int i = 0, inc = 1; i < bt.m; i++)
+            for (MKL_INT i = 0, inc = 1; i < bt.m; i++)
                 dcopy(&bt.n, b.data + i, &bt.m, bt.data + i * bt.n, &inc);
             sparse_status_t st =
                 mkl_sparse_d_mm(conja ? SPARSE_OPERATION_TRANSPOSE
@@ -438,43 +441,43 @@ struct CSRMatrixFunctions {
             bt.deallocate();
         }
 #else
-        const int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        const int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
-        const int inc = 1;
+        const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        const MKL_INT inc = 1;
         assert(am == c.m && bn == c.n && an == bm);
         if (cfactor != 1)
             MatrixFunctions::iscale(c, cfactor);
         if (!conja && !conjb) {
-            for (int ia = 0; ia < a.m; ia++) {
-                const int jap = a.rows[ia], jar = a.rows[ia + 1];
-                for (int ja = jap; ja < jar; ja++) {
+            for (MKL_INT ia = 0; ia < a.m; ia++) {
+                const MKL_INT jap = a.rows[ia], jar = a.rows[ia + 1];
+                for (MKL_INT ja = jap; ja < jar; ja++) {
                     const double factor = scale * a.data[ja];
                     daxpy(&b.n, &factor, &b(a.cols[ja], 0), &inc, &c(ia, 0),
                           &inc);
                 }
             }
         } else if (conja && !conjb) {
-            for (int ia = 0; ia < a.m; ia++) {
-                const int jap = a.rows[ia], jar = a.rows[ia + 1];
-                for (int ja = jap; ja < jar; ja++) {
+            for (MKL_INT ia = 0; ia < a.m; ia++) {
+                const MKL_INT jap = a.rows[ia], jar = a.rows[ia + 1];
+                for (MKL_INT ja = jap; ja < jar; ja++) {
                     const double factor = scale * a.data[ja];
                     daxpy(&b.n, &factor, &b(ia, 0), &inc, &c(a.cols[ja], 0),
                           &inc);
                 }
             }
         } else if (!conja && conjb) {
-            for (int ia = 0; ia < a.m; ia++) {
-                const int jap = a.rows[ia], jar = a.rows[ia + 1];
-                for (int ja = jap; ja < jar; ja++) {
+            for (MKL_INT ia = 0; ia < a.m; ia++) {
+                const MKL_INT jap = a.rows[ia], jar = a.rows[ia + 1];
+                for (MKL_INT ja = jap; ja < jar; ja++) {
                     const double factor = scale * a.data[ja];
                     daxpy(&b.m, &factor, &b(0, a.cols[ja]), &b.n, &c(ia, 0),
                           &inc);
                 }
             }
         } else {
-            for (int ia = 0; ia < a.m; ia++) {
-                const int jap = a.rows[ia], jar = a.rows[ia + 1];
-                for (int ja = jap; ja < jar; ja++) {
+            for (MKL_INT ia = 0; ia < a.m; ia++) {
+                const MKL_INT jap = a.rows[ia], jar = a.rows[ia + 1];
+                for (MKL_INT ja = jap; ja < jar; ja++) {
                     const double factor = scale * a.data[ja];
                     daxpy(&b.m, &factor, &b(0, ia), &b.n, &c(a.cols[ja], 0),
                           &inc);
@@ -529,7 +532,7 @@ struct CSRMatrixFunctions {
                                         double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
-        const int k = 1, lda = 1, ldb = b.n + 1;
+        const MKL_INT k = 1, lda = 1, ldb = b.n + 1;
         MatrixRef ad(nullptr, a.m, 1);
         ad.allocate();
         a.diag(ad);
@@ -543,7 +546,7 @@ struct CSRMatrixFunctions {
                                         const MatrixRef &c, double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
-        const int k = 1, lda = a.n + 1, ldb = 1;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = 1;
         MatrixRef bd(nullptr, b.m, 1);
         bd.allocate();
         b.diag(bd);
@@ -557,7 +560,7 @@ struct CSRMatrixFunctions {
                                         const MatrixRef &c, double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
-        const int k = 1, lda = 1, ldb = 1;
+        const MKL_INT k = 1, lda = 1, ldb = 1;
         MatrixRef ad(nullptr, a.m, 1), bd(nullptr, b.m, 1);
         ad.allocate(), bd.allocate();
         a.diag(ad), b.diag(bd);
@@ -594,12 +597,13 @@ struct CSRMatrixFunctions {
         r.allocate();
         uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
-        memset(r.rows, 0, (r.m + 1) * sizeof(int));
+        memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         vector<CSRMatrixRef> tmps;
-        int *arows = a.rows, *acols = a.cols, *brows = b.rows, *bcols = b.cols;
+        MKL_INT *arows = a.rows, *acols = a.cols, *brows = b.rows,
+                *bcols = b.cols;
         double *adata = a.data, *bdata = b.data;
-        int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conja)
             tmps.push_back(a.transpose(dalloc)), arows = tmps.back().rows,
                                                  acols = tmps.back().cols,
@@ -608,22 +612,23 @@ struct CSRMatrixFunctions {
             tmps.push_back(b.transpose(dalloc)), brows = tmps.back().rows,
                                                  bcols = tmps.back().cols,
                                                  bdata = tmps.back().data;
-        for (int ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
-            int jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
-            for (int ib = 0; ib < bm; ib++, ir++) {
-                int jbp = brows[ib], jbr = ib == bm - 1 ? b.nnz : brows[ib + 1];
+        for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
+            MKL_INT jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
+            for (MKL_INT ib = 0; ib < bm; ib++, ir++) {
+                MKL_INT jbp = brows[ib],
+                        jbr = ib == bm - 1 ? b.nnz : brows[ib + 1];
                 r.rows[ir + 1] = r.rows[ir] + (jar - jap) * (jbr - jbp);
-                for (int ja = jap; ja < jar; ja++)
-                    for (int jb = jbp; jb < jbr; jb++, ix++) {
+                for (MKL_INT ja = jap; ja < jar; ja++)
+                    for (MKL_INT jb = jbp; jb < jbr; jb++, ix++) {
                         r.cols[ix] = bn * acols[ja] + bcols[jb] + n_stride;
                         r.data[ix] = scale * adata[ja] * bdata[jb];
                     }
             }
         }
-        for (int it = conja + conjb - 1; it >= 0; it--)
+        for (MKL_INT it = conja + conjb - 1; it >= 0; it--)
             tmps[it].deallocate();
         assert(r.rows[m_stride + m_length] == r.nnz);
-        for (int ir = m_stride + m_length; ir < r.m; ir++)
+        for (MKL_INT ir = m_stride + m_length; ir < r.m; ir++)
             r.rows[ir + 1] = r.nnz;
         if (c.nnz == 0) {
             c.deallocate();
@@ -667,29 +672,29 @@ struct CSRMatrixFunctions {
         r.allocate();
         uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
-        memset(r.rows, 0, (r.m + 1) * sizeof(int));
+        memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         CSRMatrixRef tmp;
-        int *arows = a.rows, *acols = a.cols;
+        MKL_INT *arows = a.rows, *acols = a.cols;
         double *adata = a.data;
-        int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conja)
             tmp = a.transpose(dalloc), arows = tmp.rows, acols = tmp.cols,
             adata = tmp.data;
-        for (int ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
-            int jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
-            for (int ib = 0; ib < bm; ib++, ir++) {
+        for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
+            MKL_INT jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
+            for (MKL_INT ib = 0; ib < bm; ib++, ir++) {
                 r.rows[ir + 1] = r.rows[ir] + (jar - jap) * bn;
                 if (conjb)
-                    for (int ja = jap; ja < jar; ja++)
-                        for (int jb = 0; jb < bn; jb++, ix++) {
+                    for (MKL_INT ja = jap; ja < jar; ja++)
+                        for (MKL_INT jb = 0; jb < bn; jb++, ix++) {
                             r.cols[ix] = bn * acols[ja] + jb + n_stride;
                             r.data[ix] =
                                 scale * adata[ja] * b.data[jb * bm + ib];
                         }
                 else
-                    for (int ja = jap; ja < jar; ja++)
-                        for (int jb = 0; jb < bn; jb++, ix++) {
+                    for (MKL_INT ja = jap; ja < jar; ja++)
+                        for (MKL_INT jb = 0; jb < bn; jb++, ix++) {
                             r.cols[ix] = bn * acols[ja] + jb + n_stride;
                             r.data[ix] =
                                 scale * adata[ja] * b.data[ib * bn + jb];
@@ -699,7 +704,7 @@ struct CSRMatrixFunctions {
         if (conja)
             tmp.deallocate();
         assert(r.rows[m_stride + m_length] == r.nnz);
-        for (int ir = m_stride + m_length; ir < r.m; ir++)
+        for (MKL_INT ir = m_stride + m_length; ir < r.m; ir++)
             r.rows[ir + 1] = r.nnz;
         if (c.nnz == 0) {
             c.deallocate();
@@ -743,29 +748,30 @@ struct CSRMatrixFunctions {
         r.allocate();
         uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
-        memset(r.rows, 0, (r.m + 1) * sizeof(int));
+        memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         CSRMatrixRef tmp;
-        int *brows = b.rows, *bcols = b.cols;
+        MKL_INT *brows = b.rows, *bcols = b.cols;
         double *bdata = b.data;
-        int am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        int bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
+        MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conjb)
             tmp = b.transpose(dalloc), brows = tmp.rows, bcols = tmp.cols,
             bdata = tmp.data;
-        for (int ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
-            for (int ib = 0; ib < bm; ib++, ir++) {
-                int jbp = brows[ib], jbr = ib == bm - 1 ? b.nnz : brows[ib + 1];
+        for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
+            for (MKL_INT ib = 0; ib < bm; ib++, ir++) {
+                MKL_INT jbp = brows[ib],
+                        jbr = ib == bm - 1 ? b.nnz : brows[ib + 1];
                 r.rows[ir + 1] = r.rows[ir] + an * (jbr - jbp);
                 if (conja)
-                    for (int ja = 0; ja < an; ja++)
-                        for (int jb = jbp; jb < jbr; jb++, ix++) {
+                    for (MKL_INT ja = 0; ja < an; ja++)
+                        for (MKL_INT jb = jbp; jb < jbr; jb++, ix++) {
                             r.cols[ix] = bn * ja + bcols[jb] + n_stride;
                             r.data[ix] =
                                 scale * a.data[ja * am + ia] * bdata[jb];
                         }
                 else
-                    for (int ja = 0; ja < an; ja++)
-                        for (int jb = jbp; jb < jbr; jb++, ix++) {
+                    for (MKL_INT ja = 0; ja < an; ja++)
+                        for (MKL_INT jb = jbp; jb < jbr; jb++, ix++) {
                             r.cols[ix] = bn * ja + bcols[jb] + n_stride;
                             r.data[ix] =
                                 scale * a.data[ia * an + ja] * bdata[jb];
@@ -775,7 +781,7 @@ struct CSRMatrixFunctions {
         if (conjb)
             tmp.deallocate();
         assert(r.rows[m_stride + m_length] == r.nnz);
-        for (int ir = m_stride + m_length; ir < r.m; ir++)
+        for (MKL_INT ir = m_stride + m_length; ir < r.m; ir++)
             r.rows[ir + 1] = r.nnz;
         if (c.nnz == 0) {
             c.deallocate();

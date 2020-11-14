@@ -435,7 +435,7 @@ template <typename S> struct MPSInfo {
                 make_shared<StateInfo<S>>(left_dims_fci[i + 1]->deep_copy());
         for (int i = 0; i < n_sites; i++)
             if (left_dims[i + 1]->n_states_total > m) {
-                int new_total = 0;
+                total_bond_t new_total = 0;
                 for (int k = 0; k < left_dims[i + 1]->n; k++) {
                     uint32_t new_n_states =
                         (uint32_t)(ceil((double)left_dims[i + 1]->n_states[k] *
@@ -454,7 +454,7 @@ template <typename S> struct MPSInfo {
                 make_shared<StateInfo<S>>(right_dims_fci[i]->deep_copy());
         for (int i = n_sites - 1; i >= 0; i--)
             if (right_dims[i]->n_states_total > m) {
-                int new_total = 0;
+                total_bond_t new_total = 0;
                 for (int k = 0; k < right_dims[i]->n; k++) {
                     uint32_t new_n_states =
                         (uint32_t)(ceil((double)right_dims[i]->n_states[k] * m /
@@ -470,7 +470,7 @@ template <typename S> struct MPSInfo {
         for (int i = -1; i < n_sites - 1; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
                 *left_dims[i + 1], *basis[i + 1], *left_dims_fci[i + 2]);
-            int new_total = 0;
+            total_bond_t new_total = 0;
             for (int k = 0; k < left_dims[i + 2]->n; k++) {
                 int tk = t.find_state(left_dims[i + 2]->quanta[k]);
                 if (tk == -1)
@@ -485,7 +485,7 @@ template <typename S> struct MPSInfo {
         for (int i = n_sites; i > 0; i--) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
                 *basis[i - 1], *right_dims[i], *right_dims_fci[i - 1]);
-            int new_total = 0;
+            total_bond_t new_total = 0;
             for (int k = 0; k < right_dims[i - 1]->n; k++) {
                 int tk = t.find_state(right_dims[i - 1]->quanta[k]);
                 if (tk == -1)

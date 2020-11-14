@@ -161,7 +161,7 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
                 double sqsum = 0;
                 for (auto &m : cmp) {
                     double m_norm = MatrixFunctions::norm(
-                        MatrixRef(&m.second[0], (int)m.second.size(), 1));
+                        MatrixRef(&m.second[0], (MKL_INT)m.second.size(), 1));
                     sqsum += m_norm * m_norm;
                 }
                 if (sqrt(sqsum) < cutoff)
@@ -173,7 +173,7 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
                 vals[lower_bound(dets.begin(), dets.end(), cur) -
                      dets.begin()] = cmp[mps->info->target][0];
             } else {
-                for (uint8_t jj = 0; jj < (int)data[cur].size(); jj++)
+                for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
                     if (data[cur][jj] != 0)
                         ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
             }

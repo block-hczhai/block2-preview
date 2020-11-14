@@ -10,6 +10,7 @@ class TestDMRG : public ::testing::Test {
     size_t dsize = 1L << 34;
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
+        cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
     }

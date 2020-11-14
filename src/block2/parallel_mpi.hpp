@@ -102,6 +102,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
+    void broadcast(long long int *data, size_t len, int owner) override {
+        _t.get_time();
+        int ierr = MPI_Bcast(data, len, MPI_LONG_LONG, owner, MPI_COMM_WORLD);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
     void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) override {
         if (mat->get_type() == SparseMatrixTypes::Normal)
             broadcast(mat->data, mat->total_memory, owner);
@@ -228,7 +234,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = *cmat;
             shared_ptr<CSROperatorFunctions<S>> copf =
                 make_shared<CSROperatorFunctions<S>>(nullptr);
-            vector<int> nnzs(mat->info->n), dz, gnnzs;
+            vector<MKL_INT> nnzs(mat->info->n), dz, gnnzs;
             vector<double> dt;
             if (rank == owner)
                 gnnzs.resize(mat->info->n * size);
@@ -270,11 +276,11 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                 cmat->deallocate();
                 *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = r;
             } else {
-                int dsz = 0;
+                MKL_INT dsz = 0;
                 for (int i = 0; i < mat->info->n; i++)
                     dsz += cmat->csr_data[i]->memory_size();
                 dt.resize(dsz);
-                int dp = 0;
+                MKL_INT dp = 0;
                 for (int i = 0; i < mat->info->n; i++) {
                     memcpy(dt.data() + dp, cmat->csr_data[i]->data,
                            sizeof(double) * cmat->csr_data[i]->memory_size());

@@ -813,10 +813,10 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
             CSRMatrixRef mat = (*Hop)[idx];
             assert(mat.m == mat.n);
             if (!save)
-                assert(mat.m == (int)pqn.second.size());
+                assert(mat.m == (MKL_INT)pqn.second.size());
             if (mat.nnz == mat.size()) {
                 auto dmat = mat.dense_ref();
-                for (int iRow = 0; iRow < mat.m; iRow++) {
+                for (MKL_INT iRow = 0; iRow < mat.m; iRow++) {
                     if (save) {
                         pqn.second.emplace_back(dmat(iRow, iRow));
                     } else {
@@ -828,8 +828,8 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 }
             } else {
                 int nCounts = 0;
-                for (int iRow = 0; iRow < mat.m; ++iRow) { // see mat.trace()
-                    int rows_end =
+                for (MKL_INT iRow = 0; iRow < mat.m; ++iRow) { // see mat.trace()
+                    MKL_INT rows_end =
                         iRow == mat.m - 1 ? mat.nnz : mat.rows[iRow + 1];
                     int ic = lower_bound(mat.cols + mat.rows[iRow],
                                          mat.cols + rows_end, iRow) -

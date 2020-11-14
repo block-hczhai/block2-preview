@@ -32,6 +32,7 @@ namespace py = pybind11;
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
+PYBIND11_MAKE_OPAQUE(vector<long long int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
@@ -1906,6 +1907,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 template <typename S = void> void bind_data(py::module &m) {
 
     py::bind_vector<vector<int>>(m, "VectorInt");
+    py::bind_vector<vector<long long int>>(m, "VectorLLInt");
     py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
@@ -1974,6 +1976,11 @@ template <typename S = void> void bind_data(py::module &m) {
         m.attr("VectorUBond") = m.attr("VectorUInt32");
         m.attr("ArrayUBond") = m.attr("ArrayUInt32");
     }
+
+    if (sizeof(MKL_INT) == sizeof(int))
+        m.attr("VectorMKLInt") = m.attr("VectorInt");
+    else if (sizeof(MKL_INT) == sizeof(long long int))
+        m.attr("VectorMKLInt") = m.attr("VectorLLInt");
 }
 
 template <typename S = void> void bind_types(py::module &m) {
@@ -2301,10 +2308,11 @@ template <typename S = void> void bind_matrix(py::module &m) {
     py::class_<MatrixRef, shared_ptr<MatrixRef>>(m, "Matrix",
                                                  py::buffer_protocol())
         .def_buffer([](MatrixRef *self) -> py::buffer_info {
-            return py::buffer_info(self->data, sizeof(double),
-                                   py::format_descriptor<double>::format(), 2,
-                                   {self->m, self->n},
-                                   {sizeof(double) * self->n, sizeof(double)});
+            return py::buffer_info(
+                self->data, sizeof(double),
+                py::format_descriptor<double>::format(), 2,
+                {(ssize_t)self->m, (ssize_t)self->n},
+                {sizeof(double) * (ssize_t)self->n, sizeof(double)});
         })
         .def_readwrite("m", &MatrixRef::m)
         .def_readwrite("n", &MatrixRef::n)
@@ -2318,7 +2326,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
 
     py::class_<CSRMatrixRef, shared_ptr<CSRMatrixRef>>(m, "CSRMatrix")
         .def(py::init<>())
-        .def(py::init<int, int>())
+        .def(py::init<MKL_INT, MKL_INT>())
         .def_readwrite("m", &CSRMatrixRef::m)
         .def_readwrite("n", &CSRMatrixRef::n)
         .def_readwrite("nnz", &CSRMatrixRef::nnz)
@@ -2334,20 +2342,20 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_property(
             "rows",
             [](CSRMatrixRef *self) {
-                return py::array_t<int>(self->m + 1, self->rows);
+                return py::array_t<MKL_INT>(self->m + 1, self->rows);
             },
-            [](CSRMatrixRef *self, const py::array_t<int> &v) {
+            [](CSRMatrixRef *self, const py::array_t<MKL_INT> &v) {
                 assert(v.size() == self->m + 1);
-                memcpy(self->rows, v.data(), sizeof(int) * (self->m + 1));
+                memcpy(self->rows, v.data(), sizeof(MKL_INT) * (self->m + 1));
             })
         .def_property(
             "cols",
             [](CSRMatrixRef *self) {
-                return py::array_t<int>(self->nnz, self->cols);
+                return py::array_t<MKL_INT>(self->nnz, self->cols);
             },
-            [](CSRMatrixRef *self, const py::array_t<int> &v) {
+            [](CSRMatrixRef *self, const py::array_t<MKL_INT> &v) {
                 assert(v.size() == self->nnz);
-                memcpy(self->cols, v.data(), sizeof(int) * self->nnz);
+                memcpy(self->cols, v.data(), sizeof(MKL_INT) * self->nnz);
             })
         .def("__repr__",
              [](CSRMatrixRef *self) {
@@ -2370,8 +2378,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
     py::bind_vector<vector<shared_ptr<CSRMatrixRef>>>(m, "VectorCSRMatrix");
 
     py::class_<Tensor, shared_ptr<Tensor>>(m, "Tensor", py::buffer_protocol())
-        .def(py::init<int, int, int>())
-        .def(py::init<const vector<int> &>())
+        .def(py::init<MKL_INT, MKL_INT, MKL_INT>())
+        .def(py::init<const vector<MKL_INT> &>())
         .def_buffer([](Tensor *self) -> py::buffer_info {
             vector<ssize_t> shape, strides;
             for (auto x : self->shape)
@@ -2411,7 +2419,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_buffer([](DiagonalMatrix *self) -> py::buffer_info {
             return py::buffer_info(self->data, sizeof(double),
                                    py::format_descriptor<double>::format(), 1,
-                                   {self->n}, {sizeof(double)});
+                                   {(ssize_t)self->n}, {sizeof(double)});
         });
 
     py::class_<FCIDUMP, shared_ptr<FCIDUMP>>(m, "FCIDUMP")

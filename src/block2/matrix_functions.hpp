@@ -22,9 +22,6 @@
 
 #include "allocator.hpp"
 #include "matrix.hpp"
-#ifdef _HAS_INTEL_MKL
-#include "mkl.h"
-#endif
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -42,70 +39,76 @@ extern "C" {
 
 // vector scale
 // vector [sx] = double [sa] * vector [sx]
-extern void dscal(const int *n, const double *sa, double *sx,
-                  const int *incx) noexcept;
+extern void dscal(const MKL_INT *n, const double *sa, double *sx,
+                  const MKL_INT *incx) noexcept;
 
 // vector copy
 // vector [dy] = [dx]
-extern void dcopy(const int *n, const double *dx, const int *incx, double *dy,
-                  const int *incy) noexcept;
+extern void dcopy(const MKL_INT *n, const double *dx, const MKL_INT *incx,
+                  double *dy, const MKL_INT *incy) noexcept;
 
 // vector addition
 // vector [sy] = vector [sy] + double [sa] * vector [sx]
-extern void daxpy(const int *n, const double *sa, const double *sx,
-                  const int *incx, double *sy, const int *incy) noexcept;
+extern void daxpy(const MKL_INT *n, const double *sa, const double *sx,
+                  const MKL_INT *incx, double *sy,
+                  const MKL_INT *incy) noexcept;
 
 // vector dot product
-extern double ddot(const int *n, const double *dx, const int *incx,
-                   const double *dy, const int *incy) noexcept;
+extern double ddot(const MKL_INT *n, const double *dx, const MKL_INT *incx,
+                   const double *dy, const MKL_INT *incy) noexcept;
 
 // Euclidean norm of a vector
-extern double dnrm2(const int *n, const double *x, const int *incx) noexcept;
+extern double dnrm2(const MKL_INT *n, const double *x,
+                    const MKL_INT *incx) noexcept;
 
 // matrix multiplication
 // mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
-extern void dgemm(const char *transa, const char *transb, const int *m,
-                  const int *n, const int *k, const double *alpha,
-                  const double *a, const int *lda, const double *b,
-                  const int *ldb, const double *beta, double *c,
-                  const int *ldc) noexcept;
+extern void dgemm(const char *transa, const char *transb, const MKL_INT *m,
+                  const MKL_INT *n, const MKL_INT *k, const double *alpha,
+                  const double *a, const MKL_INT *lda, const double *b,
+                  const MKL_INT *ldb, const double *beta, double *c,
+                  const MKL_INT *ldc) noexcept;
 
 // matrix-vector multiplication
 // vec [y] = double [alpha] * mat [a] * vec [x] + double [beta] * vec [y]
-extern void dgemv(const char *trans, const int *m, const int *n,
-                  const double *alpha, const double *a, const int *lda,
-                  const double *x, const int *incx, const double *beta,
-                  double *y, const int *incy) noexcept;
+extern void dgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const double *alpha, const double *a, const MKL_INT *lda,
+                  const double *x, const MKL_INT *incx, const double *beta,
+                  double *y, const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void dgesv(const int *n, const int *nrhs, double *a, const int *lda,
-                  int *ipiv, double *b, const int *ldb, int *info);
+extern void dgesv(const MKL_INT *n, const MKL_INT *nrhs, double *a,
+                  const MKL_INT *lda, MKL_INT *ipiv, double *b,
+                  const MKL_INT *ldb, MKL_INT *info);
 
 // QR factorization
-extern void dgeqrf(const int *m, const int *n, double *a, const int *lda,
-                   double *tau, double *work, const int *lwork, int *info);
-extern void dorgqr(const int *m, const int *n, const int *k, double *a,
-                   const int *lda, const double *tau, double *work,
-                   const int *lwork, int *info);
+extern void dgeqrf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+extern void dorgqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void dgelqf(const int *m, const int *n, double *a, const int *lda,
-                   double *tau, double *work, const int *lwork, int *info);
-extern void dorglq(const int *m, const int *n, const int *k, double *a,
-                   const int *lda, const double *tau, double *work,
-                   const int *lwork, int *info);
+extern void dgelqf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+extern void dorglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // eigenvalue problem
-extern void dsyev(const char *jobz, const char *uplo, const int *n, double *a,
-                  const int *lda, double *w, double *work, const int *lwork,
-                  int *info);
+extern void dsyev(const char *jobz, const char *uplo, const MKL_INT *n,
+                  double *a, const MKL_INT *lda, double *w, double *work,
+                  const MKL_INT *lwork, MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void dgesvd(const char *jobu, const char *jobvt, const int *m,
-                   const int *n, double *a, const int *lda, double *s,
-                   double *u, const int *ldu, double *vt, const int *ldvt,
-                   double *work, const int *lwork, int *info);
+extern void dgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, double *a, const MKL_INT *lda, double *s,
+                   double *u, const MKL_INT *ldu, double *vt,
+                   const MKL_INT *ldvt, double *work, const MKL_INT *lwork,
+                   MKL_INT *info);
 
 #endif
 }
@@ -113,14 +116,15 @@ extern void dgesvd(const char *jobu, const char *jobvt, const int *m,
 // Dense matrix operations
 struct MatrixFunctions {
     // a = b
-    static void copy(const MatrixRef &a, const MatrixRef &b, const int inca = 1,
-                     const int incb = 1) {
+    static void copy(const MatrixRef &a, const MatrixRef &b,
+                     const MKL_INT inca = 1, const MKL_INT incb = 1) {
         assert(a.m == b.m && a.n == b.n);
-        const int n = a.m * a.n;
+        const MKL_INT n = a.m * a.n;
         dcopy(&n, b.data, &incb, a.data, &inca);
     }
-    static void iscale(const MatrixRef &a, double scale, const int inc = 1) {
-        int n = a.m * a.n;
+    static void iscale(const MatrixRef &a, double scale,
+                       const MKL_INT inc = 1) {
+        MKL_INT n = a.m * a.n;
         dscal(&n, &scale, a.data, &inc);
     }
     // a = a + scale * op(b)
@@ -128,29 +132,29 @@ struct MatrixFunctions {
                      bool conj = false) {
         if (!conj) {
             assert(a.m == b.m && a.n == b.n);
-            int n = a.m * a.n, inc = 1;
+            MKL_INT n = a.m * a.n, inc = 1;
             daxpy(&n, &scale, b.data, &inc, a.data, &inc);
         } else {
             assert(a.m == b.n && a.n == b.m);
-            for (int i = 0, inc = 1; i < a.m; i++)
+            for (MKL_INT i = 0, inc = 1; i < a.m; i++)
                 daxpy(&a.n, &scale, b.data + i, &a.m, a.data + i * a.n, &inc);
         }
     }
     static double norm(const MatrixRef &a) {
-        int n = a.m * a.n, inc = 1;
+        MKL_INT n = a.m * a.n, inc = 1;
         return dnrm2(&n, a.data, &inc);
     }
     static double dot(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == b.m && a.n == b.n);
-        int n = a.m * a.n, inc = 1;
+        MKL_INT n = a.m * a.n, inc = 1;
         return ddot(&n, a.data, &inc, b.data, &inc);
     }
     template <typename T1, typename T2>
     static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
                           double rtol = 1E-5, double scale = 1.0) {
         assert(a.m == b.m && a.n == b.n);
-        for (int i = 0; i < a.m; i++)
-            for (int j = 0; j < a.n; j++)
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
                 if (abs(a(i, j) - scale * b(i, j)) > atol + rtol * abs(b(i, j)))
                     return false;
         return true;
@@ -158,10 +162,10 @@ struct MatrixFunctions {
     // solve a^T x[i, :] = b[i, :] => output in b; a will be overwritten
     static void linear(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == a.n && a.m == b.n);
-        int *work = (int *)ialloc->allocate(a.n), info = -1;
+        MKL_INT *work = (MKL_INT *)ialloc->allocate(a.n * _MINTSZ), info = -1;
         dgesv(&a.m, &b.m, a.data, &a.n, work, b.data, &a.n, &info);
         assert(info == 0);
-        ialloc->deallocate(work, a.n);
+        ialloc->deallocate(work, a.n * _MINTSZ);
     }
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
@@ -208,8 +212,8 @@ struct MatrixFunctions {
                                double scale, uint32_t stride) {
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
-            int am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
-            int cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
             uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
             MatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
@@ -232,8 +236,8 @@ struct MatrixFunctions {
                    (size_t)work.m * work.n * cm;
         } else {
             dconja ^= conj_ket, dconjb ^= conj_ket;
-            int kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
-            int km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
             uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
             MatrixRef work(nullptr, a.m, kn);
@@ -260,7 +264,7 @@ struct MatrixFunctions {
                                         const MatrixRef &c, double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
-        const int k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
         dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
               &cfactor, c.data, &c.n);
     }
@@ -272,24 +276,26 @@ struct MatrixFunctions {
                                   bool dleft, double scale, uint32_t stride) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
-        const int dstrm = (int)stride / (dleft ? a.m : b.m);
-        const int dstrn = (int)stride % (dleft ? a.m : b.m);
+        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
+        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
             return;
         assert(da.m == da.n && db.m == db.n);
-        const int ddstr = 0;
-        const int k = 1, lda = a.n + 1, ldb = b.n + 1;
-        const int ldda = da.n + 1, lddb = db.n + 1;
+        const MKL_INT ddstr = 0;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const MKL_INT ldda = da.n + 1, lddb = db.n + 1;
         if (da.m == 1 && da.n == 1) {
             scale *= *da.data;
-            const int dn = db.n - abs(ddstr);
-            const double *bdata = dconjb ? &db(max(-ddstr, 0), max(ddstr, 0))
-                                         : &db(max(ddstr, 0), max(-ddstr, 0));
+            const MKL_INT dn = db.n - abs(ddstr);
+            const double *bdata =
+                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
             if (dn > 0) {
                 if (dleft)
                     // (1 x db) x b
                     dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, bdata,
-                          &lddb, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                          &lddb, &cfactor, &c(max(dstrn, dstrm), (MKL_INT)0),
+                          &c.n);
                 else
                     // a x (1 x db)
                     dgemm("t", "n", &dn, &a.n, &k, &scale, bdata, &lddb, a.data,
@@ -297,14 +303,16 @@ struct MatrixFunctions {
             }
         } else if (db.m == 1 && db.n == 1) {
             scale *= *db.data;
-            const int dn = da.n - abs(ddstr);
-            const double *adata = dconja ? &da(max(-ddstr, 0), max(ddstr, 0))
-                                         : &da(max(ddstr, 0), max(-ddstr, 0));
+            const MKL_INT dn = da.n - abs(ddstr);
+            const double *adata =
+                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
             if (dn > 0) {
                 if (dleft)
                     // (da x 1) x b
                     dgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb, adata,
-                          &ldda, &cfactor, &c(max(dstrn, dstrm), 0), &c.n);
+                          &ldda, &cfactor, &c(max(dstrn, dstrm), (MKL_INT)0),
+                          &c.n);
                 else
                     // a x (da x 1)
                     dgemm("t", "n", &dn, &a.n, &k, &scale, adata, &ldda, a.data,
@@ -322,33 +330,33 @@ struct MatrixFunctions {
         case 0:
             if (a.m == 1 && a.n == 1) {
                 if (b.n == c.n) {
-                    const int n = b.m * b.n;
+                    const MKL_INT n = b.m * b.n;
                     dgemm("n", "n", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
                           &a.n, &cfactor, &c(0, stride), &n);
                 } else {
                     assert(b.n < c.n);
-                    for (int k = 0; k < b.m; k++)
+                    for (MKL_INT k = 0; k < b.m; k++)
                         dgemm("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
                               &b.n, a.data, &a.n, &cfactor, &c(k, stride),
                               &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
-                    const int n = a.m * a.n;
+                    const MKL_INT n = a.m * a.n;
                     dgemm("n", "n", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
                           &b.n, &cfactor, &c(0, stride), &n);
                 } else {
                     assert(a.n < c.n);
-                    for (int k = 0; k < a.m; k++)
+                    for (MKL_INT k = 0; k < a.m; k++)
                         dgemm("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
                               &a.n, b.data, &b.n, &cfactor, &c(k, stride),
                               &c.n);
                 }
             } else {
-                for (int i = 0, inc = 1; i < a.m; i++)
-                    for (int j = 0; j < a.n; j++) {
+                for (MKL_INT i = 0, inc = 1; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++) {
                         const double factor = scale * a(i, j);
-                        for (int k = 0; k < b.m; k++)
+                        for (MKL_INT k = 0; k < b.m; k++)
                             daxpy(&b.n, &factor, &b(k, 0), &inc,
                                   &c(i * b.m + k, j * b.n + stride), &inc);
                     }
@@ -357,26 +365,26 @@ struct MatrixFunctions {
         case 1:
             if (a.m == 1 && a.n == 1) {
                 if (b.n == c.n) {
-                    const int n = b.m * b.n;
+                    const MKL_INT n = b.m * b.n;
                     dgemm("n", "n", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
                           &a.n, &cfactor, &c(0, stride), &n);
                 } else {
                     assert(b.n < c.n);
-                    for (int k = 0; k < b.m; k++)
+                    for (MKL_INT k = 0; k < b.m; k++)
                         dgemm("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
                               &b.n, a.data, &a.n, &cfactor, &c(k, stride),
                               &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 assert(a.m <= c.n);
-                for (int k = 0; k < a.n; k++)
+                for (MKL_INT k = 0; k < a.n; k++)
                     dgemm("t", "n", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
                           b.data, &b.n, &cfactor, &c(k, stride), &c.n);
             } else {
-                for (int i = 0, inc = 1; i < a.n; i++)
-                    for (int j = 0; j < a.m; j++) {
+                for (MKL_INT i = 0, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
                         const double factor = scale * a(j, i);
-                        for (int k = 0; k < b.m; k++)
+                        for (MKL_INT k = 0; k < b.m; k++)
                             daxpy(&b.n, &factor, &b(k, 0), &inc,
                                   &c(i * b.m + k, j * b.n + stride), &inc);
                     }
@@ -385,26 +393,26 @@ struct MatrixFunctions {
         case 2:
             if (a.m == 1 && a.n == 1) {
                 assert(b.m <= c.n);
-                for (int k = 0; k < b.n; k++)
+                for (MKL_INT k = 0; k < b.n; k++)
                     dgemm("t", "n", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
                           a.data, &a.n, &cfactor, &c(k, stride), &c.n);
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
-                    const int n = a.m * a.n;
+                    const MKL_INT n = a.m * a.n;
                     dgemm("n", "n", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
                           &b.n, &cfactor, &c(0, stride), &n);
                 } else {
                     assert(a.n < c.n);
-                    for (int k = 0; k < a.m; k++)
+                    for (MKL_INT k = 0; k < a.m; k++)
                         dgemm("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
                               &a.n, b.data, &b.n, &cfactor, &c(k, stride),
                               &c.n);
                 }
             } else {
-                for (int i = 0, incb = b.n, inc = 1; i < a.m; i++)
-                    for (int j = 0; j < a.n; j++) {
+                for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++) {
                         const double factor = scale * a(i, j);
-                        for (int k = 0; k < b.n; k++)
+                        for (MKL_INT k = 0; k < b.n; k++)
                             daxpy(&b.m, &factor, &b(0, k), &incb,
                                   &c(i * b.n + k, j * b.m + stride), &inc);
                     }
@@ -412,18 +420,18 @@ struct MatrixFunctions {
             break;
         case 1 | 2:
             if (a.m == 1 && a.n == 1) {
-                for (int k = 0; k < b.n; k++)
+                for (MKL_INT k = 0; k < b.n; k++)
                     dgemm("t", "n", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
                           a.data, &a.n, &cfactor, &c(k, stride), &c.n);
             } else if (b.m == 1 && b.n == 1) {
-                for (int k = 0; k < a.n; k++)
+                for (MKL_INT k = 0; k < a.n; k++)
                     dgemm("t", "n", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
                           b.data, &b.n, &cfactor, &c(k, stride), &c.n);
             } else {
-                for (int i = 0, incb = b.n, inc = 1; i < a.n; i++)
-                    for (int j = 0; j < a.m; j++) {
+                for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
                         const double factor = scale * a(j, i);
-                        for (int k = 0; k < b.n; k++)
+                        for (MKL_INT k = 0; k < b.n; k++)
                             daxpy(&b.m, &factor, &b(0, k), &incb,
                                   &c(i * b.n + k, j * b.m + stride), &inc);
                     }
@@ -436,7 +444,7 @@ struct MatrixFunctions {
     // SVD; original matrix will be destroyed
     static void svd(const MatrixRef &a, const MatrixRef &l, const MatrixRef &s,
                     const MatrixRef &r) {
-        int k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
         // double work[lwork];
         double *work = dalloc->allocate(lwork);
         assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
@@ -447,7 +455,7 @@ struct MatrixFunctions {
     }
     // LQ factorization
     static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {
-        int k = min(a.m, a.n), info, lwork = 34 * a.m;
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.m;
         // double work[lwork], tau[k], t[a.m * a.n];
         double *work = dalloc->allocate(lwork);
         double *tau = dalloc->allocate(k);
@@ -457,7 +465,7 @@ struct MatrixFunctions {
         dgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memset(l.data, 0, sizeof(double) * k * a.m);
-        for (int j = 0; j < a.m; j++)
+        for (MKL_INT j = 0; j < a.m; j++)
             memcpy(l.data + j * k, t + j * a.n, sizeof(double) * min(j + 1, k));
         dorgqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
@@ -468,7 +476,7 @@ struct MatrixFunctions {
     }
     // QR factorization
     static void qr(const MatrixRef &a, const MatrixRef &q, const MatrixRef &r) {
-        int k = min(a.m, a.n), info, lwork = 34 * a.n;
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.n;
         // double work[lwork], tau[k], t[a.m * a.n];
         double *work = dalloc->allocate(lwork);
         double *tau = dalloc->allocate(k);
@@ -478,12 +486,12 @@ struct MatrixFunctions {
         dgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memset(r.data, 0, sizeof(double) * k * a.n);
-        for (int j = 0; j < k; j++)
+        for (MKL_INT j = 0; j < k; j++)
             memcpy(r.data + j * a.n + j, t + j * a.n + j,
                    sizeof(double) * (a.n - j));
         dorglq(&k, &a.m, &k, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
-        for (int j = 0; j < a.m; j++)
+        for (MKL_INT j = 0; j < a.m; j++)
             memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
         dalloc->deallocate(t, a.m * a.n);
         dalloc->deallocate(tau, k);
@@ -492,7 +500,7 @@ struct MatrixFunctions {
     // eigenvectors are row vectors
     static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {
         assert(a.m == a.n && w.n == a.n);
-        int lwork = 34 * a.n, info;
+        MKL_INT lwork = 34 * a.n, info;
         // double work[lwork];
         double *work = dalloc->allocate(lwork);
         dsyev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
@@ -505,7 +513,7 @@ struct MatrixFunctions {
         copy(z, r);
         if (aa.size() != 0) {
             assert(aa.size() == r.size() && r.size() == z.size());
-            for (int i = 0; i < aa.n; i++)
+            for (MKL_INT i = 0; i < aa.n; i++)
                 if (abs(aa.data[i]) > 1E-12)
                     z.data[i] /= aa.data[i];
         }
@@ -516,11 +524,11 @@ struct MatrixFunctions {
         MatrixRef t(nullptr, c.m, c.n);
         t.allocate();
         copy(t, c);
-        for (int i = 0; i < aa.n; i++)
+        for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12)
                 t.data[i] /= ld - aa.data[i];
         iadd(q, c, -dot(t, q) / dot(c, t));
-        for (int i = 0; i < aa.n; i++)
+        for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12)
                 q.data[i] /= ld - aa.data[i];
         t.deallocate();
@@ -681,38 +689,39 @@ struct MatrixFunctions {
     //   ACM - Transactions On Mathematical Software, 24(1):130-156, 1998
     // lwork = 4 * m * m + ideg + 1
     // exp(tH) is located at work[ret:ret+m*m]
-    static pair<int, int> expo_pade(int ideg, int m, const double *h, int ldh,
-                                    double t, double *work) {
+    static pair<MKL_INT, MKL_INT> expo_pade(MKL_INT ideg, MKL_INT m,
+                                            const double *h, MKL_INT ldh,
+                                            double t, double *work) {
         static const double zero = 0.0, one = 1.0, mone = -1.0, two = 2.0;
-        static const int inc = 1;
+        static const MKL_INT inc = 1;
         // check restrictions on input parameters
-        int mm = m * m;
-        int iflag = 0;
+        MKL_INT mm = m * m;
+        MKL_INT iflag = 0;
         assert(ldh >= m);
         // initialize pointers
-        int icoef = 0, ih2 = icoef + (ideg + 1), ip = ih2 + mm, iq = ip + mm,
-            ifree = iq + mm;
+        MKL_INT icoef = 0, ih2 = icoef + (ideg + 1), ip = ih2 + mm,
+                iq = ip + mm, ifree = iq + mm;
         // scaling: seek ns such that ||t*H/2^ns|| < 1/2;
         // and set scale = t/2^ns ...
         memset(work, 0, sizeof(double) * m);
-        for (int j = 0; j < m; j++)
-            for (int i = 0; i < m; i++)
+        for (MKL_INT j = 0; j < m; j++)
+            for (MKL_INT i = 0; i < m; i++)
                 work[i] += abs(h[j * m + i]);
         double hnorm = 0.0;
-        for (int i = 0; i < m; i++)
+        for (MKL_INT i = 0; i < m; i++)
             hnorm = max(hnorm, work[i]);
         hnorm = abs(t * hnorm);
         if (hnorm == 0.0) {
             cerr << "Error - null H in expo pade" << endl;
             abort();
         }
-        int ns = max(0, (int)(log(hnorm) / log(2.0)) + 2);
+        MKL_INT ns = max((MKL_INT)0, (MKL_INT)(log(hnorm) / log(2.0)) + 2);
         double scale = t / (double)(1LL << ns);
         double scale2 = scale * scale;
         // compute Pade coefficients
-        int i = ideg + 1, j = 2 * ideg + 1;
+        MKL_INT i = ideg + 1, j = 2 * ideg + 1;
         work[icoef] = 1.0;
-        for (int k = 1; k <= ideg; k++)
+        for (MKL_INT k = 1; k <= ideg; k++)
             work[icoef + k] =
                 work[icoef + k - 1] * (double)(i - k) / double(k * (j - k));
         // H2 = scale2*H*H ...
@@ -722,15 +731,15 @@ struct MatrixFunctions {
         memset(work + ip, 0, sizeof(double) * mm * 2);
         double cp = work[icoef + ideg - 1];
         double cq = work[icoef + ideg];
-        for (int j = 0; j < m; j++)
+        for (MKL_INT j = 0; j < m; j++)
             work[ip + j * (m + 1)] = cp, work[iq + j * (m + 1)] = cq;
         // Apply Horner rule
-        int iodd = 1;
-        for (int k = ideg - 1; k > 0; k--) {
-            int iused = iodd * iq + (1 - iodd) * ip;
+        MKL_INT iodd = 1;
+        for (MKL_INT k = ideg - 1; k > 0; k--) {
+            MKL_INT iused = iodd * iq + (1 - iodd) * ip;
             dgemm("n", "n", &m, &m, &m, &one, work + iused, &m, work + ih2, &m,
                   &zero, work + ifree, &m);
-            for (int j = 0; j < m; j++)
+            for (MKL_INT j = 0; j < m; j++)
                 work[ifree + j * (m + 1)] += work[icoef + k - 1];
             ip = (1 - iodd) * ifree + iodd * ip;
             iq = iodd * ifree + (1 - iodd) * iq;
@@ -738,27 +747,28 @@ struct MatrixFunctions {
             iodd = 1 - iodd;
         }
         // Obtain (+/-)(I + 2*(p\q))
-        int *iqp = iodd ? &iq : &ip;
+        MKL_INT *iqp = iodd ? &iq : &ip;
         dgemm("n", "n", &m, &m, &m, &scale, work + *iqp, &m, h, &ldh, &zero,
               work + ifree, &m);
         *iqp = ifree;
         daxpy(&mm, &mone, work + ip, &inc, work + iq, &inc);
-        dgesv(&m, &m, work + iq, &m, (int *)work + ih2, work + ip, &m, &iflag);
+        dgesv(&m, &m, work + iq, &m, (MKL_INT *)work + ih2, work + ip, &m,
+              &iflag);
         if (iflag != 0) {
             cerr << "Problem in DGESV in expo pade" << endl;
             abort();
         }
         dscal(&mm, &two, work + ip, &inc);
-        for (int j = 0; j < m; j++)
+        for (MKL_INT j = 0; j < m; j++)
             work[ip + j * (m + 1)]++;
-        int iput = ip;
+        MKL_INT iput = ip;
         if (ns == 0 && iodd) {
             dscal(&mm, &mone, work + ip, &inc);
         } else {
             // squaring : exp(t*H) = (exp(t*H))^(2^ns)
             iodd = 1;
-            for (int k = 0; k < ns; k++) {
-                int iget = iodd * ip + (1 - iodd) * iq;
+            for (MKL_INT k = 0; k < ns; k++) {
+                MKL_INT iget = iodd * ip + (1 - iodd) * iq;
                 iput = (1 - iodd) * ip + iodd * iq;
                 dgemm("n", "n", &m, &m, &m, &one, work + iget, &m, work + iget,
                       &m, &zero, work + iput, &m);
@@ -774,15 +784,15 @@ struct MatrixFunctions {
     //   ACM - Transactions On Mathematical Software, 24(1):130-156, 1998
     // lwork = n*(m+1)+n+(m+2)^2+4*(m+2)^2+ideg+1
     template <typename MatMul, typename PComm>
-    static int expo_krylov(MatMul op, int n, int m, double t, double *v,
-                           double *w, double &tol, double anorm, double *work,
-                           int lwork, bool iprint,
-                           const PComm &pcomm = nullptr) {
-        const int inc = 1;
+    static MKL_INT expo_krylov(MatMul op, MKL_INT n, MKL_INT m, double t,
+                               double *v, double *w, double &tol, double anorm,
+                               double *work, MKL_INT lwork, bool iprint,
+                               const PComm &pcomm = nullptr) {
+        const MKL_INT inc = 1;
         const double sqr1 = sqrt(0.1), zero = 0.0;
-        const int mxstep = 500, mxreject = 0, ideg = 6;
+        const MKL_INT mxstep = 500, mxreject = 0, ideg = 6;
         const double delta = 1.2, gamma = 0.9;
-        int iflag = 0;
+        MKL_INT iflag = 0;
         if (lwork < n * (m + 2) + 5 * (m + 2) * (m + 2) + ideg + 1)
             iflag = -1;
         if (m >= n || m <= 0)
@@ -792,14 +802,14 @@ struct MatrixFunctions {
             abort();
         }
         // initializations
-        int k1 = 2, mh = m + 2, iv = 0, ih = iv + n * (m + 1) + n;
-        int ifree = ih + mh * mh, lfree = lwork - ifree, iexph;
-        int ibrkflag = 0, mbrkdwn = m, nmult = 0, mx;
-        int nreject = 0, nexph = 0, nscale = 0, ns = 0;
+        MKL_INT k1 = 2, mh = m + 2, iv = 0, ih = iv + n * (m + 1) + n;
+        MKL_INT ifree = ih + mh * mh, lfree = lwork - ifree, iexph;
+        MKL_INT ibrkflag = 0, mbrkdwn = m, nmult = 0, mx;
+        MKL_INT nreject = 0, nexph = 0, nscale = 0, ns = 0;
         double t_out = abs(t), tbrkdwn = 0.0, t_now = 0.0, t_new = 0.0;
         double step_min = t_out, step_max = 0.0, s_error = 0.0, x_error = 0.0;
         double err_loc;
-        int nstep = 0;
+        MKL_INT nstep = 0;
         // machine precision
         double eps = 0.0;
         for (double p1 = 4.0 / 3.0, p2, p3; eps == 0.0;)
@@ -821,14 +831,14 @@ struct MatrixFunctions {
             nstep++;
             double t_step = min(t_out - t_now, t_new);
             p1 = 1.0 / beta;
-            for (int i = 0; i < n; i++)
+            for (MKL_INT i = 0; i < n; i++)
                 work[iv + i] = p1 * w[i];
             if (pcomm == nullptr || pcomm->root == pcomm->rank)
                 memset(work + ih, 0, sizeof(double) * mh * mh);
             // Lanczos loop
-            int j1v = iv + n;
+            MKL_INT j1v = iv + n;
             double hj1j = 0.0;
-            for (int j = 0; j < m; j++) {
+            for (MKL_INT j = 0; j < m; j++) {
                 nmult++;
                 op(work + j1v - n, work + j1v);
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
@@ -871,7 +881,7 @@ struct MatrixFunctions {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank)
                     avnorm = dnrm2(&n, work + j1v, &inc);
             }
-            int ireject = 0;
+            MKL_INT ireject = 0;
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 // set 1 for the 2-corrected scheme
                 work[ih + m * mh + m - 1] = 0.0;
@@ -931,7 +941,7 @@ struct MatrixFunctions {
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 // now update w = beta*V*exp(t_step*H)*e1 and the hump
-                mx = mbrkdwn + max(0, k1 - 1);
+                mx = mbrkdwn + max((MKL_INT)0, k1 - 1);
                 dgemv("n", &n, &mx, &beta, work + iv, &n, work + iexph, &inc,
                       &zero, w, &inc);
                 beta = dnrm2(&n, w, &inc);
@@ -974,21 +984,21 @@ struct MatrixFunctions {
                           double consta = 0.0, bool iprint = false,
                           const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
                           int deflation_max_size = 20) {
-        int vm = v.m, vn = v.n, n = vm * vn;
+        MKL_INT vm = v.m, vn = v.n, n = vm * vn;
         if (n < 4) {
-            const int lwork = 4 * n * n + 7;
+            const MKL_INT lwork = 4 * n * n + 7;
             double te[n], h[n * n], work[lwork];
             MatrixRef e = MatrixRef(&te[0], vm, vn);
             memset(e.data, 0, sizeof(double) * n);
             memset(h, 0, sizeof(double) * n * n);
-            for (int i = 0; i < n; i++) {
+            for (MKL_INT i = 0; i < n; i++) {
                 e.data[i] = 1.0;
                 op(e, MatrixRef(h + i * n, vm, vn));
                 h[i * (n + 1)] += consta;
                 e.data[i] = 0.0;
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                int iptr = expo_pade(6, n, h, n, t, work).first;
+                MKL_INT iptr = expo_pade(6, n, h, n, t, work).first;
                 MatrixFunctions::multiply(MatrixRef(work + iptr, n, n), true, v,
                                           false, e, 1.0, 0.0);
                 memcpy(v.data, e.data, sizeof(double) * n);
@@ -998,21 +1008,21 @@ struct MatrixFunctions {
             return n;
         }
         auto lop = [&op, consta, n, vm, vn](double *a, double *b) -> void {
-            static int inc = 1;
+            static MKL_INT inc = 1;
             memset(b, 0, sizeof(double) * n);
             op(MatrixRef(a, vm, vn), MatrixRef(b, vm, vn));
             daxpy(&n, &consta, a, &inc, b, &inc);
         };
-        int m = min(deflation_max_size, n - 1);
-        int lwork = n * (m + 2) + 5 * (m + 2) * (m + 2) + 7;
+        MKL_INT m = min((MKL_INT)deflation_max_size, n - 1);
+        MKL_INT lwork = n * (m + 2) + 5 * (m + 2) * (m + 2) + 7;
         vector<double> w(n), work(lwork);
         if (anorm < 1E-10)
             anorm = 1.0;
-        int nmult = MatrixFunctions::expo_krylov(lop, n, m, t, v.data, w.data(),
-                                                 conv_thrd, anorm, work.data(),
-                                                 lwork, iprint, (PComm)pcomm);
+        MKL_INT nmult = MatrixFunctions::expo_krylov(
+            lop, n, m, t, v.data, w.data(), conv_thrd, anorm, work.data(),
+            lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
-        return nmult;
+        return (int)nmult;
     }
     // Solve x in linear equation H x = b
     // by applying linear CG method

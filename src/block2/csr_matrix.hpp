@@ -37,22 +37,26 @@ namespace block2 {
 // Compressed-Sparse-Row matrix
 struct CSRMatrixRef {
     shared_ptr<Allocator<double>> alloc = nullptr;
-    int m, n, nnz; // m is rows, n is cols, nnz is number of nonzeros
+    MKL_INT m, n, nnz; // m is rows, n is cols, nnz is number of nonzeros
     double *data;
-    int *rows, *cols;
+    MKL_INT *rows, *cols;
     CSRMatrixRef()
         : m(0), n(0), nnz(0), data(nullptr), rows(nullptr), cols(nullptr) {}
-    CSRMatrixRef(int m, int n, int nnz = 0) : m(m), n(n), nnz(nnz) {
+    CSRMatrixRef(MKL_INT m, MKL_INT n, MKL_INT nnz = 0) : m(m), n(n), nnz(nnz) {
         alloc = make_shared<VectorAllocator<double>>();
         allocate();
         if (nnz != size())
-            memset(rows, 0, (m + 1) * sizeof(int));
+            memset(rows, 0, (m + 1) * sizeof(MKL_INT));
     }
-    CSRMatrixRef(int m, int n, int nnz, double *data, int *rows, int *cols)
+    CSRMatrixRef(MKL_INT m, MKL_INT n, MKL_INT nnz, double *data, MKL_INT *rows,
+                 MKL_INT *cols)
         : m(m), n(n), nnz(nnz), data(data), rows(rows), cols(cols) {}
     size_t size() const { return (size_t)m * n; }
-    int memory_size() const {
-        return nnz == m * n ? nnz : nnz + ((nnz + m + 2) >> 1);
+    MKL_INT memory_size() const {
+        if (sizeof(MKL_INT) == 4)
+            return nnz == m * n ? nnz : nnz + ((nnz + m + 2) >> 1);
+        else
+            return nnz == m * n ? nnz : nnz + nnz + m + 1;
     }
     void load_data(ifstream &ifs) {
         ifs.read((char *)&m, sizeof(m));
@@ -63,8 +67,8 @@ struct CSRMatrixRef {
         allocate();
         ifs.read((char *)data, sizeof(double) * nnz);
         if (nnz != size()) {
-            ifs.read((char *)cols, sizeof(int) * nnz);
-            ifs.read((char *)rows, sizeof(int) * (m + 1));
+            ifs.read((char *)cols, sizeof(MKL_INT) * nnz);
+            ifs.read((char *)rows, sizeof(MKL_INT) * (m + 1));
         } else
             cols = rows = nullptr;
     }
@@ -74,9 +78,9 @@ struct CSRMatrixRef {
         ofs.write((char *)&nnz, sizeof(nnz));
         ofs.write((char *)data, sizeof(double) * nnz);
         if (nnz != size()) {
-            ofs.write((char *)cols, sizeof(int) * nnz);
-            ofs.write((char *)rows, sizeof(int) * m);
-            ofs.write((char *)&nnz, sizeof(int));
+            ofs.write((char *)cols, sizeof(MKL_INT) * nnz);
+            ofs.write((char *)rows, sizeof(MKL_INT) * m);
+            ofs.write((char *)&nnz, sizeof(MKL_INT));
         }
     }
     CSRMatrixRef
@@ -85,23 +89,23 @@ struct CSRMatrixRef {
         r.alloc = alloc;
         r.allocate();
         if (r.nnz != r.size()) {
-            memset(r.rows, 0, sizeof(int) * (n + 1));
-            for (int ia = 0; ia < nnz; ia++)
+            memset(r.rows, 0, sizeof(MKL_INT) * (n + 1));
+            for (MKL_INT ia = 0; ia < nnz; ia++)
                 r.rows[cols[ia] + 1]++;
-            for (int ia = 0; ia < n; ia++)
+            for (MKL_INT ia = 0; ia < n; ia++)
                 r.rows[ia + 1] += r.rows[ia];
-            for (int ia = 0; ia < m; ia++) {
-                int jap = rows[ia], jar = ia == m - 1 ? nnz : rows[ia + 1];
-                for (int ja = jap; ja < jar; ja++) {
+            for (MKL_INT ia = 0; ia < m; ia++) {
+                MKL_INT jap = rows[ia], jar = ia == m - 1 ? nnz : rows[ia + 1];
+                for (MKL_INT ja = jap; ja < jar; ja++) {
                     r.cols[r.rows[cols[ja]]] = ia;
                     r.data[r.rows[cols[ja]]] = data[ja];
                     r.rows[cols[ja]]++;
                 }
             }
-            for (int ia = n - 1; ia >= 0; ia--)
+            for (MKL_INT ia = n - 1; ia >= 0; ia--)
                 r.rows[ia] -= r.rows[ia] - (ia == 0 ? 0 : r.rows[ia - 1]);
         } else
-            for (int i = 0, inc = 1; i < n; i++)
+            for (MKL_INT i = 0, inc = 1; i < n; i++)
                 dcopy(&m, data + i, &n, r.data + i * m, &inc);
         return r;
     }
@@ -116,8 +120,8 @@ struct CSRMatrixRef {
         if (nnz == size())
             cols = rows = nullptr;
         else {
-            cols = (int *)(data + nnz);
-            rows = (int *)(cols + nnz);
+            cols = (MKL_INT *)(data + nnz);
+            rows = (MKL_INT *)(cols + nnz);
         }
     }
     void deallocate() {
@@ -141,8 +145,8 @@ struct CSRMatrixRef {
         r.allocate();
         memcpy(r.data, data, nnz * sizeof(double));
         if (nnz != size()) {
-            memcpy(r.cols, cols, nnz * sizeof(int));
-            memcpy(r.rows, rows, m * sizeof(int));
+            memcpy(r.cols, cols, nnz * sizeof(MKL_INT));
+            memcpy(r.rows, rows, m * sizeof(MKL_INT));
             r.rows[m] = nnz;
         }
         return r;
@@ -153,11 +157,11 @@ struct CSRMatrixRef {
         else {
             os << "CSR-MAT ( " << mat.m << "x" << mat.n
                << " ) NNZ = " << mat.nnz << endl;
-            for (int i = 0; i < mat.m; i++)
+            for (MKL_INT i = 0; i < mat.m; i++)
                 if ((i == mat.m - 1 ? mat.nnz : mat.rows[i + 1]) >
                     mat.rows[i]) {
                     os << "ROW [ " << setw(5) << i << " ] = ";
-                    for (int j = mat.rows[i];
+                    for (MKL_INT j = mat.rows[i];
                          j < (i == mat.m - 1 ? mat.nnz : mat.rows[i + 1]); j++)
                         os << setw(5) << mat.cols[j] << " : " << setw(20)
                            << setprecision(14) << mat.data[j] << ", ";
@@ -170,15 +174,15 @@ struct CSRMatrixRef {
     void from_dense(const MatrixRef &mat, double cutoff = TINY) {
         alloc = make_shared<VectorAllocator<double>>();
         m = mat.m, n = mat.n, nnz = 0;
-        for (int i = 0; i < mat.size(); i++)
+        for (MKL_INT i = 0; i < mat.size(); i++)
             nnz += abs(mat.data[i]) > cutoff;
         allocate();
         if (nnz == size())
             memcpy(data, mat.data, sizeof(double) * size());
         else {
-            for (int i = 0, k = 0; i < m; i++) {
+            for (MKL_INT i = 0, k = 0; i < m; i++) {
                 rows[i] = k;
-                for (int j = 0; j < n; j++)
+                for (MKL_INT j = 0; j < n; j++)
                     if (abs(mat(i, j)) > cutoff)
                         cols[k] = j, data[k] = mat(i, j), k++;
             }
@@ -190,9 +194,9 @@ struct CSRMatrixRef {
             memcpy(mat.data, data, sizeof(double) * size());
         else {
             mat.clear();
-            for (int i = 0; i < m; i++) {
-                int rows_end = i == m - 1 ? nnz : rows[i + 1];
-                for (int j = rows[i]; j < rows_end; j++)
+            for (MKL_INT i = 0; i < m; i++) {
+                MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
+                for (MKL_INT j = rows[i]; j < rows_end; j++)
                     mat(i, cols[j]) = data[j];
             }
         }
@@ -200,14 +204,15 @@ struct CSRMatrixRef {
     void diag(MatrixRef x) const {
         assert(m == n);
         if (nnz == size()) {
-            const int inc = 1, ind = n + 1;
+            const MKL_INT inc = 1, ind = n + 1;
             dcopy(&m, data, &ind, x.data, &inc);
         } else {
             x.clear();
-            if(nnz != 0)
-                for (int i = 0; i < m; i++) {
-                    int rows_end = i == m - 1 ? nnz : rows[i + 1];
-                    int ic = lower_bound(cols + rows[i], cols + rows_end, i) - cols;
+            if (nnz != 0)
+                for (MKL_INT i = 0; i < m; i++) {
+                    MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
+                    MKL_INT ic =
+                        lower_bound(cols + rows[i], cols + rows_end, i) - cols;
                     if (ic != rows_end && cols[ic] == i)
                         x.data[i] = data[ic];
                 }
@@ -219,9 +224,10 @@ struct CSRMatrixRef {
             return dense_ref().trace();
         else {
             double r = 0;
-            for (int i = 0; i < m; i++) {
-                int rows_end = i == m - 1 ? nnz : rows[i + 1];
-                int ic = lower_bound(cols + rows[i], cols + rows_end, i) - cols;
+            for (MKL_INT i = 0; i < m; i++) {
+                MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
+                MKL_INT ic =
+                    lower_bound(cols + rows[i], cols + rows_end, i) - cols;
                 if (ic != rows_end && cols[ic] == i)
                     r += data[ic];
             }

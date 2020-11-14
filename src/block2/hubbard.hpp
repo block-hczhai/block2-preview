@@ -41,7 +41,7 @@ struct HubbardFCIDUMP : FCIDUMP {
         params["isym"] = Parsing::to_string(1);
         params["iuhf"] = "0";
         stringstream ss;
-        for (int i = 0; i < n_sites; i++) {
+        for (uint16_t i = 0; i < n_sites; i++) {
             ss << "1";
             if (i != n_sites - 1)
                 ss << ",";

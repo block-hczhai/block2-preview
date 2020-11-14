@@ -528,7 +528,7 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                         MatrixRef dmat(cmat->data, cmat->m, 1);
                         pmat->csr_data[i]->diag(dmat);
                         if (cmat->nnz != cmat->size()) {
-                            for (int j = 0; j < cmat->m; j++)
+                            for (MKL_INT j = 0; j < cmat->m; j++)
                                 cmat->rows[j] = j, cmat->cols[j] = j;
                             cmat->rows[cmat->m] = cmat->nnz;
                         }

@@ -55,6 +55,9 @@ template <typename S> struct ParallelCommunicator {
     virtual void broadcast(int *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void broadcast(long long int *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void allreduce_sum(double *data, size_t len) { assert(size == 1); }
     virtual void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) {
         assert(size == 1);

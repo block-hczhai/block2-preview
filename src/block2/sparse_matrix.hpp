@@ -1089,7 +1089,7 @@ template <typename S> struct SparseMatrix {
             S ql = info->quanta[i].get_bra(info->delta_quantum);
             int k = qsmp.at(ql);
             MatrixRef ll = l[k]->ref(), rr = r[i]->ref(), ss = s[k]->ref();
-            for (int j = 0; j < r[i]->shape[0]; j++)
+            for (MKL_INT j = 0; j < r[i]->shape[0]; j++)
                 if (abs(s[k]->data[j]) > 1E-12)
                     MatrixFunctions::multiply(
                         MatrixRef(&ll(0, j), ll.m, ll.n), false,
@@ -1103,29 +1103,29 @@ template <typename S> struct SparseMatrix {
     void left_svd(vector<S> &rqs, vector<shared_ptr<Tensor>> &l,
                   vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
                   ubond_t bond_dim = 0) const {
-        map<S, uint32_t> qs_mp;
+        map<S, MKL_INT> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                         : info->quanta[i].get_ket();
-            qs_mp[q] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            qs_mp[q] += (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
         }
         int nr = (int)qs_mp.size(), k = 0;
         rqs.resize(nr);
-        uint32_t tmp[nr + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nr + 1));
+        MKL_INT tmp[nr + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nr + 1));
         for (auto &mp : qs_mp)
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
         double *dt = dalloc->allocate(tmp[nr]);
-        uint32_t it[nr], sz[nr];
-        memset(it, 0, sizeof(uint32_t) * nr);
+        MKL_INT it[nr], sz[nr];
+        memset(it, 0, sizeof(MKL_INT) * nr);
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                         : info->quanta[i].get_ket();
             int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
-            uint32_t n_states =
-                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            MKL_INT n_states =
+                (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
             memcpy(dt + (tmp[ir] + it[ir]), data + info->n_states_total[i],
                    n_states * sizeof(double));
             sz[ir] = info->n_states_ket[i];
@@ -1138,12 +1138,12 @@ template <typename S> struct SparseMatrix {
         s.clear();
         vector<double> svals;
         for (int ir = 0; ir < nr; ir++) {
-            int nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
+            MKL_INT nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
-            int nxk = min(nxl, nxr);
-            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
-            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
-            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MKL_INT nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
             svals.insert(svals.end(), tss->data.begin(), tss->data.end());
@@ -1155,7 +1155,7 @@ template <typename S> struct SparseMatrix {
             sort(svals.begin(), svals.end());
             double small = svals[svals.size() - bond_dim];
             for (int ir = 0; ir < nr; ir++)
-                for (int j = 1; j < (int)s[ir]->data.size(); j++)
+                for (MKL_INT j = 1; j < (MKL_INT)s[ir]->data.size(); j++)
                     if (s[ir]->data[j] < small) {
                         merged_l[ir]->truncate_right(j);
                         s[ir]->truncate(j);
@@ -1163,13 +1163,13 @@ template <typename S> struct SparseMatrix {
                         break;
                     }
         }
-        memset(it, 0, sizeof(uint32_t) * nr);
+        memset(it, 0, sizeof(MKL_INT) * nr);
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                         : info->quanta[i].get_ket();
             int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
-            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{
-                (int)info->n_states_bra[i], merged_l[ir]->shape[1]});
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{
+                (MKL_INT)info->n_states_bra[i], merged_l[ir]->shape[1]});
             memcpy(tsl->data.data(), merged_l[ir]->data.data() + it[ir],
                    tsl->size() * sizeof(double));
             it[ir] += tsl->size();
@@ -1184,30 +1184,30 @@ template <typename S> struct SparseMatrix {
     void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
                    vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
                    ubond_t bond_dim = 0) const {
-        map<S, uint32_t> qs_mp;
+        map<S, MKL_INT> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
-            qs_mp[q] += (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            qs_mp[q] += (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
         }
         int nl = (int)qs_mp.size(), p = 0;
         lqs.resize(nl);
-        uint32_t tmp[nl + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nl + 1));
+        MKL_INT tmp[nl + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nl + 1));
         for (auto &mp : qs_mp)
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
         double *dt = dalloc->allocate(tmp[nl]);
-        uint32_t it[nl], sz[nl];
-        memset(it, 0, sizeof(uint32_t) * nl);
+        MKL_INT it[nl], sz[nl];
+        memset(it, 0, sizeof(MKL_INT) * nl);
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
             int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
-            uint32_t nxl = info->n_states_bra[i],
+            MKL_INT nxl = info->n_states_bra[i],
                      nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
-            uint32_t inr = info->n_states_ket[i];
-            for (uint32_t k = 0; k < nxl; k++)
+            MKL_INT inr = info->n_states_ket[i];
+            for (MKL_INT k = 0; k < nxl; k++)
                 memcpy(dt + (tmp[il] + it[il] + k * nxr),
                        data + (info->n_states_total[i] + k * inr),
                        inr * sizeof(double));
@@ -1221,12 +1221,12 @@ template <typename S> struct SparseMatrix {
         s.clear();
         vector<double> svals;
         for (int il = 0; il < nl; il++) {
-            int nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
+            MKL_INT nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
-            int nxk = min(nxl, nxr);
-            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
-            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
-            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MKL_INT nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
             svals.insert(svals.end(), tss->data.begin(), tss->data.end());
@@ -1238,7 +1238,7 @@ template <typename S> struct SparseMatrix {
             sort(svals.begin(), svals.end());
             double small = svals[svals.size() - bond_dim];
             for (int il = 0; il < nl; il++)
-                for (int j = 1; j < (int)s[il]->data.size(); j++)
+                for (MKL_INT j = 1; j < (MKL_INT)s[il]->data.size(); j++)
                     if (s[il]->data[j] < small) {
                         l[il]->truncate_right(j);
                         s[il]->truncate(j);
@@ -1246,15 +1246,15 @@ template <typename S> struct SparseMatrix {
                         break;
                     }
         }
-        memset(it, 0, sizeof(uint32_t) * nl);
+        memset(it, 0, sizeof(MKL_INT) * nl);
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
             int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
-            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{
-                merged_r[il]->shape[0], (int)info->n_states_ket[i]});
-            int inr = info->n_states_ket[i], ixr = merged_r[il]->shape[1];
-            int inl = merged_r[il]->shape[0];
-            for (uint32_t k = 0; k < inl; k++)
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{
+                merged_r[il]->shape[0], (MKL_INT)info->n_states_ket[i]});
+            MKL_INT inr = info->n_states_ket[i], ixr = merged_r[il]->shape[1];
+            MKL_INT inl = merged_r[il]->shape[0];
+            for (MKL_INT k = 0; k < inl; k++)
                 memcpy(tsr->data.data() + k * inr,
                        merged_r[il]->data.data() + (it[il] + k * ixr),
                        inr * sizeof(double));
@@ -1267,23 +1267,23 @@ template <typename S> struct SparseMatrix {
     }
     void left_canonicalize(const shared_ptr<SparseMatrix<S>> &rmat) {
         int nr = rmat->info->n, n = info->n;
-        uint32_t tmp[nr + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nr + 1));
+        MKL_INT tmp[nr + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nr + 1));
         for (int i = 0; i < n; i++) {
             int ir = rmat->info->find_state(info->quanta[i].get_ket());
             assert(ir != -1);
             tmp[ir + 1] +=
-                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
         }
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
         double *dt = dalloc->allocate(tmp[nr]);
-        uint32_t it[nr];
-        memset(it, 0, sizeof(uint32_t) * nr);
+        MKL_INT it[nr];
+        memset(it, 0, sizeof(MKL_INT) * nr);
         for (int i = 0; i < n; i++) {
             int ir = rmat->info->find_state(info->quanta[i].get_ket());
-            uint32_t n_states =
-                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            MKL_INT n_states =
+                (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
             memcpy(dt + (tmp[ir] + it[ir]), data + info->n_states_total[i],
                    n_states * sizeof(double));
             it[ir] += n_states;
@@ -1291,17 +1291,17 @@ template <typename S> struct SparseMatrix {
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == tmp[ir + 1] - tmp[ir]);
         for (int ir = 0; ir < nr; ir++) {
-            uint32_t nxr = rmat->info->n_states_ket[ir],
+            MKL_INT nxr = rmat->info->n_states_ket[ir],
                      nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0 && nxl >= nxr);
             MatrixFunctions::qr(MatrixRef(dt + tmp[ir], nxl, nxr),
                                 MatrixRef(dt + tmp[ir], nxl, nxr), (*rmat)[ir]);
         }
-        memset(it, 0, sizeof(uint32_t) * nr);
+        memset(it, 0, sizeof(MKL_INT) * nr);
         for (int i = 0; i < n; i++) {
             int ir = rmat->info->find_state(info->quanta[i].get_ket());
-            uint32_t n_states =
-                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+            MKL_INT n_states =
+                (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
             memcpy(data + info->n_states_total[i], dt + (tmp[ir] + it[ir]),
                    n_states * sizeof(double));
             it[ir] += n_states;
@@ -1310,27 +1310,27 @@ template <typename S> struct SparseMatrix {
     }
     void right_canonicalize(const shared_ptr<SparseMatrix<S>> &lmat) {
         int nl = lmat->info->n, n = info->n;
-        uint32_t tmp[nl + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nl + 1));
+        MKL_INT tmp[nl + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nl + 1));
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
             assert(il != -1);
             tmp[il + 1] +=
-                (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
         }
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
         double *dt = dalloc->allocate(tmp[nl]);
-        uint32_t it[nl];
-        memset(it, 0, sizeof(uint32_t) * nl);
+        MKL_INT it[nl];
+        memset(it, 0, sizeof(MKL_INT) * nl);
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
-            uint32_t nxl = info->n_states_bra[i],
+            MKL_INT nxl = info->n_states_bra[i],
                      nxr = (tmp[il + 1] - tmp[il]) / nxl;
-            uint32_t inr = info->n_states_ket[i];
-            for (uint32_t k = 0; k < nxl; k++)
+            MKL_INT inr = info->n_states_ket[i];
+            for (MKL_INT k = 0; k < nxl; k++)
                 memcpy(dt + (tmp[il] + it[il] + k * nxr),
                        data + info->n_states_total[i] + k * inr,
                        inr * sizeof(double));
@@ -1339,20 +1339,20 @@ template <typename S> struct SparseMatrix {
         for (int il = 0; il < nl; il++)
             assert(it[il] == tmp[il + 1] - tmp[il]);
         for (int il = 0; il < nl; il++) {
-            uint32_t nxl = lmat->info->n_states_bra[il],
+            MKL_INT nxl = lmat->info->n_states_bra[il],
                      nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0 && nxr >= nxl);
             MatrixFunctions::lq(MatrixRef(dt + tmp[il], nxl, nxr), (*lmat)[il],
                                 MatrixRef(dt + tmp[il], nxl, nxr));
         }
-        memset(it, 0, sizeof(uint32_t) * nl);
+        memset(it, 0, sizeof(MKL_INT) * nl);
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
                 info->quanta[i].get_bra(info->delta_quantum));
-            uint32_t nxl = info->n_states_bra[i],
+            MKL_INT nxl = info->n_states_bra[i],
                      nxr = (tmp[il + 1] - tmp[il]) / nxl;
-            uint32_t inr = info->n_states_ket[i];
-            for (uint32_t k = 0; k < nxl; k++)
+            MKL_INT inr = info->n_states_ket[i];
+            for (MKL_INT k = 0; k < nxl; k++)
                 memcpy(data + info->n_states_total[i] + k * inr,
                        dt + (tmp[il] + it[il] + k * nxr), inr * sizeof(double));
             it[il] += inr * nxl;
@@ -1371,12 +1371,12 @@ template <typename S> struct SparseMatrix {
             int ik = r.find_state(ket);
             int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ib + 1];
-            uint32_t p = info->n_states_total[i];
+            MKL_INT p = info->n_states_total[i];
             for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
                 uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = old_fused_cinfo.quanta[bb].data & 0xFFFFU;
                 int il = lmat->info->find_state(l.quanta[ibba]);
-                uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
+                MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 if (il != -1) {
                     assert(lmat->info->n_states_bra[il] ==
                            lmat->info->n_states_ket[il]);
@@ -1408,12 +1408,12 @@ template <typename S> struct SparseMatrix {
             int ik = old_fused.find_state(ket);
             int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ik + 1];
-            uint32_t p = info->n_states_total[i];
+            MKL_INT p = info->n_states_total[i];
             for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = old_fused_cinfo.quanta[kk].data & 0xFFFFU;
                 int ir = rmat->info->find_state(r.quanta[ikkb]);
-                uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
+                MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
                 if (ir != -1) {
                     assert(rmat->info->n_states_bra[ir] ==
                            rmat->info->n_states_ket[ir]);
@@ -1493,7 +1493,7 @@ template <typename S> struct SparseMatrix {
         factor = mat->factor;
         // for SU2 with target 2S != 0, for each l m r there can be multiple mr
         // mp is the three-index wavefunction
-        map<uint32_t, map<uint16_t, vector<pair<uint32_t, int>>>> mp;
+        map<uint32_t, map<uint16_t, vector<pair<MKL_INT, int>>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
@@ -1501,11 +1501,11 @@ template <typename S> struct SparseMatrix {
             int ik = old_fused.find_state(ket);
             int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ik + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            MKL_INT p = mat->info->n_states_total[i];
             for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
-                uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
+                MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
                 mp[(ib << 16) + ikka][ikkb].push_back(make_pair(p, ik));
                 p += lp;
             }
@@ -1521,11 +1521,11 @@ template <typename S> struct SparseMatrix {
             for (int bb = new_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
                 uint16_t ibba = new_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = new_fused_cinfo.quanta[bb].data & (0xFFFFU);
-                uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
+                MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 S bra_l = l.quanta[ibba], bra_m = m.quanta[ibbb];
                 if (mp.count(new_fused_cinfo.quanta[bb].data) &&
                     mp[new_fused_cinfo.quanta[bb].data].count(ik))
-                    for (pair<uint32_t, int> &t :
+                    for (pair<MKL_INT, int> &t :
                          mp.at(new_fused_cinfo.quanta[bb].data).at(ik)) {
                         S ket_mr = old_fused.quanta[t.second];
                         double factor =
@@ -1559,7 +1559,7 @@ template <typename S> struct SparseMatrix {
                              const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
-        map<uint32_t, map<uint16_t, vector<tuple<uint32_t, uint32_t, int>>>> mp;
+        map<uint32_t, map<uint16_t, vector<tuple<MKL_INT, MKL_INT, int>>>> mp;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
@@ -1567,11 +1567,11 @@ template <typename S> struct SparseMatrix {
             int ik = r.find_state(ket);
             int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
                                              : old_fused_cinfo.n_states[ib + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            MKL_INT p = mat->info->n_states_total[i];
             for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
                 uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
-                uint32_t lp = (uint32_t)m.n_states[ibbb] * r.n_states[ik];
+                MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 mp[(ibbb << 16) + ik][ibba].push_back(make_tuple(p, lp, ib));
                 p += l.n_states[ibba] * lp;
             }
@@ -1587,14 +1587,14 @@ template <typename S> struct SparseMatrix {
             int kked = ik == new_fused.n - 1 ? new_fused_cinfo.n
                                              : new_fused_cinfo.n_states[ik + 1];
             double *ptr = data + info->n_states_total[i];
-            uint32_t lp = new_fused.n_states[ik];
+            MKL_INT lp = new_fused.n_states[ik];
             for (int kk = new_fused_cinfo.n_states[ik]; kk < kked; kk++) {
                 uint16_t ikka = new_fused_cinfo.quanta[kk].data >> 16,
                          ikkb = new_fused_cinfo.quanta[kk].data & (0xFFFFU);
                 S ket_m = m.quanta[ikka], ket_r = r.quanta[ikkb];
                 if (mp.count(new_fused_cinfo.quanta[kk].data) &&
                     mp[new_fused_cinfo.quanta[kk].data].count(ib))
-                    for (tuple<uint32_t, uint32_t, int> &t :
+                    for (tuple<MKL_INT, MKL_INT, int> &t :
                          mp.at(new_fused_cinfo.quanta[kk].data).at(ib)) {
                         S bra_lm = old_fused.quanta[get<2>(t)];
                         double factor =
@@ -1605,9 +1605,9 @@ template <typename S> struct SparseMatrix {
                                  bra_lm.multiplicity());
                         for (int j = 0; j < l.n_states[ib]; j++) {
                             MatrixFunctions::iadd(
-                                MatrixRef(ptr + j * lp, (int)get<1>(t), 1),
+                                MatrixRef(ptr + j * lp, (MKL_INT)get<1>(t), 1),
                                 MatrixRef(mat->data + get<0>(t) + j * get<1>(t),
-                                          (int)get<1>(t), 1),
+                                          (MKL_INT)get<1>(t), 1),
                                 factor);
                         }
                     }
@@ -1617,7 +1617,7 @@ template <typename S> struct SparseMatrix {
     }
     friend ostream &operator<<(ostream &os, const SparseMatrix<S> &c) {
         os << "DATA = [ ";
-        for (int i = 0; i < c.total_memory; i++)
+        for (size_t i = 0; i < c.total_memory; i++)
             os << setw(20) << setprecision(14) << c.data[i] << " ";
         os << "]"
            << " FACTOR = ";
@@ -1754,7 +1754,7 @@ template <typename S> struct SparseMatrixGroup {
                   const vector<shared_ptr<SparseMatrix<S>>> &xmats =
                       vector<shared_ptr<SparseMatrix<S>>>(),
                   const vector<double> &scales = vector<double>()) {
-        map<S, uint32_t> qs_mp;
+        map<S, MKL_INT> qs_mp;
         vector<shared_ptr<SparseMatrixInfo<S>>> xinfos = infos;
         vector<size_t> xoffsets = offsets;
         vector<double> xscales(infos.size(), 1);
@@ -1774,33 +1774,33 @@ template <typename S> struct SparseMatrixGroup {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
                 qs_mp[q] +=
-                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                    (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
             }
         int nr = (int)qs_mp.size(), k = 0;
         rqs.resize(nr);
-        uint32_t tmp[nr + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nr + 1));
+        MKL_INT tmp[nr + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nr + 1));
         for (auto &mp : qs_mp)
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
         double *dt = dalloc->allocate(tmp[nr]);
         memset(dt, 0, sizeof(double) * tmp[nr]);
-        uint32_t it[nr], sz[nr];
-        memset(it, 0, sizeof(uint32_t) * nr);
+        MKL_INT it[nr], sz[nr];
+        memset(it, 0, sizeof(MKL_INT) * nr);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
                 int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
-                uint32_t n_states =
-                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                MKL_INT n_states =
+                    (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
                 if (abs(xscales[ii]) > 1E-12)
                     MatrixFunctions::iadd(
-                        MatrixRef(dt + (tmp[ir] + it[ir]), (int)n_states, 1),
+                        MatrixRef(dt + (tmp[ir] + it[ir]), (MKL_INT)n_states, 1),
                         MatrixRef(data + xoffsets[ii] + info->n_states_total[i],
-                                  (int)n_states, 1),
+                                  (MKL_INT)n_states, 1),
                         xscales[ii]);
                 sz[ir] = info->n_states_ket[i];
                 it[ir] += n_states;
@@ -1812,19 +1812,19 @@ template <typename S> struct SparseMatrixGroup {
         r.clear();
         s.clear();
         for (int ir = 0; ir < nr; ir++) {
-            int nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
+            MKL_INT nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
-            int nxk = min(nxl, nxr);
-            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
-            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
-            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MKL_INT nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
             merged_l.push_back(tsl);
             s.push_back(tss);
             r.push_back(tsr);
         }
-        memset(it, 0, sizeof(uint32_t) * nr);
+        memset(it, 0, sizeof(MKL_INT) * nr);
         l.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
@@ -1832,13 +1832,13 @@ template <typename S> struct SparseMatrixGroup {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
                 int ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
-                shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{
-                    (int)info->n_states_bra[i], merged_l[ir]->shape[1]});
+                shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{
+                    (MKL_INT)info->n_states_bra[i], merged_l[ir]->shape[1]});
                 if (abs(xscales[ii]) > 1E-12)
                     MatrixFunctions::iadd(
-                        MatrixRef(tsl->data.data(), (int)tsl->size(), 1),
+                        MatrixRef(tsl->data.data(), (MKL_INT)tsl->size(), 1),
                         MatrixRef(merged_l[ir]->data.data() + it[ir],
-                                  (int)tsl->size(), 1),
+                                  (MKL_INT)tsl->size(), 1),
                         1 / xscales[ii]);
                 it[ir] += tsl->size();
                 l[ii].push_back(tsl);
@@ -1856,7 +1856,7 @@ template <typename S> struct SparseMatrixGroup {
                    const vector<shared_ptr<SparseMatrix<S>>> &xmats =
                        vector<shared_ptr<SparseMatrix<S>>>(),
                    const vector<double> &scales = vector<double>()) {
-        map<S, uint32_t> qs_mp;
+        map<S, MKL_INT> qs_mp;
         vector<shared_ptr<SparseMatrixInfo<S>>> xinfos = infos;
         vector<size_t> xoffsets = offsets;
         vector<double> xscales(infos.size(), 1);
@@ -1875,37 +1875,37 @@ template <typename S> struct SparseMatrixGroup {
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 qs_mp[q] +=
-                    (uint32_t)info->n_states_bra[i] * info->n_states_ket[i];
+                    (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
             }
         int nl = (int)qs_mp.size(), p = 0;
         lqs.resize(nl);
-        uint32_t tmp[nl + 1];
-        memset(tmp, 0, sizeof(uint32_t) * (nl + 1));
+        MKL_INT tmp[nl + 1];
+        memset(tmp, 0, sizeof(MKL_INT) * (nl + 1));
         for (auto &mp : qs_mp)
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
         double *dt = dalloc->allocate(tmp[nl]);
         memset(dt, 0, sizeof(double) * tmp[nl]);
-        uint32_t it[nl], sz[nl];
-        memset(it, 0, sizeof(uint32_t) * nl);
+        MKL_INT it[nl], sz[nl];
+        memset(it, 0, sizeof(MKL_INT) * nl);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
-                uint32_t nxl = info->n_states_bra[i],
+                MKL_INT nxl = info->n_states_bra[i],
                          nxr = (tmp[il + 1] - tmp[il]) / nxl;
                 assert((tmp[il + 1] - tmp[il]) % nxl == 0);
-                uint32_t inr = info->n_states_ket[i];
+                MKL_INT inr = info->n_states_ket[i];
                 if (abs(xscales[ii]) > 1E-12) {
-                    for (uint32_t k = 0; k < nxl; k++)
+                    for (MKL_INT k = 0; k < nxl; k++)
                         MatrixFunctions::iadd(
                             MatrixRef(dt + (tmp[il] + it[il] + k * nxr),
-                                      (int)inr, 1),
+                                      (MKL_INT)inr, 1),
                             MatrixRef(data + xoffsets[ii] +
                                           (info->n_states_total[i] + k * inr),
-                                      (int)inr, 1),
+                                      (MKL_INT)inr, 1),
                             xscales[ii]);
                 }
                 sz[il] = nxl;
@@ -1918,36 +1918,36 @@ template <typename S> struct SparseMatrixGroup {
         l.clear();
         s.clear();
         for (int il = 0; il < nl; il++) {
-            int nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
+            MKL_INT nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
-            int nxk = min(nxl, nxr);
-            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<int>{nxl, nxk});
-            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<int>{nxk});
-            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{nxk, nxr});
+            MKL_INT nxk = min(nxl, nxr);
+            shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{nxl, nxk});
+            shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
+            shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
             l.push_back(tsl);
             s.push_back(tss);
             merged_r.push_back(tsr);
         }
-        memset(it, 0, sizeof(uint32_t) * nl);
+        memset(it, 0, sizeof(MKL_INT) * nl);
         r.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 int il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
-                shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<int>{
-                    merged_r[il]->shape[0], (int)info->n_states_ket[i]});
-                int inr = info->n_states_ket[i], ixr = merged_r[il]->shape[1];
-                int inl = merged_r[il]->shape[0];
+                shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{
+                    merged_r[il]->shape[0], (MKL_INT)info->n_states_ket[i]});
+                MKL_INT inr = info->n_states_ket[i], ixr = merged_r[il]->shape[1];
+                MKL_INT inl = merged_r[il]->shape[0];
                 if (abs(xscales[ii]) > 1E-12) {
-                    for (uint32_t k = 0; k < inl; k++)
+                    for (MKL_INT k = 0; k < inl; k++)
                         MatrixFunctions::iadd(
-                            MatrixRef(tsr->data.data() + k * inr, (int)inr, 1),
+                            MatrixRef(tsr->data.data() + k * inr, (MKL_INT)inr, 1),
                             MatrixRef(merged_r[il]->data.data() +
                                           (it[il] + k * ixr),
-                                      (int)inr, 1),
+                                      (MKL_INT)inr, 1),
                             1 / xscales[ii]);
                 }
                 it[il] += inr;

@@ -91,7 +91,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
                     make_shared<SparseMatrix<S>>(d_alloc);
                 opt->ops[i_op] = mat;
                 mat->allocate(info);
-                for (int i = 0; i < mat->total_memory; i++)
+                for (MKL_INT i = 0; i < mat->total_memory; i++)
                     mat->data[i] = 1;
             } else {
                 has_sparse = true;
@@ -104,12 +104,12 @@ template <typename S> struct IdentityMPO : MPO<S> {
                     shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
                     cmat->nnz = min(cmat->m, cmat->n);
                     cmat->allocate();
-                    for (int j = 0; j < cmat->nnz; j++)
+                    for (MKL_INT j = 0; j < cmat->nnz; j++)
                         cmat->data[j] = 1;
                     if (cmat->nnz != cmat->size()) {
-                        for (int j = 0; j < cmat->nnz; j++)
+                        for (MKL_INT j = 0; j < cmat->nnz; j++)
                             cmat->rows[j] = j, cmat->cols[j] = j;
-                        for (int j = cmat->nnz; j <= cmat->m; j++)
+                        for (MKL_INT j = cmat->nnz; j <= cmat->m; j++)
                             cmat->rows[j] = cmat->nnz;
                     }
                 }

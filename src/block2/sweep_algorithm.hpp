@@ -2704,8 +2704,8 @@ template <typename S> struct Expect {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         shared_ptr<Tensor> r = make_shared<Tensor>(
-            vector<int>{n_physical_sites * 2, n_physical_sites * 2,
-                        n_physical_sites * 2, n_physical_sites * 2});
+            vector<MKL_INT>{n_physical_sites * 2, n_physical_sites * 2,
+                            n_physical_sites * 2, n_physical_sites * 2});
         r->clear();
         for (auto &v : expectations)
             for (auto &x : v) {

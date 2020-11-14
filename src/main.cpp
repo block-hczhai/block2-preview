@@ -86,6 +86,7 @@ template <typename S> void run(const map<string, string> &params) {
          << ((frame_()->dsize << 3) / 1E9) << " GB" << endl;
 
     cout << "bond integer size = " << sizeof(ubond_t) << endl;
+    cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
 
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;

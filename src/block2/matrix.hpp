@@ -21,20 +21,33 @@
 #pragma once
 
 #include "allocator.hpp"
+#ifdef _HAS_INTEL_MKL
+#include "mkl.h"
+#endif
 #include <cstring>
 #include <iomanip>
 #include <iostream>
 
 using namespace std;
 
+#ifndef _HAS_INTEL_MKL
+#ifdef MKL_ILP64
+#define MKL_INT long long int
+#else
+#define MKL_INT int
+#endif
+#endif
+
+#define _MINTSZ (sizeof(MKL_INT) / sizeof(int32_t))
+
 namespace block2 {
 
 // 2D dense matrix stored in stack memory
 struct MatrixRef {
-    int m, n; // m is rows, n is cols
+    MKL_INT m, n; // m is rows, n is cols
     double *data;
-    MatrixRef(double *data, int m, int n) : data(data), m(m), n(n) {}
-    double &operator()(int i, int j) const {
+    MatrixRef(double *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
+    double &operator()(MKL_INT i, MKL_INT j) const {
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
@@ -45,9 +58,9 @@ struct MatrixRef {
     MatrixRef shift_ptr(size_t l) const { return MatrixRef(data + l, m, n); }
     friend ostream &operator<<(ostream &os, const MatrixRef &mat) {
         os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
-        for (int i = 0; i < mat.m; i++) {
+        for (MKL_INT i = 0; i < mat.m; i++) {
             os << "[ ";
-            for (int j = 0; j < mat.n; j++)
+            for (MKL_INT j = 0; j < mat.n; j++)
                 os << setw(20) << setprecision(14) << mat(i, j) << " ";
             os << "]" << endl;
         }
@@ -56,7 +69,7 @@ struct MatrixRef {
     double trace() const {
         assert(m == n);
         double r = 0;
-        for (int i = 0; i < m; i++)
+        for (MKL_INT i = 0; i < m; i++)
             r += this->operator()(i, i);
         return r;
     }
@@ -65,8 +78,8 @@ struct MatrixRef {
 // Diagonal matrix
 struct DiagonalMatrix : MatrixRef {
     double zero = 0.0;
-    DiagonalMatrix(double *data, int n) : MatrixRef(data, n, n) {}
-    double &operator()(int i, int j) const {
+    DiagonalMatrix(double *data, MKL_INT n) : MatrixRef(data, n, n) {}
+    double &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? *(data + i) : const_cast<double &>(zero);
     }
     size_t size() const { return (size_t)m; }
@@ -76,7 +89,7 @@ struct DiagonalMatrix : MatrixRef {
     friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
-        for (int j = 0; j < mat.n; j++)
+        for (MKL_INT j = 0; j < mat.n; j++)
             os << setw(20) << setprecision(14) << mat(j, j) << " ";
         os << "]" << endl;
         return os;
@@ -86,8 +99,8 @@ struct DiagonalMatrix : MatrixRef {
 // Identity matrix
 struct IdentityMatrix : DiagonalMatrix {
     double one = 1.0;
-    IdentityMatrix(int n) : DiagonalMatrix(nullptr, n) {}
-    double &operator()(int i, int j) const {
+    IdentityMatrix(MKL_INT n) : DiagonalMatrix(nullptr, n) {}
+    double &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? const_cast<double &>(one) : const_cast<double &>(zero);
     }
     void allocate() {}
@@ -101,28 +114,30 @@ struct IdentityMatrix : DiagonalMatrix {
 
 // General rank-n dense tensor
 struct Tensor {
-    vector<int> shape;
+    vector<MKL_INT> shape;
     vector<double> data;
-    Tensor(int m, int k, int n) : shape{m, k, n} { data.resize(m * k * n); }
-    Tensor(const vector<int> &shape) : shape(shape) {
+    Tensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {
+        data.resize(m * k * n);
+    }
+    Tensor(const vector<MKL_INT> &shape) : shape(shape) {
         data.resize(
             accumulate(shape.begin(), shape.end(), 1, multiplies<double>()));
     }
     size_t size() const { return data.size(); }
     void clear() { memset(data.data(), 0, size() * sizeof(double)); }
-    void truncate(int n) {
+    void truncate(MKL_INT n) {
         assert(shape.size() == 1);
         data.resize(n);
         shape[0] = n;
     }
-    void truncate_left(int nl) {
+    void truncate_left(MKL_INT nl) {
         assert(shape.size() == 2);
         data.resize(nl * shape[1]);
         shape[0] = nl;
     }
-    void truncate_right(int nr) {
+    void truncate_right(MKL_INT nr) {
         assert(shape.size() == 2);
-        for (int i = 1; i < shape[0]; i++)
+        for (MKL_INT i = 1; i < shape[0]; i++)
             memcpy(data.data() + i * nr, data.data() + i * shape[1],
                    nr * sizeof(double));
         data.resize(shape[0] * nr);
@@ -140,7 +155,7 @@ struct Tensor {
             return MatrixRef(data.data(), 0, 1);
         }
     }
-    double &operator()(initializer_list<int> idx) {
+    double &operator()(initializer_list<MKL_INT> idx) {
         size_t i = 0;
         int k = 0;
         for (auto &ix : idx) {

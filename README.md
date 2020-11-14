@@ -21,6 +21,7 @@ Features
     * MPS compression
     * Expectation
     * Imaginary time evolution (tangent space / RK4)
+    * Green's function
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
@@ -60,6 +61,8 @@ This will build the python extension (using 10 CPU cores) (serial code).
 ### MKL
 
 If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required (with limited support for multi-threading).
+
+Use `-DUSE_MKL64=ON` instead of `-DUSE_MKL=ON` to enable using matrices with 64-bit integer type.
 
 ### Serial compilation
 
