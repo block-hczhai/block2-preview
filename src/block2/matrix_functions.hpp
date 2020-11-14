@@ -550,7 +550,8 @@ struct MatrixFunctions {
             deflation_max_size = k + k / 2;
         MatrixRef pbs(nullptr, deflation_max_size * vs[0].size(), 1);
         MatrixRef pss(nullptr, deflation_max_size * vs[0].size(), 1);
-        pbs.allocate(), pss.allocate();
+        pbs.data = dalloc->allocate(deflation_max_size * vs[0].size());
+        pss.data = dalloc->allocate(deflation_max_size * vs[0].size());
         vector<MatrixRef> bs(deflation_max_size,
                              MatrixRef(nullptr, vs[0].m, vs[0].n));
         vector<MatrixRef> sigmas(deflation_max_size,
@@ -676,8 +677,8 @@ struct MatrixFunctions {
         for (int i = 0; i < k; i++)
             copy(vs[i], bs[i]);
         q.deallocate();
-        pss.deallocate();
-        pbs.deallocate();
+        dalloc->deallocate(pss.data, deflation_max_size * vs[0].size());
+        dalloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
         ndav = xiter;
         return eigvals;
     }
