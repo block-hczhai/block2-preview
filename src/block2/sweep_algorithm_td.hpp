@@ -56,7 +56,6 @@ enum struct TruncPatternTypes : uint8_t { None, TruncAfterOdd, TruncAfterEven };
 // Imaginary/Real Time Evolution (td-DMRG++/RK4)
 template <typename S> struct TDDMRG {
     shared_ptr<MovingEnvironment<S>> me;
-    // at the beginning, split (link) one me to two mes
     shared_ptr<MovingEnvironment<S>> lme, rme;
     vector<ubond_t> bond_dims;
     vector<double> noises;
@@ -66,18 +65,19 @@ template <typename S> struct TDDMRG {
     vector<double> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
+    DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
     bool forward;
     TETypes mode = TETypes::ImagTE;
-    int n_sub_sweeps;
+    int n_sub_sweeps = 1;
     vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
     TDDMRG(const shared_ptr<MovingEnvironment<S>> &me,
-           const vector<ubond_t> &bond_dims, int n_sub_sweeps = 1)
-        : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
-          forward(false), n_sub_sweeps(n_sub_sweeps) {}
+           const vector<ubond_t> &bond_dims,
+           const vector<double> &noises = vector<double>())
+        : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
         double energy, normsq, error;
         int nmult, mmps;
@@ -99,13 +99,215 @@ template <typename S> struct TDDMRG {
             return os;
         }
     };
+    // two-site algorithm
+    Iteration update_two_dot(int i, bool forward, bool advance, double beta,
+                             ubond_t bond_dim, double noise) {
+        assert(rme->bra != rme->ket);
+        frame->activate(0);
+        vector<shared_ptr<MPS<S>>> mpss = {rme->bra, rme->ket};
+        for (auto &mps : mpss) {
+            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S>::contract_two_dot(i, mps);
+            else {
+                mps->load_tensor(i);
+                mps->tensors[i + 1] = nullptr;
+            }
+        }
+        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
+        tuple<double, double, int, size_t, double> pdi;
+        bool last_site =
+            (forward && i + 1 == me->n_sites - 1) || (!forward && i == 0);
+        vector<shared_ptr<SparseMatrix<S>>> mrk4;
+        shared_ptr<EffectiveHamiltonian<S>> r_eff =
+            rme->eff_ham(FuseTypes::FuseLR, false, rme->bra->tensors[i],
+                         rme->ket->tensors[i]);
+        auto rvmt =
+            r_eff->first_rk4_apply(-beta, me->mpo->const_e, rme->para_rule);
+        r_eff->deallocate();
+        vector<shared_ptr<SparseMatrix<S>>> hkets = rvmt.first;
+        memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
+               hkets[0]->total_memory * sizeof(double));
+        shared_ptr<EffectiveHamiltonian<S>> l_eff =
+            lme->eff_ham(FuseTypes::FuseLR, false, lme->bra->tensors[i],
+                         lme->ket->tensors[i]);
+        if (!advance && last_site) {
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
+                                    me->para_rule);
+            memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
+                   hkets[0]->total_memory * sizeof(double));
+            auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
+                                                hkets[1], false, me->para_rule);
+            mrk4 = lvmt.first;
+            get<2>(pdi) += get<2>(lvmt.second);
+            get<3>(pdi) += get<3>(lvmt.second);
+            get<4>(pdi) += get<4>(lvmt.second);
+        } else if (last_site)
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
+                                    me->para_rule);
+        else {
+            auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
+                                                hkets[1], false, me->para_rule);
+            mrk4 = lvmt.first;
+            pdi = lvmt.second;
+        }
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pbra = l_eff->perturbative_noise(forward, i, i + 1,
+                                             FuseTypes::FuseLR, lme->bra->info,
+                                             noise_type, me->para_rule);
+        l_eff->deallocate();
+        get<2>(pdi) += get<0>(rvmt.second);
+        get<3>(pdi) += get<1>(rvmt.second);
+        get<4>(pdi) += get<2>(rvmt.second);
+        vector<shared_ptr<SparseMatrix<S>>> old_wfns;
+        for (auto &mps : mpss)
+            old_wfns.push_back(mps->tensors[i]);
+        double bra_error = 0.0;
+        int bra_mmps = 0;
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            assert(pbra != nullptr);
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
+            for (auto &mps : mpss) {
+                shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S>> dm = nullptr;
+                double error;
+                if (decomp_type == DecompositionTypes::DensityMatrix) {
+                    if (mps != rme->bra) {
+                        dm = MovingEnvironment<S>::density_matrix(
+                            mps->info->vacuum, old_wfn, forward, 0.0,
+                            NoiseTypes::None);
+                    } else if (mrk4.size() == 0) {
+                        dm = MovingEnvironment<S>::density_matrix(
+                            mps->info->vacuum, old_wfn, forward, noise,
+                            noise_type, 1.0, pbra);
+                    } else {
+                        dm = MovingEnvironment<S>::density_matrix(
+                            mps->info->vacuum, old_wfn, forward, noise,
+                            noise_type, weights[0], pbra);
+                        assert(mrk4.size() == 3);
+                        for (int i = 0; i < 3; i++)
+                            MovingEnvironment<S>::density_matrix_add_wfn(
+                                dm, mrk4[i], forward, weights[i + 1]);
+                    }
+                    error = MovingEnvironment<S>::split_density_matrix(
+                        dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
+                        mps->tensors[i + 1], cutoff, trunc_type);
+                } else if (decomp_type == DecompositionTypes::SVD ||
+                           decomp_type == DecompositionTypes::PureSVD) {
+                    if (mps != me->bra) {
+                        error = MovingEnvironment<S>::split_wavefunction_svd(
+                            mps->info->vacuum, old_wfn, bond_dim, forward,
+                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
+                            trunc_type, decomp_type, nullptr);
+                    } else {
+                        if (noise != 0 && mps == me->bra) {
+                            if (noise_type == NoiseTypes::Wavefunction)
+                                MovingEnvironment<S>::wavefunction_add_noise(
+                                    old_wfn, noise);
+                            else if (noise_type & NoiseTypes::Perturbative)
+                                MovingEnvironment<S>::scale_perturbative_noise(
+                                    noise, noise_type, pbra);
+                        }
+                        vector<double> xweights = {1};
+                        vector<shared_ptr<SparseMatrix<S>>> xwfns = {};
+                        if (mrk4.size() != 0) {
+                            assert(mrk4.size() == 3);
+                            xweights = weights;
+                            xwfns = mrk4;
+                        }
+                        error = MovingEnvironment<S>::split_wavefunction_svd(
+                            mps->info->vacuum, old_wfn, bond_dim, forward,
+                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
+                            trunc_type, decomp_type, pbra, xwfns, xweights);
+                    }
+                } else
+                    assert(false);
+                if (mps == me->bra)
+                    bra_error = error;
+                shared_ptr<StateInfo<S>> info = nullptr;
+                if (forward) {
+                    info = mps->tensors[i]->info->extract_state_info(forward);
+                    mps->info->left_dims[i + 1] = info;
+                    mps->info->save_left_dims(i + 1);
+                    mps->canonical_form[i] = 'L';
+                    mps->canonical_form[i + 1] = 'C';
+                } else {
+                    info =
+                        mps->tensors[i + 1]->info->extract_state_info(forward);
+                    mps->info->right_dims[i + 1] = info;
+                    mps->info->save_right_dims(i + 1);
+                    mps->canonical_form[i] = 'C';
+                    mps->canonical_form[i + 1] = 'R';
+                }
+                if (mps == me->bra) {
+                    if (!(last_site && advance)) {
+                        if (forward)
+                            mps->tensors[i + 1]->normalize();
+                        else
+                            mps->tensors[i]->normalize();
+                    }
+                    bra_mmps = info->n_states_total;
+                    mps->info->bond_dim =
+                        max(mps->info->bond_dim, (ubond_t)bra_mmps);
+                }
+                info->deallocate();
+                mps->save_tensor(i + 1);
+                mps->save_tensor(i);
+                mps->unload_tensor(i + 1);
+                mps->unload_tensor(i);
+                if (dm != nullptr) {
+                    dm->info->deallocate();
+                    dm->deallocate();
+                }
+            }
+        } else {
+            for (auto &mps : mpss) {
+                mps->tensors[i + 1] = make_shared<SparseMatrix<S>>();
+                if (forward) {
+                    mps->canonical_form[i] = 'L';
+                    mps->canonical_form[i + 1] = 'C';
+                } else {
+                    mps->canonical_form[i] = 'C';
+                    mps->canonical_form[i + 1] = 'R';
+                }
+            }
+        }
+        if (pbra != nullptr) {
+            pbra->deallocate();
+            pbra->deallocate_infos();
+        }
+        for (auto mrk : mrk4)
+            mrk->deallocate();
+        for (auto hket : hkets)
+            hket->deallocate();
+        for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S>>>(
+                 old_wfns.rbegin(), old_wfns.rend())) {
+            old_wfn->info->deallocate();
+            old_wfn->deallocate();
+        }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
+            for (auto &mps : mpss) {
+                MovingEnvironment<S>::propagate_wfn(
+                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                mps->save_data();
+            }
+        }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        return Iteration(get<0>(pdi) + me->mpo->const_e,
+                         get<1>(pdi) * get<1>(pdi), bra_error, bra_mmps,
+                         get<2>(pdi), get<3>(pdi), get<4>(pdi));
+    }
     Iteration blocking(int i, bool forward, bool advance, double beta,
                        ubond_t bond_dim, double noise) {
-        me->move_to(i);
-        assert(me->dot == 2 || me->dot == 1);
-        // if (me->dot == 2)
-        //     return update_two_dot(i, forward, advance, beta, bond_dim,
-        //     noise);
+        lme->move_to(i);
+        rme->move_to(i);
+        assert(rme->dot == 2 || rme->dot == 1);
+        if (rme->dot == 2)
+            return update_two_dot(i, forward, advance, beta, bond_dim, noise);
+        else
+            assert(false);
         // else
         //     return update_one_dot(i, forward, advance, beta, bond_dim,
         //     noise);
@@ -123,7 +325,6 @@ template <typename S> struct TDDMRG {
         else
             for (int it = me->center; it >= 0; it--)
                 sweep_range.push_back(it);
-
         Timer t;
         for (auto i : sweep_range) {
             check_signal_()();

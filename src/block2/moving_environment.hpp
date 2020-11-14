@@ -514,6 +514,107 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(expectations, (size_t)nflop, t.get_time());
     }
+    // return |ket> and beta [H_eff] |ket>
+    pair<vector<shared_ptr<SparseMatrix<S>>>, tuple<int, size_t, double>>
+    first_rk4_apply(double beta, double const_e,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<shared_ptr<SparseMatrix<S>>> r(2);
+        for (int i = 0; i < 2; i++) {
+            r[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            r[i]->allocate(bra->info);
+        }
+        MatrixRef kk(ket->data, ket->total_memory, 1);
+        MatrixRef r0(r[0]->data, bra->total_memory, 1);
+        MatrixRef r1(r[1]->data, bra->total_memory, 1);
+        Timer t;
+        t.get_time();
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        assert(op->mat->data.size() > 0);
+        tf->opf->seq->cumulative_nflop = 0;
+        (*this)(kk, r1, 0, beta);
+        shared_ptr<OpExpr<S>> expr = op->mat->data[0];
+        shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+            OpNames::I, SiteIndex(),
+            dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
+        if (para_rule == nullptr || para_rule->is_root())
+            op->mat->data[0] = iop * iop;
+        else
+            op->mat->data[0] = make_shared<OpExpr<S>>();
+        (*this)(kk, r0, 0, 1.0);
+        op->mat->data[0] = expr;
+        // if (const_e != 0)
+        //     MatrixFunctions::iadd(r1, r0, beta * const_e);
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_pair(r, make_tuple(1, (size_t)nflop, t.get_time()));
+    }
+    pair<vector<shared_ptr<SparseMatrix<S>>>,
+         tuple<double, double, int, size_t, double>>
+    second_rk4_apply(double beta, double const_e,
+                     const shared_ptr<SparseMatrix<S>> &hket,
+                     bool eval_energy = false,
+                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<shared_ptr<SparseMatrix<S>>> rr(3), kk(4);
+        kk[0] = hket;
+        for (int i = 0; i < 3; i++) {
+            rr[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            rr[i]->allocate(ket->info);
+            kk[i + 1] = make_shared<SparseMatrix<S>>(d_alloc);
+            kk[i + 1]->allocate(ket->info);
+        }
+        MatrixRef v(ket->data, ket->total_memory, 1);
+        vector<MatrixRef> k(4, v), r(3, v);
+        Timer t;
+        t.get_time();
+        for (int i = 0; i < 3; i++)
+            r[i] = MatrixRef(rr[i]->data, ket->total_memory, 1);
+        for (int i = 0; i < 4; i++)
+            k[i] = MatrixRef(kk[i]->data, ket->total_memory, 1);
+        assert(tf->opf->seq->mode != SeqTypes::Auto);
+        tf->opf->seq->cumulative_nflop = 0;
+        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<double>> cs = vector<vector<double>>{
+            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
+                           -5.0 / 162.0},
+            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
+        // k1 ~ k3
+        for (int i = 1; i < 4; i++) {
+            MatrixFunctions::copy(r[0], v);
+            MatrixFunctions::iadd(r[0], k[i - 1], ks[i]);
+            (*this)(r[0], k[i], 0, beta);
+        }
+        // r0 ~ r2
+        for (int i = 0; i < 3; i++) {
+            MatrixFunctions::copy(r[i], v);
+            double factor = exp(beta * (i + 1) / 3 * const_e);
+            for (size_t j = 0; j < 4; j++) {
+                MatrixFunctions::iadd(r[i], k[j], cs[i][j]);
+                MatrixFunctions::iscale(r[i], factor);
+            }
+        }
+        double norm = MatrixFunctions::norm(r[2]);
+        double energy = -const_e;
+        if (eval_energy) {
+            k[0].clear();
+            (*this)(r[2], k[0]);
+            energy = MatrixFunctions::dot(r[2], k[0]) / (norm * norm);
+        }
+        for (int i = 3; i >= 1; i--)
+            k[i].deallocate();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_pair(rr, make_tuple(energy, norm, 3 + eval_energy,
+                                        (size_t)nflop, t.get_time()));
+    }
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
     pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
@@ -547,9 +648,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 (*this)(v, k[i], 0, beta);
             else {
                 MatrixFunctions::copy(r[0], v);
-                tf->opf->seq->iadd(r[0], k[i - 1], ks[i], 1.0);
-                if (tf->opf->seq->mode != SeqTypes::None)
-                    tf->opf->seq->simple_perform();
+                MatrixFunctions::iadd(r[0], k[i - 1], ks[i]);
                 (*this)(r[0], k[i], 0, beta);
             }
         }
@@ -558,9 +657,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             MatrixFunctions::copy(r[i], v);
             double factor = exp(beta * (i + 1) / 3 * const_e);
             for (size_t j = 0; j < 4; j++) {
-                tf->opf->seq->iadd(r[i], k[j], cs[i][j] * factor, factor);
-                if (tf->opf->seq->mode != SeqTypes::None)
-                    tf->opf->seq->simple_perform();
+                MatrixFunctions::iadd(r[i], k[j], cs[i][j]);
+                MatrixFunctions::iscale(r[i], factor);
             }
         }
         double norm = MatrixFunctions::norm(r[2]);

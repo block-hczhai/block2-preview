@@ -628,7 +628,7 @@ struct FCIDUMP {
             return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
     virtual double e() const { return const_e; }
-    void deallocate() {
+    virtual void deallocate() {
         assert(total_memory != 0);
         vdata = nullptr;
         data = nullptr;

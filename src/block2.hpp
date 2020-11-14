@@ -36,6 +36,7 @@
 #include "block2/determinant.hpp"
 #include "block2/expr.hpp"
 #include "block2/hamiltonian.hpp"
+#include "block2/hubbard.hpp"
 #include "block2/integral.hpp"
 #include "block2/matrix.hpp"
 #include "block2/matrix_functions.hpp"
