@@ -239,7 +239,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         int vidx = reduced ? -1 : 0;
         // perform multiplication
         tf->tensor_product_partial_multiply(
-            pexpr, op->lopt, op->ropt, trace_right, cmat, psubsl, cinfos,
+            pexpr, op->lopt, op->ropt, trace_right, ket, psubsl, cinfos,
             perturb_ket_labels, perturb_ket, vidx);
         if (!reduced)
             assert(vidx == perturb_ket->n);

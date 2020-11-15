@@ -562,33 +562,33 @@ struct MatrixFunctions {
         }
         for (int i = 0; i < k; i++)
             copy(bs[i], vs[i]);
-        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-            for (int i = 0; i < k; i++) {
-                for (int j = 0; j < i; j++)
-                    iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
-                iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
-            }
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < i; j++)
+                iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
+            iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
         }
-        if (pcomm != nullptr)
-            pcomm->broadcast(pbs.data, bs[0].size() * k, pcomm->root);
-        vector<double> eigvals;
+        vector<double> eigvals(k);
         MatrixRef q(nullptr, bs[0].m, bs[0].n);
-        q.allocate();
-        q.clear();
-        int l = k, ck = 0, msig = 0, m = k, xiter = 0;
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate();
+        int ck = 0, msig = 0, m = k, xiter = 0;
+        double qq;
         if (iprint)
             cout << endl;
         while (xiter < max_iter &&
                (soft_max_iter == -1 || xiter < soft_max_iter)) {
             xiter++;
+            if (pcomm != nullptr && xiter != 1)
+                pcomm->broadcast(pbs.data + bs[0].size() * msig,
+                                 bs[0].size() * (m - msig), pcomm->root);
             for (int i = msig; i < m; i++, msig++) {
                 sigmas[i].clear();
                 op(bs[i], sigmas[i]);
             }
-            DiagonalMatrix ld(nullptr, m);
-            MatrixRef alpha(nullptr, m, m);
-            ld.allocate();
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                DiagonalMatrix ld(nullptr, m);
+                MatrixRef alpha(nullptr, m, m);
+                ld.allocate();
                 alpha.allocate();
                 for (int i = 0; i < m; i++)
                     for (int j = 0; j <= i; j++)
@@ -619,35 +619,32 @@ struct MatrixFunctions {
                 for (int i = m - 1; i >= 0; i--)
                     tmp[i].deallocate();
                 alpha.deallocate();
+                for (int i = 0; i < ck; i++) {
+                    copy(q, sigmas[i]);
+                    iadd(q, bs[i], -ld(i, i));
+                    if (dot(q, q) >= conv_thrd) {
+                        ck = i;
+                        break;
+                    }
+                }
+                copy(q, sigmas[ck]);
+                iadd(q, bs[ck], -ld(ck, ck));
+                qq = dot(q, q);
+                if (iprint)
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                         << fixed << setw(15) << setprecision(8) << ld.data[ck]
+                         << scientific << setw(13) << setprecision(2) << qq
+                         << endl;
+                olsen_precondition(q, bs[ck], ld.data[ck], aa);
+                eigvals.resize(ck + 1);
+                if (ck + 1 != 0)
+                    memcpy(eigvals.data(), ld.data, (ck + 1) * sizeof(double));
+                ld.deallocate();
             }
             if (pcomm != nullptr) {
-                pcomm->broadcast(ld.data, ld.size(), pcomm->root);
-                pcomm->broadcast(pbs.data, bs[0].size() * m, pcomm->root);
-                pcomm->broadcast(pss.data, sigmas[0].size() * m, pcomm->root);
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
             }
-            for (int i = 0; i < ck; i++) {
-                copy(q, sigmas[i]);
-                iadd(q, bs[i], -ld(i, i));
-                if (dot(q, q) >= conv_thrd) {
-                    ck = i;
-                    break;
-                }
-            }
-            copy(q, sigmas[ck]);
-            iadd(q, bs[ck], -ld(ck, ck));
-            double qq = dot(q, q);
-            if (iprint)
-                cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
-                     << fixed << setw(15) << setprecision(8) << ld.data[ck]
-                     << scientific << setw(13) << setprecision(2) << qq << endl;
-            if (pcomm == nullptr || pcomm->root == pcomm->rank)
-                olsen_precondition(q, bs[ck], ld.data[ck], aa);
-            if (pcomm != nullptr)
-                pcomm->broadcast(bs[ck].data, bs[ck].size(), pcomm->root);
-            eigvals.resize(ck + 1);
-            if (ck + 1 != 0)
-                memcpy(eigvals.data(), ld.data, (ck + 1) * sizeof(double));
-            ld.deallocate();
             if (qq < conv_thrd) {
                 ck++;
                 if (ck == k)
@@ -659,10 +656,8 @@ struct MatrixFunctions {
                     for (int j = 0; j < m; j++)
                         iadd(q, bs[j], -dot(bs[j], q));
                     iscale(q, 1.0 / sqrt(dot(q, q)));
+                    copy(bs[m], q);
                 }
-                if (pcomm != nullptr)
-                    pcomm->broadcast(q.data, q.size(), pcomm->root);
-                copy(bs[m], q);
                 m++;
             }
             if (xiter == soft_max_iter)
@@ -674,9 +669,14 @@ struct MatrixFunctions {
             cout << "Error : only " << ck << " converged!" << endl;
             assert(false);
         }
+        if (pcomm != nullptr) {
+            pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
+            pcomm->broadcast(pbs.data, bs[0].size() * k, pcomm->root);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate();
         for (int i = 0; i < k; i++)
             copy(vs[i], bs[i]);
-        q.deallocate();
         dalloc->deallocate(pss.data, deflation_max_size * vs[0].size());
         dalloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
         ndav = xiter;

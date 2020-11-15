@@ -331,6 +331,7 @@ struct BatchGEMMSeq {
     size_t max_work, max_rwork;
     double *work, *rwork;
     SeqTypes mode;
+    bool no_check = true;
     BatchGEMMSeq(size_t max_batch_flops = 1LU << 30,
                  SeqTypes mode = SeqTypes::None)
         : max_batch_flops(max_batch_flops), mode(mode), vdata(nullptr) {
@@ -676,7 +677,8 @@ struct BatchGEMMSeq {
     // Perform non-confliciting batched DGEMM
     void simple_perform() {
         divide_batch();
-        assert(check());
+        if (!no_check)
+            assert(check());
         allocate();
         perform();
         deallocate();
