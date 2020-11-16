@@ -186,6 +186,13 @@ template <typename S> struct MultiMPS : MPS<S> {
     shared_ptr<MPS<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> new_info = info->shallow_copy(new_tag);
         shared_ptr<MultiMPS<S>> mps = make_shared<MultiMPS<S>>(*this);
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        for (int i = 0; i < mps->n_sites; i++)
+            if (mps->tensors[i] != nullptr)
+                mps->tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+        for (int j = 0; j < nroots; j++)
+            mps->wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
         mps->info = new_info;
         shallow_copy_to(mps);
         shallow_copy_wfn_to(mps);
@@ -224,7 +231,10 @@ template <typename S> struct MultiMPS : MPS<S> {
     }
     void save_data() const override {
         if (frame->prefix_can_write) {
-            ofstream ofs(get_filename(-1).c_str(), ios::binary);
+            string filename = get_filename(-1);
+            if (Parsing::link_exists(filename))
+                Parsing::remove_file(filename);
+            ofstream ofs(filename.c_str(), ios::binary);
             if (!ofs.good())
                 throw runtime_error("MultiMPS::save_data on '" +
                                     get_filename(-1) + "' failed.");

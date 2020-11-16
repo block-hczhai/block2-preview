@@ -20,6 +20,8 @@
 
 #include "instantiation.hpp"
 
+template struct block2::TDDMRG<block2::SZ>;
 template struct block2::ImaginaryTE<block2::SZ>;
 
+template struct block2::TDDMRG<block2::SU2>;
 template struct block2::ImaginaryTE<block2::SU2>;

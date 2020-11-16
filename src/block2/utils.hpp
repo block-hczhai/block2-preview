@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <iomanip>
 #include <random>
 #include <sstream>
@@ -164,10 +165,35 @@ struct Parsing {
     static bool remove_file(const string &name) {
         return remove(name.c_str()) == 0;
     }
+    static string get_filename(const string &path) {
+        size_t idx = path.find_last_of("/\\");
+        if (idx != string::npos)
+            return path.substr(idx + 1);
+        else
+            return path;
+    }
+    static string get_pathname(const string &path) {
+        size_t idx = path.find_last_of("/\\");
+        if (idx != string::npos)
+            return path.substr(0, idx);
+        else
+            return "";
+    }
+    static string read_link(const string &name) {
+        char buf[255];
+        ssize_t cnt = readlink(name.c_str(), buf, 255);
+        return string(buf, cnt);
+    }
     static bool link_file(const string &source, const string &name) {
+        if (link_exists(source)) {
+            string real_src = read_link(source);
+            if (get_filename(name) == real_src)
+                return true;
+        }
         if (file_exists(name))
             remove_file(name);
-        return symlink(source.c_str(), name.c_str()) == 0;
+        assert(get_pathname(source) == get_pathname(name));
+        return symlink(get_filename(source).c_str(), name.c_str()) == 0;
     }
     static void copy_file(const string &source, const string &dest) {
         ifstream ifs(source.c_str(), ios::binary);
