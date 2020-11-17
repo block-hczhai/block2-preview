@@ -761,9 +761,11 @@ struct SparseMatrixInfo<
             quanta[i] = q[idx[i]], n_states_bra[i] = nqb[idx[i]],
             n_states_ket[i] = nqk[idx[i]];
         n_states_total[0] = 0;
-        for (int i = 0; i < n - 1; i++)
+        for (int i = 0; i < n - 1; i++) {
             n_states_total[i + 1] =
                 n_states_total[i] + (uint32_t)n_states_bra[i] * n_states_ket[i];
+            assert(n_states_total[i + 1] >= n_states_total[i]);
+        }
     }
     uint32_t get_total_memory() const {
         return n == 0 ? 0

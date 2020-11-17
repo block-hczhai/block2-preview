@@ -79,6 +79,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     using ParallelCommunicator<S>::root;
     using ParallelCommunicator<S>::tcomm;
     Timer _t;
+    const size_t chunk_size = 1 << 30;
     MPICommunicator(int root = 0)
         : ParallelCommunicator<S>(MPI::size(), MPI::rank(), root) {}
     ParallelTypes get_parallel_type() const override {
@@ -92,8 +93,11 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void broadcast(double *data, size_t len, int owner) override {
         _t.get_time();
-        int ierr = MPI_Bcast(data, len, MPI_DOUBLE, owner, MPI_COMM_WORLD);
-        assert(ierr == 0);
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Bcast(data + offset, min(chunk_size, len - offset),
+                                 MPI_DOUBLE, owner, MPI_COMM_WORLD);
+            assert(ierr == 0);
+        }
         tcomm += _t.get_time();
     }
     void broadcast(int *data, size_t len, int owner) override {
@@ -166,9 +170,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void allreduce_sum(double *data, size_t len) override {
         _t.get_time();
-        int ierr = MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE, MPI_SUM,
-                                 MPI_COMM_WORLD);
-        assert(ierr == 0);
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_DOUBLE,
+                                     MPI_SUM, MPI_COMM_WORLD);
+            assert(ierr == 0);
+        }
         tcomm += _t.get_time();
     }
     void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
@@ -204,9 +211,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void reduce_sum(double *data, size_t len, int owner) override {
         _t.get_time();
-        int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
-                              MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD);
-        assert(ierr == 0);
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data + offset,
+                                  data + offset, min(chunk_size, len - offset),
+                                  MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD);
+            assert(ierr == 0);
+        }
         tcomm += _t.get_time();
     }
     void reduce_sum(uint64_t *data, size_t len, int owner) override {
