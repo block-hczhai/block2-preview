@@ -1764,7 +1764,7 @@ template <typename S> struct SparseMatrixGroup {
                   const vector<shared_ptr<SparseMatrix<S>>> &xmats =
                       vector<shared_ptr<SparseMatrix<S>>>(),
                   const vector<double> &scales = vector<double>()) {
-        map<S, MKL_INT> qs_mp;
+        map<S, size_t> qs_mp;
         vector<shared_ptr<SparseMatrixInfo<S>>> xinfos = infos;
         vector<size_t> xoffsets = offsets;
         vector<double> xscales(infos.size(), 1);
@@ -1784,20 +1784,20 @@ template <typename S> struct SparseMatrixGroup {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
                 qs_mp[q] +=
-                    (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
+                    (size_t)info->n_states_bra[i] * info->n_states_ket[i];
             }
         int nr = (int)qs_mp.size(), k = 0;
         rqs.resize(nr);
-        MKL_INT tmp[nr + 1];
-        memset(tmp, 0, sizeof(MKL_INT) * (nr + 1));
+        size_t tmp[nr + 1];
+        memset(tmp, 0, sizeof(size_t) * (nr + 1));
         for (auto &mp : qs_mp)
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
         double *dt = dalloc->allocate(tmp[nr]);
         memset(dt, 0, sizeof(double) * tmp[nr]);
-        MKL_INT it[nr], sz[nr];
-        memset(it, 0, sizeof(MKL_INT) * nr);
+        size_t it[nr], sz[nr];
+        memset(it, 0, sizeof(size_t) * nr);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
@@ -1808,10 +1808,9 @@ template <typename S> struct SparseMatrixGroup {
                     (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
                 if (abs(xscales[ii]) > 1E-12)
                     MatrixFunctions::iadd(
-                        MatrixRef(dt + (tmp[ir] + it[ir]), (MKL_INT)n_states,
-                                  1),
+                        MatrixRef(dt + (tmp[ir] + it[ir]), n_states, 1),
                         MatrixRef(data + xoffsets[ii] + info->n_states_total[i],
-                                  (MKL_INT)n_states, 1),
+                                  n_states, 1),
                         xscales[ii]);
                 sz[ir] = info->n_states_ket[i];
                 it[ir] += n_states;
@@ -1837,7 +1836,7 @@ template <typename S> struct SparseMatrixGroup {
             s.push_back(tss);
             r.push_back(tsr);
         }
-        memset(it, 0, sizeof(MKL_INT) * nr);
+        memset(it, 0, sizeof(size_t) * nr);
         l.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
@@ -1869,7 +1868,7 @@ template <typename S> struct SparseMatrixGroup {
                    const vector<shared_ptr<SparseMatrix<S>>> &xmats =
                        vector<shared_ptr<SparseMatrix<S>>>(),
                    const vector<double> &scales = vector<double>()) {
-        map<S, MKL_INT> qs_mp;
+        map<S, size_t> qs_mp;
         vector<shared_ptr<SparseMatrixInfo<S>>> xinfos = infos;
         vector<size_t> xoffsets = offsets;
         vector<double> xscales(infos.size(), 1);
@@ -1888,20 +1887,20 @@ template <typename S> struct SparseMatrixGroup {
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
                 qs_mp[q] +=
-                    (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
+                    (size_t)info->n_states_bra[i] * info->n_states_ket[i];
             }
         int nl = (int)qs_mp.size(), p = 0;
         lqs.resize(nl);
-        MKL_INT tmp[nl + 1];
-        memset(tmp, 0, sizeof(MKL_INT) * (nl + 1));
+        size_t tmp[nl + 1];
+        memset(tmp, 0, sizeof(size_t) * (nl + 1));
         for (auto &mp : qs_mp)
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
         double *dt = dalloc->allocate(tmp[nl]);
         memset(dt, 0, sizeof(double) * tmp[nl]);
-        MKL_INT it[nl], sz[nl];
-        memset(it, 0, sizeof(MKL_INT) * nl);
+        size_t it[nl], sz[nl];
+        memset(it, 0, sizeof(size_t) * nl);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
@@ -1914,11 +1913,11 @@ template <typename S> struct SparseMatrixGroup {
                 if (abs(xscales[ii]) > 1E-12) {
                     for (MKL_INT k = 0; k < nxl; k++)
                         MatrixFunctions::iadd(
-                            MatrixRef(dt + (tmp[il] + it[il] + k * nxr),
-                                      (MKL_INT)inr, 1),
+                            MatrixRef(dt + (tmp[il] + it[il] + k * nxr), inr,
+                                      1),
                             MatrixRef(data + xoffsets[ii] +
                                           (info->n_states_total[i] + k * inr),
-                                      (MKL_INT)inr, 1),
+                                      inr, 1),
                             xscales[ii]);
                 }
                 sz[il] = nxl;
@@ -1945,7 +1944,7 @@ template <typename S> struct SparseMatrixGroup {
             s.push_back(tss);
             merged_r.push_back(tsr);
         }
-        memset(it, 0, sizeof(MKL_INT) * nl);
+        memset(it, 0, sizeof(size_t) * nl);
         r.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
             const auto &info = xinfos[ii];
