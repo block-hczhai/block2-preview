@@ -768,9 +768,14 @@ struct SparseMatrixInfo<
         }
     }
     uint32_t get_total_memory() const {
-        return n == 0 ? 0
-                      : n_states_total[n - 1] +
+        if (n == 0)
+            return 0;
+        else {
+            uint32_t tmem = n_states_total[n - 1] +
                             (uint32_t)n_states_bra[n - 1] * n_states_ket[n - 1];
+            assert(tmem >= n_states_total[n - 1]);
+            return tmem;
+        }
     }
     void allocate(int length, uint32_t *ptr = 0) {
         if (ptr == 0) {
