@@ -32,6 +32,7 @@ namespace py = pybind11;
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<int>);
+PYBIND11_MAKE_OPAQUE(vector<char>);
 PYBIND11_MAKE_OPAQUE(vector<long long int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
@@ -1907,6 +1908,7 @@ template <typename S> void bind_class(py::module &m, const string &name) {
 template <typename S = void> void bind_data(py::module &m) {
 
     py::bind_vector<vector<int>>(m, "VectorInt");
+    py::bind_vector<vector<char>>(m, "VectorChar");
     py::bind_vector<vector<long long int>>(m, "VectorLLInt");
     py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
