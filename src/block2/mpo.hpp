@@ -844,4 +844,67 @@ template <typename S> struct AncillaMPO : MPO<S> {
     void deallocate() override { prim_mpo->deallocate(); }
 };
 
+// Add identity operator to MPO (will not change expression of MPO)
+// MPO must be simplified
+template <typename S> struct IdentityAddedMPO : MPO<S> {
+    using MPO<S>::n_sites;
+    IdentityAddedMPO(const shared_ptr<MPO<S>> &mpo) : MPO<S>(mpo->n_sites) {
+        MPO<S>::const_e = mpo->const_e;
+        MPO<S>::op = mpo->op;
+        MPO<S>::tf = mpo->tf;
+        MPO<S>::basis = mpo->basis;
+        MPO<S>::site_op_infos = mpo->site_op_infos;
+        MPO<S>::sparse_form = mpo->sparse_form;
+        MPO<S>::schemer =
+            mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
+        MPO<S>::left_operator_names = mpo->left_operator_names;
+        MPO<S>::right_operator_names = mpo->right_operator_names;
+        MPO<S>::middle_operator_names = mpo->middle_operator_names;
+        MPO<S>::left_operator_exprs = mpo->left_operator_exprs;
+        MPO<S>::right_operator_exprs = mpo->right_operator_exprs;
+        MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
+        assert(mpo->left_operator_exprs.size() != 0);
+        assert(mpo->right_operator_exprs.size() != 0);
+        MPO<S>::tensors = mpo->tensors;
+        const shared_ptr<OpExpr<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
+        for (size_t m = 0; m < MPO<S>::left_operator_names.size(); m++) {
+            bool found = false;
+            auto &x = MPO<S>::left_operator_names[m];
+            auto &y = MPO<S>::left_operator_exprs[m];
+            x = x->copy();
+            y = y->copy();
+            for (size_t j = 0; j < x->data.size(); j++)
+                if (x->data[j] == i_op) {
+                    found = true;
+                    break;
+                }
+            if (!found) {
+                x->data.push_back(i_op);
+                y->data.push_back(i_op * i_op);
+                assert(x->get_type() == SymTypes::RVec);
+                x->n = y->n = (int)x->data.size();
+            }
+        }
+        for (size_t m = 0; m < MPO<S>::right_operator_names.size(); m++) {
+            bool found = false;
+            auto &x = MPO<S>::right_operator_names[m];
+            auto &y = MPO<S>::right_operator_exprs[m];
+            x = x->copy();
+            y = y->copy();
+            for (size_t j = 0; j < x->data.size(); j++)
+                if (x->data[j] == i_op) {
+                    found = true;
+                    break;
+                }
+            if (!found) {
+                x->data.push_back(i_op);
+                y->data.push_back(i_op * i_op);
+                assert(x->get_type() == SymTypes::CVec);
+                x->m = y->m = (int)x->data.size();
+            }
+        }
+    }
+};
+
 } // namespace block2

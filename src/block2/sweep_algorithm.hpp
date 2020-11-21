@@ -860,7 +860,7 @@ template <typename S> struct DMRG {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
-            noises.resize(n_sweeps, noises.back());
+            noises.resize(n_sweeps, noises.size() == 0 ? 0.0 : noises.back());
         if (davidson_conv_thrds.size() < n_sweeps)
             for (size_t i = davidson_conv_thrds.size(); i < noises.size(); i++)
                 davidson_conv_thrds.push_back(

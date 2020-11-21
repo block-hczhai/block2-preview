@@ -1492,6 +1492,56 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("partial_sweep", &ParallelDMRG<S>::partial_sweep)
         .def("connection_sweep", &ParallelDMRG<S>::connection_sweep);
 
+    py::class_<typename TDDMRG<S>::Iteration,
+               shared_ptr<typename TDDMRG<S>::Iteration>>(m, "TDDMRGIteration")
+        .def(py::init<double, double, double, int, int, size_t, double>())
+        .def(py::init<double, double, double, int, int>())
+        .def_readwrite("mmps", &TDDMRG<S>::Iteration::mmps)
+        .def_readwrite("energy", &TDDMRG<S>::Iteration::energy)
+        .def_readwrite("normsq", &TDDMRG<S>::Iteration::normsq)
+        .def_readwrite("error", &TDDMRG<S>::Iteration::error)
+        .def_readwrite("nmult", &TDDMRG<S>::Iteration::nmult)
+        .def_readwrite("tmult", &TDDMRG<S>::Iteration::tmult)
+        .def_readwrite("nflop", &TDDMRG<S>::Iteration::nflop)
+        .def("__repr__", [](typename TDDMRG<S>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<TDDMRG<S>, shared_ptr<TDDMRG<S>>>(m, "TDDMRG")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &>())
+        .def_readwrite("me", &TDDMRG<S>::me)
+        .def_readwrite("lme", &TDDMRG<S>::lme)
+        .def_readwrite("rme", &TDDMRG<S>::rme)
+        .def_readwrite("iprint", &TDDMRG<S>::iprint)
+        .def_readwrite("cutoff", &TDDMRG<S>::cutoff)
+        .def_readwrite("bond_dims", &TDDMRG<S>::bond_dims)
+        .def_readwrite("noises", &TDDMRG<S>::noises)
+        .def_readwrite("energies", &TDDMRG<S>::energies)
+        .def_readwrite("normsqs", &TDDMRG<S>::normsqs)
+        .def_readwrite("discarded_weights", &TDDMRG<S>::discarded_weights)
+        .def_readwrite("forward", &TDDMRG<S>::forward)
+        .def_readwrite("n_sub_sweeps", &TDDMRG<S>::n_sub_sweeps)
+        .def_readwrite("weights", &TDDMRG<S>::weights)
+        .def_readwrite("mode", &TDDMRG<S>::mode)
+        .def_readwrite("noise_type", &TDDMRG<S>::noise_type)
+        .def_readwrite("trunc_type", &TDDMRG<S>::trunc_type)
+        .def_readwrite("decomp_type", &TDDMRG<S>::decomp_type)
+        .def_readwrite("decomp_last_site", &TDDMRG<S>::decomp_last_site)
+        .def_readwrite("sweep_cumulative_nflop",
+                       &TDDMRG<S>::sweep_cumulative_nflop)
+        .def("update_one_dot", &TDDMRG<S>::update_one_dot)
+        .def("update_two_dot", &TDDMRG<S>::update_two_dot)
+        .def("blocking", &TDDMRG<S>::blocking)
+        .def("sweep", &TDDMRG<S>::sweep)
+        .def("normalize", &TDDMRG<S>::normalize)
+        .def("solve", &TDDMRG<S>::solve, py::arg("n_sweeps"), py::arg("beta"),
+             py::arg("forward") = true, py::arg("tol") = 1E-6);
+
     py::class_<typename ImaginaryTE<S>::Iteration,
                shared_ptr<typename ImaginaryTE<S>::Iteration>>(
         m, "ImaginaryTEIteration")
@@ -1530,6 +1580,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("noise_type", &ImaginaryTE<S>::noise_type)
         .def_readwrite("trunc_type", &ImaginaryTE<S>::trunc_type)
         .def_readwrite("trunc_pattern", &ImaginaryTE<S>::trunc_pattern)
+        .def("update_one_dot", &ImaginaryTE<S>::update_one_dot)
         .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
         .def("blocking", &ImaginaryTE<S>::blocking)
         .def("sweep", &ImaginaryTE<S>::sweep)
@@ -1887,6 +1938,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &,
                       const shared_ptr<Rule<S>> &>());
+
+    py::class_<IdentityAddedMPO<S>, shared_ptr<IdentityAddedMPO<S>>, MPO<S>>(
+        m, "IdentityAddedMPO")
+        .def(py::init<const shared_ptr<MPO<S>> &>());
 }
 
 template <typename S> void bind_class(py::module &m, const string &name) {
@@ -2107,8 +2162,11 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("FuseLR", FuseTypes::FuseLR);
 
     py::enum_<TETypes>(m, "TETypes", py::arithmetic())
+        .value("ImagTE", TETypes::ImagTE)
+        .value("RealTE", TETypes::RealTE)
         .value("TangentSpace", TETypes::TangentSpace)
-        .value("RK4", TETypes::RK4);
+        .value("RK4", TETypes::RK4)
+        .value("RK4PP", TETypes::RK4PP);
 
     py::enum_<TruncPatternTypes>(m, "TruncPatternTypes", py::arithmetic())
         .value("Nothing", TruncPatternTypes::None)

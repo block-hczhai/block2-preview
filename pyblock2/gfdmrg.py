@@ -32,8 +32,8 @@ import time
 import numpy as np
 
 # Set spin-adapted or non-spin-adapted here
-SpinLabel = SU2
-# SpinLabel = SZ
+# SpinLabel = SU2
+SpinLabel = SZ
 
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
@@ -324,7 +324,7 @@ class GFDMRG:
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
-                        eta, freqs, addition, cutoff=1E-14, diag_only=False):
+                        eta, freqs, addition, cutoff=1E-14, diag_only=False, alpha=True):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -391,10 +391,10 @@ class GFDMRG:
             if SpinLabel == SZ:
                 if addition:
                     ops[ii] = OpElement(OpNames.C, SiteIndex(
-                        (idx, ), (0, )), SZ(1, 1, self.orb_sym[idx]))
+                        (idx, ), (0 if alpha else 1, )), SZ(1, 1 if alpha else -1, self.orb_sym[idx]))
                 else:
                     ops[ii] = OpElement(OpNames.D, SiteIndex(
-                        (idx, ), (0, )), SZ(-1, -1, self.orb_sym[idx]))
+                        (idx, ), (0 if alpha else 1, )), SZ(-1, -1 if alpha else 1, self.orb_sym[idx]))
             else:
                 if addition:
                     ops[ii] = OpElement(OpNames.C, SiteIndex(
@@ -551,7 +551,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
-               lowdin=False, diag_only=False, mpi=None):
+               lowdin=False, diag_only=False, alpha=True, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
 
@@ -657,7 +657,8 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         # only calculate alpha spin
         gf += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
                                    gs_bond_dims, gs_noises, gs_tol, gs_n_steps, idxs=mo_orbs,
-                                   eta=delta, freqs=freqs, addition=addit, diag_only=diag_only)
+                                   eta=delta, freqs=freqs, addition=addit, diag_only=diag_only,
+                                   alpha=alpha)
 
     del dmrg
 
@@ -731,6 +732,6 @@ if __name__ == "__main__":
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                             gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                             gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
-                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False)
+                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False)
         gfmat = np.einsum('ip,pqr,jq->ijr',mf.mo_coeff, gfmat, mf.mo_coeff)
         print(gfmat)

@@ -239,7 +239,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         int vidx = reduced ? -1 : 0;
         // perform multiplication
         tf->tensor_product_partial_multiply(
-            pexpr, op->lopt, op->ropt, trace_right, cmat, psubsl, cinfos,
+            pexpr, op->lopt, op->ropt, trace_right, ket, psubsl, cinfos,
             perturb_ket_labels, perturb_ket, vidx);
         if (!reduced)
             assert(vidx == perturb_ket->n);
@@ -565,6 +565,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         for (int i = 0; i < 3; i++) {
             rr[i] = make_shared<SparseMatrix<S>>(d_alloc);
             rr[i]->allocate(ket->info);
+        }
+        for (int i = 0; i < 3; i++) {
             kk[i + 1] = make_shared<SparseMatrix<S>>(d_alloc);
             kk[i + 1]->allocate(ket->info);
         }
@@ -607,7 +609,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             energy = MatrixFunctions::dot(r[2], k[0]) / (norm * norm);
         }
         for (int i = 3; i >= 1; i--)
-            k[i].deallocate();
+            kk[i]->deallocate();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
@@ -1357,6 +1359,8 @@ template <typename S> struct MovingEnvironment {
     void shallow_copy_to(const shared_ptr<MovingEnvironment<S>> &me) const {
         for (int i = 0; i < n_sites; i++) {
             me->envs[i] = make_shared<Partition<S>>(*envs[i]);
+            me->envs[i]->left_op_infos = envs[i]->left_op_infos;
+            me->envs[i]->right_op_infos = envs[i]->right_op_infos;
             if (envs[i]->left != nullptr)
                 Parsing::link_file(get_left_partition_filename(i),
                                    me->get_left_partition_filename(i));

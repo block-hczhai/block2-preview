@@ -162,11 +162,13 @@ extern template struct block2::MPOSchemer<block2::SZ>;
 extern template struct block2::MPO<block2::SZ>;
 extern template struct block2::DiagonalMPO<block2::SZ>;
 extern template struct block2::AncillaMPO<block2::SZ>;
+extern template struct block2::IdentityAddedMPO<block2::SZ>;
 
 extern template struct block2::MPOSchemer<block2::SU2>;
 extern template struct block2::MPO<block2::SU2>;
 extern template struct block2::DiagonalMPO<block2::SU2>;
 extern template struct block2::AncillaMPO<block2::SU2>;
+extern template struct block2::IdentityAddedMPO<block2::SU2>;
 
 // mpo_fusing.hpp
 extern template struct block2::FusedMPO<block2::SZ>;
@@ -318,8 +320,10 @@ extern template struct block2::StateInfo<block2::SU2>;
 extern template struct block2::StateProbability<block2::SU2>;
 
 // sweep_algorithm_td.hpp
+extern template struct block2::TDDMRG<block2::SZ>;
 extern template struct block2::ImaginaryTE<block2::SZ>;
 
+extern template struct block2::TDDMRG<block2::SU2>;
 extern template struct block2::ImaginaryTE<block2::SU2>;
 
 // sweep_algorithm.hpp
