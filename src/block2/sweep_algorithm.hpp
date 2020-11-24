@@ -1890,7 +1890,7 @@ template <typename S> struct Linear {
                 }
                 cout << endl;
             }
-            if (converged)
+            if (converged || has_abort_file())
                 break;
         }
         this->forward = forward;
