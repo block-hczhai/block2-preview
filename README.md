@@ -119,6 +119,13 @@ will use optimization flags such as -O3 (default).
 
 enables debug flags.
 
+GS-DMRG
+-------
+
+Test Ground-State DMRG (need `pyscf` module):
+
+    python3 -m pyblock2.gsdmrg
+
 FT-DMRG
 -------
 
