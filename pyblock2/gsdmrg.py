@@ -473,12 +473,11 @@ if __name__ == "__main__":
     scratch = './tmp'
 
     memory = 1E9  # in bytes
-    mpi = None
     verbose = 3
     do_ccsd = True # True: use ccsd init MPS; False: use random init MPS
     bias = 10
 
-    # if n_sweep is larger than len(bond_dims), the last value will be repeated
+    # if n_sweeps is larger than len(bond_dims), the last value will be repeated
     bond_dims = [250, 250, 250, 500, 500, 1000]
     # unit : norm(wfn) ** 2 (same as StackBlock)
     noises = [1E-6, 1E-7, 1E-8, 1E-9, 1E-9]
@@ -567,7 +566,6 @@ if __name__ == "__main__":
         h1e = (h1ea, h1eb)
         g2e = (g2eaa, g2ebb, g2eab)
         ecore = mol.energy_nuc()
-        print(mf.mol.nelectron)
         na, nb = mol.nelec
     
     if do_ccsd:
@@ -575,11 +573,15 @@ if __name__ == "__main__":
             mcc = cc.CCSD(mf)
             mcc.kernel()
             dmmo = mcc.make_rdm1()
-            occs = np.diag(dmmo)
+            if hf_type == "RHF":
+                occs = np.diag(dmmo)
+            else:
+                occs = np.diag(dmmo[0]) + np.diag(dmmo[1])
         else:
             occs = None
         if MPI is not None:
             occs = comm.bcast(occs, root=0)
+        _print('OCCS = ', occs)
     else:
         occs = None
 
