@@ -87,6 +87,7 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    hamil.opf->seq->mode = SeqTypes::Simple;
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(4);
@@ -125,7 +126,7 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    ubond_t bond_dim = 250;
+    ubond_t bond_dim = 200;
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
@@ -172,7 +173,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 1);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -188,7 +189,6 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SU2>> me =
         make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
     t.get_time();
@@ -201,19 +201,23 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7,
-                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+                             500, 500, 750, 750, 750, 750, 750};
+    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7,
+                             1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7};
+    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
+                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
+                              5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
     // noises = vector<double>{1E-5};
     // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
+    dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     // dmrg->me->fuse_center = 1;
     dmrg->solve(10, true, 1E-12);
 

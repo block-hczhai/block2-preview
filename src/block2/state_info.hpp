@@ -72,7 +72,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         allocate(1);
         quanta[0] = q, n_states[0] = 1, n_states_total = 1;
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         ifs.read((char *)&n_states_total, sizeof(n_states_total));
         ifs.read((char *)&n, sizeof(n));
         vdata = make_shared<vector<uint32_t>>(_SI_MEM_SIZE(n));
@@ -92,7 +92,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
                                 "' failed.");
         ifs.close();
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         ofs.write((char *)&n_states_total, sizeof(n_states_total));
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)quanta, sizeof(uint32_t) * _SI_MEM_SIZE(n));

@@ -194,8 +194,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         shared_ptr<SparseMatrixGroup<S>> perturb_ket =
             make_shared<SparseMatrixGroup<S>>(d_alloc);
         assert(noise_type & NoiseTypes::Perturbative);
-        bool reduced = noise_type == NoiseTypes::ReducedPerturbative ||
-                       noise_type == NoiseTypes::ReducedPerturbativeUnscaled;
+        bool do_reduce = !(noise_type & NoiseTypes::Collected);
+        bool reduced = noise_type & NoiseTypes::Reduced;
         if (reduced)
             perturb_ket->allocate(infos);
         else {
@@ -240,12 +240,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // perform multiplication
         tf->tensor_product_partial_multiply(
             pexpr, op->lopt, op->ropt, trace_right, ket, psubsl, cinfos,
-            perturb_ket_labels, perturb_ket, vidx);
+            perturb_ket_labels, perturb_ket, vidx, do_reduce);
         if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             tf->opf->seq->auto_perform();
-            if (para_rule != nullptr)
+            if (para_rule != nullptr && do_reduce)
                 para_rule->comm->reduce_sum(perturb_ket, para_rule->comm->root);
         }
         for (int j = (int)cinfos.size() - 1; j >= 0; j--)
@@ -1134,8 +1134,9 @@ template <typename S> struct MovingEnvironment {
     string tag;
     // Parallel execution control
     shared_ptr<ParallelRule<S>> para_rule;
-    double tctr = 0, trot = 0, tint = 0, tmid = 0;
-    Timer _t;
+    double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
+           tfwrt = 0, tfred = 0, tinfo = 0;
+    Timer _t, _t2;
     bool iprint = false;
     OpNamesSet delayed_contraction = OpNamesSet();
     int fuse_center;
@@ -1159,6 +1160,7 @@ template <typename S> struct MovingEnvironment {
     // new site = i - 1
     void left_contract_rotate(int i) {
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
+        _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
             mpo->left_operator_names[i - 1]};
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
@@ -1181,7 +1183,7 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S>> new_left = Partition<S>::build_left(
             {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
             mpo->sparse_form[i - 1] == 'S');
-        _t.get_time();
+        tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
@@ -1202,7 +1204,7 @@ template <typename S> struct MovingEnvironment {
                                          envs[i]->left_op_infos);
         frame->activate(1);
         envs[i]->left = Partition<S>::build_left(mats, envs[i]->left_op_infos);
-        _t.get_time();
+        tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
                 ->filename = get_left_archive_filename(i);
@@ -1227,12 +1229,15 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i - 1);
         new_left->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
+        _t.get_time();
         frame->save_data(1, get_left_partition_filename(i));
+        tfwrt += _t.get_time();
     }
     // Contract and renormalize right block by one site
     // new site = i + dot
     void right_contract_rotate(int i) {
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
+        _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
             mpo->right_operator_names[i + dot]};
         if (mpo->schemer != nullptr &&
@@ -1257,7 +1262,7 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S>> new_right = Partition<S>::build_right(
             {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
             mpo->sparse_form[i + dot] == 'S');
-        _t.get_time();
+        tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
@@ -1279,7 +1284,7 @@ template <typename S> struct MovingEnvironment {
         frame->activate(1);
         envs[i]->right =
             Partition<S>::build_right(mats, envs[i]->right_op_infos);
-        _t.get_time();
+        tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
                 ->filename = get_right_archive_filename(i);
@@ -1306,7 +1311,9 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i + dot);
         new_right->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
+        _t.get_time();
         frame->save_data(1, get_right_partition_filename(i));
+        tfwrt += _t.get_time();
     }
     void left_contract_rotate_unordered(int i) {
         if (i != 0) {
@@ -1407,7 +1414,7 @@ template <typename S> struct MovingEnvironment {
     }
     void partial_prepare(int a, int b) {
         assert(a >= 0 && b <= n_sites);
-        tctr = trot = tmid = tint = 0;
+        tctr = trot = tmid = tint = tdctr = tdiag = tfwrt = tfred = tinfo = 0;
         for (int i = b - dot; i > center; i--) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
@@ -1419,12 +1426,13 @@ template <typename S> struct MovingEnvironment {
     }
     // Remove old environment for starting a new sweep
     void prepare() {
-        tctr = trot = tmid = tint = 0;
+        tctr = trot = tmid = tint = tdctr = tdiag = tfwrt = tfred = tinfo = 0;
         if (dot == 2 && envs[0]->middle.size() == 1)
             throw runtime_error("switching from one-site algorithm to two-site "
                                 "algorithm is not allowed.");
         // two-site to one-site transition
         if (dot == 1 && envs[0]->middle.size() == 2) {
+            frame->reset_buffer(1);
             if (center == n_sites - 2 &&
                 (ket->canonical_form[n_sites - 1] == 'C' ||
                  ket->canonical_form[n_sites - 1] == 'M')) {
@@ -1468,14 +1476,18 @@ template <typename S> struct MovingEnvironment {
     virtual void move_to(int i) {
         string new_data_name = "";
         if (i > center) {
+            _t.get_time();
             if (envs[center]->left != nullptr)
                 frame->load_data(1, get_left_partition_filename(center));
+            tfred += _t.get_time();
             left_contract_rotate(++center);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
         } else if (i < center) {
+            _t.get_time();
             if (envs[center]->right != nullptr)
                 frame->load_data(1, get_right_partition_filename(center));
+            tfred += _t.get_time();
             right_contract_rotate(--center);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
@@ -1806,6 +1818,7 @@ template <typename S> struct MovingEnvironment {
                            !delay_left && iR != n_sites - 1);
         else
             right_copy(iR, right_op_infos, new_right);
+        _t2.get_time();
         // make sure that the previous block is still in memory
         if (!delayed_contraction.empty()) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
@@ -1822,6 +1835,7 @@ template <typename S> struct MovingEnvironment {
                       mpo->middle_operator_exprs[iM], delayed_contraction)
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
+        tdctr += _t2.get_time();
         frame->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
@@ -1832,6 +1846,7 @@ template <typename S> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S>>(left_op_infos, right_op_infos,
                                                  op, bra_wfn, ket_wfn, mpo->op,
                                                  hops, mpo->tf, compute_diag);
+        tdiag += _t2.get_time();
         frame->update_peak_used_memory();
         return efh;
     }
@@ -1881,6 +1896,7 @@ template <typename S> struct MovingEnvironment {
                            !delay_left && iR != n_sites - 1);
         else
             right_copy(iR, right_op_infos, new_right);
+        _t2.get_time();
         // make sure that the previous block is still in memory
         if (!delayed_contraction.empty()) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
@@ -1897,6 +1913,7 @@ template <typename S> struct MovingEnvironment {
                       mpo->middle_operator_exprs[iM], delayed_contraction)
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
+        tdctr += _t2.get_time();
         frame->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
@@ -1907,6 +1924,7 @@ template <typename S> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S, MultiMPS<S>>>(
                 left_op_infos, right_op_infos, op, mbra->wfns, mket->wfns,
                 mpo->op, hops, mpo->tf, compute_diag);
+        tdiag += _t2.get_time();
         frame->update_peak_used_memory();
         return efh;
     }
@@ -2260,8 +2278,7 @@ template <typename S> struct MovingEnvironment {
                              const shared_ptr<SparseMatrixGroup<S>> &mats) {
         if (abs(noise) < TINY && noise == 0.0)
             return;
-        if (noise_type == NoiseTypes::Perturbative ||
-            noise_type == NoiseTypes::ReducedPerturbative) {
+        if (!(noise_type & NoiseTypes::Unscaled)) {
             for (int i = 0; i < mats->n; i++) {
                 double mat_norm = (*mats)[i]->norm();
                 if (abs(mat_norm) > TINY)

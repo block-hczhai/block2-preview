@@ -510,7 +510,7 @@ struct SparseMatrixInfo<
                                 "' failed.");
         ifs.close();
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         ifs.read((char *)&delta_quantum, sizeof(delta_quantum));
         ifs.read((char *)&n, sizeof(n));
         if (alloc == nullptr)
@@ -538,7 +538,7 @@ struct SparseMatrixInfo<
                                 "' failed.");
         ofs.close();
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         ofs.write((char *)&delta_quantum, sizeof(delta_quantum));
         assert(n != -1);
         ofs.write((char *)&n, sizeof(n));
@@ -849,7 +849,7 @@ template <typename S> struct SparseMatrix {
     virtual const SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
-    virtual void load_data(ifstream &ifs) {
+    virtual void load_data(istream &ifs) {
         ifs.read((char *)&factor, sizeof(factor));
         ifs.read((char *)&total_memory, sizeof(total_memory));
         data = alloc->allocate(total_memory);
@@ -874,7 +874,7 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         ifs.close();
     }
-    virtual void save_data(ofstream &ofs) const {
+    virtual void save_data(ostream &ofs) const {
         ofs.write((char *)&factor, sizeof(factor));
         ofs.write((char *)&total_memory, sizeof(total_memory));
         ofs.write((char *)data, sizeof(double) * total_memory);

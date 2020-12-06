@@ -159,7 +159,7 @@ inline ostream &operator<<(ostream &os, const shared_ptr<Symbolic<S>> sym) {
 }
 
 template <typename S>
-inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ofstream &ofs) {
+inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ostream &ofs) {
     SymTypes tp = x->get_type();
     ofs.write((char *)&tp, sizeof(tp));
     ofs.write((char *)&x->m, sizeof(x->m));
@@ -183,7 +183,7 @@ inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ofstream &ofs) {
 }
 
 template <typename S>
-inline shared_ptr<Symbolic<S>> load_symbolic(ifstream &ifs) {
+inline shared_ptr<Symbolic<S>> load_symbolic(istream &ifs) {
     SymTypes tp;
     int m, n, sz;
     ifs.read((char *)&tp, sizeof(tp));

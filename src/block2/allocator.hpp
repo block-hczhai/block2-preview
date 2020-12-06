@@ -28,6 +28,8 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -177,17 +179,26 @@ struct DataFrame {
     bool prefix_can_write = true;
     size_t isize, dsize;
     int n_frames, i_frame;
-    mutable double tread = 0, twrite = 0; // io time cost
+    mutable double tread = 0, twrite = 0, tasync = 0; // io time cost
     mutable Timer _t;
     vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
     vector<shared_ptr<StackAllocator<double>>> dallocs;
     mutable vector<size_t> peak_used_memory;
+    mutable vector<string> present_filenames;
+    mutable vector<pair<string, shared_ptr<stringstream>>> load_buffers;
+    mutable vector<pair<string, shared_ptr<stringstream>>> save_buffers;
+    mutable vector<shared_future<void>> save_futures;
+    bool load_buffering = false, save_buffering = false;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double main_ratio = 0.7,
               int n_frames = 2)
         : n_frames(n_frames), save_dir(save_dir), mps_dir(save_dir) {
         peak_used_memory.resize(n_frames * 2);
+        present_filenames.resize(n_frames);
+        load_buffers.resize(n_frames);
+        save_buffers.resize(n_frames);
+        save_futures.resize(n_frames);
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
         size_t imain = (size_t)(main_ratio * this->isize);
@@ -220,57 +231,139 @@ struct DataFrame {
     void reset(int i) {
         iallocs[i]->used = 0;
         dallocs[i]->used = 0;
+        present_filenames[i] = "";
+    }
+    void reset_buffer(int i) {
+        load_buffers[i] = make_pair("", nullptr);
+        if (save_buffering && save_futures[i].valid())
+            save_futures[i].wait();
+        save_buffers[i] = make_pair("", nullptr);
     }
     void rename_data(const string &old_filename,
                      const string &new_filename) const {
         if (!Parsing::rename_file(old_filename, new_filename))
             throw runtime_error("Renaming '" + old_filename + "' to '" +
                                 new_filename + "' failed.");
+        for (auto &fn : present_filenames)
+            fn = "";
     }
-    // Load one data frame from disk
-    void load_data(int i, const string &filename) const {
-        _t.get_time();
-        ifstream ifs(filename.c_str(), ios::binary);
-        if (!ifs.good())
-            throw runtime_error("DataFrame::load_data on '" + filename +
-                                "' failed.");
+    void load_data_from(int i, istream &ifs) const {
         ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ifs.read((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
         ifs.read((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
         ifs.read((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
+    }
+    // Load one data frame from disk
+    void load_data(int i, const string &filename) const {
+        _t.get_time();
+        if (present_filenames[i] == filename) {
+            return;
+        } else if (load_buffers[i].first == filename) {
+            shared_ptr<stringstream> ss = make_shared<stringstream>();
+            if (load_buffering && present_filenames[i] != "")
+                save_data_to(i, *ss);
+            load_buffers[i].second->clear();
+            load_buffers[i].second->seekg(0);
+            load_data_from(i, *load_buffers[i].second);
+            load_buffers[i] = make_pair(present_filenames[i], ss);
+            present_filenames[i] = filename;
+            tread += _t.get_time();
+            return;
+        } else if (load_buffering && present_filenames[i] != "") {
+            shared_ptr<stringstream> ss = make_shared<stringstream>();
+            save_data_to(i, *ss);
+            load_buffers[i] = make_pair(present_filenames[i], ss);
+        }
+        if (save_buffers[i].first == filename) {
+            if (save_futures[i].valid())
+                save_futures[i].wait();
+            save_buffers[i].second->clear();
+            save_buffers[i].second->seekg(0);
+            load_data_from(i, *save_buffers[i].second);
+            present_filenames[i] = filename;
+            tread += _t.get_time();
+            return;
+        }
+        ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("DataFrame::load_data on '" + filename +
+                                "' failed.");
+        load_data_from(i, ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("DataFrame::load_data on '" + filename +
                                 "' failed.");
         ifs.close();
         tread += _t.get_time();
         update_peak_used_memory();
+        present_filenames[i] = filename;
+    }
+    void save_data_to(int i, ostream &ofs) const {
+        ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
+        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
+        ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
+        ofs.write((char *)iallocs[i]->data,
+                  sizeof(uint32_t) * iallocs[i]->used);
+    }
+    static void buffer_save_data(const string &filename,
+                                 const shared_ptr<stringstream> &ss,
+                                 double *tasync) {
+        Timer tx;
+        tx.get_time();
+        if (Parsing::link_exists(filename))
+            Parsing::remove_file(filename);
+        ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("DataFrame::buffer_save_data on '" + filename +
+                                "' failed.");
+        ss->clear();
+        ss->seekg(0);
+        ofs << ss->rdbuf();
+        if (!ofs.good())
+            throw runtime_error("DataFrame::buffer_save_data on '" + filename +
+                                "' failed.");
+        ofs.close();
+        *tasync += tx.get_time();
     }
     // Save one data frame to disk
     void save_data(int i, const string &filename) const {
         _t.get_time();
+        if (save_buffering) {
+            if (save_futures[i].valid())
+                save_futures[i].wait();
+            shared_ptr<stringstream> ss = make_shared<stringstream>();
+            save_data_to(i, *ss);
+            save_buffers[i] = make_pair(filename, ss);
+            save_futures[i] = async(launch::async, &DataFrame::buffer_save_data,
+                                    filename, ss, &tasync);
+            twrite += _t.get_time();
+            update_peak_used_memory();
+            present_filenames[i] = filename;
+            return;
+        }
         if (Parsing::link_exists(filename))
             Parsing::remove_file(filename);
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
             throw runtime_error("DataFrame::save_data on '" + filename +
                                 "' failed.");
-        ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
-        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
-        ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
-        ofs.write((char *)iallocs[i]->data,
-                  sizeof(uint32_t) * iallocs[i]->used);
+        save_data_to(i, ofs);
         if (!ofs.good())
             throw runtime_error("DataFrame::save_data on '" + filename +
                                 "' failed.");
         ofs.close();
         twrite += _t.get_time();
         update_peak_used_memory();
+        present_filenames[i] = filename;
     }
     void deallocate() {
         delete[] iallocs[0]->data;
         delete[] dallocs[0]->data;
         iallocs.clear();
         dallocs.clear();
+        if (save_buffering)
+            for (const auto &ft : save_futures)
+                if (ft.valid())
+                    ft.wait();
     }
     size_t memory_used() const {
         size_t r = 0;

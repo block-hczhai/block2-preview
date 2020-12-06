@@ -64,7 +64,7 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     double energy_std = -107.654122447525;
 
 #ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(1);
+    mkl_set_num_threads(4);
     mkl_set_dynamic(0);
 #endif
 
@@ -153,7 +153,8 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     // DMRG
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
-    dmrg->noise_type = NoiseTypes::Perturbative;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
@@ -188,19 +189,28 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     imps_info->save_mutable();
     imps_info->deallocate_mutable();
 
-    // Identity ME
+    // Negative identity ME
     shared_ptr<MovingEnvironment<S>> ime =
-        make_shared<MovingEnvironment<S>>(impo, imps, mps, "COMPRESS");
+        make_shared<MovingEnvironment<S>>(-impo, imps, mps, "COMPRESS");
     ime->init_environments();
+
+    // Left ME
+    shared_ptr<MovingEnvironment<S>> lme =
+        make_shared<MovingEnvironment<S>>(mpo, imps, imps, "LINEAR");
+    double ce = mpo->const_e;
+    mpo->const_e = 0;
+    lme->init_environments();
 
     // Linear
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
-    noises = {0.0};
+    noises = {1E-4, 1E-6, 1E-8, 0};
     shared_ptr<Linear<S>> cps =
-        make_shared<Linear<S>>(ime, bra_bdims, ket_bdims, noises);
-    double norm = cps->solve(10, mps->center == 0);
+        make_shared<Linear<S>>(lme, ime, bra_bdims, ket_bdims, noises);
+    cps->noise_type = NoiseTypes::ReducedPerturbative;
+    cps->decomp_type = DecompositionTypes::DensityMatrix;
+    double norm = cps->solve(10, mps->center == 0, 1E-10);
 
-    EXPECT_LT(abs(norm - 1.0), 1E-7);
+    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), 1E-7);
 
     // Energy ME
     shared_ptr<MovingEnvironment<S>> eme =
@@ -226,7 +236,7 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 
     para_comm->tcomm = 0.0;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    EXPECT_LT(abs(energy + 1.0), 1E-7);
 
     imps_info->deallocate();
     mps_info->deallocate();

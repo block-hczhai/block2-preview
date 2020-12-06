@@ -182,7 +182,7 @@ TEST_F(TestDMRG, Test) {
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
-    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->solve(50, true, 0.0);

@@ -803,6 +803,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def("save_right_dims", &MPSInfo<S>::save_right_dims)
         .def("load_left_dims", &MPSInfo<S>::load_left_dims)
         .def("load_right_dims", &MPSInfo<S>::load_right_dims)
+        .def("deep_copy", &MPSInfo<S>::deep_copy)
         .def("deallocate", &MPSInfo<S>::deallocate);
 
     py::class_<DynamicMPSInfo<S>, shared_ptr<DynamicMPSInfo<S>>, MPSInfo<S>>(
@@ -1851,6 +1852,7 @@ template <typename S> void bind_mpo(py::module &m) {
         .def("estimate_storage", &MPO<S>::estimate_storage, py::arg("info"),
              py::arg("dot"))
         .def("deallocate", &MPO<S>::deallocate)
+        .def("deep_copy", &MPO<S>::deep_copy)
         .def("__neg__",
              [](MPO<S> *self) { return -make_shared<MPO<S>>(*self); })
         .def("__mul__", [](MPO<S> *self,
@@ -2111,11 +2113,23 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Nothing", NoiseTypes::None)
         .value("Wavefunction", NoiseTypes::Wavefunction)
         .value("DensityMatrix", NoiseTypes::DensityMatrix)
-        .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("Perturbative", NoiseTypes::Perturbative)
+        .value("Collected", NoiseTypes::Collected)
+        .value("Reduced", NoiseTypes::Reduced)
+        .value("Unscaled", NoiseTypes::Unscaled)
+        .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("ReducedPerturbativeUnscaled",
                NoiseTypes::ReducedPerturbativeUnscaled)
-        .value("PerturbativeUnscaled", NoiseTypes::PerturbativeUnscaled);
+        .value("PerturbativeUnscaled", NoiseTypes::PerturbativeUnscaled)
+        .value("PerturbativeCollected", NoiseTypes::PerturbativeCollected)
+        .value("PerturbativeUnscaledCollected",
+               NoiseTypes::PerturbativeUnscaledCollected)
+        .value("ReducedPerturbativeCollected",
+               NoiseTypes::ReducedPerturbativeCollected)
+        .value("ReducedPerturbativeUnscaledCollected",
+               NoiseTypes::ReducedPerturbativeUnscaledCollected)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
         .value("Physical", TruncationTypes::Physical)
@@ -2302,6 +2316,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("iallocs", &DataFrame::iallocs)
         .def_readwrite("dallocs", &DataFrame::dallocs)
         .def_readwrite("peak_used_memory", &DataFrame::peak_used_memory)
+        .def_readwrite("load_buffering", &DataFrame::load_buffering)
+        .def_readwrite("save_buffering", &DataFrame::save_buffering)
         .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)
         .def("activate", &DataFrame::activate)
@@ -2558,6 +2574,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
             "    Args:\n"
             "        i, j, k, l : spatial indices\n"
             "        sij, skl : spin indices (0=alpha, 1=beta)")
+        .def("det_energy", &FCIDUMP::det_energy)
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,
                       "Orbital symmetry in molpro convention")
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)

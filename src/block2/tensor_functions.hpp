@@ -103,7 +103,7 @@ template <typename S> struct TensorFunctions {
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             &cinfos,
         const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
-        int &vidx) const {
+        int &vidx, bool do_reduce) const {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         // if no identity operator found in one side,
@@ -289,7 +289,7 @@ template <typename S> struct TensorFunctions {
             for (auto &x : op->strings)
                 tensor_product_partial_multiply(x, lopt, ropt, trace_right,
                                                 cmat, psubsl, cinfos, vdqs,
-                                                vmats, vidx);
+                                                vmats, vidx, false);
         } break;
         case OpTypes::Zero:
             break;

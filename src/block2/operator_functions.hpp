@@ -36,13 +36,24 @@ enum struct NoiseTypes : uint8_t {
     Wavefunction = 1,
     DensityMatrix = 2,
     Perturbative = 4,
-    ReducedPerturbative = 5,
-    PerturbativeUnscaled = 6,
-    ReducedPerturbativeUnscaled = 7
+    Reduced = 8,
+    Unscaled = 16,
+    Collected = 32,
+    ReducedPerturbative = 4 | 8,
+    PerturbativeUnscaled = 4 | 16,
+    ReducedPerturbativeUnscaled = 4 | 8 | 16,
+    PerturbativeCollected = 4 | 32,
+    PerturbativeUnscaledCollected = 4 | 16 | 32,
+    ReducedPerturbativeCollected = 4 | 8 | 32,
+    ReducedPerturbativeUnscaledCollected = 4 | 8 | 16 | 32
 };
 
 inline bool operator&(NoiseTypes a, NoiseTypes b) {
     return ((uint8_t)a & (uint8_t)b) != 0;
+}
+
+inline NoiseTypes operator|(NoiseTypes a, NoiseTypes b) {
+    return NoiseTypes((uint8_t)a | (uint8_t)b);
 }
 
 // SparseMatrix operations
@@ -471,15 +482,17 @@ template <typename S> struct OperatorFunctions {
                b->get_type() == SparseMatrixTypes::Normal);
         double scale = a->factor * a->factor, noise_scale = 0;
         assert(b->factor == 1.0);
-        if (abs(scale) < TINY && noise == 0.0)
+        if (abs(scale) < TINY &&
+            (noise == 0.0 || (!(noise_type & NoiseTypes::Wavefunction) &&
+                              !(noise_type & NoiseTypes::DensityMatrix))))
             return;
         SparseMatrix<S> tmp;
-        if (noise != 0 && noise_type == NoiseTypes::Wavefunction) {
+        if (noise != 0 && (noise_type & NoiseTypes::Wavefunction)) {
             tmp.allocate(a->info);
             tmp.randomize(-0.5, 0.5);
             noise_scale = noise / tmp.norm();
             noise_scale *= noise_scale;
-        } else if (noise != 0 && noise_type == NoiseTypes::DensityMatrix) {
+        } else if (noise != 0 && (noise_type & NoiseTypes::DensityMatrix)) {
             tmp.allocate(b->info);
             tmp.randomize(0.0, 1.0);
             noise_scale = noise * noise / tmp.norm();
@@ -492,11 +505,11 @@ template <typename S> struct OperatorFunctions {
                     continue;
                 MatrixFunctions::multiply((*a)[ia], false, (*a)[ia], true,
                                           (*b)[ib], scale, 1.0);
-                if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
+                if (noise_scale != 0 && (noise_type & NoiseTypes::Wavefunction))
                     MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
                                               (*b)[ib], noise_scale, 1.0);
                 else if (noise_scale != 0 &&
-                         noise_type == NoiseTypes::DensityMatrix)
+                         (noise_type & NoiseTypes::DensityMatrix))
                     MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         else
@@ -507,11 +520,11 @@ template <typename S> struct OperatorFunctions {
                     continue;
                 MatrixFunctions::multiply((*a)[ia], true, (*a)[ia], false,
                                           (*b)[ib], scale, 1.0);
-                if (noise_scale != 0 && noise_type == NoiseTypes::Wavefunction)
+                if (noise_scale != 0 && (noise_type & NoiseTypes::Wavefunction))
                     MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
                                               (*b)[ib], noise_scale, 1.0);
                 else if (noise_scale != 0 &&
-                         noise_type == NoiseTypes::DensityMatrix)
+                         (noise_type & NoiseTypes::DensityMatrix))
                     MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         if (noise != 0)

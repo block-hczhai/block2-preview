@@ -107,6 +107,18 @@ template <typename S> struct ParallelMPO : MPO<S> {
         return rule->get_parallel_type();
     }
     void deallocate() override { prim_mpo->deallocate(); }
+    shared_ptr<MPO<S>> scalar_multiply(double d) const override {
+        shared_ptr<MPO<S>> rmpo = make_shared<ParallelMPO<S>>(*this);
+        assert(rmpo->middle_operator_exprs.size() != 0);
+        for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+            auto &x = rmpo->middle_operator_exprs[ix];
+            x = x->copy();
+            for (size_t j = 0; j < x->data.size(); j++)
+                x->data[j] = d * x->data[j];
+        }
+        rmpo->const_e = d * rmpo->const_e;
+        return rmpo;
+    }
 };
 
 } // namespace block2

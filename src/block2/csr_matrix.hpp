@@ -58,7 +58,7 @@ struct CSRMatrixRef {
         else
             return nnz == m * n ? nnz : nnz + nnz + m + 1;
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         ifs.read((char *)&m, sizeof(m));
         ifs.read((char *)&n, sizeof(n));
         ifs.read((char *)&nnz, sizeof(nnz));
@@ -72,7 +72,7 @@ struct CSRMatrixRef {
         } else
             cols = rows = nullptr;
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         ofs.write((char *)&m, sizeof(m));
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)&nnz, sizeof(nnz));

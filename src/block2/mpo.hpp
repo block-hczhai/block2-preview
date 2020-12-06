@@ -62,7 +62,7 @@ template <typename S> struct MPOSchemer {
                 right_new_operator_exprs->copy());
         return r;
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         ifs.read((char *)&left_trans_site, sizeof(left_trans_site));
         ifs.read((char *)&right_trans_site, sizeof(right_trans_site));
         left_new_operator_names =
@@ -76,7 +76,7 @@ template <typename S> struct MPOSchemer {
             dynamic_pointer_cast<SymbolicColumnVector<S>>(
                 load_symbolic<S>(ifs));
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         ofs.write((char *)&left_trans_site, sizeof(left_trans_site));
         ofs.write((char *)&right_trans_site, sizeof(right_trans_site));
         save_symbolic<S>(left_new_operator_names, ofs);
@@ -250,7 +250,7 @@ template <typename S> struct MPO {
         for (int16_t m = n_sites - 1; m >= 0; m--)
             tensors[m]->deallocate();
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&const_e, sizeof(const_e));
         sparse_form = string(n_sites, 'N');
@@ -326,7 +326,7 @@ template <typename S> struct MPO {
             throw runtime_error("MPO:load_data on '" + filename + "' failed.");
         ifs.close();
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         ofs.write((char *)&n_sites, sizeof(n_sites));
         ofs.write((char *)&const_e, sizeof(const_e));
         ofs.write((char *)&sparse_form[0], sizeof(char) * n_sites);
@@ -391,6 +391,14 @@ template <typename S> struct MPO {
             throw runtime_error("MPO:save_data on '" + filename + "' failed.");
         ofs.close();
     }
+    shared_ptr<MPO<S>> deep_copy() const {
+        stringstream ss;
+        save_data(ss);
+        shared_ptr<MPO<S>> mpo = make_shared<MPO<S>>(0);
+        mpo->load_data(ss);
+        mpo->tf = this->tf;
+        return mpo;
+    }
     string get_blocking_formulas() const {
         stringstream ss;
         for (int i = 0; i < n_sites; i++) {
@@ -433,20 +441,23 @@ template <typename S> struct MPO {
             ss << schemer->get_transform_formulas() << endl;
         return ss.str();
     }
+    virtual shared_ptr<MPO<S>> scalar_multiply(double d) const {
+        shared_ptr<MPO<S>> rmpo = make_shared<MPO<S>>(*this);
+        assert(rmpo->middle_operator_exprs.size() != 0);
+        for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+            auto &x = rmpo->middle_operator_exprs[ix];
+            x = x->copy();
+            for (size_t j = 0; j < x->data.size(); j++)
+                x->data[j] = d * x->data[j];
+        }
+        rmpo->const_e = d * rmpo->const_e;
+        return rmpo;
+    }
 };
 
 template <typename S>
 inline shared_ptr<MPO<S>> operator*(double d, const shared_ptr<MPO<S>> &mpo) {
-    shared_ptr<MPO<S>> rmpo = make_shared<MPO<S>>(*mpo);
-    assert(rmpo->middle_operator_exprs.size() != 0);
-    for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
-        auto &x = rmpo->middle_operator_exprs[ix];
-        x = x->copy();
-        for (size_t j = 0; j < x->data.size(); j++)
-            x->data[j] = d * x->data[j];
-    }
-    rmpo->const_e = d * rmpo->const_e;
-    return rmpo;
+    return mpo->scalar_multiply(d);
 }
 
 template <typename S>

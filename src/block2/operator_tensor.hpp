@@ -61,7 +61,7 @@ template <typename S> struct OperatorTensor {
             for (const auto &t : it->second)
                 t->deallocate();
     }
-    void load_data(ifstream &ifs) {
+    void load_data(istream &ifs) {
         bool lr;
         ifs.read((char *)&lr, sizeof(lr));
         if (lr) {
@@ -97,7 +97,7 @@ template <typename S> struct OperatorTensor {
             ops[expr] = mat;
         }
     }
-    void save_data(ofstream &ofs) const {
+    void save_data(ostream &ofs) const {
         bool lr = lmat == rmat;
         ofs.write((char *)&lr, sizeof(lr));
         if (lr)

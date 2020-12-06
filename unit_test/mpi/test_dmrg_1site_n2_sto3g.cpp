@@ -205,6 +205,9 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSU2) {
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
                    DecompositionTypes::DensityMatrix,
                    NoiseTypes::ReducedPerturbative);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT COL",
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbativeCollected);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT SVD",
@@ -263,6 +266,9 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSZ) {
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
                   DecompositionTypes::DensityMatrix,
                   NoiseTypes::ReducedPerturbative);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT COL",
+                  DecompositionTypes::DensityMatrix,
+                  NoiseTypes::ReducedPerturbativeCollected);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT SVD",

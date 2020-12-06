@@ -105,7 +105,7 @@ template <typename S> struct MPSInfo {
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
     virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
-    virtual void load_data(ifstream &ifs) {
+    virtual void load_data(istream &ifs) {
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&vacuum, sizeof(vacuum));
         ifs.read((char *)&target, sizeof(target));
@@ -146,7 +146,7 @@ template <typename S> struct MPSInfo {
                                 "' failed.");
         ifs.close();
     }
-    virtual void save_data(ofstream &ofs) const {
+    virtual void save_data(ostream &ofs) const {
         ofs.write((char *)&n_sites, sizeof(n_sites));
         ofs.write((char *)&vacuum, sizeof(vacuum));
         ofs.write((char *)&target, sizeof(target));
@@ -572,6 +572,13 @@ template <typename S> struct MPSInfo {
         shared_ptr<MPSInfo<S>> info = make_shared<MPSInfo<S>>(*this);
         info->tag = new_tag;
         shallow_copy_to(info);
+        return info;
+    }
+    shared_ptr<MPSInfo<S>> deep_copy() const {
+        stringstream ss;
+        save_data(ss);
+        shared_ptr<MPSInfo<S>> info = make_shared<MPSInfo<S>>(0);
+        info->load_data(ss);
         return info;
     }
     void copy_mutable(const string &dir) const {
@@ -1492,7 +1499,7 @@ template <typename S> struct MPS {
             Parsing::copy_file(get_filename(-1), get_filename(-1, dir));
         }
     }
-    void load_data_from(ifstream &ifs) {
+    void load_data_from(istream &ifs) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         ifs.read((char *)&n_sites, sizeof(n_sites));
@@ -1518,7 +1525,7 @@ template <typename S> struct MPS {
                                 "' failed.");
         ifs.close();
     }
-    void save_data_to(ofstream &ofs) const {
+    void save_data_to(ostream &ofs) const {
         ofs.write((char *)&n_sites, sizeof(n_sites));
         ofs.write((char *)&center, sizeof(center));
         ofs.write((char *)&dot, sizeof(dot));

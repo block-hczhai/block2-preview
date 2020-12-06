@@ -499,7 +499,7 @@ template <typename S> struct OpExprRef : OpExpr<S> {
 };
 
 template <typename S>
-inline void save_expr(const shared_ptr<OpExpr<S>> &x, ofstream &ofs) {
+inline void save_expr(const shared_ptr<OpExpr<S>> &x, ostream &ofs) {
     OpTypes tp = x->get_type();
     ofs.write((char *)&tp, sizeof(tp));
     if (tp == OpTypes::Zero)
@@ -570,7 +570,7 @@ inline void save_expr(const shared_ptr<OpExpr<S>> &x, ofstream &ofs) {
         assert(false);
 }
 
-template <typename S> inline shared_ptr<OpExpr<S>> load_expr(ifstream &ifs) {
+template <typename S> inline shared_ptr<OpExpr<S>> load_expr(istream &ifs) {
     OpTypes tp;
     ifs.read((char *)&tp, sizeof(tp));
     if (tp == OpTypes::Zero)

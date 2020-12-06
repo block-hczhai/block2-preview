@@ -277,7 +277,7 @@ template <typename S> struct TDDMRG {
                                     trunc_type, decomp_type, nullptr);
                         } else {
                             if (noise != 0 && mps == rme->bra) {
-                                if (noise_type == NoiseTypes::Wavefunction)
+                                if (noise_type & NoiseTypes::Wavefunction)
                                     MovingEnvironment<
                                         S>::wavefunction_add_noise(old_wfn,
                                                                    noise);
@@ -499,7 +499,7 @@ template <typename S> struct TDDMRG {
                             trunc_type, decomp_type, nullptr);
                     } else {
                         if (noise != 0 && mps == rme->bra) {
-                            if (noise_type == NoiseTypes::Wavefunction)
+                            if (noise_type & NoiseTypes::Wavefunction)
                                 MovingEnvironment<S>::wavefunction_add_noise(
                                     old_wfn, noise);
                             else if (noise_type & NoiseTypes::Perturbative)

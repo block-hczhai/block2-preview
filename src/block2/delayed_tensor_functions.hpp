@@ -124,7 +124,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             &cinfos,
         const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
-        int &vidx) const override {
+        int &vidx, bool do_reduce) const override {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         if ((!trace_right && lopt->ops.count(i_op) == 0) ||
@@ -210,7 +210,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
             for (auto &x : op->strings)
                 tensor_product_partial_multiply(x, lopt, ropt, trace_right,
                                                 cmat, psubsl, cinfos, vdqs,
-                                                vmats, vidx);
+                                                vmats, vidx, false);
         } break;
         case OpTypes::Zero:
             break;
