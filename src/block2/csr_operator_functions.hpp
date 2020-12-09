@@ -36,6 +36,12 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
     using OperatorFunctions<S>::seq;
     CSROperatorFunctions(const shared_ptr<CG<S>> &cg)
         : OperatorFunctions<S>(cg) {}
+    shared_ptr<OperatorFunctions<S>> copy() const override {
+        shared_ptr<OperatorFunctions<S>> opf =
+            make_shared<CSROperatorFunctions<S>>(this->cg);
+        opf->seq = this->seq->copy();
+        return opf;
+    }
     // a += b * scale
     void iadd(const shared_ptr<SparseMatrix<S>> &a,
               const shared_ptr<SparseMatrix<S>> &b, double scale = 1.0,

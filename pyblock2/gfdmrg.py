@@ -24,8 +24,8 @@ using pyscf and block2.
 Author: Huanchen Zhai, Nov 5, 2020
 """
 
-from block2 import SU2, SZ, Global, OpNamesSet
-from block2 import init_memory, release_memory, set_mkl_num_threads, SiteIndex
+from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
+from block2 import init_memory, release_memory, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
 import time
@@ -70,7 +70,9 @@ class GFDMRG:
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
-        set_mkl_num_threads(omp_threads)
+        Global.threading = Threading(
+            ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
+        Global.threading.seq_type = SeqTypes.Simple
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -106,7 +108,6 @@ class GFDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
     def init_hamiltonian(self, pg, n_sites, n_elec, twos, isym, orb_sym,
@@ -155,7 +156,6 @@ class GFDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
 
         if save_fcidump is not None:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)

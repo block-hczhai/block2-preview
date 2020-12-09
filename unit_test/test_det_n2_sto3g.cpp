@@ -11,6 +11,10 @@ class TestDETN2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -27,11 +31,6 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     vector<double> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
@@ -70,8 +69,6 @@ TEST_F(TestDETN2STO3G, TestSZ) {
               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
 
     Timer t;
     t.get_time();
@@ -123,7 +120,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     vector<double> noises = {1E-8, 0.0};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;
-    dmrg->solve(10, true, 1E-10);
+    dmrg->solve(10, true, 1E-13);
 
     shared_ptr<DeterminantTRIE<SZ>> dtrie =
         make_shared<DeterminantTRIE<SZ>>(mps->n_sites, true);

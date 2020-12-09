@@ -11,6 +11,10 @@ class TestFCIDUMP : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);

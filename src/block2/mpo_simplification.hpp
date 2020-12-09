@@ -22,11 +22,13 @@
 
 #include "mpo.hpp"
 #include "rule.hpp"
+#include "threading.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #define TINY (1E-20)
@@ -98,6 +100,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         MPO<S>::schemer->right_new_operator_exprs->data[j];
             }
         }
+        int ntg = threading->activate_global();
         for (int i = 0; i < MPO<S>::n_sites; i++) {
             if (i == 0) {
                 MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
@@ -298,7 +301,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             MPO<S>::left_operator_names[i]->data.size());
                         memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
-                        map<shared_ptr<OpExpr<S>>, int, op_expr_less<S>> mp;
+                        unordered_map<shared_ptr<OpExpr<S>>, int> mp;
+                        mp.reserve(MPO<S>::left_operator_names[i]->data.size());
                         for (size_t j = 0;
                              j < MPO<S>::left_operator_names[i]->data.size();
                              j++)
@@ -425,7 +429,9 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             MPO<S>::right_operator_names[i]->data.size());
                         memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
-                        map<shared_ptr<OpExpr<S>>, int, op_expr_less<S>> mp;
+                        unordered_map<shared_ptr<OpExpr<S>>, int> mp;
+                        mp.reserve(
+                            MPO<S>::right_operator_names[i]->data.size());
                         for (size_t j = 0;
                              j < MPO<S>::right_operator_names[i]->data.size();
                              j++)
@@ -520,6 +526,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             }
         }
         simplify();
+        threading->activate_normal();
     }
     shared_ptr<OpExpr<S>> simplify_expr(const shared_ptr<OpExpr<S>> &expr,
                                         S op = S(S::invalid)) {
@@ -541,9 +548,10 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> ops = dynamic_pointer_cast<OpSum<S>>(expr);
-            map<shared_ptr<OpExpr<S>>, vector<shared_ptr<OpProduct<S>>>,
-                op_expr_less<S>>
+            unordered_map<shared_ptr<OpExpr<S>>,
+                          vector<shared_ptr<OpProduct<S>>>>
                 mp;
+            mp.reserve(ops->strings.size());
             for (auto &x : ops->strings) {
                 if (x->factor == 0)
                     continue;
@@ -583,9 +591,13 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             else if (terms[0]->b == nullptr || terms.size() <= 2)
                 return make_shared<OpSum<S>>(terms);
             else if (collect_terms && op != S(S::invalid)) {
-                map<shared_ptr<OpExpr<S>>,
-                    map<int, vector<shared_ptr<OpProduct<S>>>>, op_expr_less<S>>
+                unordered_map<shared_ptr<OpExpr<S>>,
+                              map<int, vector<shared_ptr<OpProduct<S>>>>>
                     mpa[2], mpb[2];
+                for (int i = 0; i < 2; i++) {
+                    mpa[i].reserve(terms.size());
+                    mpb[i].reserve(terms.size());
+                }
                 for (auto &x : terms) {
                     assert(x->a != nullptr && x->b != nullptr);
                     if (x->conj & 1)
@@ -739,13 +751,21 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 dynamic_pointer_cast<OpElement<S>>(name->data[j]);
             if (rule->operator()(op) != nullptr)
                 continue;
-            name->data[k] = abs_value(name->data[j]);
-            expr->data[k] =
-                simplify_expr(expr->data[j], op->q_label) * (1 / op->factor);
+            name->data[k] = name->data[j];
+            expr->data[k] = expr->data[j];
             k++;
         }
         name->data.resize(k);
         expr->data.resize(k);
+        int ntg = ref != nullptr ? threading->activate_global() : 1;
+#pragma omp parallel for schedule(static, 20) num_threads(ntg)
+        for (size_t j = 0; j < name->data.size(); j++) {
+            shared_ptr<OpElement<S>> op =
+                dynamic_pointer_cast<OpElement<S>>(name->data[j]);
+            name->data[j] = abs_value(name->data[j]);
+            expr->data[j] =
+                simplify_expr(expr->data[j], op->q_label) * (1 / op->factor);
+        }
         if (use_intermediate) {
             uint16_t idxi = 0, idxj = 0;
             for (size_t j = 0; j < expr->data.size(); j++) {
@@ -785,16 +805,28 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 MPO<S>::right_operator_names[MPO<S>::schemer
                                                  ->right_trans_site]);
         }
+        int ntg = threading->activate_global();
+        vector<int> gidx(MPO<S>::n_sites);
         for (int i = 0; i < MPO<S>::n_sites; i++)
+            gidx[i] = i;
+        if (ntg != 1)
+            sort(gidx.begin(), gidx.end(), [this](int i, int j) {
+                return this->left_operator_names[i]->data.size() >
+                       this->left_operator_names[j]->data.size();
+            });
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (int ii = 0; ii < MPO<S>::n_sites; ii++) {
+            int i = gidx[ii];
             simplify_symbolic(MPO<S>::left_operator_names[i],
                               MPO<S>::left_operator_exprs[i]);
-        for (int i = 0; i < MPO<S>::n_sites; i++)
             simplify_symbolic(MPO<S>::right_operator_names[i],
                               MPO<S>::right_operator_exprs[i]);
-        for (int i = 0; i < MPO<S>::n_sites - 1; i++) {
-            shared_ptr<Symbolic<S>> mexpr = MPO<S>::middle_operator_exprs[i];
-            for (size_t j = 0; j < mexpr->data.size(); j++)
-                mexpr->data[j] = simplify_expr(mexpr->data[j]);
+            if (i < MPO<S>::n_sites - 1) {
+                shared_ptr<Symbolic<S>> mexpr =
+                    MPO<S>::middle_operator_exprs[i];
+                for (size_t j = 0; j < mexpr->data.size(); j++)
+                    mexpr->data[j] = simplify_expr(mexpr->data[j]);
+            }
         }
     }
     AncillaTypes get_ancilla_type() const override {

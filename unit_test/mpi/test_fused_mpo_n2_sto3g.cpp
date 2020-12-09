@@ -47,6 +47,11 @@ class TestFusedMPON2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
+            4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -62,13 +67,6 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                     const vector<vector<double>> &energies,
                                     HamiltonianQC<S> hamil, const string &name,
                                     DecompositionTypes dt, NoiseTypes nt) {
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(1);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<S>> para_comm =
@@ -235,7 +233,11 @@ TEST_F(TestFusedMPON2STO3G, TestSU2) {
     energies.resize(2);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbative);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT COL",
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbativeCollected);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
 
@@ -289,7 +291,11 @@ TEST_F(TestFusedMPON2STO3G, TestSZ) {
     energies.resize(2);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
+                  DecompositionTypes::DensityMatrix,
+                  NoiseTypes::ReducedPerturbative);
+    test_dmrg<SZ>(targets, energies, hamil, "SU2 PERT COL",
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbativeCollected);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
 

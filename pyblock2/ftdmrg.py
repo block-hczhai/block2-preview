@@ -27,7 +27,7 @@ Revised:     added sz, May 18, 2020
 from block2 import SU2, SZ
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
-from block2 import init_memory, release_memory, set_mkl_num_threads
+from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 import time
 import numpy as np
 
@@ -59,7 +59,9 @@ class FTDMRG:
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
-        set_mkl_num_threads(omp_threads)
+        Global.threading = Threading(
+            ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
+        Global.threading.seq_type = SeqTypes.Simple
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -80,7 +82,6 @@ class FTDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_physical_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
     def init_hamiltonian(self, pg, n_sites, twos, isym, orb_sym, e_core, h1e, g2e, tol=1E-13, save_fcidump=None):
@@ -129,7 +130,6 @@ class FTDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_physical_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
 
         if save_fcidump is not None:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)

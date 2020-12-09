@@ -22,6 +22,7 @@
 
 #include "matrix.hpp"
 #include "matrix_functions.hpp"
+#include "threading.hpp"
 #ifdef _HAS_INTEL_MKL
 #include "mkl.h"
 #endif
@@ -82,6 +83,38 @@ inline void cblas_dgemm_batch(
 }
 
 #endif
+
+inline void threaded_dgemm_batch(
+    const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
+    const CBLAS_TRANSPOSE *TransB_Array, const MKL_INT *M_Array,
+    const MKL_INT *N_Array, const MKL_INT *K_Array, const double *alpha_Array,
+    const double **A_Array, const MKL_INT *lda_Array, const double **B_Array,
+    const MKL_INT *ldb_Array, const double *beta_Array, double **C_Array,
+    const MKL_INT *ldc_Array, const MKL_INT group_count,
+    const MKL_INT *group_size) {
+    assert(Layout == CblasRowMajor);
+    vector<MKL_INT> gidxs;
+    gidxs.reserve(group_count);
+    for (MKL_INT ig = 0, i = 0; ig < group_count; ig++) {
+        const MKL_INT gsize = group_size[ig];
+        gidxs.insert(gidxs.end(), gsize, ig);
+        i += gsize;
+    }
+    int ntq = threading->activate_quanta();
+#pragma omp parallel for schedule(dynamic) num_threads(ntq)
+    for (MKL_INT i = 0; i < (int)gidxs.size(); i++) {
+        const MKL_INT ig = gidxs[i];
+        const char *tra = TransA_Array[ig] == CblasNoTrans ? "n" : "t";
+        const char *trb = TransB_Array[ig] == CblasNoTrans ? "n" : "t";
+        const MKL_INT m = M_Array[ig], n = N_Array[ig], k = K_Array[ig];
+        const double alpha = alpha_Array[ig], beta = beta_Array[ig];
+        const MKL_INT lda = lda_Array[ig], ldb = ldb_Array[ig],
+                      ldc = ldc_Array[ig];
+        const MKL_INT gsize = group_size[ig];
+        dgemm(trb, tra, &n, &m, &k, &alpha, B_Array[i], &ldb, A_Array[i], &lda,
+              &beta, C_Array[i], &ldc);
+    }
+}
 
 // The parameters for a series of DGEMM operations
 struct BatchGEMM {
@@ -263,11 +296,19 @@ struct BatchGEMM {
     }
     // Execute DGEMM operation groups from index ii to ii + nn
     void perform(MKL_INT ii = 0, MKL_INT kk = 0, MKL_INT nn = 0) {
-        if (nn != 0 || gp.size() != 0)
-            cblas_dgemm_batch(layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
-                              &alpha[ii], &a[kk], &lda[ii], &b[kk], &ldb[ii],
-                              &beta[ii], &c[kk], &ldc[ii],
-                              nn == 0 ? (MKL_INT)gp.size() : nn, &gp[ii]);
+        if (nn != 0 || gp.size() != 0) {
+            if (threading->type & ThreadingTypes::Quanta)
+                threaded_dgemm_batch(
+                    layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
+                    &alpha[ii], &a[kk], &lda[ii], &b[kk], &ldb[ii], &beta[ii],
+                    &c[kk], &ldc[ii], nn == 0 ? (MKL_INT)gp.size() : nn,
+                    &gp[ii]);
+            else
+                cblas_dgemm_batch(layout, &ta[ii], &tb[ii], &m[ii], &n[ii],
+                                  &k[ii], &alpha[ii], &a[kk], &lda[ii], &b[kk],
+                                  &ldb[ii], &beta[ii], &c[kk], &ldc[ii],
+                                  nn == 0 ? (MKL_INT)gp.size() : nn, &gp[ii]);
+        }
     }
     void clear() {
         ta.clear(), tb.clear();
@@ -310,16 +351,6 @@ struct BatchGEMMRef {
     }
 };
 
-// Method of DGEMM parallelism
-// None:   DGEMM are not parallelized
-//         (but parallelism may happen inside each DGEMM)
-// Simple: DGEMM are completely parallelized
-//         (each DGEMM should write output to different memory)
-// Auto:   DGEMM automatically divided into several batches
-//         (conflicts of output are automatically resolved by
-//         introducing temporary arrays)
-enum struct SeqTypes : uint8_t { None, Simple, Auto };
-
 // Batched DGEMM analyzer
 struct BatchGEMMSeq {
     shared_ptr<vector<double>> vdata;
@@ -337,6 +368,14 @@ struct BatchGEMMSeq {
         : max_batch_flops(max_batch_flops), mode(mode), vdata(nullptr) {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
+    }
+    shared_ptr<BatchGEMMSeq> copy() const {
+        shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(*this);
+        assert(seq->vdata == nullptr);
+        seq->batch.clear();
+        seq->batch.push_back(make_shared<BatchGEMM>());
+        seq->batch.push_back(make_shared<BatchGEMM>());
+        return seq;
     }
     // [a] = cfactor * [a] + scale * [b]
     void iadd(const MatrixRef &a, const MatrixRef &b, double scale = 1.0,

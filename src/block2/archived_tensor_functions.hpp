@@ -275,7 +275,7 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
     void tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
                                  const shared_ptr<OperatorTensor<S>> &lopt,
                                  const shared_ptr<OperatorTensor<S>> &ropt,
-                                 shared_ptr<SparseMatrix<S>> &mat,
+                                 const shared_ptr<SparseMatrix<S>> &mat,
                                  S opdq) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
@@ -310,13 +310,12 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         }
     }
     // mat = eval(expr)
-    void
-    tensor_product(const shared_ptr<OpExpr<S>> &expr,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &lop,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &rop,
-                   shared_ptr<SparseMatrix<S>> &mat) const override {
+    void tensor_product(const shared_ptr<OpExpr<S>> &expr,
+                        const unordered_map<shared_ptr<OpExpr<S>>,
+                                            shared_ptr<SparseMatrix<S>>> &lop,
+                        const unordered_map<shared_ptr<OpExpr<S>>,
+                                            shared_ptr<SparseMatrix<S>>> &rop,
+                        shared_ptr<SparseMatrix<S>> &mat) const override {
         shared_ptr<ArchivedSparseMatrix<S>> aromat = nullptr;
         shared_ptr<SparseMatrix<S>> omat;
         if (mat->get_type() == SparseMatrixTypes::Archived) {

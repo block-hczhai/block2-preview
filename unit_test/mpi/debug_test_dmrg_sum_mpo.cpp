@@ -41,6 +41,10 @@ class TestDMRG : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -52,11 +56,6 @@ class TestDMRG : public ::testing::Test {
 bool TestDMRG::_mpi = MPITest::okay();
 
 TEST_F(TestDMRG, Test) {
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(4);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<SZ>> para_comm =
@@ -214,7 +213,6 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SZ>> me =
         make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
     t.get_time();

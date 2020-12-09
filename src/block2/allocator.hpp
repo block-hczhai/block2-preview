@@ -21,10 +21,14 @@
 #pragma once
 
 #include "utils.hpp"
+#ifdef _HAS_TBB
+#include "tbb/scalable_allocator.h"
+#endif
 #include <algorithm>
 #ifdef __unix__
 #include <execinfo.h>
 #endif
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -107,7 +111,13 @@ template <typename T> struct StackAllocator : Allocator<T> {
 
 // Vector memory allocator (with automatic deallocation)
 template <typename T> struct VectorAllocator : Allocator<T> {
+#ifdef _HAS_TBB
+    vector<vector<T, tbb::scalable_allocator<T>>,
+           tbb::scalable_allocator<vector<T, tbb::scalable_allocator<T>>>>
+        data;
+#else
     vector<vector<T>> data;
+#endif
     VectorAllocator() {}
     T *allocate(size_t n) override {
         data.emplace_back(n);

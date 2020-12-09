@@ -53,7 +53,7 @@ For unit tests, `googletest` is required.
 
     mkdir build
     cd build
-    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DTBB=ON
     make -j 10
 
 This will build the python extension (using 10 CPU cores) (serial code).
@@ -90,16 +90,34 @@ To build unit tests and binary executable (instead of python extension), use the
 
     cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON
 
+### TBB (Intel Threading Building Blocks)
+
+Adding (optional) option `-DTBB=ON` will utilize `malloc` from `tbbmalloc`.
+This can improve multi-threading performance.
+
 ### openMP
 
-If intel openMP library `libiomp5` is not available, one can use gnu openMP library.
-The following will switch to gnu openMP library:
+If gnu openMP library `libiomp5` is not available, one can use intel openMP library.
 
-    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=GNU
+The following will switch to intel openMP library (incompatible with `-fopenmp`):
+
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=INTEL
 
 The following will use sequential mkl library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=SEQ
+
+The following will use tbb mkl library:
+
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=TBB -DTBB=ON
+
+Note: for `CSR sparse MKL + ThreadingTypes::Operator`, if `-DOMP_LIB=GNU`,
+it is not possible to set both `n_threads_mkl` not equal to 1 and `n_threads_op` not equal to 1.
+In other words, nested openMP is not possible for CSR sparse matrix (generating wrong result/non-convergence).
+For `-DOMP_LIB=SEQ`, CSR sparse matrix is okay (non-nested openMP).
+For `-DOMP_LIB=TBB`, nested openMP + TBB MKL is okay.
+
+`-DTBB=ON` can be combined with any `-DOMP_LIB=...`.
 
 ### Maximal bond dimension
 

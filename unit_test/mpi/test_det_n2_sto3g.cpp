@@ -40,6 +40,10 @@ class TestDETN2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -58,11 +62,6 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(1);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<SZ>> para_comm =
@@ -111,8 +110,6 @@ TEST_F(TestDETN2STO3G, TestSZ) {
               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
 
     Timer t;
     t.get_time();

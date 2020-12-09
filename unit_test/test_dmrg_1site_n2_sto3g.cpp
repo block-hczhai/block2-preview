@@ -16,9 +16,12 @@ class TestOneSiteDMRGN2STO3G : public ::testing::Test {
                    DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
-        cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::None;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -33,14 +36,6 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                        const HamiltonianQC<S> &hamil,
                                        const string &name,
                                        DecompositionTypes dt, NoiseTypes nt) {
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
-
     Timer t;
     t.get_time();
     // MPO construction

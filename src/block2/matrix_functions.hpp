@@ -194,11 +194,13 @@ struct MatrixFunctions {
     static size_t rotate(const MatrixRef &a, const MatrixRef &c,
                          const MatrixRef &bra, bool conj_bra,
                          const MatrixRef &ket, bool conj_ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
-        work.allocate();
+        work.allocate(d_alloc);
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
-        work.deallocate();
+        work.deallocate(d_alloc);
         return (size_t)ket.m * ket.n * work.m + (size_t)work.m * work.n * c.m;
     }
     // dleft == true : c = bra (= da x db) * a * ket
@@ -210,6 +212,8 @@ struct MatrixFunctions {
                                const MatrixRef &da, bool dconja,
                                const MatrixRef &db, bool dconjb, bool dleft,
                                double scale, uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
@@ -217,7 +221,7 @@ struct MatrixFunctions {
             uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
             uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
             MatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
-            work.allocate();
+            work.allocate(d_alloc);
             // work = a * ket
             multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket, conj_ket, work,
                      1.0, 0.0);
@@ -231,7 +235,7 @@ struct MatrixFunctions {
                          MatrixRef(&c(cst, 0), cm, c.n), scale * *db.data, 1.0);
             else
                 assert(false);
-            work.deallocate();
+            work.deallocate(d_alloc);
             return (size_t)ket.m * ket.n * work.m +
                    (size_t)work.m * work.n * cm;
         } else {
@@ -241,7 +245,7 @@ struct MatrixFunctions {
             uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
             uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
             MatrixRef work(nullptr, a.m, kn);
-            work.allocate();
+            work.allocate(d_alloc);
             if (da.m == 1 && da.n == 1)
                 // work = a * (1 x db)
                 multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db, dconjb,
@@ -255,7 +259,7 @@ struct MatrixFunctions {
             // c = bra * work
             multiply(bra, conj_bra, work, false,
                      MatrixRef(&c(0, cst), c.m, c.n), 1.0, 1.0);
-            work.deallocate();
+            work.deallocate(d_alloc);
             return (size_t)km * kn * work.m + (size_t)work.m * work.n * c.m;
         }
     }

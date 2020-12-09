@@ -21,6 +21,7 @@
 #pragma once
 
 #include "expr.hpp"
+#include "threading.hpp"
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
@@ -241,29 +242,57 @@ operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
                b->get_type() == SymTypes::Mat) {
         shared_ptr<SymbolicRowVector<S>> r(
             make_shared<SymbolicRowVector<S>>(b->n));
+        int ntg = threading->activate_global();
         vector<pair<int, int>> &idx =
             dynamic_pointer_cast<SymbolicMatrix<S>>(b)->indices;
-        vector<shared_ptr<OpExpr<S>>> xs[b->n];
-        for (size_t k = 0; k < b->data.size(); k++) {
-            int i = idx[k].first, j = idx[k].second;
-            xs[j].push_back(a->data[i] * b->data[k]);
+        vector<int> pidx(idx.size());
+        for (int i = 0; i < pidx.size(); i++)
+            pidx[i] = i;
+        sort(pidx.begin(), pidx.end(),
+             [&idx](int i, int j) { return idx[i].second < idx[j].second; });
+#pragma omp parallel for schedule(static, 50) num_threads(ntg)
+        for (size_t j = 0; j < b->n; j++) {
+            size_t ki = lower_bound(pidx.begin(), pidx.end(), j,
+                                    [&idx](int ii, int jj) {
+                                        return idx[ii].second < jj;
+                                    }) -
+                        pidx.begin();
+            vector<shared_ptr<OpExpr<S>>> xs;
+            xs.reserve(pidx.size() - ki);
+            for (size_t k = ki; k < pidx.size() && idx[pidx[k]].second == j;
+                 k++)
+                xs.push_back(a->data[idx[pidx[k]].first] * b->data[pidx[k]]);
+            (*r)[j] = sum(xs);
         }
-        for (size_t j = 0; j < b->n; j++)
-            (*r)[j] = sum(xs[j]);
+        threading->activate_normal();
         return r;
     } else if (a->get_type() == SymTypes::Mat &&
                b->get_type() == SymTypes::CVec) {
         shared_ptr<SymbolicColumnVector<S>> r(
             make_shared<SymbolicColumnVector<S>>(a->m));
+        int ntg = threading->activate_global();
         vector<pair<int, int>> &idx =
             dynamic_pointer_cast<SymbolicMatrix<S>>(a)->indices;
-        vector<shared_ptr<OpExpr<S>>> xs[a->m];
-        for (size_t k = 0; k < a->data.size(); k++) {
-            int i = idx[k].first, j = idx[k].second;
-            xs[i].push_back(a->data[k] * b->data[j]);
+        vector<int> pidx(idx.size());
+        for (int i = 0; i < pidx.size(); i++)
+            pidx[i] = i;
+        sort(pidx.begin(), pidx.end(),
+             [&idx](int i, int j) { return idx[i].first < idx[j].first; });
+#pragma omp parallel for schedule(static, 50) num_threads(ntg)
+        for (size_t i = 0; i < a->m; i++) {
+            size_t ki = lower_bound(pidx.begin(), pidx.end(), i,
+                                    [&idx](int ii, int jj) {
+                                        return idx[ii].first < jj;
+                                    }) -
+                        pidx.begin();
+            vector<shared_ptr<OpExpr<S>>> xs;
+            xs.reserve(pidx.size() - ki);
+            for (size_t k = ki; k < pidx.size() && idx[pidx[k]].first == i;
+                 k++)
+                xs.push_back(a->data[pidx[k]] * b->data[idx[pidx[k]].second]);
+            (*r)[i] = sum(xs);
         }
-        for (size_t i = 0; i < a->m; i++)
-            (*r)[i] = sum(xs[i]);
+        threading->activate_normal();
         return r;
     } else if (a->get_type() == SymTypes::RVec &&
                b->get_type() == SymTypes::CVec) {

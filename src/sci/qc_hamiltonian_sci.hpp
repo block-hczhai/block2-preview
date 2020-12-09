@@ -191,8 +191,7 @@ public:
 
   protected:
     void get_site_ops(uint16_t m,
-                      map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                          op_expr_less<S>> &ops) const override {
+                      unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops) const override {
         shared_ptr<HamiltonianQCSCI> ph = nullptr;
         if (delayed != DelayedSCIOpNames::None) {
             ph = make_shared<HamiltonianQCSCI>(*this);
@@ -608,7 +607,7 @@ public:
         }
     }
     void get_site_ops_big_site(const std::shared_ptr<sci::AbstractSciWrapper<S>>& sciWrapper,
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
             &ops, int iSite) const {
         int ii, jj; // spin orbital indices
         // For optimization purposes (parallelization + orbital loop elsewhere

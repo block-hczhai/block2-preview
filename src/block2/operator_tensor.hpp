@@ -27,6 +27,7 @@
 #include "symbolic.hpp"
 #include <map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 using namespace std;
@@ -41,8 +42,7 @@ template <typename S> struct OperatorTensor {
     // For normal MPO, lmat and rmat are the same
     shared_ptr<Symbolic<S>> lmat, rmat;
     // SparseMatrix representation of symbols
-    map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-        ops;
+    unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> ops;
     OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
     virtual ~OperatorTensor() = default;
     virtual const OperatorTensorTypes get_type() const {
@@ -54,12 +54,17 @@ template <typename S> struct OperatorTensor {
     }
     virtual void deallocate() {
         // need to check order in parallel mode
-        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
+        vector<pair<double *, shared_ptr<SparseMatrix<S>>>> mp;
+        mp.reserve(ops.size());
         for (auto it = ops.cbegin(); it != ops.cend(); it++)
-            mp[it->second->data].push_back(it->second);
-        for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            for (const auto &t : it->second)
-                t->deallocate();
+            mp.emplace_back(it->second->data, it->second);
+        sort(mp.begin(), mp.end(),
+             [](const pair<double *, shared_ptr<SparseMatrix<S>>> &a,
+                const pair<double *, shared_ptr<SparseMatrix<S>>> &b) {
+                 return a.first > b.first;
+             });
+        for (const auto &t : mp)
+            t.second->deallocate();
     }
     void load_data(istream &ifs) {
         bool lr;
@@ -77,6 +82,7 @@ template <typename S> struct OperatorTensor {
             make_shared<VectorAllocator<double>>();
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        ops.reserve(sz);
         for (int i = 0; i < sz; i++) {
             shared_ptr<OpExpr<S>> expr = load_expr<S>(ifs);
             SparseMatrixTypes tp;
@@ -129,6 +135,7 @@ template <typename S> struct OperatorTensor {
     shared_ptr<OperatorTensor> deep_copy() const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
+        r->ops.reserve(ops.size());
         for (auto &p : ops) {
             if (p.second->get_type() == SparseMatrixTypes::Normal) {
                 shared_ptr<SparseMatrix<S>> mat =
@@ -182,19 +189,19 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() override {
-        // need to check order in parallel mode
-        map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
+        vector<pair<double *, shared_ptr<SparseMatrix<S>>>> mp;
+        mp.reserve(lopt->ops.size() + ropt->ops.size());
         for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
-            mp[it->second->data].push_back(it->second);
-        for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            for (const auto &t : it->second)
-                t->deallocate();
-        mp.clear();
+            mp.emplace_back(it->second->data, it->second);
         for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
-            mp[it->second->data].push_back(it->second);
-        for (auto it = mp.crbegin(); it != mp.crend(); it++)
-            for (const auto &t : it->second)
-                t->deallocate();
+            mp.emplace_back(it->second->data, it->second);
+        sort(mp.begin(), mp.end(),
+             [](const pair<double *, shared_ptr<SparseMatrix<S>>> &a,
+                const pair<double *, shared_ptr<SparseMatrix<S>>> &b) {
+                 return a.first > b.first;
+             });
+        for (const auto &t : mp)
+            t.second->deallocate();
     }
 };
 

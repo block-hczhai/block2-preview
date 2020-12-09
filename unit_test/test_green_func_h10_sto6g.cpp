@@ -15,6 +15,10 @@ class TestGreenFunctionH10STO6G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex", 0.7, 2);
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -28,15 +32,8 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
                                           const HamiltonianQC<S> &hamil,
                                           const string &name, int dot) {
 
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
     double igf_std = -0.2286598562666365;
     double energy_std = -5.424385375684663;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     Timer t;
     t.get_time();

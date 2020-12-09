@@ -45,6 +45,10 @@ class TestLinearN2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -59,14 +63,7 @@ template <typename S>
 void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
                                     const string &name, int dot) {
 
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
     double energy_std = -107.654122447525;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(4);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<S>> para_comm =

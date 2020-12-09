@@ -630,8 +630,9 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     }
     void deallocate() override {
         for (uint16_t m = n_sites - 1; m < n_sites; m--) {
-            for (auto it = this->tensors[m]->ops.crbegin();
-                 it != this->tensors[m]->ops.crend(); ++it) {
+            vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>> vps(
+                this->tensors[m]->ops.cbegin(), this->tensors[m]->ops.cend());
+            for (auto it = vps.crbegin(); it != vps.crend(); ++it) {
                 OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(it->first);
                 //cout << "m == " << (int) m << "deallocate" << op.name << "s" << (int) op.site_index[0] << ","
                 //     << (int) op.site_index[1] << "ss" << (int) op.site_index.s(0) << (int) op.site_index.s(1) << endl;

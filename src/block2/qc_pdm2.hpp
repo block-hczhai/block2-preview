@@ -1064,15 +1064,8 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {
-        for (uint16_t m = MPO<S>::n_sites - 1; m < MPO<S>::n_sites; m--)
-            for (auto it = this->tensors[m]->ops.crbegin();
-                 it != this->tensors[m]->ops.crend(); ++it) {
-                OpElement<S> &op =
-                    *dynamic_pointer_cast<OpElement<S>>(it->first);
-                if (op.name == OpNames::CCDD || op.name == OpNames::CCD ||
-                    op.name == OpNames::CDD)
-                    it->second->deallocate();
-            }
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            this->tensors[m]->deallocate();
     }
 };
 

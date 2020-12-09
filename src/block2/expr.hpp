@@ -993,6 +993,10 @@ inline ostream &operator<<(ostream &os, const shared_ptr<OpExpr<S>> &c) {
 
 namespace std {
 
+template <> struct hash<block2::OpNames> {
+    size_t operator()(block2::OpNames s) const noexcept { return (size_t)s; }
+};
+
 template <typename S> struct hash<block2::OpElement<S>> {
     size_t operator()(const block2::OpElement<S> &s) const noexcept {
         return s.hash();
@@ -1002,6 +1006,12 @@ template <typename S> struct hash<block2::OpElement<S>> {
 template <typename S> struct hash<block2::OpProduct<S>> {
     size_t operator()(const block2::OpProduct<S> &s) const noexcept {
         return s.hash();
+    }
+};
+
+template <typename S> struct hash<shared_ptr<block2::OpExpr<S>>> {
+    size_t operator()(const shared_ptr<block2::OpExpr<S>> &s) const noexcept {
+        return hash_value(s);
     }
 };
 

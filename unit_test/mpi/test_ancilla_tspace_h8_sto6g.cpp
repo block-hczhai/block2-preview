@@ -47,6 +47,10 @@ class TestTSpaceAncillaH8STO6G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -64,13 +68,6 @@ void TestTSpaceAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
                                             const vector<double> &energies_m500,
                                             const HamiltonianQC<S> &hamil,
                                             const string &name) {
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<S>> para_comm =
@@ -258,7 +255,7 @@ TEST_F(TestTSpaceAncillaH8STO6G, TestSU2) {
 
     HamiltonianQC<SU2> hamil(vacuum, n_physical_sites, orbsym, fcidump);
     hamil.mu = -1.0;
-    hamil.fcidump->e = 0.0;
+    hamil.fcidump->const_e = 0.0;
 
     test_imag_te<SU2>(n_sites, n_physical_sites, target, energies_fted,
                       energies_m500, hamil, "SU2");
@@ -295,8 +292,7 @@ TEST_F(TestTSpaceAncillaH8STO6G, TestSZ) {
 
     HamiltonianQC<SZ> hamil(vacuum, n_physical_sites, orbsym, fcidump);
     hamil.mu = -1.0;
-    hamil.fcidump->e = 0.0;
-    hamil.opf->seq->mode = SeqTypes::Simple;
+    hamil.fcidump->const_e = 0.0;
 
     test_imag_te<SZ>(n_sites, n_physical_sites, target, energies_fted,
                      energies_m500, hamil, "SZ");

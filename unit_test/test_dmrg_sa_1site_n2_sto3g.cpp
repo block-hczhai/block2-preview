@@ -16,6 +16,10 @@ class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::None;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -31,13 +35,6 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
                                          const string &name, ubond_t bond_dim,
                                          uint16_t nroots) {
 
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
-
     Timer t;
     t.get_time();
     // MPO construction
@@ -52,7 +49,7 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    vector<double> noises = {1E-6, 1E-7, 0.0};
 
     t.get_time();
 

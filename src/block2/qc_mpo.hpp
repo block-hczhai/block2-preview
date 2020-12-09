@@ -26,6 +26,7 @@
 #include "qc_hamiltonian.hpp"
 #include "symbolic.hpp"
 #include "tensor_functions.hpp"
+#include "threading.hpp"
 #include <cassert>
 #include <memory>
 #include <vector>
@@ -312,9 +313,25 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                         S(0, -sz_minus[s],
                           hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
-        int p;
-        bool repeat_m = false;
-        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+        bool need_repeat_m = mode == QCTypes::Conventional &&
+                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
+                             trans_l + 1 < hamil.n_sites;
+        this->left_operator_names.resize(hamil.n_sites, nullptr);
+        this->right_operator_names.resize(hamil.n_sites, nullptr);
+        this->tensors.resize(hamil.n_sites, nullptr);
+        for (uint16_t m = 0; m < hamil.n_sites; m++)
+            this->tensors[m] = make_shared<OperatorTensor<S>>();
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (uint16_t xm = 0; xm < hamil.n_sites + need_repeat_m; xm++) {
+            uint16_t m = xm;
+            int p;
+            bool repeat_m = false;
+            if (need_repeat_m && xm > trans_l + 1) {
+                m = xm - 1;
+                if (m == trans_l + 1)
+                    repeat_m = true;
+            }
             shared_ptr<Symbolic<S>> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
@@ -933,19 +950,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 assert(false);
                 break;
             }
-            shared_ptr<OperatorTensor<S>> opt = nullptr;
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
             if (mode != QCTypes::Conventional ||
-                !(m == trans_l + 1 && m == trans_r - 1)) {
-                opt = make_shared<OperatorTensor<S>>();
+                !(m == trans_l + 1 && m == trans_r - 1))
                 opt->lmat = opt->rmat = pmat;
-            } else if (!repeat_m) {
-                opt = make_shared<OperatorTensor<S>>();
+            else if (!repeat_m)
                 opt->rmat = pmat;
-            } else {
-                opt = this->tensors.back();
-                this->tensors.pop_back();
+            else
                 opt->lmat = pmat;
-            }
             // operator names
             if (opt->lmat == pmat) {
                 shared_ptr<SymbolicRowVector<S>> plop;
@@ -1025,7 +1037,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     assert(p == rshape);
                 }
-                this->left_operator_names.push_back(plop);
+                this->left_operator_names[m] = plop;
             }
             if (opt->rmat == pmat) {
                 shared_ptr<SymbolicColumnVector<S>> prop;
@@ -1107,18 +1119,17 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     }
                     assert(p == lshape);
                 }
-                this->right_operator_names.push_back(prop);
+                this->right_operator_names[m] = prop;
             }
-            if (mode == QCTypes::Conventional && m == trans_l + 1 &&
-                m == trans_r - 1 && !repeat_m) {
-                repeat_m = true;
-                m--;
-                this->tensors.push_back(opt);
-                continue;
-            }
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
-            this->tensors.push_back(opt);
         }
+        SeqTypes seqt = hamil.opf->seq->mode;
+        hamil.opf->seq->mode = SeqTypes::None;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+        }
+        hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
             uint16_t m;
@@ -1138,13 +1149,18 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 *MPO<S>::schemer->left_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * hamil.n_sites; i++)
                 lop[i] = this->left_operator_names[m]->data[i];
-            p = 2 + 4 * hamil.n_sites;
-            vector<shared_ptr<OpExpr<S>>> exprs;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    vector<shared_ptr<OpExpr<S>>> exprs;
+                    exprs.reserve((m + 1) * (m + 1));
                     for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = 0.5 * p_op[j][k][s];
+                        int p = (k - m - 1) +
+                                (j - m - 1) * (hamil.n_sites - m - 1) +
+                                s * (hamil.n_sites - m - 1) *
+                                    (hamil.n_sites - m - 1);
                         exprs.clear();
+                        p += 2 + 4 * hamil.n_sites;
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
@@ -1153,15 +1169,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         (0.5 *
                                          hamil.v(s & 1, s >> 1, j, g, k, h)) *
                                         ad_op[g][h][s]);
-                        lexpr[p + k - m - 1] = sum(exprs);
-                    }
-                    p += hamil.n_sites - m - 1;
-                }
-            for (uint8_t s = 0; s < 4; s++)
-                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = 0.5 * pd_op[j][k][s];
+                        lop[p] = 0.5 * p_op[j][k][s];
+                        lexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 4 * (hamil.n_sites - m - 1) *
+                             (hamil.n_sites - m - 1);
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
@@ -1170,15 +1182,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         (0.5 *
                                          hamil.v(s & 1, s >> 1, j, g, k, h)) *
                                         a_op[g][h][s]);
-                        lexpr[p + k - m - 1] = sum(exprs);
-                    }
-                    p += hamil.n_sites - m - 1;
-                }
-            for (uint8_t s = 0; s < 4; s++)
-                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = q_op[j][k][s];
+                        lop[p] = 0.5 * pd_op[j][k][s];
+                        lexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 4 * (hamil.n_sites - m - 1) *
+                             (hamil.n_sites - m - 1);
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++) {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
@@ -1194,11 +1202,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 hamil.v(s & 1, sp, j, k, g, h) *
                                                 b_op[g][h][(sp << 1) | sp]);
                             }
-                        lexpr[p + k - m - 1] = sum(exprs);
+                        lop[p] = q_op[j][k][s];
+                        lexpr[p] = sum(exprs);
                     }
-                    p += hamil.n_sites - m - 1;
                 }
-            assert(p == new_rshape);
             // right transform
             m = trans_r - 1;
             int new_lshape = 2 + 4 * hamil.n_sites + 12 * (m + 1) * (m + 1);
@@ -1212,12 +1219,16 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 *MPO<S>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * hamil.n_sites; i++)
                 rop[i] = this->right_operator_names[m + 1]->data[i];
-            p = 2 + 4 * hamil.n_sites;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
+                    vector<shared_ptr<OpExpr<S>>> exprs;
+                    exprs.reserve((hamil.n_sites - m - 1) *
+                                  (hamil.n_sites - m - 1));
                     for (uint16_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = 0.5 * p_op[j][k][s];
+                        int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
                         exprs.clear();
+                        p += 2 + 4 * hamil.n_sites;
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
@@ -1226,15 +1237,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         (0.5 *
                                          hamil.v(s & 1, s >> 1, j, g, k, h)) *
                                         ad_op[g][h][s]);
-                        rexpr[p + k] = sum(exprs);
-                    }
-                    p += m + 1;
-                }
-            for (uint8_t s = 0; s < 4; s++)
-                for (uint16_t j = 0; j < m + 1; j++) {
-                    for (uint16_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = 0.5 * pd_op[j][k][s];
+                        rop[p] = 0.5 * p_op[j][k][s];
+                        rexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 4 * (m + 1) * (m + 1);
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
@@ -1243,15 +1249,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                         (0.5 *
                                          hamil.v(s & 1, s >> 1, j, g, k, h)) *
                                         a_op[g][h][s]);
-                        rexpr[p + k] = sum(exprs);
-                    }
-                    p += m + 1;
-                }
-            for (uint8_t s = 0; s < 4; s++)
-                for (uint16_t j = 0; j < m + 1; j++) {
-                    for (uint16_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = q_op[j][k][s];
+                        rop[p] = 0.5 * pd_op[j][k][s];
+                        rexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 4 * (m + 1) * (m + 1);
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++) {
                                 if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
@@ -1267,12 +1268,12 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                                 hamil.v(s & 1, sp, j, k, g, h) *
                                                 b_op[g][h][(sp << 1) | sp]);
                             }
-                        rexpr[p + k] = sum(exprs);
+                        rop[p] = q_op[j][k][s];
+                        rexpr[p] = sum(exprs);
                     }
-                    p += m + 1;
                 }
-            assert(p == new_lshape);
         }
+        threading->activate_normal();
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
@@ -1349,9 +1350,25 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         OpNames::Q, SiteIndex(i, j, s),
                         S(0, s * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 }
-        int p;
-        bool repeat_m = false;
-        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+        bool need_repeat_m = mode == QCTypes::Conventional &&
+                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
+                             trans_l + 1 < hamil.n_sites;
+        this->left_operator_names.resize(hamil.n_sites, nullptr);
+        this->right_operator_names.resize(hamil.n_sites, nullptr);
+        this->tensors.resize(hamil.n_sites, nullptr);
+        for (uint16_t m = 0; m < hamil.n_sites; m++)
+            this->tensors[m] = make_shared<OperatorTensor<S>>();
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (uint16_t xm = 0; xm < hamil.n_sites + need_repeat_m; xm++) {
+            uint16_t m = xm;
+            int p;
+            bool repeat_m = false;
+            if (need_repeat_m && xm > trans_l + 1) {
+                m = xm - 1;
+                if (m == trans_l + 1)
+                    repeat_m = true;
+            }
             shared_ptr<Symbolic<S>> pmat;
             int lshape, rshape;
             QCTypes effective_mode;
@@ -1823,19 +1840,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 assert(false);
                 break;
             }
-            shared_ptr<OperatorTensor<S>> opt = nullptr;
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
             if (mode != QCTypes::Conventional ||
-                !(m == trans_l + 1 && m == trans_r - 1)) {
-                opt = make_shared<OperatorTensor<S>>();
+                !(m == trans_l + 1 && m == trans_r - 1))
                 opt->lmat = opt->rmat = pmat;
-            } else if (!repeat_m) {
-                opt = make_shared<OperatorTensor<S>>();
+            else if (!repeat_m)
                 opt->rmat = pmat;
-            } else {
-                opt = this->tensors.back();
-                this->tensors.pop_back();
+            else
                 opt->lmat = pmat;
-            }
             // operator names
             if (opt->lmat == pmat) {
                 shared_ptr<SymbolicRowVector<S>> plop;
@@ -1913,7 +1925,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     assert(p == rshape);
                 }
-                this->left_operator_names.push_back(plop);
+                this->left_operator_names[m] = plop;
             }
             if (opt->rmat == pmat) {
                 shared_ptr<SymbolicColumnVector<S>> prop;
@@ -1990,18 +2002,17 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     }
                     assert(p == lshape);
                 }
-                this->right_operator_names.push_back(prop);
+                this->right_operator_names[m] = prop;
             }
-            if (mode == QCTypes::Conventional && m == trans_l + 1 &&
-                m == trans_r - 1 && !repeat_m) {
-                repeat_m = true;
-                m--;
-                this->tensors.push_back(opt);
-                continue;
-            }
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
-            this->tensors.push_back(opt);
         }
+        SeqTypes seqt = hamil.opf->seq->mode;
+        hamil.opf->seq->mode = SeqTypes::None;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+        }
+        hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
             uint16_t m;
@@ -2021,15 +2032,20 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 *MPO<S>::schemer->left_new_operator_exprs;
             for (int i = 0; i < 2 + 2 * hamil.n_sites; i++)
                 lop[i] = this->left_operator_names[m]->data[i];
-            p = 2 + 2 * hamil.n_sites;
-            vector<shared_ptr<OpExpr<S>>> exprs;
-            vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
-            vector<double> su2_factor_q = {1.0, sqrt(3)};
+            const vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
+            const vector<double> su2_factor_q = {1.0, sqrt(3)};
+#pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+                    vector<shared_ptr<OpExpr<S>>> exprs;
+                    exprs.reserve((m + 1) * (m + 1));
                     for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = su2_factor_p[s] * p_op[j][k][s];
+                        int p = (k - m - 1) +
+                                (j - m - 1) * (hamil.n_sites - m - 1) +
+                                s * (hamil.n_sites - m - 1) *
+                                    (hamil.n_sites - m - 1);
                         exprs.clear();
+                        p += 2 + 2 * hamil.n_sites;
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
@@ -2037,15 +2053,11 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
                                          (s ? -1 : 1)) *
                                         ad_op[g][h][s]);
-                        lexpr[p + k - m - 1] = sum(exprs);
-                    }
-                    p += hamil.n_sites - m - 1;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
-                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        lop[p + k - m - 1] = su2_factor_p[s] * pd_op[j][k][s];
+                        lop[p] = su2_factor_p[s] * p_op[j][k][s];
+                        lexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 2 * (hamil.n_sites - m - 1) *
+                             (hamil.n_sites - m - 1);
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
@@ -2053,41 +2065,33 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
                                          (s ? -1 : 1)) *
                                         a_op[g][h][s]);
-                        lexpr[p + k - m - 1] = sum(exprs);
+                        lop[p] = su2_factor_p[s] * pd_op[j][k][s];
+                        lexpr[p] = sum(exprs);
+                        exprs.clear();
+                        p += 2 * (hamil.n_sites - m - 1) *
+                             (hamil.n_sites - m - 1);
+                        if (s == 0) {
+                            for (uint16_t g = 0; g < m + 1; g++)
+                                for (uint16_t h = 0; h < m + 1; h++)
+                                    if (abs(2 * hamil.v(j, k, g, h) -
+                                            hamil.v(j, h, g, k)) > TINY)
+                                        exprs.push_back(
+                                            (su2_factor_q[0] *
+                                             (2 * hamil.v(j, k, g, h) -
+                                              hamil.v(j, h, g, k))) *
+                                            b_op[g][h][0]);
+                        } else {
+                            for (uint16_t g = 0; g < m + 1; g++)
+                                for (uint16_t h = 0; h < m + 1; h++)
+                                    if (abs(hamil.v(j, h, g, k)) > TINY)
+                                        exprs.push_back((su2_factor_q[1] *
+                                                         hamil.v(j, h, g, k)) *
+                                                        b_op[g][h][1]);
+                        }
+                        lop[p] = su2_factor_q[s] * q_op[j][k][s];
+                        lexpr[p] = sum(exprs);
                     }
-                    p += hamil.n_sites - m - 1;
                 }
-            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
-                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                    lop[p + k - m - 1] = su2_factor_q[0] * q_op[j][k][0];
-                    exprs.clear();
-                    for (uint16_t g = 0; g < m + 1; g++)
-                        for (uint16_t h = 0; h < m + 1; h++)
-                            if (abs(2 * hamil.v(j, k, g, h) -
-                                    hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[0] *
-                                                 (2 * hamil.v(j, k, g, h) -
-                                                  hamil.v(j, h, g, k))) *
-                                                b_op[g][h][0]);
-                    lexpr[p + k - m - 1] = sum(exprs);
-                }
-                p += hamil.n_sites - m - 1;
-            }
-            for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
-                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                    lop[p + k - m - 1] = su2_factor_q[1] * q_op[j][k][1];
-                    exprs.clear();
-                    for (uint16_t g = 0; g < m + 1; g++)
-                        for (uint16_t h = 0; h < m + 1; h++)
-                            if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back(
-                                    (su2_factor_q[1] * hamil.v(j, h, g, k)) *
-                                    b_op[g][h][1]);
-                    lexpr[p + k - m - 1] = sum(exprs);
-                }
-                p += hamil.n_sites - m - 1;
-            }
-            assert(p == new_rshape);
             // right transform
             m = trans_r - 1;
             int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
@@ -2101,12 +2105,16 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 *MPO<S>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 2 * hamil.n_sites; i++)
                 rop[i] = this->right_operator_names[m + 1]->data[i];
-            p = 2 + 2 * hamil.n_sites;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
+                    vector<shared_ptr<OpExpr<S>>> exprs;
+                    exprs.reserve((hamil.n_sites - m - 1) *
+                                  (hamil.n_sites - m - 1));
                     for (uint16_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = su2_factor_p[s] * p_op[j][k][s];
+                        int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
                         exprs.clear();
+                        p += 2 + 2 * hamil.n_sites;
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
@@ -2114,15 +2122,10 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
                                          (s ? -1 : 1)) *
                                         ad_op[g][h][s]);
-                        rexpr[p + k] = sum(exprs);
-                    }
-                    p += m + 1;
-                }
-            for (uint8_t s = 0; s < 2; s++)
-                for (uint16_t j = 0; j < m + 1; j++) {
-                    for (uint16_t k = 0; k < m + 1; k++) {
-                        rop[p + k] = su2_factor_p[s] * pd_op[j][k][s];
+                        rop[p] = su2_factor_p[s] * p_op[j][k][s];
+                        rexpr[p] = sum(exprs);
                         exprs.clear();
+                        p += 2 * (m + 1) * (m + 1);
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
                                 if (abs(hamil.v(j, g, k, h)) > TINY)
@@ -2130,42 +2133,34 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                                         (su2_factor_p[s] * hamil.v(j, g, k, h) *
                                          (s ? -1 : 1)) *
                                         a_op[g][h][s]);
-                        rexpr[p + k] = sum(exprs);
+                        rop[p] = su2_factor_p[s] * pd_op[j][k][s];
+                        rexpr[p] = sum(exprs);
+                        exprs.clear();
+                        p += 2 * (m + 1) * (m + 1);
+                        if (s == 0) {
+                            for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                                for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                                    if (abs(2 * hamil.v(j, k, g, h) -
+                                            hamil.v(j, h, g, k)) > TINY)
+                                        exprs.push_back(
+                                            (su2_factor_q[0] *
+                                             (2 * hamil.v(j, k, g, h) -
+                                              hamil.v(j, h, g, k))) *
+                                            b_op[g][h][0]);
+                        } else {
+                            for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                                for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                                    if (abs(hamil.v(j, h, g, k)) > TINY)
+                                        exprs.push_back((su2_factor_q[1] *
+                                                         hamil.v(j, h, g, k)) *
+                                                        b_op[g][h][1]);
+                        }
+                        rop[p] = su2_factor_q[s] * q_op[j][k][s];
+                        rexpr[p] = sum(exprs);
                     }
-                    p += m + 1;
                 }
-            for (uint16_t j = 0; j < m + 1; j++) {
-                for (uint16_t k = 0; k < m + 1; k++) {
-                    rop[p + k] = su2_factor_q[0] * q_op[j][k][0];
-                    exprs.clear();
-                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                            if (abs(2 * hamil.v(j, k, g, h) -
-                                    hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back((su2_factor_q[0] *
-                                                 (2 * hamil.v(j, k, g, h) -
-                                                  hamil.v(j, h, g, k))) *
-                                                b_op[g][h][0]);
-                    rexpr[p + k] = sum(exprs);
-                }
-                p += m + 1;
-            }
-            for (uint16_t j = 0; j < m + 1; j++) {
-                for (uint16_t k = 0; k < m + 1; k++) {
-                    rop[p + k] = su2_factor_q[1] * q_op[j][k][1];
-                    exprs.clear();
-                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                            if (abs(hamil.v(j, h, g, k)) > TINY)
-                                exprs.push_back(
-                                    (su2_factor_q[1] * hamil.v(j, h, g, k)) *
-                                    b_op[g][h][1]);
-                    rexpr[p + k] = sum(exprs);
-                }
-                p += m + 1;
-            }
-            assert(p == new_lshape);
         }
+        threading->activate_normal();
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)

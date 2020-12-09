@@ -103,8 +103,7 @@ template <typename S> struct HamiltonianSCI {
     // Trivial sparse matrices are removed from symbolic operator tensor and map
     void filter_site_ops(uint16_t m,
                          const vector<shared_ptr<Symbolic<S>>> &mats,
-                         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &ops) const {
+                         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops) const {
         vector<shared_ptr<Symbolic<S>>> pmats = mats;
         // hrl: ops is empty initially. It will be filled here. First by
         // specifying the keys, then by declaring the value
@@ -219,7 +218,7 @@ template <typename S> struct HamiltonianSCI {
     /* @param m: site */
     virtual void get_site_ops(
         uint16_t m,
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
             &ops) const {};
 
   protected:
@@ -270,7 +269,7 @@ struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, OpExpr
         : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {
     }
     shared_ptr<SparseMatrix<S>> build() override {
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
             ops;
         assert(hamil != nullptr);
         assert(hamil->delayed == DelayedSCIOpNames::None);

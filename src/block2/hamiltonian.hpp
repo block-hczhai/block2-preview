@@ -85,17 +85,19 @@ template <typename S> struct Hamiltonian {
     // The keys in map should be already set by filter_site_ops
     virtual void get_site_ops(
         uint16_t m,
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-            &ops) const {};
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
+        const {};
     // Fill the map with sparse matrix representation of site operators
     // Trivial sparse matrices are removed from symbolic operator tensor and map
-    void filter_site_ops(uint16_t m,
-                         const vector<shared_ptr<Symbolic<S>>> &mats,
-                         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &ops) const {
+    void filter_site_ops(
+        uint16_t m, const vector<shared_ptr<Symbolic<S>>> &mats,
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
+        const {
         vector<shared_ptr<Symbolic<S>>> pmats = mats;
         if (pmats.size() == 2 && pmats[0] == pmats[1])
             pmats.resize(1);
+        if (pmats.size() >= 1)
+            ops.reserve(pmats[0]->data.size());
         for (auto pmat : pmats)
             for (auto &x : pmat->data) {
                 switch (x->get_type()) {
@@ -125,12 +127,12 @@ template <typename S> struct Hamiltonian {
                 switch (x->get_type()) {
                 case OpTypes::Zero:
                     break;
-                case OpTypes::Elem:
-                    xx = abs_value(x);
-                    if (ops[xx]->factor == 0.0 || ops[xx]->info->n == 0 ||
-                        ops[xx]->norm() < TINY)
+                case OpTypes::Elem: {
+                    shared_ptr<SparseMatrix<S>> &mat = ops.at(abs_value(x));
+                    if (mat->factor == 0.0 || mat->info->n == 0 ||
+                        mat->norm() < TINY)
                         x = zero;
-                    break;
+                } break;
                 case OpTypes::Sum:
                     kk = 0;
                     for (size_t i = 0;
@@ -140,7 +142,7 @@ template <typename S> struct Hamiltonian {
                                            dynamic_pointer_cast<OpSum<S>>(x)
                                                ->strings[i]
                                                ->get_op());
-                        shared_ptr<SparseMatrix<S>> &mat = ops[xx];
+                        shared_ptr<SparseMatrix<S>> &mat = ops.at(xx);
                         if (!(mat->factor == 0.0 || mat->info->n == 0 ||
                               mat->norm() < TINY)) {
                             if (i != kk)
@@ -206,8 +208,7 @@ struct DelayedSparseMatrix<S, Hamiltonian<S>>
                         const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
         : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {}
     shared_ptr<SparseMatrix<S>> build() override {
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-            ops;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> ops;
         assert(hamil != nullptr);
         assert(hamil->delayed == DelayedOpNames::None);
         ops[op] = nullptr;

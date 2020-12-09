@@ -13,6 +13,11 @@ class TestDMRG : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM | ThreadingTypes::Global, 8, 8);
+        threading_() = make_shared<Threading>(ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16, 16, 16);
+        // threading_() = make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM | ThreadingTypes::Global, 16, 16, 16, 16);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -37,7 +42,11 @@ TEST_F(TestDMRG, Test) {
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    Timer t;
+    t.get_time();
+    cout << "INT start" << endl;
     fcidump->read(filename);
+    cout << "INT end .. T = " << t.get_time() << endl;
 
     vector<uint8_t> ioccs;
     for (auto x : occs)
@@ -56,14 +65,7 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
-    hamil.opf->seq->mode = SeqTypes::Simple;
 
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
-
-    Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
@@ -185,7 +187,7 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    dmrg->solve(50, true, 0.0);
+    dmrg->solve(30, true);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

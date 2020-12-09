@@ -73,6 +73,7 @@
 #include "block2/symbolic.hpp"
 #include "block2/symmetry.hpp"
 #include "block2/tensor_functions.hpp"
+#include "block2/threading.hpp"
 #include "block2/utils.hpp"
 
 #ifdef _USE_SCI
@@ -90,3 +91,4 @@
 #undef ialloc
 #undef dalloc
 #undef frame
+#undef threading

@@ -909,6 +909,9 @@ template <typename S> struct SparseMatrix {
                                          info->n_states_ket[k]));
     }
     virtual void clear() { memset(data, 0, sizeof(double) * total_memory); }
+    virtual void allocate_like(const shared_ptr<SparseMatrix<S>> &mat) {
+        allocate(mat->info);
+    }
     virtual void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
                           double *ptr = 0) {
         this->info = info;
@@ -1691,6 +1694,9 @@ template <typename S> struct SparseMatrixGroup {
             throw runtime_error("SparseMatrixGroup::save_data on '" + filename +
                                 "' failed.");
         ofs.close();
+    }
+    void allocate_like(const shared_ptr<SparseMatrixGroup<S>> &mat) {
+        allocate(mat->infos);
     }
     void allocate(const vector<shared_ptr<SparseMatrixInfo<S>>> &infos,
                   double *ptr = 0) {

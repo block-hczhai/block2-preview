@@ -16,6 +16,10 @@ class TestFITN2631G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -30,14 +34,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
                               const string &name, DecompositionTypes dt,
                               NoiseTypes nt) {
 
-    hamil.opf->seq->mode = SeqTypes::Simple;
     bool dcl = false;
     int dot = 2;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     Timer t;
     t.get_time();

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "threading.hpp"
 #include "utils.hpp"
 #include <array>
 #include <cassert>
@@ -348,19 +349,18 @@ struct FCIDUMP {
         if (ifs.bad())
             throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
         ifs.close();
-        bool ipar = true;
-        vector<string> pars, ints;
-        for (size_t il = 0; il < lines.size(); il++) {
+        vector<string> pars;
+        size_t il = 0;
+        for (; il < lines.size(); il++) {
             string l(Parsing::lower(lines[il]));
             if (l.find("&fci") != string::npos)
                 l.replace(l.find("&fci"), 4, "");
             if (l.find("/") != string::npos || l.find("&end") != string::npos)
-                ipar = false;
-            else if (ipar)
-                pars.push_back(l);
+                break;
             else
-                ints.push_back(l);
+                pars.push_back(l);
         }
+        il++;
         string par = Parsing::join(pars.begin(), pars.end(), ",");
         for (size_t ip = 0; ip < par.length(); ip++)
             if (par[ip] == ' ')
@@ -380,20 +380,26 @@ struct FCIDUMP {
                                         : params[p_key] + "," + cc;
             }
         }
-        vector<array<uint16_t, 4>> int_idx;
-        vector<double> int_val;
-        for (auto &l : ints) {
-            string ll = Parsing::trim(l);
-            if (ll.length() == 0 || ll[0] == '!')
+        size_t int_sz = lines.size() > il ? lines.size() - il : 0;
+        vector<array<uint16_t, 4>> int_idx(int_sz);
+        vector<double> int_val(int_sz);
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static) num_threads(ntg)
+        for (size_t ill = 0; ill < int_sz; ill++) {
+            string ll = Parsing::trim(lines[il + ill]);
+            if (ll.length() == 0 || ll[0] == '!') {
+                int_idx[ill][0] = numeric_limits<uint16_t>::max();
                 continue;
+            }
             vector<string> ls = Parsing::split(ll, " ", true);
             assert(ls.size() == 5);
-            int_idx.push_back({(uint16_t)Parsing::to_int(ls[1]),
-                               (uint16_t)Parsing::to_int(ls[2]),
-                               (uint16_t)Parsing::to_int(ls[3]),
-                               (uint16_t)Parsing::to_int(ls[4])});
-            int_val.push_back(Parsing::to_double(ls[0]));
+            int_idx[ill] = array<uint16_t, 4>{(uint16_t)Parsing::to_int(ls[1]),
+                                              (uint16_t)Parsing::to_int(ls[2]),
+                                              (uint16_t)Parsing::to_int(ls[3]),
+                                              (uint16_t)Parsing::to_int(ls[4])};
+            int_val[ill] = Parsing::to_double(ls[0]);
         }
+        threading->activate_normal();
         uint16_t n = (uint16_t)Parsing::to_int(params["norb"]);
         uhf = params.count("iuhf") != 0 && Parsing::to_int(params["iuhf"]) == 1;
         general = params.count("igeneral") != 0 &&
@@ -420,6 +426,8 @@ struct FCIDUMP {
                 vgs[0].clear();
             }
             for (size_t i = 0; i < int_val.size(); i++) {
+                if (int_idx[i][0] == numeric_limits<uint16_t>::max())
+                    continue;
                 if (int_idx[i][0] + int_idx[i][1] + int_idx[i][2] +
                         int_idx[i][3] ==
                     0)
@@ -467,6 +475,8 @@ struct FCIDUMP {
             }
             int ip = 0;
             for (size_t i = 0; i < int_val.size(); i++) {
+                if (int_idx[i][0] == numeric_limits<uint16_t>::max())
+                    continue;
                 if (int_idx[i][0] + int_idx[i][1] + int_idx[i][2] +
                         int_idx[i][3] ==
                     0) {

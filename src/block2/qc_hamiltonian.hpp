@@ -26,6 +26,7 @@
 #include "sparse_matrix.hpp"
 #include <map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 using namespace std;
@@ -47,11 +48,10 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     using Hamiltonian<S>::opf;
     using Hamiltonian<S>::delayed;
     // Sparse matrix representation for normal site operators
-    vector<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-               op_expr_less<S>>>
+    vector<unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
         site_norm_ops;
     // Primitives for sparse matrix representation for normal site operators
-    vector<map<OpNames, shared_ptr<SparseMatrix<S>>>> op_prims;
+    vector<unordered_map<OpNames, shared_ptr<SparseMatrix<S>>>> op_prims;
     // For storage of one-electron and two-electron integrals
     shared_ptr<FCIDUMP> fcidump;
     // Chemical potenital parameter in Hamiltonian
@@ -239,9 +239,10 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                                    op_prims[op.site_index.ss()][op.name]->data);
             }
     }
-    void get_site_ops(uint16_t m,
-                      map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                          op_expr_less<S>> &ops) const override {
+    void get_site_ops(
+        uint16_t m,
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
+        const override {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         uint16_t i, j, k;
@@ -357,6 +358,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
+                    tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
@@ -382,6 +384,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
+                    tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         tmp->copy_data_from(
@@ -408,20 +411,22 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::D));
-                     p.second->iscale(-2.0 * t(s, i, m));
+                    p.second->iscale(-2.0 * t(s, i, m));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         // q_label is not used for comparison
                         opf->product(
                             0,
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                OpNames::B, SiteIndex({m, m}, {sp, sp}), vacuum)),
+                                OpNames::B, SiteIndex({m, m}, {sp, sp}),
+                                vacuum)),
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                 OpNames::D, SiteIndex({m}, {s}), vacuum)),
                             p.second, -v(s, sp, i, m, m, m));
                         opf->product(
                             0,
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                OpNames::B, SiteIndex({m, m}, {sp, s}), vacuum)),
+                                OpNames::B, SiteIndex({m, m}, {sp, s}),
+                                vacuum)),
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                 OpNames::D, SiteIndex({m}, {sp}), vacuum)),
                             p.second, v(sp, s, m, m, i, m));
@@ -447,7 +452,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
                                 OpNames::C, SiteIndex({m}, {s}), vacuum)),
                             site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                OpNames::B, SiteIndex({m, m}, {sp, sp}), vacuum)),
+                                OpNames::B, SiteIndex({m, m}, {sp, sp}),
+                                vacuum)),
                             p.second, v(s, sp, m, i, m, m));
                         opf->product(
                             0,
@@ -501,6 +507,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
                         p.second->copy_data_from(
                             op_prims[(s >> 1) | ((s & 1) << 1)].at(OpNames::B));
                         p.second->factor *= -v(s & 1, s >> 1, i, m, m, j);
+                        tmp->alloc = d_alloc;
                         tmp->allocate(info);
                         for (uint8_t sp = 0; sp < 2; sp++) {
                             tmp->copy_data_from(
@@ -571,11 +578,10 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     using Hamiltonian<S>::opf;
     using Hamiltonian<S>::delayed;
     // Sparse matrix representation for normal site operators
-    vector<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-               op_expr_less<S>>>
+    vector<unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
         site_norm_ops;
     // Primitives for sparse matrix representation for normal site operators
-    vector<map<OpNames, shared_ptr<SparseMatrix<S>>>> op_prims;
+    vector<unordered_map<OpNames, shared_ptr<SparseMatrix<S>>>> op_prims;
     // For storage of one-electron and two-electron integrals
     shared_ptr<FCIDUMP> fcidump;
     // Chemical potenital parameter in Hamiltonian
@@ -725,9 +731,10 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             }
         }
     }
-    void get_site_ops(uint16_t m,
-                      map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                          op_expr_less<S>> &ops) const override {
+    void get_site_ops(
+        uint16_t m,
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
+        const override {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         uint16_t i, j, k;
@@ -779,6 +786,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::D));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
+                    tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::R));
                     tmp->factor = v(i, m, m, m);
@@ -798,6 +806,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::C));
                     p.second->factor *= t(i, m) * sqrt(2) / 4;
+                    tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::RD));
                     tmp->factor = v(i, m, m, m);

@@ -61,9 +61,50 @@ template <typename S> struct OperatorFunctions {
     shared_ptr<CG<S>> cg;
     shared_ptr<BatchGEMMSeq> seq = nullptr;
     OperatorFunctions(const shared_ptr<CG<S>> &cg) : cg(cg) {
-        seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
+        seq = make_shared<BatchGEMMSeq>(0, threading->seq_type);
     }
     virtual ~OperatorFunctions() = default;
+    virtual shared_ptr<OperatorFunctions<S>> copy() const {
+        shared_ptr<OperatorFunctions<S>> opf =
+            make_shared<OperatorFunctions<S>>(this->cg);
+        opf->seq = this->seq->copy();
+        return opf;
+    }
+    virtual void
+    parallel_reduce(const vector<shared_ptr<SparseMatrix<S>>> &mats, int i,
+                    int j) const {
+        assert(j > i);
+        if (j - i == 1)
+            return;
+        assert(mats[i]->get_type() == SparseMatrixTypes::Normal);
+        int m = (i + j) >> 1;
+#pragma omp task
+        parallel_reduce(mats, i, m);
+#pragma omp task
+        parallel_reduce(mats, m, j);
+#pragma omp taskwait
+        MatrixFunctions::iadd(
+            MatrixRef(mats[i]->data, 1, mats[i]->total_memory),
+            MatrixRef(mats[m]->data, 1, mats[m]->total_memory), 1.0);
+    }
+    virtual void
+    parallel_reduce(const vector<shared_ptr<SparseMatrixGroup<S>>> &mats, int i,
+                    int j) const {
+        assert(j > i);
+        if (j - i == 1)
+            return;
+        int m = (i + j) >> 1;
+#pragma omp task
+        parallel_reduce(mats, i, m);
+#pragma omp task
+        parallel_reduce(mats, m, j);
+#pragma omp taskwait
+        // avoid possible int32 overflow
+        for (int j = 0; j < mats[i]->n; j++)
+            MatrixFunctions::iadd(
+                MatrixRef(mats[i]->data, 1, (*mats[i])[j]->total_memory),
+                MatrixRef(mats[m]->data, 1, (*mats[m])[j]->total_memory), 1.0);
+    }
     // a += b * scale
     virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
                       const shared_ptr<SparseMatrix<S>> &b, double scale = 1.0,

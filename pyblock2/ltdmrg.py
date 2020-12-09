@@ -27,7 +27,7 @@ Author: Huanchen Zhai, Jun 21, 2020
 
 import numpy as np
 import time
-from block2 import init_memory, release_memory, set_mkl_num_threads
+from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 from block2 import VectorUInt8, VectorUBond, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
 from block2 import SU2, SZ, get_partition_weights
@@ -62,7 +62,9 @@ class LTDMRG:
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
-        set_mkl_num_threads(omp_threads)
+        Global.threading = Threading(
+            ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
+        Global.threading.seq_type = SeqTypes.Simple
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -82,7 +84,6 @@ class LTDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
         assert pg in ["d2h", "c1"]
 
     def init_hamiltonian(self, pg, n_sites, n_elec, twos, isym, orb_sym, e_core,
@@ -131,7 +132,6 @@ class LTDMRG:
 
         self.hamil = HamiltonianQC(
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
-        self.hamil.opf.seq.mode = SeqTypes.Simple
 
         if save_fcidump is not None:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)

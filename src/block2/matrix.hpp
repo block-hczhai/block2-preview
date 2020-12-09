@@ -21,6 +21,7 @@
 #pragma once
 
 #include "allocator.hpp"
+#include "threading.hpp"
 #ifdef _HAS_INTEL_MKL
 #include "mkl.h"
 #endif
@@ -29,14 +30,6 @@
 #include <iostream>
 
 using namespace std;
-
-#ifndef _HAS_INTEL_MKL
-#ifdef MKL_ILP64
-#define MKL_INT long long int
-#else
-#define MKL_INT int
-#endif
-#endif
 
 #define _MINTSZ (sizeof(MKL_INT) / sizeof(int32_t))
 
@@ -51,8 +44,13 @@ struct MatrixRef {
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
-    void allocate() { data = dalloc->allocate(size()); }
-    void deallocate() { dalloc->deallocate(data, size()), data = nullptr; }
+    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        data = (alloc == nullptr ? dalloc : alloc)->allocate(size());
+    }
+    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc : alloc)->deallocate(data, size());
+        data = nullptr;
+    }
     void clear() { memset(data, 0, size() * sizeof(double)); }
     MatrixRef flip_dims() const { return MatrixRef(data, n, m); }
     MatrixRef shift_ptr(size_t l) const { return MatrixRef(data + l, m, n); }

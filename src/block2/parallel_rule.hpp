@@ -137,8 +137,8 @@ template <typename S> struct ParallelRule {
         ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
         return pp.ptype & ParallelOpTypes::Number;
     }
-    template <typename EvalOp, typename PostOp>
-    void parallel_apply(EvalOp f, PostOp g,
+    template <typename T>
+    void distributed_apply(T f,
                         const vector<shared_ptr<OpExpr<S>>> &ops,
                         const vector<shared_ptr<OpExpr<S>>> &exprs,
                         vector<shared_ptr<SparseMatrix<S>>> &mats) const {
@@ -162,7 +162,7 @@ template <typename S> struct ParallelRule {
                 op_exprs[i] =
                     make_pair(op, dynamic_pointer_cast<OpExprRef<S>>(expr));
         }
-        shared_ptr<SparseMatrix<S>> xm = nullptr;
+        vector<shared_ptr<OpExpr<S>>> local_exprs(exprs.size());
         for (size_t i = 0; i < exprs.size(); i++) {
             if (i < mats.size() && mats[i] == nullptr)
                 continue;
@@ -170,11 +170,10 @@ template <typename S> struct ParallelRule {
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
                 partial(op) ? (expr_ref->is_local ? own(op) : true) : own(op);
-            if (req) {
-                f(expr_ref->op, mats.size() != 0 ? mats[i] : xm);
-            }
+            if (req)
+                local_exprs[i] = expr_ref->op;
         }
-        g();
+        f(local_exprs);
         for (size_t i = 0; i < mats.size(); i++) {
             if (mats[i] == nullptr)
                 continue;

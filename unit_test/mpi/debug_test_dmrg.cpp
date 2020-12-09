@@ -40,6 +40,10 @@ class TestDMRG : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -87,12 +91,6 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(4);
-    mkl_set_dynamic(0);
-#endif
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<SU2>> para_comm =
@@ -173,7 +171,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 1);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 

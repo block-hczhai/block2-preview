@@ -11,6 +11,10 @@ class TestNPDM : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -31,11 +35,6 @@ TEST_F(TestNPDM, TestSU2) {
                PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -199,7 +198,6 @@ TEST_F(TestNPDM, TestSU2) {
         mps_info->deallocate_mutable();
 
         // ME
-        hamil.opf->seq->mode = SeqTypes::Simple;
         shared_ptr<MovingEnvironment<SU2>> me =
             make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
         t.get_time();
@@ -209,7 +207,7 @@ TEST_F(TestNPDM, TestSU2) {
 
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
-        vector<double> noises =  {1E-8, 0.0};
+        vector<double> noises =  {1E-8, 0};
         shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
@@ -332,11 +330,6 @@ TEST_F(TestNPDM, TestSZ) {
               PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -766,7 +759,6 @@ TEST_F(TestNPDM, TestSZ) {
         mps_info->deallocate_mutable();
 
         // ME
-        hamil.opf->seq->mode = SeqTypes::Simple;
         shared_ptr<MovingEnvironment<SZ>> me =
             make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
         t.get_time();

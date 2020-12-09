@@ -13,6 +13,9 @@ class TestDMRG : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16, 16, 16);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -24,37 +27,41 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    string occ_filename = "data/CR2.SVP.OCC";
+    // string occ_filename = "data/CR2.SVP.OCC";
+    string occ_filename = "../my_test/cuprate/new2/CPR.CCSD.OCC";
     occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename = "../my_test/cuprate/new2/FCIDUMP";
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
+    Timer t;
+    t.get_time();
+    cout << "INT start" << endl;
     fcidump->read(filename);
+    cout << "INT end .. T = " << t.get_time() << endl;
     vector<uint8_t> orbsym = fcidump->orb_sym();
-    transform(orbsym.begin(), orbsym.end(), orbsym.begin(), PointGroup::swap_d2h);
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_d2h);
     SZ vacuum(0);
-    SZ target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_d2h(fcidump->isym()));
+    SZ target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
     // abort();
 
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(16);
-    mkl_set_dynamic(0);
-#endif
-
-    Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SZ>> mpo =
+        make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true, true);
+    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true,
+                                         true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -62,8 +69,8 @@ TEST_F(TestDMRG, Test) {
     ubond_t bond_dim = 250;
 
     // MPSInfo
-    shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis);
+    shared_ptr<MPSInfo<SZ>> mps_info =
+        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -103,9 +110,12 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
+    t.get_time();
+    cout << "MPO start" << endl;
     shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
+    cout << "MPS end .. T = " << t.get_time() << endl;
 
     // for (int i = 0; i < mps->n_sites; i++)
     //     if (mps->tensors[i] != nullptr)
@@ -126,7 +136,6 @@ TEST_F(TestDMRG, Test) {
          << " D = " << dalloc_()->used << endl;
     // abort();
     // ME
-    hamil.opf->seq->mode = SeqTypes::Simple;
     shared_ptr<MovingEnvironment<SZ>> me =
         make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
     t.get_time();
@@ -140,9 +149,11 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
-                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7, 1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    vector<double> davthrs = {2.5E-5, 2.5E-5, 2.5E-5, 2.5E-5, 1E-6, 1E-6, 1E-6, 1E-8, 1E-8, 1E-8, 1E-8};
+                             500, 500, 750, 750, 750, 750, 750};
+    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7,
+                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
+    vector<double> davthrs = {2.5E-5, 2.5E-5, 2.5E-5, 2.5E-5, 1E-6, 1E-6,
+                              1E-6,   1E-8,   1E-8,   1E-8,   1E-8};
     // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);

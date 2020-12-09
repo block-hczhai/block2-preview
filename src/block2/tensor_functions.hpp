@@ -46,6 +46,87 @@ template <typename S> struct TensorFunctions {
     virtual const TensorFunctionsTypes get_type() const {
         return TensorFunctionsTypes::Normal;
     }
+    virtual shared_ptr<TensorFunctions<S>> copy() const {
+        return make_shared<TensorFunctions<S>>(opf->copy());
+    }
+    template <typename T> void serial_for(size_t n, T op) const {
+        shared_ptr<TensorFunctions<S>> tf =
+            make_shared<TensorFunctions<S>>(*this);
+        for (size_t i = 0; i < n; i++)
+            op(tf, i);
+    }
+    template <typename T> void parallel_for(size_t n, T op) const {
+        shared_ptr<TensorFunctions<S>> tf =
+            make_shared<TensorFunctions<S>>(*this);
+        int ntop = threading->activate_operator();
+        if (ntop == 1) {
+            for (size_t i = 0; i < n; i++)
+                op(tf, i);
+        } else {
+            vector<shared_ptr<TensorFunctions<S>>> tfs(1, tf);
+            for (int i = 1; i < ntop; i++) {
+                tfs.push_back(this->copy());
+                tfs[i]->opf->seq->cumulative_nflop = 0;
+            }
+#pragma omp parallel for schedule(dynamic) num_threads(ntop)
+            for (size_t i = 0; i < n; i++) {
+                int tid = threading->get_thread_id();
+                op(tfs[tid], i);
+            }
+            for (int i = 1; i < ntop; i++)
+                opf->seq->cumulative_nflop +=
+                    tfs[i]->opf->seq->cumulative_nflop;
+        }
+        threading->activate_normal();
+    }
+    template <typename T, typename SM>
+    void serial_reduce(size_t n, const shared_ptr<SM> &mat, T op) const {
+        shared_ptr<TensorFunctions<S>> tf =
+            make_shared<TensorFunctions<S>>(*this);
+        for (size_t i = 0; i < n; i++)
+            op(tf, mat, i);
+    }
+    template <typename T, typename SM>
+    void parallel_reduce(size_t n, const shared_ptr<SM> &mat, T op) const {
+        shared_ptr<TensorFunctions<S>> tf =
+            make_shared<TensorFunctions<S>>(*this);
+        int ntop = threading->activate_operator();
+        if (ntop == 1) {
+            for (size_t i = 0; i < n; i++)
+                op(tf, mat, i);
+        } else {
+            vector<shared_ptr<SM>> mats(1, mat);
+            vector<shared_ptr<TensorFunctions<S>>> tfs(1, tf);
+            mats.resize(ntop, nullptr);
+            for (int i = 1; i < ntop; i++) {
+                tfs.push_back(this->copy());
+                tfs[i]->opf->seq->cumulative_nflop = 0;
+            }
+#pragma omp parallel num_threads(ntop)
+            {
+                int tid = threading->get_thread_id();
+                if (tid != 0) {
+                    shared_ptr<VectorAllocator<double>> d_alloc =
+                        make_shared<VectorAllocator<double>>();
+                    mats[tid] = make_shared<SM>(d_alloc);
+                    mats[tid]->allocate_like(mat);
+                }
+#pragma omp for schedule(dynamic)
+                for (size_t i = 0; i < n; i++)
+                    op(tfs[tid], mats[tid], i);
+#pragma omp single
+                tfs[tid]->opf->parallel_reduce(mats, 0, ntop);
+                if (tid != 0) {
+                    mats[tid]->deallocate();
+                    mats[tid] = nullptr;
+                }
+            }
+            for (int i = 1; i < ntop; i++)
+                opf->seq->cumulative_nflop +=
+                    tfs[i]->opf->seq->cumulative_nflop;
+        }
+        threading->activate_normal();
+    }
     // c = a
     virtual void left_assign(const shared_ptr<OperatorTensor<S>> &a,
                              shared_ptr<OperatorTensor<S>> &c) const {
@@ -54,20 +135,22 @@ template <typename S> struct TensorFunctions {
         assert(c->lmat != nullptr);
         assert(c->lmat->get_type() == SymTypes::RVec);
         assert(a->lmat->data.size() == c->lmat->data.size());
-        for (size_t i = 0; i < a->lmat->data.size(); i++) {
-            if (a->lmat->data[i]->get_type() == OpTypes::Zero)
-                c->lmat->data[i] = a->lmat->data[i];
-            else {
-                assert(a->lmat->data[i] == c->lmat->data[i]);
-                auto pa = abs_value(a->lmat->data[i]),
-                     pc = abs_value(c->lmat->data[i]);
-                if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                    c->ops[pc]->copy_data_from(a->ops[pa], true);
-                else
-                    c->ops[pc]->selective_copy_from(a->ops[pa], true);
-                c->ops[pc]->factor = a->ops[pa]->factor;
-            }
-        }
+        parallel_for(
+            a->lmat->data.size(),
+            [&a, &c](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                if (a->lmat->data[i]->get_type() == OpTypes::Zero)
+                    c->lmat->data[i] = a->lmat->data[i];
+                else {
+                    assert(a->lmat->data[i] == c->lmat->data[i]);
+                    auto pa = abs_value(a->lmat->data[i]),
+                         pc = abs_value(c->lmat->data[i]);
+                    if (c->ops[pc]->info->n == a->ops[pa]->info->n)
+                        c->ops[pc]->copy_data_from(a->ops[pa], true);
+                    else
+                        c->ops[pc]->selective_copy_from(a->ops[pa], true);
+                    c->ops[pc]->factor = a->ops[pa]->factor;
+                }
+            });
     }
     // c = a
     virtual void right_assign(const shared_ptr<OperatorTensor<S>> &a,
@@ -77,20 +160,22 @@ template <typename S> struct TensorFunctions {
         assert(c->rmat != nullptr);
         assert(c->rmat->get_type() == SymTypes::CVec);
         assert(a->rmat->data.size() == c->rmat->data.size());
-        for (size_t i = 0; i < a->rmat->data.size(); i++) {
-            if (a->rmat->data[i]->get_type() == OpTypes::Zero)
-                c->rmat->data[i] = a->rmat->data[i];
-            else {
-                assert(a->rmat->data[i] == c->rmat->data[i]);
-                auto pa = abs_value(a->rmat->data[i]),
-                     pc = abs_value(c->rmat->data[i]);
-                if (c->ops[pc]->info->n == a->ops[pa]->info->n)
-                    c->ops[pc]->copy_data_from(a->ops[pa], true);
-                else
-                    c->ops[pc]->selective_copy_from(a->ops[pa], true);
-                c->ops[pc]->factor = a->ops[pa]->factor;
-            }
-        }
+        parallel_for(
+            a->rmat->data.size(),
+            [&a, &c](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                if (a->rmat->data[i]->get_type() == OpTypes::Zero)
+                    c->rmat->data[i] = a->rmat->data[i];
+                else {
+                    assert(a->rmat->data[i] == c->rmat->data[i]);
+                    auto pa = abs_value(a->rmat->data[i]),
+                         pc = abs_value(c->rmat->data[i]);
+                    if (c->ops[pc]->info->n == a->ops[pa]->info->n)
+                        c->ops[pc]->copy_data_from(a->ops[pa], true);
+                    else
+                        c->ops[pc]->selective_copy_from(a->ops[pa], true);
+                    c->ops[pc]->factor = a->ops[pa]->factor;
+                }
+            });
     }
     // vmat = expr[L part | R part] x cmat (for perturbative noise)
     virtual void tensor_product_partial_multiply(
@@ -286,10 +371,28 @@ template <typename S> struct TensorFunctions {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
-            for (auto &x : op->strings)
-                tensor_product_partial_multiply(x, lopt, ropt, trace_right,
-                                                cmat, psubsl, cinfos, vdqs,
-                                                vmats, vidx, false);
+            if (vidx != -1)
+                for (auto &x : op->strings)
+                    tensor_product_partial_multiply(x, lopt, ropt, trace_right,
+                                                    cmat, psubsl, cinfos, vdqs,
+                                                    vmats, vidx, false);
+            else
+                parallel_reduce(
+                    op->strings.size(), vmats,
+                    [&op, &lopt, &ropt, trace_right, &cmat, &psubsl, &cinfos,
+                     &vdqs](const shared_ptr<TensorFunctions<S>> &tf,
+                            const shared_ptr<SparseMatrixGroup<S>> &vmats,
+                            size_t i) {
+                        shared_ptr<SparseMatrixInfo<S>> pcmat_info =
+                            make_shared<SparseMatrixInfo<S>>(*cmat->info);
+                        shared_ptr<SparseMatrix<S>> pcmat =
+                            make_shared<SparseMatrix<S>>(*cmat);
+                        pcmat->info = pcmat_info;
+                        int vidx = -1;
+                        tf->tensor_product_partial_multiply(
+                            op->strings[i], lopt, ropt, trace_right, pcmat,
+                            psubsl, cinfos, vdqs, vmats, vidx, false);
+                    });
         } break;
         case OpTypes::Zero:
             break;
@@ -353,8 +456,14 @@ template <typename S> struct TensorFunctions {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
-            for (auto &x : op->strings)
-                tensor_product_multiply(x, lopt, ropt, cmat, vmat, opdq, false);
+            parallel_reduce(
+                op->strings.size(), vmat,
+                [&op, &lopt, &ropt, &cmat,
+                 &opdq](const shared_ptr<TensorFunctions<S>> &tf,
+                        const shared_ptr<SparseMatrix<S>> &vmat, size_t i) {
+                    tf->tensor_product_multiply(op->strings[i], lopt, ropt,
+                                                cmat, vmat, opdq, false);
+                });
         } break;
         case OpTypes::Zero:
             break;
@@ -368,7 +477,8 @@ template <typename S> struct TensorFunctions {
     tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
                             const shared_ptr<OperatorTensor<S>> &lopt,
                             const shared_ptr<OperatorTensor<S>> &ropt,
-                            shared_ptr<SparseMatrix<S>> &mat, S opdq) const {
+                            const shared_ptr<SparseMatrix<S>> &mat,
+                            S opdq) const {
         switch (expr->get_type()) {
         case OpTypes::SumProd: {
             shared_ptr<OpSumProd<S>> op =
@@ -404,8 +514,14 @@ template <typename S> struct TensorFunctions {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
-            for (auto &x : op->strings)
-                tensor_product_diagonal(x, lopt, ropt, mat, opdq);
+            parallel_reduce(
+                op->strings.size(), mat,
+                [&op, &lopt, &ropt,
+                 &opdq](const shared_ptr<TensorFunctions<S>> &tf,
+                        const shared_ptr<SparseMatrix<S>> &mat, size_t i) {
+                    tf->tensor_product_diagonal(op->strings[i], lopt, ropt, mat,
+                                                opdq);
+                });
         } break;
         case OpTypes::Zero:
             break;
@@ -415,13 +531,13 @@ template <typename S> struct TensorFunctions {
         }
     }
     // mat = eval(expr)
-    virtual void
-    tensor_product(const shared_ptr<OpExpr<S>> &expr,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &lop,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &rop,
-                   shared_ptr<SparseMatrix<S>> &mat) const {
+    virtual void tensor_product(
+        const shared_ptr<OpExpr<S>> &expr,
+        const unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
+            &lop,
+        const unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
+            &rop,
+        shared_ptr<SparseMatrix<S>> &mat) const {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S>> op =
@@ -440,7 +556,10 @@ template <typename S> struct TensorFunctions {
             assert((op->a == nullptr) ^ (op->b == nullptr));
             assert(op->ops.size() != 0);
             bool has_intermediate = false;
-            shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            shared_ptr<SparseMatrix<S>> tmp =
+                make_shared<SparseMatrix<S>>(d_alloc);
             if (op->c != nullptr && ((op->b == nullptr && rop.count(op->c)) ||
                                      (op->a == nullptr && lop.count(op->c)))) {
                 has_intermediate = true;
@@ -506,12 +625,16 @@ template <typename S> struct TensorFunctions {
                 dynamic_pointer_cast<OpElement<S>>(p.first);
             c->ops.at(op)->allocate(c->ops.at(op)->info);
         }
-        for (size_t i = 0; i < a->lmat->data.size(); i++)
-            if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
-                auto pa = abs_value(a->lmat->data[i]);
-                opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa), mpst_bra,
-                                   mpst_ket, false);
-            }
+        parallel_for(a->lmat->data.size(),
+                     [&a, &c, &mpst_bra, &mpst_ket](
+                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                         if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
+                             auto pa = abs_value(a->lmat->data[i]);
+                             tf->opf->tensor_rotate(a->ops.at(pa),
+                                                    c->ops.at(pa), mpst_bra,
+                                                    mpst_ket, false);
+                         }
+                     });
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
@@ -525,12 +648,16 @@ template <typename S> struct TensorFunctions {
                 dynamic_pointer_cast<OpElement<S>>(p.first);
             c->ops.at(op)->allocate(c->ops.at(op)->info);
         }
-        for (size_t i = 0; i < a->rmat->data.size(); i++)
-            if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
-                auto pa = abs_value(a->rmat->data[i]);
-                opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa), mpst_bra,
-                                   mpst_ket, true);
-            }
+        parallel_for(a->rmat->data.size(),
+                     [&a, &c, &mpst_bra, &mpst_ket](
+                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                         if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
+                             auto pa = abs_value(a->rmat->data[i]);
+                             tf->opf->tensor_rotate(a->ops.at(pa),
+                                                    c->ops.at(pa), mpst_bra,
+                                                    mpst_ket, true);
+                         }
+                     });
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
@@ -538,13 +665,17 @@ template <typename S> struct TensorFunctions {
                                const shared_ptr<Symbolic<S>> &exprs,
                                const shared_ptr<OperatorTensor<S>> &a,
                                bool left) const {
+        vector<vector<shared_ptr<OpSumProd<S>>>> exs;
+        vector<int> maxk;
+        exs.reserve(exprs->data.size());
+        maxk.reserve(exprs->data.size());
         for (size_t i = 0; i < exprs->data.size(); i++)
-            if (exprs->data[i]->get_type() == OpTypes::Sum) {
+            if (exprs->data[i] != nullptr &&
+                exprs->data[i]->get_type() == OpTypes::Sum) {
                 shared_ptr<OpSum<S>> expr =
                     dynamic_pointer_cast<OpSum<S>>(exprs->data[i]);
-                vector<shared_ptr<OpSumProd<S>>> exs;
-                exs.reserve(expr->strings.size());
-                int maxk = 0;
+                exs.push_back(vector<shared_ptr<OpSumProd<S>>>());
+                maxk.push_back(0);
                 for (size_t j = 0; j < expr->strings.size(); j++)
                     if (expr->strings[j]->get_type() == OpTypes::SumProd) {
                         shared_ptr<OpSumProd<S>> ex =
@@ -562,24 +693,27 @@ template <typename S> struct TensorFunctions {
                         assert(a->ops.count(opb) != 0);
                         tmp->allocate(a->ops.at(opb)->info);
                         a->ops[ex->c] = tmp;
-                        exs.push_back(ex);
-                        maxk = max(maxk, (int)ex->ops.size());
+                        exs.back().push_back(ex);
+                        maxk.back() = max(maxk.back(), (int)ex->ops.size());
                     }
-                for (int k = 0; k < maxk; k++) {
-                    for (auto &ex : exs) {
-                        if (k < ex->ops.size()) {
-                            shared_ptr<SparseMatrix<S>> xmat = a->ops.at(
-                                abs_value((shared_ptr<OpExpr<S>>)ex->ops[k]));
-                            assert(xmat->get_type() !=
-                                   SparseMatrixTypes::Delayed);
-                            opf->iadd(a->ops.at(ex->c), xmat,
-                                      ex->ops[k]->factor, ex->conjs[k]);
-                        }
-                    }
-                    if (opf->seq->mode == SeqTypes::Simple)
-                        opf->seq->simple_perform();
-                }
             }
+        parallel_for(exs.size(), [&maxk, &exs,
+                                  &a](const shared_ptr<TensorFunctions<S>> &tf,
+                                      size_t i) {
+            for (int k = 0; k < maxk[i]; k++) {
+                for (auto &ex : exs[i]) {
+                    if (k < ex->ops.size()) {
+                        shared_ptr<SparseMatrix<S>> xmat = a->ops.at(
+                            abs_value((shared_ptr<OpExpr<S>>)ex->ops[k]));
+                        assert(xmat->get_type() != SparseMatrixTypes::Delayed);
+                        tf->opf->iadd(a->ops.at(ex->c), xmat,
+                                      ex->ops[k]->factor, ex->conjs[k]);
+                    }
+                }
+                if (tf->opf->seq->mode == SeqTypes::Simple)
+                    tf->opf->seq->simple_perform();
+            }
+        });
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
@@ -623,20 +757,20 @@ template <typename S> struct TensorFunctions {
                 break;
             }
         }
-        for (int i = 0; i < maxi; i++) {
-            for (auto &tr : trs) {
-                shared_ptr<OpSum<S>> op = tr.second;
-                if (i < op->strings.size()) {
-                    shared_ptr<OpElement<S>> nexpr = op->strings[i]->get_op();
+        parallel_for(
+            trs.size(),
+            [&trs, &a](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                shared_ptr<OpSum<S>> op = trs[i].second;
+                for (size_t j = 0; j < op->strings.size(); j++) {
+                    shared_ptr<OpElement<S>> nexpr = op->strings[j]->get_op();
                     assert(a->ops.count(nexpr) != 0);
-                    opf->iadd(tr.first, a->ops.at(nexpr),
-                              op->strings[i]->factor,
-                              op->strings[i]->conj != 0);
+                    tf->opf->iadd(trs[i].first, a->ops.at(nexpr),
+                                  op->strings[j]->factor,
+                                  op->strings[j]->conj != 0);
+                    if (tf->opf->seq->mode == SeqTypes::Simple)
+                        tf->opf->seq->simple_perform();
                 }
-            }
-            if (opf->seq->mode == SeqTypes::Simple)
-                opf->seq->simple_perform();
-        }
+            });
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
@@ -646,9 +780,10 @@ template <typename S> struct TensorFunctions {
     substitute_delayed_exprs(const shared_ptr<Symbolic<S>> &exprs,
                              const shared_ptr<DelayedOperatorTensor<S>> &a,
                              bool left, OpNamesSet delayed) const {
-        map<shared_ptr<OpExpr<S>>, shared_ptr<OpExpr<S>>, op_expr_less<S>> aops;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<OpExpr<S>>> aops;
         shared_ptr<Symbolic<S>> amat = left ? a->lmat : a->rmat;
         assert(amat->data.size() == a->mat->data.size());
+        aops.reserve(amat->data.size());
         for (size_t i = 0; i < amat->data.size(); i++) {
             shared_ptr<OpElement<S>> aop =
                 dynamic_pointer_cast<OpElement<S>>(amat->data[i]);
@@ -657,6 +792,8 @@ template <typename S> struct TensorFunctions {
             aops[op] = expr;
         }
         vector<shared_ptr<OpExpr<S>>> rexpr(exprs->data.size());
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static, 20) num_threads(ntg)
         for (size_t i = 0; i < exprs->data.size(); i++) {
             shared_ptr<OpExpr<S>> expr = exprs->data[i];
             if (expr->get_type() == OpTypes::ExprRef)
@@ -697,7 +834,7 @@ template <typename S> struct TensorFunctions {
                 // sometimes, terms in TEMP expr can be evaluated in different
                 // procs, which will change the conj of TEMP
                 // we need to use the conj from the localized expr of TEMP
-                map<shared_ptr<OpExpr<S>>, uint8_t, op_expr_less<S>> mpc;
+                unordered_map<shared_ptr<OpExpr<S>>, uint8_t> mpc;
                 if (hexpr->get_type() == OpTypes::ExprRef) {
                     shared_ptr<OpExpr<S>> op_expr =
                         dynamic_pointer_cast<OpExprRef<S>>(hexpr)->op;
@@ -720,6 +857,7 @@ template <typename S> struct TensorFunctions {
                         assert(false);
                         break;
                     }
+                    mpc.reserve(mrs.size());
                     for (auto &op : mrs)
                         if (op->c != nullptr) {
                             uint8_t cj = op->b == nullptr ? (op->conj >> 1)
@@ -795,6 +933,7 @@ template <typename S> struct TensorFunctions {
             }
             rexpr[i] = make_shared<OpSum<S>>(rr);
         }
+        threading->activate_normal();
         shared_ptr<Symbolic<S>> r = exprs->copy();
         r->data = rexpr;
         if (r->get_type() == SymTypes::RVec)
@@ -902,14 +1041,18 @@ template <typename S> struct TensorFunctions {
             shared_ptr<Symbolic<S>> exprs =
                 cexprs == nullptr ? a->lmat * b->lmat : cexprs;
             assert(exprs->data.size() == c->lmat->data.size());
-            for (size_t i = 0; i < exprs->data.size(); i++) {
-                shared_ptr<OpElement<S>> cop =
-                    dynamic_pointer_cast<OpElement<S>>(c->lmat->data[i]);
-                shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
-                shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
-                if (!delayed(cop->name))
-                    tensor_product(expr, a->ops, b->ops, c->ops.at(op));
-            }
+            parallel_for(
+                exprs->data.size(),
+                [&a, &b, &c, &exprs,
+                 &delayed](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                    shared_ptr<OpElement<S>> cop =
+                        dynamic_pointer_cast<OpElement<S>>(c->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i] * (1 / cop->factor);
+                    if (!delayed(cop->name))
+                        tf->tensor_product(expr, a->ops, b->ops, c->ops.at(op));
+                });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
         }
@@ -932,14 +1075,18 @@ template <typename S> struct TensorFunctions {
             shared_ptr<Symbolic<S>> exprs =
                 cexprs == nullptr ? b->rmat * a->rmat : cexprs;
             assert(exprs->data.size() == c->rmat->data.size());
-            for (size_t i = 0; i < exprs->data.size(); i++) {
-                shared_ptr<OpElement<S>> cop =
-                    dynamic_pointer_cast<OpElement<S>>(c->rmat->data[i]);
-                shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
-                shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
-                if (!delayed(cop->name))
-                    tensor_product(expr, b->ops, a->ops, c->ops.at(op));
-            }
+            parallel_for(
+                exprs->data.size(),
+                [&a, &b, &c, &exprs,
+                 &delayed](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                    shared_ptr<OpElement<S>> cop =
+                        dynamic_pointer_cast<OpElement<S>>(c->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i] * (1 / cop->factor);
+                    if (!delayed(cop->name))
+                        tf->tensor_product(expr, b->ops, a->ops, c->ops.at(op));
+                });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
         }

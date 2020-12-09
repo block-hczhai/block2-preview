@@ -35,6 +35,9 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
     const TensorFunctionsTypes get_type() const override {
         return TensorFunctionsTypes::Delayed;
     }
+    shared_ptr<TensorFunctions<S>> copy() const override {
+        return make_shared<DelayedTensorFunctions<S>>(opf->copy());
+    }
     // c = a
     void left_assign(const shared_ptr<OperatorTensor<S>> &a,
                      shared_ptr<OperatorTensor<S>> &c) const override {
@@ -278,7 +281,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
     void tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
                                  const shared_ptr<OperatorTensor<S>> &lopt,
                                  const shared_ptr<OperatorTensor<S>> &ropt,
-                                 shared_ptr<SparseMatrix<S>> &mat,
+                                 const shared_ptr<SparseMatrix<S>> &mat,
                                  S opdq) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
@@ -317,13 +320,12 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
         }
     }
     // mat = eval(expr)
-    void
-    tensor_product(const shared_ptr<OpExpr<S>> &expr,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &lop,
-                   const map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                             op_expr_less<S>> &rop,
-                   shared_ptr<SparseMatrix<S>> &mat) const override {
+    void tensor_product(const shared_ptr<OpExpr<S>> &expr,
+                        const unordered_map<shared_ptr<OpExpr<S>>,
+                                            shared_ptr<SparseMatrix<S>>> &lop,
+                        const unordered_map<shared_ptr<OpExpr<S>>,
+                                            shared_ptr<SparseMatrix<S>>> &rop,
+                        shared_ptr<SparseMatrix<S>> &mat) const override {
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S>> op =

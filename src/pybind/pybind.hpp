@@ -694,10 +694,11 @@ template <typename S> void bind_sparse(py::module &m) {
     py::bind_vector<vector<shared_ptr<SparseMatrix<S>>>>(m, "VectorSpMat");
     py::bind_vector<vector<map<OpNames, shared_ptr<SparseMatrix<S>>>>>(
         m, "VectorMapOpNamesSpMat");
-    py::bind_map<map<OpNames, shared_ptr<SparseMatrix<S>>>>(m,
-                                                            "MapOpNamesSpMat");
-    py::bind_map<map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>,
-                     op_expr_less<S>>>(m, "MapOpExprSpMat");
+    py::bind_map<unordered_map<OpNames, shared_ptr<SparseMatrix<S>>>>(
+        m, "MapOpNamesSpMat");
+    py::bind_map<
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
+        m, "MapOpExprSpMat");
 
     py::bind_vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>>(
         m, "VectorPSSTensor");
@@ -2244,6 +2245,8 @@ template <typename S = void> void bind_io(py::module &m) {
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n);
         mkl_set_dynamic(0);
+        threading_()->n_threads_mkl = n;
+        threading_()->type = threading_()->type | ThreadingTypes::BatchedGEMM;
 #else
         throw runtime_error("cannot set number of mkl threads.");
 #endif
@@ -2251,6 +2254,8 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def("set_omp_num_threads", [](int n) {
 #ifdef _OPENMP
         omp_set_num_threads(n);
+        threading_()->n_threads_global = n;
+        threading_()->type = threading_()->type | ThreadingTypes::Global;
 #else
         if(n != 1)
             throw runtime_error("cannot set number of omp threads.");
@@ -2330,6 +2335,48 @@ template <typename S = void> void bind_io(py::module &m) {
             return ss.str();
         });
 
+    py::enum_<ThreadingTypes>(m, "ThreadingTypes", py::arithmetic())
+        .value("SequentialGEMM", ThreadingTypes::SequentialGEMM)
+        .value("BatchedGEMM", ThreadingTypes::BatchedGEMM)
+        .value("Quanta", ThreadingTypes::Quanta)
+        .value("QuantaBatchedGEMM", ThreadingTypes::QuantaBatchedGEMM)
+        .value("Operator", ThreadingTypes::Operator)
+        .value("OperatorBatchedGEMM", ThreadingTypes::OperatorBatchedGEMM)
+        .value("OperatorQuanta", ThreadingTypes::OperatorQuanta)
+        .value("OperatorQuantaBatchedGEMM",
+               ThreadingTypes::OperatorQuantaBatchedGEMM)
+        .value("Global", ThreadingTypes::Global)
+        .def(py::self & py::self)
+        .def(py::self ^ py::self)
+        .def(py::self | py::self);
+
+    py::class_<Threading, shared_ptr<Threading>>(m, "Threading")
+        .def(py::init<>())
+        .def(py::init<ThreadingTypes>())
+        .def(py::init<ThreadingTypes, int>())
+        .def(py::init<ThreadingTypes, int, int>())
+        .def(py::init<ThreadingTypes, int, int, int>())
+        .def(py::init<ThreadingTypes, int, int, int, int>())
+        .def_readwrite("type", &Threading::type)
+        .def_readwrite("seq_type", &Threading::seq_type)
+        .def_readwrite("n_threads_op", &Threading::n_threads_op)
+        .def_readwrite("n_threads_quanta", &Threading::n_threads_quanta)
+        .def_readwrite("n_threads_mkl", &Threading::n_threads_mkl)
+        .def_readwrite("n_threads_global", &Threading::n_threads_global)
+        .def_readwrite("n_levels", &Threading::n_levels)
+        .def("openmp_available", &Threading::openmp_available)
+        .def("mkl_available", &Threading::mkl_available)
+        .def("tbb_available", &Threading::tbb_available)
+        .def("activate_global", &Threading::activate_global)
+        .def("activate_normal", &Threading::activate_normal)
+        .def("activate_operator", &Threading::activate_operator)
+        .def("activate_quanta", &Threading::activate_quanta)
+        .def("__repr__", [](Threading *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
     py::bind_vector<vector<shared_ptr<StackAllocator<uint32_t>>>>(
         m, "VectorIntStackAllocator");
     py::bind_vector<vector<shared_ptr<StackAllocator<double>>>>(
@@ -2348,7 +2395,10 @@ template <typename S = void> void bind_io(py::module &m) {
             })
         .def_property_static(
             "frame", [](py::object) { return frame_(); },
-            [](py::object, shared_ptr<DataFrame> fr) { frame_() = fr; });
+            [](py::object, shared_ptr<DataFrame> fr) { frame_() = fr; })
+        .def_property_static(
+            "threading", [](py::object) { return threading_(); },
+            [](py::object, shared_ptr<Threading> th) { threading_() = th; });
 
     py::class_<Random, shared_ptr<Random>>(m, "Random")
         .def_static("rand_seed", &Random::rand_seed, py::arg("i") = 0U)
@@ -2398,7 +2448,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
                  ss << *self;
                  return ss.str();
              })
-        .def("deallocate", &MatrixRef::deallocate);
+        .def("allocate", &MatrixRef::allocate, py::arg("alloc") = nullptr)
+        .def("deallocate", &MatrixRef::deallocate, py::arg("alloc") = nullptr);
 
     py::class_<CSRMatrixRef, shared_ptr<CSRMatrixRef>>(m, "CSRMatrix")
         .def(py::init<>())

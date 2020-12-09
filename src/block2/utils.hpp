@@ -107,8 +107,8 @@ struct Parsing {
             last = index + 1;
             index = s.find_first_of(delim, last);
         }
-        if (index > last)
-            r.push_back(s.substr(last, index - last));
+        if (s.length() > last)
+            r.push_back(s.substr(last, s.length() - last));
         return r;
     }
     static string &lower(string &x) {

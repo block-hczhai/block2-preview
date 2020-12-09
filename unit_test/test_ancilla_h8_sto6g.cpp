@@ -17,6 +17,10 @@ class TestAncillaH8STO6G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+        threading_()->seq_type = SeqTypes::Simple;
+        cout << *threading_() << endl;
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -32,13 +36,6 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
                                       const vector<double> &energies_m500,
                                       const HamiltonianQC<S> &hamil,
                                       const string &name) {
-
-    hamil.opf->seq->mode = SeqTypes::Simple;
-
-#ifdef _HAS_INTEL_MKL
-    mkl_set_num_threads(8);
-    mkl_set_dynamic(0);
-#endif
 
     Timer t;
     t.get_time();

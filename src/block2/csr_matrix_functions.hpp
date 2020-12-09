@@ -122,24 +122,26 @@ struct CSRMatrixFunctions {
     // a = a + scale * op(b)
     static void iadd(CSRMatrixRef &a, const CSRMatrixRef &b, double scale,
                      bool conj = false) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         if (a.nnz == a.size()) {
             if (b.nnz == b.size())
                 MatrixFunctions::iadd(a.dense_ref(), b.dense_ref(), scale,
                                       conj);
             else {
-                MatrixRef bd(dalloc->allocate(b.size()), b.m, b.n);
+                MatrixRef bd(d_alloc->allocate(b.size()), b.m, b.n);
                 b.to_dense(bd);
                 MatrixFunctions::iadd(a.dense_ref(), bd, scale, conj);
-                bd.deallocate();
+                bd.deallocate(d_alloc);
             }
             return;
         } else if (b.nnz == b.size()) {
-            MatrixRef ad(dalloc->allocate(a.size()), a.m, a.n);
+            MatrixRef ad(d_alloc->allocate(a.size()), a.m, a.n);
             a.to_dense(ad);
             MatrixFunctions::iadd(ad, b.dense_ref(), scale, conj);
             a.deallocate();
             a.from_dense(ad);
-            ad.deallocate();
+            ad.deallocate(d_alloc);
             return;
         }
 #ifdef _HAS_INTEL_MKL
@@ -156,6 +158,8 @@ struct CSRMatrixFunctions {
         a.deallocate();
         a = MKLSparseAllocator::from_mkl_sparse_matrix(spc);
 #else
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
         CSRMatrixRef tmp;
         MKL_INT *arows = a.rows, *acols = a.cols, *brows = b.rows,
                 *bcols = b.cols;
@@ -164,11 +168,12 @@ struct CSRMatrixFunctions {
         const MKL_INT bm = conj ? b.n : b.m, bn = conj ? b.m : b.n;
         assert(am == bm && an == bn);
         if (conj)
-            tmp = b.transpose(dalloc), brows = tmp.rows, bcols = tmp.cols,
+            tmp = b.transpose(d_alloc), brows = tmp.rows, bcols = tmp.cols,
             bdata = tmp.data;
-        MKL_INT *rrows = (MKL_INT *)ialloc->allocate((a.m + 1) * _MINTSZ);
-        MKL_INT *rcols = (MKL_INT *)ialloc->allocate((a.nnz + b.nnz) * _MINTSZ);
-        double *rdata = dalloc->allocate(a.nnz + b.nnz);
+        MKL_INT *rrows = (MKL_INT *)i_alloc->allocate((a.m + 1) * _MINTSZ);
+        MKL_INT *rcols =
+            (MKL_INT *)i_alloc->allocate((a.nnz + b.nnz) * _MINTSZ);
+        double *rdata = d_alloc->allocate(a.nnz + b.nnz);
         MKL_INT k = 0;
         for (MKL_INT i = 0; i < am; i++) {
             rrows[i] = k;
@@ -192,8 +197,6 @@ struct CSRMatrixFunctions {
             }
         }
         rrows[am] = k;
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(am, an, k, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
@@ -202,9 +205,9 @@ struct CSRMatrixFunctions {
             memcpy(r.cols, rcols, r.nnz * sizeof(MKL_INT));
         }
         memcpy(r.data, rdata, r.nnz * sizeof(double));
-        dalloc->deallocate(rdata, a.nnz + b.nnz);
-        ialloc->deallocate(rcols, (a.nnz + b.nnz) * _MINTSZ);
-        ialloc->deallocate(rrows, (a.m + 1) * _MINTSZ);
+        d_alloc->deallocate(rdata, a.nnz + b.nnz);
+        i_alloc->deallocate(rcols, (a.nnz + b.nnz) * _MINTSZ);
+        i_alloc->deallocate(rrows, (a.m + 1) * _MINTSZ);
         a.deallocate();
         a = r;
         if (conj)
@@ -214,6 +217,10 @@ struct CSRMatrixFunctions {
     static void multiply(const CSRMatrixRef &a, bool conja,
                          const CSRMatrixRef &b, bool conjb, CSRMatrixRef &c,
                          double scale, double cfactor) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
         if (a.nnz == a.size() || b.nnz == b.size()) {
             if (c.nnz == c.size()) {
                 if (a.nnz == a.size() && b.nnz == b.size())
@@ -227,7 +234,7 @@ struct CSRMatrixFunctions {
                     multiply(a, conja, b.dense_ref(), conjb, c.dense_ref(),
                              scale, cfactor);
             } else {
-                MatrixRef cd(dalloc->allocate(c.size()), c.m, c.n);
+                MatrixRef cd(d_alloc->allocate(c.size()), c.m, c.n);
                 c.to_dense(cd);
                 if (a.nnz == a.size() && b.nnz == b.size())
                     MatrixFunctions::multiply(a.dense_ref(), conja,
@@ -241,14 +248,14 @@ struct CSRMatrixFunctions {
                              cfactor);
                 c.deallocate();
                 c.from_dense(cd);
-                cd.deallocate();
+                cd.deallocate(d_alloc);
             }
             return;
         } else if (c.nnz == c.size()) {
-            MatrixRef bd(dalloc->allocate(b.size()), b.m, b.n);
+            MatrixRef bd(d_alloc->allocate(b.size()), b.m, b.n);
             b.to_dense(bd);
             multiply(a, conja, bd, conjb, c.dense_ref(), scale, cfactor);
-            bd.deallocate();
+            bd.deallocate(d_alloc);
             return;
         }
         vector<CSRMatrixRef> tmps;
@@ -259,14 +266,14 @@ struct CSRMatrixFunctions {
         const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         assert(am == c.m && bn == c.n && an == bm);
         if (conja)
-            tmps.push_back(a.transpose(dalloc)), arows = tmps.back().rows,
-                                                 acols = tmps.back().cols,
-                                                 adata = tmps.back().data;
+            tmps.push_back(a.transpose(d_alloc)), arows = tmps.back().rows,
+                                                  acols = tmps.back().cols,
+                                                  adata = tmps.back().data;
         if (conjb)
-            tmps.push_back(b.transpose(dalloc)), brows = tmps.back().rows,
-                                                 bcols = tmps.back().cols,
-                                                 bdata = tmps.back().data;
-        MKL_INT *r_idx = (MKL_INT *)ialloc->allocate((c.m + 1) * _MINTSZ);
+            tmps.push_back(b.transpose(d_alloc)), brows = tmps.back().rows,
+                                                  bcols = tmps.back().cols,
+                                                  bdata = tmps.back().data;
+        MKL_INT *r_idx = (MKL_INT *)i_alloc->allocate((c.m + 1) * _MINTSZ);
         vector<MKL_INT> tcols, rcols;
         vector<double> tdata, rdata;
         for (MKL_INT i = 0, jp, jr, inc = 1; i < am; i++) {
@@ -290,7 +297,7 @@ struct CSRMatrixFunctions {
             }
             if (tcols.size() != 0) {
                 MKL_INT *idx =
-                    (MKL_INT *)ialloc->allocate(tcols.size() * _MINTSZ);
+                    (MKL_INT *)i_alloc->allocate(tcols.size() * _MINTSZ);
                 for (MKL_INT l = 0; l < (MKL_INT)tcols.size(); l++)
                     idx[l] = l;
                 sort(idx, idx + tcols.size(), [&tcols](MKL_INT ti, MKL_INT tj) {
@@ -306,12 +313,10 @@ struct CSRMatrixFunctions {
                     else
                         rcols.push_back(tcols[idx[l]]),
                             rdata.push_back(tdata[idx[l]]);
-                ialloc->deallocate(idx, tcols.size() * _MINTSZ);
+                i_alloc->deallocate(idx, tcols.size() * _MINTSZ);
             }
         }
         r_idx[am] = (MKL_INT)rcols.size();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, r_idx[am], nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
@@ -322,7 +327,7 @@ struct CSRMatrixFunctions {
         memcpy(r.data, rdata.data(), r.nnz * sizeof(double));
         c.deallocate();
         c = r;
-        ialloc->deallocate(r_idx, (c.m + 1) * _MINTSZ);
+        i_alloc->deallocate(r_idx, (c.m + 1) * _MINTSZ);
         for (MKL_INT it = conja + conjb - 1; it >= 0; it--)
             tmps[it].deallocate();
     }
@@ -348,8 +353,10 @@ struct CSRMatrixFunctions {
                                 a.data, a.m, a.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
         } else {
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
             MatrixRef at(nullptr, a.n, a.m);
-            at.allocate();
+            at.allocate(d_alloc);
             for (MKL_INT i = 0, inc = 1; i < at.m; i++)
                 dcopy(&at.n, a.data + i, &at.m, at.data + i * at.n, &inc);
             sparse_status_t st =
@@ -358,7 +365,7 @@ struct CSRMatrixFunctions {
                                 scale, *spb, mt, SPARSE_LAYOUT_COLUMN_MAJOR,
                                 at.data, at.m, at.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
-            at.deallocate();
+            at.deallocate(d_alloc);
         }
 #else
         const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
@@ -428,8 +435,10 @@ struct CSRMatrixFunctions {
                                 b.data, b.n, b.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
         } else {
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
             MatrixRef bt(nullptr, b.n, b.m);
-            bt.allocate();
+            bt.allocate(d_alloc);
             for (MKL_INT i = 0, inc = 1; i < bt.m; i++)
                 dcopy(&bt.n, b.data + i, &bt.m, bt.data + i * bt.n, &inc);
             sparse_status_t st =
@@ -438,7 +447,7 @@ struct CSRMatrixFunctions {
                                 scale, *spa, mt, SPARSE_LAYOUT_ROW_MAJOR,
                                 bt.data, bt.n, bt.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
-            bt.deallocate();
+            bt.deallocate(d_alloc);
         }
 #else
         const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
@@ -490,87 +499,103 @@ struct CSRMatrixFunctions {
     static void rotate(const MatrixRef &a, const MatrixRef &c,
                        const CSRMatrixRef &bra, bool conj_bra,
                        const CSRMatrixRef &ket, bool conj_ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
-        work.allocate();
+        work.allocate(d_alloc);
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
-        work.deallocate();
+        work.deallocate(d_alloc);
     }
     // c = bra * a * ket(.T) for tensor product multiplication
     static void rotate(const MatrixRef &a, const MatrixRef &c,
                        const CSRMatrixRef &bra, bool conj_bra,
                        const MatrixRef &ket, bool conj_ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
-        work.allocate();
+        work.allocate(d_alloc);
         MatrixFunctions::multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
-        work.deallocate();
+        work.deallocate(d_alloc);
     }
     // c = bra * a * ket(.T) for tensor product multiplication
     static void rotate(const MatrixRef &a, const MatrixRef &c,
                        const MatrixRef &bra, bool conj_bra,
                        const CSRMatrixRef &ket, bool conj_ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
-        work.allocate();
+        work.allocate(d_alloc);
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         MatrixFunctions::multiply(bra, conj_bra, work, false, c, scale, 1.0);
-        work.deallocate();
+        work.deallocate(d_alloc);
     }
     // c = bra * a * ket(.T) for operator rotation
     static void rotate(const CSRMatrixRef &a, const MatrixRef &c,
                        const MatrixRef &bra, bool conj_bra,
                        const MatrixRef &ket, bool conj_ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
-        work.allocate();
+        work.allocate(d_alloc);
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         MatrixFunctions::multiply(bra, conj_bra, work, false, c, scale, 1.0);
-        work.deallocate();
+        work.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
     static void tensor_product_diagonal(const CSRMatrixRef &a,
                                         const MatrixRef &b, const MatrixRef &c,
                                         double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT k = 1, lda = 1, ldb = b.n + 1;
         MatrixRef ad(nullptr, a.m, 1);
-        ad.allocate();
+        ad.allocate(d_alloc);
         a.diag(ad);
         dgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, ad.data, &lda,
               &cfactor, c.data, &c.n);
-        ad.deallocate();
+        ad.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
     static void tensor_product_diagonal(const MatrixRef &a,
                                         const CSRMatrixRef &b,
                                         const MatrixRef &c, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT k = 1, lda = a.n + 1, ldb = 1;
         MatrixRef bd(nullptr, b.m, 1);
-        bd.allocate();
+        bd.allocate(d_alloc);
         b.diag(bd);
         dgemm("t", "n", &b.n, &a.n, &k, &scale, bd.data, &ldb, a.data, &lda,
               &cfactor, c.data, &c.n);
-        bd.deallocate();
+        bd.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
     static void tensor_product_diagonal(const CSRMatrixRef &a,
                                         const CSRMatrixRef &b,
                                         const MatrixRef &c, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT k = 1, lda = 1, ldb = 1;
         MatrixRef ad(nullptr, a.m, 1), bd(nullptr, b.m, 1);
-        ad.allocate(), bd.allocate();
+        ad.allocate(d_alloc), bd.allocate(d_alloc);
         a.diag(ad), b.diag(bd);
         dgemm("t", "n", &b.n, &a.n, &k, &scale, bd.data, &ldb, ad.data, &lda,
               &cfactor, c.data, &c.n);
-        bd.deallocate(), ad.deallocate();
+        bd.deallocate(d_alloc), ad.deallocate(d_alloc);
     }
     static void tensor_product(const CSRMatrixRef &a, bool conja,
                                const CSRMatrixRef &b, bool conjb,
                                CSRMatrixRef &c, double scale, uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         if (a.nnz == a.size() || b.nnz == b.size()) {
             if (a.nnz == a.size())
                 tensor_product(a.dense_ref(), conja, b, conjb, c, scale,
@@ -580,18 +605,16 @@ struct CSRMatrixFunctions {
                                stride);
             return;
         } else if (c.nnz == c.size()) {
-            MatrixRef ad = MatrixRef(dalloc->allocate(a.size()), a.m, a.n);
+            MatrixRef ad = MatrixRef(d_alloc->allocate(a.size()), a.m, a.n);
             a.to_dense(ad);
-            MatrixRef bd = MatrixRef(dalloc->allocate(b.size()), b.m, b.n);
+            MatrixRef bd = MatrixRef(d_alloc->allocate(b.size()), b.m, b.n);
             b.to_dense(bd);
             MatrixFunctions::tensor_product(ad, conja, bd, conjb, c.dense_ref(),
                                             scale, stride);
-            ad.deallocate();
-            bd.deallocate();
+            ad.deallocate(d_alloc);
+            bd.deallocate(d_alloc);
             return;
         }
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.nnz * b.nnz, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
@@ -605,13 +628,13 @@ struct CSRMatrixFunctions {
         MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
         MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conja)
-            tmps.push_back(a.transpose(dalloc)), arows = tmps.back().rows,
-                                                 acols = tmps.back().cols,
-                                                 adata = tmps.back().data;
+            tmps.push_back(a.transpose(d_alloc)), arows = tmps.back().rows,
+                                                  acols = tmps.back().cols,
+                                                  adata = tmps.back().data;
         if (conjb)
-            tmps.push_back(b.transpose(dalloc)), brows = tmps.back().rows,
-                                                 bcols = tmps.back().cols,
-                                                 bdata = tmps.back().data;
+            tmps.push_back(b.transpose(d_alloc)), brows = tmps.back().rows,
+                                                  bcols = tmps.back().cols,
+                                                  bdata = tmps.back().data;
         for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
             MKL_INT jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
             for (MKL_INT ib = 0; ib < bm; ib++, ir++) {
@@ -641,32 +664,32 @@ struct CSRMatrixFunctions {
     static void tensor_product(const CSRMatrixRef &a, bool conja,
                                const MatrixRef &b, bool conjb, CSRMatrixRef &c,
                                double scale, uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         if (a.nnz == a.size() || c.nnz == c.size()) {
             MatrixRef ad =
                 a.nnz == a.size()
                     ? a.dense_ref()
-                    : MatrixRef(dalloc->allocate(a.size()), a.m, a.n);
+                    : MatrixRef(d_alloc->allocate(a.size()), a.m, a.n);
             if (a.nnz != a.size())
                 a.to_dense(ad);
             MatrixRef cd =
                 c.nnz == c.size()
                     ? c.dense_ref()
-                    : MatrixRef(dalloc->allocate(c.size()), c.m, c.n);
+                    : MatrixRef(d_alloc->allocate(c.size()), c.m, c.n);
             if (c.nnz != c.size())
                 c.to_dense(cd);
             MatrixFunctions::tensor_product(ad, conja, b, conjb, cd, scale,
                                             stride);
             if (a.nnz != a.size())
-                ad.deallocate();
+                ad.deallocate(d_alloc);
             if (c.nnz != c.size()) {
                 c.deallocate();
                 c.from_dense(cd);
-                cd.deallocate();
+                cd.deallocate(d_alloc);
             }
             return;
         }
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.nnz * b.m * b.n, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
@@ -679,7 +702,7 @@ struct CSRMatrixFunctions {
         MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
         MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conja)
-            tmp = a.transpose(dalloc), arows = tmp.rows, acols = tmp.cols,
+            tmp = a.transpose(d_alloc), arows = tmp.rows, acols = tmp.cols,
             adata = tmp.data;
         for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
             MKL_INT jap = arows[ia], jar = ia == am - 1 ? a.nnz : arows[ia + 1];
@@ -717,32 +740,32 @@ struct CSRMatrixFunctions {
     static void tensor_product(const MatrixRef &a, bool conja,
                                const CSRMatrixRef &b, bool conjb,
                                CSRMatrixRef &c, double scale, uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         if (b.nnz == b.size() || c.nnz == c.size()) {
             MatrixRef bd =
                 b.nnz == b.size()
                     ? b.dense_ref()
-                    : MatrixRef(dalloc->allocate(b.size()), b.m, b.n);
+                    : MatrixRef(d_alloc->allocate(b.size()), b.m, b.n);
             if (b.nnz != b.size())
                 b.to_dense(bd);
             MatrixRef cd =
                 c.nnz == c.size()
                     ? c.dense_ref()
-                    : MatrixRef(dalloc->allocate(c.size()), c.m, c.n);
+                    : MatrixRef(d_alloc->allocate(c.size()), c.m, c.n);
             if (c.nnz != c.size())
                 c.to_dense(cd);
             MatrixFunctions::tensor_product(a, conja, bd, conjb, cd, scale,
                                             stride);
             if (b.nnz != b.size())
-                bd.deallocate();
+                bd.deallocate(d_alloc);
             if (c.nnz != c.size()) {
                 c.deallocate();
                 c.from_dense(cd);
-                cd.deallocate();
+                cd.deallocate(d_alloc);
             }
             return;
         }
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
         CSRMatrixRef r(c.m, c.n, a.m * a.n * b.nnz, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
@@ -755,7 +778,7 @@ struct CSRMatrixFunctions {
         MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
         MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         if (conjb)
-            tmp = b.transpose(dalloc), brows = tmp.rows, bcols = tmp.cols,
+            tmp = b.transpose(d_alloc), brows = tmp.rows, bcols = tmp.cols,
             bdata = tmp.data;
         for (MKL_INT ir = m_stride, ix = 0, ia = 0; ia < am; ia++) {
             for (MKL_INT ib = 0; ib < bm; ib++, ir++) {
