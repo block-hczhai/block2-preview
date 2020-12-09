@@ -84,7 +84,8 @@ template <typename S> struct DMRG {
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
-    double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0;
+    double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
+           tsvd = 0;
     Timer _t, _t2;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
@@ -257,10 +258,12 @@ template <typename S> struct DMRG {
                             MovingEnvironment<S>::scale_perturbative_noise(
                                 noise, noise_type, pket);
                     }
+                    _t.get_time();
                     error = MovingEnvironment<S>::split_wavefunction_svd(
                         me->ket->info->vacuum, me->ket->tensors[i],
                         (int)bond_dim, forward, true, left, right, cutoff,
                         trunc_type, decomp_type, pket);
+                    tsvd += _t.get_time();
                 } else
                     assert(false);
                 shared_ptr<StateInfo<S>> info = nullptr;
@@ -452,10 +455,12 @@ template <typename S> struct DMRG {
                         MovingEnvironment<S>::scale_perturbative_noise(
                             noise, noise_type, pket);
                 }
+                _t.get_time();
                 error = MovingEnvironment<S>::split_wavefunction_svd(
                     me->ket->info->vacuum, old_wfn, (int)bond_dim, forward,
                     true, me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
                     trunc_type, decomp_type, pket);
+                tsvd += _t.get_time();
             } else
                 assert(false);
             shared_ptr<StateInfo<S>> info = nullptr;
@@ -874,8 +879,10 @@ template <typename S> struct DMRG {
     virtual tuple<vector<double>, double, vector<vector<pair<S, double>>>>
     sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
-        teff = teig = tprt = tblk = tmve = tdm = tsplt = 0;
+        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->tcomm = 0;
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();
@@ -911,7 +918,7 @@ template <typename S> struct DMRG {
             sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                     << t.get_time() << endl;
+                     << fixed << t.get_time() << endl;
             sweep_energies.push_back(r.energies);
             sweep_discarded_weights.push_back(r.error);
             sweep_quanta.push_back(r.quanta);
@@ -1005,6 +1012,13 @@ template <typename S> struct DMRG {
                                                     "FLOP/SWP");
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
+                    if (me->para_rule != nullptr) {
+                        me->para_rule->comm->reduce_sum(
+                            &me->para_rule->comm->tcomm, 1,
+                            me->para_rule->comm->root);
+                        me->para_rule->comm->tcomm /= me->para_rule->comm->size;
+                        cout << " | Tcomm = " << me->para_rule->comm->tcomm;
+                    }
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tasync = " << frame->tasync << endl;
@@ -1018,7 +1032,7 @@ template <typename S> struct DMRG {
                     cout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Teig = " << teig << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
-                         << " | Tsplt = " << tsplt;
+                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
                 }
                 cout << endl;
             }
@@ -1070,7 +1084,7 @@ template <typename S> struct Linear {
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
     double tprt = 0, tmult = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0,
-           tsplt = 0;
+           tsplt = 0, tsvd = 0;
     Timer _t, _t2;
     bool precondition_cg = true;
     // weight for mixing rhs wavefunction in density matrix/svd
@@ -1466,12 +1480,14 @@ template <typename S> struct Linear {
                                 weights.push_back(sqrt(right_weight));
                                 xwfns.push_back(right_bra);
                             }
+                            _t.get_time();
                             error =
                                 MovingEnvironment<S>::split_wavefunction_svd(
                                     mps->info->vacuum, old_wfn, bond_dim,
                                     forward, false, left, right, cutoff,
                                     trunc_type, decomp_type, pbra, xwfns,
                                     weights);
+                            tsvd += _t.get_time();
                         }
                     } else
                         assert(false);
@@ -1811,10 +1827,12 @@ template <typename S> struct Linear {
                             weights.push_back(sqrt(right_weight));
                             xwfns.push_back(right_bra);
                         }
+                        _t.get_time();
                         error = MovingEnvironment<S>::split_wavefunction_svd(
                             mps->info->vacuum, old_wfn, bond_dim, forward,
                             false, mps->tensors[i], mps->tensors[i + 1], cutoff,
                             trunc_type, decomp_type, pbra, xwfns, weights);
+                        tsvd += _t.get_time();
                     }
                 } else
                     assert(false);
@@ -1913,8 +1931,10 @@ template <typename S> struct Linear {
     tuple<vector<double>, double> sweep(bool forward, ubond_t bra_bond_dim,
                                         ubond_t ket_bond_dim, double noise,
                                         double minres_conv_thrd) {
-        teff = tmult = tprt = tblk = tmve = tdm = tsplt = 0;
+        teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
+        if (lme->para_rule != nullptr)
+            lme->para_rule->comm->tcomm = 0;
         rme->prepare();
         if (lme != nullptr)
             lme->prepare();
@@ -1951,7 +1971,7 @@ template <typename S> struct Linear {
             sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                     << t.get_time() << endl;
+                     << fixed << t.get_time() << endl;
             sweep_targets.push_back(r.targets);
             sweep_discarded_weights.push_back(r.error);
         }
@@ -2056,6 +2076,14 @@ template <typename S> struct Linear {
                                                     "FLOP/SWP");
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
+                    if (lme->para_rule != nullptr) {
+                        lme->para_rule->comm->reduce_sum(
+                            &lme->para_rule->comm->tcomm, 1,
+                            lme->para_rule->comm->root);
+                        lme->para_rule->comm->tcomm /=
+                            lme->para_rule->comm->size;
+                        cout << " | Tcomm = " << lme->para_rule->comm->tcomm;
+                    }
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tasync = " << frame->tasync << endl;
@@ -2072,7 +2100,7 @@ template <typename S> struct Linear {
                     cout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Tmult = " << tmult << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
-                         << " | Tsplt = " << tsplt;
+                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
                 }
                 cout << endl;
             }

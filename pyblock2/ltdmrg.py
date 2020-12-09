@@ -25,12 +25,12 @@ using pyscf and block2.
 Author: Huanchen Zhai, Jun 21, 2020
 """
 
-import numpy as np
-import time
 from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 from block2 import VectorUInt8, VectorUBond, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
 from block2 import SU2, SZ, get_partition_weights
+import numpy as np
+import time
 
 # Set spin-adapted or non-spin-adapted here
 # SpinLabel = SU2

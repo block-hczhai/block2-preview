@@ -144,6 +144,11 @@ template <typename S> struct TensorFunctions {
                     assert(a->lmat->data[i] == c->lmat->data[i]);
                     auto pa = abs_value(a->lmat->data[i]),
                          pc = abs_value(c->lmat->data[i]);
+                    if (!frame->use_main_stack) {
+                        c->ops[pc]->alloc =
+                            make_shared<VectorAllocator<double>>();
+                        c->ops[pc]->allocate(c->ops[pc]->info);
+                    }
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                         c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else
@@ -169,6 +174,11 @@ template <typename S> struct TensorFunctions {
                     assert(a->rmat->data[i] == c->rmat->data[i]);
                     auto pa = abs_value(a->rmat->data[i]),
                          pc = abs_value(c->rmat->data[i]);
+                    if (!frame->use_main_stack) {
+                        c->ops[pc]->alloc =
+                            make_shared<VectorAllocator<double>>();
+                        c->ops[pc]->allocate(c->ops[pc]->info);
+                    }
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                         c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else
@@ -1029,12 +1039,13 @@ template <typename S> struct TensorFunctions {
                                shared_ptr<OperatorTensor<S>> &c,
                                const shared_ptr<Symbolic<S>> &cexprs = nullptr,
                                OpNamesSet delayed = OpNamesSet()) const {
-        for (auto &p : c->ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
-            if (a == nullptr || !delayed(op->name))
-                c->ops.at(op)->allocate(c->ops.at(op)->info);
-        }
+        if (frame->use_main_stack)
+            for (auto &p : c->ops) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(p.first);
+                if (a == nullptr || !delayed(op->name))
+                    c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
         if (a == nullptr)
             left_assign(b, c);
         else {
@@ -1050,8 +1061,14 @@ template <typename S> struct TensorFunctions {
                     shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
                         exprs->data[i] * (1 / cop->factor);
-                    if (!delayed(cop->name))
+                    if (!delayed(cop->name)) {
+                        if (!frame->use_main_stack) {
+                            c->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<double>>();
+                            c->ops.at(op)->allocate(c->ops.at(op)->info);
+                        }
                         tf->tensor_product(expr, a->ops, b->ops, c->ops.at(op));
+                    }
                 });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
@@ -1063,12 +1080,13 @@ template <typename S> struct TensorFunctions {
                                 shared_ptr<OperatorTensor<S>> &c,
                                 const shared_ptr<Symbolic<S>> &cexprs = nullptr,
                                 OpNamesSet delayed = OpNamesSet()) const {
-        for (auto &p : c->ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
-            if (a == nullptr || !delayed(op->name))
-                c->ops.at(op)->allocate(c->ops.at(op)->info);
-        }
+        if (frame->use_main_stack)
+            for (auto &p : c->ops) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(p.first);
+                if (a == nullptr || !delayed(op->name))
+                    c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
         if (a == nullptr)
             right_assign(b, c);
         else {
@@ -1084,8 +1102,14 @@ template <typename S> struct TensorFunctions {
                     shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
                         exprs->data[i] * (1 / cop->factor);
-                    if (!delayed(cop->name))
+                    if (!delayed(cop->name)) {
+                        if (!frame->use_main_stack) {
+                            c->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<double>>();
+                            c->ops.at(op)->allocate(c->ops.at(op)->info);
+                        }
                         tf->tensor_product(expr, b->ops, a->ops, c->ops.at(op));
+                    }
                 });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();

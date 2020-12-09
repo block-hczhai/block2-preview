@@ -2227,13 +2227,14 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def(
         "init_memory",
         [](size_t isize, size_t dsize, const string &save_dir,
-           double main_ratio, int n_frames) {
-            frame_() = make_shared<DataFrame>(isize, dsize, save_dir,
-                                              main_ratio, n_frames);
+           double dmain_ratio, double imain_ratio, int n_frames) {
+            frame_() = make_shared<DataFrame>(
+                isize, dsize, save_dir, dmain_ratio, imain_ratio, n_frames);
         },
         py::arg("isize") = size_t(1L << 28),
         py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
-        py::arg("main_ratio") = 0.7, py::arg("n_frames") = 2);
+        py::arg("dmain_ratio") = 0.7, py::arg("imain_ratio") = 0.7,
+        py::arg("n_frames") = 2);
 
     m.def("release_memory", []() {
         frame_()->activate(0);
@@ -2307,6 +2308,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<size_t, size_t>())
         .def(py::init<size_t, size_t, const string &>())
         .def(py::init<size_t, size_t, const string &, double>())
+        .def(py::init<size_t, size_t, const string &, double, double>())
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("mps_dir", &DataFrame::mps_dir)
         .def_readwrite("restart_dir", &DataFrame::restart_dir)
@@ -2323,6 +2325,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("peak_used_memory", &DataFrame::peak_used_memory)
         .def_readwrite("load_buffering", &DataFrame::load_buffering)
         .def_readwrite("save_buffering", &DataFrame::save_buffering)
+        .def_readwrite("use_main_stack", &DataFrame::use_main_stack)
         .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)
         .def("activate", &DataFrame::activate)

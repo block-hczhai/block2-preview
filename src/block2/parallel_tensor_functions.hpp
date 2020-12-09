@@ -62,7 +62,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
                     assert(c->ops[pc]->data == nullptr);
-                    c->ops[pc]->allocate(c->ops[pc]->info);
+                    if (frame->use_main_stack)
+                        c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
                 }
@@ -74,6 +75,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                          size_t i = idxs[ii];
                          auto pa = abs_value(a->lmat->data[i]),
                               pc = abs_value(c->lmat->data[i]);
+                         if (!frame->use_main_stack) {
+                             c->ops[pc]->alloc =
+                                 make_shared<VectorAllocator<double>>();
+                             c->ops[pc]->allocate(c->ops[pc]->info);
+                         }
                          if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                              c->ops[pc]->copy_data_from(a->ops[pa], true);
                          else
@@ -100,7 +106,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
                     assert(c->ops[pc]->data == nullptr);
-                    c->ops[pc]->allocate(c->ops[pc]->info);
+                    if (frame->use_main_stack)
+                        c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
                 }
@@ -112,6 +119,11 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                          size_t i = idxs[ii];
                          auto pa = abs_value(a->rmat->data[i]),
                               pc = abs_value(c->rmat->data[i]);
+                         if (!frame->use_main_stack) {
+                             c->ops[pc]->alloc =
+                                 make_shared<VectorAllocator<double>>();
+                             c->ops[pc]->allocate(c->ops[pc]->info);
+                         }
                          if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                              c->ops[pc]->copy_data_from(a->ops[pa], true);
                          else
@@ -250,8 +262,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                              auto pa = abs_value(a->rmat->data[i]);
                              if (this->rule->own(pa))
                                  tf->opf->tensor_rotate(a->ops.at(pa),
-                                                    c->ops.at(pa), mpst_bra,
-                                                    mpst_ket, true);
+                                                        c->ops.at(pa), mpst_bra,
+                                                        mpst_ket, true);
                          }
                      });
         if (opf->seq->mode == SeqTypes::Auto)
@@ -404,19 +416,24 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             }
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
-                for (size_t i = 0; i < local_exprs.size(); i++) {
-                    if (local_exprs[i] == nullptr)
-                        continue;
-                    assert(mats[i]->data == nullptr);
-                    mats[i]->allocate(mats[i]->info);
-                }
+                for (size_t i = 0; i < local_exprs.size(); i++)
+                    if (frame->use_main_stack && local_exprs[i] != nullptr) {
+                        assert(mats[i]->data == nullptr);
+                        mats[i]->allocate(mats[i]->info);
+                    }
                 this->parallel_for(
                     local_exprs.size(),
                     [&a, &b, &mats, &local_exprs](
                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                        if (local_exprs[i] != nullptr)
+                        if (local_exprs[i] != nullptr) {
+                            if (!frame->use_main_stack) {
+                                mats[i]->alloc =
+                                    make_shared<VectorAllocator<double>>();
+                                mats[i]->allocate(mats[i]->info);
+                            }
                             tf->tensor_product(local_exprs[i], a->ops, b->ops,
                                                mats[i]);
+                        }
                     });
                 if (this->opf->seq->mode == SeqTypes::Auto)
                     this->opf->seq->auto_perform();
@@ -444,19 +461,24 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             }
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
-                for (size_t i = 0; i < local_exprs.size(); i++) {
-                    if (local_exprs[i] == nullptr)
-                        continue;
-                    assert(mats[i]->data == nullptr);
-                    mats[i]->allocate(mats[i]->info);
-                }
+                for (size_t i = 0; i < local_exprs.size(); i++)
+                    if (frame->use_main_stack && local_exprs[i] != nullptr) {
+                        assert(mats[i]->data == nullptr);
+                        mats[i]->allocate(mats[i]->info);
+                    }
                 this->parallel_for(
                     local_exprs.size(),
                     [&a, &b, &mats, &local_exprs](
                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                        if (local_exprs[i] != nullptr)
+                        if (local_exprs[i] != nullptr) {
+                            if (!frame->use_main_stack) {
+                                mats[i]->alloc =
+                                    make_shared<VectorAllocator<double>>();
+                                mats[i]->allocate(mats[i]->info);
+                            }
                             tf->tensor_product(local_exprs[i], b->ops, a->ops,
                                                mats[i]);
+                        }
                     });
                 if (this->opf->seq->mode == SeqTypes::Auto)
                     this->opf->seq->auto_perform();

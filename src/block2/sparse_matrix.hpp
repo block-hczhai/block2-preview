@@ -1145,10 +1145,11 @@ template <typename S> struct SparseMatrix {
         }
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == tmp[ir + 1] - tmp[ir]);
-        vector<shared_ptr<Tensor>> merged_l;
-        r.clear();
-        s.clear();
-        vector<double> svals;
+        vector<shared_ptr<Tensor>> merged_l(nr);
+        r.resize(nr);
+        s.resize(nr);
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ir = 0; ir < nr; ir++) {
             MKL_INT nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
@@ -1160,11 +1161,14 @@ template <typename S> struct SparseMatrix {
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
-            svals.insert(svals.end(), tss->data.begin(), tss->data.end());
-            merged_l.push_back(tsl);
-            s.push_back(tss);
-            r.push_back(tsr);
+            merged_l[ir] = tsl;
+            s[ir] = tss;
+            r[ir] = tsr;
         }
+        threading->activate_normal();
+        vector<double> svals;
+        for (int ir = 0; ir < nr; ir++)
+            svals.insert(svals.end(), s[ir]->data.begin(), s[ir]->data.end());
         if (bond_dim != 0 && svals.size() > bond_dim) {
             sort(svals.begin(), svals.end());
             double small = svals[svals.size() - bond_dim];
@@ -1230,10 +1234,11 @@ template <typename S> struct SparseMatrix {
         }
         for (int il = 0; il < nl; il++)
             assert(it[il] == (tmp[il + 1] - tmp[il]) / sz[il]);
-        vector<shared_ptr<Tensor>> merged_r;
-        l.clear();
-        s.clear();
-        vector<double> svals;
+        vector<shared_ptr<Tensor>> merged_r(nl);
+        l.resize(nl);
+        s.resize(nl);
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int il = 0; il < nl; il++) {
             MKL_INT nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
@@ -1245,11 +1250,14 @@ template <typename S> struct SparseMatrix {
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
-            svals.insert(svals.end(), tss->data.begin(), tss->data.end());
-            l.push_back(tsl);
-            s.push_back(tss);
-            merged_r.push_back(tsr);
+            l[il] = tsl;
+            s[il] = tss;
+            merged_r[il] = tsr;
         }
+        threading->activate_normal();
+        vector<double> svals;
+        for (int il = 0; il < nl; il++)
+            svals.insert(svals.end(), s[il]->data.begin(), s[il]->data.end());
         if (bond_dim != 0 && svals.size() > bond_dim) {
             sort(svals.begin(), svals.end());
             double small = svals[svals.size() - bond_dim];
@@ -1829,9 +1837,11 @@ template <typename S> struct SparseMatrixGroup {
         }
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == tmp[ir + 1] - tmp[ir]);
-        vector<shared_ptr<Tensor>> merged_l;
-        r.clear();
-        s.clear();
+        vector<shared_ptr<Tensor>> merged_l(nr);
+        r.resize(nr);
+        s.resize(nr);
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ir = 0; ir < nr; ir++) {
             MKL_INT nxr = sz[ir], nxl = (tmp[ir + 1] - tmp[ir]) / nxr;
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
@@ -1843,10 +1853,11 @@ template <typename S> struct SparseMatrixGroup {
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
-            merged_l.push_back(tsl);
-            s.push_back(tss);
-            r.push_back(tsr);
+            merged_l[ir] = tsl;
+            s[ir] = tss;
+            r[ir] = tsr;
         }
+        threading->activate_normal();
         memset(it, 0, sizeof(size_t) * nr);
         l.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
@@ -1937,9 +1948,11 @@ template <typename S> struct SparseMatrixGroup {
         }
         for (int il = 0; il < nl; il++)
             assert(it[il] == (tmp[il + 1] - tmp[il]) / sz[il]);
-        vector<shared_ptr<Tensor>> merged_r;
-        l.clear();
-        s.clear();
+        vector<shared_ptr<Tensor>> merged_r(nl);
+        l.resize(nl);
+        s.resize(nl);
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int il = 0; il < nl; il++) {
             MKL_INT nxl = sz[il], nxr = (tmp[il + 1] - tmp[il]) / nxl;
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
@@ -1951,10 +1964,11 @@ template <typename S> struct SparseMatrixGroup {
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
             MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
                                  tss->ref().flip_dims(), tsr->ref());
-            l.push_back(tsl);
-            s.push_back(tss);
-            merged_r.push_back(tsr);
+            l[il] = tsl;
+            s[il] = tss;
+            merged_r[il] = tsr;
         }
+        threading->activate_normal();
         memset(it, 0, sizeof(size_t) * nl);
         r.resize(xinfos.size());
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {

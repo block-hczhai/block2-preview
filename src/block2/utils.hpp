@@ -147,7 +147,7 @@ struct Parsing {
             ss << i << " " << suffix;
             return ss.str();
         } else {
-            string prefix = "KMGTPEZY";
+            string prefix = "KMGTPEZYB";
             for (size_t j = 0; j < prefix.size(); j++, a *= 1024) {
                 for (int k = 10, p = 2; k <= 1000; k *= 10, p--)
                     if (i < k * a) {

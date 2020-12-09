@@ -199,10 +199,11 @@ struct DataFrame {
     mutable vector<pair<string, shared_ptr<stringstream>>> save_buffers;
     mutable vector<shared_future<void>> save_futures;
     bool load_buffering = false, save_buffering = false;
+    bool use_main_stack = true;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
-              const string &save_dir = "node0", double main_ratio = 0.7,
-              int n_frames = 2)
+              const string &save_dir = "node0", double dmain_ratio = 0.7,
+              double imain_ratio = 0.7, int n_frames = 2)
         : n_frames(n_frames), save_dir(save_dir), mps_dir(save_dir) {
         peak_used_memory.resize(n_frames * 2);
         present_filenames.resize(n_frames);
@@ -211,8 +212,8 @@ struct DataFrame {
         save_futures.resize(n_frames);
         this->isize = isize >> 2;
         this->dsize = dsize >> 3;
-        size_t imain = (size_t)(main_ratio * this->isize);
-        size_t dmain = (size_t)(main_ratio * this->dsize);
+        size_t imain = (size_t)(imain_ratio * this->isize);
+        size_t dmain = (size_t)(dmain_ratio * this->dsize);
         size_t ir = (this->isize - imain) / (n_frames - 1);
         size_t dr = (this->dsize - dmain) / (n_frames - 1);
         double *dptr = new double[this->dsize];
@@ -394,14 +395,17 @@ struct DataFrame {
                sizeof(size_t) * peak_used_memory.size());
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
-        os << "persistent memory used :: I = " << df.iallocs[0]->used << "("
-           << (df.iallocs[0]->used * 100 / df.iallocs[0]->size) << "%)"
-           << " D = " << df.dallocs[0]->used << "("
-           << (df.dallocs[0]->used * 100 / df.dallocs[0]->size) << "%)" << endl;
-        os << "exclusive  memory used :: I = " << df.iallocs[1]->used << "("
-           << (df.iallocs[1]->used * 100 / df.iallocs[1]->size) << "%)"
-           << " D = " << df.dallocs[1]->used << "("
-           << (df.dallocs[1]->used * 100 / df.dallocs[1]->size) << "%)" << endl;
+        os << " UseMainStack = " << df.use_main_stack
+           << " IBuf = " << df.load_buffering
+           << " OBuf = " << df.save_buffering << endl;
+        os << " IMain = " << Parsing::to_size_string(df.iallocs[0]->used * 4)
+           << " / " << Parsing::to_size_string(df.iallocs[0]->size * 4);
+        os << " DMain = " << Parsing::to_size_string(df.dallocs[0]->used * 8)
+           << " / " << Parsing::to_size_string(df.dallocs[0]->size * 8);
+        os << " ISeco = " << Parsing::to_size_string(df.iallocs[1]->used * 4)
+           << " / " << Parsing::to_size_string(df.iallocs[1]->size * 4);
+        os << " DSeco = " << Parsing::to_size_string(df.dallocs[1]->used * 8)
+           << " / " << Parsing::to_size_string(df.dallocs[1]->size * 8);
         return os;
     }
 };

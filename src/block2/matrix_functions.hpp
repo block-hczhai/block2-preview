@@ -448,22 +448,26 @@ struct MatrixFunctions {
     // SVD; original matrix will be destroyed
     static void svd(const MatrixRef &a, const MatrixRef &l, const MatrixRef &s,
                     const MatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
         // double work[lwork];
-        double *work = dalloc->allocate(lwork);
+        double *work = d_alloc->allocate(lwork);
         assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
         dgesvd("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n, l.data,
                &k, work, &lwork, &info);
         assert(info == 0);
-        dalloc->deallocate(work, lwork);
+        d_alloc->deallocate(work, lwork);
     }
     // LQ factorization
     static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.m;
         // double work[lwork], tau[k], t[a.m * a.n];
-        double *work = dalloc->allocate(lwork);
-        double *tau = dalloc->allocate(k);
-        double *t = dalloc->allocate(a.m * a.n);
+        double *work = d_alloc->allocate(lwork);
+        double *tau = d_alloc->allocate(k);
+        double *t = d_alloc->allocate(a.m * a.n);
         assert(a.m == l.m && a.n == q.n && l.n == k && q.m == k);
         memcpy(t, a.data, sizeof(double) * a.m * a.n);
         dgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
@@ -474,17 +478,19 @@ struct MatrixFunctions {
         dorgqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
         assert(info == 0);
         memcpy(q.data, t, sizeof(double) * k * a.n);
-        dalloc->deallocate(t, a.m * a.n);
-        dalloc->deallocate(tau, k);
-        dalloc->deallocate(work, lwork);
+        d_alloc->deallocate(t, a.m * a.n);
+        d_alloc->deallocate(tau, k);
+        d_alloc->deallocate(work, lwork);
     }
     // QR factorization
     static void qr(const MatrixRef &a, const MatrixRef &q, const MatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.n;
         // double work[lwork], tau[k], t[a.m * a.n];
-        double *work = dalloc->allocate(lwork);
-        double *tau = dalloc->allocate(k);
-        double *t = dalloc->allocate(a.m * a.n);
+        double *work = d_alloc->allocate(lwork);
+        double *tau = d_alloc->allocate(k);
+        double *t = d_alloc->allocate(a.m * a.n);
         assert(a.m == q.m && a.n == r.n && q.n == k && r.m == k);
         memcpy(t, a.data, sizeof(double) * a.m * a.n);
         dgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
@@ -497,19 +503,21 @@ struct MatrixFunctions {
         assert(info == 0);
         for (MKL_INT j = 0; j < a.m; j++)
             memcpy(q.data + j * k, t + j * a.n, sizeof(double) * k);
-        dalloc->deallocate(t, a.m * a.n);
-        dalloc->deallocate(tau, k);
-        dalloc->deallocate(work, lwork);
+        d_alloc->deallocate(t, a.m * a.n);
+        d_alloc->deallocate(tau, k);
+        d_alloc->deallocate(work, lwork);
     }
     // eigenvectors are row vectors
     static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         assert(a.m == a.n && w.n == a.n);
         MKL_INT lwork = 34 * a.n, info;
         // double work[lwork];
-        double *work = dalloc->allocate(lwork);
+        double *work = d_alloc->allocate(lwork);
         dsyev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
         assert(info == 0);
-        dalloc->deallocate(work, lwork);
+        d_alloc->deallocate(work, lwork);
     }
     // z = r / aa
     static void precondition(const MatrixRef &z, const MatrixRef &r,
@@ -547,6 +555,8 @@ struct MatrixFunctions {
              double conv_thrd = 5E-6, int max_iter = 5000,
              int soft_max_iter = -1, int deflation_min_size = 2,
              int deflation_max_size = 50) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
         int k = (int)vs.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
@@ -554,8 +564,8 @@ struct MatrixFunctions {
             deflation_max_size = k + k / 2;
         MatrixRef pbs(nullptr, deflation_max_size * vs[0].size(), 1);
         MatrixRef pss(nullptr, deflation_max_size * vs[0].size(), 1);
-        pbs.data = dalloc->allocate(deflation_max_size * vs[0].size());
-        pss.data = dalloc->allocate(deflation_max_size * vs[0].size());
+        pbs.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        pss.data = d_alloc->allocate(deflation_max_size * vs[0].size());
         vector<MatrixRef> bs(deflation_max_size,
                              MatrixRef(nullptr, vs[0].m, vs[0].n));
         vector<MatrixRef> sigmas(deflation_max_size,
@@ -681,8 +691,8 @@ struct MatrixFunctions {
             q.deallocate();
         for (int i = 0; i < k; i++)
             copy(vs[i], bs[i]);
-        dalloc->deallocate(pss.data, deflation_max_size * vs[0].size());
-        dalloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
+        d_alloc->deallocate(pss.data, deflation_max_size * vs[0].size());
+        d_alloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
         ndav = xiter;
         return eigvals;
     }
