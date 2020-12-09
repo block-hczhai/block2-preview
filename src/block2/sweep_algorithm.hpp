@@ -210,6 +210,7 @@ template <typename S> struct DMRG {
             }
         }
         if (build_pdm && !skip_decomp) {
+            _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             pdm = MovingEnvironment<S>::density_matrix(
                 me->ket->info->vacuum, me->ket->tensors[i], forward,
@@ -218,6 +219,7 @@ template <typename S> struct DMRG {
                 noise_type, 0.0, pket);
             if (me->para_rule != nullptr)
                 me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (skip_decomp) {
@@ -409,6 +411,7 @@ template <typename S> struct DMRG {
             pdi = two_dot_eigs_and_perturb(forward, i, davidson_conv_thrd,
                                            noise, pket);
         if (build_pdm) {
+            _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             pdm = MovingEnvironment<S>::density_matrix(
                 me->ket->info->vacuum, old_wfn, forward,
@@ -417,6 +420,7 @@ template <typename S> struct DMRG {
                 noise_type, 0.0, pket);
             if (me->para_rule != nullptr)
                 me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<SparseMatrix<S>> dm;
@@ -1350,6 +1354,7 @@ template <typename S> struct Linear {
             }
         }
         if (build_pdm && !skip_decomp) {
+            _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             pdm = MovingEnvironment<S>::density_matrix(
                 me->bra->info->vacuum, me->bra->tensors[i], forward,
@@ -1358,6 +1363,7 @@ template <typename S> struct Linear {
                 noise_type, 0.0, pbra);
             if (me->para_rule != nullptr)
                 me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
         }
         double bra_error = 0.0;
         int bra_mmps = 0;
@@ -1709,6 +1715,7 @@ template <typename S> struct Linear {
             t_eff->deallocate();
         }
         if (build_pdm) {
+            _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             pdm = MovingEnvironment<S>::density_matrix(
                 me->bra->info->vacuum, me->bra->tensors[i], forward,
@@ -1717,6 +1724,7 @@ template <typename S> struct Linear {
                 noise_type, 0.0, pbra);
             if (me->para_rule != nullptr)
                 me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
         }
         vector<shared_ptr<SparseMatrix<S>>> old_wfns;
         for (auto &mps : mpss)

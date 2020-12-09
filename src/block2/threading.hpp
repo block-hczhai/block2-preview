@@ -26,9 +26,6 @@
 #ifdef _HAS_INTEL_MKL
 #include "mkl.h"
 #endif
-#ifdef _HAS_TBB
-#include "tbb/tbb.h"
-#endif
 #include <cassert>
 #include <cstdint>
 #include <cstring>
