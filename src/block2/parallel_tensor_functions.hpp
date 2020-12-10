@@ -222,25 +222,38 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     c->ops.at(pa)->allocate(c->ops.at(pa)->info);
                 }
             }
-        parallel_for(a->lmat->data.size(),
-                     [&a, &c, &mpst_bra, &mpst_ket, this](
-                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                         if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
-                             auto pa = abs_value(a->lmat->data[i]);
-                             if (this->rule->own(pa))
-                                 tf->opf->tensor_rotate(a->ops.at(pa),
-                                                        c->ops.at(pa), mpst_bra,
-                                                        mpst_ket, false);
-                         }
-                     });
+        bool repeat = true, no_repeat = rule->non_blocking ? false : true;
+        auto f = [&a, &c, &mpst_bra, &mpst_ket, this, &repeat, &no_repeat](
+                     const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+            if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
+                auto pa = abs_value(a->lmat->data[i]);
+                if (this->rule->own(pa) &&
+                    ((repeat && this->rule->repeat(pa)) ||
+                     (no_repeat && !this->rule->repeat(pa))))
+                    tf->opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa),
+                                           mpst_bra, mpst_ket, false);
+            }
+        };
+        parallel_for(a->lmat->data.size(), f);
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
         for (size_t i = 0; i < a->lmat->data.size(); i++)
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
-                if (rule->repeat(pa))
-                    rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
+                if (rule->repeat(pa)) {
+                    if (!rule->non_blocking)
+                        rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
+                    else
+                        rule->comm->ibroadcast(c->ops.at(pa), rule->owner(pa));
+                }
             }
+        if (rule->non_blocking) {
+            repeat = false, no_repeat = true;
+            parallel_for(a->lmat->data.size(), f);
+            if (opf->seq->mode == SeqTypes::Auto)
+                opf->seq->auto_perform();
+            rule->comm->waitall();
+        }
     }
     // c = mpst_bra x a x mpst_ket
     void right_rotate(const shared_ptr<OperatorTensor<S>> &a,
@@ -255,25 +268,38 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     c->ops.at(pa)->allocate(c->ops.at(pa)->info);
                 }
             }
-        parallel_for(a->rmat->data.size(),
-                     [&a, &c, &mpst_bra, &mpst_ket, this](
-                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                         if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
-                             auto pa = abs_value(a->rmat->data[i]);
-                             if (this->rule->own(pa))
-                                 tf->opf->tensor_rotate(a->ops.at(pa),
-                                                        c->ops.at(pa), mpst_bra,
-                                                        mpst_ket, true);
-                         }
-                     });
+        bool repeat = true, no_repeat = rule->non_blocking ? false : true;
+        auto f = [&a, &c, &mpst_bra, &mpst_ket, this, &repeat, &no_repeat](
+                     const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+            if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
+                auto pa = abs_value(a->rmat->data[i]);
+                if (this->rule->own(pa) &&
+                    ((repeat && this->rule->repeat(pa)) ||
+                     (no_repeat && !this->rule->repeat(pa))))
+                    tf->opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa),
+                                           mpst_bra, mpst_ket, true);
+            }
+        };
+        parallel_for(a->rmat->data.size(), f);
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
         for (size_t i = 0; i < a->rmat->data.size(); i++)
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
-                if (rule->repeat(pa))
-                    rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
+                if (rule->repeat(pa)) {
+                    if (!rule->non_blocking)
+                        rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
+                    else
+                        rule->comm->ibroadcast(c->ops.at(pa), rule->owner(pa));
+                }
             }
+        if (rule->non_blocking) {
+            repeat = false, no_repeat = true;
+            parallel_for(a->rmat->data.size(), f);
+            if (opf->seq->mode == SeqTypes::Auto)
+                opf->seq->auto_perform();
+            rule->comm->waitall();
+        }
     }
     void intermediates(const shared_ptr<Symbolic<S>> &names,
                        const shared_ptr<Symbolic<S>> &exprs,

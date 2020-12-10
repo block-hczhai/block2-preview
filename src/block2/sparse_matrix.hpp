@@ -510,13 +510,21 @@ struct SparseMatrixInfo<
                                 "' failed.");
         ifs.close();
     }
-    void load_data(istream &ifs) {
+    void load_data(istream &ifs, bool pointer_only = false) {
         ifs.read((char *)&delta_quantum, sizeof(delta_quantum));
         ifs.read((char *)&n, sizeof(n));
         if (alloc == nullptr)
             alloc = ialloc;
-        uint32_t *ptr = alloc->allocate((n << 1) + _DBL_MEM_SIZE(n));
-        ifs.read((char *)ptr, sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
+        uint32_t *ptr;
+        if (pointer_only) {
+            size_t psz;
+            ifs.read((char *)&psz, sizeof(psz));
+            ptr = ialloc->data + psz;
+        } else {
+            ptr = alloc->allocate((n << 1) + _DBL_MEM_SIZE(n));
+            ifs.read((char *)ptr,
+                     sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
+        }
         ifs.read((char *)&is_fermion, sizeof(is_fermion));
         ifs.read((char *)&is_wavefunction, sizeof(is_wavefunction));
         quanta = (S *)ptr;
@@ -538,12 +546,17 @@ struct SparseMatrixInfo<
                                 "' failed.");
         ofs.close();
     }
-    void save_data(ostream &ofs) const {
+    void save_data(ostream &ofs, bool pointer_only = false) const {
         ofs.write((char *)&delta_quantum, sizeof(delta_quantum));
         assert(n != -1);
         ofs.write((char *)&n, sizeof(n));
-        ofs.write((char *)quanta,
-                  sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
+        if (pointer_only) {
+            assert(alloc == ialloc);
+            size_t psz = (uint32_t *)quanta - ialloc->data;
+            ofs.write((char *)&psz, sizeof(psz));
+        } else
+            ofs.write((char *)quanta,
+                      sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
         ofs.write((char *)&is_fermion, sizeof(is_fermion));
         ofs.write((char *)&is_wavefunction, sizeof(is_wavefunction));
     }
@@ -849,11 +862,17 @@ template <typename S> struct SparseMatrix {
     virtual const SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
-    virtual void load_data(istream &ifs) {
+    virtual void load_data(istream &ifs, bool pointer_only = false) {
         ifs.read((char *)&factor, sizeof(factor));
         ifs.read((char *)&total_memory, sizeof(total_memory));
-        data = alloc->allocate(total_memory);
-        ifs.read((char *)data, sizeof(double) * total_memory);
+        if (pointer_only && total_memory != 0) {
+            size_t psz;
+            ifs.read((char *)&psz, sizeof(psz));
+            data = dalloc->data + psz;
+        } else {
+            data = alloc->allocate(total_memory);
+            ifs.read((char *)data, sizeof(double) * total_memory);
+        }
     }
     void load_data(const string &filename, bool load_info = false,
                    const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
@@ -874,10 +893,15 @@ template <typename S> struct SparseMatrix {
                                 "' failed.");
         ifs.close();
     }
-    virtual void save_data(ostream &ofs) const {
+    virtual void save_data(ostream &ofs, bool pointer_only = false) const {
         ofs.write((char *)&factor, sizeof(factor));
         ofs.write((char *)&total_memory, sizeof(total_memory));
-        ofs.write((char *)data, sizeof(double) * total_memory);
+        if (pointer_only && total_memory != 0) {
+            assert(alloc == dalloc);
+            size_t psz = data - dalloc->data;
+            ofs.write((char *)&psz, sizeof(psz));
+        } else
+            ofs.write((char *)data, sizeof(double) * total_memory);
     }
     void save_data(const string &filename, bool save_info = false) const {
         if (Parsing::link_exists(filename))

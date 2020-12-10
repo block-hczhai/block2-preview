@@ -187,6 +187,7 @@ struct DataFrame {
     string save_dir, mps_dir, restart_dir = "";
     string prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
+    bool partition_can_write = true;
     size_t isize, dsize;
     int n_frames, i_frame;
     mutable double tread = 0, twrite = 0, tasync = 0; // io time cost
@@ -337,6 +338,11 @@ struct DataFrame {
     }
     // Save one data frame to disk
     void save_data(int i, const string &filename) const {
+        if (!partition_can_write) {
+            update_peak_used_memory();
+            present_filenames[i] = filename;
+            return;
+        }
         _t.get_time();
         if (save_buffering) {
             if (save_futures[i].valid())
@@ -396,8 +402,8 @@ struct DataFrame {
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << " UseMainStack = " << df.use_main_stack
-           << " IBuf = " << df.load_buffering
-           << " OBuf = " << df.save_buffering << endl;
+           << " IBuf = " << df.load_buffering << " OBuf = " << df.save_buffering
+           << endl;
         os << " IMain = " << Parsing::to_size_string(df.iallocs[0]->used * 4)
            << " / " << Parsing::to_size_string(df.iallocs[0]->size * 4);
         os << " DMain = " << Parsing::to_size_string(df.dallocs[0]->used * 8)

@@ -25,6 +25,7 @@
 #include "mpo.hpp"
 #include "mps.hpp"
 #include "parallel_mpo.hpp"
+#include "parallel_mps.hpp"
 #include "parallel_rule.hpp"
 #include "partition.hpp"
 #include "state_averaged.hpp"
@@ -1138,6 +1139,7 @@ template <typename S> struct MovingEnvironment {
            tfwrt = 0, tfred = 0, tinfo = 0;
     Timer _t, _t2;
     bool iprint = false;
+    bool save_partition_info = false;
     OpNamesSet delayed_contraction = OpNamesSet();
     int fuse_center;
     MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
@@ -1154,6 +1156,12 @@ template <typename S> struct MovingEnvironment {
         if (mpo->get_parallel_type() == ParallelTypes::Distributed) {
             para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
             para_rule->comm->barrier();
+        }
+        if (ket->get_type() & MPSTypes::MultiCenter) {
+            save_partition_info = true;
+            if (dynamic_pointer_cast<ParallelMPS<S>>(ket)->rule != nullptr)
+                dynamic_pointer_cast<ParallelMPS<S>>(ket)
+                    ->rule->comm->barrier();
         }
     }
     // Contract and renormalize left block by one site
@@ -1231,6 +1239,11 @@ template <typename S> struct MovingEnvironment {
         Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         _t.get_time();
         frame->save_data(1, get_left_partition_filename(i));
+        if (save_partition_info) {
+            frame->activate(1);
+            envs[i]->save_data(true, get_left_partition_filename(i, true));
+            frame->activate(0);
+        }
         tfwrt += _t.get_time();
     }
     // Contract and renormalize right block by one site
@@ -1313,25 +1326,164 @@ template <typename S> struct MovingEnvironment {
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         _t.get_time();
         frame->save_data(1, get_right_partition_filename(i));
+        if (save_partition_info) {
+            frame->activate(1);
+            envs[i]->save_data(false, get_right_partition_filename(i, true));
+            frame->activate(0);
+        }
         tfwrt += _t.get_time();
     }
-    void left_contract_rotate_unordered(int i) {
-        if (i != 0) {
+    void left_contract_rotate_unordered(
+        int i, const shared_ptr<ParallelRule<S>> &rule = nullptr) {
+        if (i == 0)
+            return;
+        if (rule == nullptr || rule->is_root()) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
-            if (envs[i - 1]->left != nullptr)
+            if (envs[i - 1]->left != nullptr) {
                 frame->load_data(1, get_left_partition_filename(i - 1));
+                frame->activate(1);
+                envs[i - 1]->load_data(
+                    true, get_left_partition_filename(i - 1, true));
+            }
             left_contract_rotate(i);
         }
+        if (rule != nullptr)
+            rule->comm->barrier();
+        if (rule != nullptr && !rule->is_root()) {
+            frame->activate(1);
+            envs[i]->load_data(true, get_left_partition_filename(i, true));
+            frame->activate(0);
+        }
     }
-    void right_contract_rotate_unordered(int i) {
-        if (i >= 0 && i + 1 < n_sites) {
+    void right_contract_rotate_unordered(
+        int i, const shared_ptr<ParallelRule<S>> &rule = nullptr) {
+        if (!(i >= 0 && i + 1 < n_sites))
+            return;
+        if (rule == nullptr || rule->is_root()) {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
-            if (envs[i + 1]->right != nullptr)
+            if (envs[i + 1]->right != nullptr) {
                 frame->load_data(1, get_right_partition_filename(i + 1));
+                frame->activate(1);
+                envs[i + 1]->load_data(
+                    false, get_right_partition_filename(i + 1, true));
+            }
             right_contract_rotate(i);
         }
+        if (rule != nullptr)
+            rule->comm->barrier();
+        if (rule != nullptr && !rule->is_root()) {
+            frame->activate(1);
+            envs[i]->load_data(false, get_right_partition_filename(i, true));
+            frame->activate(0);
+        }
+    }
+    // change from standard single-center MPS to multi-center MPS
+    void parallelize_mps() {
+        assert(ket->get_type() & MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
+        if (para_mps->ncenter != 0)
+            return;
+        assert(para_mps->conn_centers.size() != 0);
+        para_mps->ncenter = para_mps->conn_centers.size();
+        assert(para_mps->conn_matrices.size() == 0);
+        para_mps->conn_matrices.resize(para_mps->ncenter);
+        if (para_mps->rule != nullptr)
+            para_mps->rule->comm->barrier();
+        while (para_mps->center != 0) {
+            para_mps->move_left(cg, para_mps->rule);
+            right_contract_rotate_unordered(
+                para_mps->center - para_mps->dot + 1, para_mps->rule);
+        }
+        assert(para_mps->center == 0);
+        for (int i = 0; i < para_mps->ncenter; i++) {
+            while (para_mps->center != para_mps->conn_centers[i]) {
+                para_mps->move_right(cg, para_mps->rule);
+                left_contract_rotate_unordered(para_mps->center,
+                                               para_mps->rule);
+            }
+            auto rmat = para_mps->para_split(i, para_mps->rule);
+            right_contract_rotate_unordered(para_mps->center - para_mps->dot,
+                                            para_mps->rule);
+            if (para_mps->rule == nullptr || para_mps->rule->is_root()) {
+                para_mps->tensors[para_mps->center] = rmat;
+                para_mps->save_tensor(para_mps->center);
+            }
+            if (para_mps->rule != nullptr)
+                para_mps->rule->comm->barrier();
+        }
+        while (para_mps->center != para_mps->n_sites - 1) {
+            para_mps->move_right(cg, para_mps->rule);
+            left_contract_rotate_unordered(para_mps->center, para_mps->rule);
+        }
+        para_mps->move_right(cg, para_mps->rule);
+        for (int i = 0; i < para_mps->ncenter; i += 2) {
+            para_mps->center = i != para_mps->ncenter - 1
+                                   ? para_mps->conn_centers[i + 1] - 1
+                                   : para_mps->n_sites - 1;
+            while (para_mps->center != para_mps->conn_centers[i])
+                para_mps->move_left(cg, para_mps->rule);
+        }
+        for (int i = 0; para_mps->dot == 2 && i < para_mps->ncenter + 1;
+             i += 2) {
+            para_mps->center = i != para_mps->ncenter
+                                   ? para_mps->conn_centers[i] - 1
+                                   : para_mps->n_sites - 1;
+            para_mps->flip_fused_form(para_mps->center, cg, para_mps->rule);
+        }
+        para_mps->center = para_mps->conn_centers[0] - 1;
+    }
+    // change from multi-center MPS to standard single-center MPS
+    void serialize_mps() {
+        assert(ket->get_type() & MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
+        assert(para_mps->conn_matrices.size() != 0);
+        if (para_mps->rule != nullptr)
+            para_mps->rule->comm->barrier();
+        if (para_mps->canonical_form[para_mps->n_sites - 1] == 'C')
+            para_mps->canonical_form[para_mps->n_sites - 1] = 'S';
+        else if (para_mps->canonical_form[para_mps->n_sites - 1] == 'K')
+            para_mps->flip_fused_form(para_mps->n_sites - 1, cg,
+                                      para_mps->rule);
+        if (para_mps->canonical_form[0] == 'C')
+            para_mps->canonical_form[0] = 'K';
+        else if (para_mps->canonical_form[0] == 'S')
+            para_mps->flip_fused_form(0, cg, para_mps->rule);
+        for (int i = 0; i <= para_mps->ncenter; i++) {
+            para_mps->center = i == 0 ? 0 : para_mps->conn_centers[i - 1];
+            int j = i == para_mps->ncenter ? para_mps->n_sites - 1
+                                           : para_mps->conn_centers[i] - 1;
+            if (para_mps->canonical_form[para_mps->center] == 'K')
+                while (para_mps->center != j) {
+                    para_mps->move_right(cg, para_mps->rule);
+                    left_contract_rotate_unordered(para_mps->center,
+                                                   para_mps->rule);
+                }
+        }
+        para_mps->center = para_mps->n_sites - 1;
+        for (int i = para_mps->ncenter - 1; i >= 0; i--) {
+            while (para_mps->center != para_mps->conn_centers[i]) {
+                para_mps->move_left(cg, para_mps->rule);
+                right_contract_rotate_unordered(
+                    para_mps->center - para_mps->dot + 1, para_mps->rule);
+            }
+            para_mps->flip_fused_form(para_mps->center - 1, cg, para_mps->rule);
+            para_mps->flip_fused_form(para_mps->center, cg, para_mps->rule);
+            para_mps->para_merge(i, para_mps->rule);
+        }
+        while (para_mps->center != 0) {
+            para_mps->move_left(cg, para_mps->rule);
+            right_contract_rotate_unordered(
+                para_mps->center - para_mps->dot + 1, para_mps->rule);
+        }
+        center = para_mps->center;
+        para_mps->conn_matrices.clear();
+        para_mps->ncenter = 0;
     }
     string get_left_archive_filename(int i) const {
         stringstream ss;
@@ -1351,16 +1503,17 @@ template <typename S> struct MovingEnvironment {
            << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
-    string get_left_partition_filename(int i) const {
+    string get_left_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART." << tag
-           << ".LEFT." << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART."
+           << (info ? "INFO." : "") << tag << ".LEFT." << Parsing::to_string(i);
         return ss.str();
     }
-    string get_right_partition_filename(int i) const {
+    string get_right_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART." << tag
-           << ".RIGHT." << Parsing::to_string(i);
+        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART."
+           << (info ? "INFO." : "") << tag << ".RIGHT."
+           << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MovingEnvironment<S>> &me) const {
@@ -1423,6 +1576,13 @@ template <typename S> struct MovingEnvironment {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
         }
+        frame->activate(1);
+        if (envs[a]->left != nullptr)
+            envs[a]->load_data(true, get_left_partition_filename(a, true));
+        if (envs[b - dot]->right != nullptr)
+            envs[b - dot]->load_data(
+                false, get_right_partition_filename(b - dot, true));
+        frame->activate(0);
     }
     // Remove old environment for starting a new sweep
     void prepare() {
@@ -1774,8 +1934,8 @@ template <typename S> struct MovingEnvironment {
     eff_ham(FuseTypes fuse_type, bool compute_diag,
             const shared_ptr<SparseMatrix<S>> &bra_wfn,
             const shared_ptr<SparseMatrix<S>> &ket_wfn) {
-        assert(bra->info->get_multi_type() == MultiTypes::None);
-        assert(ket->info->get_multi_type() == MultiTypes::None);
+        assert(!(bra->get_type() & MPSTypes::MultiWfn));
+        assert(!(ket->get_type() & MPSTypes::MultiWfn));
         const bool delay_left = center <= fuse_center;
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
             right_op_infos;
@@ -1854,8 +2014,8 @@ template <typename S> struct MovingEnvironment {
     // for MultiMPS case
     shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>>
     multi_eff_ham(FuseTypes fuse_type, bool compute_diag) {
-        assert(bra->info->get_multi_type() == MultiTypes::Multi);
-        assert(ket->info->get_multi_type() == MultiTypes::Multi);
+        assert(bra->get_type() & MPSTypes::MultiWfn);
+        assert(ket->get_type() & MPSTypes::MultiWfn);
         const bool delay_left = center <= fuse_center;
         shared_ptr<MultiMPS<S>> mbra = dynamic_pointer_cast<MultiMPS<S>>(bra);
         shared_ptr<MultiMPS<S>> mket = dynamic_pointer_cast<MultiMPS<S>>(ket);

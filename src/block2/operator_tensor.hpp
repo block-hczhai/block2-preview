@@ -66,15 +66,17 @@ template <typename S> struct OperatorTensor {
         for (const auto &t : mp)
             t.second->deallocate();
     }
-    void load_data(istream &ifs) {
-        bool lr;
+    void load_data(istream &ifs, bool pointer_only = false) {
+        uint8_t lr;
         ifs.read((char *)&lr, sizeof(lr));
-        if (lr) {
+        if (lr == 1) {
             lmat = load_symbolic<S>(ifs);
             rmat = lmat;
         } else {
-            lmat = load_symbolic<S>(ifs);
-            rmat = load_symbolic<S>(ifs);
+            if (lr == 0 || lr == 2)
+                lmat = load_symbolic<S>(ifs);
+            if (lr == 0 || lr == 3)
+                rmat = load_symbolic<S>(ifs);
         }
         int sz;
         ifs.read((char *)&sz, sizeof(sz));
@@ -98,16 +100,20 @@ template <typename S> struct OperatorTensor {
             else
                 assert(false);
             mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
-            mat->info->load_data(ifs);
-            mat->load_data(ifs);
+            mat->info->load_data(ifs, pointer_only);
+            mat->load_data(ifs, pointer_only);
             ops[expr] = mat;
         }
     }
-    void save_data(ostream &ofs) const {
-        bool lr = lmat == rmat;
+    void save_data(ostream &ofs, bool pointer_only = false) const {
+        uint8_t lr = lmat == rmat
+                         ? 1
+                         : (rmat == nullptr ? 2 : (lmat == nullptr ? 3 : 0));
         ofs.write((char *)&lr, sizeof(lr));
-        if (lr)
+        if (lr == 1 || lr == 2)
             save_symbolic(lmat, ofs);
+        else if (lr == 3)
+            save_symbolic(rmat, ofs);
         else {
             save_symbolic(lmat, ofs);
             save_symbolic(rmat, ofs);
@@ -122,8 +128,8 @@ template <typename S> struct OperatorTensor {
                    tp == SparseMatrixTypes::CSR ||
                    tp == SparseMatrixTypes::Delayed);
             ofs.write((char *)&tp, sizeof(tp));
-            op.second->info->save_data(ofs);
-            op.second->save_data(ofs);
+            op.second->info->save_data(ofs, pointer_only);
+            op.second->save_data(ofs, pointer_only);
         }
     }
     shared_ptr<OperatorTensor> copy() const {

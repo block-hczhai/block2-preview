@@ -90,11 +90,11 @@ struct DelayedSparseMatrix<S, OpExpr<S>> : DelayedSparseMatrix<S> {
         : DelayedSparseMatrix<S>(), m(m), op(op) {
         this->info = info;
     }
-    void load_data(istream &ifs) override {
+    void load_data(istream &ifs, bool pointer_only = false) override {
         ifs.read((char *)&m, sizeof(m));
         op = load_expr<S>(ifs);
     }
-    void save_data(ostream &ofs) const override {
+    void save_data(ostream &ofs, bool pointer_only = false) const override {
         ofs.write((char *)&m, sizeof(m));
         assert(op != nullptr);
         save_expr<S>(op, ofs);

@@ -69,7 +69,19 @@ inline void write_occ(const string &filename, const vector<double> &occ) {
 
 enum struct WarmUpTypes : uint8_t { None, Local, Determinant };
 
-enum struct MultiTypes : uint8_t { None, Multi };
+enum struct MPSTypes : uint8_t { None = 0, MultiWfn = 1, MultiCenter = 2 };
+
+inline bool operator&(MPSTypes a, MPSTypes b) {
+    return ((uint8_t)a & (uint8_t)b) != 0;
+}
+
+inline MPSTypes operator|(MPSTypes a, MPSTypes b) {
+    return MPSTypes((uint8_t)a | (uint8_t)b);
+}
+
+inline MPSTypes operator^(MPSTypes a, MPSTypes b) {
+    return MPSTypes((uint8_t)a ^ (uint8_t)b);
+}
 
 // Quantum number information in a MPS
 template <typename S> struct MPSInfo {
@@ -104,7 +116,7 @@ template <typename S> struct MPSInfo {
     virtual ~MPSInfo() = default;
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual WarmUpTypes get_warm_up_type() const { return WarmUpTypes::None; }
-    virtual MultiTypes get_multi_type() const { return MultiTypes::None; }
+    virtual MPSTypes get_type() const { return MPSTypes::None; }
     virtual void load_data(istream &ifs) {
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&vacuum, sizeof(vacuum));
@@ -1000,6 +1012,7 @@ template <typename S> struct MPS {
             canonical_form[i] = 'R';
     }
     virtual ~MPS() = default;
+    virtual MPSTypes get_type() const { return MPSTypes::None; }
     // in bytes; 0 = peak memory, 1 = total disk storage
     // only count lower bound of doubles
     virtual vector<size_t>
@@ -1165,20 +1178,30 @@ template <typename S> struct MPS {
                 }
             }
     }
-    void flip_fused_form(int center, const shared_ptr<CG<S>> &cg) {
-        load_tensor(center);
-        if (canonical_form[center] == 'S') {
-            tensors[center] =
-                info->swap_wfn_to_fused_left(center, tensors[center], cg);
+    void
+    flip_fused_form(int center, const shared_ptr<CG<S>> &cg,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (para_rule == nullptr || para_rule->is_root()) {
+            load_tensor(center);
+            if (canonical_form[center] == 'S')
+                tensors[center] =
+                    info->swap_wfn_to_fused_left(center, tensors[center], cg);
+            else if (canonical_form[center] == 'K')
+                tensors[center] =
+                    info->swap_wfn_to_fused_right(center, tensors[center], cg);
+            else
+                assert(false);
+            save_tensor(center);
+            unload_tensor(center);
+        }
+        if (canonical_form[center] == 'S')
             canonical_form[center] = 'K';
-        } else if (canonical_form[center] == 'K') {
-            tensors[center] =
-                info->swap_wfn_to_fused_right(center, tensors[center], cg);
+        else if (canonical_form[center] == 'K')
             canonical_form[center] = 'S';
-        } else
+        else
             assert(false);
-        save_tensor(center);
-        unload_tensor(center);
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
     }
     // CC -> KR or K -> S or LS -> KR or LK -> KR
     void move_left(const shared_ptr<CG<S>> &cg,

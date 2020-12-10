@@ -780,7 +780,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def(py::init<int, S, S, const vector<shared_ptr<StateInfo<S>>> &,
                       bool>())
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
-        .def("get_multi_type", &MPSInfo<S>::get_multi_type)
+        .def("get_type", &MPSInfo<S>::get_type)
         .def("load_data",
              (void (MPSInfo<S>::*)(const string &)) & MPSInfo<S>::load_data)
         .def("save_data", (void (MPSInfo<S>::*)(const string &) const) &
@@ -883,6 +883,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("info", &MPS<S>::info)
         .def_readwrite("tensors", &MPS<S>::tensors)
         .def_readwrite("canonical_form", &MPS<S>::canonical_form)
+        .def("get_type", &MPS<S>::get_type)
         .def("initialize", &MPS<S>::initialize, py::arg("info"),
              py::arg("init_left") = true, py::arg("init_right") = true)
         .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
@@ -925,8 +926,6 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("conn_centers", &ParallelMPS<S>::conn_centers)
         .def_readwrite("conn_matrices", &ParallelMPS<S>::conn_matrices)
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
-        .def("parallelize", &ParallelMPS<S>::parallelize)
-        .def("serialize", &ParallelMPS<S>::serialize)
         .def("para_merge", &ParallelMPS<S>::para_merge)
         .def("para_split", &ParallelMPS<S>::para_split);
 }
@@ -1215,6 +1214,8 @@ template <typename S> void bind_partition(py::module &m) {
              &MovingEnvironment<S>::left_contract_rotate_unordered)
         .def("right_contract_rotate_unordered",
              &MovingEnvironment<S>::right_contract_rotate_unordered)
+        .def("parallelize_mps", &MovingEnvironment<S>::parallelize_mps)
+        .def("serialize_mps", &MovingEnvironment<S>::serialize_mps)
         .def(
             "left_contract",
             [](MovingEnvironment<S> *self, int iL,
@@ -1482,17 +1483,12 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
         .def("update_multi_one_dot", &DMRG<S>::update_multi_one_dot)
         .def("blocking", &DMRG<S>::blocking)
+        .def("partial_sweep", &DMRG<S>::partial_sweep)
+        .def("connection_sweep", &DMRG<S>::connection_sweep)
+        .def("unordered_sweep", &DMRG<S>::unordered_sweep)
         .def("sweep", &DMRG<S>::sweep)
         .def("solve", &DMRG<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
-
-    py::class_<ParallelDMRG<S>, shared_ptr<ParallelDMRG<S>>, DMRG<S>>(
-        m, "ParallelDMRG")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<ubond_t> &, const vector<double> &>())
-        .def_readwrite("para_mps", &ParallelDMRG<S>::para_mps)
-        .def("partial_sweep", &ParallelDMRG<S>::partial_sweep)
-        .def("connection_sweep", &ParallelDMRG<S>::connection_sweep);
 
     py::class_<typename TDDMRG<S>::Iteration,
                shared_ptr<typename TDDMRG<S>::Iteration>>(m, "TDDMRGIteration")
@@ -1739,7 +1735,9 @@ template <typename S> void bind_parallel(py::module &m) {
 
     py::class_<ParallelRule<S>, shared_ptr<ParallelRule<S>>>(m, "ParallelRule")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>())
         .def_readwrite("comm", &ParallelRule<S>::comm)
+        .def_readwrite("non_blocking", &ParallelRule<S>::non_blocking)
         .def("get_parallel_type", &ParallelRule<S>::get_parallel_type)
         .def("__call__", &ParallelRule<S>::operator())
         .def("is_root", &ParallelRule<S>::is_root)
@@ -2153,9 +2151,13 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Nothing", AncillaTypes::None)
         .value("Ancilla", AncillaTypes::Ancilla);
 
-    py::enum_<MultiTypes>(m, "MultiTypes", py::arithmetic())
-        .value("Nothing", MultiTypes::None)
-        .value("Multi", MultiTypes::Multi);
+    py::enum_<MPSTypes>(m, "MPSTypes", py::arithmetic())
+        .value("Nothing", MPSTypes::None)
+        .value("MultiWfn", MPSTypes::MultiWfn)
+        .value("MultiCenter", MPSTypes::MultiCenter)
+        .def(py::self & py::self)
+        .def(py::self | py::self)
+        .def(py::self ^ py::self);
 
     py::enum_<ActiveTypes>(m, "ActiveTypes", py::arithmetic())
         .value("Empty", ActiveTypes::Empty)
@@ -2314,6 +2316,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("restart_dir", &DataFrame::restart_dir)
         .def_readwrite("prefix", &DataFrame::prefix)
         .def_readwrite("prefix_distri", &DataFrame::prefix_distri)
+        .def_readwrite("prefix_can_write", &DataFrame::prefix_can_write)
+        .def_readwrite("partition_can_write", &DataFrame::partition_can_write)
         .def_readwrite("isize", &DataFrame::isize)
         .def_readwrite("dsize", &DataFrame::dsize)
         .def_readwrite("tread", &DataFrame::tread)

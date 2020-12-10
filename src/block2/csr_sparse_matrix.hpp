@@ -87,7 +87,8 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         total_memory = 0;
         data = nullptr;
     }
-    void load_data(istream &ifs) override {
+    void load_data(istream &ifs, bool pointer_only = false) override {
+        assert(pointer_only == false);
         SparseMatrix<S>::load_data(ifs);
         csr_data.resize(info->n);
         if (total_memory != 0) {
@@ -103,7 +104,8 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
             }
         }
     }
-    void save_data(ostream &ofs) const override {
+    void save_data(ostream &ofs, bool pointer_only = false) const override {
+        assert(pointer_only == false);
         SparseMatrix<S>::save_data(ofs);
         if (total_memory == 0) {
             assert((int)csr_data.size() == info->n);

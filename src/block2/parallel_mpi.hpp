@@ -78,8 +78,11 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     using ParallelCommunicator<S>::rank;
     using ParallelCommunicator<S>::root;
     using ParallelCommunicator<S>::tcomm;
+    using ParallelCommunicator<S>::tidle;
+    using ParallelCommunicator<S>::twait;
     Timer _t;
     const size_t chunk_size = 1 << 30;
+    vector<MPI_Request> reqs;
     MPICommunicator(int root = 0)
         : ParallelCommunicator<S>(MPI::size(), MPI::rank(), root) {}
     ParallelTypes get_parallel_type() const override {
@@ -89,7 +92,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         _t.get_time();
         int ierr = MPI_Barrier(MPI_COMM_WORLD);
         assert(ierr == 0);
-        tcomm += _t.get_time();
+        tidle += _t.get_time();
     }
     void broadcast(double *data, size_t len, int owner) override {
         _t.get_time();
@@ -97,6 +100,17 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             int ierr = MPI_Bcast(data + offset, min(chunk_size, len - offset),
                                  MPI_DOUBLE, owner, MPI_COMM_WORLD);
             assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void ibroadcast(double *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ibcast(data + offset, min(chunk_size, len - offset),
+                                  MPI_DOUBLE, owner, MPI_COMM_WORLD, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
         }
         tcomm += _t.get_time();
     }
@@ -168,6 +182,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         } else
             assert(false);
     }
+    void ibroadcast(const shared_ptr<SparseMatrix<S>> &mat,
+                    int owner) override {
+        if (mat->get_type() == SparseMatrixTypes::Normal) {
+            ibroadcast(mat->data, mat->total_memory, owner);
+        } else
+            assert(false);
+    }
     void allreduce_sum(double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -178,12 +199,35 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_min(double *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_DOUBLE,
+                                     MPI_MIN, MPI_COMM_WORLD);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
         allreduce_sum(mat->data, mat->total_memory);
     }
     void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) override {
         assert(mat->get_type() == SparseMatrixTypes::Normal);
         allreduce_sum(mat->data, mat->total_memory);
+    }
+    void allreduce_min(vector<double> &vs) override {
+        allreduce_min(vs.data(), vs.size());
+    }
+    void allreduce_min(vector<vector<double>> &vs) override {
+        vector<double> vx;
+        for (size_t i = 0; i < vs.size(); i++)
+            vx.insert(vx.end(), vs[i].begin(), vs[i].end());
+        allreduce_min(vx.data(), vx.size());
+        for (size_t i = 0, j = 0; i < vs.size(); i++) {
+            memcpy(vs[i].data(), vx.data() + j, vs[i].size() * sizeof(double));
+            j += vs[i].size();
+        }
     }
     void allreduce_sum(vector<S> &vs) override {
         _t.get_time();
@@ -209,6 +253,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
+    void allreduce_xor(char *data, size_t len) override {
+        _t.get_time();
+        int ierr = MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_CHAR, MPI_BXOR,
+                                 MPI_COMM_WORLD);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
     void reduce_sum(double *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -216,6 +267,19 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                                   data + offset, min(chunk_size, len - offset),
                                   MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD);
             assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void ireduce_sum(double *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr =
+                MPI_Ireduce(rank == owner ? MPI_IN_PLACE : data + offset,
+                            data + offset, min(chunk_size, len - offset),
+                            MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
         }
         tcomm += _t.get_time();
     }
@@ -229,6 +293,10 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void reduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat,
                     int owner) override {
         return reduce_sum(mat->data, mat->total_memory, owner);
+    }
+    void ireduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
+                     int owner) override {
+        return ireduce_sum(mat->data, mat->total_memory, owner);
     }
     void reduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
                     int owner) override {
@@ -303,6 +371,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             }
             tcomm += _t.get_time();
         }
+    }
+    void waitall() override {
+        _t.get_time();
+        int ierr =
+            MPI_Waitall((int)reqs.size(), reqs.data(), MPI_STATUSES_IGNORE);
+        assert(ierr == 0);
+        twait += _t.get_time();
     }
 };
 

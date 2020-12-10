@@ -4,7 +4,37 @@
 
 using namespace block2;
 
+// suppress googletest output for non-root mpi procs
+struct MPITest {
+    shared_ptr<testing::TestEventListener> tel;
+    testing::TestEventListener *def_tel;
+    MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            def_tel = tels.Release(tels.default_result_printer());
+            tel = make_shared<testing::EmptyTestEventListener>();
+            tels.Append(tel.get());
+        }
+    }
+    ~MPITest() {
+        if (block2::MPI::rank() != 0) {
+            testing::TestEventListeners &tels =
+                testing::UnitTest::GetInstance()->listeners();
+            assert(tel.get() == tels.Release(tel.get()));
+            tel = nullptr;
+            tels.Append(def_tel);
+        }
+    }
+    static bool okay() {
+        static MPITest _mpi_test;
+        return _mpi_test.tel != nullptr;
+    }
+};
+
 class TestDMRGUnorderedN2STO3G : public ::testing::Test {
+    static bool _mpi;
+
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
@@ -16,12 +46,12 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
                    DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
-        cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
-        threading_()->seq_type = SeqTypes::None;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
+            4);
+        threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -31,12 +61,24 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
     }
 };
 
+bool TestDMRGUnorderedN2STO3G::_mpi = MPITest::okay();
+
 template <typename S>
 void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
-                                const vector<vector<double>> &energies,
-                                const HamiltonianQC<S> &hamil,
-                                const string &name, DecompositionTypes dt,
-                                NoiseTypes nt) {
+                                         const vector<vector<double>> &energies,
+                                         const HamiltonianQC<S> &hamil,
+                                         const string &name,
+                                         DecompositionTypes dt, NoiseTypes nt) {
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
+#else
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRule<S>> para_rule =
+        make_shared<ParallelRule<S>>(para_comm);
 
     Timer t;
     t.get_time();
@@ -70,7 +112,8 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             // MPS
             Random::rand_seed(0);
 
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, 2);
+            shared_ptr<ParallelMPS<S>> mps =
+                make_shared<ParallelMPS<S>>(hamil.n_sites, 0, 2, para_rule);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -80,12 +123,9 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             mps_info->save_mutable();
             mps_info->deallocate_mutable();
 
-            shared_ptr<ParallelMPS<S>> pmps = make_shared<ParallelMPS<S>>(mps);
-            pmps->conn_centers = vector<int> {hamil.n_sites / 3, 2 * hamil.n_sites / 3};
-
             // ME
             shared_ptr<MovingEnvironment<S>> me =
-                make_shared<MovingEnvironment<S>>(mpo, pmps, pmps, "DMRG");
+                make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
             me->init_environments(false);
 
             // DMRG
@@ -101,22 +141,6 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
                  << (energy - energies[i][j]) << " T = " << fixed << setw(10)
                  << setprecision(3) << t.get_time() << endl;
 
-            EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
-
-            me->bra = me->ket = make_shared<MPS<S>>(*pmps);
-
-            dmrg = make_shared<DMRG<S>>(me, bdims, no_noises);
-            dmrg->iprint = 2;
-            dmrg->decomp_type = dt;
-            dmrg->noise_type = nt;
-            energy = dmrg->solve(1, mps->center == 0, 1E-8);
-
-            cout << "== SER " << name << " ==" << setw(20) << target
-                 << " E = " << fixed << setw(22) << setprecision(12) << energy
-                 << " error = " << scientific << setprecision(3) << setw(10)
-                 << (energy - energies[i][j]) << " T = " << fixed << setw(10)
-                 << setprecision(3) << t.get_time() << endl;
-            
             EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
 
             // deallocate persistent stack memory
@@ -167,14 +191,15 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSU2) {
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD", DecompositionTypes::PureSVD,
-                   NoiseTypes::Wavefunction);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD",
+                   DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
                    DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
                    DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
                    DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 
@@ -230,14 +255,15 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSZ) {
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD", DecompositionTypes::PureSVD,
-                  NoiseTypes::Wavefunction);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD",
+                  DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD PERT",
                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+                  DecompositionTypes::DensityMatrix,
+                  NoiseTypes::ReducedPerturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD RED PERT",
                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 

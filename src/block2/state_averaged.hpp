@@ -46,7 +46,7 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         if (init_fci)
             set_bond_dimension_fci();
     }
-    MultiTypes get_multi_type() const override { return MultiTypes::Multi; }
+    MPSTypes get_type() const override { return MPSTypes::MultiWfn; }
     vector<S> get_complementary(S q) const override {
         vector<S> r;
         for (auto target : targets) {
@@ -112,6 +112,7 @@ template <typename S> struct MultiMPS : MPS<S> {
                 canonical_form[i] = 'M';
         weights = vector<double>(nroots, 1.0 / nroots);
     }
+    MPSTypes get_type() const override { return MPSTypes::MultiWfn; }
     void initialize(const shared_ptr<MPSInfo<S>> &info, bool init_left = true,
                     bool init_right = true) override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -119,7 +120,7 @@ template <typename S> struct MultiMPS : MPS<S> {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         this->info = info;
-        assert(info->get_multi_type() == MultiTypes::Multi);
+        assert(info->get_type() == MPSTypes::MultiWfn);
         shared_ptr<MultiMPSInfo<S>> minfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(info);
         vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;

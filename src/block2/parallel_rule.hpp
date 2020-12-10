@@ -37,7 +37,7 @@ enum ParallelOpTypes : uint8_t {
 
 template <typename S> struct ParallelCommunicator {
     int size, rank, root;
-    double tcomm = 0.0; // Runtime for communication
+    double tcomm = 0.0, tidle = 0.0, twait = 0.0; // Runtime for communication
     ParallelCommunicator() : size(1), rank(0), root(0) {}
     ParallelCommunicator(int size, int rank, int root)
         : size(size), rank(rank), root(root) {}
@@ -50,6 +50,12 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void broadcast(double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ibroadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
+        assert(size == 1);
+    }
+    virtual void ibroadcast(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void broadcast(int *data, size_t len, int owner) {
@@ -66,6 +72,12 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void allreduce_sum(vector<S> &vs) { assert(size == 1); }
+    virtual void allreduce_xor(char *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_min(double *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_min(vector<vector<double>> &vs) {
+        assert(size == 1);
+    }
+    virtual void allreduce_min(vector<double> &vs) { assert(size == 1); }
     virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat,
                             int owner) {
         assert(size == 1);
@@ -73,13 +85,21 @@ template <typename S> struct ParallelCommunicator {
     virtual void reduce_sum(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
         assert(size == 1);
     }
+    virtual void ireduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
+                             int owner) {
+        assert(size == 1);
+    }
     virtual void reduce_sum(double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ireduce_sum(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void reduce_sum(uint64_t *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void allreduce_logical_or(bool &v) { assert(size == 1); }
+    virtual void waitall() { assert(size == 1); }
 };
 
 struct ParallelProperty {
@@ -93,7 +113,10 @@ struct ParallelProperty {
 // Rule for parallel dispatcher
 template <typename S> struct ParallelRule {
     shared_ptr<ParallelCommunicator<S>> comm;
-    ParallelRule(const shared_ptr<ParallelCommunicator<S>> &comm) : comm(comm) {
+    bool non_blocking;
+    ParallelRule(const shared_ptr<ParallelCommunicator<S>> &comm,
+                 bool non_blocking = false)
+        : comm(comm), non_blocking(non_blocking) {
         assert(frame != nullptr);
         frame->prefix_distri = frame->prefix + Parsing::to_string(comm->rank);
         if (comm->rank != comm->root)
@@ -138,10 +161,9 @@ template <typename S> struct ParallelRule {
         return pp.ptype & ParallelOpTypes::Number;
     }
     template <typename T>
-    void distributed_apply(T f,
-                        const vector<shared_ptr<OpExpr<S>>> &ops,
-                        const vector<shared_ptr<OpExpr<S>>> &exprs,
-                        vector<shared_ptr<SparseMatrix<S>>> &mats) const {
+    void distributed_apply(T f, const vector<shared_ptr<OpExpr<S>>> &ops,
+                           const vector<shared_ptr<OpExpr<S>>> &exprs,
+                           vector<shared_ptr<SparseMatrix<S>>> &mats) const {
         assert(ops.size() == exprs.size());
         vector<pair<shared_ptr<OpElement<S>>, shared_ptr<OpExprRef<S>>>>
             op_exprs(exprs.size());
@@ -163,6 +185,7 @@ template <typename S> struct ParallelRule {
                     make_pair(op, dynamic_pointer_cast<OpExprRef<S>>(expr));
         }
         vector<shared_ptr<OpExpr<S>>> local_exprs(exprs.size());
+        vector<shared_ptr<OpExpr<S>>> post_exprs = local_exprs;
         for (size_t i = 0; i < exprs.size(); i++) {
             if (i < mats.size() && mats[i] == nullptr)
                 continue;
@@ -170,8 +193,13 @@ template <typename S> struct ParallelRule {
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
                 partial(op) ? (expr_ref->is_local ? own(op) : true) : own(op);
-            if (req)
-                local_exprs[i] = expr_ref->op;
+            bool comm_req = (partial(op) && !expr_ref->is_local) || repeat(op);
+            if (req) {
+                if (!non_blocking || comm_req)
+                    local_exprs[i] = expr_ref->op;
+                else
+                    post_exprs[i] = expr_ref->op;
+            }
         }
         f(local_exprs);
         for (size_t i = 0; i < mats.size(); i++) {
@@ -179,13 +207,27 @@ template <typename S> struct ParallelRule {
                 continue;
             shared_ptr<OpElement<S>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
-            if (partial(op) && !expr_ref->is_local)
-                comm->reduce_sum(mats[i], (*this)(op).owner);
-            if (repeat(op)) {
-                if (mats[i]->data == nullptr)
-                    mats[i]->allocate(mats[i]->info);
-                comm->broadcast(mats[i], (*this)(op).owner);
+            if (!non_blocking) {
+                if (partial(op) && !expr_ref->is_local)
+                    comm->reduce_sum(mats[i], (*this)(op).owner);
+                if (repeat(op)) {
+                    if (mats[i]->data == nullptr)
+                        mats[i]->allocate(mats[i]->info);
+                    comm->broadcast(mats[i], (*this)(op).owner);
+                }
+            } else {
+                if (partial(op) && !expr_ref->is_local)
+                    comm->ireduce_sum(mats[i], (*this)(op).owner);
+                if (repeat(op)) {
+                    if (mats[i]->data == nullptr)
+                        mats[i]->allocate(mats[i]->info);
+                    comm->ibroadcast(mats[i], (*this)(op).owner);
+                }
             }
+        }
+        if (non_blocking) {
+            f(post_exprs);
+            comm->waitall();
         }
     }
     shared_ptr<OpExprRef<S>> localize_expr(const shared_ptr<OpExpr<S>> &expr,

@@ -21,7 +21,4 @@
 #include "instantiation.hpp"
 
 template struct block2::ParallelMPS<block2::SZ>;
-template struct block2::ParallelDMRG<block2::SZ>;
-
 template struct block2::ParallelMPS<block2::SU2>;
-template struct block2::ParallelDMRG<block2::SU2>;

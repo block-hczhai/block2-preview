@@ -23,6 +23,7 @@
 #include "expr.hpp"
 #include "matrix.hpp"
 #include "moving_environment.hpp"
+#include "parallel_mps.hpp"
 #include "sparse_matrix.hpp"
 #include <cassert>
 #include <cstdint>
@@ -876,13 +877,15 @@ template <typename S> struct DMRG {
         tblk += _t2.get_time();
         return it;
     }
+    // one standard DMRG sweep
     virtual tuple<vector<double>, double, vector<vector<pair<S, double>>>>
     sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
-        if (me->para_rule != nullptr)
-            me->para_rule->comm->tcomm = 0;
+        if (me->para_rule != nullptr && iprint >= 2)
+            me->para_rule->comm->tcomm = me->para_rule->comm->tidle =
+                me->para_rule->comm->twait = 0;
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();
@@ -939,6 +942,156 @@ template <typename S> struct DMRG {
         return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
                           sweep_quanta[idx]);
     }
+    // one DMRG sweep over a range of sites in multi-center MPS
+    void partial_sweep(int ip, bool forward, bool connect, ubond_t bond_dim,
+                       double noise, double davidson_conv_thrd) {
+        assert(me->ket->get_type() == MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
+        int a = ip == 0 ? 0 : para_mps->conn_centers[ip - 1];
+        int b =
+            ip == para_mps->ncenter ? me->n_sites : para_mps->conn_centers[ip];
+        if (connect) {
+            a = para_mps->conn_centers[ip] - 1;
+            b = a + me->dot;
+        } else
+            forward ^= ip & 1;
+        if (para_mps->canonical_form[a] == 'C' ||
+            para_mps->canonical_form[a] == 'K')
+            me->center = a;
+        else if (para_mps->canonical_form[b - 1] == 'C' ||
+                 para_mps->canonical_form[b - 1] == 'S')
+            me->center = b - me->dot;
+        else if (para_mps->canonical_form[b - 2] == 'C' ||
+                 para_mps->canonical_form[b - 2] == 'K')
+            me->center = b - me->dot;
+        else
+            assert(false);
+        me->partial_prepare(a, b);
+        vector<int> sweep_range;
+        if (forward)
+            for (int it = me->center; it < b - me->dot + 1; it++)
+                sweep_range.push_back(it);
+        else
+            for (int it = me->center; it >= a; it--)
+                sweep_range.push_back(it);
+        Timer t;
+        for (auto i : sweep_range) {
+            stringstream sout;
+            check_signal_()();
+            sout << " " << (connect ? "CON" : "PAR") << setw(4) << ip;
+            sout << " " << (forward ? "-->" : "<--");
+            if (me->dot == 2)
+                sout << " Site = " << setw(4) << i << "-" << setw(4) << i + 1
+                     << " .. ";
+            else
+                sout << " Site = " << setw(4) << i << " .. ";
+            t.get_time();
+            Iteration r =
+                blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
+            sweep_cumulative_nflop += r.nflop;
+            sout << r << " T = " << setw(4) << fixed << setprecision(2)
+                 << t.get_time() << endl;
+            if (iprint >= 2)
+                cout << sout.rdbuf();
+            sweep_energies[i] = r.energies;
+            sweep_discarded_weights[i] = r.error;
+            sweep_quanta[i] = r.quanta;
+        }
+        if (me->dot == 2 && !connect) {
+            if (forward)
+                me->left_contract_rotate_unordered(me->center + 1);
+            else
+                me->right_contract_rotate_unordered(me->center - 1);
+        }
+    }
+    // update one connection site in multi-center MPS
+    void connection_sweep(int ip, ubond_t bond_dim, double noise,
+                          double davidson_conv_thrd) {
+        assert(me->ket->get_type() == MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
+        me->center = para_mps->conn_centers[ip] - 1;
+        if (para_mps->canonical_form[me->center] == 'C' &&
+            para_mps->canonical_form[me->center + 1] == 'C')
+            para_mps->canonical_form[me->center] = 'K',
+            para_mps->canonical_form[me->center + 1] = 'S';
+        else if (para_mps->canonical_form[me->center] == 'S' &&
+                 para_mps->canonical_form[me->center + 1] == 'K') {
+            para_mps->flip_fused_form(me->center, me->mpo->tf->opf->cg);
+            para_mps->flip_fused_form(me->center + 1, me->mpo->tf->opf->cg);
+        }
+        if (para_mps->canonical_form[me->center] == 'K' &&
+            para_mps->canonical_form[me->center + 1] == 'S') {
+            para_mps->para_merge(ip);
+            partial_sweep(ip, true, true, bond_dim, noise,
+                          davidson_conv_thrd); // LK
+            me->left_contract_rotate_unordered(me->center + 1);
+            para_mps->canonical_form[me->center + 1] = 'K';
+            para_mps->flip_fused_form(me->center + 1,
+                                      me->mpo->tf->opf->cg); // LS
+            auto rmat = para_mps->para_split(ip);            // KR
+            me->right_contract_rotate_unordered(me->center - 1);
+            para_mps->tensors[me->center + 1] = rmat;
+            para_mps->save_tensor(me->center + 1); // KS
+            para_mps->flip_fused_form(me->center, me->mpo->tf->opf->cg);
+            para_mps->flip_fused_form(me->center + 1,
+                                      me->mpo->tf->opf->cg); // SK
+        }
+    }
+    // one unordered DMRG sweep (multi-center MPS required)
+    tuple<vector<double>, double, vector<vector<pair<S, double>>>>
+    unordered_sweep(bool forward, ubond_t bond_dim, double noise,
+                    double davidson_conv_thrd) {
+        assert(me->ket->get_type() == MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
+        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
+        frame->twrite = frame->tread = frame->tasync = 0;
+        if (para_mps->rule != nullptr && iprint >= 2)
+            para_mps->rule->comm->tcomm = para_mps->rule->comm->tidle =
+                para_mps->rule->comm->twait = 0;
+        sweep_energies.clear();
+        sweep_discarded_weights.clear();
+        sweep_quanta.clear();
+        sweep_cumulative_nflop = 0;
+        frame->reset_peak_used_memory();
+        sweep_energies.resize(me->n_sites - me->dot + 1, vector<double>{1E9});
+        sweep_discarded_weights.resize(me->n_sites - me->dot + 1);
+        sweep_quanta.resize(me->n_sites - me->dot + 1);
+        para_mps->enable_parallel_writing();
+        para_mps->set_ref_canonical_form();
+        for (int ip = 0; ip < para_mps->ncenter; ip++)
+            if (para_mps->rule == nullptr ||
+                ip % para_mps->rule->comm->size == para_mps->rule->comm->rank)
+                connection_sweep(ip, bond_dim, noise, davidson_conv_thrd);
+        para_mps->sync_canonical_form();
+        for (int ip = 0; ip <= para_mps->ncenter; ip++)
+            if (para_mps->rule == nullptr ||
+                ip % para_mps->rule->comm->size == para_mps->rule->comm->rank)
+                partial_sweep(ip, forward, false, bond_dim, noise,
+                              davidson_conv_thrd);
+        para_mps->sync_canonical_form();
+        for (int ip = 0; ip < para_mps->ncenter; ip++)
+            if (para_mps->rule == nullptr ||
+                ip % para_mps->rule->comm->size == para_mps->rule->comm->rank)
+                connection_sweep(ip, bond_dim, noise, davidson_conv_thrd);
+        para_mps->sync_canonical_form();
+        if (para_mps->rule != nullptr) {
+            para_mps->rule->comm->allreduce_min(sweep_energies);
+            para_mps->rule->comm->allreduce_min(sweep_discarded_weights);
+        }
+        para_mps->disable_parallel_writing();
+        size_t idx =
+            min_element(sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x.back() < y.back();
+                        }) -
+            sweep_energies.begin();
+        return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
+                          sweep_quanta[idx]);
+    }
+    // energy optimization using multiple DMRG sweeps
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
@@ -949,6 +1102,14 @@ template <typename S> struct DMRG {
                 davidson_conv_thrds.push_back(
                     (noises[i] == 0 ? (tol == 0 ? 1E-9 : tol) : noises[i]) *
                     0.1);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            me->ket->get_type() == MPSTypes::MultiCenter
+                ? dynamic_pointer_cast<ParallelMPS<S>>(me->ket)
+                : nullptr;
+        if (para_mps != nullptr) {
+            me->parallelize_mps();
+            para_mps->save_data();
+        }
         Timer start, current;
         start.get_time();
         current.get_time();
@@ -967,8 +1128,12 @@ template <typename S> struct DMRG {
                      << setw(9) << setprecision(2) << noises[iw]
                      << " | Dav threshold = " << scientific << setw(9)
                      << setprecision(2) << davidson_conv_thrds[iw] << endl;
-            auto sweep_results = sweep(forward, bond_dims[iw], noises[iw],
-                                       davidson_conv_thrds[iw]);
+            auto sweep_results =
+                para_mps != nullptr
+                    ? unordered_sweep(forward, bond_dims[iw], noises[iw],
+                                      davidson_conv_thrds[iw])
+                    : sweep(forward, bond_dims[iw], noises[iw],
+                            davidson_conv_thrds[iw]);
             energies.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             mps_quanta.push_back(get<2>(sweep_results));
@@ -1012,12 +1177,17 @@ template <typename S> struct DMRG {
                                                     "FLOP/SWP");
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
-                    if (me->para_rule != nullptr) {
-                        me->para_rule->comm->reduce_sum(
-                            &me->para_rule->comm->tcomm, 1,
-                            me->para_rule->comm->root);
-                        me->para_rule->comm->tcomm /= me->para_rule->comm->size;
-                        cout << " | Tcomm = " << me->para_rule->comm->tcomm;
+                    if ((para_mps != nullptr && para_mps->rule != nullptr) ||
+                        me->para_rule != nullptr) {
+                        shared_ptr<ParallelCommunicator<S>> comm =
+                            para_mps != nullptr && para_mps->rule != nullptr
+                                ? para_mps->rule->comm
+                                : me->para_rule->comm;
+                        double tt[3] = {comm->tcomm, comm->tidle, comm->twait};
+                        comm->reduce_sum(&tt[0], 3, comm->root);
+                        cout << " | Tcomm = " << tt[0] / comm->size
+                             << " | Tidle = " << tt[1] / comm->size
+                             << " | Twait = " << tt[2] / comm->size;
                     }
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
@@ -1040,6 +1210,10 @@ template <typename S> struct DMRG {
                 break;
         }
         this->forward = forward;
+        if (para_mps != nullptr) {
+            me->serialize_mps();
+            para_mps->save_data();
+        }
         if (!converged && iprint > 0 && tol != 0)
             cout << "ATTENTION: DMRG is not converged to desired tolerance of "
                  << scientific << tol << endl;
@@ -1934,7 +2108,8 @@ template <typename S> struct Linear {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         if (lme->para_rule != nullptr)
-            lme->para_rule->comm->tcomm = 0;
+            lme->para_rule->comm->tcomm = lme->para_rule->comm->tidle =
+                lme->para_rule->comm->twait = 0;
         rme->prepare();
         if (lme != nullptr)
             lme->prepare();
@@ -2077,12 +2252,16 @@ template <typename S> struct Linear {
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
                     if (lme->para_rule != nullptr) {
+                        double tt[3] = {lme->para_rule->comm->tcomm,
+                                        lme->para_rule->comm->tidle,
+                                        lme->para_rule->comm->twait};
                         lme->para_rule->comm->reduce_sum(
-                            &lme->para_rule->comm->tcomm, 1,
-                            lme->para_rule->comm->root);
-                        lme->para_rule->comm->tcomm /=
-                            lme->para_rule->comm->size;
-                        cout << " | Tcomm = " << lme->para_rule->comm->tcomm;
+                            &tt[0], 3, lme->para_rule->comm->root);
+                        tt[0] /= lme->para_rule->comm->size;
+                        tt[1] /= lme->para_rule->comm->size;
+                        tt[2] /= lme->para_rule->comm->size;
+                        cout << " | Tcomm = " << tt[0] << " | Tidle = " << tt[1]
+                             << " | Twait = " << tt[2];
                     }
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite

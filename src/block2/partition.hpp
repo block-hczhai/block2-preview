@@ -56,6 +56,72 @@ template <typename S> struct Partition {
         : left(left), right(right), middle{ldot, rdot} {}
     Partition(const Partition &other)
         : left(other.left), right(other.right), middle(other.middle) {}
+    void load_data(istream &ifs, bool left_part) {
+        if (left_part) {
+            left = make_shared<OperatorTensor<S>>();
+            left->load_data(ifs, true);
+            left_op_infos = Partition::load_op_infos(ifs);
+        } else {
+            right = make_shared<OperatorTensor<S>>();
+            right->load_data(ifs, true);
+            right_op_infos = Partition::load_op_infos(ifs);
+        }
+    }
+    void load_data(bool left_part, const string &filename) {
+        ifstream ifs(filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("Partition:load_data on '" + filename +
+                                "' failed.");
+        load_data(ifs, left_part);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("Partition:load_data on '" + filename +
+                                "' failed.");
+        ifs.close();
+    }
+    void save_data(ostream &ofs, bool left_part) const {
+        if (left_part) {
+            left->save_data(ofs, true);
+            Partition::save_op_infos(left_op_infos, ofs);
+        } else {
+            right->save_data(ofs, true);
+            Partition::save_op_infos(right_op_infos, ofs);
+        }
+    }
+    void save_data(bool left_part, const string &filename) const {
+        if (!frame->partition_can_write)
+            return;
+        ofstream ofs(filename.c_str(), ios::binary);
+        if (!ofs.good())
+            throw runtime_error("Partition:save_data on '" + filename +
+                                "' failed.");
+        save_data(ofs, left_part);
+        if (!ofs.good())
+            throw runtime_error("Partition:save_data on '" + filename +
+                                "' failed.");
+        ofs.close();
+    }
+    static vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
+    load_op_infos(istream &ifs) {
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos(sz);
+        for (int i = 0; i < sz; i++) {
+            ifs.read((char *)&op_infos[i].first, sizeof(op_infos[i].first));
+            op_infos[i].second = make_shared<SparseMatrixInfo<S>>(ialloc);
+            op_infos[i].second->load_data(ifs, true);
+        }
+        return op_infos;
+    }
+    static void save_op_infos(
+        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &op_infos,
+        ostream &ofs) {
+        int sz = (int)op_infos.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (auto &op_info : op_infos) {
+            ofs.write((char *)&op_info.first, sizeof(op_info.first));
+            op_info.second->save_data(ofs, true);
+        }
+    }
     static shared_ptr<SparseMatrixInfo<S>> find_op_info(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &op_infos, S q) {
         auto p = lower_bound(op_infos.begin(), op_infos.end(), q,

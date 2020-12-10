@@ -30,8 +30,9 @@ namespace block2 {
 // Rule for parallel dispatcher for quantum chemistry MPO
 template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
-    ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm)
-        : ParallelRule<S>(comm) {}
+    ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                   bool non_blocking = false)
+        : ParallelRule<S>(comm, non_blocking) {}
     static int find_index(uint16_t i, uint16_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
@@ -74,8 +75,9 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
 // Rule for parallel dispatcher for quantum chemistry NPDM
 template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
-    ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm)
-        : ParallelRule<S>(comm) {}
+    ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                       bool non_blocking = false)
+        : ParallelRule<S>(comm, non_blocking) {}
     static uint64_t find_index(uint32_t i, uint32_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
