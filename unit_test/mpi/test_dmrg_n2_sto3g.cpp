@@ -47,6 +47,7 @@ class TestDMRGN2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
         threading_()->seq_type = SeqTypes::Simple;
@@ -128,6 +129,8 @@ void TestDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             shared_ptr<MovingEnvironment<S>> me =
                 make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
             me->init_environments(false);
+            me->delayed_contraction = OpNamesSet::normal_ops();
+            me->cached_contraction = true;
 
             // DMRG
             shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);

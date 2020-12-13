@@ -61,6 +61,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      pc = abs_value(c->lmat->data[i]);
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
+                    // skip cached part
+                    if (c->ops[pc]->alloc != nullptr)
+                        return;
                     assert(c->ops[pc]->data == nullptr);
                     if (frame->use_main_stack)
                         c->ops[pc]->allocate(c->ops[pc]->info);
@@ -108,6 +111,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      pc = abs_value(c->rmat->data[i]);
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
+                    // skip cached part
+                    if (c->ops[pc]->alloc != nullptr)
+                        return;
                     assert(c->ops[pc]->data == nullptr);
                     if (frame->use_main_stack)
                         c->ops[pc]->allocate(c->ops[pc]->info);
@@ -443,8 +449,16 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             vector<shared_ptr<SparseMatrix<S>>> mats(exprs->data.size());
             for (size_t i = 0; i < exprs->data.size(); i++) {
                 shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
-                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name))
+                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name)) {
+                    if (!frame->use_main_stack) {
+                        // skip cached part
+                        if (c->ops.at(op)->alloc != nullptr)
+                            continue;
+                        c->ops.at(op)->alloc =
+                            make_shared<VectorAllocator<double>>();
+                    }
                     mats[i] = c->ops.at(op);
+                }
             }
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
@@ -458,14 +472,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     [&a, &b, &mats, &local_exprs](
                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
                         if (local_exprs[i] != nullptr) {
-                            if (!frame->use_main_stack) {
-                                // skip cached part
-                                if (mats[i]->alloc != nullptr)
-                                    return;
-                                mats[i]->alloc =
-                                    make_shared<VectorAllocator<double>>();
+                            if (!frame->use_main_stack)
                                 mats[i]->allocate(mats[i]->info);
-                            }
                             tf->tensor_product(local_exprs[i], a->ops, b->ops,
                                                mats[i]);
                         }
@@ -491,8 +499,16 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             vector<shared_ptr<SparseMatrix<S>>> mats(exprs->data.size());
             for (size_t i = 0; i < exprs->data.size(); i++) {
                 shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
-                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name))
+                if (!delayed(dynamic_pointer_cast<OpElement<S>>(op)->name)) {
+                    if (!frame->use_main_stack) {
+                        // skip cached part
+                        if (c->ops.at(op)->alloc != nullptr)
+                            continue;
+                        c->ops.at(op)->alloc =
+                            make_shared<VectorAllocator<double>>();
+                    }
                     mats[i] = c->ops.at(op);
+                }
             }
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
@@ -506,14 +522,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     [&a, &b, &mats, &local_exprs](
                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
                         if (local_exprs[i] != nullptr) {
-                            if (!frame->use_main_stack) {
-                                // skip cached part
-                                if (mats[i]->alloc != nullptr)
-                                    return;
-                                mats[i]->alloc =
-                                    make_shared<VectorAllocator<double>>();
+                            if (!frame->use_main_stack)
                                 mats[i]->allocate(mats[i]->info);
-                            }
                             tf->tensor_product(local_exprs[i], b->ops, a->ops,
                                                mats[i]);
                         }
