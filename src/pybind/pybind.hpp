@@ -1895,12 +1895,15 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("rule", &SimplifiedMPO<S>::rule)
         .def_readwrite("collect_terms", &SimplifiedMPO<S>::collect_terms)
         .def_readwrite("use_intermediate", &SimplifiedMPO<S>::use_intermediate)
+        .def_readwrite("intermediate_ops", &SimplifiedMPO<S>::intermediate_ops)
         .def(
             py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
                       bool>())
         .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
                       bool, bool>())
+        .def(py::init<const shared_ptr<MPO<S>> &, const shared_ptr<Rule<S>> &,
+                      bool, bool, OpNamesSet>())
         .def("simplify_expr", &SimplifiedMPO<S>::simplify_expr)
         .def("simplify_symbolic", &SimplifiedMPO<S>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S>::simplify);

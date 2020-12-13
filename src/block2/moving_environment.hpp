@@ -616,6 +616,15 @@ template <typename S> struct MovingEnvironment {
     // Move the center site by one
     virtual void move_to(int i) {
         string new_data_name = "";
+        // here the ialloc part is still needed even if we have cached
+        // but consider two cases (for why it can be skipped):
+        // 1. when center is delayed, then it is already in ialloc
+        //    whether skipping loading makes no difference
+        // 2. when it is not delayed, SpMatInfo is reconstructed
+        //    but it is based on MPSInfo
+        //    only SpMatInfo.cinfo needs prev_op_infos
+        //    but since no contraction will be performed,
+        //    incorrect cinfo does not have effects
         if (i > center) {
             _t.get_time();
             if (envs[center]->left != nullptr &&

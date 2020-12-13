@@ -20,7 +20,8 @@ class TestOneSiteDMRGN2STO3G : public ::testing::Test {
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
     }
@@ -47,7 +48,9 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo =
+        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
+                                      OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -82,6 +85,7 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             shared_ptr<MovingEnvironment<S>> me =
                 make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
             me->init_environments(false);
+            me->delayed_contraction = OpNamesSet::normal_ops();
             me->cached_contraction = true;
 
             // DMRG
@@ -147,14 +151,15 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSU2) {
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD", DecompositionTypes::PureSVD,
-                   NoiseTypes::Wavefunction);
+    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD",
+                   DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
                    DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
                    DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+                   DecompositionTypes::DensityMatrix,
+                   NoiseTypes::ReducedPerturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
                    DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 
@@ -210,14 +215,15 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSZ) {
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD", DecompositionTypes::PureSVD,
-                  NoiseTypes::Wavefunction);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD",
+                  DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD PERT",
                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::ReducedPerturbative);
+                  DecompositionTypes::DensityMatrix,
+                  NoiseTypes::ReducedPerturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD RED PERT",
                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 

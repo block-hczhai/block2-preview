@@ -47,11 +47,14 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
     // (if there are common factors)
     // A x B + A x C + A x D => A x (B + C + D)
     bool collect_terms, use_intermediate;
+    OpNamesSet intermediate_ops;
     SimplifiedMPO(const shared_ptr<MPO<S>> &mpo,
                   const shared_ptr<Rule<S>> &rule, bool collect_terms = true,
-                  bool use_intermediate = false)
+                  bool use_intermediate = false,
+                  OpNamesSet intermediate_ops = OpNamesSet::all_ops())
         : prim_mpo(mpo), rule(rule), MPO<S>(mpo->n_sites),
-          collect_terms(collect_terms), use_intermediate(use_intermediate) {
+          collect_terms(collect_terms), use_intermediate(use_intermediate),
+          intermediate_ops(intermediate_ops) {
         if (!collect_terms)
             use_intermediate = false;
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
@@ -769,7 +772,10 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         if (use_intermediate) {
             uint16_t idxi = 0, idxj = 0;
             for (size_t j = 0; j < expr->data.size(); j++) {
-                if (expr->data[j]->get_type() == OpTypes::Sum) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(name->data[j]);
+                if (expr->data[j]->get_type() == OpTypes::Sum &&
+                    intermediate_ops(op->name)) {
                     shared_ptr<OpSum<S>> ex =
                         dynamic_pointer_cast<OpSum<S>>(expr->data[j]);
                     for (size_t k = 0; k < ex->strings.size(); k++)
