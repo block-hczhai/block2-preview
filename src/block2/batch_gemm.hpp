@@ -387,6 +387,12 @@ struct BatchGEMMSeq {
             batch[1]->tensor_product(b, conj, MatrixRef(&x, 1, 1), false, a,
                                      scale, 0, cfactor);
     }
+    // [c] = scale * [a] x [b] + cfactor * [c]
+    void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
+                  bool conjb, const MatrixRef &c, double scale,
+                  double cfactor) {
+        batch[1]->multiply(a, conja, b, conjb, c, scale, cfactor);
+    }
     // [c] = scale * [bra] x [a] x [ket]
     void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
                 bool conj_bra, const MatrixRef &ket, bool conj_ket,
@@ -452,6 +458,78 @@ struct BatchGEMMSeq {
                                MatrixRef(&c(0, cst), c.m, c.n), scale, 1.0);
             batch[0]->work += work.size();
             batch[1]->work += work.size();
+        }
+    }
+    //  dleft: [c] = scale * [a] * [ket]
+    // !dleft: [c] = scale * [a] * [ket] (= [da] x [db])
+    void three_rotate_tr_left(const MatrixRef &a, const MatrixRef &c,
+                              const MatrixRef &bra, bool conj_bra,
+                              const MatrixRef &ket, bool conj_ket,
+                              const MatrixRef &da, bool dconja,
+                              const MatrixRef &db, bool dconjb, bool dleft,
+                              double scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            batch[1]->multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket,
+                               conj_ket, MatrixRef(&c(cst, 0), cm, c.n), scale,
+                               1.0);
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            if (da.m == 1 && da.n == 1)
+                // c = a * (1 x db)
+                batch[1]->multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db,
+                                   dconjb, MatrixRef(&c(0, cst), c.m, c.n),
+                                   *da.data * scale, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = a * (da x 1)
+                batch[1]->multiply(MatrixRef(&a(0, ast), a.m, a.n), false, da,
+                                   dconja, MatrixRef(&c(0, cst), c.m, c.n),
+                                   *db.data * scale, 1.0);
+            else
+                assert(false);
+        }
+    }
+    //  dleft: [c] = scale * [bra] (= [da] x [db]) * [a]
+    // !dleft: [c] = scale * [bra] * [a]
+    void three_rotate_tr_right(const MatrixRef &a, const MatrixRef &c,
+                               const MatrixRef &bra, bool conj_bra,
+                               const MatrixRef &ket, bool conj_ket,
+                               const MatrixRef &da, bool dconja,
+                               const MatrixRef &db, bool dconjb, bool dleft,
+                               double scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * a
+                batch[1]->multiply(db, dconjb, MatrixRef(&a(ast, 0), am, a.n),
+                                   false, MatrixRef(&c(cst, 0), cm, c.n),
+                                   *da.data * scale, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * a
+                batch[1]->multiply(da, dconja, MatrixRef(&a(ast, 0), am, a.n),
+                                   false, MatrixRef(&c(cst, 0), cm, c.n),
+                                   *db.data * scale, 1.0);
+            else
+                assert(false);
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            // c = bra * a
+            batch[1]->dgemm(conj_bra, false, c.m, kn, a.m, scale, bra.data,
+                            bra.n, &a(0, ast), a.n, 1.0, &c(0, cst), c.n);
         }
     }
     // [c] = scale * diag(a) (out product) diag(b)

@@ -30,6 +30,7 @@
 #include "../block2/delayed_sparse_matrix.hpp"
 #include "../block2/delayed_tensor_functions.hpp"
 #include "../block2/determinant.hpp"
+#include "../block2/effective_hamiltonian.hpp"
 #include "../block2/expr.hpp"
 #include "../block2/hamiltonian.hpp"
 #include "../block2/moving_environment.hpp"
@@ -119,6 +120,19 @@ extern template struct block2::DeterminantMPSInfo<block2::SZ>;
 extern template struct block2::DeterminantQC<block2::SU2>;
 extern template struct block2::DeterminantMPSInfo<block2::SU2>;
 
+// effective_hamiltonian.hpp
+extern template struct block2::EffectiveHamiltonian<block2::SZ,
+                                                    block2::MPS<block2::SZ>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SZ>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SZ, block2::MultiMPS<block2::SZ>>;
+
+extern template struct block2::EffectiveHamiltonian<block2::SU2,
+                                                    block2::MPS<block2::SU2>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SU2>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SU2, block2::MultiMPS<block2::SU2>>;
+
 // expr.hpp
 extern template struct block2::OpExpr<block2::SZ>;
 extern template struct block2::OpElement<block2::SZ>;
@@ -143,18 +157,7 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SU2, block2::Hamiltonian<block2::SU2>>;
 
 // moving_environment.hpp
-extern template struct block2::EffectiveHamiltonian<block2::SZ,
-                                                    block2::MPS<block2::SZ>>;
-extern template struct block2::LinearEffectiveHamiltonian<block2::SZ>;
-extern template struct block2::EffectiveHamiltonian<
-    block2::SZ, block2::MultiMPS<block2::SZ>>;
 extern template struct block2::MovingEnvironment<block2::SZ>;
-
-extern template struct block2::EffectiveHamiltonian<block2::SU2,
-                                                    block2::MPS<block2::SU2>>;
-extern template struct block2::LinearEffectiveHamiltonian<block2::SU2>;
-extern template struct block2::EffectiveHamiltonian<
-    block2::SU2, block2::MultiMPS<block2::SU2>>;
 extern template struct block2::MovingEnvironment<block2::SU2>;
 
 // mpo.hpp

@@ -260,10 +260,10 @@ struct DataFrame {
             fn = "";
     }
     void load_data_from(int i, istream &ifs) const {
-        ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
-        ifs.read((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
         ifs.read((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
+        ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ifs.read((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
+        ifs.read((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
     }
     // Load one data frame from disk
     void load_data(int i, const string &filename) const {
@@ -310,11 +310,11 @@ struct DataFrame {
         present_filenames[i] = filename;
     }
     void save_data_to(int i, ostream &ofs) const {
-        ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
-        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
         ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
+        ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ofs.write((char *)iallocs[i]->data,
                   sizeof(uint32_t) * iallocs[i]->used);
+        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
     }
     static void buffer_save_data(const string &filename,
                                  const shared_ptr<stringstream> &ss,

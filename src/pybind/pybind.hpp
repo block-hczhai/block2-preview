@@ -948,7 +948,8 @@ template <typename S> void bind_operator(py::module &m) {
         .def("tensor_product_multiply",
              &OperatorFunctions<S>::tensor_product_multiply, py::arg("conj"),
              py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
-             py::arg("opdq"), py::arg("scale") = 1.0)
+             py::arg("opdq"), py::arg("scale") = 1.0,
+             py::arg("tt") = TraceTypes::None)
         .def("tensor_product", &OperatorFunctions<S>::tensor_product,
              py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
              py::arg("scale") = 1.0)
@@ -974,7 +975,8 @@ template <typename S> void bind_operator(py::module &m) {
         .def("reallocate", &OperatorTensor<S>::reallocate, py::arg("clean"))
         .def("deallocate", &OperatorTensor<S>::deallocate)
         .def("copy", &OperatorTensor<S>::copy)
-        .def("deep_copy", &OperatorTensor<S>::deep_copy);
+        .def("deep_copy", &OperatorTensor<S>::deep_copy,
+             py::arg("alloc") = nullptr);
 
     py::class_<DelayedOperatorTensor<S>, shared_ptr<DelayedOperatorTensor<S>>,
                OperatorTensor<S>>(m, "DelayedOperatorTensor")
@@ -1061,6 +1063,10 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("middle", &Partition<S>::middle)
         .def_readwrite("left_op_infos", &Partition<S>::left_op_infos)
         .def_readwrite("right_op_infos", &Partition<S>::right_op_infos)
+        .def("load_data", (void (Partition<S>::*)(bool, const string &)) &
+                              Partition<S>::load_data)
+        .def("save_data", (void (Partition<S>::*)(bool, const string &) const) &
+                              Partition<S>::save_data)
         .def_static("find_op_info", &Partition<S>::find_op_info)
         .def_static("build_left", &Partition<S>::build_left)
         .def_static("build_right", &Partition<S>::build_right)
@@ -1206,6 +1212,12 @@ template <typename S> void bind_partition(py::module &m) {
         .def_readwrite("delayed_contraction",
                        &MovingEnvironment<S>::delayed_contraction)
         .def_readwrite("fuse_center", &MovingEnvironment<S>::fuse_center)
+        .def_readwrite("save_partition_info",
+                       &MovingEnvironment<S>::save_partition_info)
+        .def_readwrite("cached_opt", &MovingEnvironment<S>::cached_opt)
+        .def_readwrite("cached_info", &MovingEnvironment<S>::cached_info)
+        .def_readwrite("cached_contraction",
+                       &MovingEnvironment<S>::cached_contraction)
         .def("left_contract_rotate",
              &MovingEnvironment<S>::left_contract_rotate)
         .def("right_contract_rotate",
@@ -1264,9 +1276,10 @@ template <typename S> void bind_partition(py::module &m) {
         .def("get_right_partition_filename",
              &MovingEnvironment<S>::get_right_partition_filename)
         .def("eff_ham", &MovingEnvironment<S>::eff_ham, py::arg("fuse_type"),
-             py::arg("compute_diag"), py::arg("bra_wfn"), py::arg("ket_wfn"))
+             py::arg("forward"), py::arg("compute_diag"), py::arg("bra_wfn"),
+             py::arg("ket_wfn"))
         .def("multi_eff_ham", &MovingEnvironment<S>::multi_eff_ham,
-             py::arg("fuse_type"), py::arg("compute_diag"))
+             py::arg("fuse_type"), py::arg("forward"), py::arg("compute_diag"))
         .def_static("contract_two_dot", &MovingEnvironment<S>::contract_two_dot,
                     py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
         .def_static("wavefunction_add_noise",
@@ -1751,6 +1764,7 @@ template <typename S> void bind_parallel(py::module &m) {
                ParallelRule<S>>(m, "ParallelRuleSumMPO")
         .def_readwrite("n_sites", &ParallelRuleSumMPO<S>::n_sites)
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>())
         .def(
             "index_available",
             [](ParallelRuleSumMPO<S> *self, py::args &args) -> bool {
@@ -1786,11 +1800,13 @@ template <typename S> void bind_parallel(py::module &m) {
 
     py::class_<ParallelRuleQC<S>, shared_ptr<ParallelRuleQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleQC")
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>());
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>());
 
     py::class_<ParallelRuleNPDMQC<S>, shared_ptr<ParallelRuleNPDMQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleNPDMQC")
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>());
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>());
 
     py::class_<ParallelTensorFunctions<S>,
                shared_ptr<ParallelTensorFunctions<S>>, TensorFunctions<S>>(
@@ -2222,6 +2238,18 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction);
+
+    py::enum_<TraceTypes>(m, "TraceTypes", py::arithmetic())
+        .value("Nothing", TraceTypes::None)
+        .value("Left", TraceTypes::Left)
+        .value("Right", TraceTypes::Right);
+
+    py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
+        .value("Nothing", OpCachingTypes::None)
+        .value("Left", OpCachingTypes::Left)
+        .value("Right", OpCachingTypes::Right)
+        .value("LeftCopy", OpCachingTypes::LeftCopy)
+        .value("RightCopy", OpCachingTypes::RightCopy);
 }
 
 template <typename S = void> void bind_io(py::module &m) {
@@ -2311,6 +2339,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<size_t, size_t, const string &>())
         .def(py::init<size_t, size_t, const string &, double>())
         .def(py::init<size_t, size_t, const string &, double, double>())
+        .def(py::init<size_t, size_t, const string &, double, double, int>())
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("mps_dir", &DataFrame::mps_dir)
         .def_readwrite("restart_dir", &DataFrame::restart_dir)
@@ -2659,6 +2688,9 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("iadd", &BatchGEMMSeq::iadd, py::arg("a"), py::arg("b"),
              py::arg("scale") = 1.0, py::arg("cfactor") = 1.0,
              py::arg("conj") = false)
+        .def("multiply", &BatchGEMMSeq::multiply, py::arg("a"),
+             py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
+             py::arg("scale"), py::arg("cfactor"))
         .def("rotate", &BatchGEMMSeq::rotate, py::arg("a"), py::arg("c"),
              py::arg("bra"), py::arg("conj_bra"), py::arg("ket"),
              py::arg("conj_ket"), py::arg("scale"))

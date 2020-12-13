@@ -14,7 +14,7 @@ class TestGreenFunctionH10STO6G : public ::testing::Test {
                    int dot);
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex", 0.7, 2);
+        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
         threading_()->seq_type = SeqTypes::Simple;

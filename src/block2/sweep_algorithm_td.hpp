@@ -145,18 +145,18 @@ template <typename S> struct TDDMRG {
             (forward && i == me->n_sites - 1) || (!forward && i == 0);
         vector<shared_ptr<SparseMatrix<S>>> mrk4;
         // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> r_eff =
-            rme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                         rme->bra->tensors[i], rme->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> r_eff = rme->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
+            rme->bra->tensors[i], rme->ket->tensors[i]);
         auto rvmt =
             r_eff->first_rk4_apply(-beta, me->mpo->const_e, rme->para_rule);
         r_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> hkets = rvmt.first;
         memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
                hkets[0]->total_memory * sizeof(double));
-        shared_ptr<EffectiveHamiltonian<S>> l_eff =
-            lme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                         lme->bra->tensors[i], lme->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
+            lme->bra->tensors[i], lme->ket->tensors[i]);
         if ((mode & TETypes::RK4PP) && !last_site) {
             auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
                                                 hkets[1], false, me->para_rule);
@@ -429,8 +429,8 @@ template <typename S> struct TDDMRG {
             (forward && i + 1 == me->n_sites - 1) || (!forward && i == 0);
         vector<shared_ptr<SparseMatrix<S>>> mrk4;
         shared_ptr<EffectiveHamiltonian<S>> r_eff =
-            rme->eff_ham(FuseTypes::FuseLR, false, rme->bra->tensors[i],
-                         rme->ket->tensors[i]);
+            rme->eff_ham(FuseTypes::FuseLR, forward, false,
+                         rme->bra->tensors[i], rme->ket->tensors[i]);
         auto rvmt =
             r_eff->first_rk4_apply(-beta, me->mpo->const_e, rme->para_rule);
         r_eff->deallocate();
@@ -438,7 +438,7 @@ template <typename S> struct TDDMRG {
         memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
                hkets[0]->total_memory * sizeof(double));
         shared_ptr<EffectiveHamiltonian<S>> l_eff =
-            lme->eff_ham(FuseTypes::FuseLR, true, lme->bra->tensors[i],
+            lme->eff_ham(FuseTypes::FuseLR, forward, true, lme->bra->tensors[i],
                          lme->ket->tensors[i]);
         if ((mode & TETypes::RK4PP) && !last_site) {
             auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
@@ -838,9 +838,9 @@ template <typename S> struct ImaginaryTE {
         vector<MatrixRef> pdpf;
         tuple<double, double, int, size_t, double> pdi;
         // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                        me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
+            me->bra->tensors[i], me->ket->tensors[i]);
         if (!advance &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -995,8 +995,8 @@ template <typename S> struct ImaginaryTE {
             if (forward) {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
                 me->move_to(i + 1);
-                shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                    me->eff_ham(FuseTypes::NoFuseL, true, right, right);
+                shared_ptr<EffectiveHamiltonian<S>> k_eff = me->eff_ham(
+                    FuseTypes::NoFuseL, forward, true, right, right);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
@@ -1013,7 +1013,7 @@ template <typename S> struct ImaginaryTE {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
                 me->move_to(i - 1);
                 shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                    me->eff_ham(FuseTypes::NoFuseR, true, left, left);
+                    me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
@@ -1111,8 +1111,9 @@ template <typename S> struct ImaginaryTE {
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
+                        me->ket->tensors[i]);
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -1229,8 +1230,8 @@ template <typename S> struct ImaginaryTE {
             me->move_to(i + 1);
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                me->eff_ham(FuseTypes::FuseR, true, me->bra->tensors[i + 1],
-                            me->ket->tensors[i + 1]);
+                me->eff_ham(FuseTypes::FuseR, forward, true,
+                            me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
                                          me->para_rule);
             k_eff->deallocate();
@@ -1245,8 +1246,8 @@ template <typename S> struct ImaginaryTE {
             me->move_to(i - 1);
             me->ket->load_tensor(i);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
-                me->eff_ham(FuseTypes::FuseL, true, me->bra->tensors[i],
-                            me->ket->tensors[i]);
+                me->eff_ham(FuseTypes::FuseL, forward, true,
+                            me->bra->tensors[i], me->ket->tensors[i]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
                                          me->para_rule);
             k_eff->deallocate();

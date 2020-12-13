@@ -376,9 +376,9 @@ template <typename S> struct DMRG {
                              shared_ptr<SparseMatrixGroup<S>> &pket) {
         tuple<double, int, size_t, double> pdi;
         _t.get_time();
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                        me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
+            me->bra->tensors[i], me->ket->tensors[i]);
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, me->para_rule);
@@ -533,8 +533,9 @@ template <typename S> struct DMRG {
         const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) {
         tuple<double, int, size_t, double> pdi;
         _t.get_time();
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
+                        me->ket->tensors[i]);
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, me->para_rule);
@@ -590,8 +591,9 @@ template <typename S> struct DMRG {
         // effective hamiltonian
         if (davidson_soft_max_iter != 0 || noise != 0) {
             shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-                me->multi_eff_ham(
-                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true);
+                me->multi_eff_ham(fuse_left ? FuseTypes::FuseL
+                                            : FuseTypes::FuseR,
+                                  forward, true);
             pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
                               davidson_max_iter, me->para_rule);
             for (int i = 0; i < mket->nroots; i++) {
@@ -757,7 +759,7 @@ template <typename S> struct DMRG {
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
         if (davidson_soft_max_iter != 0 || noise != 0) {
             shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-                me->multi_eff_ham(FuseTypes::FuseLR, true);
+                me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
             pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
                               davidson_max_iter, me->para_rule);
             for (int i = 0; i < mket->nroots; i++) {
@@ -1398,8 +1400,8 @@ template <typename S> struct Linear {
         _t.get_time();
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                        right_bra, me->ket->tensors[i]);
+            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                        forward, false, right_bra, me->ket->tensors[i]);
         teff += _t.get_time();
         auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
         tmult += _t.get_time();
@@ -1409,8 +1411,8 @@ template <typename S> struct Linear {
             assert(lme != nullptr);
             if (noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
-                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                    lme->bra->tensors[i], lme->ket->tensors[i]);
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
+                    false, lme->bra->tensors[i], lme->ket->tensors[i]);
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
@@ -1421,9 +1423,9 @@ template <typename S> struct Linear {
                 l_eff->deallocate();
             }
         } else if (lme != nullptr) {
-            shared_ptr<EffectiveHamiltonian<S>> l_eff =
-                lme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                             precondition_cg, me->bra->tensors[i], right_bra);
+            shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
+                precondition_cg, me->bra->tensors[i], right_bra);
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
                 tuple<double, int, size_t, double> lpdi;
@@ -1455,9 +1457,9 @@ template <typename S> struct Linear {
             l_eff->deallocate();
         }
         if (tme != nullptr) {
-            shared_ptr<EffectiveHamiltonian<S>> t_eff =
-                tme->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                             false, tme->bra->tensors[i], tme->ket->tensors[i]);
+            shared_ptr<EffectiveHamiltonian<S>> t_eff = tme->eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
+                tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
             auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
             targets.clear();
@@ -1826,7 +1828,7 @@ template <typename S> struct Linear {
         }
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, false, right_bra, me->ket->tensors[i]);
+            FuseTypes::FuseLR, forward, false, right_bra, me->ket->tensors[i]);
         teff += _t.get_time();
         auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
         tmult += _t.get_time();
@@ -1836,8 +1838,8 @@ template <typename S> struct Linear {
             assert(lme != nullptr);
             if (noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S>> l_eff =
-                    lme->eff_ham(FuseTypes::FuseLR, false, lme->bra->tensors[i],
-                                 lme->ket->tensors[i]);
+                    lme->eff_ham(FuseTypes::FuseLR, forward, false,
+                                 lme->bra->tensors[i], lme->ket->tensors[i]);
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
@@ -1848,7 +1850,7 @@ template <typename S> struct Linear {
             }
         } else if (lme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> l_eff =
-                lme->eff_ham(FuseTypes::FuseLR, precondition_cg,
+                lme->eff_ham(FuseTypes::FuseLR, forward, precondition_cg,
                              me->bra->tensors[i], right_bra);
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
@@ -1881,8 +1883,8 @@ template <typename S> struct Linear {
         }
         if (tme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff =
-                tme->eff_ham(FuseTypes::FuseLR, false, tme->bra->tensors[i],
-                             tme->ket->tensors[i]);
+                tme->eff_ham(FuseTypes::FuseLR, forward, false,
+                             tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
             auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
             targets.clear();
@@ -2107,7 +2109,7 @@ template <typename S> struct Linear {
                                         double minres_conv_thrd) {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
-        if (lme->para_rule != nullptr)
+        if (lme != nullptr && lme->para_rule != nullptr)
             lme->para_rule->comm->tcomm = lme->para_rule->comm->tidle =
                 lme->para_rule->comm->twait = 0;
         rme->prepare();
@@ -2251,7 +2253,7 @@ template <typename S> struct Linear {
                                                     "FLOP/SWP");
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
-                    if (lme->para_rule != nullptr) {
+                    if (lme != nullptr && lme->para_rule != nullptr) {
                         double tt[3] = {lme->para_rule->comm->tcomm,
                                         lme->para_rule->comm->tidle,
                                         lme->para_rule->comm->twait};
@@ -2399,9 +2401,9 @@ template <typename S> struct Expect {
                 prev_wfn->deallocate();
             }
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, false,
-                        me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
+            me->bra->tensors[i], me->ket->tensors[i]);
         auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
@@ -2546,8 +2548,9 @@ template <typename S> struct Expect {
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, false, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, forward, false, me->bra->tensors[i],
+                        me->ket->tensors[i]);
         auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> old_wfns =
@@ -2674,7 +2677,7 @@ template <typename S> struct Expect {
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                              true);
+                              forward, true);
         auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
@@ -2868,7 +2871,7 @@ template <typename S> struct Expect {
             mps->tensors[i] = mps->tensors[i + 1] = nullptr;
         }
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-            me->multi_eff_ham(FuseTypes::FuseLR, false);
+            me->multi_eff_ham(FuseTypes::FuseLR, forward, false);
         auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
         h_eff->deallocate();
         vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =

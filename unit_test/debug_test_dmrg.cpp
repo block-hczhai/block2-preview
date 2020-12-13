@@ -13,10 +13,17 @@ class TestDMRG : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM | ThreadingTypes::Global, 8, 8);
-        threading_() = make_shared<Threading>(ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16, 16, 16);
-        // threading_() = make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM | ThreadingTypes::Global, 16, 16, 16, 16);
+        frame_()->use_main_stack = false;
+        // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
+        // ThreadingTypes::Global, 8, 8);
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
+            16, 1);
+        // threading_() =
+        // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
+        // ThreadingTypes::Global, 16, 16, 16, 16);
         threading_()->seq_type = SeqTypes::Simple;
+        cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -180,6 +187,7 @@ TEST_F(TestDMRG, Test) {
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
+    dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;

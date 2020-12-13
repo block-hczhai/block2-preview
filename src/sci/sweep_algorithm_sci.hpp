@@ -420,24 +420,26 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         tuple<double, int, size_t, double> pdi;
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
-        d_eff1 = ext_mes.at(0)->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        d_eff1 =
+            ext_mes.at(0)->eff_ham(FuseTypes::FuseLR, forward, true,
+                                   me->bra->tensors[i], me->ket->tensors[i]);
         if (RAS_mode or ACPF2_mode) {
-            d_eff2 = ext_mes.at(1)->eff_ham(FuseTypes::FuseLR, true,
+            d_eff2 = ext_mes.at(1)->eff_ham(FuseTypes::FuseLR, forward, true,
                                             me->bra->tensors[i],
                                             me->ket->tensors[i]);
         }
         if (RAS_mode and ACPF2_mode) {
-            d_eff3 = ext_mes.at(2)->eff_ham(FuseTypes::FuseLR, true,
+            d_eff3 = ext_mes.at(2)->eff_ham(FuseTypes::FuseLR, forward, true,
                                             me->bra->tensors[i],
                                             me->ket->tensors[i]);
-            d_eff4 = ext_mes.at(3)->eff_ham(FuseTypes::FuseLR, true,
+            d_eff4 = ext_mes.at(3)->eff_ham(FuseTypes::FuseLR, forward, true,
                                             me->bra->tensors[i],
                                             me->ket->tensors[i]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            FuseTypes::FuseLR, true, me->bra->tensors[i], me->ket->tensors[i]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+            me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
+                        me->ket->tensors[i]);
         auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
         teff += _t.get_time();
         // TODO: For RAS mode, it might be good to do several iterations
@@ -473,25 +475,25 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                             abs(davidson_soft_max_iter) > 0;
         shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
-            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
         if (RAS_mode or ACPF2_mode) {
             d_eff2 = ext_mes.at(1)->eff_ham(
-                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
         if (RAS_mode and ACPF2_mode) {
             d_eff3 = ext_mes.at(2)->eff_ham(
-                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
             d_eff4 = ext_mes.at(3)->eff_ham(
-                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
-            me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, true,
-                        me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
+            me->bra->tensors[i_site], me->ket->tensors[i_site]);
         teff += _t.get_time();
         if (doAQCC) {
             // AQCC
@@ -647,7 +649,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
         const auto doAQCC =
             i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
-            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
             // vv diag will be computed in aqcc loop
             not doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info,

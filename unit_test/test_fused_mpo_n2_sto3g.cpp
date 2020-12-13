@@ -17,9 +17,10 @@ class TestFusedMPON2STO3G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
-            8);
+            1);
         threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
     }
@@ -115,6 +116,7 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             shared_ptr<MovingEnvironment<S>> me =
                 make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
             me->init_environments(false);
+            me->cached_contraction = true;
 
             // DMRG
             shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);

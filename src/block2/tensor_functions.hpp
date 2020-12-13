@@ -145,6 +145,9 @@ template <typename S> struct TensorFunctions {
                     auto pa = abs_value(a->lmat->data[i]),
                          pc = abs_value(c->lmat->data[i]);
                     if (!frame->use_main_stack) {
+                        // skip cached part
+                        if (c->ops[pc]->alloc != nullptr)
+                            return;
                         c->ops[pc]->alloc =
                             make_shared<VectorAllocator<double>>();
                         c->ops[pc]->allocate(c->ops[pc]->info);
@@ -175,6 +178,9 @@ template <typename S> struct TensorFunctions {
                     auto pa = abs_value(a->rmat->data[i]),
                          pc = abs_value(c->rmat->data[i]);
                     if (!frame->use_main_stack) {
+                        // skip cached part
+                        if (c->ops[pc]->alloc != nullptr)
+                            return;
                         c->ops[pc]->alloc =
                             make_shared<VectorAllocator<double>>();
                         c->ops[pc]->allocate(c->ops[pc]->info);
@@ -260,11 +266,11 @@ template <typename S> struct TensorFunctions {
                     if (dlmat != nullptr)
                         opf->three_tensor_product_multiply(
                             op->conj & 1, lmat, rmat, cmat, vmat, dconj, dlmat,
-                            drmat, dleft, opdq, op->factor);
+                            drmat, dleft, opdq, op->factor, TraceTypes::Right);
                     else
-                        opf->tensor_product_multiply(op->conj & 1, lmat, rmat,
-                                                     cmat, vmat, opdq,
-                                                     op->factor);
+                        opf->tensor_product_multiply(
+                            op->conj & 1, lmat, rmat, cmat, vmat, opdq,
+                            op->factor, TraceTypes::Right);
                 }
             } else {
                 assert(lopt->ops.count(i_op) != 0 &&
@@ -287,11 +293,11 @@ template <typename S> struct TensorFunctions {
                     if (dlmat != nullptr)
                         opf->three_tensor_product_multiply(
                             op->conj & 2, lmat, rmat, cmat, vmat, dconj, dlmat,
-                            drmat, dleft, opdq, op->factor);
+                            drmat, dleft, opdq, op->factor, TraceTypes::Left);
                     else
-                        opf->tensor_product_multiply(op->conj & 2, lmat, rmat,
-                                                     cmat, vmat, opdq,
-                                                     op->factor);
+                        opf->tensor_product_multiply(
+                            op->conj & 2, lmat, rmat, cmat, vmat, opdq,
+                            op->factor, TraceTypes::Left);
                 }
             }
             cmat->info->cinfo = old_cinfo;
@@ -343,11 +349,11 @@ template <typename S> struct TensorFunctions {
                     if (dlmat != nullptr)
                         opf->three_tensor_product_multiply(
                             op->conj & 1, lmat, rmat, cmat, vmat, dconj, dlmat,
-                            drmat, dleft, opdq, op->factor);
+                            drmat, dleft, opdq, op->factor, TraceTypes::Right);
                     else
-                        opf->tensor_product_multiply(op->conj & 1, lmat, rmat,
-                                                     cmat, vmat, opdq,
-                                                     op->factor);
+                        opf->tensor_product_multiply(
+                            op->conj & 1, lmat, rmat, cmat, vmat, opdq,
+                            op->factor, TraceTypes::Right);
                 }
             } else {
                 assert(lopt->ops.count(i_op) != 0 &&
@@ -370,11 +376,11 @@ template <typename S> struct TensorFunctions {
                     if (dlmat != nullptr)
                         opf->three_tensor_product_multiply(
                             op->conj & 2, lmat, rmat, cmat, vmat, dconj, dlmat,
-                            drmat, dleft, opdq, op->factor);
+                            drmat, dleft, opdq, op->factor, TraceTypes::Left);
                     else
-                        opf->tensor_product_multiply(op->conj & 2, lmat, rmat,
-                                                     cmat, vmat, opdq,
-                                                     op->factor);
+                        opf->tensor_product_multiply(
+                            op->conj & 2, lmat, rmat, cmat, vmat, opdq,
+                            op->factor, TraceTypes::Left);
                 }
             }
             cmat->info->cinfo = old_cinfo;
@@ -419,9 +425,29 @@ template <typename S> struct TensorFunctions {
                                   const shared_ptr<SparseMatrixGroup<S>> &cmats,
                                   const shared_ptr<SparseMatrixGroup<S>> &vmats,
                                   S opdq, bool all_reduce) const {
-        for (int i = 0; i < cmats->n; i++)
-            tensor_product_multiply(expr, lopt, ropt, (*cmats)[i], (*vmats)[i],
-                                    opdq, false);
+        switch (expr->get_type()) {
+        case OpTypes::Sum: {
+            shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
+            parallel_reduce(
+                op->strings.size() * cmats->n, vmats,
+                [&op, &lopt, &ropt, &cmats, &opdq](
+                    const shared_ptr<TensorFunctions<S>> &tf,
+                    const shared_ptr<SparseMatrixGroup<S>> &vmats, size_t idx) {
+                    const size_t i = idx % op->strings.size(),
+                                 j = idx / op->strings.size();
+                    tf->tensor_product_multiply(op->strings[i], lopt, ropt,
+                                                (*cmats)[j], (*vmats)[j], opdq,
+                                                false);
+                });
+        } break;
+        case OpTypes::Zero:
+            break;
+        default:
+            for (int i = 0; i < cmats->n; i++)
+                tensor_product_multiply(expr, lopt, ropt, (*cmats)[i],
+                                        (*vmats)[i], opdq, false);
+            break;
+        }
     }
     // vmat = expr x cmat
     virtual void
@@ -1063,6 +1089,9 @@ template <typename S> struct TensorFunctions {
                         exprs->data[i] * (1 / cop->factor);
                     if (!delayed(cop->name)) {
                         if (!frame->use_main_stack) {
+                            // skip cached part
+                            if (c->ops.at(op)->alloc != nullptr)
+                                return;
                             c->ops.at(op)->alloc =
                                 make_shared<VectorAllocator<double>>();
                             c->ops.at(op)->allocate(c->ops.at(op)->info);
@@ -1104,6 +1133,9 @@ template <typename S> struct TensorFunctions {
                         exprs->data[i] * (1 / cop->factor);
                     if (!delayed(cop->name)) {
                         if (!frame->use_main_stack) {
+                            // skip cached part
+                            if (c->ops.at(op)->alloc != nullptr)
+                                return;
                             c->ops.at(op)->alloc =
                                 make_shared<VectorAllocator<double>>();
                             c->ops.at(op)->allocate(c->ops.at(op)->info);

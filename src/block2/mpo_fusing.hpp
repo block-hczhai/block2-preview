@@ -125,15 +125,21 @@ template <typename S> struct FusedMPO : MPO<S> {
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
                     opt->ops[op] = fused_sparse_form == 'N'
-                                       ? make_shared<SparseMatrix<S>>(d_alloc)
+                                       ? make_shared<SparseMatrix<S>>()
                                        : make_shared<CSRSparseMatrix<S>>();
                 }
         }
+        // here main stack is not used
+        // but when frame->use_main_stack == false:
+        // tf->left/right_contract will skip allocated matrices if alloc !=
+        // nullptr
         for (auto &p : opt->ops) {
             shared_ptr<OpElement<S>> op =
                 dynamic_pointer_cast<OpElement<S>>(p.first);
-            p.second->allocate(
-                Partition<S>::find_op_info(fused_op_infos, op->q_label));
+            if (frame->use_main_stack)
+                p.second->alloc = d_alloc;
+            p.second->info =
+                Partition<S>::find_op_info(fused_op_infos, op->q_label);
         }
         // contract
         if (fused_mat->m == 1)

@@ -48,6 +48,8 @@ enum struct NoiseTypes : uint8_t {
     ReducedPerturbativeUnscaledCollected = 4 | 8 | 16 | 32
 };
 
+enum struct TraceTypes : uint8_t { None = 0, Left = 1, Right = 2 };
+
 inline bool operator&(NoiseTypes a, NoiseTypes b) {
     return ((uint8_t)a & (uint8_t)b) != 0;
 }
@@ -102,8 +104,8 @@ template <typename S> struct OperatorFunctions {
         // avoid possible int32 overflow
         for (int j = 0; j < mats[i]->n; j++)
             MatrixFunctions::iadd(
-                MatrixRef(mats[i]->data, 1, (*mats[i])[j]->total_memory),
-                MatrixRef(mats[m]->data, 1, (*mats[m])[j]->total_memory), 1.0);
+                MatrixRef((*mats[i])[j]->data, 1, (*mats[i])[j]->total_memory),
+                MatrixRef((*mats[m])[j]->data, 1, (*mats[m])[j]->total_memory), 1.0);
     }
     // a += b * scale
     virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
@@ -294,12 +296,13 @@ template <typename S> struct OperatorFunctions {
                 break;
         }
     }
-    virtual void tensor_product_multiply(uint8_t conj,
-                                         const shared_ptr<SparseMatrix<S>> &a,
-                                         const shared_ptr<SparseMatrix<S>> &b,
-                                         const shared_ptr<SparseMatrix<S>> &c,
-                                         const shared_ptr<SparseMatrix<S>> &v,
-                                         S opdq, double scale = 1.0) const {
+    virtual void
+    tensor_product_multiply(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
+                            const shared_ptr<SparseMatrix<S>> &b,
+                            const shared_ptr<SparseMatrix<S>> &c,
+                            const shared_ptr<SparseMatrix<S>> &v, S opdq,
+                            double scale = 1.0,
+                            TraceTypes tt = TraceTypes::None) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -326,13 +329,37 @@ template <typename S> struct OperatorFunctions {
                 iv <= cinfo->stride[il - 1])
                 seq->simple_perform();
             double factor = cinfo->factor[il];
-            if (seq->mode != SeqTypes::None)
-                seq->rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
-                            !(conj & 2), scale * factor);
-            else
-                seq->cumulative_nflop += MatrixFunctions::rotate(
-                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
-                    !(conj & 2), scale * factor);
+            switch (tt) {
+            case TraceTypes::None:
+                if (seq->mode != SeqTypes::None)
+                    seq->rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                (*b)[ib], !(conj & 2), scale * factor);
+                else
+                    seq->cumulative_nflop += MatrixFunctions::rotate(
+                        (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
+                        !(conj & 2), scale * factor);
+                break;
+            case TraceTypes::Left:
+                if (seq->mode != SeqTypes::None)
+                    seq->multiply((*c)[ic], false, (*b)[ib], !(conj & 2),
+                                  (*v)[iv], scale * factor, 1.0);
+                else
+                    MatrixFunctions::multiply((*c)[ic], false, (*b)[ib],
+                                              !(conj & 2), (*v)[iv],
+                                              scale * factor, 1.0);
+                break;
+            case TraceTypes::Right:
+                if (seq->mode != SeqTypes::None)
+                    seq->multiply((*a)[ia], conj & 1, (*c)[ic], false, (*v)[iv],
+                                  scale * factor, 1.0);
+                else
+                    MatrixFunctions::multiply((*a)[ia], conj & 1, (*c)[ic],
+                                              false, (*v)[iv], scale * factor,
+                                              1.0);
+                break;
+            default:
+                assert(false);
+            }
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -344,7 +371,7 @@ template <typename S> struct OperatorFunctions {
         const shared_ptr<SparseMatrix<S>> &v, uint8_t dconj,
         const shared_ptr<SparseMatrix<S>> &da,
         const shared_ptr<SparseMatrix<S>> &db, bool dleft, S opdq,
-        double scale = 1.0) const {
+        double scale = 1.0, TraceTypes tt = TraceTypes::None) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -396,19 +423,57 @@ template <typename S> struct OperatorFunctions {
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
                     uint32_t stride = dinfo->stride[idl];
                     double dfactor = dinfo->factor[idl];
-                    if (seq->mode != SeqTypes::None) {
-                        seq->three_rotate((*c)[ic], (*v)[iv], (*a)[ia],
-                                          conj & 1, (*b)[ib], !(conj & 2),
-                                          (*da)[ida], dconj & 1, (*db)[idb],
-                                          (dconj & 2) >> 1, dleft,
-                                          scale * factor * dfactor, stride);
+                    switch (tt) {
+                    case TraceTypes::None:
+                        if (seq->mode != SeqTypes::None)
+                            seq->three_rotate((*c)[ic], (*v)[iv], (*a)[ia],
+                                              conj & 1, (*b)[ib], !(conj & 2),
+                                              (*da)[ida], dconj & 1, (*db)[idb],
+                                              (dconj & 2) >> 1, dleft,
+                                              scale * factor * dfactor, stride);
+                        else
+                            seq->cumulative_nflop +=
+                                MatrixFunctions::three_rotate(
+                                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                    (*b)[ib], !(conj & 2), (*da)[ida],
+                                    dconj & 1, (*db)[idb], (dconj & 2) >> 1,
+                                    dleft, scale * factor * dfactor, stride);
                         break;
-                    } else
-                        seq->cumulative_nflop += MatrixFunctions::three_rotate(
-                            (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
-                            !(conj & 2), (*da)[ida], dconj & 1, (*db)[idb],
-                            (dconj & 2) >> 1, dleft, scale * factor * dfactor,
-                            stride);
+                    case TraceTypes::Left:
+                        if (seq->mode != SeqTypes::None)
+                            seq->three_rotate_tr_left(
+                                (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                (*b)[ib], !(conj & 2), (*da)[ida], dconj & 1,
+                                (*db)[idb], (dconj & 2) >> 1, dleft,
+                                scale * factor * dfactor, stride);
+                        else
+                            seq->cumulative_nflop +=
+                                MatrixFunctions::three_rotate_tr_left(
+                                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                    (*b)[ib], !(conj & 2), (*da)[ida],
+                                    dconj & 1, (*db)[idb], (dconj & 2) >> 1,
+                                    dleft, scale * factor * dfactor, stride);
+                        break;
+                    case TraceTypes::Right:
+                        if (seq->mode != SeqTypes::None)
+                            seq->three_rotate_tr_right(
+                                (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                (*b)[ib], !(conj & 2), (*da)[ida], dconj & 1,
+                                (*db)[idb], (dconj & 2) >> 1, dleft,
+                                scale * factor * dfactor, stride);
+                        else
+                            seq->cumulative_nflop +=
+                                MatrixFunctions::three_rotate_tr_right(
+                                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                    (*b)[ib], !(conj & 2), (*da)[ida],
+                                    dconj & 1, (*db)[idb], (dconj & 2) >> 1,
+                                    dleft, scale * factor * dfactor, stride);
+                        break;
+                    default:
+                        assert(false);
+                    }
+                    if (seq->mode != SeqTypes::None)
+                        break;
                 }
             }
             if (seq->mode == SeqTypes::Simple)

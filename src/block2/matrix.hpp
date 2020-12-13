@@ -81,8 +81,14 @@ struct DiagonalMatrix : MatrixRef {
         return i == j ? *(data + i) : const_cast<double &>(zero);
     }
     size_t size() const { return (size_t)m; }
-    void allocate() { data = dalloc->allocate(size()); }
-    void deallocate() { dalloc->deallocate(data, size()), data = nullptr; }
+    // need override since size() is changed (which is not virtual)
+    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        data = (alloc == nullptr ? dalloc : alloc)->allocate(size());
+    }
+    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc : alloc)->deallocate(data, size());
+        data = nullptr;
+    }
     void clear() { memset(data, 0, size() * sizeof(double)); }
     friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;

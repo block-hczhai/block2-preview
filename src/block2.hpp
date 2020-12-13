@@ -34,6 +34,7 @@
 #include "block2/delayed_sparse_matrix.hpp"
 #include "block2/delayed_tensor_functions.hpp"
 #include "block2/determinant.hpp"
+#include "block2/effective_hamiltonian.hpp"
 #include "block2/expr.hpp"
 #include "block2/hamiltonian.hpp"
 #include "block2/hubbard.hpp"

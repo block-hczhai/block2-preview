@@ -17,7 +17,7 @@ class TestFITN2631G : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 1);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }

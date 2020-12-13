@@ -82,6 +82,7 @@ void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             shared_ptr<MovingEnvironment<S>> me =
                 make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
             me->init_environments(false);
+            me->cached_contraction = true;
 
             // DMRG
             shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);

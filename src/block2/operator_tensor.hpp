@@ -138,14 +138,15 @@ template <typename S> struct OperatorTensor {
         r->ops = ops;
         return r;
     }
-    shared_ptr<OperatorTensor> deep_copy() const {
+    shared_ptr<OperatorTensor>
+    deep_copy(const shared_ptr<Allocator<double>> &alloc = nullptr) const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
         r->ops.reserve(ops.size());
         for (auto &p : ops) {
             if (p.second->get_type() == SparseMatrixTypes::Normal) {
                 shared_ptr<SparseMatrix<S>> mat =
-                    make_shared<SparseMatrix<S>>();
+                    make_shared<SparseMatrix<S>>(alloc);
                 if (p.second->total_memory == 0)
                     mat->info = p.second->info;
                 else {
@@ -195,6 +196,9 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() override {
+        // do not free contracted operators for future reuse in rotation
+        if (!frame->use_main_stack)
+            return;
         vector<pair<double *, shared_ptr<SparseMatrix<S>>>> mp;
         mp.reserve(lopt->ops.size() + ropt->ops.size());
         for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)

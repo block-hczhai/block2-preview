@@ -175,12 +175,13 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             }
         }
     }
-    void tensor_product_multiply(uint8_t conj,
-                                 const shared_ptr<SparseMatrix<S>> &a,
-                                 const shared_ptr<SparseMatrix<S>> &b,
-                                 const shared_ptr<SparseMatrix<S>> &c,
-                                 const shared_ptr<SparseMatrix<S>> &v, S opdq,
-                                 double scale = 1.0) const override {
+    void
+    tensor_product_multiply(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
+                            const shared_ptr<SparseMatrix<S>> &b,
+                            const shared_ptr<SparseMatrix<S>> &c,
+                            const shared_ptr<SparseMatrix<S>> &v, S opdq,
+                            double scale = 1.0,
+                            TraceTypes tt = TraceTypes::None) const override {
         if (a->get_type() == SparseMatrixTypes::Normal &&
             b->get_type() == SparseMatrixTypes::Normal &&
             c->get_type() == SparseMatrixTypes::Normal &&
@@ -220,7 +221,7 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
                     ((conj & 2) ? (*b)[ib].n : (*b)[ib].n) +
                 (size_t)(*a)[ia].m * (*a)[ia].n *
                     ((conj & 2) ? (*b)[ib].n : (*b)[ib].n);
-            switch (irot) {
+            switch (irot | ((int)tt << 2)) {
             case 1:
                 CSRMatrixFunctions::rotate((*c)[ic], (*v)[iv], (*ca)[ia],
                                            conj & 1, (*b)[ib], !(conj & 2),
@@ -235,6 +236,27 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
                 CSRMatrixFunctions::rotate((*c)[ic], (*v)[iv], (*ca)[ia],
                                            conj & 1, (*cb)[ib], !(conj & 2),
                                            scale * factor);
+                break;
+            case 1 | ((int)TraceTypes::Left << 2):
+                MatrixFunctions::multiply((*c)[ic], false, (*b)[ib],
+                                          !(conj & 2), (*v)[iv], scale * factor,
+                                          1.0);
+                break;
+            case 2 | ((int)TraceTypes::Left << 2):
+            case 3 | ((int)TraceTypes::Left << 2):
+                CSRMatrixFunctions::multiply((*c)[ic], false, (*cb)[ib],
+                                             !(conj & 2), (*v)[iv],
+                                             scale * factor, 1.0);
+                break;
+            case 1 | ((int)TraceTypes::Right << 2):
+            case 3 | ((int)TraceTypes::Right << 2):
+                CSRMatrixFunctions::multiply((*ca)[ia], conj & 1, (*c)[ic],
+                                             false, (*v)[iv], scale * factor,
+                                             1.0);
+                break;
+            case 2 | ((int)TraceTypes::Right << 2):
+                MatrixFunctions::multiply((*a)[ia], conj & 1, (*c)[ic], false,
+                                          (*v)[iv], scale * factor, 1.0);
                 break;
             default:
                 assert(false);

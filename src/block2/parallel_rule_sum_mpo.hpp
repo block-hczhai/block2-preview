@@ -33,8 +33,9 @@ namespace block2 {
 template <typename S> struct ParallelRuleSumMPO : ParallelRule<S> {
     using ParallelRule<S>::comm;
     uint16_t n_sites;
-    ParallelRuleSumMPO(const shared_ptr<ParallelCommunicator<S>> &comm)
-        : ParallelRule<S>(comm) {}
+    ParallelRuleSumMPO(const shared_ptr<ParallelCommunicator<S>> &comm,
+                       bool non_blocking = false)
+        : ParallelRule<S>(comm, non_blocking) {}
     ParallelProperty
     operator()(const shared_ptr<OpElement<S>> &op) const override {
         return ParallelProperty(comm->rank, ParallelOpTypes::None);
@@ -140,11 +141,14 @@ struct SymmetricFCIDUMP : FCIDUMP {
     double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
              uint16_t l) const override {
         if (i < k && j < l)
-            return 2 * (FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, k, j, i, l));
+            return 2 * (FCIDUMP::v(sl, sr, i, j, k, l) -
+                        FCIDUMP::v(sl, sr, k, j, i, l));
         else if (i < k && j == l)
-            return FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, k, j, i, l);
+            return FCIDUMP::v(sl, sr, i, j, k, l) -
+                   FCIDUMP::v(sl, sr, k, j, i, l);
         else if (i == k && j < l)
-            return FCIDUMP::v(sl, sr, i, j, k, l) - FCIDUMP::v(sl, sr, i, l, k, j);
+            return FCIDUMP::v(sl, sr, i, j, k, l) -
+                   FCIDUMP::v(sl, sr, i, l, k, j);
         else if (i == k && j == l)
             return FCIDUMP::v(sl, sr, i, j, k, l);
         else

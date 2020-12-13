@@ -19,6 +19,7 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
         threading_()->seq_type = SeqTypes::None;
@@ -87,6 +88,7 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             shared_ptr<MovingEnvironment<S>> me =
                 make_shared<MovingEnvironment<S>>(mpo, pmps, pmps, "DMRG");
             me->init_environments(false);
+            me->cached_contraction = true;
 
             // DMRG
             shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
@@ -106,7 +108,7 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             me->bra = me->ket = make_shared<MPS<S>>(*pmps);
 
             dmrg = make_shared<DMRG<S>>(me, bdims, no_noises);
-            dmrg->iprint = 2;
+            dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             energy = dmrg->solve(1, mps->center == 0, 1E-8);

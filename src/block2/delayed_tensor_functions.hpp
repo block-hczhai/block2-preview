@@ -166,7 +166,8 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
                     opf->tensor_product_multiply(op->conj & 1, lmat, rmat, cmat,
-                                                 vmat, opdq, op->factor);
+                                                 vmat, opdq, op->factor,
+                                                 TraceTypes::Right);
                 }
                 if (dr)
                     rmat->deallocate();
@@ -199,7 +200,8 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
                     opf->tensor_product_multiply(op->conj & 2, lmat, rmat, cmat,
-                                                 vmat, opdq, op->factor);
+                                                 vmat, opdq, op->factor,
+                                                 TraceTypes::Left);
                 }
                 if (dr)
                     rmat->deallocate();
