@@ -187,7 +187,7 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             c->get_type() == SparseMatrixTypes::Normal &&
             v->get_type() == SparseMatrixTypes::Normal)
             return OperatorFunctions<S>::tensor_product_multiply(
-                conj, a, b, c, v, opdq, scale);
+                conj, a, b, c, v, opdq, scale, tt);
         shared_ptr<CSRSparseMatrix<S>> ca, cb;
         int irot = 0;
         if (a->get_type() == SparseMatrixTypes::CSR)
