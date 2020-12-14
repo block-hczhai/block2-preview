@@ -73,6 +73,9 @@ class GFDMRG:
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
         Global.threading.seq_type = SeqTypes.Simple
+        Global.frame.load_buffering = False
+        Global.frame.save_buffering = False
+        Global.frame.use_main_stack = False
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -81,6 +84,10 @@ class GFDMRG:
         self.print_statistics = print_statistics
         self.mpi = mpi
         self.dctr = dctr
+
+        if self.verbose >= 2:
+            print(Global.frame)
+            print(Global.threading)
 
         if mpi is not None:
             if SpinLabel == SU2:
@@ -201,7 +208,7 @@ class GFDMRG:
         # MPO
         tx = time.perf_counter()
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(mpo, RuleQC(), True, True)
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         self.mpo_orig = mpo
 
         if self.mpi is not None:
@@ -229,6 +236,7 @@ class GFDMRG:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         if self.dctr:
             me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = True
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 4)
         if self.verbose >= 3:
@@ -363,7 +371,7 @@ class GFDMRG:
             mps_info2.deallocate()
 
         impo = SimplifiedMPO(IdentityMPO(self.hamil),
-                             NoTransposeRule(RuleQC()), True, True)
+                             NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
         if self.mpi is not None:
             impo = ParallelMPO(impo, self.prule)
@@ -417,7 +425,7 @@ class GFDMRG:
             rket_info.deallocate_mutable()
 
             rmpos[ii] = SimplifiedMPO(
-                SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True, True)
+                SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
             if self.mpi is not None:
                 rmpos[ii] = ParallelMPO(rmpos[ii], self.prule)
@@ -668,7 +676,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
 if __name__ == "__main__":
 
     # parameters
-    n_threads = 8
+    n_threads = 28
     hf_type = "RHF"  # RHF or UHF
     mpg = 'c1'  # point group: d2h or c1
     scratch = './tmp'
@@ -682,7 +690,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf
 
     # H chain
-    N = 6
+    N = 10
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (0, 0, i * R)] for i in range(N)],
@@ -708,7 +716,7 @@ if __name__ == "__main__":
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
                         gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
-                        gmres_tol=1E-8, lowdin=True, ignore_ecore=False)
+                        gmres_tol=1E-8, lowdin=True, ignore_ecore=False, n_threads=n_threads)
 
         print(gfmat) # alpha only
 
@@ -732,6 +740,6 @@ if __name__ == "__main__":
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                             gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                             gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
-                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False)
+                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3, n_threads=n_threads)
         gfmat = np.einsum('ip,pqr,jq->ijr',mf.mo_coeff, gfmat, mf.mo_coeff)
         print(gfmat)
