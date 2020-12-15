@@ -72,7 +72,7 @@ class GFDMRG:
                     dsize=int(memory * 0.9), save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-        Global.threading.seq_type = SeqTypes.Simple
+        Global.threading.seq_type = SeqTypes.Nothing
         Global.frame.load_buffering = False
         Global.frame.save_buffering = False
         Global.frame.use_main_stack = False

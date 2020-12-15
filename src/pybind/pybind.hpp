@@ -923,6 +923,12 @@ template <typename S> void bind_mps(py::module &m) {
         m, "ParallelMPS")
         .def(py::init<const shared_ptr<MPSInfo<S>> &>())
         .def(py::init<int, int, int>())
+        .def(py::init<const shared_ptr<MPS<S>> &>())
+        .def(py::init<const shared_ptr<MPSInfo<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>())
+        .def(py::init<int, int, int, const shared_ptr<ParallelRule<S>> &>())
+        .def(py::init<const shared_ptr<MPS<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>())
         .def_readwrite("conn_centers", &ParallelMPS<S>::conn_centers)
         .def_readwrite("conn_matrices", &ParallelMPS<S>::conn_matrices)
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)

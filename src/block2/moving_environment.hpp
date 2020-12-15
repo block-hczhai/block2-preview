@@ -403,8 +403,11 @@ template <typename S> struct MovingEnvironment {
             para_mps->center = i != para_mps->ncenter - 1
                                    ? para_mps->conn_centers[i + 1] - 1
                                    : para_mps->n_sites - 1;
-            while (para_mps->center != para_mps->conn_centers[i])
+            while (para_mps->center != para_mps->conn_centers[i]) {
                 para_mps->move_left(cg, para_mps->rule);
+                right_contract_rotate_unordered(
+                    para_mps->center - para_mps->dot + 1, para_mps->rule);
+            }
         }
         for (int i = 0; para_mps->dot == 2 && i < para_mps->ncenter + 1;
              i += 2) {

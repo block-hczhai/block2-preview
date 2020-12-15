@@ -135,13 +135,14 @@ ELSE()
 ENDIF()
 
 IF (${TBB})
-    FIND_PATH(TBB_INCLUDE_DIR NAMES tbb/tbb.h HINTS $ENV{MKLROOT}/include /usr/local/include)
+    FIND_PATH(TBB_INCLUDE_DIR NAMES tbb/tbb.h
+        HINTS $ENV{MKLROOT}/include /usr/local/include $ENV{TBBROOT}/include)
     FIND_LIBRARY(TBB_LIB NAMES tbb
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib $ENV{TBBROOT}/lib)
     FIND_LIBRARY(TBB_LIB_MAL NAMES tbbmalloc
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib $ENV{TBBROOT}/lib)
     FIND_LIBRARY(TBB_LIBS_MALP NAMES tbbmalloc_proxy
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib $ENV{TBBROOT}/lib)
     SET(TBB_LIBS ${TBB_LIB} ${TBB_LIB_MAL} ${TBB_LIBS_MALP})
     SET(TBB_FLAG "-D_HAS_TBB")
 ENDIF()
