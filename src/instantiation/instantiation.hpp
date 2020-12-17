@@ -220,7 +220,10 @@ extern template struct block2::MPICommunicator<block2::SU2>;
 #endif
 
 // parallel_mpo.hpp
+extern template struct block2::ClassicParallelMPO<block2::SZ>;
 extern template struct block2::ParallelMPO<block2::SZ>;
+
+extern template struct block2::ClassicParallelMPO<block2::SU2>;
 extern template struct block2::ParallelMPO<block2::SU2>;
 
 // parallel_mps.hpp

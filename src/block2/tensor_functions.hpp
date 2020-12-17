@@ -815,7 +815,8 @@ template <typename S> struct TensorFunctions {
     virtual shared_ptr<Symbolic<S>>
     substitute_delayed_exprs(const shared_ptr<Symbolic<S>> &exprs,
                              const shared_ptr<DelayedOperatorTensor<S>> &a,
-                             bool left, OpNamesSet delayed) const {
+                             bool left, OpNamesSet delayed,
+                             bool use_orig = true) const {
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<OpExpr<S>>> aops;
         shared_ptr<Symbolic<S>> amat = left ? a->lmat : a->rmat;
         assert(amat->data.size() == a->mat->data.size());
@@ -833,7 +834,8 @@ template <typename S> struct TensorFunctions {
         for (size_t i = 0; i < exprs->data.size(); i++) {
             shared_ptr<OpExpr<S>> expr = exprs->data[i];
             if (expr->get_type() == OpTypes::ExprRef)
-                expr = dynamic_pointer_cast<OpExprRef<S>>(expr)->orig;
+                expr = use_orig ? dynamic_pointer_cast<OpExprRef<S>>(expr)->orig
+                                : dynamic_pointer_cast<OpExprRef<S>>(expr)->op;
             vector<shared_ptr<OpProduct<S>>> prods;
             switch (expr->get_type()) {
             case OpTypes::Prod:
@@ -871,7 +873,7 @@ template <typename S> struct TensorFunctions {
                 // procs, which will change the conj of TEMP
                 // we need to use the conj from the localized expr of TEMP
                 unordered_map<shared_ptr<OpExpr<S>>, uint8_t> mpc;
-                if (hexpr->get_type() == OpTypes::ExprRef) {
+                if (hexpr->get_type() == OpTypes::ExprRef && use_orig) {
                     shared_ptr<OpExpr<S>> op_expr =
                         dynamic_pointer_cast<OpExprRef<S>>(hexpr)->op;
                     vector<shared_ptr<OpSumProd<S>>> mrs;
@@ -904,7 +906,8 @@ template <typename S> struct TensorFunctions {
                                 mpc[op->c] = cj;
                         }
                     hexpr = dynamic_pointer_cast<OpExprRef<S>>(hexpr)->orig;
-                }
+                } else if (hexpr->get_type() == OpTypes::ExprRef && !use_orig)
+                    hexpr = dynamic_pointer_cast<OpExprRef<S>>(hexpr)->op;
                 vector<shared_ptr<OpProduct<S>>> rk;
                 vector<shared_ptr<OpSumProd<S>>> rs;
                 switch (hexpr->get_type()) {
@@ -968,6 +971,12 @@ template <typename S> struct TensorFunctions {
                         prod->factor * op->factor, prod->conj));
             }
             rexpr[i] = make_shared<OpSum<S>>(rr);
+            if (!use_orig && exprs->data[i]->get_type() == OpTypes::ExprRef) {
+                shared_ptr<OpExprRef<S>> pexpr =
+                    dynamic_pointer_cast<OpExprRef<S>>(exprs->data[i]);
+                rexpr[i] = make_shared<OpExprRef<S>>(rexpr[i], pexpr->is_local,
+                                                     pexpr->orig);
+            }
         }
         threading->activate_normal();
         shared_ptr<Symbolic<S>> r = exprs->copy();

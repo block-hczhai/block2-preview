@@ -34,8 +34,8 @@ template <typename S> struct ParallelRuleSumMPO : ParallelRule<S> {
     using ParallelRule<S>::comm;
     uint16_t n_sites;
     ParallelRuleSumMPO(const shared_ptr<ParallelCommunicator<S>> &comm,
-                       bool non_blocking = false)
-        : ParallelRule<S>(comm, non_blocking) {}
+                       ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
     ParallelProperty
     operator()(const shared_ptr<OpElement<S>> &op) const override {
         return ParallelProperty(comm->rank, ParallelOpTypes::None);

@@ -20,5 +20,8 @@
 
 #include "instantiation.hpp"
 
+template struct block2::ClassicParallelMPO<block2::SZ>;
 template struct block2::ParallelMPO<block2::SZ>;
+
+template struct block2::ClassicParallelMPO<block2::SU2>;
 template struct block2::ParallelMPO<block2::SU2>;

@@ -34,7 +34,23 @@ using namespace std;
 
 namespace block2 {
 
-enum struct ParallelTypes : uint8_t { Serial = 0, Distributed = 1 };
+enum struct ParallelTypes : uint8_t {
+    Serial = 0,
+    Distributed = 1,
+    NewScheme = 2
+};
+
+inline bool operator&(ParallelTypes a, ParallelTypes b) {
+    return ((uint8_t)a & (uint8_t)b) != 0;
+}
+
+inline ParallelTypes operator|(ParallelTypes a, ParallelTypes b) {
+    return ParallelTypes((uint8_t)a | (uint8_t)b);
+}
+
+inline ParallelTypes operator^(ParallelTypes a, ParallelTypes b) {
+    return ParallelTypes((uint8_t)a ^ (uint8_t)b);
+}
 
 // Operator names
 enum struct OpNames : uint8_t {

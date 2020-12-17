@@ -34,14 +34,17 @@ struct MPITest {
 
 class TestDMRG : public ::testing::Test {
     static bool _mpi;
+
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
+            1);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -70,8 +73,9 @@ TEST_F(TestDMRG, Test) {
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
-    // string filename = "data/H8.STO6G.R1.8.FCIDUMP"; // E = -4.3450794024 (-12.3741579456)
-    // string filename = "data/H4.STO6G.R1.8.FCIDUMP"; // E = -2.1903842183
+    // string filename = "data/H8.STO6G.R1.8.FCIDUMP"; // E = -4.3450794024
+    // (-12.3741579456) string filename = "data/H4.STO6G.R1.8.FCIDUMP"; // E =
+    // -2.1903842183
     fcidump->read(filename);
 
     vector<uint8_t> ioccs;
@@ -112,8 +116,9 @@ TEST_F(TestDMRG, Test) {
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true, true);
+    mpo = make_shared<SimplifiedMPO<SU2>>(
+        mpo, make_shared<RuleQC<SU2>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
@@ -121,7 +126,8 @@ TEST_F(TestDMRG, Test) {
     mpo = make_shared<ParallelMPO<SU2>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
-    // cout << mpo->get_blocking_formulas() << endl;
+    // if(para_comm->rank == 1)
+    // cerr << mpo->get_blocking_formulas() << endl;
     // abort();
 
     ubond_t bond_dim = 200;
@@ -131,8 +137,8 @@ TEST_F(TestDMRG, Test) {
     //     norb, vacuum, target, hamil.basis);
 
     // CCSD init
-    shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-        norb, vacuum, target, hamil.basis);
+    shared_ptr<MPSInfo<SU2>> mps_info =
+        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -152,7 +158,8 @@ TEST_F(TestDMRG, Test) {
 
     // Determinant init
     // shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
-    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
+    //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target,
+    //     hamil.basis,
     //                                      hamil.orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
 
@@ -210,6 +217,7 @@ TEST_F(TestDMRG, Test) {
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
+    dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
     // dmrg->cutoff = 0;
@@ -217,7 +225,7 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     // dmrg->me->fuse_center = 1;
-    dmrg->solve(10, true, 1E-12);
+    dmrg->solve(20, true, 1E-12);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

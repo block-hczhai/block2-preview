@@ -95,7 +95,7 @@ template <typename S> struct MovingEnvironment {
     // !frame->use_main_stack)
     bool cached_contraction = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
-           tfwrt = 0, tfred = 0, tinfo = 0;
+           tinfo = 0;
     Timer _t, _t2;
     bool iprint = false;
     bool save_partition_info = false;
@@ -112,7 +112,7 @@ template <typename S> struct MovingEnvironment {
         (*hop_mat)[0] = mpo->op;
         fuse_center = mpo->schemer == nullptr ? n_sites - 2
                                               : mpo->schemer->left_trans_site;
-        if (mpo->get_parallel_type() == ParallelTypes::Distributed) {
+        if (mpo->get_parallel_type() & ParallelTypes::Distributed) {
             para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
             para_rule->comm->barrier();
         }
@@ -206,14 +206,12 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i - 1);
         new_left->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
-        _t.get_time();
         frame->save_data(1, get_left_partition_filename(i));
         if (save_partition_info) {
             frame->activate(1);
             envs[i]->save_data(true, get_left_partition_filename(i, true));
             frame->activate(0);
         }
-        tfwrt += _t.get_time();
     }
     // Contract and renormalize right block by one site
     // new site = i + dot
@@ -303,14 +301,12 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i + dot);
         new_right->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
-        _t.get_time();
         frame->save_data(1, get_right_partition_filename(i));
         if (save_partition_info) {
             frame->activate(1);
             envs[i]->save_data(false, get_right_partition_filename(i, true));
             frame->activate(0);
         }
-        tfwrt += _t.get_time();
     }
     void left_contract_rotate_unordered(
         int i, const shared_ptr<ParallelRule<S>> &rule = nullptr) {
@@ -549,7 +545,7 @@ template <typename S> struct MovingEnvironment {
     }
     void partial_prepare(int a, int b) {
         assert(a >= 0 && b <= n_sites);
-        tctr = trot = tmid = tint = tdctr = tdiag = tfwrt = tfred = tinfo = 0;
+        tctr = trot = tmid = tint = tdctr = tdiag = tinfo = 0;
         // in unordered sweep, same-site contraction may not be identical
         cached_info = make_pair(OpCachingTypes::None, -1);
         for (int i = b - dot; i > center; i--) {
@@ -570,7 +566,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Remove old environment for starting a new sweep
     void prepare() {
-        tctr = trot = tmid = tint = tdctr = tdiag = tfwrt = tfred = tinfo = 0;
+        tctr = trot = tmid = tint = tdctr = tdiag = tinfo = 0;
         if (dot == 2 && envs[0]->middle.size() == 1)
             throw runtime_error("switching from one-site algorithm to two-site "
                                 "algorithm is not allowed.");
@@ -629,22 +625,18 @@ template <typename S> struct MovingEnvironment {
         //    but since no contraction will be performed,
         //    incorrect cinfo does not have effects
         if (i > center) {
-            _t.get_time();
             if (envs[center]->left != nullptr &&
                 !(cached_info.first == OpCachingTypes::Left &&
                   cached_info.second == center))
                 frame->load_data(1, get_left_partition_filename(center));
-            tfred += _t.get_time();
             left_contract_rotate(++center);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
         } else if (i < center) {
-            _t.get_time();
             if (envs[center]->right != nullptr &&
                 !(cached_info.first == OpCachingTypes::Right &&
                   cached_info.second == center + dot - 1))
                 frame->load_data(1, get_right_partition_filename(center));
-            tfred += _t.get_time();
             right_contract_rotate(--center);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);

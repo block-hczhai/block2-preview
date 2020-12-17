@@ -1742,6 +1742,7 @@ template <typename S> void bind_parallel(py::module &m) {
         .def_readwrite("rank", &ParallelCommunicator<S>::rank)
         .def_readwrite("root", &ParallelCommunicator<S>::root)
         .def_readwrite("tcomm", &ParallelCommunicator<S>::tcomm)
+        .def_readwrite("para_type", &ParallelCommunicator<S>::para_type)
         .def("get_parallel_type", &ParallelCommunicator<S>::get_parallel_type)
         .def("barrier", &ParallelCommunicator<S>::barrier);
 
@@ -1754,9 +1755,10 @@ template <typename S> void bind_parallel(py::module &m) {
 
     py::class_<ParallelRule<S>, shared_ptr<ParallelRule<S>>>(m, "ParallelRule")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>())
         .def_readwrite("comm", &ParallelRule<S>::comm)
-        .def_readwrite("non_blocking", &ParallelRule<S>::non_blocking)
+        .def_readwrite("comm_type", &ParallelRule<S>::comm_type)
         .def("get_parallel_type", &ParallelRule<S>::get_parallel_type)
         .def("__call__", &ParallelRule<S>::operator())
         .def("is_root", &ParallelRule<S>::is_root)
@@ -1770,7 +1772,8 @@ template <typename S> void bind_parallel(py::module &m) {
                ParallelRule<S>>(m, "ParallelRuleSumMPO")
         .def_readwrite("n_sites", &ParallelRuleSumMPO<S>::n_sites)
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>())
         .def(
             "index_available",
             [](ParallelRuleSumMPO<S> *self, py::args &args) -> bool {
@@ -1807,17 +1810,26 @@ template <typename S> void bind_parallel(py::module &m) {
     py::class_<ParallelRuleQC<S>, shared_ptr<ParallelRuleQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleQC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>());
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
 
     py::class_<ParallelRuleNPDMQC<S>, shared_ptr<ParallelRuleNPDMQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleNPDMQC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &, bool>());
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
 
     py::class_<ParallelTensorFunctions<S>,
                shared_ptr<ParallelTensorFunctions<S>>, TensorFunctions<S>>(
         m, "ParallelTensorFunctions")
         .def(py::init<const shared_ptr<OperatorFunctions<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>());
+
+    py::class_<ClassicParallelMPO<S>, shared_ptr<ClassicParallelMPO<S>>,
+               MPO<S>>(m, "ClassicParallelMPO")
+        .def_readwrite("prim_mpo", &ClassicParallelMPO<S>::prim_mpo)
+        .def_readwrite("rule", &ClassicParallelMPO<S>::rule)
+        .def(py::init<const shared_ptr<MPO<S>> &,
                       const shared_ptr<ParallelRule<S>> &>());
 
     py::class_<ParallelMPO<S>, shared_ptr<ParallelMPO<S>>, MPO<S>>(
@@ -2259,6 +2271,20 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Right", OpCachingTypes::Right)
         .value("LeftCopy", OpCachingTypes::LeftCopy)
         .value("RightCopy", OpCachingTypes::RightCopy);
+
+    py::enum_<ParallelCommTypes>(m, "ParallelCommTypes", py::arithmetic())
+        .value("Nothing", ParallelCommTypes::None)
+        .value("NonBlocking", ParallelCommTypes::NonBlocking)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
+
+    py::enum_<ParallelTypes>(m, "ParallelTypes", py::arithmetic())
+        .value("Serial", ParallelTypes::Serial)
+        .value("Distributed", ParallelTypes::Distributed)
+        .value("NewScheme", ParallelTypes::NewScheme)
+        .def(py::self & py::self)
+        .def(py::self | py::self)
+        .def(py::self ^ py::self);
 }
 
 template <typename S = void> void bind_io(py::module &m) {

@@ -885,9 +885,11 @@ template <typename S> struct DMRG {
           double davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
-        if (me->para_rule != nullptr && iprint >= 2)
-            me->para_rule->comm->tcomm = me->para_rule->comm->tidle =
-                me->para_rule->comm->twait = 0;
+        if (me->para_rule != nullptr && iprint >= 2) {
+            me->para_rule->comm->tcomm = 0;
+            me->para_rule->comm->tidle = 0;
+            me->para_rule->comm->twait = 0;
+        }
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();
@@ -1050,9 +1052,11 @@ template <typename S> struct DMRG {
             dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
-        if (para_mps->rule != nullptr && iprint >= 2)
-            para_mps->rule->comm->tcomm = para_mps->rule->comm->tidle =
-                para_mps->rule->comm->twait = 0;
+        if (para_mps->rule != nullptr && iprint >= 2) {
+            para_mps->rule->comm->tcomm = 0;
+            para_mps->rule->comm->tidle = 0;
+            para_mps->rule->comm->twait = 0;
+        }
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
@@ -1198,8 +1202,6 @@ template <typename S> struct DMRG {
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr
                          << " | Tdiag = " << me->tdiag
-                         << " | Tfred = " << me->tfred
-                         << " | Tfwrt = " << me->tfwrt
                          << " | Tinfo = " << me->tinfo << endl;
                     cout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Teig = " << teig << " | Tblk = " << tblk
@@ -2109,9 +2111,11 @@ template <typename S> struct Linear {
                                         double minres_conv_thrd) {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
-        if (lme != nullptr && lme->para_rule != nullptr)
-            lme->para_rule->comm->tcomm = lme->para_rule->comm->tidle =
-                lme->para_rule->comm->twait = 0;
+        if (lme != nullptr && lme->para_rule != nullptr) {
+            lme->para_rule->comm->tcomm = 0;
+            lme->para_rule->comm->tidle = 0;
+            lme->para_rule->comm->twait = 0;
+        }
         rme->prepare();
         if (lme != nullptr)
             lme->prepare();
@@ -2262,7 +2266,8 @@ template <typename S> struct Linear {
                         tt[0] /= lme->para_rule->comm->size;
                         tt[1] /= lme->para_rule->comm->size;
                         tt[2] /= lme->para_rule->comm->size;
-                        cout << " | Tcomm = " << tt[0] << " | Tidle = " << tt[1]
+                        cout << " | Tcomm = " << tt[0] 
+                             << " | Tidle = " << tt[1]
                              << " | Twait = " << tt[2];
                     }
                     cout << " | Tread = " << frame->tread
@@ -2275,8 +2280,6 @@ template <typename S> struct Linear {
                              << " | Tmid = " << lme->tmid
                              << " | Tdctr = " << lme->tdctr
                              << " | Tdiag = " << lme->tdiag
-                             << " | Tfred = " << lme->tfred
-                             << " | Tfwrt = " << lme->tfwrt
                              << " | Tinfo = " << lme->tinfo << endl;
                     cout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Tmult = " << tmult << " | Tblk = " << tblk

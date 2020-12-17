@@ -77,6 +77,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     using ParallelCommunicator<S>::size;
     using ParallelCommunicator<S>::rank;
     using ParallelCommunicator<S>::root;
+    using ParallelCommunicator<S>::para_type;
     using ParallelCommunicator<S>::tcomm;
     using ParallelCommunicator<S>::tidle;
     using ParallelCommunicator<S>::twait;
@@ -84,9 +85,8 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     const size_t chunk_size = 1 << 30;
     vector<MPI_Request> reqs;
     MPICommunicator(int root = 0)
-        : ParallelCommunicator<S>(MPI::size(), MPI::rank(), root) {}
-    ParallelTypes get_parallel_type() const override {
-        return ParallelTypes::Distributed;
+        : ParallelCommunicator<S>(MPI::size(), MPI::rank(), root) {
+        para_type = ParallelTypes::Distributed;
     }
     void barrier() override {
         _t.get_time();

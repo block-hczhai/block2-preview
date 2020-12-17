@@ -35,6 +35,7 @@ namespace block2 {
 template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     using TensorFunctions<S>::opf;
     using TensorFunctions<S>::parallel_for;
+    using TensorFunctions<S>::substitute_delayed_exprs;
     shared_ptr<ParallelRule<S>> rule;
     ParallelTensorFunctions(const shared_ptr<OperatorFunctions<S>> &opf,
                             const shared_ptr<ParallelRule<S>> &rule)
@@ -69,7 +70,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
-                }
+                } else if (rule->partial(pc) && (rule->get_parallel_type() &
+                                                 ParallelTypes::NewScheme))
+                    c->ops[pc]->factor = 0;
             }
         }
         parallel_for(idxs.size(),
@@ -119,7 +122,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
-                }
+                } else if (rule->partial(pc) && (rule->get_parallel_type() &
+                                                 ParallelTypes::NewScheme))
+                    c->ops[pc]->factor = 0;
             }
         }
         parallel_for(idxs.size(),
@@ -229,19 +234,29 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         for (size_t i = 0; i < a->lmat->data.size(); i++)
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
-                if (rule->available(pa)) {
+                bool req = rule->available(pa);
+                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                    req = req || this->rule->partial(pa);
+                if (req) {
                     assert(c->ops.at(pa)->data == nullptr);
                     c->ops.at(pa)->allocate(c->ops.at(pa)->info);
                 }
             }
-        bool repeat = true, no_repeat = rule->non_blocking ? false : true;
+        bool repeat = true,
+             no_repeat = !(rule->comm_type & ParallelCommTypes::NonBlocking);
         auto f = [&a, &c, &mpst_bra, &mpst_ket, this, &repeat, &no_repeat](
                      const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
-                if (this->rule->own(pa) &&
-                    ((repeat && this->rule->repeat(pa)) ||
-                     (no_repeat && !this->rule->repeat(pa))))
+                bool req = true;
+                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                    req = this->rule->own(pa) || this->rule->repeat(pa) ||
+                          this->rule->partial(pa);
+                else
+                    req = this->rule->own(pa) &&
+                          ((repeat && this->rule->repeat(pa)) ||
+                           (no_repeat && !this->rule->repeat(pa)));
+                if (req)
                     tf->opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa),
                                            mpst_bra, mpst_ket, false);
             }
@@ -249,17 +264,19 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         parallel_for(a->lmat->data.size(), f);
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
+        if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+            return;
         for (size_t i = 0; i < a->lmat->data.size(); i++)
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
                 if (rule->repeat(pa)) {
-                    if (!rule->non_blocking)
+                    if (!(rule->comm_type & ParallelCommTypes::NonBlocking))
                         rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
                     else
                         rule->comm->ibroadcast(c->ops.at(pa), rule->owner(pa));
                 }
             }
-        if (rule->non_blocking) {
+        if (rule->comm_type & ParallelCommTypes::NonBlocking) {
             repeat = false, no_repeat = true;
             parallel_for(a->lmat->data.size(), f);
             if (opf->seq->mode == SeqTypes::Auto)
@@ -275,19 +292,29 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         for (size_t i = 0; i < a->rmat->data.size(); i++)
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
-                if (rule->available(pa)) {
+                bool req = rule->available(pa);
+                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                    req = req || this->rule->partial(pa);
+                if (req) {
                     assert(c->ops.at(pa)->data == nullptr);
                     c->ops.at(pa)->allocate(c->ops.at(pa)->info);
                 }
             }
-        bool repeat = true, no_repeat = rule->non_blocking ? false : true;
+        bool repeat = true,
+             no_repeat = !(rule->comm_type & ParallelCommTypes::NonBlocking);
         auto f = [&a, &c, &mpst_bra, &mpst_ket, this, &repeat, &no_repeat](
                      const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
-                if (this->rule->own(pa) &&
-                    ((repeat && this->rule->repeat(pa)) ||
-                     (no_repeat && !this->rule->repeat(pa))))
+                bool req = true;
+                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                    req = this->rule->own(pa) || this->rule->repeat(pa) ||
+                          this->rule->partial(pa);
+                else
+                    req = this->rule->own(pa) &&
+                          ((repeat && this->rule->repeat(pa)) ||
+                           (no_repeat && !this->rule->repeat(pa)));
+                if (req)
                     tf->opf->tensor_rotate(a->ops.at(pa), c->ops.at(pa),
                                            mpst_bra, mpst_ket, true);
             }
@@ -295,17 +322,19 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         parallel_for(a->rmat->data.size(), f);
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
+        if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+            return;
         for (size_t i = 0; i < a->rmat->data.size(); i++)
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
                 if (rule->repeat(pa)) {
-                    if (!rule->non_blocking)
+                    if (!(rule->comm_type & ParallelCommTypes::NonBlocking))
                         rule->comm->broadcast(c->ops.at(pa), rule->owner(pa));
                     else
                         rule->comm->ibroadcast(c->ops.at(pa), rule->owner(pa));
                 }
             }
-        if (rule->non_blocking) {
+        if (rule->comm_type & ParallelCommTypes::NonBlocking) {
             repeat = false, no_repeat = true;
             parallel_for(a->rmat->data.size(), f);
             if (opf->seq->mode == SeqTypes::Auto)
@@ -352,10 +381,14 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 exprs->data[k] *
                 (1 /
                  dynamic_pointer_cast<OpElement<S>>(names->data[k])->factor);
+            shared_ptr<OpExprRef<S>> lexpr;
             if (expr->get_type() != OpTypes::ExprRef)
-                expr = rule->localize_expr(expr, rule->owner(nop))->op;
+                lexpr = rule->localize_expr(expr, rule->owner(nop));
             else
-                expr = dynamic_pointer_cast<OpExprRef<S>>(expr)->op;
+                lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
+            expr = lexpr->op;
+            if (lexpr->orig->get_type() == OpTypes::Zero)
+                continue;
             assert(a->ops.count(nop) != 0);
             shared_ptr<SparseMatrix<S>> anop = a->ops.at(nop);
             switch (expr->get_type()) {
@@ -395,12 +428,16 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 continue;
             shared_ptr<OpExpr<S>> expr = exprs->data[k];
             bool is_local = false;
+            if (rule->get_parallel_type() == ParallelTypes::NewScheme)
+                assert(expr->get_type() == OpTypes::ExprRef);
+            shared_ptr<OpExprRef<S>> lexpr;
             if (expr->get_type() != OpTypes::ExprRef)
-                is_local =
-                    rule->localize_expr(expr, rule->owner(nop))->is_local;
+                lexpr = rule->localize_expr(expr, rule->owner(nop));
             else
-                is_local = dynamic_pointer_cast<OpExprRef<S>>(expr)->is_local;
-            if (!is_local)
+                lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
+            if (lexpr->orig->get_type() == OpTypes::Zero)
+                continue;
+            if (!lexpr->is_local)
                 rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
         }
     }
@@ -411,10 +448,28 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      const shared_ptr<OpExpr<S>> &op,
                      OpNamesSet delayed) const override {
         shared_ptr<DelayedOperatorTensor<S>> dopt =
-            TensorFunctions<S>::delayed_contract(a, b, op, delayed);
-        bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
-        dopt->mat->data[0] = rule->localize_expr(
-            dopt->mat->data[0], rule->owner(dopt->dops[0]), dleft);
+            make_shared<DelayedOperatorTensor<S>>();
+        dopt->lopt = a, dopt->ropt = b;
+        dopt->dops.push_back(op);
+        assert(a->lmat->data.size() == b->rmat->data.size());
+        shared_ptr<Symbolic<S>> exprs = a->lmat * b->rmat;
+        assert(exprs->data.size() == 1);
+        bool use_orig = !(rule->get_parallel_type() & ParallelTypes::NewScheme);
+        if (a->get_type() == OperatorTensorTypes::Delayed)
+            dopt->mat = substitute_delayed_exprs(
+                exprs, dynamic_pointer_cast<DelayedOperatorTensor<S>>(a), true,
+                delayed, use_orig);
+        else if (b->get_type() == OperatorTensorTypes::Delayed)
+            dopt->mat = substitute_delayed_exprs(
+                exprs, dynamic_pointer_cast<DelayedOperatorTensor<S>>(b), false,
+                delayed, use_orig);
+        else
+            dopt->mat = exprs;
+        if (use_orig) {
+            bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
+            dopt->mat->data[0] = rule->localize_expr(
+                dopt->mat->data[0], rule->owner(dopt->dops[0]), dleft);
+        }
         return dopt;
     }
     // delayed left and right block contraction
@@ -426,12 +481,27 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      const shared_ptr<Symbolic<S>> &exprs,
                      OpNamesSet delayed) const override {
         shared_ptr<DelayedOperatorTensor<S>> dopt =
-            TensorFunctions<S>::delayed_contract(a, b, ops, exprs, delayed);
-        bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
-        for (size_t i = 0; i < dopt->mat->data.size(); i++)
-            if (dopt->mat->data[i]->get_type() != OpTypes::ExprRef)
-                dopt->mat->data[i] = rule->localize_expr(
-                    dopt->mat->data[i], rule->owner(dopt->dops[i]), dleft);
+            make_shared<DelayedOperatorTensor<S>>();
+        dopt->lopt = a, dopt->ropt = b;
+        dopt->dops = ops->data;
+        bool use_orig = !(rule->get_parallel_type() & ParallelTypes::NewScheme);
+        if (a->get_type() == OperatorTensorTypes::Delayed)
+            dopt->mat = substitute_delayed_exprs(
+                exprs, dynamic_pointer_cast<DelayedOperatorTensor<S>>(a), true,
+                delayed, use_orig);
+        else if (b->get_type() == OperatorTensorTypes::Delayed)
+            dopt->mat = substitute_delayed_exprs(
+                exprs, dynamic_pointer_cast<DelayedOperatorTensor<S>>(b), false,
+                delayed, use_orig);
+        else
+            dopt->mat = exprs;
+        if (use_orig) {
+            bool dleft = a->get_type() == OperatorTensorTypes::Delayed;
+            for (size_t i = 0; i < dopt->mat->data.size(); i++)
+                if (dopt->mat->data[i]->get_type() != OpTypes::ExprRef)
+                    dopt->mat->data[i] = rule->localize_expr(
+                        dopt->mat->data[i], rule->owner(dopt->dops[i]), dleft);
+        }
         return dopt;
     }
     // c = a x b (dot)

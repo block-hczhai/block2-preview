@@ -31,8 +31,8 @@ namespace block2 {
 template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
     ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm,
-                   bool non_blocking = false)
-        : ParallelRule<S>(comm, non_blocking) {}
+                   ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
     static int find_index(uint16_t i, uint16_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
@@ -76,8 +76,8 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
 template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     using ParallelRule<S>::comm;
     ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm,
-                       bool non_blocking = false)
-        : ParallelRule<S>(comm, non_blocking) {}
+                       ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
     static uint64_t find_index(uint32_t i, uint32_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
