@@ -43,6 +43,14 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     shared_ptr<TensorFunctions<S>> copy() const override {
         return make_shared<ParallelTensorFunctions<S>>(opf->copy(), rule);
     }
+    const TensorFunctionsTypes get_type() const override {
+        return TensorFunctionsTypes::Parallel;
+    }
+    void operator()(const MatrixRef &b, const MatrixRef &c,
+                    double scale = 1.0) override {
+        opf->seq->operator()(b, c, scale);
+        rule->comm->allreduce_sum(c.data, c.size());
+    }
     // c = a
     void left_assign(const shared_ptr<OperatorTensor<S>> &a,
                      shared_ptr<OperatorTensor<S>> &c) const override {
@@ -165,7 +173,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             TensorFunctions<S>::tensor_product_partial_multiply(
                 op->op, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
                 vmats, vidx, false);
-            if (opf->seq->mode != SeqTypes::Auto && do_reduce)
+            if (opf->seq->mode != SeqTypes::Auto &&
+                !(opf->seq->mode & SeqTypes::Tasked) && do_reduce)
                 rule->comm->reduce_sum(vmats, rule->comm->root);
         } else
             TensorFunctions<S>::tensor_product_partial_multiply(
@@ -220,8 +229,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
             TensorFunctions<S>::tensor_product_diagonal(op->op, lopt, ropt, mat,
                                                         opdq);
-            if (opf->seq->mode != SeqTypes::Auto)
-                rule->comm->allreduce_sum(mat);
+            rule->comm->allreduce_sum(mat);
         } else
             TensorFunctions<S>::tensor_product_diagonal(expr, lopt, ropt, mat,
                                                         opdq);
@@ -416,7 +424,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     tf->opf->iadd(trs[i].first, a->ops.at(nexpr),
                                   op->strings[j]->factor,
                                   op->strings[j]->conj != 0);
-                    if (tf->opf->seq->mode == SeqTypes::Simple)
+                    if (tf->opf->seq->mode & SeqTypes::Simple)
                         tf->opf->seq->simple_perform();
                 }
             });

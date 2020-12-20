@@ -55,7 +55,7 @@ class GFDMRG:
     """
 
     def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2,
-        print_statistics=True, mpi=None, dctr=True):
+                 print_statistics=True, mpi=None, dctr=True):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -72,7 +72,7 @@ class GFDMRG:
                     dsize=int(memory * 0.9), save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-        Global.threading.seq_type = SeqTypes.Nothing
+        Global.threading.seq_type = SeqTypes.Tasked
         Global.frame.load_buffering = False
         Global.frame.save_buffering = False
         Global.frame.use_main_stack = False
@@ -168,7 +168,7 @@ class GFDMRG:
             self.fcidump.orb_sym = VectorUInt8(orb_sym)
             self.fcidump.write(save_fcidump)
         assert pg in ["d2h", "c1"]
-    
+
     @staticmethod
     def fmt_size(i, suffix='B'):
         if i < 1000:
@@ -184,7 +184,7 @@ class GFDMRG:
                 a *= 1024
         return "??? " + suffix
 
-    def dmrg(self, bond_dims, noises, n_steps=30, conv_tol=1E-7, cutoff=1E-14):
+    def dmrg(self, bond_dims, noises, n_steps=30, conv_tol=1E-7, cutoff=1E-14, occs=None, bias=1.0):
         """Ground-State DMRG."""
 
         if self.verbose >= 2:
@@ -195,7 +195,15 @@ class GFDMRG:
         mps_info = MPSInfo(self.n_sites, self.hamil.vacuum,
                            self.target, self.hamil.basis)
         mps_info.tag = 'KET'
-        mps_info.set_bond_dimension(bond_dims[0])
+        if occs is None:
+            if self.verbose >= 2:
+                print("Using FCI INIT MPS")
+            mps_info.set_bond_dimension(bond_dims[0])
+        else:
+            if self.verbose >= 2:
+                print("Using occupation number INIT MPS")
+            mps_info.set_bond_dimension_using_occ(
+                bond_dims[0], VectorDouble(occs), bias=bias)
         mps = MPS(self.n_sites, 0, 2)
         mps.initialize(mps_info)
         mps.random_canonicalize()
@@ -208,7 +216,8 @@ class GFDMRG:
         # MPO
         tx = time.perf_counter()
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(mpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True,
+                            OpNamesSet((OpNames.R, OpNames.RD)))
         self.mpo_orig = mpo
 
         if self.mpi is not None:
@@ -220,15 +229,19 @@ class GFDMRG:
 
         if self.verbose >= 3:
             print('MPO time = ', time.perf_counter() - tx)
-        
+
         if self.print_statistics:
-            print('GS MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+            print('GS MPO BOND DIMS = ', ''.join(
+                ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
             max_d = max(bond_dims)
-            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum, self.target, self.hamil.basis)
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
+                                self.target, self.hamil.basis)
             mps_info2.set_bond_dimension(max_d)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            print("GS EST MAX MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            print("GS EST PEAK MEM = ", GFDMRG.fmt_size(mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
+            print("GS EST MAX MPS BOND DIMS = ", ''.join(
+                ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
+            print("GS EST PEAK MEM = ", GFDMRG.fmt_size(
+                mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
 
@@ -242,6 +255,7 @@ class GFDMRG:
         if self.verbose >= 3:
             print('DMRG INIT time = ', time.perf_counter() - tx)
         dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+        dmrg.davidson_soft_max_iter = 4000
         dmrg.noise_type = NoiseTypes.ReducedPerturbative
         dmrg.decomp_type = DecompositionTypes.SVD
         dmrg.iprint = max(self.verbose - 1, 0)
@@ -257,11 +271,11 @@ class GFDMRG:
 
         if self.print_statistics:
             dmain, dseco, imain, iseco = Global.frame.peak_used_memory
-            print("GS PEAK MEM USAGE:", 
-                "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
-                "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-                "IMEM = ", GFDMRG.fmt_size(imain + iseco),
-                "(%.0f%%)" % (imain * 100 / (imain + iseco)))
+            print("GS PEAK MEM USAGE:",
+                  "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                  "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                  "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                  "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         if self.verbose >= 1:
             print("=== GS Energy = %20.15f" % self.gs_energy)
@@ -269,7 +283,7 @@ class GFDMRG:
         if self.verbose >= 2:
             print('>>> COMPLETE GS-DMRG | Time = %.2f <<<' %
                   (time.perf_counter() - t))
-    
+
     # one-particle density matrix
     # return value:
     #     pdm[0, :, :] -> <AD_{i,alpha} A_{j,alpha}>
@@ -332,7 +346,8 @@ class GFDMRG:
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
-                        eta, freqs, addition, cutoff=1E-14, diag_only=False, alpha=True):
+                        eta, freqs, addition, cutoff=1E-14, diag_only=False, 
+                        alpha=True, occs=None, bias=1.0):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -360,13 +375,17 @@ class GFDMRG:
             mpo = ParallelMPO(mpo, self.prule)
 
         if self.print_statistics:
-            print('GF MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+            print('GF MPO BOND DIMS = ', ''.join(
+                ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
             max_d = max(bond_dims)
-            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum, self.target, self.hamil.basis)
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
+                                self.target, self.hamil.basis)
             mps_info2.set_bond_dimension(max_d)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            print("GF EST MAX MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            print("GF EST PEAK MEM = ", GFDMRG.fmt_size(mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
+            print("GF EST MAX MPS BOND DIMS = ", ''.join(
+                ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
+            print("GF EST PEAK MEM = ", GFDMRG.fmt_size(
+                mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
 
@@ -415,6 +434,15 @@ class GFDMRG:
                                 self.target + ops[ii].q_label, self.hamil.basis)
             rket_info.tag = 'DKET%d' % idx
             rket_info.set_bond_dimension(mps.info.bond_dim)
+            if occs is None:
+                if self.verbose >= 2:
+                    print("Using FCI INIT MPS")
+                rket_info.set_bond_dimension(mps.info.bond_dim)
+            else:
+                if self.verbose >= 2:
+                    print("Using occupation number INIT MPS")
+                rket_info.set_bond_dimension_using_occ(
+                    mps.info.bond_dim, VectorDouble(occs), bias=bias)
             rkets[ii] = MPS(self.n_sites, mps.center, 2)
             rkets[ii].initialize(rket_info)
             rkets[ii].random_canonicalize()
@@ -471,6 +499,9 @@ class GFDMRG:
             linear.minres_conv_thrds = VectorDouble([gmres_tol] * n_steps)
             linear.noise_type = NoiseTypes.ReducedPerturbative
             linear.decomp_type = DecompositionTypes.SVD
+            # TZ: Not raising error even if CG is not converged
+            linear.minres_soft_max_iter = 4000
+            linear.minres_max_iter = 5000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -537,11 +568,11 @@ class GFDMRG:
         mps_info.deallocate()
 
         if self.print_statistics:
-            print("GF PEAK MEM USAGE:", 
-                "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
-                "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-                "IMEM = ", GFDMRG.fmt_size(imain + iseco),
-                "(%.0f%%)" % (imain * 100 / (imain + iseco)))
+            print("GF PEAK MEM USAGE:",
+                  "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                  "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                  "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                  "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         return gf_mat
 
@@ -559,7 +590,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
-               lowdin=False, diag_only=False, alpha=True, mpi=None):
+               lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
 
@@ -585,6 +616,27 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         scratch : scratch folder for temporary files.
         lowdin : if True, will use lowdin orbitals instead of molecular orbitals
         diag_only : if True, only calculate diagonal GF elements.
+        alpha : bool. alpha spin or beta spin (not used if SU2)
+        occs : list(double) or None
+            if occs = None, use FCI init MPS (default)
+            if occs = list(double), use occ init MPS
+            either
+                (A) len(occs) == n_sites (RHF or UHF, 0 <= occ <= 2)
+             or (B) len(occs) == n_sites * 2 (UHF, 0 <= occ <= 1)
+                    order: 0a, 0b, 1a, 1b, ...
+        bias : float64, effective when occs is not None
+            bias = 0.0: HF occ (e.g. occs => 2 2 2 ... 0 0 0)
+            bias = 1.0: no bias (e.g. occs => 1.7 1.8 ... 0.1 0.05)
+            bias = +inf: fully random (e.g. occs => 1 1 1 ... 1 1 1)
+
+            increase bias if you want an init MPS with larger bond dim
+
+            0 <= occ <= 2
+            biased occ = 1 + (occ - 1) ** bias    (if occ > 1)
+                        = 1 - (1 - occ) ** bias    (if occ < 1)
+        cutoff : float64, lowest kept density matrix eigen value (default 1E-14)
+            use smaller cutoff (e.g. 1E-20) when you need super accurate ground state energy
+            noise smaller than cutoff will have no effect.
         mpi : if not None, MPI is used
 
     Returns:
@@ -608,7 +660,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
     else:
         mo_coeff = mf.mo_coeff
 
-    is_uhf = isinstance(mo_coeff, tuple)
+    is_uhf = isinstance(mo_coeff, tuple) or mo_coeff.ndim == 3
 
     if not is_uhf:
 
@@ -647,7 +699,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         ecore = mol.energy_nuc()
         if ignore_ecore:
             ecore = 0
-        na, nb = mol.nelectron
+        na, nb = mol.nelec
 
     if mo_orbs is None:
         mo_orbs = range(n_mo)
@@ -657,7 +709,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
     dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
                           orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
     dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
-              n_steps=gs_n_steps, conv_tol=gs_tol)
+              n_steps=gs_n_steps, conv_tol=gs_tol, occs=occs, bias=bias, cutoff=cutoff)
     pdm = dmrg.get_one_pdm()
     print('pdm = ', pdm)
     gf = 0
@@ -681,6 +733,7 @@ if __name__ == "__main__":
     mpg = 'c1'  # point group: d2h or c1
     scratch = './tmp'
     lowdin = False
+    do_ccsd = True
 
     import os
     if not os.path.isdir(scratch):
@@ -708,6 +761,21 @@ if __name__ == "__main__":
     print("SCF Energy = %20.15f" % ener)
     print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
 
+    if do_ccsd:
+        from pyscf import cc
+        mcc = cc.CCSD(mf)
+        mcc.kernel()
+        dmmo = mcc.make_rdm1()
+        if hf_type == "RHF":
+            # RHF: 0 <= occ <= 2, len = n_mo
+            occs = np.diag(dmmo)
+        else:
+            # UHF: 0 <= occ <= 1, order: 0a, 0b, 1a, 1b, ..., len = n_mo * 2
+            occs = np.array([i for j in zip(np.diag(dmmo[0]), np.diag(dmmo[1])) for i in j])
+        print('OCCS = ', occs)
+    else:
+        occs = None
+
     if lowdin:
 
         eta = 0.005
@@ -715,10 +783,10 @@ if __name__ == "__main__":
         mo_orbs = [4]
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
-                        gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
-                        gmres_tol=1E-8, lowdin=True, ignore_ecore=False, n_threads=n_threads)
+                                gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
+                                gmres_tol=1E-8, lowdin=True, ignore_ecore=False, n_threads=n_threads)
 
-        print(gfmat) # alpha only
+        print(gfmat)  # alpha only
 
         # alpha + beta
         pdos = (-2 / np.pi) * gfmat.imag.trace(axis1=0, axis2=1)
@@ -731,15 +799,16 @@ if __name__ == "__main__":
         plt.xlabel('Frequency $\\omega$ (a.u.)')
         plt.ylabel('LDOS (a.u.)')
         plt.savefig('gf-figure.png', dpi=600)
-    
+
     else:
 
         eta = 0.005
         freqs = [-0.2]
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
-                            gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
-                            gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
-                            gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3, n_threads=n_threads)
-        gfmat = np.einsum('ip,pqr,jq->ijr',mf.mo_coeff, gfmat, mf.mo_coeff)
+                                gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
+                                gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
+                                gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
+                                n_threads=n_threads, occs=occs, bias=1.0)
+        gfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
         print(gfmat)

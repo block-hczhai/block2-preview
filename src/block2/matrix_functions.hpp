@@ -630,7 +630,7 @@ struct MatrixFunctions {
     // bs: input/output vector
     template <typename MatMul, typename PComm>
     static vector<double>
-    davidson(MatMul op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
+    davidson(MatMul &op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
              int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
              double conv_thrd = 5E-6, int max_iter = 5000,
              int soft_max_iter = -1, int deflation_min_size = 2,
@@ -684,32 +684,44 @@ struct MatrixFunctions {
                 MatrixRef alpha(nullptr, m, m);
                 ld.allocate();
                 alpha.allocate();
-                for (int i = 0; i < m; i++)
-                    for (int j = 0; j <= i; j++)
-                        alpha(i, j) = dot(bs[i], sigmas[j]);
-                eigs(alpha, ld);
                 vector<MatrixRef> tmp(m, MatrixRef(nullptr, bs[0].m, bs[0].n));
-                for (int i = 0; i < m; i++) {
+                for (int i = 0; i < m; i++)
                     tmp[i].allocate();
-                    copy(tmp[i], bs[i]);
-                }
-                // note alpha row/column is diff from python
-                // b[1:m] = np.dot(b[:], alpha[:, 1:m])
-                for (int j = 0; j < m; j++)
-                    iscale(bs[j], alpha(j, j));
-                for (int j = 0; j < m; j++)
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#pragma omp for schedule(dynamic) collapse(2)
                     for (int i = 0; i < m; i++)
-                        if (i != j)
-                            iadd(bs[j], tmp[i], alpha(j, i));
-                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
-                for (int j = 0; j < m; j++) {
-                    copy(tmp[j], sigmas[j]);
-                    iscale(sigmas[j], alpha(j, j));
+                        for (int j = 0; j < m; j++)
+                            if (j <= i)
+                                alpha(i, j) = dot(bs[i], sigmas[j]);
+#pragma omp single
+                    eigs(alpha, ld);
+                    // note alpha row/column is diff from python
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], bs[j]);
+                        iscale(bs[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(bs[j], tmp[i], alpha(j, i));
+                    // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], sigmas[j]);
+                        iscale(sigmas[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(sigmas[j], tmp[i], alpha(j, i));
                 }
-                for (int j = 0; j < m; j++)
-                    for (int i = 0; i < m; i++)
-                        if (i != j)
-                            iadd(sigmas[j], tmp[i], alpha(j, i));
+                threading->activate_normal();
                 for (int i = m - 1; i >= 0; i--)
                     tmp[i].deallocate();
                 alpha.deallocate();
@@ -879,7 +891,7 @@ struct MatrixFunctions {
     //   ACM - Transactions On Mathematical Software, 24(1):130-156, 1998
     // lwork = n*(m+1)+n+(m+2)^2+4*(m+2)^2+ideg+1
     template <typename MatMul, typename PComm>
-    static MKL_INT expo_krylov(MatMul op, MKL_INT n, MKL_INT m, double t,
+    static MKL_INT expo_krylov(MatMul &op, MKL_INT n, MKL_INT m, double t,
                                double *v, double *w, double &tol, double anorm,
                                double *work, MKL_INT lwork, bool iprint,
                                const PComm &pcomm = nullptr) {
@@ -1075,7 +1087,7 @@ struct MatrixFunctions {
     // apply exponential of a matrix to a vector
     // v: input/output vector
     template <typename MatMul, typename PComm>
-    static int expo_apply(MatMul op, double t, double anorm, MatrixRef &v,
+    static int expo_apply(MatMul &op, double t, double anorm, MatrixRef &v,
                           double consta = 0.0, bool iprint = false,
                           const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
                           int deflation_max_size = 20) {
@@ -1125,7 +1137,7 @@ struct MatrixFunctions {
     // H x := op(x) + consta * x
     template <typename MatMul, typename PComm>
     static double
-    conjugate_gradient(MatMul op, const DiagonalMatrix &aa, MatrixRef x,
+    conjugate_gradient(MatMul &op, const DiagonalMatrix &aa, MatrixRef x,
                        MatrixRef b, int &nmult, double consta = 0.0,
                        bool iprint = false, const PComm &pcomm = nullptr,
                        double conv_thrd = 5E-6, int max_iter = 5000,
@@ -1224,7 +1236,7 @@ struct MatrixFunctions {
     // by applying linear CG method to equation (H H) x = H b
     // where H x := op(x) + consta * x
     template <typename MatMul, typename PComm>
-    static double minres(MatMul op, MatrixRef x, MatrixRef b, int &nmult,
+    static double minres(MatMul &op, MatrixRef x, MatrixRef b, int &nmult,
                          double consta = 0.0, bool iprint = false,
                          const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
                          int max_iter = 5000, int soft_max_iter = -1) {

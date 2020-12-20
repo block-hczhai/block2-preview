@@ -153,7 +153,7 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_m500[i]) << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-4);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 2E-4);
     }
 
     imps_info->deallocate();

@@ -51,7 +51,7 @@ class TestDMRGN2STO3G : public ::testing::Test {
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             1);
-        threading_()->seq_type = SeqTypes::Simple;
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {

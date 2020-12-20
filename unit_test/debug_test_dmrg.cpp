@@ -22,7 +22,7 @@ class TestDMRG : public ::testing::Test {
         // threading_() =
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
-        threading_()->seq_type = SeqTypes::Simple;
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *frame_() << endl;
         cout << *threading_() << endl;
     }

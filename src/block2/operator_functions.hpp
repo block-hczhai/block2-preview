@@ -105,7 +105,8 @@ template <typename S> struct OperatorFunctions {
         for (int j = 0; j < mats[i]->n; j++)
             MatrixFunctions::iadd(
                 MatrixRef((*mats[i])[j]->data, 1, (*mats[i])[j]->total_memory),
-                MatrixRef((*mats[m])[j]->data, 1, (*mats[m])[j]->total_memory), 1.0);
+                MatrixRef((*mats[m])[j]->data, 1, (*mats[m])[j]->total_memory),
+                1.0);
     }
     // a += b * scale
     virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
@@ -114,7 +115,7 @@ template <typename S> struct OperatorFunctions {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
         if (a->info == b->info && !conj) {
-            if (seq->mode != SeqTypes::None) {
+            if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked) {
                 seq->iadd(MatrixRef(a->data, 1, a->total_memory),
                           MatrixRef(b->data, 1, b->total_memory),
                           scale * b->factor, a->factor);
@@ -143,7 +144,8 @@ template <typename S> struct OperatorFunctions {
                     if (conj)
                         factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
                                                    ket.twos());
-                    if (seq->mode != SeqTypes::None)
+                    if (seq->mode != SeqTypes::None &&
+                        seq->mode != SeqTypes::Tasked)
                         seq->iadd((*a)[ia], (*b)[ib], factor, a->factor, conj);
                     else {
                         if (a->factor != 1.0)
@@ -179,14 +181,14 @@ template <typename S> struct OperatorFunctions {
             S cqprime = c->info->quanta[ic].get_ket();
             int ibra = rot_bra->info->find_state(cq);
             int iket = rot_ket->info->find_state(cqprime);
-            if (seq->mode != SeqTypes::None)
+            if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
                 seq->rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra], !trans,
                             (*rot_ket)[iket], trans, scale);
             else
                 MatrixFunctions::rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra],
                                         !trans, (*rot_ket)[iket], trans, scale);
         }
-        if (seq->mode == SeqTypes::Simple)
+        if (seq->mode & SeqTypes::Simple)
             seq->simple_perform();
     }
     virtual void tensor_product_diagonal(uint8_t conj,
@@ -282,7 +284,8 @@ template <typename S> struct OperatorFunctions {
                             (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
                             (*db)[idb], (dconj & 2) >> 1, dleft,
                             scale * factor * dfactor, stride);
-                        break;
+                        if (seq->mode == SeqTypes::Simple)
+                            break;
                     } else
                         MatrixFunctions::three_tensor_product_diagonal(
                             (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
@@ -292,7 +295,7 @@ template <typename S> struct OperatorFunctions {
             }
             if (seq->mode == SeqTypes::Simple)
                 seq->simple_perform();
-            if (!found || seq->mode == SeqTypes::None)
+            if (!found || seq->mode != SeqTypes::Simple)
                 break;
         }
     }
@@ -472,13 +475,13 @@ template <typename S> struct OperatorFunctions {
                     default:
                         assert(false);
                     }
-                    if (seq->mode != SeqTypes::None)
+                    if (seq->mode == SeqTypes::Simple)
                         break;
                 }
             }
             if (seq->mode == SeqTypes::Simple)
                 seq->simple_perform();
-            if (!found || seq->mode == SeqTypes::None)
+            if (!found || seq->mode != SeqTypes::Simple)
                 break;
         }
     }
@@ -510,7 +513,7 @@ template <typename S> struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             uint32_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
-            if (seq->mode != SeqTypes::None)
+            if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
                 seq->tensor_product((*a)[ia], conj & 1, (*b)[ib],
                                     (conj & 2) >> 1, (*c)[ic], scale * factor,
                                     stride);
@@ -519,7 +522,7 @@ template <typename S> struct OperatorFunctions {
                                                 (conj & 2) >> 1, (*c)[ic],
                                                 scale * factor, stride);
         }
-        if (seq->mode == SeqTypes::Simple)
+        if (seq->mode & SeqTypes::Simple)
             seq->simple_perform();
     }
     // c = a * b * scale

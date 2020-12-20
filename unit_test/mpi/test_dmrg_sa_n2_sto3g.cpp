@@ -47,8 +47,8 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 1);
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {

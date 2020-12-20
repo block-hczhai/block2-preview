@@ -116,6 +116,23 @@ inline void threaded_dgemm_batch(
     }
 }
 
+inline void single_dgemm(
+    const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
+    const CBLAS_TRANSPOSE *TransB_Array, const MKL_INT *M_Array,
+    const MKL_INT *N_Array, const MKL_INT *K_Array, const double *alpha_Array,
+    const double *A, const MKL_INT *lda_Array, const double *B,
+    const MKL_INT *ldb_Array, const double *beta_Array, double *C,
+    const MKL_INT *ldc_Array, const MKL_INT *group_size, double scale = 1.0) {
+    const MKL_INT ig = 0, i = 0;
+    const char *tra = TransA_Array[ig] == CblasNoTrans ? "n" : "t";
+    const char *trb = TransB_Array[ig] == CblasNoTrans ? "n" : "t";
+    const MKL_INT m = M_Array[ig], n = N_Array[ig], k = K_Array[ig];
+    const double alpha = alpha_Array[ig] * scale, beta = beta_Array[ig];
+    const MKL_INT lda = lda_Array[ig], ldb = ldb_Array[ig], ldc = ldc_Array[ig];
+    const MKL_INT gsize = group_size[ig];
+    dgemm(trb, tra, &n, &m, &k, &alpha, B, &ldb, A, &lda, &beta, C, &ldc);
+}
+
 // The parameters for a series of DGEMM operations
 struct BatchGEMM {
     const CBLAS_LAYOUT layout = CblasRowMajor;
@@ -124,8 +141,45 @@ struct BatchGEMM {
     vector<double> alpha, beta;
     vector<const double *> a, b;
     vector<double *> c;
-    size_t work;
-    BatchGEMM() : work(0) {}
+    size_t work, nflop;
+    BatchGEMM() : work(0), nflop(0) {}
+    void resize(size_t nn) {
+        ta.resize(nn), tb.resize(nn);
+        n.resize(nn), m.resize(nn), k.resize(nn);
+        gp.resize(nn), alpha.resize(nn), beta.resize(nn);
+        lda.resize(nn), ldb.resize(nn), ldc.resize(nn);
+        a.resize(nn), b.resize(nn), c.resize(nn);
+    }
+    void copy_from(size_t ii, const shared_ptr<BatchGEMM> &batch) {
+        memcpy(ta.data() + ii, batch->ta.data(),
+               sizeof(CBLAS_TRANSPOSE) * batch->ta.size());
+        memcpy(tb.data() + ii, batch->tb.data(),
+               sizeof(CBLAS_TRANSPOSE) * batch->tb.size());
+        memcpy(n.data() + ii, batch->n.data(),
+               sizeof(MKL_INT) * batch->n.size());
+        memcpy(m.data() + ii, batch->m.data(),
+               sizeof(MKL_INT) * batch->m.size());
+        memcpy(k.data() + ii, batch->k.data(),
+               sizeof(MKL_INT) * batch->k.size());
+        memcpy(gp.data() + ii, batch->gp.data(),
+               sizeof(MKL_INT) * batch->gp.size());
+        memcpy(lda.data() + ii, batch->lda.data(),
+               sizeof(MKL_INT) * batch->lda.size());
+        memcpy(ldb.data() + ii, batch->ldb.data(),
+               sizeof(MKL_INT) * batch->ldb.size());
+        memcpy(ldc.data() + ii, batch->ldc.data(),
+               sizeof(MKL_INT) * batch->ldc.size());
+        memcpy(alpha.data() + ii, batch->alpha.data(),
+               sizeof(double) * batch->alpha.size());
+        memcpy(beta.data() + ii, batch->beta.data(),
+               sizeof(double) * batch->beta.size());
+        memcpy(a.data() + ii, batch->a.data(),
+               sizeof(const double *) * batch->a.size());
+        memcpy(b.data() + ii, batch->b.data(),
+               sizeof(const double *) * batch->b.size());
+        memcpy(c.data() + ii, batch->c.data(),
+               sizeof(double *) * batch->c.size());
+    }
     void dgemm_group(bool conja, bool conjb, MKL_INT m, MKL_INT n, MKL_INT k,
                      double alpha, MKL_INT lda, MKL_INT ldb, double beta,
                      MKL_INT ldc, MKL_INT gc) {
@@ -136,6 +190,7 @@ struct BatchGEMM {
         this->lda.push_back(lda), this->ldb.push_back(ldb),
             this->ldc.push_back(ldc);
         this->gp.push_back(gc);
+        nflop += (size_t)m * n * k * gc;
     }
     void dgemm_array(const double *a, const double *b, double *c) {
         this->a.push_back(a), this->b.push_back(b), this->c.push_back(c);
@@ -310,13 +365,25 @@ struct BatchGEMM {
                                   nn == 0 ? (MKL_INT)gp.size() : nn, &gp[ii]);
         }
     }
+    inline void perform_single(MKL_INT ii, const double *a, const double *b,
+                               double *c, double scale) {
+        single_dgemm(layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
+                     &alpha[ii], a, &lda[ii], b, &ldb[ii], &beta[ii], c,
+                     &ldc[ii], &gp[ii], scale);
+    }
+    inline void perform_single(MKL_INT ii, const double *a, const double *b,
+                               double *c) {
+        single_dgemm(layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
+                     &alpha[ii], a, &lda[ii], b, &ldb[ii], &beta[ii], c,
+                     &ldc[ii], &gp[ii]);
+    }
     void clear() {
         ta.clear(), tb.clear();
         n.clear(), m.clear(), k.clear(), gp.clear();
         lda.clear(), ldb.clear(), ldc.clear();
         alpha.clear(), beta.clear();
         a.clear(), b.clear(), c.clear();
-        work = 0;
+        work = nflop = 0;
     }
     friend ostream &operator<<(ostream &os, const BatchGEMM &c) {
         for (size_t i = 0, k = 0; i < c.gp.size(); k += c.gp[i], i++) {
@@ -369,6 +436,7 @@ struct BatchGEMMSeq {
         batch.push_back(make_shared<BatchGEMM>());
         batch.push_back(make_shared<BatchGEMM>());
     }
+    // clear copy
     shared_ptr<BatchGEMMSeq> copy() const {
         shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(*this);
         assert(seq->vdata == nullptr);
@@ -401,6 +469,8 @@ struct BatchGEMMSeq {
                        conj_ket ? ket.m : ket.n);
         batch[0]->multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         batch[1]->multiply(bra, conj_bra, work, false, c, scale, 1.0);
+        if (mode & SeqTypes::Tasked)
+            max_work = max(max_work, work.size());
         batch[0]->work += work.size();
         batch[1]->work += work.size();
     }
@@ -411,14 +481,15 @@ struct BatchGEMMSeq {
                       bool conj_ket, const MatrixRef &da, bool dconja,
                       const MatrixRef &db, bool dconjb, bool dleft,
                       double scale, uint32_t stride) {
+        MatrixRef work(nullptr, 0, 0);
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
             uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
-            MatrixRef work((double *)0 + batch[0]->work, am,
-                           conj_ket ? ket.m : ket.n);
+            work = MatrixRef((double *)0 + batch[0]->work, am,
+                             conj_ket ? ket.m : ket.n);
             // work = a * ket
             batch[0]->multiply(MatrixRef(&a(ast, 0), am, a.n), false, ket,
                                conj_ket, work, scale, 0.0);
@@ -434,15 +505,13 @@ struct BatchGEMMSeq {
                                    1.0);
             else
                 assert(false);
-            batch[0]->work += work.size();
-            batch[1]->work += work.size();
         } else {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
             uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
-            MatrixRef work((double *)0 + batch[0]->work, a.m, kn);
+            work = MatrixRef((double *)0 + batch[0]->work, a.m, kn);
             if (da.m == 1 && da.n == 1)
                 // work = a * (1 x db)
                 batch[0]->multiply(MatrixRef(&a(0, ast), a.m, a.n), false, db,
@@ -456,9 +525,11 @@ struct BatchGEMMSeq {
             // c = bra * work
             batch[1]->multiply(bra, conj_bra, work, false,
                                MatrixRef(&c(0, cst), c.m, c.n), scale, 1.0);
-            batch[0]->work += work.size();
-            batch[1]->work += work.size();
         }
+        if (mode & SeqTypes::Tasked)
+            max_work = max(max_work, work.size());
+        batch[0]->work += work.size();
+        batch[1]->work += work.size();
     }
     //  dleft: [c] = scale * [a] * [ket]
     // !dleft: [c] = scale * [a] * [ket] (= [da] x [db])
@@ -556,6 +627,17 @@ struct BatchGEMMSeq {
     // Divide batch to several batches
     // so that nflop of each batch is roughly max_batch_flops
     void divide_batch() {
+        // no need to divide
+        if (max_batch_flops == 0) {
+            if (batch[0]->gp.size() != 0)
+                refs.push_back(BatchGEMMRef(batch[0], batch[0]->nflop,
+                                            batch[0]->work, 0, 0,
+                                            (MKL_INT)batch[0]->gp.size(), 0));
+            refs.push_back(BatchGEMMRef(batch[1], batch[1]->nflop,
+                                        batch[1]->work, 0, 0,
+                                        (MKL_INT)batch[1]->gp.size(), 0));
+            return;
+        }
         size_t cur = 0, cur0 = 0, cwork = 0, pwork = 0;
         MKL_INT ip = 0, kp = 0;
         for (MKL_INT i = 0, k = 0; i < batch[1]->gp.size();
@@ -801,14 +883,43 @@ struct BatchGEMMSeq {
         deallocate();
         clear();
     }
-    // Perform possibly confliciting batched DGEMM
-    // An analysis is performed to automatically resolve conflicts
-    void auto_perform() {
-        prepare();
-        allocate();
-        perform();
-        deallocate();
-        clear();
+    // SeqTypes::Auto:
+    //   Perform possibly confliciting batched DGEMM
+    //   An analysis is performed to automatically resolve conflicts
+    // SeqTypes::Tasked:
+    //   Each thread write to thread-copied outputs
+    void auto_perform(const MatrixRef &v = MatrixRef(nullptr, 0, 0)) {
+        if (mode == SeqTypes::Auto) {
+            prepare();
+            allocate();
+            perform();
+            deallocate();
+            clear();
+        } else if (mode & SeqTypes::Tasked) {
+            int ntop = threading->activate_operator();
+            vector<MatrixRef> vts(ntop, v);
+            assert(batch[0]->c.size() == 0);
+#pragma omp parallel num_threads(ntop)
+            {
+                int tid = threading->get_thread_id();
+                shared_ptr<VectorAllocator<double>> d_alloc =
+                    make_shared<VectorAllocator<double>>();
+                if (tid != 0)
+                    vts[tid].allocate(d_alloc);
+                size_t t_vshift = vts[tid].data - v.data;
+#pragma omp for schedule(static)
+                for (size_t i = 0; i < batch[1]->c.size(); i++)
+                    batch[1]->perform_single(i, batch[1]->a[i], batch[1]->b[i],
+                                             batch[1]->c[i] + t_vshift);
+#pragma omp single
+                parallel_reduce(vts, 0, ntop);
+                if (tid != 0)
+                    vts[tid].deallocate(d_alloc);
+            }
+            threading->activate_normal();
+            cumulative_nflop += batch[1]->nflop;
+            clear();
+        }
     }
     // Directly perform batched DGEMM
     void perform() {
@@ -824,32 +935,79 @@ struct BatchGEMMSeq {
         }
         assert(ipost == post_batch.size());
     }
+    void parallel_reduce(const vector<MatrixRef> &mats, int i, int j) const {
+        assert(j > i);
+        if (j - i == 1)
+            return;
+        int m = (i + j) >> 1;
+#pragma omp task
+        parallel_reduce(mats, i, m);
+#pragma omp task
+        parallel_reduce(mats, m, j);
+#pragma omp taskwait
+        MatrixFunctions::iadd(mats[i], mats[m], 1.0);
+    }
     // Matrix multiply vector (c) => vector (v)
     // (in automatic mode)
-    void operator()(const MatrixRef &c, const MatrixRef &v) {
+    void operator()(const MatrixRef &c, const MatrixRef &v,
+                    double scale = 1.0) {
         size_t cshift = c.data - (double *)0;
         size_t vshift = v.data - (double *)0;
-        for (size_t i = 0; i < batch[0]->a.size(); i++)
-            batch[0]->a[i] += cshift;
-        size_t ipost = 0;
-        for (auto b : refs) {
-            if (b.ipost != 0)
-                for (size_t i = 0;
-                     i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
-                    post_batch[ipost + b.ipost - 1]->c[i] += vshift;
-            ipost += b.ipost;
-        }
-        perform();
-        for (size_t i = 0; i < batch[0]->a.size(); i++)
-            batch[0]->a[i] -= cshift;
-        ipost = 0;
-        for (auto b : refs) {
-            if (b.ipost != 0)
-                for (size_t i = 0;
-                     i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
-                    post_batch[ipost + b.ipost - 1]->c[i] -= vshift;
-            ipost += b.ipost;
-        }
+        if (mode == SeqTypes::Auto) {
+            assert(scale == 1.0);
+            for (size_t i = 0; i < batch[0]->a.size(); i++)
+                batch[0]->a[i] += cshift;
+            size_t ipost = 0;
+            for (auto b : refs) {
+                if (b.ipost != 0)
+                    for (size_t i = 0;
+                         i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
+                        post_batch[ipost + b.ipost - 1]->c[i] += vshift;
+                ipost += b.ipost;
+            }
+            perform();
+            for (size_t i = 0; i < batch[0]->a.size(); i++)
+                batch[0]->a[i] -= cshift;
+            ipost = 0;
+            for (auto b : refs) {
+                if (b.ipost != 0)
+                    for (size_t i = 0;
+                         i < post_batch[ipost + b.ipost - 1]->c.size(); i++)
+                        post_batch[ipost + b.ipost - 1]->c[i] -= vshift;
+                ipost += b.ipost;
+            }
+        } else if (mode & SeqTypes::Tasked) {
+            int ntop = threading->activate_operator();
+            vector<MatrixRef> vts(ntop, v);
+            vector<MatrixRef> works(ntop, MatrixRef(nullptr, max_work, 1));
+            assert(max_rwork == 0 && max_work != 0);
+#pragma omp parallel num_threads(ntop)
+            {
+                int tid = threading->get_thread_id();
+                shared_ptr<VectorAllocator<double>> d_alloc =
+                    make_shared<VectorAllocator<double>>();
+                if (tid != 0)
+                    vts[tid].allocate(d_alloc);
+                works[tid].allocate(d_alloc);
+                size_t t_vshift = vts[tid].data - (double *)0;
+#pragma omp for schedule(static)
+                for (size_t i = 0; i < batch[0]->c.size(); i++) {
+                    batch[0]->perform_single(i, batch[0]->a[i] + cshift,
+                                             batch[0]->b[i], works[tid].data);
+                    batch[1]->perform_single(i, batch[1]->a[i], works[tid].data,
+                                             batch[1]->c[i] + t_vshift, scale);
+                }
+#pragma omp single
+                parallel_reduce(vts, 0, ntop);
+                works[tid].deallocate(d_alloc);
+                if (tid != 0)
+                    vts[tid].deallocate(d_alloc);
+            }
+            threading->activate_normal();
+            cumulative_nflop += batch[0]->nflop;
+            cumulative_nflop += batch[1]->nflop;
+        } else
+            assert(false);
     }
     // Clear all DGEMM parameters
     void clear() {

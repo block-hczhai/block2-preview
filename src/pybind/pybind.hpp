@@ -1138,8 +1138,7 @@ template <typename S> void bind_partition(py::module &m) {
         .def(py::init<const vector<shared_ptr<EffectiveHamiltonian<S>>> &,
                       const vector<double> &>())
         .def("__call__", &LinearEffectiveHamiltonian<S>::operator(),
-             py::arg("b"), py::arg("c"), py::arg("idx") = 0,
-             py::arg("factor") = 1.0, py::arg("all_reduce") = true)
+             py::arg("b"), py::arg("c"))
         .def("eigs", &LinearEffectiveHamiltonian<S>::eigs)
         .def("deallocate", &LinearEffectiveHamiltonian<S>::deallocate)
         .def_readwrite("h_effs", &LinearEffectiveHamiltonian<S>::h_effs)
@@ -2206,7 +2205,11 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<SeqTypes>(m, "SeqTypes", py::arithmetic())
         .value("Nothing", SeqTypes::None)
         .value("Simple", SeqTypes::Simple)
-        .value("Auto", SeqTypes::Auto);
+        .value("Auto", SeqTypes::Auto)
+        .value("Tasked", SeqTypes::Tasked)
+        .value("SimpleTasked", SeqTypes::SimpleTasked)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 
     py::enum_<FuseTypes>(m, "FuseTypes", py::arithmetic())
         .value("NoFuseL", FuseTypes::NoFuseL)
@@ -2740,7 +2743,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("allocate", &BatchGEMMSeq::allocate)
         .def("deallocate", &BatchGEMMSeq::deallocate)
         .def("simple_perform", &BatchGEMMSeq::simple_perform)
-        .def("auto_perform", &BatchGEMMSeq::auto_perform)
+        .def("auto_perform", &BatchGEMMSeq::auto_perform,
+             py::arg("v") = MatrixRef(nullptr, 0, 0))
         .def("perform", &BatchGEMMSeq::perform)
         .def("clear", &BatchGEMMSeq::clear)
         .def("__call__", &BatchGEMMSeq::operator())

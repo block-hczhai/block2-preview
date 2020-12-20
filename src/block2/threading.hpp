@@ -81,7 +81,24 @@ inline ThreadingTypes operator^(ThreadingTypes a, ThreadingTypes b) {
 // Auto:   DGEMM automatically divided into several batches
 //         (conflicts of output are automatically resolved by
 //         introducing temporary arrays)
-enum struct SeqTypes : uint8_t { None, Simple, Auto };
+// Tasked: DGEMM are collected and then performed in separate
+//         threads, the output will then be merged
+//         only useful for tensor_product_multiply
+enum struct SeqTypes : uint8_t {
+    None = 0,
+    Simple = 1,
+    Auto = 2,
+    Tasked = 4,
+    SimpleTasked = 5
+};
+
+inline bool operator&(SeqTypes a, SeqTypes b) {
+    return ((uint8_t)a & (uint8_t)b) != 0;
+}
+
+inline SeqTypes operator|(SeqTypes a, SeqTypes b) {
+    return SeqTypes((uint8_t)a | (uint8_t)b);
+}
 
 struct Threading {
     ThreadingTypes type;
@@ -141,10 +158,16 @@ struct Threading {
     string get_seq_type() const {
         if (seq_type == SeqTypes::Auto)
             return "Auto";
+        else if (seq_type == SeqTypes::Tasked)
+            return "Tasked";
+        else if (seq_type == SeqTypes::SimpleTasked)
+            return "SimpleTasked";
         else if (seq_type == SeqTypes::Simple)
             return "Simple";
-        else
+        else if (seq_type == SeqTypes::None)
             return "None";
+        else
+            return "???";
     }
     int get_thread_id() const {
 #ifdef _OPENMP

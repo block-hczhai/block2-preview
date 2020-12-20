@@ -35,7 +35,8 @@ namespace block2 {
 enum struct TensorFunctionsTypes : uint8_t {
     Normal = 0,
     Archived = 1,
-    Delayed = 2
+    Delayed = 2,
+    Parallel = 3
 };
 
 // Operations for operator tensors
@@ -48,6 +49,10 @@ template <typename S> struct TensorFunctions {
     }
     virtual shared_ptr<TensorFunctions<S>> copy() const {
         return make_shared<TensorFunctions<S>>(opf->copy());
+    }
+    virtual void operator()(const MatrixRef &b, const MatrixRef &c,
+                            double scale = 1.0) {
+        opf->seq->operator()(b, c, scale);
     }
     template <typename T> void serial_for(size_t n, T op) const {
         shared_ptr<TensorFunctions<S>> tf =
@@ -64,6 +69,7 @@ template <typename S> struct TensorFunctions {
                 op(tf, i);
         } else {
             vector<shared_ptr<TensorFunctions<S>>> tfs(1, tf);
+            vector<pair<size_t, size_t>> tf_sz(ntop + 1);
             for (int i = 1; i < ntop; i++) {
                 tfs.push_back(this->copy());
                 tfs[i]->opf->seq->cumulative_nflop = 0;
@@ -73,9 +79,36 @@ template <typename S> struct TensorFunctions {
                 int tid = threading->get_thread_id();
                 op(tfs[tid], i);
             }
-            for (int i = 1; i < ntop; i++)
+            tf_sz[1].first = opf->seq->batch[0]->gp.size();
+            tf_sz[1].second = opf->seq->batch[1]->gp.size();
+            for (int i = 1; i < ntop; i++) {
+                tf_sz[i + 1].first =
+                    tf_sz[i].first + tfs[i]->opf->seq->batch[0]->gp.size();
+                tf_sz[i + 1].second =
+                    tf_sz[i].second + tfs[i]->opf->seq->batch[1]->gp.size();
+                opf->seq->batch[0]->nflop += tfs[i]->opf->seq->batch[0]->nflop;
+                opf->seq->batch[1]->nflop += tfs[i]->opf->seq->batch[1]->nflop;
                 opf->seq->cumulative_nflop +=
                     tfs[i]->opf->seq->cumulative_nflop;
+                opf->seq->max_work =
+                    max(opf->seq->max_work, tfs[i]->opf->seq->max_work);
+            }
+            if (tf_sz[ntop].second != 0) {
+                if (tf_sz[ntop].first != 0)
+                    opf->seq->batch[0]->resize(tf_sz[ntop].first);
+                opf->seq->batch[1]->resize(tf_sz[ntop].second);
+#pragma omp parallel num_threads(ntop)
+                {
+                    int tid = threading->get_thread_id();
+                    if (tid != 0) {
+                        if (tf_sz[ntop].first != 0)
+                            opf->seq->batch[0]->copy_from(
+                                tf_sz[tid].first, tfs[tid]->opf->seq->batch[0]);
+                        opf->seq->batch[1]->copy_from(
+                            tf_sz[tid].second, tfs[tid]->opf->seq->batch[1]);
+                    }
+                }
+            }
         }
         threading->activate_normal();
     }
@@ -88,6 +121,12 @@ template <typename S> struct TensorFunctions {
     }
     template <typename T, typename SM>
     void parallel_reduce(size_t n, const shared_ptr<SM> &mat, T op) const {
+        if (opf->seq->mode == SeqTypes::Auto ||
+            (opf->seq->mode & SeqTypes::Tasked)) {
+            auto xop = [&mat, &op](const shared_ptr<TensorFunctions<S>> &tf,
+                                   size_t i) { op(tf, mat, i); };
+            return parallel_for(n, xop);
+        }
         shared_ptr<TensorFunctions<S>> tf =
             make_shared<TensorFunctions<S>>(*this);
         int ntop = threading->activate_operator();
@@ -558,6 +597,11 @@ template <typename S> struct TensorFunctions {
                     tf->tensor_product_diagonal(op->strings[i], lopt, ropt, mat,
                                                 opdq);
                 });
+            if (opf->seq->mode == SeqTypes::Auto)
+                opf->seq->auto_perform();
+            else if (opf->seq->mode & SeqTypes::Tasked)
+                opf->seq->auto_perform(
+                    MatrixRef(mat->data, mat->total_memory, 1));
         } break;
         case OpTypes::Zero:
             break;
@@ -613,7 +657,7 @@ template <typename S> struct TensorFunctions {
                         tmp,
                         rop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
                         op->ops[i]->factor, op->conjs[i]);
-                    if (opf->seq->mode == SeqTypes::Simple)
+                    if (opf->seq->mode & SeqTypes::Simple)
                         opf->seq->simple_perform();
                 }
             } else {
@@ -626,7 +670,7 @@ template <typename S> struct TensorFunctions {
                         tmp,
                         lop.at(abs_value((shared_ptr<OpExpr<S>>)op->ops[i])),
                         op->ops[i]->factor, op->conjs[i]);
-                    if (opf->seq->mode == SeqTypes::Simple)
+                    if (opf->seq->mode & SeqTypes::Simple)
                         opf->seq->simple_perform();
                 }
             }
@@ -746,7 +790,7 @@ template <typename S> struct TensorFunctions {
                                       ex->ops[k]->factor, ex->conjs[k]);
                     }
                 }
-                if (tf->opf->seq->mode == SeqTypes::Simple)
+                if (tf->opf->seq->mode & SeqTypes::Simple)
                     tf->opf->seq->simple_perform();
             }
         });
@@ -803,7 +847,7 @@ template <typename S> struct TensorFunctions {
                     tf->opf->iadd(trs[i].first, a->ops.at(nexpr),
                                   op->strings[j]->factor,
                                   op->strings[j]->conj != 0);
-                    if (tf->opf->seq->mode == SeqTypes::Simple)
+                    if (tf->opf->seq->mode & SeqTypes::Simple)
                         tf->opf->seq->simple_perform();
                 }
             });

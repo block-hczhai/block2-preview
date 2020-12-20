@@ -305,24 +305,52 @@ template <typename S> struct MPSInfo {
         bond_dim = m;
         // site state probabilities
         vector<shared_ptr<StateProbability<S>>> site_probs(n_sites);
+        assert(occ.size() == n_sites || occ.size() == n_sites * 2);
         for (int i = 0; i < n_sites; i++) {
-            double alpha_occ = occ[i];
-            if (bias != 1.0) {
-                if (alpha_occ > 1)
-                    alpha_occ = 1 + pow(alpha_occ - 1, bias);
-                else if (alpha_occ < 1)
-                    alpha_occ = 1 - pow(1 - alpha_occ, bias);
+            double alpha_occ, beta_occ;
+            if (occ.size() == n_sites) {
+                alpha_occ = occ[i];
+                if (bias != 1.0) {
+                    if (alpha_occ > 1)
+                        alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                    else if (alpha_occ < 1)
+                        alpha_occ = 1 - pow(1 - alpha_occ, bias);
+                }
+                alpha_occ /= 2;
+                beta_occ = alpha_occ;
+            } else {
+                alpha_occ = occ[2 * i] * 2, beta_occ = occ[2 * i + 1] * 2;
+                if (bias != 1.0) {
+                    if (alpha_occ > 1)
+                        alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                    else if (alpha_occ < 1)
+                        alpha_occ = 1 - pow(1 - alpha_occ, bias);
+                    if (beta_occ > 1)
+                        beta_occ = 1 + pow(beta_occ - 1, bias);
+                    else if (beta_occ < 1)
+                        beta_occ = 1 - pow(1 - beta_occ, bias);
+                }
+                alpha_occ /= 2;
+                beta_occ /= 2;
             }
-            alpha_occ /= 2;
             assert(0 <= alpha_occ && alpha_occ <= 1);
-            vector<double> probs = {(1 - alpha_occ) * (1 - alpha_occ),
-                                    (1 - alpha_occ) * alpha_occ,
-                                    alpha_occ * alpha_occ};
+            assert(0 <= beta_occ && beta_occ <= 1);
             site_probs[i] = make_shared<StateProbability<S>>();
             site_probs[i]->allocate(basis[i]->n);
             for (int j = 0; j < basis[i]->n; j++) {
                 site_probs[i]->quanta[j] = basis[i]->quanta[j];
-                site_probs[i]->probs[j] = probs[basis[i]->quanta[j].n()];
+                if (basis[i]->quanta[j].n() == 0)
+                    site_probs[i]->probs[j] = (1 - alpha_occ) * (1 - beta_occ);
+                else if (basis[i]->quanta[j].n() == 2)
+                    site_probs[i]->probs[j] = alpha_occ * beta_occ;
+                else if (basis[i]->quanta[j].n() == 1 &&
+                         basis[i]->quanta[j].twos() == 1)
+                    site_probs[i]->probs[j] = alpha_occ * (1 - beta_occ);
+                else if (basis[i]->quanta[j].n() == 1 &&
+                         basis[i]->quanta[j].twos() == -1)
+                    site_probs[i]->probs[j] = beta_occ * (1 - alpha_occ);
+                else
+                    assert(false);
             }
         }
         // left and right block probabilities

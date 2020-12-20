@@ -21,8 +21,8 @@ class TestDMRGN2STO3G : public ::testing::Test {
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
-            8);
-        threading_()->seq_type = SeqTypes::None;
+            1);
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {
