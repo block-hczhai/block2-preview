@@ -344,14 +344,37 @@ class GFDMRG:
         else:
             return np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
 
+    def save_gs_mps(self, save_dir='./gs_mps'):
+        import shutil
+        import pickle
+        import os
+        pickle.dump(self.gs_energy, open(self.scratch + '/GS_ENERGY', 'wb'))
+        for k in os.listdir(self.scratch):
+            if '.KET.' in k or 'GS_' in k:
+                shutil.copy(self.scratch + "/" + k, save_dir + "/" + k)
+
+    def load_gs_mps(self, load_dir='./gs_mps'):
+        import shutil
+        import pickle
+        import os
+        for k in os.listdir(load_dir):
+            shutil.copy(load_dir + "/" + k, self.scratch + "/" + k)
+        self.gs_energy = pickle.load(open(self.scratch + '/GS_ENERGY', 'rb'))
+
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
-                        eta, freqs, addition, cutoff=1E-14, diag_only=False, 
+                        eta, freqs, addition, cutoff=1E-14, diag_only=False,
                         alpha=True, occs=None, bias=1.0):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
         rmpos = [None] * len(idxs)
+
+        if self.mpo_orig is None:
+            mpo = MPOQC(self.hamil, QCTypes.Conventional)
+            mpo = SimplifiedMPO(mpo, RuleQC(), True, True,
+                                OpNamesSet((OpNames.R, OpNames.RD)))
+            self.mpo_orig = mpo
 
         mps_info = MPSInfo(0)
         mps_info.load_data(self.scratch + "/GS_MPS_INFO")
@@ -590,6 +613,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
+               load_dir=None, save_dir=None,
                lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
@@ -637,6 +661,9 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         cutoff : float64, lowest kept density matrix eigen value (default 1E-14)
             use smaller cutoff (e.g. 1E-20) when you need super accurate ground state energy
             noise smaller than cutoff will have no effect.
+        load_dir : if not None, skip ground-state calculation and load previous results
+        save_dir : if not None, save results to a separate dir after ground-state calculation
+            Note: one of load_dir and save_dir must be None
         mpi : if not None, MPI is used
 
     Returns:
@@ -644,6 +671,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
             GF matrix in the MO basis (for selected mo_orbs).
     '''
     from pyscf import lo, symm, ao2mo
+    assert load_dir is None or save_dir is None
 
     mol = mf.mol
 
@@ -706,10 +734,20 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
 
     dmrg = GFDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=mpi)
-    dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
-                          orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
-    dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
-              n_steps=gs_n_steps, conv_tol=gs_tol, occs=occs, bias=bias, cutoff=cutoff)
+    if load_dir is None:
+        save_fd = save_dir + "/GS_FCIDUMP" if save_dir is not None else None
+        dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
+                              orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e, save_fcidump=save_fd)
+        dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
+                  n_steps=gs_n_steps, conv_tol=gs_tol, occs=occs, bias=bias, cutoff=cutoff)
+        if save_dir is not None:
+            print('saving ground state ...')
+            dmrg.save_gs_mps(save_dir)
+    else:
+        dmrg.init_hamiltonian_fcidump(pg, load_dir + "/GS_FCIDUMP")
+        print('loading ground state ...')
+        dmrg.load_gs_mps(load_dir)
+
     pdm = dmrg.get_one_pdm()
     print('pdm = ', pdm)
     gf = 0
@@ -732,12 +770,17 @@ if __name__ == "__main__":
     hf_type = "RHF"  # RHF or UHF
     mpg = 'c1'  # point group: d2h or c1
     scratch = './tmp'
+    save_dir = './gs_mps'
+    load_dir = None
     lowdin = False
     do_ccsd = True
 
     import os
     if not os.path.isdir(scratch):
         os.mkdir(scratch)
+    if save_dir is not None:
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
     os.environ['TMPDIR'] = scratch
 
     from pyscf import gto, scf
@@ -771,7 +814,8 @@ if __name__ == "__main__":
             occs = np.diag(dmmo)
         else:
             # UHF: 0 <= occ <= 1, order: 0a, 0b, 1a, 1b, ..., len = n_mo * 2
-            occs = np.array([i for j in zip(np.diag(dmmo[0]), np.diag(dmmo[1])) for i in j])
+            occs = np.array(
+                [i for j in zip(np.diag(dmmo[0]), np.diag(dmmo[1])) for i in j])
         print('OCCS = ', occs)
     else:
         occs = None
@@ -809,6 +853,6 @@ if __name__ == "__main__":
                                 gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
-                                n_threads=n_threads, occs=occs, bias=1.0)
+                                n_threads=n_threads, occs=occs, bias=1.0, save_dir=save_dir, load_dir=load_dir)
         gfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
         print(gfmat)
