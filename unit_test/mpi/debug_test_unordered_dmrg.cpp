@@ -43,9 +43,9 @@ class TestDMRG : public ::testing::Test {
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 32, 32,
-            1);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2,
+            2, 1);
+        threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -104,6 +104,7 @@ TEST_F(TestDMRG, Test) {
 #endif
     shared_ptr<ParallelRule<SU2>> para_rule =
         make_shared<ParallelRuleQC<SU2>>(para_comm);
+    shared_ptr<ParallelRule<SU2>> mpo_rule = para_rule->split(2);
 
     Timer t;
     t.get_time();
@@ -119,6 +120,11 @@ TEST_F(TestDMRG, Test) {
         mpo, make_shared<RuleQC<SU2>>(), true, true,
         OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    // MPO parallelization
+    cout << "MPO parallelization start" << endl;
+    mpo = make_shared<ParallelMPO<SU2>>(mpo, mpo_rule);
+    cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
 
@@ -164,7 +170,8 @@ TEST_F(TestDMRG, Test) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    mps->conn_centers = vector<int>{13, 21, 27};
+    // mps->conn_centers = vector<int>{13, 21, 27};
+    mps->conn_centers = vector<int>{norb / 4, 2 * norb / 4, 3 * norb / 4};
 
     // ME
     shared_ptr<MovingEnvironment<SU2>> me =

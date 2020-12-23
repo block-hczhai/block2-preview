@@ -58,12 +58,22 @@ template <typename S> struct Partition {
         : left(other.left), right(other.right), middle(other.middle) {}
     void load_data(istream &ifs, bool left_part) {
         if (left_part) {
-            left = make_shared<OperatorTensor<S>>();
-            left->load_data(ifs, true);
+            uint8_t has_left;
+            ifs.read((char *)&has_left, sizeof(has_left));
+            if (has_left) {
+                left = make_shared<OperatorTensor<S>>();
+                left->load_data(ifs, true);
+            } else
+                left = nullptr;
             left_op_infos = Partition::load_op_infos(ifs);
         } else {
-            right = make_shared<OperatorTensor<S>>();
-            right->load_data(ifs, true);
+            uint8_t has_right;
+            ifs.read((char *)&has_right, sizeof(has_right));
+            if (has_right) {
+                right = make_shared<OperatorTensor<S>>();
+                right->load_data(ifs, true);
+            } else
+                right = nullptr;
             right_op_infos = Partition::load_op_infos(ifs);
         }
     }
@@ -80,10 +90,16 @@ template <typename S> struct Partition {
     }
     void save_data(ostream &ofs, bool left_part) const {
         if (left_part) {
-            left->save_data(ofs, true);
+            uint8_t has_left = left != nullptr;
+            ofs.write((char *)&has_left, sizeof(has_left));
+            if (has_left)
+                left->save_data(ofs, true);
             Partition::save_op_infos(left_op_infos, ofs);
         } else {
-            right->save_data(ofs, true);
+            uint8_t has_right = right != nullptr;
+            ofs.write((char *)&has_right, sizeof(has_right));
+            if (has_right)
+                right->save_data(ofs, true);
             Partition::save_op_infos(right_op_infos, ofs);
         }
     }

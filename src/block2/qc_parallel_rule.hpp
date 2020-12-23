@@ -33,6 +33,10 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                    ParallelCommTypes comm_type = ParallelCommTypes::None)
         : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRuleQC<S>>(r->comm, r->comm_type);
+    }
     static int find_index(uint16_t i, uint16_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
@@ -78,6 +82,10 @@ template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
         : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRuleNPDMQC<S>>(r->comm, r->comm_type);
+    }
     static uint64_t find_index(uint32_t i, uint32_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;

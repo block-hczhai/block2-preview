@@ -73,9 +73,10 @@ template <typename S> struct ParallelMPS : MPS<S> {
     void init_para_mps() {
         disable_parallel_writing();
         if (rule != nullptr) {
+            assert(rule->comm->size % rule->comm->gsize == 0);
             conn_centers.clear();
-            for (int i = 1; i < rule->comm->size; i++) {
-                int j = i * n_sites / rule->comm->size;
+            for (int i = 1; i < rule->comm->ngroup; i++) {
+                int j = i * n_sites / rule->comm->ngroup;
                 if (j < 2 || j > n_sites - 2 ||
                     (conn_centers.size() != 0 && j - conn_centers.back() < 2))
                     continue;
@@ -96,9 +97,10 @@ template <typename S> struct ParallelMPS : MPS<S> {
         if (rule == nullptr)
             return;
         vector<char> canonical_form_change(canonical_form.length(), 0);
-        for (size_t i = 0; i < canonical_form.length(); i++)
-            if (canonical_form[i] != ref_canonical_form[i])
-                canonical_form_change[i] = canonical_form[i];
+        if (rule == nullptr || rule->comm->grank == rule->comm->root)
+            for (size_t i = 0; i < canonical_form.length(); i++)
+                if (canonical_form[i] != ref_canonical_form[i])
+                    canonical_form_change[i] = canonical_form[i];
         rule->comm->allreduce_xor(canonical_form_change.data(),
                                   canonical_form_change.size());
         for (size_t i = 0; i < canonical_form.length(); i++)
@@ -108,20 +110,20 @@ template <typename S> struct ParallelMPS : MPS<S> {
     }
     void enable_parallel_writing() const {
         if (rule != nullptr) {
-            frame->prefix_distri = frame->prefix + Parsing::to_string(0);
-            frame->prefix_can_write = true;
-            frame->partition_can_write = true;
-            cout.clear();
+            frame->prefix_can_write = rule->comm->grank == rule->comm->root;
+            if (rule->comm->grank == rule->comm->root)
+                cout.clear();
+            else
+                cout.setstate(ios::failbit);
         }
     }
     void disable_parallel_writing() const {
         if (rule != nullptr) {
-            frame->prefix_distri = frame->prefix + Parsing::to_string(0);
-            if (rule->comm->rank != rule->comm->root) {
-                frame->prefix_can_write = false;
-                frame->partition_can_write = false;
+            frame->prefix_can_write = rule->comm->rank == rule->comm->root;
+            if (rule->comm->rank == rule->comm->root)
+                cout.clear();
+            else
                 cout.setstate(ios::failbit);
-            }
         }
     }
     // K|S -> L|S

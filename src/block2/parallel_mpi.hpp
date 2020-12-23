@@ -77,6 +77,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     using ParallelCommunicator<S>::size;
     using ParallelCommunicator<S>::rank;
     using ParallelCommunicator<S>::root;
+    using ParallelCommunicator<S>::group;
     using ParallelCommunicator<S>::para_type;
     using ParallelCommunicator<S>::tcomm;
     using ParallelCommunicator<S>::tidle;
@@ -84,13 +85,42 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     Timer _t;
     const size_t chunk_size = 1 << 30;
     vector<MPI_Request> reqs;
+    MPI_Comm comm;
     MPICommunicator(int root = 0)
         : ParallelCommunicator<S>(MPI::size(), MPI::rank(), root) {
         para_type = ParallelTypes::Distributed;
+        comm = MPI_COMM_WORLD;
+    }
+    MPICommunicator(MPI_Comm comm, int size, int rank, int root = 0)
+        : ParallelCommunicator<S>(size, rank, root), comm(comm) {
+        para_type = ParallelTypes::Distributed;
+    }
+    ~MPICommunicator() override {
+        if (comm != MPI_COMM_WORLD && comm != MPI_COMM_NULL) {
+            int ierr = MPI_Comm_free(&comm);
+            assert(ierr == 0);
+        }
+    }
+    shared_ptr<ParallelCommunicator<S>> split(int igroup, int irank) override {
+        MPI_Comm icomm;
+        int jrank, isize, ierr;
+        ierr = MPI_Comm_split(comm, igroup == -1 ? MPI_UNDEFINED : igroup,
+                              irank, &icomm);
+        assert(ierr == 0);
+        if (igroup != -1) {
+            ierr = MPI_Comm_rank(icomm, &jrank);
+            assert(ierr == 0);
+            ierr = MPI_Comm_size(icomm, &isize);
+            assert(ierr == 0);
+        } else
+            isize = irank = -1;
+        return make_shared<MPICommunicator<S>>(icomm, isize, jrank);
     }
     void barrier() override {
+        if (comm == MPI_COMM_NULL)
+            return;
         _t.get_time();
-        int ierr = MPI_Barrier(MPI_COMM_WORLD);
+        int ierr = MPI_Barrier(comm);
         assert(ierr == 0);
         tidle += _t.get_time();
     }
@@ -98,7 +128,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             int ierr = MPI_Bcast(data + offset, min(chunk_size, len - offset),
-                                 MPI_DOUBLE, owner, MPI_COMM_WORLD);
+                                 MPI_DOUBLE, owner, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
@@ -108,7 +138,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             MPI_Request req;
             int ierr = MPI_Ibcast(data + offset, min(chunk_size, len - offset),
-                                  MPI_DOUBLE, owner, MPI_COMM_WORLD, &req);
+                                  MPI_DOUBLE, owner, comm, &req);
             assert(ierr == 0);
             reqs.push_back(req);
         }
@@ -116,13 +146,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void broadcast(int *data, size_t len, int owner) override {
         _t.get_time();
-        int ierr = MPI_Bcast(data, len, MPI_INT, owner, MPI_COMM_WORLD);
+        int ierr = MPI_Bcast(data, len, MPI_INT, owner, comm);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
     void broadcast(long long int *data, size_t len, int owner) override {
         _t.get_time();
-        int ierr = MPI_Bcast(data, len, MPI_LONG_LONG, owner, MPI_COMM_WORLD);
+        int ierr = MPI_Bcast(data, len, MPI_LONG_LONG, owner, comm);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
@@ -144,8 +174,8 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             vector<int> nnzs(mat->info->n);
             for (int i = 0; i < mat->info->n; i++)
                 nnzs[i] = cmat->csr_data[i]->nnz;
-            int ierr = MPI_Bcast(nnzs.data(), mat->total_memory, MPI_INT, owner,
-                                 MPI_COMM_WORLD);
+            int ierr =
+                MPI_Bcast(nnzs.data(), mat->total_memory, MPI_INT, owner, comm);
             assert(ierr == 0);
             size_t dsize = 0, dp = 0;
             for (int i = 0; i < mat->info->n; i++) {
@@ -167,8 +197,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                            sizeof(double) * cmat->csr_data[i]->memory_size());
                     dp += cmat->csr_data[i]->memory_size();
                 }
-            ierr = MPI_Bcast(dt.data(), dt.size(), MPI_DOUBLE, owner,
-                             MPI_COMM_WORLD);
+            ierr = MPI_Bcast(dt.data(), dt.size(), MPI_DOUBLE, owner, comm);
             assert(ierr == 0);
             dp = 0;
             if (rank != owner) {
@@ -194,20 +223,36 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
                                      min(chunk_size, len - offset), MPI_DOUBLE,
-                                     MPI_SUM, MPI_COMM_WORLD);
+                                     MPI_SUM, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
+    }
+    void allreduce_max(double *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_DOUBLE,
+                                     MPI_MAX, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void allreduce_max(vector<double> &vs) override {
+        allreduce_max(vs.data(), vs.size());
     }
     void allreduce_min(double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
                                      min(chunk_size, len - offset), MPI_DOUBLE,
-                                     MPI_MIN, MPI_COMM_WORLD);
+                                     MPI_MIN, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
+    }
+    void allreduce_min(vector<double> &vs) override {
+        allreduce_min(vs.data(), vs.size());
     }
     void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
         allreduce_sum(mat->data, mat->total_memory);
@@ -215,9 +260,6 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) override {
         assert(mat->get_type() == SparseMatrixTypes::Normal);
         allreduce_sum(mat->data, mat->total_memory);
-    }
-    void allreduce_min(vector<double> &vs) override {
-        allreduce_min(vs.data(), vs.size());
     }
     void allreduce_min(vector<vector<double>> &vs) override {
         vector<double> vx;
@@ -232,13 +274,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void allreduce_sum(vector<S> &vs) override {
         _t.get_time();
         uint32_t sz = (uint32_t)vs.size(), maxsz;
-        int ierr = MPI_Allreduce(&sz, &maxsz, 1, MPI_UINT32_T, MPI_MAX,
-                                 MPI_COMM_WORLD);
+        int ierr = MPI_Allreduce(&sz, &maxsz, 1, MPI_UINT32_T, MPI_MAX, comm);
         assert(ierr == 0);
         vector<S> vsrecv(maxsz * size);
         vs.resize(maxsz, S(S::invalid));
         ierr = MPI_Allgather(vs.data(), maxsz, MPI_UINT32_T, vsrecv.data(),
-                             maxsz, MPI_UINT32_T, MPI_COMM_WORLD);
+                             maxsz, MPI_UINT32_T, comm);
         assert(ierr == 0);
         vsrecv.resize(
             distance(vsrecv.begin(),
@@ -248,15 +289,15 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void allreduce_logical_or(bool &v) override {
         _t.get_time();
-        int ierr = MPI_Allreduce(MPI_IN_PLACE, &v, 1, MPI_C_BOOL, MPI_LOR,
-                                 MPI_COMM_WORLD);
+        int ierr =
+            MPI_Allreduce(MPI_IN_PLACE, &v, 1, MPI_C_BOOL, MPI_LOR, comm);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
     void allreduce_xor(char *data, size_t len) override {
         _t.get_time();
-        int ierr = MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_CHAR, MPI_BXOR,
-                                 MPI_COMM_WORLD);
+        int ierr =
+            MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_CHAR, MPI_BXOR, comm);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
@@ -265,7 +306,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data + offset,
                                   data + offset, min(chunk_size, len - offset),
-                                  MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD);
+                                  MPI_DOUBLE, MPI_SUM, owner, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
@@ -274,10 +315,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
             MPI_Request req;
-            int ierr =
-                MPI_Ireduce(rank == owner ? MPI_IN_PLACE : data + offset,
-                            data + offset, min(chunk_size, len - offset),
-                            MPI_DOUBLE, MPI_SUM, owner, MPI_COMM_WORLD, &req);
+            int ierr = MPI_Ireduce(rank == owner ? MPI_IN_PLACE : data + offset,
+                                   data + offset, min(chunk_size, len - offset),
+                                   MPI_DOUBLE, MPI_SUM, owner, comm, &req);
             assert(ierr == 0);
             reqs.push_back(req);
         }
@@ -286,7 +326,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void reduce_sum(uint64_t *data, size_t len, int owner) override {
         _t.get_time();
         int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
-                              MPI_UINT64_T, MPI_SUM, owner, MPI_COMM_WORLD);
+                              MPI_UINT64_T, MPI_SUM, owner, comm);
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
@@ -320,7 +360,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                 nnzs[i] = cmat->csr_data[i]->nnz;
             int ierr =
                 MPI_Gather(nnzs.data(), mat->info->n, MPI_INT, gnnzs.data(),
-                           mat->info->n, MPI_INT, owner, MPI_COMM_WORLD);
+                           mat->info->n, MPI_INT, owner, comm);
             assert(ierr == 0);
             if (rank == owner) {
                 dz.resize(size, 0);
@@ -337,8 +377,8 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                         dz[k] += tmp->csr_data[i]->memory_size();
                     }
                     dt.resize(dz[k]);
-                    ierr = MPI_Recv(dt.data(), dz[k], MPI_DOUBLE, k, 11,
-                                    MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    ierr = MPI_Recv(dt.data(), dz[k], MPI_DOUBLE, k, 11, comm,
+                                    MPI_STATUS_IGNORE);
                     assert(ierr == 0);
                     dp = 0;
                     for (int i = 0, dp = 0; i < mat->info->n; i++) {
@@ -365,8 +405,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                     dp += cmat->csr_data[i]->memory_size();
                 }
                 assert(dp == dsz);
-                ierr = MPI_Send(dt.data(), dsz, MPI_DOUBLE, owner, 11,
-                                MPI_COMM_WORLD);
+                ierr = MPI_Send(dt.data(), dsz, MPI_DOUBLE, owner, 11, comm);
                 assert(ierr == 0);
             }
             tcomm += _t.get_time();

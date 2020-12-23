@@ -315,12 +315,11 @@ template <typename S> struct MovingEnvironment {
         if (rule == nullptr || rule->is_root()) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
-            if (envs[i - 1]->left != nullptr) {
+            frame->activate(1);
+            envs[i - 1]->load_data(true,
+                                   get_left_partition_filename(i - 1, true));
+            if (envs[i - 1]->left != nullptr)
                 frame->load_data(1, get_left_partition_filename(i - 1));
-                frame->activate(1);
-                envs[i - 1]->load_data(
-                    true, get_left_partition_filename(i - 1, true));
-            }
             left_contract_rotate(i);
         }
         if (rule != nullptr)
@@ -338,12 +337,11 @@ template <typename S> struct MovingEnvironment {
         if (rule == nullptr || rule->is_root()) {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
-            if (envs[i + 1]->right != nullptr) {
+            frame->activate(1);
+            envs[i + 1]->load_data(false,
+                                   get_right_partition_filename(i + 1, true));
+            if (envs[i + 1]->right != nullptr)
                 frame->load_data(1, get_right_partition_filename(i + 1));
-                frame->activate(1);
-                envs[i + 1]->load_data(
-                    false, get_right_partition_filename(i + 1, true));
-            }
             right_contract_rotate(i);
         }
         if (rule != nullptr)
@@ -515,6 +513,152 @@ template <typename S> struct MovingEnvironment {
         shallow_copy_to(me);
         return me;
     }
+    virtual void init_parallel_environments(
+        int pi, int pj,
+        const shared_ptr<ParallelCommunicator<S>> &pcomm = nullptr,
+        bool init = false) {
+        assert(pj >= pi + 2 && pi % 2 == 0);
+        assert(ket->get_type() & MPSTypes::MultiCenter);
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
+        int pm = (pi + pj) / 2;
+        if (pm % 2 != 0 && !(pj == pi + 2))
+            pm++;
+        if (para_mps->center ==
+            (pi == 0 ? 0 : para_mps->conn_centers[pi - 1])) {
+            // SRRR -> LLSR
+            if (para_mps->rule == nullptr ||
+                para_mps->rule->comm->group ==
+                    pi % para_mps->rule->comm->ngroup) {
+                while (para_mps->center != para_mps->conn_centers[pm - 1]) {
+                    para_mps->move_right(cg, para_rule);
+                    check_signal_()();
+                    if (iprint)
+                        cout << "init .. L = " << para_mps->center << endl;
+                    left_contract_rotate_unordered(para_mps->center);
+                }
+            }
+            if ((para_mps->rule == nullptr ||
+                 para_mps->rule->comm->group ==
+                     pm % para_mps->rule->comm->ngroup) &&
+                init) {
+                for (int i = n_sites - dot - 1;
+                     i > para_mps->conn_centers[pm - 1] - para_mps->dot; i--) {
+                    check_signal_()();
+                    if (iprint)
+                        cout << "init .. R = " << i << endl;
+                    right_contract_rotate_unordered(i);
+                }
+            }
+        } else {
+            // LLLK -> LLKR -> LLSR
+            if ((para_mps->rule == nullptr ||
+                 para_mps->rule->comm->group ==
+                     pi % para_mps->rule->comm->ngroup) &&
+                init) {
+                for (int i = 1; i <= para_mps->conn_centers[pm - 1]; i++) {
+                    check_signal_()();
+                    if (iprint)
+                        cout << "init .. L = " << para_mps->center << endl;
+                    left_contract_rotate_unordered(i);
+                }
+            }
+            if (para_mps->rule == nullptr ||
+                para_mps->rule->comm->group ==
+                    pm % para_mps->rule->comm->ngroup) {
+                while (para_mps->center != para_mps->conn_centers[pm - 1]) {
+                    para_mps->move_left(cg, para_rule);
+                    check_signal_()();
+                    if (iprint)
+                        cout << "init .. R = "
+                             << para_mps->center - para_mps->dot + 1 << endl;
+                    right_contract_rotate_unordered(para_mps->center -
+                                                    para_mps->dot + 1);
+                }
+                para_mps->flip_fused_form(para_mps->center, cg, para_rule);
+            }
+        }
+        for (int i = (pi == 0 ? 0 : para_mps->conn_centers[pi - 1]);
+             i < (pj == para_mps->ncenter + 1 ? n_sites
+                                              : para_mps->conn_centers[pj - 1]);
+             i++) {
+            if (para_mps->tensors[i] == nullptr)
+                para_mps->tensors[i] = make_shared<SparseMatrix<S>>();
+            if (i == para_mps->conn_centers[pm - 1])
+                para_mps->canonical_form[i] = 'S';
+            else if (i < para_mps->conn_centers[pm - 1])
+                para_mps->canonical_form[i] = 'L';
+            else
+                para_mps->canonical_form[i] = 'R';
+        }
+        if (pcomm != nullptr)
+            pcomm->barrier();
+        // LLSR -> LKSR
+        if (para_mps->rule == nullptr ||
+            para_mps->rule->comm->group == pi % para_mps->rule->comm->ngroup) {
+            para_mps->center = para_mps->conn_centers[pm - 1];
+            auto rmat = para_mps->para_split(pm - 1, para_rule);
+            check_signal_()();
+            if (iprint)
+                cout << "init .. R = " << para_mps->center - para_mps->dot
+                     << endl;
+            right_contract_rotate_unordered(para_mps->center - para_mps->dot);
+            if (para_rule == nullptr || para_rule->is_root()) {
+                para_mps->tensors[para_mps->center] = rmat;
+                para_mps->save_tensor(para_mps->center);
+            }
+            if (para_rule != nullptr)
+                para_rule->comm->barrier();
+        }
+        para_mps->canonical_form[para_mps->conn_centers[pm - 1] - 1] = 'K';
+        shared_ptr<ParallelCommunicator<S>> lpcomm = nullptr, rpcomm = nullptr;
+        if (pcomm != nullptr) {
+            if (pj - pi > para_mps->rule->comm->ngroup)
+                lpcomm = pcomm, rpcomm = pcomm;
+            else {
+                int second = 0;
+                for (int px = pm; px < pj; px++)
+                    if (para_mps->rule->comm->group ==
+                        px % para_mps->rule->comm->ngroup)
+                        second = 1;
+                shared_ptr<ParallelCommunicator<S>> ppcomm =
+                    pcomm->split(second, pcomm->rank);
+                lpcomm = second == 0 ? ppcomm : nullptr;
+                rpcomm = second == 1 ? ppcomm : nullptr;
+            }
+        }
+        if (pm > pi + 1) {
+            para_mps->center = para_mps->conn_centers[pm - 1] - 1;
+            init_parallel_environments(pi, pm, lpcomm);
+        }
+        if (pj > pm + 1) {
+            para_mps->center = para_mps->conn_centers[pm - 1];
+            init_parallel_environments(pm, pj, rpcomm);
+        } else if (pm % 2 == 0) {
+            para_mps->center = para_mps->conn_centers[pm - 1];
+            int j = pj == para_mps->ncenter + 1
+                        ? n_sites - 1
+                        : para_mps->conn_centers[pj - 1] - 1;
+            // SRRR -> LLLS
+            if (para_mps->rule == nullptr ||
+                para_mps->rule->comm->group ==
+                    pm % para_mps->rule->comm->ngroup) {
+                while (para_mps->center != j) {
+                    para_mps->move_right(cg, para_rule);
+                    check_signal_()();
+                    if (iprint)
+                        cout << "init .. L = " << para_mps->center << endl;
+                    left_contract_rotate_unordered(para_mps->center);
+                }
+            }
+            cout << para_mps->canonical_form << endl;
+            for (int i = para_mps->conn_centers[pm - 1]; i < j; i++)
+                para_mps->canonical_form[i] = 'L';
+            para_mps->canonical_form[j] = 'S';
+            cout << para_mps->canonical_form << endl;
+        }
+    }
     // Generate contracted environment blocks for all center sites
     virtual void init_environments(bool iprint = false) {
         this->iprint = iprint;
@@ -526,8 +670,46 @@ template <typename S> struct MovingEnvironment {
             if (i != n_sites - 1 && dot == 2)
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
-        if (bra->info->get_warm_up_type() == WarmUpTypes::None &&
-            ket->info->get_warm_up_type() == WarmUpTypes::None) {
+        if (ket->get_type() & MPSTypes::MultiCenter) {
+            shared_ptr<ParallelMPS<S>> para_mps =
+                dynamic_pointer_cast<ParallelMPS<S>>(ket);
+            para_mps->enable_parallel_writing();
+            if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) {
+                frame->activate(1);
+                for (int i = 0; i < n_sites; i++) {
+                    envs[i]->save_data(true,
+                                       get_left_partition_filename(i, true));
+                    envs[i]->save_data(false,
+                                       get_right_partition_filename(i, true));
+                }
+                frame->activate(0);
+            }
+            if (para_mps->rule != nullptr)
+                para_mps->rule->comm->barrier();
+            assert(para_mps->conn_centers.size() != 0);
+            para_mps->ncenter = para_mps->conn_centers.size();
+            para_mps->conn_matrices.resize(para_mps->ncenter);
+            for (int i = 0; i < para_mps->ncenter; i++)
+                para_mps->conn_matrices[i] = make_shared<SparseMatrix<S>>();
+            init_parallel_environments(
+                0, para_mps->ncenter + 1,
+                para_mps->rule == nullptr ? nullptr : para_mps->rule->comm,
+                true);
+            if (para_mps->rule != nullptr)
+                para_mps->rule->comm->barrier();
+            if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)
+                para_mps->save_data();
+            frame->activate(1);
+            for (int i = 0; i < n_sites; i++) {
+                envs[i]->load_data(true, get_left_partition_filename(i, true));
+                envs[i]->load_data(false,
+                                   get_right_partition_filename(i, true));
+            }
+            frame->activate(0);
+            // outside code may have cout
+            para_mps->disable_parallel_writing();
+        } else if (bra->info->get_warm_up_type() == WarmUpTypes::None &&
+                   ket->info->get_warm_up_type() == WarmUpTypes::None) {
             for (int i = 1; i <= center; i++) {
                 check_signal_()();
                 if (iprint)
@@ -548,6 +730,14 @@ template <typename S> struct MovingEnvironment {
         tctr = trot = tmid = tint = tdctr = tdiag = tinfo = 0;
         // in unordered sweep, same-site contraction may not be identical
         cached_info = make_pair(OpCachingTypes::None, -1);
+        frame->activate(1);
+        // when conn center can change dynamically,
+        // partition info in the middle also needs reloading
+        for (int i = a; i <= b - dot; i++) {
+            envs[i]->load_data(true, get_left_partition_filename(i, true));
+            envs[i]->load_data(false, get_right_partition_filename(i, true));
+        }
+        frame->activate(0);
         for (int i = b - dot; i > center; i--) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
@@ -556,13 +746,6 @@ template <typename S> struct MovingEnvironment {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
         }
-        frame->activate(1);
-        if (envs[a]->left != nullptr)
-            envs[a]->load_data(true, get_left_partition_filename(a, true));
-        if (envs[b - dot]->right != nullptr)
-            envs[b - dot]->load_data(
-                false, get_right_partition_filename(b - dot, true));
-        frame->activate(0);
     }
     // Remove old environment for starting a new sweep
     void prepare() {

@@ -36,14 +36,19 @@ enum ParallelOpTypes : uint8_t {
 };
 
 template <typename S> struct ParallelCommunicator {
-    int size, rank, root;
+    int size, rank, root, group, grank, gsize, ngroup;
     ParallelTypes para_type = ParallelTypes::Serial;
     double tcomm = 0.0, tidle = 0.0, twait = 0.0; // Runtime for communication
-    ParallelCommunicator() : size(1), rank(0), root(0) {}
+    ParallelCommunicator()
+        : size(1), rank(0), root(0), group(0), grank(0), gsize(1), ngroup(1) {}
     ParallelCommunicator(int size, int rank, int root)
-        : size(size), rank(rank), root(root) {}
+        : size(size), rank(rank), root(root), group(0), grank(rank), gsize(size), ngroup(1) {}
     virtual ~ParallelCommunicator() = default;
     ParallelTypes get_parallel_type() const { return para_type; }
+    virtual shared_ptr<ParallelCommunicator<S>> split(int igroup, int irank) {
+        assert(false);
+        return nullptr;
+    }
     virtual void barrier() { assert(size == 1); }
     virtual void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
         assert(size == 1);
@@ -77,6 +82,8 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void allreduce_min(vector<double> &vs) { assert(size == 1); }
+    virtual void allreduce_max(double *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_max(vector<double> &vs) { assert(size == 1); }
     virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat,
                             int owner) {
         assert(size == 1);
@@ -109,10 +116,7 @@ struct ParallelProperty {
         : owner(owner), ptype(ptype) {}
 };
 
-enum struct ParallelCommTypes : uint8_t {
-    None = 0,
-    NonBlocking = 1
-};
+enum struct ParallelCommTypes : uint8_t { None = 0, NonBlocking = 1 };
 
 inline bool operator&(ParallelCommTypes a, ParallelCommTypes b) {
     return ((uint8_t)a & (uint8_t)b) != 0;
@@ -131,12 +135,21 @@ template <typename S> struct ParallelRule {
         : comm(comm), comm_type(comm_type) {
         assert(frame != nullptr);
         frame->prefix_distri = frame->prefix + Parsing::to_string(comm->rank);
-        if (comm->rank != comm->root)
-            frame->prefix_can_write = false;
+        frame->prefix_can_write = comm->rank == comm->root;
     }
     virtual ~ParallelRule() = default;
     ParallelTypes get_parallel_type() const {
         return comm->get_parallel_type();
+    }
+    virtual shared_ptr<ParallelRule<S>> split(int gsize) const {
+        int igroup = comm->rank / gsize, irank = comm->rank % gsize;
+        assert(comm->size % gsize == 0);
+        comm->ngroup = comm->size / gsize;
+        comm->gsize = gsize;
+        comm->group = igroup;
+        comm->grank = irank;
+        return make_shared<ParallelRule<S>>(comm->split(igroup, irank),
+                                            comm_type);
     }
     virtual ParallelProperty
     operator()(const shared_ptr<OpElement<S>> &op) const {
