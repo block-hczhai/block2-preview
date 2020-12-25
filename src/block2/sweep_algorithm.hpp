@@ -1056,6 +1056,10 @@ template <typename S> struct DMRG {
             }
             auto rmat = para_mps->para_split(ip, me->para_rule); // KR
             me->right_contract_rotate_unordered(me->center - 1);
+            // if root proc saves tensor too early, 
+            // right_contract_rotate in other proc will have problems
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 para_mps->tensors[me->center + 1] = rmat;
                 para_mps->save_tensor(me->center + 1); // KS
@@ -1304,10 +1308,6 @@ template <typename S> struct DMRG {
                 break;
         }
         this->forward = forward;
-        if (para_mps != nullptr) {
-            me->serialize_mps();
-            para_mps->save_data();
-        }
         if (!converged && iprint > 0 && tol != 0)
             cout << "ATTENTION: DMRG is not converged to desired tolerance of "
                  << scientific << tol << endl;

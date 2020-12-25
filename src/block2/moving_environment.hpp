@@ -513,6 +513,158 @@ template <typename S> struct MovingEnvironment {
         shallow_copy_to(me);
         return me;
     }
+    virtual void finalize_environments() {
+        if (!(ket->get_type() & MPSTypes::MultiCenter))
+            return;
+        shared_ptr<ParallelMPS<S>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
+        assert(para_mps->conn_matrices.size() != 0);
+        para_mps->enable_parallel_writing();
+        if (para_mps->rule != nullptr)
+            para_mps->rule->comm->barrier();
+        if (para_mps->canonical_form[para_mps->n_sites - 1] == 'C')
+            para_mps->canonical_form[para_mps->n_sites - 1] = 'S';
+        else if (para_mps->canonical_form[para_mps->n_sites - 1] == 'K') {
+            if (para_mps->rule == nullptr ||
+                para_mps->rule->comm->group ==
+                    para_mps->ncenter % para_mps->rule->comm->ngroup)
+                para_mps->flip_fused_form(para_mps->n_sites - 1, cg, para_rule);
+            para_mps->canonical_form[para_mps->n_sites - 1] = 'S';
+        }
+        if (para_mps->canonical_form[0] == 'C')
+            para_mps->canonical_form[0] = 'K';
+        else if (para_mps->canonical_form[0] == 'S') {
+            if (para_mps->rule == nullptr ||
+                para_mps->rule->comm->group == 0 % para_mps->rule->comm->ngroup)
+                para_mps->flip_fused_form(0, cg, para_rule);
+            para_mps->canonical_form[0] = 'K';
+        }
+        vector<int> conn_idxs(para_mps->ncenter);
+        for (int i = 0; i < para_mps->ncenter; i++)
+            conn_idxs[i] = i;
+        while (conn_idxs.size() != 0) {
+            if (para_mps->rule != nullptr)
+                para_mps->rule->comm->barrier();
+            vector<int> new_conn_idxs;
+            bool l_form = false;
+            bool last_rev =
+                para_mps->canonical_form[para_mps->n_sites - 1] == 'S';
+            if (para_mps->canonical_form[0] == 'K') {
+                int ip = conn_idxs[0];
+                l_form = !l_form;
+                if (para_mps->rule == nullptr ||
+                    para_mps->rule->comm->group ==
+                        0 % para_mps->rule->comm->ngroup) {
+                    para_mps->center = 0;
+                    while (para_mps->center != para_mps->conn_centers[ip] - 1) {
+                        para_mps->move_right(cg, para_rule);
+                        check_signal_()();
+                        left_contract_rotate_unordered(para_mps->center);
+                    }
+                }
+                for (int i = 0; i < para_mps->conn_centers[ip] - 1; i++)
+                    para_mps->canonical_form[i] = 'L';
+                para_mps->canonical_form[para_mps->conn_centers[ip] - 1] = 'S';
+            }
+            for (int ipx = 0; ipx < (int)conn_idxs.size(); ipx++) {
+                int ip = conn_idxs[ipx];
+                if (para_mps->canonical_form[para_mps->conn_centers[ip]] !=
+                        'L' &&
+                    para_mps->canonical_form[para_mps->conn_centers[ip]] !=
+                        'R') {
+                    l_form = !l_form;
+                    int pj =
+                        ipx == (int)conn_idxs.size() - 1
+                            ? n_sites - 1
+                            : para_mps->conn_centers[conn_idxs[ipx + 1]] - 1;
+                    int pi = ipx == 0
+                                 ? 0
+                                 : para_mps->conn_centers[conn_idxs[ipx - 1]];
+                    if (para_mps->rule == nullptr ||
+                        para_mps->rule->comm->group ==
+                            (ip + 1) % para_mps->rule->comm->ngroup) {
+                        center = para_mps->conn_centers[ip] - 1;
+                        if (para_mps->canonical_form[center] == 'C' &&
+                            para_mps->canonical_form[center + 1] == 'C')
+                            para_mps->canonical_form[center] = 'K',
+                            para_mps->canonical_form[center + 1] = 'S';
+                        else if (para_mps->canonical_form[center] == 'S' &&
+                                 para_mps->canonical_form[center + 1] == 'K') {
+                            para_mps->flip_fused_form(center, cg, para_rule);
+                            para_mps->flip_fused_form(center + 1, cg,
+                                                      para_rule);
+                        }
+                        assert(para_mps->canonical_form[center] == 'K' &&
+                               para_mps->canonical_form[center + 1] == 'S');
+                        para_mps->para_merge(ip, para_rule); // LS
+                        para_mps->center = para_mps->conn_centers[ip];
+                        if (l_form) {
+                            para_mps->move_left(cg, para_rule);
+                            para_mps->move_right(cg, para_rule);
+                            left_contract_rotate_unordered(para_mps->center);
+                            while (para_mps->center != pj) {
+                                para_mps->move_right(cg, para_rule);
+                                check_signal_()();
+                                left_contract_rotate_unordered(
+                                    para_mps->center);
+                            }
+                        } else
+                            while (para_mps->center != pi) {
+                                para_mps->move_left(cg, para_rule);
+                                check_signal_()();
+                                right_contract_rotate_unordered(
+                                    para_mps->center - para_mps->dot + 1);
+                            }
+                    }
+                    for (int i = pi; i <= pj; i++)
+                        para_mps->canonical_form[i] = l_form ? 'L' : 'R';
+                    if (l_form)
+                        para_mps->canonical_form[pj] = 'S';
+                    else
+                        para_mps->canonical_form[pi] = 'K';
+                } else
+                    new_conn_idxs.push_back(ip);
+            }
+            if (last_rev && l_form) {
+                int ip = conn_idxs[conn_idxs.size() - 1];
+                l_form = !l_form;
+                if (para_mps->rule == nullptr ||
+                    para_mps->rule->comm->group ==
+                        para_mps->ncenter % para_mps->rule->comm->ngroup) {
+                    para_mps->center = para_mps->n_sites - 1;
+                    while (para_mps->center != para_mps->conn_centers[ip]) {
+                        para_mps->move_left(cg, para_rule);
+                        check_signal_()();
+                        right_contract_rotate_unordered(para_mps->center -
+                                                        para_mps->dot + 1);
+                    }
+                }
+                for (int i = para_mps->conn_centers[ip] + 1; i < n_sites; i++)
+                    para_mps->canonical_form[i] = 'R';
+                para_mps->canonical_form[para_mps->conn_centers[ip]] = 'K';
+            }
+            conn_idxs = new_conn_idxs;
+        }
+        para_mps->conn_matrices.clear();
+        para_mps->conn_centers.clear();
+        para_mps->ncenter = 0;
+        // for two-site
+        para_mps->center = para_mps->n_sites - 2;
+        center = para_mps->center;
+        if (para_mps->rule != nullptr)
+            para_mps->rule->comm->barrier();
+        if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)
+            para_mps->save_data();
+        frame->activate(1);
+        for (int i = 0; i < n_sites; i++) {
+            envs[i]->load_data(true, get_left_partition_filename(i, true));
+            envs[i]->load_data(false, get_right_partition_filename(i, true));
+        }
+        frame->activate(0);
+        // outside code may have cout
+        para_mps->disable_parallel_writing();
+    }
     virtual void init_parallel_environments(
         int pi, int pj,
         const shared_ptr<ParallelCommunicator<S>> &pcomm = nullptr,
@@ -604,6 +756,8 @@ template <typename S> struct MovingEnvironment {
                 cout << "init .. R = " << para_mps->center - para_mps->dot
                      << endl;
             right_contract_rotate_unordered(para_mps->center - para_mps->dot);
+            if (para_rule != nullptr)
+                para_rule->comm->barrier();
             if (para_rule == nullptr || para_rule->is_root()) {
                 para_mps->tensors[para_mps->center] = rmat;
                 para_mps->save_tensor(para_mps->center);
@@ -652,11 +806,9 @@ template <typename S> struct MovingEnvironment {
                     left_contract_rotate_unordered(para_mps->center);
                 }
             }
-            cout << para_mps->canonical_form << endl;
             for (int i = para_mps->conn_centers[pm - 1]; i < j; i++)
                 para_mps->canonical_form[i] = 'L';
             para_mps->canonical_form[j] = 'S';
-            cout << para_mps->canonical_form << endl;
         }
     }
     // Generate contracted environment blocks for all center sites
@@ -695,6 +847,7 @@ template <typename S> struct MovingEnvironment {
                 0, para_mps->ncenter + 1,
                 para_mps->rule == nullptr ? nullptr : para_mps->rule->comm,
                 true);
+            para_mps->center = para_mps->conn_centers[0];
             if (para_mps->rule != nullptr)
                 para_mps->rule->comm->barrier();
             if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)

@@ -105,13 +105,15 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
             EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
 
+            me->finalize_environments();
+
             me->bra = me->ket = make_shared<MPS<S>>(*pmps);
 
             dmrg = make_shared<DMRG<S>>(me, bdims, no_noises);
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
-            energy = dmrg->solve(1, mps->center == 0, 1E-8);
+            energy = dmrg->solve(1, pmps->center == 0, 1E-8);
 
             cout << "== SER " << name << " ==" << setw(20) << target
                  << " E = " << fixed << setw(22) << setprecision(12) << energy

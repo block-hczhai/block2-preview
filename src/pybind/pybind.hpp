@@ -1267,6 +1267,8 @@ template <typename S> void bind_partition(py::module &m) {
              })
         .def("init_environments", &MovingEnvironment<S>::init_environments,
              py::arg("iprint") = false)
+        .def("finalize_environments",
+             &MovingEnvironment<S>::finalize_environments)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
         .def("partial_prepare", &MovingEnvironment<S>::partial_prepare)
@@ -1740,10 +1742,15 @@ template <typename S> void bind_parallel(py::module &m) {
         .def_readwrite("size", &ParallelCommunicator<S>::size)
         .def_readwrite("rank", &ParallelCommunicator<S>::rank)
         .def_readwrite("root", &ParallelCommunicator<S>::root)
+        .def_readwrite("group", &ParallelCommunicator<S>::group)
+        .def_readwrite("grank", &ParallelCommunicator<S>::grank)
+        .def_readwrite("gsize", &ParallelCommunicator<S>::gsize)
+        .def_readwrite("ngroup", &ParallelCommunicator<S>::ngroup)
         .def_readwrite("tcomm", &ParallelCommunicator<S>::tcomm)
         .def_readwrite("para_type", &ParallelCommunicator<S>::para_type)
         .def("get_parallel_type", &ParallelCommunicator<S>::get_parallel_type)
-        .def("barrier", &ParallelCommunicator<S>::barrier);
+        .def("barrier", &ParallelCommunicator<S>::barrier)
+        .def("split", &ParallelCommunicator<S>::split);
 
 #ifdef _HAS_MPI
     py::class_<MPICommunicator<S>, shared_ptr<MPICommunicator<S>>,
@@ -1759,6 +1766,7 @@ template <typename S> void bind_parallel(py::module &m) {
         .def_readwrite("comm", &ParallelRule<S>::comm)
         .def_readwrite("comm_type", &ParallelRule<S>::comm_type)
         .def("get_parallel_type", &ParallelRule<S>::get_parallel_type)
+        .def("split", &ParallelRule<S>::split)
         .def("__call__", &ParallelRule<S>::operator())
         .def("is_root", &ParallelRule<S>::is_root)
         .def("available", &ParallelRule<S>::available)

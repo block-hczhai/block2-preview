@@ -146,6 +146,7 @@ template <typename S> struct ParallelMPS : MPS<S> {
             rinfo->initialize_trans_contract(tensors[center - 1]->info,
                                              conn_matrices[pidx]->info,
                                              info->vacuum, true);
+            assert(rinfo->n != 0);
             rot->allocate(rinfo);
             rot->contract(tensors[center - 1], conn_matrices[pidx], true);
             tensors[center - 1] = rot;

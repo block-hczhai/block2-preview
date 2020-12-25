@@ -49,9 +49,9 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
-            4);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
+            1);
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -78,7 +78,10 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
         make_shared<ParallelCommunicator<S>>(1, 0, 0);
 #endif
     shared_ptr<ParallelRule<S>> para_rule =
-        make_shared<ParallelRule<S>>(para_comm);
+        make_shared<ParallelRuleQC<S>>(para_comm);
+    // this is required, even for all sweep parallel (split(1))
+    // to change prefix_distri
+    shared_ptr<ParallelRule<S>> mpo_rule = para_rule->split(3);
 
     Timer t;
     t.get_time();
@@ -92,6 +95,11 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
     cout << "MPO simplification start" << endl;
     mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    // MPO parallelization
+    cout << "MPO parallelization start" << endl;
+    mpo = make_shared<ParallelMPO<S>>(mpo, mpo_rule);
+    cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
@@ -143,6 +151,26 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
             EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
 
+            me->finalize_environments();
+
+            if (para_rule->comm->group == 0) {
+                me->bra = me->ket = make_shared<MPS<S>>(*mps);
+                dmrg = make_shared<DMRG<S>>(me, bdims, no_noises);
+                dmrg->iprint = 0;
+                dmrg->decomp_type = dt;
+                dmrg->noise_type = nt;
+                energy = dmrg->solve(1, mps->center == 0, 1E-8);
+
+                cout << "== SER " << name << " ==" << setw(20) << target
+                     << " E = " << fixed << setw(22) << setprecision(12)
+                     << energy << " error = " << scientific << setprecision(3)
+                     << setw(10) << (energy - energies[i][j])
+                     << " T = " << fixed << setw(10) << setprecision(3)
+                     << t.get_time() << endl;
+
+                EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
+            }
+
             // deallocate persistent stack memory
             mps_info->deallocate();
         }
@@ -193,10 +221,6 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSU2) {
                    NoiseTypes::Wavefunction);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD",
                    DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
-                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
                    DecompositionTypes::DensityMatrix,
                    NoiseTypes::ReducedPerturbative);
@@ -257,10 +281,6 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSZ) {
                   NoiseTypes::Wavefunction);
     test_dmrg<SZ>(targets, energies, hamil, "SZ PURE SVD",
                   DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ SVD PERT",
-                  DecompositionTypes::SVD, NoiseTypes::Perturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT",
                   DecompositionTypes::DensityMatrix,
                   NoiseTypes::ReducedPerturbative);

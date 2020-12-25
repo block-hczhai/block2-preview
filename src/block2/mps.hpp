@@ -1284,7 +1284,9 @@ template <typename S> struct MPS {
                 unload_tensor(center);
                 tensors[center] = right;
                 save_tensor(center);
+                assert(tensors[center]->info->n != 0);
                 load_tensor(center - 1);
+                assert(tensors[center - 1]->info->n != 0);
                 shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                     make_shared<VectorAllocator<uint32_t>>();
                 shared_ptr<VectorAllocator<double>> d_alloc =
@@ -1299,6 +1301,7 @@ template <typename S> struct MPS {
                 wfn->contract(tensors[center - 1], left);
                 tensors[center - 1] = wfn;
                 save_tensor(center - 1);
+                assert(tensors[center - 1]->info->n != 0);
             } else {
                 if (canonical_form[center] == 'K') {
                     if (center == 0) {
@@ -1350,6 +1353,7 @@ template <typename S> struct MPS {
                    canonical_form[center] == 'K') {
             if (para_rule == nullptr || para_rule->is_root()) {
                 load_tensor(center);
+                assert(tensors[center]->info->n != 0);
                 if (canonical_form[center] == 'S') {
                     tensors[center] = info->swap_wfn_to_fused_left(
                         center, tensors[center], cg);
@@ -1362,6 +1366,7 @@ template <typename S> struct MPS {
                         return;
                     }
                 }
+                assert(tensors[center]->info->n != 0);
                 assert(canonical_form[center + 1] == 'R');
                 shared_ptr<SparseMatrix<S>> left, right;
                 tensors[center]->left_split(left, right, info->bond_dim);

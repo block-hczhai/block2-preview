@@ -43,8 +43,8 @@ class TestDMRG : public ::testing::Test {
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2,
-            2, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4,
+            4, 1);
         threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
     }
@@ -104,7 +104,7 @@ TEST_F(TestDMRG, Test) {
 #endif
     shared_ptr<ParallelRule<SU2>> para_rule =
         make_shared<ParallelRuleQC<SU2>>(para_comm);
-    shared_ptr<ParallelRule<SU2>> mpo_rule = para_rule->split(2);
+    shared_ptr<ParallelRule<SU2>> mpo_rule = para_rule->split(1);
 
     Timer t;
     t.get_time();
@@ -171,7 +171,7 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // mps->conn_centers = vector<int>{13, 21, 27};
-    mps->conn_centers = vector<int>{norb / 4, 2 * norb / 4, 3 * norb / 4};
+    // mps->conn_centers = vector<int>{norb / 4, 2 * norb / 4, 3 * norb / 4};
 
     // ME
     shared_ptr<MovingEnvironment<SU2>> me =
@@ -207,6 +207,8 @@ TEST_F(TestDMRG, Test) {
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     // dmrg->me->fuse_center = 1;
     dmrg->solve(10, true, 1E-12);
+
+    me->finalize_environments();
 
     // deallocate persistent stack memory
     mps_info->deallocate();
