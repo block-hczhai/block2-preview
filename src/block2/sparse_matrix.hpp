@@ -31,6 +31,7 @@
 #include <string>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #define TINY (1E-20)
@@ -1541,7 +1542,8 @@ template <typename S> struct SparseMatrix {
         factor = mat->factor;
         // for SU2 with target 2S != 0, for each l m r there can be multiple mr
         // mp is the three-index wavefunction
-        map<uint32_t, map<uint16_t, vector<pair<MKL_INT, int>>>> mp;
+        unordered_map<uint32_t, map<uint16_t, vector<pair<MKL_INT, int>>>> mp;
+        mp.reserve(mat->info->n);
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
@@ -1607,7 +1609,10 @@ template <typename S> struct SparseMatrix {
                              const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
-        map<uint32_t, map<uint16_t, vector<tuple<MKL_INT, MKL_INT, int>>>> mp;
+        unordered_map<uint32_t,
+                      map<uint16_t, vector<tuple<MKL_INT, MKL_INT, int>>>>
+            mp;
+        mp.reserve(mat->info->n);
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();

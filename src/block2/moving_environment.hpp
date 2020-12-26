@@ -113,7 +113,11 @@ template <typename S> struct MovingEnvironment {
         fuse_center = mpo->schemer == nullptr ? n_sites - 2
                                               : mpo->schemer->left_trans_site;
         if (mpo->get_parallel_type() & ParallelTypes::Distributed) {
-            para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
+            if (mpo->get_parallel_type() & ParallelTypes::NewScheme)
+                para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
+            else
+                para_rule =
+                    dynamic_pointer_cast<ClassicParallelMPO<S>>(mpo)->rule;
             para_rule->comm->barrier();
         }
         if (ket->get_type() & MPSTypes::MultiCenter) {

@@ -32,6 +32,7 @@
 #include "../block2/determinant.hpp"
 #include "../block2/effective_hamiltonian.hpp"
 #include "../block2/expr.hpp"
+#include "../block2/fp_codec.hpp"
 #include "../block2/hamiltonian.hpp"
 #include "../block2/moving_environment.hpp"
 #include "../block2/mpo.hpp"
@@ -147,6 +148,9 @@ extern template struct block2::OpElementRef<block2::SU2>;
 extern template struct block2::OpProduct<block2::SU2>;
 extern template struct block2::OpSumProd<block2::SU2>;
 extern template struct block2::OpSum<block2::SU2>;
+
+// fp_codec.hpp
+extern template struct block2::FPCodec<double>;
 
 // hamiltonian.hpp
 extern template struct block2::Hamiltonian<block2::SZ>;

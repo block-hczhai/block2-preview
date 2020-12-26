@@ -14,6 +14,7 @@ class TestDMRG : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
+        frame_()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
         // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
         // ThreadingTypes::Global, 8, 8);
         threading_() = make_shared<Threading>(

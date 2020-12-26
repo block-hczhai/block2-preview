@@ -89,6 +89,7 @@ template <typename S> struct DMRG {
     size_t sweep_cumulative_nflop = 0;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
            tsvd = 0;
+    bool print_connection_time = false;
     Timer _t, _t2;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
          const vector<ubond_t> &bond_dims, const vector<double> &noises)
@@ -887,6 +888,9 @@ template <typename S> struct DMRG {
           double davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
+        frame->fpwrite = frame->fpread = 0;
+        if (frame->fp_codec != nullptr)
+            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
         if (me->para_rule != nullptr && iprint >= 2) {
             me->para_rule->comm->tcomm = 0;
             me->para_rule->comm->tidle = 0;
@@ -1018,7 +1022,11 @@ template <typename S> struct DMRG {
         assert(me->ket->get_type() == MPSTypes::MultiCenter);
         shared_ptr<ParallelMPS<S>> para_mps =
             dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
+        Timer t;
+        double tflip = 0, tmerge = 0, tsplit = 0, trot = 0, tmove = 0,
+               tsweep = 0;
         me->center = para_mps->conn_centers[ip] - 1;
+        t.get_time();
         if (para_mps->canonical_form[me->center] == 'C' &&
             para_mps->canonical_form[me->center + 1] == 'C')
             para_mps->canonical_form[me->center] = 'K',
@@ -1030,12 +1038,17 @@ template <typename S> struct DMRG {
             para_mps->flip_fused_form(me->center + 1, me->mpo->tf->opf->cg,
                                       me->para_rule);
         }
+        tflip += t.get_time();
         if (para_mps->canonical_form[me->center] == 'K' &&
             para_mps->canonical_form[me->center + 1] == 'S') {
+            t.get_time();
             para_mps->para_merge(ip, me->para_rule);
+            tmerge += t.get_time();
             partial_sweep(ip, true, true, bond_dim, noise,
                           davidson_conv_thrd); // LK
+            tsweep += t.get_time();
             me->left_contract_rotate_unordered(me->center + 1);
+            trot += t.get_time();
             para_mps->canonical_form[me->center + 1] = 'K';
             para_mps->center = me->center + 1;
             while (new_conn_center < para_mps->conn_centers[ip]) {
@@ -1045,8 +1058,10 @@ template <typename S> struct DMRG {
                 para_mps->conn_centers[ip]--;
                 me->center--;
             }
+            tmove += t.get_time();
             para_mps->flip_fused_form(me->center + 1, me->mpo->tf->opf->cg,
                                       me->para_rule); // LS
+            tflip += t.get_time();
             para_mps->center = me->center + 1;
             while (new_conn_center > para_mps->conn_centers[ip]) {
                 para_mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
@@ -1054,9 +1069,11 @@ template <typename S> struct DMRG {
                 para_mps->conn_centers[ip]++;
                 me->center++;
             }
+            tmove += t.get_time();
             auto rmat = para_mps->para_split(ip, me->para_rule); // KR
             me->right_contract_rotate_unordered(me->center - 1);
-            // if root proc saves tensor too early, 
+            trot += t.get_time();
+            // if root proc saves tensor too early,
             // right_contract_rotate in other proc will have problems
             if (me->para_rule != nullptr)
                 me->para_rule->comm->barrier();
@@ -1066,10 +1083,22 @@ template <typename S> struct DMRG {
             }
             if (me->para_rule != nullptr)
                 me->para_rule->comm->barrier();
+            t.get_time();
             para_mps->flip_fused_form(me->center, me->mpo->tf->opf->cg,
                                       me->para_rule);
             para_mps->flip_fused_form(me->center + 1, me->mpo->tf->opf->cg,
                                       me->para_rule); // SK
+            tflip += t.get_time();
+        }
+        if (iprint >= 2 && print_connection_time) {
+            stringstream sout;
+            sout << "Time connection = [" << ip << "] " << fixed
+                 << setprecision(3)
+                 << tflip + tmerge + tsplit + trot + tmove + tsweep;
+            sout << " | Tflip = " << tflip << " | Tmerge = " << tmerge
+                 << " | tsplit = " << tsplit << " | Trot = " << trot
+                 << " | Tmove = " << tmove << endl;
+            cout << sout.rdbuf();
         }
     }
     // one unordered DMRG sweep (multi-center MPS required)
@@ -1081,6 +1110,9 @@ template <typename S> struct DMRG {
             dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
+        frame->fpwrite = frame->fpread = 0;
+        if (frame->fp_codec != nullptr)
+            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
         if (para_mps->rule != nullptr && iprint >= 2) {
             para_mps->rule->comm->tcomm = 0;
             para_mps->rule->comm->tidle = 0;
@@ -1140,16 +1172,24 @@ template <typename S> struct DMRG {
             double tdiff = abs(partition_time[ip] - partition_time[ip + 1]);
             if (partition_time[ip + 1] > partition_time[ip])
                 for (int i = 1; i <= conn_adjust_step; i++) {
-                    if (cc + 1 <= hcc && 2 * sweep_time[cc] < tdiff)
+                    if (cc + 1 <= hcc && 2 * sweep_time[cc] <= tdiff)
                         tdiff -= 2 * sweep_time[cc], cc++;
-                    else
+                    else if (cc + 1 <= hcc &&
+                             2 * sweep_time[cc] - tdiff < tdiff) {
+                        tdiff = 2 * sweep_time[cc] - tdiff, cc++;
+                        break;
+                    } else
                         break;
                 }
             else if (partition_time[ip + 1] < partition_time[ip])
                 for (int i = 1; i <= conn_adjust_step; i++) {
-                    if (cc - 1 >= lcc && 2 * sweep_time[cc - 2] < tdiff)
+                    if (cc - 1 >= lcc && 2 * sweep_time[cc - 2] <= tdiff)
                         tdiff -= 2 * sweep_time[cc - 2], cc--;
-                    else
+                    else if (cc - 1 >= lcc &&
+                             2 * sweep_time[cc - 2] - tdiff < tdiff) {
+                        tdiff = 2 * sweep_time[cc - 2] - tdiff, cc--;
+                        break;
+                    } else
                         break;
                 }
             new_conn_centers[ip] = cc;
@@ -1289,9 +1329,19 @@ template <typename S> struct DMRG {
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
                     }
+                    cout << endl;
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
-                         << " | Tasync = " << frame->tasync << endl;
+                         << " | Tfpread = " << frame->fpread
+                         << " | Tfpwrite = " << frame->fpwrite;
+                    if (frame->fp_codec != nullptr)
+                        cout << " | data = "
+                             << Parsing::to_size_string(frame->fp_codec->ndata *
+                                                        8)
+                             << " | cpsd = "
+                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
+                                                        8);
+                    cout << " | Tasync = " << frame->tasync << endl;
                     cout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr
@@ -2201,6 +2251,9 @@ template <typename S> struct Linear {
                                         double minres_conv_thrd) {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
+        frame->fpwrite = frame->fpread = 0;
+        if (frame->fp_codec != nullptr)
+            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
         if (lme != nullptr && lme->para_rule != nullptr) {
             lme->para_rule->comm->tcomm = 0;
             lme->para_rule->comm->tidle = 0;
@@ -2359,9 +2412,19 @@ template <typename S> struct Linear {
                         cout << " | Tcomm = " << tt[0] << " | Tidle = " << tt[1]
                              << " | Twait = " << tt[2];
                     }
+                    cout << endl;
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
-                         << " | Tasync = " << frame->tasync << endl;
+                         << " | Tfpread = " << frame->fpread
+                         << " | Tfpwrite = " << frame->fpwrite;
+                    if (frame->fp_codec != nullptr)
+                        cout << " | data = "
+                             << Parsing::to_size_string(frame->fp_codec->ndata *
+                                                        8)
+                             << " | cpsd = "
+                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
+                                                        8);
+                    cout << " | Tasync = " << frame->tasync << endl;
                     if (lme != nullptr)
                         cout << " | Trot = " << lme->trot
                              << " | Tctr = " << lme->tctr

@@ -1484,6 +1484,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("davidson_max_iter", &DMRG<S>::davidson_max_iter)
         .def_readwrite("davidson_soft_max_iter",
                        &DMRG<S>::davidson_soft_max_iter)
+        .def_readwrite("conn_adjust_step", &DMRG<S>::conn_adjust_step)
         .def_readwrite("energies", &DMRG<S>::energies)
         .def_readwrite("discarded_weights", &DMRG<S>::discarded_weights)
         .def_readwrite("mps_quanta", &DMRG<S>::mps_quanta)
@@ -2379,6 +2380,12 @@ template <typename S = void> void bind_io(py::module &m) {
 
     struct Global {};
 
+    py::class_<FPCodec<double>, shared_ptr<FPCodec<double>>>(m, "DoubleFPCodec")
+        .def(py::init<double>())
+        .def(py::init<double, size_t>())
+        .def_readwrite("ndata", &FPCodec<double>::ndata)
+        .def_readwrite("ncpsd", &FPCodec<double>::ncpsd);
+
     py::class_<DataFrame, shared_ptr<DataFrame>>(m, "DataFrame")
         .def(py::init<>())
         .def(py::init<size_t, size_t>())
@@ -2397,6 +2404,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("dsize", &DataFrame::dsize)
         .def_readwrite("tread", &DataFrame::tread)
         .def_readwrite("twrite", &DataFrame::twrite)
+        .def_readwrite("tasync", &DataFrame::tasync)
+        .def_readwrite("fpread", &DataFrame::fpread)
+        .def_readwrite("fpwrite", &DataFrame::fpwrite)
         .def_readwrite("n_frames", &DataFrame::n_frames)
         .def_readwrite("i_frame", &DataFrame::i_frame)
         .def_readwrite("iallocs", &DataFrame::iallocs)
@@ -2405,6 +2415,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("load_buffering", &DataFrame::load_buffering)
         .def_readwrite("save_buffering", &DataFrame::save_buffering)
         .def_readwrite("use_main_stack", &DataFrame::use_main_stack)
+        .def_readwrite("fp_codec", &DataFrame::fp_codec)
         .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)
         .def("activate", &DataFrame::activate)

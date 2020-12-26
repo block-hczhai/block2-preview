@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "fp_codec.hpp"
 #include "utils.hpp"
 #ifdef _HAS_TBB
 #include "tbb/scalable_allocator.h"
@@ -191,7 +192,8 @@ struct DataFrame {
     size_t isize, dsize;
     int n_frames, i_frame;
     mutable double tread = 0, twrite = 0, tasync = 0; // io time cost
-    mutable Timer _t;
+    mutable double fpread = 0, fpwrite = 0;           // fp data io time cost
+    mutable Timer _t, _t2;
     vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
     vector<shared_ptr<StackAllocator<double>>> dallocs;
     mutable vector<size_t> peak_used_memory;
@@ -201,6 +203,7 @@ struct DataFrame {
     mutable vector<shared_future<void>> save_futures;
     bool load_buffering = false, save_buffering = false;
     bool use_main_stack = true;
+    shared_ptr<FPCodec<double>> fp_codec = nullptr;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double dmain_ratio = 0.7,
@@ -263,7 +266,13 @@ struct DataFrame {
         ifs.read((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
         ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ifs.read((char *)iallocs[i]->data, sizeof(uint32_t) * iallocs[i]->used);
-        ifs.read((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
+        _t2.get_time();
+        if (fp_codec != nullptr)
+            fp_codec->read_array(ifs, dallocs[i]->data, dallocs[i]->used);
+        else
+            ifs.read((char *)dallocs[i]->data,
+                     sizeof(double) * dallocs[i]->used);
+        fpread += _t2.get_time();
     }
     // Load one data frame from disk
     void load_data(int i, const string &filename) const {
@@ -314,7 +323,13 @@ struct DataFrame {
         ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
         ofs.write((char *)iallocs[i]->data,
                   sizeof(uint32_t) * iallocs[i]->used);
-        ofs.write((char *)dallocs[i]->data, sizeof(double) * dallocs[i]->used);
+        _t2.get_time();
+        if (fp_codec != nullptr)
+            fp_codec->write_array(ofs, dallocs[i]->data, dallocs[i]->used);
+        else
+            ofs.write((char *)dallocs[i]->data,
+                      sizeof(double) * dallocs[i]->used);
+        fpwrite += _t2.get_time();
     }
     static void buffer_save_data(const string &filename,
                                  const shared_ptr<stringstream> &ss,
@@ -404,6 +419,10 @@ struct DataFrame {
         os << " UseMainStack = " << df.use_main_stack
            << " IBuf = " << df.load_buffering << " OBuf = " << df.save_buffering
            << endl;
+        if (df.fp_codec != nullptr)
+            os << " FPCompression: prec = " << scientific << setprecision(2)
+               << df.fp_codec->prec << " chunk = " << fixed
+               << df.fp_codec->chunk_size << endl;
         os << " IMain = " << Parsing::to_size_string(df.iallocs[0]->used * 4)
            << " / " << Parsing::to_size_string(df.iallocs[0]->size * 4);
         os << " DMain = " << Parsing::to_size_string(df.dallocs[0]->used * 8)
