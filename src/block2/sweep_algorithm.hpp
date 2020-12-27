@@ -1289,7 +1289,7 @@ template <typename S> struct DMRG {
             if (iprint >= 1) {
                 cout << "Time elapsed = " << fixed << setw(10)
                      << setprecision(3) << current.current - start.current;
-                cout << fixed << setprecision(8);
+                cout << fixed << setprecision(10);
                 if (get<0>(sweep_results).size() == 1)
                     cout << " | E = " << setw(15) << get<0>(sweep_results)[0];
                 else {
@@ -1301,6 +1301,8 @@ template <typename S> struct DMRG {
                 if (energies.size() >= 2)
                     cout << " | DE = " << setw(6) << setprecision(2)
                          << scientific << energy_difference;
+                cout << " | DW = " << setw(6) << setprecision(2) << scientific
+                     << get<1>(sweep_results);
                 if (iprint >= 2) {
                     size_t dmain = frame->peak_used_memory[0];
                     size_t dseco = frame->peak_used_memory[1];
@@ -1317,12 +1319,17 @@ template <typename S> struct DMRG {
                                                     "FLOP/SWP");
                     cout << endl << fixed << setw(10) << setprecision(3);
                     cout << "Time sweep = " << tswp;
-                    if ((para_mps != nullptr && para_mps->rule != nullptr) ||
-                        me->para_rule != nullptr) {
+                    if (para_mps != nullptr && para_mps->rule != nullptr) {
                         shared_ptr<ParallelCommunicator<S>> comm =
-                            para_mps != nullptr && para_mps->rule != nullptr
-                                ? para_mps->rule->comm
-                                : me->para_rule->comm;
+                            para_mps->rule->comm;
+                        double tt[2] = {comm->tcomm, comm->tidle};
+                        comm->reduce_sum(&tt[0], 2, comm->root);
+                        cout << " | UTcomm = " << tt[0] / comm->size
+                             << " | UTidle = " << tt[1] / comm->size;
+                    }
+                    if (me->para_rule != nullptr) {
+                        shared_ptr<ParallelCommunicator<S>> comm =
+                            me->para_rule->comm;
                         double tt[3] = {comm->tcomm, comm->tidle, comm->twait};
                         comm->reduce_sum(&tt[0], 3, comm->root);
                         cout << " | Tcomm = " << tt[0] / comm->size
