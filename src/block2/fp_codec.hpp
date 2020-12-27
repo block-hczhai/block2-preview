@@ -187,7 +187,7 @@ struct FPCodec {
         ofs.write((char *)&chunk_size, sizeof(chunk_size));
         ndata += len;
         int nchunk = len / chunk_size + !!(len % chunk_size);
-        T *pdata = new T[len];
+        T *pdata = new T[len + 2];
         vector<size_t> cplens(nchunk);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)
@@ -214,8 +214,7 @@ struct FPCodec {
         assert(magic == "fpc");
         ifs.read((char *)&chunk_size, sizeof(chunk_size));
         int nchunk = len / chunk_size + !!(len % chunk_size);
-        T *pdata = new T[len];
-        size_t p_offset = 0;
+        T *pdata = new T[len + 2];
         vector<size_t> cplens(nchunk);
         for (int ic = 0; ic < nchunk; ic++) {
             size_t &cplen = cplens[ic];
@@ -223,7 +222,6 @@ struct FPCodec {
             ifs.read((char *)&cplen, sizeof(cplen));
             assert(cplen <= chunk_size + 1);
             ifs.read((char *)(pdata + offset), sizeof(T) * cplen);
-            p_offset += cplen;
         }
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)

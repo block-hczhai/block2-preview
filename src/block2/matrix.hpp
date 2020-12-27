@@ -121,11 +121,11 @@ struct Tensor {
     vector<MKL_INT> shape;
     vector<double> data;
     Tensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {
-        data.resize(m * k * n);
+        data.resize((size_t)m * k * n);
     }
     Tensor(const vector<MKL_INT> &shape) : shape(shape) {
         data.resize(
-            accumulate(shape.begin(), shape.end(), 1, multiplies<double>()));
+            accumulate(shape.begin(), shape.end(), 1, multiplies<size_t>()));
     }
     size_t size() const { return data.size(); }
     void clear() { memset(data.data(), 0, size() * sizeof(double)); }
