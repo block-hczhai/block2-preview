@@ -980,6 +980,8 @@ struct BatchGEMMSeq {
             int ntop = threading->activate_operator();
             vector<MatrixRef> vts(ntop, v);
             vector<MatrixRef> works(ntop, MatrixRef(nullptr, max_work, 1));
+            if (batch[0]->c.size() == 0 && batch[1]->c.size() == 0)
+                return;
             assert(max_rwork == 0 && max_work != 0);
 #pragma omp parallel num_threads(ntop)
             {
