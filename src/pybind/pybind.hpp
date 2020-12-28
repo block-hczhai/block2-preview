@@ -2161,6 +2161,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Collected", NoiseTypes::Collected)
         .value("Reduced", NoiseTypes::Reduced)
         .value("Unscaled", NoiseTypes::Unscaled)
+        .value("LowMem", NoiseTypes::LowMem)
         .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("ReducedPerturbativeUnscaled",
                NoiseTypes::ReducedPerturbativeUnscaled)
@@ -2172,6 +2173,14 @@ template <typename S = void> void bind_types(py::module &m) {
                NoiseTypes::ReducedPerturbativeCollected)
         .value("ReducedPerturbativeUnscaledCollected",
                NoiseTypes::ReducedPerturbativeUnscaledCollected)
+        .value("ReducedPerturbativeLowMem",
+               NoiseTypes::ReducedPerturbativeLowMem)
+        .value("ReducedPerturbativeUnscaledLowMem",
+               NoiseTypes::ReducedPerturbativeUnscaledLowMem)
+        .value("ReducedPerturbativeCollectedLowMem",
+               NoiseTypes::ReducedPerturbativeCollectedLowMem)
+        .value("ReducedPerturbativeUnscaledCollectedLowMem",
+               NoiseTypes::ReducedPerturbativeUnscaledCollectedLowMem)
         .def(py::self & py::self)
         .def(py::self | py::self);
 

@@ -243,7 +243,7 @@ template <typename S> struct TensorFunctions {
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             &cinfos,
         const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
-        int &vidx, bool do_reduce) const {
+        int &vidx, int tvidx, bool do_reduce) const {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
         // if no identity operator found in one side,
@@ -299,6 +299,8 @@ template <typename S> struct TensorFunctions {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
+                    if (tvidx >= 0 && tvidx != iv)
+                        continue;
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
@@ -326,6 +328,8 @@ template <typename S> struct TensorFunctions {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
+                    if (tvidx >= 0 && tvidx != iv)
+                        continue;
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
@@ -382,6 +386,8 @@ template <typename S> struct TensorFunctions {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
+                    if (tvidx >= 0 && tvidx != iv)
+                        continue;
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
@@ -409,6 +415,8 @@ template <typename S> struct TensorFunctions {
                     S vdq = pks[k];
                     int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
                              vdqs.begin();
+                    if (tvidx >= 0 && tvidx != iv)
+                        continue;
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
@@ -426,12 +434,14 @@ template <typename S> struct TensorFunctions {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
+            // non-reduced noise
             if (vidx != -1)
                 for (auto &x : op->strings)
                     tensor_product_partial_multiply(x, lopt, ropt, trace_right,
                                                     cmat, psubsl, cinfos, vdqs,
-                                                    vmats, vidx, false);
-            else
+                                                    vmats, vidx, tvidx, false);
+            // copy vmats to every thread, high memory mode
+            else if (tvidx == -1)
                 parallel_reduce(
                     op->strings.size(), vmats,
                     [&op, &lopt, &ropt, trace_right, &cmat, &psubsl, &cinfos,
@@ -446,8 +456,28 @@ template <typename S> struct TensorFunctions {
                         int vidx = -1;
                         tf->tensor_product_partial_multiply(
                             op->strings[i], lopt, ropt, trace_right, pcmat,
-                            psubsl, cinfos, vdqs, vmats, vidx, false);
+                            psubsl, cinfos, vdqs, vmats, vidx, -1, false);
                     });
+            // every thread works on a single vmat, low memory mode
+            else if (tvidx == -2)
+                parallel_for(
+                    vmats->n,
+                    [&op, &lopt, &ropt, trace_right, &cmat, &vmats, &psubsl,
+                     &cinfos, &vdqs](const shared_ptr<TensorFunctions<S>> &tf,
+                                     size_t i) {
+                        shared_ptr<SparseMatrixInfo<S>> pcmat_info =
+                            make_shared<SparseMatrixInfo<S>>(*cmat->info);
+                        shared_ptr<SparseMatrix<S>> pcmat =
+                            make_shared<SparseMatrix<S>>(*cmat);
+                        pcmat->info = pcmat_info;
+                        int vidx = -1;
+                        for (auto &x : op->strings)
+                            tf->tensor_product_partial_multiply(
+                                x, lopt, ropt, trace_right, pcmat, psubsl,
+                                cinfos, vdqs, vmats, vidx, i, false);
+                    });
+            else
+                assert(false);
         } break;
         case OpTypes::Zero:
             break;

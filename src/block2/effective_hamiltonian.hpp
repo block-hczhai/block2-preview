@@ -204,6 +204,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         assert(noise_type & NoiseTypes::Perturbative);
         bool do_reduce = !(noise_type & NoiseTypes::Collected);
         bool reduced = noise_type & NoiseTypes::Reduced;
+        bool low_mem = noise_type & NoiseTypes::LowMem;
         if (reduced)
             perturb_ket->allocate(infos);
         else {
@@ -246,9 +247,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        tf->tensor_product_partial_multiply(
-            pexpr, op->lopt, op->ropt, trace_right, ket, psubsl, cinfos,
-            perturb_ket_labels, perturb_ket, vidx, do_reduce);
+        tf->tensor_product_partial_multiply(pexpr, op->lopt, op->ropt,
+                                            trace_right, ket, psubsl, cinfos,
+                                            perturb_ket_labels, perturb_ket,
+                                            vidx, low_mem ? -2 : -1, do_reduce);
         if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
@@ -256,6 +258,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             if (para_rule != nullptr && do_reduce)
                 para_rule->comm->reduce_sum(perturb_ket, para_rule->comm->root);
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
+            assert(!low_mem);
             tf->opf->seq->auto_perform(
                 MatrixRef(perturb_ket->data, perturb_ket->total_memory, 1));
             if (para_rule != nullptr && do_reduce)

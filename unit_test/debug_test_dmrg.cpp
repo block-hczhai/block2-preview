@@ -23,7 +23,7 @@ class TestDMRG : public ::testing::Test {
         // threading_() =
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
-        threading_()->seq_type = SeqTypes::Tasked;
+        threading_()->seq_type = SeqTypes::None;
         cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
@@ -196,7 +196,7 @@ TEST_F(TestDMRG, Test) {
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->solve(30, true);
 
     // deallocate persistent stack memory

@@ -39,13 +39,18 @@ enum struct NoiseTypes : uint8_t {
     Reduced = 8,
     Unscaled = 16,
     Collected = 32,
+    LowMem = 64,
     ReducedPerturbative = 4 | 8,
     PerturbativeUnscaled = 4 | 16,
     ReducedPerturbativeUnscaled = 4 | 8 | 16,
     PerturbativeCollected = 4 | 32,
     PerturbativeUnscaledCollected = 4 | 16 | 32,
     ReducedPerturbativeCollected = 4 | 8 | 32,
-    ReducedPerturbativeUnscaledCollected = 4 | 8 | 16 | 32
+    ReducedPerturbativeUnscaledCollected = 4 | 8 | 16 | 32,
+    ReducedPerturbativeLowMem = 4 | 8 | 64,
+    ReducedPerturbativeUnscaledLowMem = 4 | 8 | 16 | 64,
+    ReducedPerturbativeCollectedLowMem = 4 | 8 | 32 | 64,
+    ReducedPerturbativeUnscaledCollectedLowMem = 4 | 8 | 16 | 32 | 64
 };
 
 enum struct TraceTypes : uint8_t { None = 0, Left = 1, Right = 2 };

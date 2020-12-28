@@ -166,20 +166,20 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             &cinfos,
         const vector<S> &vdqs, const shared_ptr<SparseMatrixGroup<S>> &vmats,
-        int &vidx, bool do_reduce) const override {
+        int &vidx, int tvidx, bool do_reduce) const override {
         if (expr->get_type() == OpTypes::ExprRef) {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
             TensorFunctions<S>::tensor_product_partial_multiply(
                 op->op, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                vmats, vidx, false);
+                vmats, vidx, tvidx, false);
             if (opf->seq->mode != SeqTypes::Auto &&
                 !(opf->seq->mode & SeqTypes::Tasked) && do_reduce)
                 rule->comm->reduce_sum(vmats, rule->comm->root);
         } else
             TensorFunctions<S>::tensor_product_partial_multiply(
                 expr, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                vmats, vidx, false);
+                vmats, vidx, tvidx, false);
     }
     // vmats = expr x cmats
     void
