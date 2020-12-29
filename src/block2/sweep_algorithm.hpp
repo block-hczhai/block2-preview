@@ -1320,22 +1320,6 @@ template <typename S> struct DMRG {
                 if (iprint >= 2) {
                     cout << fixed << setprecision(3);
                     cout << "Time sweep = " << setw(12) << tswp;
-                    size_t dmain = frame->peak_used_memory[0];
-                    size_t dseco = frame->peak_used_memory[1];
-                    size_t imain = frame->peak_used_memory[2];
-                    size_t iseco = frame->peak_used_memory[3];
-                    cout << " | Dmem = "
-                         << Parsing::to_size_string(dmain + dseco) << " ("
-                         << (dmain * 100 / (dmain + dseco)) << "%)";
-                    cout << " | Imem = "
-                         << Parsing::to_size_string(imain + iseco) << " ("
-                         << (imain * 100 / (imain + iseco)) << "%)";
-                    cout << " | Hmem = "
-                         << Parsing::to_size_string(sweep_max_eff_ham_size *
-                                                    sizeof(double));
-                    cout << " | Pmem = "
-                         << Parsing::to_size_string(sweep_max_pket_size *
-                                                    sizeof(double));
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP")
@@ -1369,6 +1353,23 @@ template <typename S> struct DMRG {
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
                     }
+                    size_t dmain = frame->peak_used_memory[0];
+                    size_t dseco = frame->peak_used_memory[1];
+                    size_t imain = frame->peak_used_memory[2];
+                    size_t iseco = frame->peak_used_memory[3];
+                    sout << " | Dmem = "
+                         << Parsing::to_size_string(dmain + dseco) << " ("
+                         << (dmain * 100 / (dmain + dseco)) << "%)";
+                    sout << " | Imem = "
+                         << Parsing::to_size_string(imain + iseco) << " ("
+                         << (imain * 100 / (imain + iseco)) << "%)";
+                    sout << " | Hmem = "
+                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                    sizeof(double));
+                    sout << " | Pmem = "
+                         << Parsing::to_size_string(sweep_max_pket_size *
+                                                    sizeof(double))
+                         << endl;
                     sout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tfpread = " << frame->fpread
@@ -2446,22 +2447,6 @@ template <typename S> struct Linear {
                 if (iprint >= 2) {
                     cout << fixed << setprecision(3);
                     cout << "Time sweep = " << setw(12) << tswp;
-                    size_t dmain = frame->peak_used_memory[0];
-                    size_t dseco = frame->peak_used_memory[1];
-                    size_t imain = frame->peak_used_memory[2];
-                    size_t iseco = frame->peak_used_memory[3];
-                    cout << " | Dmem = "
-                         << Parsing::to_size_string(dmain + dseco) << " ("
-                         << (dmain * 100 / (dmain + dseco)) << "%)";
-                    cout << " | Imem = "
-                         << Parsing::to_size_string(imain + iseco) << " ("
-                         << (imain * 100 / (imain + iseco)) << "%)";
-                    cout << " | Hmem = "
-                         << Parsing::to_size_string(sweep_max_eff_ham_size *
-                                                    sizeof(double));
-                    cout << " | Pmem = "
-                         << Parsing::to_size_string(sweep_max_pket_size *
-                                                    sizeof(double));
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP")
@@ -2479,6 +2464,23 @@ template <typename S> struct Linear {
                              << " | Twait = " << tt[2];
                         cout << endl;
                     }
+                    size_t dmain = frame->peak_used_memory[0];
+                    size_t dseco = frame->peak_used_memory[1];
+                    size_t imain = frame->peak_used_memory[2];
+                    size_t iseco = frame->peak_used_memory[3];
+                    cout << " | Dmem = "
+                         << Parsing::to_size_string(dmain + dseco) << " ("
+                         << (dmain * 100 / (dmain + dseco)) << "%)";
+                    cout << " | Imem = "
+                         << Parsing::to_size_string(imain + iseco) << " ("
+                         << (imain * 100 / (imain + iseco)) << "%)";
+                    cout << " | Hmem = "
+                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                    sizeof(double));
+                    cout << " | Pmem = "
+                         << Parsing::to_size_string(sweep_max_pket_size *
+                                                    sizeof(double))
+                         << endl;
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tfpread = " << frame->fpread
