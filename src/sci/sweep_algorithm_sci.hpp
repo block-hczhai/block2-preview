@@ -297,6 +297,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     using DMRGSCI<S>::teff;
     using DMRGSCI<S>::teig;
     using DMRGSCI<S>::tprt;
+    using DMRGSCI<S>::sweep_max_eff_ham_size;
 
     double g_factor = 1.0;  // G in +Q formula
     double g_factor2 = 0.0; // G2 in ACPF2
@@ -411,6 +412,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 aqcc_eff = h_eff + shift * (d_eff1 - d_eff2);
             }
         }
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, aqcc_eff->get_op_total_memory());
         return aqcc_eff;
     }
 

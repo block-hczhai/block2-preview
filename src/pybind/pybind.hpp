@@ -1499,6 +1499,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("decomp_last_site", &DMRG<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &DMRG<S>::sweep_cumulative_nflop)
+        .def_readwrite("sweep_max_pket_size", &DMRG<S>::sweep_max_pket_size)
+        .def_readwrite("sweep_max_eff_ham_size",
+                       &DMRG<S>::sweep_max_eff_ham_size)
         .def("update_two_dot", &DMRG<S>::update_two_dot)
         .def("update_one_dot", &DMRG<S>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S>::update_multi_two_dot)
@@ -1670,6 +1673,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &Linear<S>::sweep_cumulative_nflop)
+        .def_readwrite("sweep_max_pket_size", &Linear<S>::sweep_max_pket_size)
+        .def_readwrite("sweep_max_eff_ham_size",
+                       &Linear<S>::sweep_max_eff_ham_size)
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
         .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
@@ -2771,8 +2777,14 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("allocate", &BatchGEMMSeq::allocate)
         .def("deallocate", &BatchGEMMSeq::deallocate)
         .def("simple_perform", &BatchGEMMSeq::simple_perform)
-        .def("auto_perform", &BatchGEMMSeq::auto_perform,
+        .def("auto_perform",
+             (void (BatchGEMMSeq::*)(const MatrixRef &)) &
+                 BatchGEMMSeq::auto_perform,
              py::arg("v") = MatrixRef(nullptr, 0, 0))
+        .def("auto_perform",
+             (void (BatchGEMMSeq::*)(const vector<MatrixRef> &)) &
+                 BatchGEMMSeq::auto_perform,
+             py::arg("vs"))
         .def("perform", &BatchGEMMSeq::perform)
         .def("clear", &BatchGEMMSeq::clear)
         .def("__call__", &BatchGEMMSeq::operator())

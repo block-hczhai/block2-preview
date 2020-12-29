@@ -162,7 +162,6 @@ TEST_F(TestDMRGN2STO3G, TestSU2) {
                    NoiseTypes::ReducedPerturbative);
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
                    DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
-    hamil.opf->seq->mode = SeqTypes::None;
     test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT LM",
                    DecompositionTypes::DensityMatrix,
                    NoiseTypes::ReducedPerturbativeLowMem);
@@ -233,7 +232,6 @@ TEST_F(TestDMRGN2STO3G, TestSZ) {
                   NoiseTypes::ReducedPerturbative);
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD RED PERT",
                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
-    hamil.opf->seq->mode = SeqTypes::None;
     test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT LM",
                   DecompositionTypes::DensityMatrix,
                   NoiseTypes::ReducedPerturbativeLowMem);

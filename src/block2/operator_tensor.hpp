@@ -195,6 +195,16 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
         for (auto &p : ropt->ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
+    size_t get_total_memory() const {
+        size_t r = 0;
+        for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
+            if (it->second->data != nullptr)
+                r += it->second->total_memory;
+        for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
+            if (it->second->data != nullptr)
+                r += it->second->total_memory;
+        return r;
+    }
     void deallocate() override {
         // do not free contracted operators for future reuse in rotation
         if (!frame->use_main_stack)

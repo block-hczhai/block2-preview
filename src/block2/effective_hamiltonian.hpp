@@ -258,9 +258,19 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             if (para_rule != nullptr && do_reduce)
                 para_rule->comm->reduce_sum(perturb_ket, para_rule->comm->root);
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
-            assert(!low_mem);
-            tf->opf->seq->auto_perform(
-                MatrixRef(perturb_ket->data, perturb_ket->total_memory, 1));
+            if (!low_mem) {
+                assert(perturb_ket->total_memory <=
+                       (size_t)numeric_limits<decltype(MatrixRef::n)>::max());
+                tf->opf->seq->auto_perform(
+                    MatrixRef(perturb_ket->data, perturb_ket->total_memory, 1));
+            } else {
+                vector<MatrixRef> pmats(perturb_ket->n,
+                                        MatrixRef(nullptr, 0, 0));
+                for (int j = 0; j < perturb_ket->n; j++)
+                    pmats[j] = MatrixRef((*perturb_ket)[j]->data,
+                                         (*perturb_ket)[j]->total_memory, 1);
+                tf->opf->seq->auto_perform(pmats);
+            }
             if (para_rule != nullptr && do_reduce)
                 para_rule->comm->reduce_sum(perturb_ket, para_rule->comm->root);
         }
@@ -839,6 +849,12 @@ template <typename S> struct LinearEffectiveHamiltonian {
                 h_effs[ih]->tf->operator()(b, c, coeffs[ih]);
             else
                 h_effs[ih]->operator()(b, c, 0, coeffs[ih]);
+    }
+    size_t get_op_total_memory() const {
+        size_t r = 0;
+        for (size_t ih = 0; ih < h_effs.size(); ih++)
+            r += h_effs[ih]->op->get_total_memory();
+        return r;
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav

@@ -87,6 +87,8 @@ template <typename S> struct DMRG {
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
+    size_t sweep_max_pket_size = 0;
+    size_t sweep_max_eff_ham_size = 0;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
            tsvd = 0;
     bool print_connection_time = false;
@@ -180,6 +182,8 @@ template <typename S> struct DMRG {
         if (davidson_soft_max_iter != 0 || noise != 0)
             pdi = one_dot_eigs_and_perturb(forward, fuse_left, i,
                                            davidson_conv_thrd, noise, pket);
+        if (pket != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
         if ((build_pdm || me->para_rule == nullptr ||
              me->para_rule->is_root()) &&
             !skip_decomp) {
@@ -382,6 +386,8 @@ template <typename S> struct DMRG {
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, me->para_rule);
@@ -417,6 +423,8 @@ template <typename S> struct DMRG {
         if (davidson_soft_max_iter != 0 || noise != 0)
             pdi = two_dot_eigs_and_perturb(forward, i, davidson_conv_thrd,
                                            noise, pket);
+        if (pket != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
         if (build_pdm) {
             _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
@@ -539,6 +547,8 @@ template <typename S> struct DMRG {
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, me->para_rule);
@@ -903,6 +913,8 @@ template <typename S> struct DMRG {
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
         sweep_cumulative_nflop = 0;
+        sweep_max_pket_size = 0;
+        sweep_max_eff_ham_size = 0;
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
@@ -1123,6 +1135,8 @@ template <typename S> struct DMRG {
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
         sweep_cumulative_nflop = 0;
+        sweep_max_pket_size = 0;
+        sweep_max_eff_ham_size = 0;
         frame->reset_peak_used_memory();
         sweep_energies.resize(me->n_sites - me->dot + 1, vector<double>{1E9});
         sweep_time.resize(me->n_sites - me->dot + 1, 0);
@@ -1302,62 +1316,86 @@ template <typename S> struct DMRG {
                     cout << " | DE = " << setw(6) << setprecision(2)
                          << scientific << energy_difference;
                 cout << " | DW = " << setw(6) << setprecision(2) << scientific
-                     << get<1>(sweep_results);
+                     << get<1>(sweep_results) << endl;
                 if (iprint >= 2) {
+                    cout << fixed << setprecision(3);
+                    cout << "Time sweep = " << setw(12) << tswp;
                     size_t dmain = frame->peak_used_memory[0];
                     size_t dseco = frame->peak_used_memory[1];
                     size_t imain = frame->peak_used_memory[2];
                     size_t iseco = frame->peak_used_memory[3];
-                    cout << " | DMEM = "
+                    cout << " | Dmem = "
                          << Parsing::to_size_string(dmain + dseco) << " ("
                          << (dmain * 100 / (dmain + dseco)) << "%)";
-                    cout << " | IMEM = "
+                    cout << " | Imem = "
                          << Parsing::to_size_string(imain + iseco) << " ("
                          << (imain * 100 / (imain + iseco)) << "%)";
+                    cout << " | Hmem = "
+                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                    sizeof(double));
+                    cout << " | Pmem = "
+                         << Parsing::to_size_string(sweep_max_pket_size *
+                                                    sizeof(double));
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
-                                                    "FLOP/SWP");
-                    cout << endl << fixed << setw(10) << setprecision(3);
-                    cout << "Time sweep = " << tswp;
+                                                    "FLOP/SWP")
+                         << endl;
                     if (para_mps != nullptr && para_mps->rule != nullptr) {
                         shared_ptr<ParallelCommunicator<S>> comm =
                             para_mps->rule->comm;
                         double tt[2] = {comm->tcomm, comm->tidle};
                         comm->reduce_sum(&tt[0], 2, comm->root);
-                        cout << " | UTcomm = " << tt[0] / comm->size
-                             << " | UTidle = " << tt[1] / comm->size;
+                        comm->reduce_sum(&sweep_cumulative_nflop, 1,
+                                         comm->root);
+                        cout << " | GTcomm = " << tt[0] / comm->size
+                             << " | GTidle = " << tt[1] / comm->size << endl;
                     }
+                    if (para_mps != nullptr && para_mps->rule != nullptr) {
+                        para_mps->enable_parallel_writing();
+                        para_mps->rule->comm->barrier();
+                    }
+                }
+                if (iprint >= 2) {
+                    stringstream sout;
+                    sout << fixed << setprecision(3);
+                    if (para_mps != nullptr && para_mps->rule != nullptr)
+                        sout << " Group = " << para_mps->rule->comm->group;
                     if (me->para_rule != nullptr) {
                         shared_ptr<ParallelCommunicator<S>> comm =
                             me->para_rule->comm;
                         double tt[3] = {comm->tcomm, comm->tidle, comm->twait};
                         comm->reduce_sum(&tt[0], 3, comm->root);
-                        cout << " | Tcomm = " << tt[0] / comm->size
+                        sout << " | Tcomm = " << tt[0] / comm->size
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
                     }
-                    cout << endl;
-                    cout << " | Tread = " << frame->tread
+                    sout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tfpread = " << frame->fpread
                          << " | Tfpwrite = " << frame->fpwrite;
                     if (frame->fp_codec != nullptr)
-                        cout << " | data = "
+                        sout << " | data = "
                              << Parsing::to_size_string(frame->fp_codec->ndata *
                                                         8)
                              << " | cpsd = "
                              << Parsing::to_size_string(frame->fp_codec->ncpsd *
                                                         8);
-                    cout << " | Tasync = " << frame->tasync << endl;
-                    cout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
+                    sout << " | Tasync = " << frame->tasync << endl;
+                    sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr
                          << " | Tdiag = " << me->tdiag
                          << " | Tinfo = " << me->tinfo << endl;
-                    cout << " | Teff = " << teff << " | Tprt = " << tprt
+                    sout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Teig = " << teig << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
                          << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
+                    sout << endl;
+                    cout << sout.rdbuf();
+                    if (para_mps != nullptr && para_mps->rule != nullptr) {
+                        para_mps->disable_parallel_writing();
+                        para_mps->rule->comm->barrier();
+                    }
                 }
                 cout << endl;
             }
@@ -1408,6 +1446,8 @@ template <typename S> struct Linear {
     double cutoff = 1E-14;
     bool decomp_last_site = true;
     size_t sweep_cumulative_nflop = 0;
+    size_t sweep_max_pket_size = 0;
+    size_t sweep_max_eff_ham_size = 0;
     double tprt = 0, tmult = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0,
            tsplt = 0, tsvd = 0;
     Timer _t, _t2;
@@ -1575,6 +1615,8 @@ template <typename S> struct Linear {
             shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
                 precondition_cg, me->bra->tensors[i], right_bra);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
                 tuple<double, int, size_t, double> lpdi;
@@ -1605,6 +1647,8 @@ template <typename S> struct Linear {
             tprt += _t.get_time();
             l_eff->deallocate();
         }
+        if (pbra != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
         if (tme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff = tme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
@@ -2001,6 +2045,8 @@ template <typename S> struct Linear {
             shared_ptr<EffectiveHamiltonian<S>> l_eff =
                 lme->eff_ham(FuseTypes::FuseLR, forward, precondition_cg,
                              me->bra->tensors[i], right_bra);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
                 tuple<double, int, size_t, double> lpdi;
@@ -2030,6 +2076,8 @@ template <typename S> struct Linear {
             tprt += _t.get_time();
             l_eff->deallocate();
         }
+        if (pbra != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
         if (tme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff =
                 tme->eff_ham(FuseTypes::FuseLR, forward, false,
@@ -2274,6 +2322,8 @@ template <typename S> struct Linear {
         sweep_targets.clear();
         sweep_discarded_weights.clear();
         sweep_cumulative_nflop = 0;
+        sweep_max_pket_size = 0;
+        sweep_max_eff_ham_size = 0;
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
@@ -2391,22 +2441,31 @@ template <typename S> struct Linear {
                 if (targets.size() >= 2)
                     cout << " | DF = " << setw(6) << setprecision(2)
                          << scientific << target_difference;
+                cout << " | DW = " << setw(6) << setprecision(2) << scientific
+                     << get<1>(sweep_results) << endl;
                 if (iprint >= 2) {
+                    cout << fixed << setprecision(3);
+                    cout << "Time sweep = " << setw(12) << tswp;
                     size_t dmain = frame->peak_used_memory[0];
                     size_t dseco = frame->peak_used_memory[1];
                     size_t imain = frame->peak_used_memory[2];
                     size_t iseco = frame->peak_used_memory[3];
-                    cout << " | DMEM = "
+                    cout << " | Dmem = "
                          << Parsing::to_size_string(dmain + dseco) << " ("
                          << (dmain * 100 / (dmain + dseco)) << "%)";
-                    cout << " | IMEM = "
+                    cout << " | Imem = "
                          << Parsing::to_size_string(imain + iseco) << " ("
                          << (imain * 100 / (imain + iseco)) << "%)";
+                    cout << " | Hmem = "
+                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                    sizeof(double));
+                    cout << " | Pmem = "
+                         << Parsing::to_size_string(sweep_max_pket_size *
+                                                    sizeof(double));
                     cout << " | "
                          << Parsing::to_size_string(sweep_cumulative_nflop,
-                                                    "FLOP/SWP");
-                    cout << endl << fixed << setw(10) << setprecision(3);
-                    cout << "Time sweep = " << tswp;
+                                                    "FLOP/SWP")
+                         << endl;
                     if (lme != nullptr && lme->para_rule != nullptr) {
                         double tt[3] = {lme->para_rule->comm->tcomm,
                                         lme->para_rule->comm->tidle,
@@ -2418,8 +2477,8 @@ template <typename S> struct Linear {
                         tt[2] /= lme->para_rule->comm->size;
                         cout << " | Tcomm = " << tt[0] << " | Tidle = " << tt[1]
                              << " | Twait = " << tt[2];
+                        cout << endl;
                     }
-                    cout << endl;
                     cout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tfpread = " << frame->fpread
@@ -2443,7 +2502,8 @@ template <typename S> struct Linear {
                     cout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Tmult = " << tmult << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
-                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
+                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd
+                         << endl;
                 }
                 cout << endl;
             }

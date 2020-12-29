@@ -921,6 +921,27 @@ struct BatchGEMMSeq {
             clear();
         }
     }
+    // low mem mode for noise
+    void auto_perform(const vector<MatrixRef> &vs) {
+        assert(mode & SeqTypes::Tasked);
+        int ntop = threading->activate_operator();
+        assert(batch[0]->c.size() == 0);
+#pragma omp parallel num_threads(ntop)
+        {
+            int tid = threading->get_thread_id();
+            for (int ig = 0; tid + ig * ntop < vs.size(); ig++)
+                for (size_t i = 0; i < batch[1]->c.size(); i++) {
+                    const MatrixRef &v = vs[tid + ig * ntop];
+                    if (batch[1]->c[i] >= v.data &&
+                        batch[1]->c[i] < v.data + v.size())
+                        batch[1]->perform_single(
+                            i, batch[1]->a[i], batch[1]->b[i], batch[1]->c[i]);
+                }
+        }
+        threading->activate_normal();
+        cumulative_nflop += batch[1]->nflop;
+        clear();
+    }
     // Directly perform batched DGEMM
     void perform() {
         size_t ipost = 0;

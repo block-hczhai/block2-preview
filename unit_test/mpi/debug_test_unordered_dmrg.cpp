@@ -45,7 +45,7 @@ class TestDMRG : public ::testing::Test {
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4,
             4, 1);
-        threading_()->seq_type = SeqTypes::None;
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -104,7 +104,7 @@ TEST_F(TestDMRG, Test) {
 #endif
     shared_ptr<ParallelRule<SU2>> para_rule =
         make_shared<ParallelRuleQC<SU2>>(para_comm);
-    shared_ptr<ParallelRule<SU2>> mpo_rule = para_rule->split(1);
+    shared_ptr<ParallelRule<SU2>> mpo_rule = para_rule->split(2);
 
     Timer t;
     t.get_time();
@@ -204,7 +204,7 @@ TEST_F(TestDMRG, Test) {
     // dmrg->cutoff = 0;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
-    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
     // dmrg->me->fuse_center = 1;
     dmrg->solve(10, true, 1E-12);
 
