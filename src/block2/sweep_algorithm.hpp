@@ -1130,6 +1130,11 @@ template <typename S> struct DMRG {
             para_mps->rule->comm->tidle = 0;
             para_mps->rule->comm->twait = 0;
         }
+        if (me->para_rule != nullptr && iprint >= 2) {
+            me->para_rule->comm->tcomm = 0;
+            me->para_rule->comm->tidle = 0;
+            me->para_rule->comm->twait = 0;
+        }
         sweep_energies.clear();
         sweep_time.clear();
         sweep_discarded_weights.clear();
@@ -1207,6 +1212,22 @@ template <typename S> struct DMRG {
                         break;
                 }
             new_conn_centers[ip] = cc;
+        }
+        if (iprint >= 2) {
+            stringstream sout;
+            sout << fixed << setprecision(3);
+            if (para_mps->rule != nullptr)
+                sout << " SW-Group = " << para_mps->rule->comm->group;
+            sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
+                 << " | Tint = " << me->tint << " | Tmid = " << me->tmid
+                 << " | Tdctr = " << me->tdctr << " | Tdiag = " << me->tdiag
+                 << " | Tinfo = " << me->tinfo << endl;
+            sout << " | Teff = " << teff << " | Tprt = " << tprt
+                 << " | Teig = " << teig << " | Tblk = " << tblk
+                 << " | Tmve = " << tmve << " | Tdm = " << tdm
+                 << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
+            sout << endl;
+            cout << sout.rdbuf();
         }
         for (int ip = 0; ip < para_mps->ncenter; ip++)
             if (para_mps->rule == nullptr ||
