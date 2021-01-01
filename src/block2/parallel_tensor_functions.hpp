@@ -369,17 +369,16 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     numerical_transform(const shared_ptr<OperatorTensor<S>> &a,
                         const shared_ptr<Symbolic<S>> &names,
                         const shared_ptr<Symbolic<S>> &exprs) const override {
-        for (auto &op : a->ops)
-            if (op.second->data == nullptr)
-                op.second->allocate(op.second->info);
         assert(names->data.size() == exprs->data.size());
         assert((a->lmat == nullptr) ^ (a->rmat == nullptr));
         if (a->lmat == nullptr)
             a->rmat = names;
         else
             a->lmat = names;
-        vector<pair<shared_ptr<SparseMatrix<S>>, shared_ptr<OpSum<S>>>> trs;
-        trs.reserve(names->data.size());
+        vector<vector<pair<shared_ptr<SparseMatrix<S>>, shared_ptr<OpSum<S>>>>>
+            trs(rule->comm->size);
+        for (int ip = 0; ip < rule->comm->size; ip++)
+            trs[ip].reserve(names->data.size() / rule->comm->size);
         int maxi = 0;
         for (size_t k = 0; k < names->data.size(); k++) {
             if (exprs->data[k]->get_type() == OpTypes::Zero)
@@ -390,8 +389,9 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 (1 /
                  dynamic_pointer_cast<OpElement<S>>(names->data[k])->factor);
             shared_ptr<OpExprRef<S>> lexpr;
+            int ip = rule->owner(nop);
             if (expr->get_type() != OpTypes::ExprRef)
-                lexpr = rule->localize_expr(expr, rule->owner(nop));
+                lexpr = rule->localize_expr(expr, ip);
             else
                 lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
             expr = lexpr->op;
@@ -401,7 +401,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             shared_ptr<SparseMatrix<S>> anop = a->ops.at(nop);
             switch (expr->get_type()) {
             case OpTypes::Sum:
-                trs.push_back(
+                trs[ip].push_back(
                     make_pair(anop, dynamic_pointer_cast<OpSum<S>>(expr)));
                 maxi = max(
                     maxi,
@@ -414,39 +414,57 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 break;
             }
         }
-        parallel_for(
-            trs.size(),
-            [&trs, &a](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                shared_ptr<OpSum<S>> op = trs[i].second;
-                for (size_t j = 0; j < op->strings.size(); j++) {
-                    shared_ptr<OpElement<S>> nexpr = op->strings[j]->get_op();
-                    assert(a->ops.count(nexpr) != 0);
-                    tf->opf->iadd(trs[i].first, a->ops.at(nexpr),
-                                  op->strings[j]->factor,
-                                  op->strings[j]->conj != 0);
-                    if (tf->opf->seq->mode & SeqTypes::Simple)
-                        tf->opf->seq->simple_perform();
-                }
-            });
-        if (opf->seq->mode == SeqTypes::Auto)
-            opf->seq->auto_perform();
-        for (size_t k = 0; k < names->data.size(); k++) {
-            shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
-            if (exprs->data[k]->get_type() == OpTypes::Zero)
-                continue;
-            shared_ptr<OpExpr<S>> expr = exprs->data[k];
-            bool is_local = false;
-            if (rule->get_parallel_type() == ParallelTypes::NewScheme)
-                assert(expr->get_type() == OpTypes::ExprRef);
-            shared_ptr<OpExprRef<S>> lexpr;
-            if (expr->get_type() != OpTypes::ExprRef)
-                lexpr = rule->localize_expr(expr, rule->owner(nop));
-            else
-                lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
-            if (lexpr->orig->get_type() == OpTypes::Zero)
-                continue;
-            if (!lexpr->is_local)
-                rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        for (int ip = 0; ip < rule->comm->size; ip++) {
+            for (size_t k = 0; k < trs[ip].size(); k++) {
+                assert(trs[ip][k].first->data == nullptr);
+                if (ip != rule->comm->rank)
+                    trs[ip][k].first->alloc = d_alloc;
+                trs[ip][k].first->allocate(trs[ip][k].first->info);
+            }
+            parallel_for(
+                trs[ip].size(),
+                [&trs, &a, ip](const shared_ptr<TensorFunctions<S>> &tf,
+                               size_t i) {
+                    shared_ptr<OpSum<S>> op = trs[ip][i].second;
+                    for (size_t j = 0; j < op->strings.size(); j++) {
+                        shared_ptr<OpElement<S>> nexpr =
+                            op->strings[j]->get_op();
+                        assert(a->ops.count(nexpr) != 0);
+                        tf->opf->iadd(trs[ip][i].first, a->ops.at(nexpr),
+                                      op->strings[j]->factor,
+                                      op->strings[j]->conj != 0);
+                        if (tf->opf->seq->mode & SeqTypes::Simple)
+                            tf->opf->seq->simple_perform();
+                    }
+                });
+            if (opf->seq->mode == SeqTypes::Auto)
+                opf->seq->auto_perform();
+            for (size_t k = 0; k < names->data.size(); k++) {
+                shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
+                if (exprs->data[k]->get_type() == OpTypes::Zero)
+                    continue;
+                if (rule->owner(nop) != ip)
+                    continue;
+                shared_ptr<OpExpr<S>> expr = exprs->data[k];
+                bool is_local = false;
+                if (rule->get_parallel_type() == ParallelTypes::NewScheme)
+                    assert(expr->get_type() == OpTypes::ExprRef);
+                shared_ptr<OpExprRef<S>> lexpr;
+                if (expr->get_type() != OpTypes::ExprRef)
+                    lexpr = rule->localize_expr(expr, rule->owner(nop));
+                else
+                    lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
+                if (lexpr->orig->get_type() == OpTypes::Zero)
+                    continue;
+                if (!lexpr->is_local)
+                    rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
+            }
+            if (ip != rule->comm->rank) {
+                for (int k = (int)trs[ip].size() - 1; k >= 0; k--)
+                    trs[ip][k].first->deallocate();
+            }
         }
     }
     // delayed left and right block contraction
