@@ -1268,7 +1268,8 @@ template <typename S> void bind_partition(py::module &m) {
         .def("init_environments", &MovingEnvironment<S>::init_environments,
              py::arg("iprint") = false)
         .def("finalize_environments",
-             &MovingEnvironment<S>::finalize_environments)
+             &MovingEnvironment<S>::finalize_environments,
+             py::arg("renormalize_ops") = true)
         .def("prepare", &MovingEnvironment<S>::prepare)
         .def("move_to", &MovingEnvironment<S>::move_to)
         .def("partial_prepare", &MovingEnvironment<S>::partial_prepare)

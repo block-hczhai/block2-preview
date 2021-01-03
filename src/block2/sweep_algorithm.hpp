@@ -1267,6 +1267,15 @@ template <typename S> struct DMRG {
             cout << endl;
         }
         para_mps->conn_centers = new_conn_centers;
+        if (frame->restart_dir != "" &&
+            (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) &&
+            (me->para_rule == nullptr || me->para_rule->is_root())) {
+            para_mps->save_data();
+            if (!Parsing::path_exists(frame->restart_dir))
+                Parsing::mkdir(frame->restart_dir);
+            para_mps->info->copy_mutable(frame->restart_dir);
+            para_mps->copy_data(frame->restart_dir);
+        }
         return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
                           sweep_quanta[idx]);
     }

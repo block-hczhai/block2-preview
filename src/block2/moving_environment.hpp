@@ -517,7 +517,7 @@ template <typename S> struct MovingEnvironment {
         shallow_copy_to(me);
         return me;
     }
-    virtual void finalize_environments() {
+    virtual void finalize_environments(bool renormalize_ops = true) {
         if (!(ket->get_type() & MPSTypes::MultiCenter))
             return;
         shared_ptr<ParallelMPS<S>> para_mps =
@@ -564,7 +564,8 @@ template <typename S> struct MovingEnvironment {
                     while (para_mps->center != para_mps->conn_centers[ip] - 1) {
                         para_mps->move_right(cg, para_rule);
                         check_signal_()();
-                        left_contract_rotate_unordered(para_mps->center);
+                        if (renormalize_ops)
+                            left_contract_rotate_unordered(para_mps->center);
                     }
                 }
                 for (int i = 0; i < para_mps->conn_centers[ip] - 1; i++)
@@ -606,19 +607,24 @@ template <typename S> struct MovingEnvironment {
                         if (l_form) {
                             para_mps->move_left(cg, para_rule);
                             para_mps->move_right(cg, para_rule);
-                            left_contract_rotate_unordered(para_mps->center);
+                            check_signal_()();
+                            if (renormalize_ops)
+                                left_contract_rotate_unordered(
+                                    para_mps->center);
                             while (para_mps->center != pj) {
                                 para_mps->move_right(cg, para_rule);
                                 check_signal_()();
-                                left_contract_rotate_unordered(
-                                    para_mps->center);
+                                if (renormalize_ops)
+                                    left_contract_rotate_unordered(
+                                        para_mps->center);
                             }
                         } else
                             while (para_mps->center != pi) {
                                 para_mps->move_left(cg, para_rule);
                                 check_signal_()();
-                                right_contract_rotate_unordered(
-                                    para_mps->center - para_mps->dot + 1);
+                                if (renormalize_ops)
+                                    right_contract_rotate_unordered(
+                                        para_mps->center - para_mps->dot + 1);
                             }
                     }
                     for (int i = pi; i <= pj; i++)
@@ -640,8 +646,9 @@ template <typename S> struct MovingEnvironment {
                     while (para_mps->center != para_mps->conn_centers[ip]) {
                         para_mps->move_left(cg, para_rule);
                         check_signal_()();
-                        right_contract_rotate_unordered(para_mps->center -
-                                                        para_mps->dot + 1);
+                        if (renormalize_ops)
+                            right_contract_rotate_unordered(para_mps->center -
+                                                            para_mps->dot + 1);
                     }
                 }
                 for (int i = para_mps->conn_centers[ip] + 1; i < n_sites; i++)
@@ -660,12 +667,15 @@ template <typename S> struct MovingEnvironment {
             para_mps->rule->comm->barrier();
         if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)
             para_mps->save_data();
-        frame->activate(1);
-        for (int i = 0; i < n_sites; i++) {
-            envs[i]->load_data(true, get_left_partition_filename(i, true));
-            envs[i]->load_data(false, get_right_partition_filename(i, true));
+        if (renormalize_ops) {
+            frame->activate(1);
+            for (int i = 0; i < n_sites; i++) {
+                envs[i]->load_data(true, get_left_partition_filename(i, true));
+                envs[i]->load_data(false,
+                                   get_right_partition_filename(i, true));
+            }
+            frame->activate(0);
         }
-        frame->activate(0);
         // outside code may have cout
         para_mps->disable_parallel_writing();
     }
