@@ -25,7 +25,7 @@ Revised:     added sz, May 18, 2020
 """
 
 from block2 import SU2, SZ
-from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes
+from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNamesSet, OpNames
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
 from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 import time
@@ -61,7 +61,8 @@ class FTDMRG:
                     dsize=int(memory * 0.9), save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-        Global.threading.seq_type = SeqTypes.Simple
+        Global.threading.seq_type = SeqTypes.Tasked
+        Global.frame.use_main_stack = False
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -204,12 +205,15 @@ class FTDMRG:
         # MPO
         tx = time.perf_counter()
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(AncillaMPO(mpo), RuleQC())
+        mpo = SimplifiedMPO(AncillaMPO(mpo), RuleQC(), True, True,
+                            OpNamesSet((OpNames.R, OpNames.RD)))
         if self.verbose >= 2:
             print('MPO time = ', time.perf_counter() - tx)
 
         # TE
         me = MovingEnvironment(mpo, mps, mps, "TE")
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
@@ -505,7 +509,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 6
+    N = 8
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],

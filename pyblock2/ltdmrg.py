@@ -28,7 +28,7 @@ Author: Huanchen Zhai, Jun 21, 2020
 from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 from block2 import VectorUInt8, VectorUBond, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
-from block2 import SU2, SZ, get_partition_weights
+from block2 import SU2, SZ, get_partition_weights, OpNamesSet, OpNames
 import numpy as np
 import time
 
@@ -64,7 +64,8 @@ class LTDMRG:
                     dsize=int(memory * 0.9), save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-        Global.threading.seq_type = SeqTypes.Simple
+        Global.threading.seq_type = SeqTypes.Tasked
+        Global.frame.use_main_stack = False
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
@@ -166,12 +167,15 @@ class LTDMRG:
         # MPO
         tx = time.perf_counter()
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(mpo, RuleQC())
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True,
+                            OpNamesSet((OpNames.R, OpNames.RD)))
         if self.verbose >= 2:
             print('MPO time = ', time.perf_counter() - tx)
 
         # DMRG
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
@@ -527,7 +531,7 @@ if __name__ == "__main__":
     from pyscf import gto, scf, symm, ao2mo
 
     # H chain
-    N = 6
+    N = 8
     BOHR = 0.52917721092  # Angstroms
     R = 1.8 * BOHR
     mol = gto.M(atom=[['H', (i * R, 0, 0)] for i in range(N)],
