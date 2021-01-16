@@ -11,6 +11,12 @@ from block2 import FCIDUMP
 from block2 import VectorUInt8
 import numpy as np
 
+KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter", 
+              "twodot_to_onedot", "twodot", "onedot", "sweep_tol", 
+              "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
+              "nonspinadapted", "noreorder", "num_thrds", "mem", 
+              "onepdm", "fullrestart", "restart_onepdm", "restart_oh"}
+
 def parse(fname):
     fin = open(fname, 'r')
     lines = fin.readlines()
@@ -29,12 +35,14 @@ def parse(fname):
         elif not line.startswith('!'):
             line_sp = line.split()
             if len(line_sp) != 0:
+                if line_sp[0] in dic:
+                    raise ValueError("duplicate key (%s)" % line_sp[0])
                 dic[line_sp[0]] = " ".join(line_sp[1:])
     fin.close()
     
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()
-    maxiter = int(dic["maxiter"]) - np.sum(nsweeps)
+    maxiter = int(dic["maxiter"]) - int(np.sum(nsweeps))
     assert maxiter > 0
     nsweeps.append(maxiter)
     
@@ -45,6 +53,11 @@ def parse(fname):
         schedule[2].extend([noise] * nswp)
     dic["schedule"] = schedule
     
+    # sanity check
+    diff = set(dic.keys()) - KNOWN_KEYS
+    if len(diff) != 0:
+        raise ValueError("Unrecognized keys (%s)" %diff)
+
     if not "nonspinadapted" in dic:
         raise ValueError("nonspinadapted should be set.")
     if "onedot" in dic:
@@ -54,7 +67,7 @@ def parse(fname):
     
     return dic
 
-def read_integral(fints, n_elec, twos):
+def read_integral(fints, n_elec, twos, tol=1e-13, isym=1, orb_sym=None):
     from libdmet_solid.system import integral
     from pyscf import ao2mo
     Ham = integral.load(fints)
@@ -62,8 +75,6 @@ def read_integral(fints, n_elec, twos):
     g2e = Ham.H2["ccdd"]
     e_core = float(Ham.H0)
     n_sites = Ham.norb
-    tol = 1e-13
-    isym = 1
     fcidump = FCIDUMP()
 
     mh1e_a = np.zeros((n_sites * (n_sites + 1) // 2))
@@ -87,7 +98,9 @@ def read_integral(fints, n_elec, twos):
         xmg2e[np.abs(xmg2e) < tol] = 0.0
     fcidump.initialize_sz(
         n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
-    fcidump.orb_sym = VectorUInt8([1] * n_sites)
+    if orb_sym is None:
+        orb_sym = [1] * n_sites
+    fcidump.orb_sym = VectorUInt8(orb_sym)
     return fcidump
 
 if __name__ == "__main__":
