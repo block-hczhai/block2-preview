@@ -1,6 +1,8 @@
+#! /usr/bin/env python
 
 import sys
-sys.path[:0] = ["../../../build"]
+from libdmet_solid.solver.settings import BLOCK2PATH 
+sys.path[:0] = [BLOCK2PATH + "/build"]
 
 from block2 import SZ, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
@@ -11,7 +13,6 @@ from block2.sz import PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
 from block2.sz import DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
 import numpy as np
 import time
-import shutil
 
 try:
     from block2.sz import MPICommunicator
@@ -23,19 +24,22 @@ try:
         if MPI.rank == 0:
             print(*args, **kwargs)
 except ImportError:
+    raise ValueError("MPI import fails.") 
     MPI = None
     _print = print
 
 tx = time.perf_counter()
 
 Random.rand_seed(1234)
-scratch = '/scratch/global/hczhai/cpr2-07'
-restart_dir = '/scratch/global/hczhai/cpr2-07-restart'
-load_dir = '/scratch/global/hczhai/cpr2-03-restart-sw09'
+# ZHC NOTE all op, MPS ...
+# from prefix parser
+scratch = '/scratch/global/hczhai/cpr2-01'
+# ZHC NOTE only MPS
+restart_dir = '/scratch/global/hczhai/cpr2-01-restart'
 n_threads = 28
-bond_dims = [3500] * 5 + [3000] * 4 + [2500] * 4 + [2000] * 4 + [1500] * 4
-noises = [0] * 21
-dav_thrds = [1E-9] * 21
+bond_dims = [800] * 5 + [1200] * 5 + [1500] * 5 + [1800] * 5 + [2500] * 5 + [3000] * 5
+noises = [1E-4] * 10 + [1E-5] * 5 + [1E-6] * 5 + [1E-7] * 20 + [0]
+dav_thrds = [1E-5] * 10 + [1E-6] * 5 + [1E-7] * 5 + [1E-8] * 20 + [0]
 
 if MPI is not None and MPI.rank == 0:
     import os
@@ -44,15 +48,12 @@ if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(restart_dir):
         os.mkdir(restart_dir)
     os.environ['TMPDIR'] = scratch
-    for k in os.listdir(load_dir):
-        if '.KET.' in k:
-            shutil.copy(load_dir + "/" + k, scratch + "/" + k)
 if MPI is not None:
     MPI.barrier()
 
 memory = int(100 * 1E9)
 init_memory(isize=int(1E9), dsize=int(memory), save_dir=scratch)
-Global.threading = Threading(ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, 28, 28, 1)
+Global.threading = Threading(ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, n_threads, n_threads, 1)
 Global.threading.seq_type = SeqTypes.Tasked
 Global.frame.restart_dir = restart_dir
 Global.frame.fp_codec = DoubleFPCodec(1E-20, 1024)
@@ -66,18 +67,26 @@ if MPI is not None:
     from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
     prule = ParallelRuleQC(MPI)
 
+# occs = np.diag(np.load('rdm1_ccsd_mp2_basis.npy')[0] + np.load('rdm1_ccsd_mp2_basis.npy')[1])
+# occs = VectorDouble(np.array(occs))
+# _print(["%.4f" % x for x in occs])
+# _print(sum(occs))
+
 mps_info = MPSInfo(0)
-mps_info.load_data('../prepare2/mps_info.bin')
+# ZHC NOTE from the prefix folder
+mps_info.load_data('../prepare/mps_info.bin')
 mps_info.tag = "KET"
-mps_info.load_mutable()
-mps = MPS(mps_info)
-mps.load_data()
-mps.load_mutable()
+# ZHC NOTE use the 1st iter M
+mps_info.set_bond_dimension(500)
+mps = MPS(mps_info.n_sites, 0, 2)
+mps.initialize(mps_info)
+mps.random_canonicalize()
 
 _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info.left_dims]))
 
 mpo = MPO(0)
-mpo.load_data('../prepare2/mpo.bin')
+# ZHC NOTE prefix
+mpo.load_data('../prepare/mpo.bin')
 mpo.tf = TensorFunctions(OperatorFunctions(CG()))
 
 _print('GS MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
@@ -88,6 +97,7 @@ if MPI is not None:
 
 _print("para mpo finished", time.perf_counter() - tx)
 
+mps.save_mutable()
 mps.deallocate()
 mps_info.save_mutable()
 mps_info.deallocate_mutable()
@@ -104,6 +114,7 @@ dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
 dmrg.decomp_type = DecompositionTypes.DensityMatrix
 dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
-dmrg.solve(21, mps.center == 0, tol=1E-10)
+# ZHC NOTE maxiter, sweep_tol from parser
+dmrg.solve(36, mps.center == 0, 1e-6)
 
 mps_info.deallocate()
