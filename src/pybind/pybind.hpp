@@ -99,6 +99,7 @@ PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MovingEnvironment<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SU2>>>);
+PYBIND11_MAKE_OPAQUE(map<string, string>);
 
 template <typename T> struct Array {
     T *data;
@@ -2091,6 +2092,8 @@ template <typename S = void> void bind_data(py::module &m) {
         m.attr("VectorMKLInt") = m.attr("VectorInt");
     else if (sizeof(MKL_INT) == sizeof(long long int))
         m.attr("VectorMKLInt") = m.attr("VectorLLInt");
+
+    py::bind_map<map<string, string>>(m, "MapStrStr");
 }
 
 template <typename S = void> void bind_types(py::module &m) {

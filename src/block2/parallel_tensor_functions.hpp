@@ -377,6 +377,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             a->lmat = names;
         vector<vector<pair<shared_ptr<SparseMatrix<S>>, shared_ptr<OpSum<S>>>>>
             trs(rule->comm->size);
+        const shared_ptr<OpSum<S>> zero =
+            make_shared<OpSum<S>>(vector<shared_ptr<OpProduct<S>>>());
         for (int ip = 0; ip < rule->comm->size; ip++)
             trs[ip].reserve(names->data.size() / rule->comm->size);
         int maxi = 0;
@@ -395,9 +397,17 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             else
                 lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
             expr = lexpr->op;
-            if (lexpr->orig->get_type() == OpTypes::Zero)
-                continue;
             assert(a->ops.count(nop) != 0);
+            // can be normal operator or zero complementary operator
+            // if zero complementary operator, set factor to zero, skip
+            // allocation
+            // in non-parallel case, all normal/compelementary operators
+            // are allocated
+            if (lexpr->orig->get_type() == OpTypes::Zero) {
+                if (a->ops.at(nop)->data == nullptr)
+                    a->ops.at(nop)->factor = 0;
+                continue;
+            }
             shared_ptr<SparseMatrix<S>> anop = a->ops.at(nop);
             switch (expr->get_type()) {
             case OpTypes::Sum:
@@ -408,6 +418,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     (int)dynamic_pointer_cast<OpSum<S>>(expr)->strings.size());
                 break;
             case OpTypes::Zero:
+                trs[ip].push_back(make_pair(anop, zero));
                 break;
             default:
                 assert(false);
@@ -448,7 +459,6 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 if (rule->owner(nop) != ip)
                     continue;
                 shared_ptr<OpExpr<S>> expr = exprs->data[k];
-                bool is_local = false;
                 if (rule->get_parallel_type() == ParallelTypes::NewScheme)
                     assert(expr->get_type() == OpTypes::ExprRef);
                 shared_ptr<OpExprRef<S>> lexpr;
@@ -458,8 +468,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                     lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
                 if (lexpr->orig->get_type() == OpTypes::Zero)
                     continue;
-                if (!lexpr->is_local)
-                    rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
+                rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
             }
             if (ip != rule->comm->rank) {
                 for (int k = (int)trs[ip].size() - 1; k >= 0; k--)
