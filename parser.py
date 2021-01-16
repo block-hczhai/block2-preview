@@ -21,7 +21,7 @@ def parse(fname):
         elif schedule_start != -1 and schedule_end == -1:
             a, b, c, d = line.split()
             schedule.append([int(a), int(b), float(c), float(d)])
-        else:
+        elif not line.startswith('!'):
             line_sp = line.split()
             if len(line_sp) != 0:
                 dic[line_sp[0]] = " ".join(line_sp[1:])
@@ -30,6 +30,7 @@ def parse(fname):
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()
     maxiter = int(dic["maxiter"]) - np.sum(nsweeps)
+    assert maxiter > 0
     nsweeps.append(maxiter)
     
     schedule = [[], [], []]
@@ -77,4 +78,3 @@ def read_integral(fints, n_elec, twos):
 if __name__ == "__main__":
     dic = parse(fname="dmrg.conf.000")
     print (dic)
-            
