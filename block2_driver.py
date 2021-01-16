@@ -7,15 +7,6 @@ Author:
     Zhi-Hao Cui
 """
 
-import sys
-
-try:
-    from libdmet_solid.solver.settings import BLOCK2PATH 
-    sys.path[:0] = [BLOCK2PATH + "/build"]
-except:
-    # in case of libdmet not in path and block2 already in path
-    pass
-
 from block2 import SZ, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
@@ -26,6 +17,7 @@ from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, Te
 import numpy as np
 import time
 import os
+import sys
 
 from parser import parse, read_integral
 
