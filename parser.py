@@ -3,8 +3,6 @@
 from block2 import FCIDUMP
 from block2 import VectorUInt8
 import numpy as np
-from pyscf import ao2mo
-from libdmet_solid.system import integral
 
 def parse(fname):
     fin = open(fname, 'r')
@@ -42,6 +40,8 @@ def parse(fname):
     return dic
 
 def read_integral(fints, n_elec, twos):
+    from libdmet_solid.system import integral
+    from pyscf import ao2mo
     Ham = integral.load(fints)
     h1e = Ham.H1["cd"]
     g2e = Ham.H2["ccdd"]
