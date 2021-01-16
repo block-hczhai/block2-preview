@@ -61,14 +61,13 @@ The DMRG run will then stop as it would be converged after the current sweep is 
 
 ### Special keywords
 
-1. only `noreorder` is supported (not checked).
-2. only `nonspinadapted` is supported (not checked).
+1. only `noreorder` is supported (reorder has no effect).
+2. only `nonspinadapted` is supported.
 3. `twodot_to_onedot` is supported. The default is `twodot`.
-4. `onedot` is not supported (not checked), but one can restart from a `onedot` mps (obtained from previous run with `twodot_to_onedot`).
+4. `onedot` is not supported, but one can restart from a `onedot` mps (obtained from previous run with `twodot_to_onedot`).
 5. 1pdm can run with either `twodot_to_onedot` or `twodot`.
 6. `orbitals` can be either `FCIDUMP` (if the filename ends with `FCIDUMP`) or `hdf5` format.
 7. currently, `hf_occ`, `nroots`, and `outputlevel` are ignored.
-8. unit of `mem` must be `g` (not checked).
-9. if `warmup occ` then keyword `occ` must be set (a space-separated list of fractional occ numbers).
+8. if `warmup occ` then keyword `occ` must be set (a space-separated list of fractional occ numbers).
    Otherwise, no matter what `warmup ???` is set, the CheMPS2 type initial FCI is used.
-10. if a line in `dmrg.conf` starts with `!`, the line will be ignored.
+9. if a line in `dmrg.conf` starts with `!`, the line will be ignored.

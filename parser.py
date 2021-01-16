@@ -1,4 +1,11 @@
 #! /usr/bin/env python
+"""
+parser for converting stackblock input and libDMET integral to block2.
+
+Author:
+    Huanchen Zhai
+    Zhi-Hao Cui
+"""
 
 from block2 import FCIDUMP
 from block2 import VectorUInt8
@@ -37,6 +44,14 @@ def parse(fname):
         schedule[1].extend([tol] * nswp)
         schedule[2].extend([noise] * nswp)
     dic["schedule"] = schedule
+    
+    if not "nonspinadapted" in dic:
+        raise ValueError("nonspinadapted should be set.")
+    if "onedot" in dic:
+        raise ValueError("onedot is currently not supported.")
+    if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
+        raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
+    
     return dic
 
 def read_integral(fints, n_elec, twos):
@@ -76,5 +91,5 @@ def read_integral(fints, n_elec, twos):
     return fcidump
 
 if __name__ == "__main__":
-    dic = parse(fname="dmrg.conf.000")
+    dic = parse(fname="./test/dmrg.conf.6")
     print (dic)

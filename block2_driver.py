@@ -1,4 +1,11 @@
 #! /usr/bin/env python
+"""
+block2 wrapper.
+
+Author:
+    Huanchen Zhai
+    Zhi-Hao Cui
+"""
 
 import sys
 
@@ -107,7 +114,7 @@ if pre_run or not no_pre_run:
     hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
 
 if dic.get("warmup", None) == "occ":
-    print("using occ init")
+    _print("using occ init")
     assert "occ" in dic
     occs = VectorDouble([float(occ) for occ in dic["occ"].split() if len(occ) != 0])
     bias = float(dic.get("bias", 1.0))
@@ -116,6 +123,7 @@ else:
 
 # prepare mps
 if "fullrestart" in dic:
+    _print("full restart")
     mps_info = MPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = "KET"
@@ -151,6 +159,7 @@ _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mp
 
 # prepare mpo
 if pre_run or not no_pre_run:
+    # mpo for dmrg
     _print("build mpo", time.perf_counter() - tx)
     mpo = MPOQC(hamil, QCTypes.Conventional)
     _print("simpl mpo", time.perf_counter() - tx)
@@ -162,7 +171,7 @@ if pre_run or not no_pre_run:
     if MPI is None or MPI.rank == 0:
         mpo.save_data(scratch + '/mpo.bin')
 
-    # ZHC NOTE 1pdm
+    # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
     pmpo = PDM1MPOQC(hamil)
     _print("simpl 1pdm mpo", time.perf_counter() - tx)
@@ -246,7 +255,6 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        # ZHC NOTE True do sweep.
         expect.solve(True, mps.center == 0)
 
         if MPI is None or MPI.rank == 0:
