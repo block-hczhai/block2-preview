@@ -961,8 +961,9 @@ template <typename S> struct DMRG {
             me->ket->info->copy_mutable(frame->restart_dir);
             me->ket->copy_data(frame->restart_dir);
         }
-        return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
-                          sweep_quanta[idx]);
+        double max_dw = *max_element(sweep_discarded_weights.begin(),
+                                     sweep_discarded_weights.end());
+        return make_tuple(sweep_energies[idx], max_dw, sweep_quanta[idx]);
     }
     // one DMRG sweep over a range of sites in multi-center MPS
     void partial_sweep(int ip, bool forward, bool connect, ubond_t bond_dim,
@@ -1276,8 +1277,9 @@ template <typename S> struct DMRG {
             para_mps->info->copy_mutable(frame->restart_dir);
             para_mps->copy_data(frame->restart_dir);
         }
-        return make_tuple(sweep_energies[idx], sweep_discarded_weights[idx],
-                          sweep_quanta[idx]);
+        double max_dw = *max_element(sweep_discarded_weights.begin(),
+                                     sweep_discarded_weights.end());
+        return make_tuple(sweep_energies[idx], max_dw, sweep_quanta[idx]);
     }
     // energy optimization using multiple DMRG sweeps
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
@@ -2400,7 +2402,9 @@ template <typename S> struct Linear {
             rme->bra->info->copy_mutable(frame->restart_dir);
             rme->bra->copy_data(frame->restart_dir);
         }
-        return make_tuple(sweep_targets[idx], sweep_discarded_weights[idx]);
+        double max_dw = *max_element(sweep_discarded_weights.begin(),
+                                     sweep_discarded_weights.end());
+        return make_tuple(sweep_targets[idx], max_dw);
     }
     double solve(int n_sweeps, bool forward = true, double tol = 1E-6) {
         if (bra_bond_dims.size() < n_sweeps)
