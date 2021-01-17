@@ -21,7 +21,8 @@ import sys
 
 from parser import parse, read_integral
 
-np.set_printoptions(3, linewidth=1000, suppress=True)
+DEBUG = True
+
 if len(sys.argv) > 1:
     fin = sys.argv[1]
     if len(sys.argv) > 2 and sys.argv[2] == "pre":
@@ -54,6 +55,12 @@ tx = time.perf_counter()
 # input parameters
 Random.rand_seed(1234)
 dic = parse(fin)
+if DEBUG:
+    _print("\n" + "*" * 34 + " INPUT START " + "*" * 34)
+    for key, val in dic.items():
+        _print ("%-25s %40s" % (key, val))
+    _print("*" * 34 + " INPUT END   " + "*" * 34 + "\n")
+
 scratch = dic.get("prefix", "./node0/")
 n_threads = int(dic.get("num_thrds", 28))
 bond_dims, dav_thrds, noises = dic["schedule"]

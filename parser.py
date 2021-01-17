@@ -73,6 +73,18 @@ def parse(fname):
         raise ValueError("onedot is currently not supported.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
+    
+    # restart check
+    if "restart_oh" in dic: 
+        # OH is always fullrestart, and should not do dmrg or pdm
+        dic["fullrestart"] = " "
+        dic.pop("onepdm", None)
+        dic.pop("twopdm", None)
+    if "restart_onepdm" in dic:
+        dic["fullrestart"] = " "
+    if "restart_twopdm" in dic:
+        dic["fullrestart"] = " "
+
     return dic
 
 def read_integral(fints, n_elec, twos, tol=1e-13, isym=1, orb_sym=None):
