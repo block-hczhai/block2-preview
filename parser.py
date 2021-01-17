@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 """
 parser for converting stackblock input and libDMET integral to block2.
 
@@ -19,8 +20,17 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "occ", "bias"}
 
 def parse(fname):
-    fin = open(fname, 'r')
-    lines = fin.readlines()
+    """
+    parse a stackblock input file.
+
+    Args:
+        fname: stackblock input config file.
+
+    Returns:
+        dic: dictionary of input args.
+    """
+    with open(fname, 'r') as fin:
+        lines = fin.readlines()
     dic = {}
     schedule = []
     schedule_start = -1
@@ -33,13 +43,12 @@ def parse(fname):
         elif schedule_start != -1 and schedule_end == -1:
             a, b, c, d = line.split()
             schedule.append([int(a), int(b), float(c), float(d)])
-        elif not line.startswith('!'):
+        elif not line.strip().startswith('!'):
             line_sp = line.split()
             if len(line_sp) != 0:
                 if line_sp[0] in dic:
                     raise ValueError("duplicate key (%s)" % line_sp[0])
                 dic[line_sp[0]] = " ".join(line_sp[1:])
-    fin.close()
     
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()
@@ -58,17 +67,29 @@ def parse(fname):
     diff = set(dic.keys()) - KNOWN_KEYS
     if len(diff) != 0:
         raise ValueError("Unrecognized keys (%s)" %diff)
-
     if not "nonspinadapted" in dic:
         raise ValueError("nonspinadapted should be set.")
     if "onedot" in dic:
         raise ValueError("onedot is currently not supported.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
-    
     return dic
 
 def read_integral(fints, n_elec, twos, tol=1e-13, isym=1, orb_sym=None):
+    """
+    Read libDMET integral h5py file to block2 FCIDUMP object.
+
+    Args:
+        fints: h5 file
+        n_elec: number of electrons
+        twos: spin, nelec_a - nelec_b
+        tol: tolerance of numerical zero
+        isym: symmetry
+        orb_sym: FCIDUMP orbital symm
+
+    Returns:
+        fcidump: block2 integral object.    
+    """
     from libdmet_solid.system import integral
     from pyscf import ao2mo
     Ham = integral.load(fints)

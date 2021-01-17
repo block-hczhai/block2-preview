@@ -214,12 +214,17 @@ if not pre_run:
         dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
         dmrg.decomp_type = DecompositionTypes.DensityMatrix
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+        sweep_energies = []
+        discarded_weights = []
         if "twodot_to_onedot" not in dic:
             E_dmrg = dmrg.solve(len(bond_dims), mps.center == 0, sweep_tol)
         else:
             tto = int(dic["twodot_to_onedot"])
             assert len(bond_dims) > tto
             dmrg.solve(tto, mps.center == 0, 0)
+            # save the twodot part energies and discarded weights 
+            sweep_energies.append(np.array(dmrg.energies))
+            discarded_weights.append(np.array(dmrg.discarded_weights))
             dmrg.me.dot = 1
             dmrg.bond_dims = VectorUBond(bond_dims[tto:])
             dmrg.noises = VectorDouble(noises[tto:])
@@ -228,9 +233,17 @@ if not pre_run:
             mps.dot = 1
             if MPI is None or MPI.rank == 0:
                 mps.save_data()
+        
+        sweep_energies.append(np.array(dmrg.energies))
+        discarded_weights.append(np.array(dmrg.discarded_weights))
+        sweep_energies = np.vstack(sweep_energies)
+        discarded_weights = np.hstack(discarded_weights)
 
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_dmrg.npy", E_dmrg)
+            np.save(scratch + "/bond_dims.npy", bond_dims[:len(discarded_weights)])
+            np.save(scratch + "/sweep_energies.npy", sweep_energies)
+            np.save(scratch + "/discarded_weights.npy", discarded_weights)
         _print("DMRG Energy = %20.15f" % E_dmrg)
 
         if MPI is None or MPI.rank == 0:
