@@ -15,7 +15,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "twodot_to_onedot", "twodot", "onedot", "sweep_tol", 
               "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
               "nonspinadapted", "noreorder", "num_thrds", "mem", 
-              "onepdm", "fullrestart", "restart_onepdm", "restart_oh"}
+              "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
+              "occ", "bias"}
 
 def parse(fname):
     fin = open(fname, 'r')
