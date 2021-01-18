@@ -87,7 +87,7 @@ def parse(fname):
 
     return dic
 
-def read_integral(fints, n_elec, twos, tol=1e-13, isym=1, orb_sym=None):
+def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
     """
     Read libDMET integral h5py file to block2 FCIDUMP object.
 
@@ -118,7 +118,7 @@ def read_integral(fints, n_elec, twos, tol=1e-13, isym=1, orb_sym=None):
         k = 0
         for i in range(0, n_sites):
             for j in range(0, i + 1):
-                assert abs(xh1e[i, j] - xh1e[j, i]) < tol
+                #assert abs(xh1e[i, j] - xh1e[j, i]) < tol
                 xmh1e[k] = xh1e[i, j]
                 k += 1
         xmh1e[np.abs(xmh1e) < tol] = 0.0
