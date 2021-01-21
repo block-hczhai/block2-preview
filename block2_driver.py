@@ -121,7 +121,7 @@ else:
     occs = None
 
 # prepare mps
-if "fullrestart" in dic:
+if "fullrestart" in dic or "middlerestart" in dic:
     _print("full restart")
     mps_info = MPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
@@ -130,6 +130,14 @@ if "fullrestart" in dic:
     mps = MPS(mps_info)
     mps.load_data()
     mps.load_mutable()
+    forward = mps.center == 0
+    if "middlerestart" in dic:
+        if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
+            mps.center += 1
+            forward = True
+        elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
+            mps.center -= 1
+            forward = False
 elif pre_run or not no_pre_run:
     mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
     mps_info.tag = "KET"
@@ -224,11 +232,11 @@ if not pre_run:
         sweep_energies = []
         discarded_weights = []
         if "twodot_to_onedot" not in dic:
-            E_dmrg = dmrg.solve(len(bond_dims), mps.center == 0, sweep_tol)
+            E_dmrg = dmrg.solve(len(bond_dims), forward, sweep_tol)
         else:
             tto = int(dic["twodot_to_onedot"])
             assert len(bond_dims) > tto
-            dmrg.solve(tto, mps.center == 0, 0)
+            dmrg.solve(tto, forward, 0)
             # save the twodot part energies and discarded weights 
             sweep_energies.append(np.array(dmrg.energies))
             discarded_weights.append(np.array(dmrg.discarded_weights))
@@ -267,7 +275,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        expect.solve(True, mps.center == 0)
+        expect.solve(True, forward)
 
         if MPI is None or MPI.rank == 0:
             dmr = expect.get_1pdm(me.n_sites)
@@ -292,7 +300,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        E_oh = expect.solve(False, mps.center == 0)
+        E_oh = expect.solve(False, forward)
 
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_oh.npy", E_oh)
