@@ -79,7 +79,7 @@ init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, n_threads, n_threads, 1)
 Global.threading.seq_type = SeqTypes.Tasked
-Global.frame.fp_codec = DoubleFPCodec(1E-20, 1024)
+Global.frame.fp_codec = DoubleFPCodec(1E-16, 1024)
 Global.frame.load_buffering = False
 Global.frame.save_buffering = False
 Global.frame.use_main_stack = False
