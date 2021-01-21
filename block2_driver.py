@@ -121,7 +121,7 @@ else:
     occs = None
 
 # prepare mps
-if "fullrestart" in dic or "middlerestart" in dic:
+if "fullrestart" in dic:
     _print("full restart")
     mps_info = MPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
@@ -131,13 +131,12 @@ if "fullrestart" in dic or "middlerestart" in dic:
     mps.load_data()
     mps.load_mutable()
     forward = mps.center == 0
-    if "middlerestart" in dic:
-        if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
-            mps.center += 1
-            forward = True
-        elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
-            mps.center -= 1
-            forward = False
+    if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
+        mps.center += 1
+        forward = True
+    elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
+        mps.center -= 1
+        forward = False
 elif pre_run or not no_pre_run:
     mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
     mps_info.tag = "KET"
