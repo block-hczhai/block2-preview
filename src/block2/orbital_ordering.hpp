@@ -239,7 +239,6 @@ struct OrbitalOrdering {
         ga.clone_rate = clone_rate;
         ga.mutate_rate = mutate_rate;
         return ga.solve(n_generations);
-        return ford;
     }
     static vector<uint16_t> fiedler(uint16_t n_sites,
                                     const vector<double> &kmat) {
