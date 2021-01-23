@@ -19,6 +19,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
               "occ", "bias"}
 
+GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
+
 def parse(fname):
     """
     parse a stackblock input file.
@@ -84,6 +86,34 @@ def parse(fname):
         dic["fullrestart"] = " "
     if "restart_twopdm" in dic:
         dic["fullrestart"] = " "
+
+    return dic
+
+def parse_gaopt(fname):
+    """
+    parse a stackblock gaopt input file.
+
+    Args:
+        fname: stackblock gaopt input config file.
+
+    Returns:
+        dic: dictionary of input args.
+    """
+    with open(fname, 'r') as fin:
+        lines = fin.readlines()
+    dic = {}
+    for line in lines:
+        if not line.strip().startswith('!'):
+            line_sp = line.split()
+            if len(line_sp) != 0:
+                if line_sp[0] in dic:
+                    raise ValueError("duplicate key (%s)" % line_sp[0])
+                dic[line_sp[0]] = " ".join(line_sp[1:])
+
+    # sanity check
+    diff = set(dic.keys()) - GAOPT_KEYS
+    if len(diff) != 0:
+        raise ValueError("Unrecognized keys (%s)" % diff)
 
     return dic
 
