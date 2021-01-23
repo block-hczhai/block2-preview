@@ -2738,6 +2738,10 @@ template <typename S = void> void bind_matrix(py::module &m) {
             "        i, j, k, l : spatial indices\n"
             "        sij, skl : spin indices (0=alpha, 1=beta)")
         .def("det_energy", &FCIDUMP::det_energy)
+        .def("exchange_matrix", &FCIDUMP::exchange_matrix)
+        .def("abs_exchange_matrix", &FCIDUMP::abs_exchange_matrix)
+        .def("h1e_matrix", &FCIDUMP::h1e_matrix)
+        .def("abs_h1e_matrix", &FCIDUMP::abs_h1e_matrix)
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,
                       "Orbital symmetry in molpro convention")
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
@@ -2751,6 +2755,18 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_readwrite("const_e", &FCIDUMP::const_e)
         .def_readwrite("total_memory", &FCIDUMP::total_memory)
         .def_readwrite("uhf", &FCIDUMP::uhf);
+
+    py::class_<OrbitalOrdering, shared_ptr<OrbitalOrdering>>(m,
+                                                             "OrbitalOrdering")
+        .def_static("exp_trans", &OrbitalOrdering::exp_trans, py::arg("mat"))
+        .def_static("evaluate", &OrbitalOrdering::evaluate, py::arg("n_sites"),
+                    py::arg("kmat"), py::arg("ord") = vector<uint16_t>())
+        .def_static("fiedler", &OrbitalOrdering::fiedler, py::arg("n_sites"),
+                    py::arg("kmat"))
+        .def_static("ga_opt", &OrbitalOrdering::ga_opt, py::arg("n_sites"),
+                    py::arg("kmat"), py::arg("n_generations") = 10000,
+                    py::arg("n_configs") = 54, py::arg("n_elite") = 5,
+                    py::arg("clone_rate") = 0.1, py::arg("mutate_rate") = 0.1);
 
     py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")
         .def_readwrite("batch", &BatchGEMMSeq::batch)

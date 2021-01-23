@@ -614,6 +614,45 @@ struct FCIDUMP {
             r[i] = t(i, i);
         return r;
     }
+    // h1e matrix
+    vector<double> h1e_matrix() const {
+        uint16_t n = n_sites();
+        vector<double> r(n * n, 0);
+        for (uint16_t i = 0; i < n; i++)
+            for (uint16_t j = 0; j < n; j++)
+                r[i * n + j] += t(i, j);
+        return r;
+    }
+    // exchange matrix
+    vector<double> exchange_matrix() const {
+        uint16_t n = n_sites();
+        vector<double> r(n * n, 0);
+        for (uint16_t i = 0; i < n; i++)
+            for (uint16_t j = 0; j < n; j++)
+                r[i * n + j] += v(i, j, j, i);
+        return r;
+    }
+    // abs h1e matrix
+    vector<double> abs_h1e_matrix() const {
+        uint16_t n = n_sites();
+        vector<double> r(n * n, 0);
+        for (uint8_t si = 0; si < 2; si++)
+            for (uint16_t i = 0; i < n; i++)
+                for (uint16_t j = 0; j < n; j++)
+                    r[i * n + j] += 0.5 * abs(t(si, i, j));
+        return r;
+    }
+    // abs exchange matrix
+    vector<double> abs_exchange_matrix() const {
+        uint16_t n = n_sites();
+        vector<double> r(n * n, 0);
+        for (uint16_t i = 0; i < n; i++)
+            for (uint8_t si = 0; si < 2; si++)
+                for (uint16_t j = 0; j < n; j++)
+                    for (uint8_t sj = 0; sj < 2; sj++)
+                        r[i * n + j] += 0.25 * abs(v(si, sj, i, j, j, i));
+        return r;
+    }
     // One-electron integral element (SU(2))
     virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
     // One-electron integral element (SZ)

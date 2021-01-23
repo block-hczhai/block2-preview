@@ -50,6 +50,7 @@
 #include "block2/mps_unfused.hpp"
 #include "block2/operator_functions.hpp"
 #include "block2/operator_tensor.hpp"
+#include "block2/orbital_ordering.hpp"
 #include "block2/parallel_mpi.hpp"
 #include "block2/parallel_mpo.hpp"
 #include "block2/parallel_mps.hpp"
