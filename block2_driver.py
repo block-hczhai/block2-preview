@@ -255,7 +255,10 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
-        dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+        if "lowmem_noise" in dic:
+            dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+        else:
+            dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
         dmrg.decomp_type = DecompositionTypes.DensityMatrix
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
         sweep_energies = []
@@ -304,7 +307,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        expect.solve(True, forward)
+        expect.solve(True, mps.center == 0)
 
         if MPI is None or MPI.rank == 0:
             if SX == SZ:
@@ -336,7 +339,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        expect.solve(True, forward)
+        expect.solve(True, mps.center == 0)
 
         if MPI is None or MPI.rank == 0:
             if SX == SZ:

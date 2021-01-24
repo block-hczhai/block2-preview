@@ -17,7 +17,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
               "nonspinadapted", "noreorder", "num_thrds", "mem", 
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
-              "occ", "bias", "correlation", "restart_correlation"}
+              "occ", "bias", "correlation", "restart_correlation",
+              "lowmem_noise"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 
