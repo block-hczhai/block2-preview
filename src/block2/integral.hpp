@@ -54,6 +54,12 @@ struct TInt {
     double operator()(uint16_t i, uint16_t j) const {
         return *(data + find_index(i, j));
     }
+    void reorder(const TInt &other, const vector<uint16_t> &ord) {
+        assert(n == other.n);
+        for (uint16_t i = 0; i < n; i++)
+            for (uint16_t j = 0; j <= i; j++)
+                (*this)(i, j) = other(ord[i], ord[j]);
+    }
     friend ostream &operator<<(ostream &os, TInt x) {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
@@ -79,6 +85,15 @@ struct V1Int {
     }
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + (((size_t)i * n + j) * n + k) * n + l);
+    }
+    void reorder(const V1Int &other, const vector<uint16_t> &ord) {
+        assert(n == other.n);
+        for (uint32_t i = 0; i < n; i++)
+            for (uint32_t j = 0; j < n; j++)
+                for (uint32_t k = 0; k < n; k++)
+                    for (uint32_t l = 0; l < n; l++)
+                        (*this)(i, j, k, l) =
+                            other(ord[i], ord[j], ord[k], ord[l]);
     }
     friend ostream &operator<<(ostream &os, V1Int x) {
         os << fixed << setprecision(16);
@@ -117,6 +132,15 @@ struct V4Int {
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
     }
+    void reorder(const V4Int &other, const vector<uint16_t> &ord) {
+        assert(n == other.n);
+        for (uint32_t i = 0; i < n; i++)
+            for (uint32_t j = 0; j <= i; j++)
+                for (uint32_t k = 0; k < n; k++)
+                    for (uint32_t l = 0; l <= k; l++)
+                        (*this)(i, j, k, l) =
+                            other(ord[i], ord[j], ord[k], ord[l]);
+    }
     friend ostream &operator<<(ostream &os, V4Int x) {
         os << fixed << setprecision(16);
         for (uint32_t i = 0; i < x.n; i++)
@@ -153,6 +177,16 @@ struct V8Int {
     }
     double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
+    }
+    void reorder(const V8Int &other, const vector<uint16_t> &ord) {
+        assert(n == other.n);
+        for (uint32_t i = 0, ij = 0; i < n; i++)
+            for (uint32_t j = 0; j <= i; j++, ij++)
+                for (uint32_t k = 0, kl = 0; k <= i; k++)
+                    for (uint32_t l = 0; l <= k; l++, kl++)
+                        if (ij >= kl)
+                            (*this)(i, j, k, l) =
+                                other(ord[i], ord[j], ord[k], ord[l]);
     }
     friend ostream &operator<<(ostream &os, V8Int x) {
         os << fixed << setprecision(16);
@@ -652,6 +686,45 @@ struct FCIDUMP {
                     for (uint8_t sj = 0; sj < 2; sj++)
                         r[i * n + j] += 0.25 * abs(v(si, sj, i, j, j, i));
         return r;
+    }
+    template <typename T>
+    static vector<T> reorder(const vector<T> &data,
+                             const vector<uint16_t> &ord) {
+        vector<T> rdata(data.size());
+        for (size_t i = 0; i < ord.size(); i++)
+            rdata[i] = data[ord[i]];
+        return rdata;
+    }
+    void reorder(const vector<uint16_t> &ord) {
+        uint16_t n = n_sites();
+        assert(ord.size() == n);
+        shared_ptr<vector<double>> rdata =
+            make_shared<vector<double>>(total_memory);
+        vector<TInt> rts(ts);
+        vector<V1Int> rvgs(vgs);
+        vector<V4Int> rvabs(vabs);
+        vector<V8Int> rvs(vs);
+        for (size_t i = 0; i < ts.size(); i++) {
+            rts[i].data = ts[i].data - data + rdata->data();
+            rts[i].reorder(ts[i], ord);
+        }
+        for (size_t i = 0; i < vgs.size(); i++) {
+            rvgs[i].data = vgs[i].data - data + rdata->data();
+            rvgs[i].reorder(vgs[i], ord);
+        }
+        for (size_t i = 0; i < vabs.size(); i++) {
+            rvabs[i].data = vabs[i].data - data + rdata->data();
+            rvabs[i].reorder(vabs[i], ord);
+        }
+        for (size_t i = 0; i < vs.size(); i++) {
+            rvs[i].data = vs[i].data - data + rdata->data();
+            rvs[i].reorder(vs[i], ord);
+        }
+        vdata = rdata;
+        data = rdata->data();
+        ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
+        if (params.count("orbsym"))
+            set_orb_sym(reorder(orb_sym(), ord));
     }
     // One-electron integral element (SU(2))
     virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }

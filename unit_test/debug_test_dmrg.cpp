@@ -18,8 +18,8 @@ class TestDMRG : public ::testing::Test {
         // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
         // ThreadingTypes::Global, 8, 8);
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
-            16, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 28,
+            28, 1);
         // threading_() =
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
@@ -40,6 +40,7 @@ TEST_F(TestDMRG, Test) {
     PGTypes pg = PGTypes::D2H;
 
     string occ_filename = "data/CR2.SVP.OCC";
+    string pdm_filename = "data/CR2.SVP.1NPC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
     occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
@@ -55,6 +56,60 @@ TEST_F(TestDMRG, Test) {
     cout << "INT start" << endl;
     fcidump->read(filename);
     cout << "INT end .. T = " << t.get_time() << endl;
+
+    bool reorder = true;
+    if (reorder) {
+        Random::rand_seed(1234);
+        // auto hmat = fcidump->abs_h1e_matrix();
+        // auto kmat = fcidump->abs_exchange_matrix();
+        // for (size_t i = 0; i < kmat.size(); i++)
+        //     kmat[i] = hmat[i] * 1E-7 + kmat[i];
+        auto kmat = read_occ(pdm_filename);
+        auto omat = fcidump->orb_sym();
+        for (size_t i = 0; i < fcidump->n_sites(); i++)
+            for (size_t j = 0; j < fcidump->n_sites(); j++)
+                if (omat[i] != omat[j])
+                    kmat[i * fcidump->n_sites() + j] =
+                        abs(kmat[i * fcidump->n_sites() + j] -
+                            occs[i] * occs[j]) *
+                        1E-7;
+                else
+                    kmat[i * fcidump->n_sites() + j] = abs(
+                        kmat[i * fcidump->n_sites() + j] - occs[i] * occs[j]);
+        // double bias = 1;
+        // for (auto &kk : kmat)
+        //     if (kk > 1)
+        //         kk = 1 + pow(kk - 1, bias);
+        //     else if (kk < 1)
+        //         kk = 1 - pow(1 - kk, bias);
+        int ntasks = 10;
+        int n_generations = 12000;
+        int n_configs = 100;
+        int n_elite = 8;
+        vector<uint16_t> mx;
+        double mf = 0;
+        for (int i = 0; i < ntasks; i++) {
+            vector<uint16_t> x = OrbitalOrdering::ga_opt(
+                fcidump->n_sites(), kmat, n_generations, n_configs, n_elite);
+            double f = OrbitalOrdering::evaluate(fcidump->n_sites(), kmat, x);
+            cout << setw(4) << i << " = " << setw(20) << setprecision(10) << f
+                 << endl;
+            if (mf == 0 || f < mf)
+                mf = f, mx = x;
+        }
+        cout << "BEST = " << setw(20) << setprecision(10) << mf << endl;
+        for (int i = 0; i < fcidump->n_sites(); i++)
+            cout << setw(4) << mx[i];
+        cout << endl;
+        fcidump->reorder(mx);
+        occs = fcidump->reorder(occs, mx);
+    }
+    Random::rand_seed(1234);
+
+    cout << "ORB SYM = ";
+    for (int i = 0; i < fcidump->n_sites(); i++)
+        cout << setw(2) << (int)fcidump->orb_sym()[i];
+    cout << endl;
 
     vector<uint8_t> ioccs;
     for (auto x : occs)
@@ -180,8 +235,8 @@ TEST_F(TestDMRG, Test) {
     // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7,
-                             1E-7, 1E-7, 1E-7, 1E-7, 1E-7, 1E-7};
+    vector<double> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5,
+                             1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6};
     vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
                               1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
                               5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};

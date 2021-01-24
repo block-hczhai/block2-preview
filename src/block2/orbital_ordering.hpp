@@ -65,7 +65,7 @@ template <typename EvalOp> struct GAOptimization {
         uint16_t irr = ir * n_sites * n_configs;
         double ssq_prob = 0, sum_prob = 0, min_prob = 1E99;
         for (int i = 0; i < n_configs; i++) {
-            probs[i] = sqrt(evop(ords.data() + irr + i * n_sites));
+            probs[i] = sqrt(abs(evop(ords.data() + irr + i * n_sites)));
             sum_prob += probs[i];
             ssq_prob += probs[i] * probs[i];
             min_prob = min(min_prob, probs[i]);

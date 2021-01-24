@@ -2742,6 +2742,10 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("abs_exchange_matrix", &FCIDUMP::abs_exchange_matrix)
         .def("h1e_matrix", &FCIDUMP::h1e_matrix)
         .def("abs_h1e_matrix", &FCIDUMP::abs_h1e_matrix)
+        .def("reorder",
+             (void (FCIDUMP::*)(const vector<uint16_t> &)) & FCIDUMP::reorder)
+        .def_static("array_reorder", &FCIDUMP::reorder<double>)
+        .def_static("array_reorder", &FCIDUMP::reorder<uint8_t>)
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,
                       "Orbital symmetry in molpro convention")
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
