@@ -25,9 +25,9 @@ else:
         Usage:
             (A) python gaopt_driver.py -config gaopt.conf -integral FCIDUMP
             (B) python gaopt_driver.py -config gaopt.conf -integral ints.h5
-            (C) python gaopt_driver.py -config gaopt.conf -integral FCIDUMP -w kmat (write kmat)
-            (D) python gaopt_driver.py -config gaopt.conf -integral ints.h5 -w kmat (write kmat)
-            (E) python gaopt_driver.py -s -config gaopt.conf -integral kmat (read kmat)
+            (C) python gaopt_driver.py -s -config gaopt.conf -integral kmat (read kmat)
+            (D) python gaopt_driver.py ... -w kmat (write kmat)
+            (E) python gaopt_driver.py ... -wint FCIDUMP.NEW (write reordered FCIDUMP)
     """)
 
 # MPI
@@ -41,11 +41,9 @@ def _print(*args, **kwargs):
     if mrank == 0:
         print(*args, **kwargs)
 
-
-Random.rand_seed(1234 + mrank)
-
 # read integrals/kmat
 fints = arg_dic["integral"]
+fcidump = None
 if 's' not in arg_dic:
     if fints[-7:] == "FCIDUMP":
         fcidump = FCIDUMP()
@@ -56,7 +54,7 @@ if 's' not in arg_dic:
     hmat = fcidump.abs_h1e_matrix()
     xmat = fcidump.abs_exchange_matrix()
     kmat = VectorDouble(np.array(hmat) * 1E-7 + np.array(xmat))
-    if 'w' in arg_dic:
+    if 'w' in arg_dic and mrank == 0:
         with open(arg_dic['w'], 'w') as kfin:
             kfin.write("%d\n" % n_sites)
             for i in range(n_sites):
@@ -87,6 +85,7 @@ opts = dict(
 # run
 midx, mf = None, None
 for i_task in range(0, n_tasks):
+    Random.rand_seed(1234 + i_task)
     if i_task * msize // n_tasks == mrank:
         idx = OrbitalOrdering.ga_opt(n_sites, kmat, **opts)
         f = OrbitalOrdering.evaluate(n_sites, kmat, idx)
@@ -105,3 +104,10 @@ else:
             midx, mf = idx, f
     print('DMRG REORDER FORMAT')
     print(','.join(map(str, midx)))
+
+# write FCIDUMP
+if 'wint' in arg_dic and mrank == 0:
+    assert fcidump is not None
+    mx = VectorUInt16(midx - 1)
+    fcidump.reorder(mx)
+    fcidump.write(arg_dic['wint'])

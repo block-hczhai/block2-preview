@@ -7,13 +7,10 @@ Author:
     Zhi-Hao Cui
 """
 
-from block2 import SZ, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
+from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames
-from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC
-from block2.sz import PDM1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
 import numpy as np
 import time
 import os
@@ -41,8 +38,21 @@ else:
                 Step 2: python block_driver.py dmrg.conf run
     """)
 
+dic = parse(fin)
+if "nonspinadapted" in dic:
+    from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
+    from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO
+    SX = SZ
+else:
+    from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
+    from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO
+    SX = SU2
+
 # MPI
-from block2.sz import MPICommunicator
 MPI = MPICommunicator()
 from mpi4py import MPI as PYMPI
 comm = PYMPI.COMM_WORLD
@@ -54,7 +64,6 @@ tx = time.perf_counter()
 
 # input parameters
 Random.rand_seed(1234)
-dic = parse(fin)
 if DEBUG:
     _print("\n" + "*" * 34 + " INPUT START " + "*" * 34)
     for key, val in dic.items():
@@ -87,7 +96,6 @@ _print(Global.frame)
 _print(Global.threading)
 
 if MPI is not None:
-    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
     prule = ParallelRuleQC(MPI)
     prule_npdm = ParallelRuleNPDMQC(MPI)
 
@@ -106,8 +114,8 @@ if pre_run or not no_pre_run:
 
     _print("read integral finished", time.perf_counter() - tx)
 
-    vacuum = SZ(0)
-    target = SZ(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
+    vacuum = SX(0)
+    target = SX(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
     n_sites = fcidump.n_sites
     orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
     hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
@@ -119,6 +127,8 @@ if dic.get("warmup", None) == "occ":
     bias = float(dic.get("bias", 1.0))
 else:
     occs = None
+
+dot = 1 if "onedot" in dic else 2
 
 # prepare mps
 if "fullrestart" in dic:
@@ -146,9 +156,10 @@ elif pre_run or not no_pre_run:
         mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
     if MPI is None or MPI.rank == 0:
         mps_info.save_data(scratch + '/mps_info.bin')
-    mps = MPS(n_sites, 0, 2)
+    mps = MPS(n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
+    forward = mps.center == 0
 else:
     mps_info = MPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
@@ -157,9 +168,10 @@ else:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
         mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
-    mps = MPS(mps_info.n_sites, 0, 2)
+    mps = MPS(mps_info.n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
+    forward = mps.center == 0
 
 _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info.left_dims]))
 
@@ -184,10 +196,22 @@ if pre_run or not no_pre_run:
     pmpo = SimplifiedMPO(pmpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl 1pdm mpo finished", time.perf_counter() - tx)
 
-    _print('GS MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.right_operator_names]))
+    _print('1PDM MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.right_operator_names]))
 
     if MPI is None or MPI.rank == 0:
         pmpo.save_data(scratch + '/mpo-1pdm.bin')
+    
+    # mpo for particle number correlation
+    _print("build 1npc mpo", time.perf_counter() - tx)
+    nmpo = NPC1MPOQC(hamil)
+    _print("simpl 1npc mpo", time.perf_counter() - tx)
+    nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+    _print("simpl 1npc mpo finished", time.perf_counter() - tx)
+
+    _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.right_operator_names]))
+
+    if MPI is None or MPI.rank == 0:
+        nmpo.save_data(scratch + '/mpo-1npc.bin')
 else:
     mpo = MPO(0)
     mpo.load_data(scratch + '/mpo.bin')
@@ -200,12 +224,18 @@ else:
     pmpo.tf = TensorFunctions(OperatorFunctions(CG()))
 
     _print('1PDM MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.left_operator_names]))
+
+    nmpo = MPO(0)
+    nmpo.load_data(scratch + '/mpo-1npc.bin')
+    nmpo.tf = TensorFunctions(OperatorFunctions(CG()))
+
+    _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
     
 if not pre_run:
     if MPI is not None:
-        from block2.sz import ParallelMPO
         mpo = ParallelMPO(mpo, prule)
         pmpo = ParallelMPO(pmpo, prule_npdm)
+        nmpo = ParallelMPO(nmpo, prule_npdm)
 
     _print("para mpo finished", time.perf_counter() - tx)
 
@@ -215,7 +245,7 @@ if not pre_run:
     mps_info.deallocate_mutable()
 
     # GS DMRG
-    if "restart_onepdm" not in dic and "restart_oh" not in dic:
+    if "restart_onepdm" not in dic and "restart_correlation" not in dic and "restart_oh" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
@@ -277,16 +307,53 @@ if not pre_run:
         expect.solve(True, forward)
 
         if MPI is None or MPI.rank == 0:
-            dmr = expect.get_1pdm(me.n_sites)
-            dm = np.array(dmr).copy()
-            dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
-            dm = np.transpose(dm, (0, 2, 1, 3))
-            dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+            if SX == SZ:
+                dmr = expect.get_1pdm(me.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+                dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+                dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+                _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+            else:
+                dmr = expect.get_1pdm_spatial(me.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+                _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm)]))
 
             np.save(scratch + "/1pdm.npy", dm)
             mps_info.save_data(scratch + '/mps_info.bin')
+    
+
+    # Particle Number Correlation
+    if "restart_correlation" in dic or "correlation" in dic:
+        me = MovingEnvironment(nmpo, mps, mps, "1NPC")
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
+        me.save_partition_info = True
+        me.init_environments(True)
+
+        _print("env init finished", time.perf_counter() - tx)
+
+        expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
+        expect.solve(True, forward)
+
+        if MPI is None or MPI.rank == 0:
+            if SX == SZ:
+                dmr = expect.get_1npc(0, me.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+                dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+                dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
+            else:
+                dmr = expect.get_1npc_spatial(0, me.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+
+            np.save(scratch + "/1npc.npy", dm)
+            mps_info.save_data(scratch + '/mps_info.bin')
         
-            _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
 
     # OH
     if "restart_oh" in dic:

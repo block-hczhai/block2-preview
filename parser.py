@@ -17,7 +17,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
               "nonspinadapted", "noreorder", "num_thrds", "mem", 
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
-              "occ", "bias"}
+              "occ", "bias", "correlation", "restart_correlation"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 
@@ -69,10 +69,8 @@ def parse(fname):
     diff = set(dic.keys()) - KNOWN_KEYS
     if len(diff) != 0:
         raise ValueError("Unrecognized keys (%s)" %diff)
-    if not "nonspinadapted" in dic:
-        raise ValueError("nonspinadapted should be set.")
-    if "onedot" in dic:
-        raise ValueError("onedot is currently not supported.")
+    if "onedot" in dic and "twodot_to_onedot" in dic:
+        raise ValueError("onedot conflicits with twodot_to_onedot.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
     
@@ -82,9 +80,12 @@ def parse(fname):
         dic["fullrestart"] = " "
         dic.pop("onepdm", None)
         dic.pop("twopdm", None)
+        dic.pop("correlation", None)
     if "restart_onepdm" in dic:
         dic["fullrestart"] = " "
     if "restart_twopdm" in dic:
+        dic["fullrestart"] = " "
+    if "restart_correlation" in dic:
         dic["fullrestart"] = " "
 
     return dic
