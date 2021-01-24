@@ -72,6 +72,8 @@ template <typename EvalOp> struct GAOptimization {
         }
         double mu = sum_prob / n_configs;
         double sigma = ssq_prob / n_configs - mu * mu;
+        if (abs(sigma) < 1E-12)
+            sigma = 1.0;
         sum_prob = 0;
         for (int i = 0; i < n_configs; sum_prob += probs[i], i++)
             probs[i] =
