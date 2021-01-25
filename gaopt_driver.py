@@ -59,9 +59,17 @@ if 's' not in arg_dic:
             kfin.write("%d\n" % n_sites)
             for i in range(n_sites):
                 for j in range(n_sites):
-                    kfin.write(" %24.16f" % kmat[i * n_sites + j])
+                    kfin.write(" %24.16e" % kmat[i * n_sites + j])
                 kfin.write("\n")
 else:
+    if len(fints.split(':')) == 2:
+        fa, fb = fints.split(':')
+        if fb[-7:] == "FCIDUMP":
+            fcidump = FCIDUMP()
+            fcidump.read(fb)
+        else:
+            fcidump = read_integral(fb, 0, 0)
+        fints = fa
     with open(fints, 'r') as kfin:
         klines = kfin.readlines()
     n_sites = int(klines[0].strip())
@@ -94,6 +102,9 @@ for i_task in range(0, n_tasks):
         if mf is None or f < mf:
             midx, mf = idx, f
 
+if msize != 0:
+    comm.barrier()
+
 # collect
 if mrank != 0:
     comm.send((midx, mf), dest=0, tag=11)
@@ -102,6 +113,7 @@ else:
         idx, f = comm.recv(source=irank, tag=11)
         if f is not None and (mf is None or f < mf):
             midx, mf = idx, f
+    print('MINIMUM / f = %20.12f' % mf)
     print('DMRG REORDER FORMAT')
     print(','.join(map(str, midx)))
 
