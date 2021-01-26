@@ -86,7 +86,7 @@ MESSAGE(STATUS "BUILD_LIB = ${BUILD_LIB}")
 
 IF (NOT(APPLE))
     SET(NO_AS_NEEDED -Wl,--no-as-needed)
-ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     SET(XPREP -Xpreprocessor)
 ENDIF()
 
@@ -168,16 +168,24 @@ IF (${USE_MKL_ANY})
             PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
         SET(MKL_FLAG "-D_HAS_INTEL_MKL=${MKL_OMP_VALUE}" "-DMKL_ILP64")
     ENDIF()
-    FIND_LIBRARY(MKL_LIB_CORE NAMES mkl_core
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
-    FIND_LIBRARY(MKL_LIB_GT NAMES ${MKL_OMP_LIB_NAME}
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
-    # AVX and AVX512 are required to avoid setting LD_PRELOAD for python
-    FIND_LIBRARY(MKL_LIB_AVX NAMES mkl_avx2
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
-    FIND_LIBRARY(MKL_LIB_AVX512 NAMES mkl_avx512
-        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
-    SET(MKL_LIBS ${NO_AS_NEEDED} ${PTHREADS} ${OMP_LIB_NAME} ${MKL_LIB_LP} ${MKL_LIB_CORE} ${MKL_LIB_GT} ${MKL_LIB_AVX} ${MKL_LIB_AVX512})
+    IF (NOT(APPLE))
+        FIND_LIBRARY(MKL_LIB_CORE NAMES mkl_core
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        FIND_LIBRARY(MKL_LIB_GT NAMES ${MKL_OMP_LIB_NAME}
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        # AVX and AVX512 are required to avoid setting LD_PRELOAD for python
+        FIND_LIBRARY(MKL_LIB_AVX NAMES mkl_avx2
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        FIND_LIBRARY(MKL_LIB_AVX512 NAMES mkl_avx512
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+        SET(MKL_LIBS ${NO_AS_NEEDED} ${PTHREADS} ${OMP_LIB_NAME} ${MKL_LIB_LP} ${MKL_LIB_CORE} ${MKL_LIB_GT} ${MKL_LIB_AVX} ${MKL_LIB_AVX512})
+    ELSE()
+        IF (${USE_MKL})
+            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core)
+        ELSE()
+            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core)
+        ENDIF()
+    ENDIF()
     MESSAGE(STATUS "MKL_INCLUDE_DIR = ${MKL_INCLUDE_DIR}")
     MESSAGE(STATUS "MKL_LIBS = ${MKL_LIBS}")
 ELSE()
