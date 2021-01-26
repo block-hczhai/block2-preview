@@ -43,7 +43,7 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
     shared_ptr<TensorFunctions<S>> copy() const override {
         return make_shared<ParallelTensorFunctions<S>>(opf->copy(), rule);
     }
-    const TensorFunctionsTypes get_type() const override {
+    TensorFunctionsTypes get_type() const override {
         return TensorFunctionsTypes::Parallel;
     }
     void operator()(const MatrixRef &b, const MatrixRef &c,
@@ -66,8 +66,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 c->lmat->data[i] = a->lmat->data[i];
             else {
                 assert(a->lmat->data[i] == c->lmat->data[i]);
-                auto pa = abs_value(a->lmat->data[i]),
-                     pc = abs_value(c->lmat->data[i]);
+                shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
+                                      pc = abs_value(c->lmat->data[i]);
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
                     // skip cached part
@@ -87,8 +87,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      [&a, &c, &idxs](const shared_ptr<TensorFunctions<S>> &tf,
                                      size_t ii) {
                          size_t i = idxs[ii];
-                         auto pa = abs_value(a->lmat->data[i]),
-                              pc = abs_value(c->lmat->data[i]);
+                         shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
+                                               pc = abs_value(c->lmat->data[i]);
                          if (!frame->use_main_stack) {
                              // skip cached part
                              if (c->ops[pc]->alloc != nullptr)
@@ -118,8 +118,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                 c->rmat->data[i] = a->rmat->data[i];
             else {
                 assert(a->rmat->data[i] == c->rmat->data[i]);
-                auto pa = abs_value(a->rmat->data[i]),
-                     pc = abs_value(c->rmat->data[i]);
+                shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
+                                      pc = abs_value(c->rmat->data[i]);
                 if (rule->available(pc)) {
                     assert(rule->available(pa));
                     // skip cached part
@@ -139,8 +139,8 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
                      [&a, &c, &idxs](const shared_ptr<TensorFunctions<S>> &tf,
                                      size_t ii) {
                          size_t i = idxs[ii];
-                         auto pa = abs_value(a->rmat->data[i]),
-                              pc = abs_value(c->rmat->data[i]);
+                         shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
+                                               pc = abs_value(c->rmat->data[i]);
                          if (!frame->use_main_stack) {
                              // skip cached part
                              if (c->ops[pc]->alloc != nullptr)

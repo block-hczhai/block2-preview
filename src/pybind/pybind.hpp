@@ -332,7 +332,7 @@ template <typename S> void bind_expr(py::module &m) {
 
     struct PySymbolic : Symbolic<S> {
         using Symbolic<S>::Symbolic;
-        const SymTypes get_type() const override {
+        SymTypes get_type() const override {
             PYBIND11_OVERLOAD_PURE(const SymTypes, Symbolic<S>, get_type, );
         }
         shared_ptr<Symbolic<S>> copy() const override {

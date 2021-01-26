@@ -41,7 +41,7 @@ template <typename S> struct Symbolic {
     Symbolic(int m, int n, const vector<shared_ptr<OpExpr<S>>> &data)
         : m(m), n(n), data(data){};
     virtual ~Symbolic() = default;
-    virtual const SymTypes get_type() const = 0;
+    virtual SymTypes get_type() const = 0;
     virtual shared_ptr<OpExpr<S>> &operator[](const initializer_list<int> ix) {
         // The purpose of this implementation is to simplify pybind
         assert(false);
@@ -58,7 +58,7 @@ template <typename S> struct SymbolicRowVector : Symbolic<S> {
     }
     SymbolicRowVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
         : Symbolic<S>(1, n, data) {}
-    const SymTypes get_type() const override { return SymTypes::RVec; }
+    SymTypes get_type() const override { return SymTypes::RVec; }
     shared_ptr<OpExpr<S>> &operator[](int i) {
         assert(i < this->data.size());
         return Symbolic<S>::data[i];
@@ -86,7 +86,7 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
     }
     SymbolicColumnVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
         : Symbolic<S>(n, 1, data) {}
-    const SymTypes get_type() const override { return SymTypes::CVec; }
+    SymTypes get_type() const override { return SymTypes::CVec; }
     shared_ptr<OpExpr<S>> &operator[](int i) {
         assert(i < this->data.size());
         return Symbolic<S>::data[i];
@@ -109,7 +109,7 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
 template <typename S> struct SymbolicMatrix : Symbolic<S> {
     vector<pair<int, int>> indices; // there can be repeated pair of indices
     SymbolicMatrix(int m, int n) : Symbolic<S>(m, n) {}
-    const SymTypes get_type() const override { return SymTypes::Mat; }
+    SymTypes get_type() const override { return SymTypes::Mat; }
     void add(int i, int j, const shared_ptr<OpExpr<S>> elem) {
         assert(i < this->m);
         assert(j < this->n);

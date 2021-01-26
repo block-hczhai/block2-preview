@@ -32,7 +32,7 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
     using TensorFunctions<S>::opf;
     DelayedTensorFunctions(const shared_ptr<OperatorFunctions<S>> &opf)
         : TensorFunctions<S>(opf) {}
-    const TensorFunctionsTypes get_type() const override {
+    TensorFunctionsTypes get_type() const override {
         return TensorFunctionsTypes::Delayed;
     }
     shared_ptr<TensorFunctions<S>> copy() const override {
@@ -51,8 +51,8 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                 c->lmat->data[i] = a->lmat->data[i];
             else {
                 assert(a->lmat->data[i] == c->lmat->data[i]);
-                auto pa = abs_value(a->lmat->data[i]),
-                     pc = abs_value(c->lmat->data[i]);
+                shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
+                                      pc = abs_value(c->lmat->data[i]);
                 shared_ptr<SparseMatrix<S>> &mata = a->ops.at(pa);
                 shared_ptr<SparseMatrix<S>> &matc = c->ops.at(pc);
                 bool delayed = mata->get_type() == SparseMatrixTypes::Delayed;
@@ -90,8 +90,8 @@ template <typename S> struct DelayedTensorFunctions : TensorFunctions<S> {
                 c->rmat->data[i] = a->rmat->data[i];
             else {
                 assert(a->rmat->data[i] == c->rmat->data[i]);
-                auto pa = abs_value(a->rmat->data[i]),
-                     pc = abs_value(c->rmat->data[i]);
+                shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
+                                      pc = abs_value(c->rmat->data[i]);
                 shared_ptr<SparseMatrix<S>> &mata = a->ops.at(pa);
                 shared_ptr<SparseMatrix<S>> &matc = c->ops.at(pc);
                 bool delayed = mata->get_type() == SparseMatrixTypes::Delayed;

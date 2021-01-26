@@ -48,7 +48,7 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
     vector<shared_ptr<CSRMatrixRef>> csr_data;
     CSRSparseMatrix(const shared_ptr<Allocator<double>> &alloc = nullptr)
         : SparseMatrix<S>(alloc) {}
-    const SparseMatrixTypes get_type() const override {
+    SparseMatrixTypes get_type() const override {
         return SparseMatrixTypes::CSR;
     }
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,

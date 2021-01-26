@@ -381,7 +381,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                                     MPI_STATUS_IGNORE);
                     assert(ierr == 0);
                     dp = 0;
-                    for (int i = 0, dp = 0; i < mat->info->n; i++) {
+                    for (int i = 0; i < mat->info->n; i++) {
                         tmp->csr_data[i]->allocate(dt.data() + dp);
                         dp += tmp->csr_data[i]->memory_size();
                     }

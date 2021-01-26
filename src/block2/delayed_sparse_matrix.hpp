@@ -60,7 +60,7 @@ struct DelayedSparseMatrix : DelayedSparseMatrix<S> {
 template <typename S> struct DelayedSparseMatrix<S> : SparseMatrix<S> {
     DelayedSparseMatrix<S>() : SparseMatrix<S>() {}
     virtual ~DelayedSparseMatrix<S>() = default;
-    const SparseMatrixTypes get_type() const override {
+    SparseMatrixTypes get_type() const override {
         return SparseMatrixTypes::Delayed;
     }
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,

@@ -45,7 +45,7 @@ template <typename S> struct OperatorTensor {
     unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> ops;
     OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
     virtual ~OperatorTensor() = default;
-    virtual const OperatorTensorTypes get_type() const {
+    virtual OperatorTensorTypes get_type() const {
         return OperatorTensorTypes::Normal;
     }
     virtual void reallocate(bool clean) {
@@ -186,7 +186,7 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
     // SparseMatrix representation of symbols from left and right block
     shared_ptr<OperatorTensor<S>> lopt, ropt;
     DelayedOperatorTensor() : OperatorTensor<S>() {}
-    const OperatorTensorTypes get_type() const override {
+    OperatorTensorTypes get_type() const override {
         return OperatorTensorTypes::Delayed;
     }
     void reallocate(bool clean) override {

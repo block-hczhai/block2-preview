@@ -42,7 +42,7 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
     ArchivedSparseMatrix(const string &filename, int64_t offset,
                          const shared_ptr<Allocator<double>> &alloc = nullptr)
         : SparseMatrix<S>(alloc), filename(filename), offset(offset) {}
-    const SparseMatrixTypes get_type() const override {
+    SparseMatrixTypes get_type() const override {
         return SparseMatrixTypes::Archived;
     }
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,

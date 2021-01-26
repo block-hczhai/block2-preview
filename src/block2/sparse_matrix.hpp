@@ -860,7 +860,7 @@ template <typename S> struct SparseMatrix {
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
     virtual ~SparseMatrix() = default;
-    virtual const SparseMatrixTypes get_type() const {
+    virtual SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
     virtual void load_data(istream &ifs, bool pointer_only = false) {

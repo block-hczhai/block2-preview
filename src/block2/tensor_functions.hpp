@@ -44,7 +44,7 @@ template <typename S> struct TensorFunctions {
     shared_ptr<OperatorFunctions<S>> opf;
     TensorFunctions(const shared_ptr<OperatorFunctions<S>> &opf) : opf(opf) {}
     virtual ~TensorFunctions() = default;
-    virtual const TensorFunctionsTypes get_type() const {
+    virtual TensorFunctionsTypes get_type() const {
         return TensorFunctionsTypes::Normal;
     }
     virtual shared_ptr<TensorFunctions<S>> copy() const {
@@ -181,8 +181,8 @@ template <typename S> struct TensorFunctions {
                     c->lmat->data[i] = a->lmat->data[i];
                 else {
                     assert(a->lmat->data[i] == c->lmat->data[i]);
-                    auto pa = abs_value(a->lmat->data[i]),
-                         pc = abs_value(c->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
+                                          pc = abs_value(c->lmat->data[i]);
                     if (!frame->use_main_stack) {
                         // skip cached part
                         if (c->ops[pc]->alloc != nullptr)
@@ -214,8 +214,8 @@ template <typename S> struct TensorFunctions {
                     c->rmat->data[i] = a->rmat->data[i];
                 else {
                     assert(a->rmat->data[i] == c->rmat->data[i]);
-                    auto pa = abs_value(a->rmat->data[i]),
-                         pc = abs_value(c->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
+                                          pc = abs_value(c->rmat->data[i]);
                     if (!frame->use_main_stack) {
                         // skip cached part
                         if (c->ops[pc]->alloc != nullptr)

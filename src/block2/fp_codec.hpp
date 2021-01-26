@@ -161,7 +161,7 @@ struct FPCodec {
             min_u = prec_u;
         int diff_u = (max_u - min_u) >> mbits;
         int ldu = 0;
-        for (int x = 1; diff_u >= x; x <<= 1, ldu++)
+        for (int ix = 1; diff_u >= ix; ix <<= 1, ldu++)
             ;
         BitsCodec<T, U> enc(op_data);
         enc.encode(prec_ud, ebits);

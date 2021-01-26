@@ -137,7 +137,7 @@ struct OpNamesSet {
 // Expression zero
 template <typename S> struct OpExpr {
     virtual ~OpExpr() = default;
-    virtual const OpTypes get_type() const { return OpTypes::Zero; }
+    virtual OpTypes get_type() const { return OpTypes::Zero; }
     bool operator==(const OpExpr &other) const { return true; }
     virtual string get_name() const { return ""; }
 };
@@ -259,7 +259,7 @@ template <typename S> struct OpElement : OpExpr<S> {
               double factor = 1.0)
         : name(name), site_index(site_index), factor(factor), q_label(q_label) {
     }
-    const OpTypes get_type() const override { return OpTypes::Elem; }
+    OpTypes get_type() const override { return OpTypes::Elem; }
     OpElement abs() const { return OpElement(name, site_index, q_label, 1.0); }
     OpElement operator*(double d) const {
         return OpElement(name, site_index, q_label, factor * d);
@@ -312,7 +312,7 @@ template <typename S> struct OpElementRef : OpExpr<S> {
     OpElementRef(const shared_ptr<OpElement<S>> &op, int8_t trans,
                  int8_t factor)
         : op(op), trans(trans), factor(factor) {}
-    const OpTypes get_type() const override { return OpTypes::ElemRef; }
+    OpTypes get_type() const override { return OpTypes::ElemRef; }
 };
 
 // Tensor product of two operator symbols: (A) x (B)
@@ -334,7 +334,7 @@ template <typename S> struct OpProduct : OpExpr<S> {
           a(a == nullptr ? nullptr : make_shared<OpElement<S>>(a->abs())),
           b(b == nullptr ? nullptr : make_shared<OpElement<S>>(b->abs())),
           conj(conj) {}
-    virtual const OpTypes get_type() const override { return OpTypes::Prod; }
+    virtual OpTypes get_type() const override { return OpTypes::Prod; }
     OpProduct abs() const { return OpProduct(a, b, 1.0, conj); }
     shared_ptr<OpElement<S>> get_op() const {
         assert(b == nullptr);
@@ -394,7 +394,7 @@ template <typename S> struct OpSumProd : OpProduct<S> {
               const vector<shared_ptr<OpElement<S>>> &ops,
               const vector<bool> &conjs, double factor, uint8_t conj = 0)
         : ops(ops), conjs(conjs), OpProduct<S>(a, b, factor, conj) {}
-    const OpTypes get_type() const override { return OpTypes::SumProd; }
+    OpTypes get_type() const override { return OpTypes::SumProd; }
     OpSumProd abs() const {
         if (OpProduct<S>::a == nullptr)
             return OpSumProd(ops, OpProduct<S>::b, conjs, 1.0,
@@ -467,7 +467,7 @@ template <typename S> struct OpSumProd : OpProduct<S> {
 template <typename S> struct OpSum : OpExpr<S> {
     vector<shared_ptr<OpProduct<S>>> strings;
     OpSum(const vector<shared_ptr<OpProduct<S>>> &strings) : strings(strings) {}
-    const OpTypes get_type() const override { return OpTypes::Sum; }
+    OpTypes get_type() const override { return OpTypes::Sum; }
     OpSum operator*(double d) const {
         vector<shared_ptr<OpProduct<S>>> strs;
         strs.reserve(strings.size());
@@ -511,7 +511,7 @@ template <typename S> struct OpExprRef : OpExpr<S> {
     OpExprRef(const shared_ptr<OpExpr<S>> &op, bool is_local,
               const shared_ptr<OpExpr<S>> &orig = nullptr)
         : op(op), is_local(is_local), orig(orig) {}
-    const OpTypes get_type() const override { return OpTypes::ExprRef; }
+    OpTypes get_type() const override { return OpTypes::ExprRef; }
 };
 
 template <typename S>
