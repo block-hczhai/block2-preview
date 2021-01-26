@@ -1361,7 +1361,7 @@ template <typename S> struct DMRG {
                             para_mps->rule->comm;
                         double tt[2] = {comm->tcomm, comm->tidle};
                         comm->reduce_sum(&tt[0], 2, comm->root);
-                        comm->reduce_sum(&sweep_cumulative_nflop, 1,
+                        comm->reduce_sum((uint64_t *)&sweep_cumulative_nflop, 1,
                                          comm->root);
                         cout << " | GTcomm = " << tt[0] / comm->size
                              << " | GTidle = " << tt[1] / comm->size << endl;
