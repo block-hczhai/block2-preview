@@ -212,7 +212,7 @@ struct CSRMatrixRef {
                 for (MKL_INT i = 0; i < m; i++) {
                     MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
                     MKL_INT ic =
-                        lower_bound(cols + rows[i], cols + rows_end, i) - cols;
+                        (MKL_INT)(lower_bound(cols + rows[i], cols + rows_end, i) - cols);
                     if (ic != rows_end && cols[ic] == i)
                         x.data[i] = data[ic];
                 }
@@ -227,7 +227,7 @@ struct CSRMatrixRef {
             for (MKL_INT i = 0; i < m; i++) {
                 MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
                 MKL_INT ic =
-                    lower_bound(cols + rows[i], cols + rows_end, i) - cols;
+                    (MKL_INT)(lower_bound(cols + rows[i], cols + rows_end, i) - cols);
                 if (ic != rows_end && cols[ic] == i)
                     r += data[ic];
             }

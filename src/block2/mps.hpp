@@ -368,7 +368,7 @@ template <typename S> struct MPSInfo {
                     *site_probs[i], *right_probs[i + 1], *right_dims_fci[i]));
         // conditional probabilities
         for (int i = 0; i <= n_sites; i++) {
-            double lprobs[left_probs[i]->n], rprobs[right_probs[i]->n];
+            vector<double> lprobs(left_probs[i]->n), rprobs(right_probs[i]->n);
             for (int j = 0; j < left_probs[i]->n; j++)
                 lprobs[j] = left_probs[i]->probs[j] *
                             left_probs[i]->quanta[j].multiplicity();
@@ -720,9 +720,9 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
             x.reduce_n_states(bond_dim);
             if (match_prev) {
                 this->load_left_dims(k + 1);
-                for (int l = 0, il; l < left_dims[k + 1]->n; l++) {
-                    assert((il = x.find_state(left_dims[k + 1]->quanta[l])) !=
-                           -1);
+                for (int l = 0; l < left_dims[k + 1]->n; l++) {
+                    int il = x.find_state(left_dims[k + 1]->quanta[l]);
+                    assert(il != -1);
                     x.n_states[il] =
                         max(x.n_states[il], left_dims[k + 1]->n_states[l]);
                 }
@@ -745,8 +745,9 @@ template <typename S> struct DynamicMPSInfo : MPSInfo<S> {
             x.reduce_n_states(bond_dim);
             if (match_prev) {
                 this->load_right_dims(k);
-                for (int l = 0, il; l < right_dims[k]->n; l++) {
-                    assert((il = x.find_state(right_dims[k]->quanta[l])) != -1);
+                for (int l = 0; l < right_dims[k]->n; l++) {
+                    int il = x.find_state(right_dims[k]->quanta[l]);
+                    assert(il != -1);
                     x.n_states[il] =
                         max(x.n_states[il], right_dims[k]->n_states[l]);
                 }

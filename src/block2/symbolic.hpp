@@ -251,7 +251,7 @@ operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
         sort(pidx.begin(), pidx.end(),
              [&idx](int i, int j) { return idx[i].second < idx[j].second; });
 #pragma omp parallel for schedule(static, 50) num_threads(ntg)
-        for (size_t j = 0; j < b->n; j++) {
+        for (int j = 0; j < b->n; j++) {
             size_t ki = lower_bound(pidx.begin(), pidx.end(), j,
                                     [&idx](int ii, int jj) {
                                         return idx[ii].second < jj;
@@ -279,7 +279,7 @@ operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
         sort(pidx.begin(), pidx.end(),
              [&idx](int i, int j) { return idx[i].first < idx[j].first; });
 #pragma omp parallel for schedule(static, 50) num_threads(ntg)
-        for (size_t i = 0; i < a->m; i++) {
+        for (int i = 0; i < a->m; i++) {
             size_t ki = lower_bound(pidx.begin(), pidx.end(), i,
                                     [&idx](int ii, int jj) {
                                         return idx[ii].first < jj;

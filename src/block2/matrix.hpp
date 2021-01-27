@@ -28,6 +28,7 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 
 using namespace std;
 
@@ -124,8 +125,10 @@ struct Tensor {
         data.resize((size_t)m * k * n);
     }
     Tensor(const vector<MKL_INT> &shape) : shape(shape) {
-        data.resize(
-            accumulate(shape.begin(), shape.end(), 1, multiplies<size_t>()));
+        size_t x = 1;
+        for (MKL_INT sh : shape)
+            x = x * (size_t)sh;
+        data.resize(x);
     }
     size_t size() const { return data.size(); }
     void clear() { memset(data.data(), 0, size() * sizeof(double)); }

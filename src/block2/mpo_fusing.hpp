@@ -148,7 +148,7 @@ template <typename S> struct FusedMPO : MPO<S> {
         else
             mpo->tf->right_contract(mpo->tensors[b], mpo->tensors[a], opt,
                                     nullptr);
-        for (int i = fused_op_infos.size() - 1; i >= 0; i--)
+        for (int i = (int)fused_op_infos.size() - 1; i >= 0; i--)
             if (fused_op_infos[i].second->cinfo != nullptr)
                 fused_op_infos[i].second->cinfo->deallocate();
         this->sparse_form = "";

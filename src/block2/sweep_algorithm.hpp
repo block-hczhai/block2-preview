@@ -246,8 +246,8 @@ template <typename S> struct DMRG {
                         build_pdm ? 0.0 : noise, noise_type, 1.0, pket);
                     if (build_pdm)
                         MatrixFunctions::iadd(
-                            MatrixRef(dm->data, dm->total_memory, 1),
-                            MatrixRef(pdm->data, pdm->total_memory, 1), 1.0);
+                            MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                            MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
                     tdm += _t.get_time();
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
@@ -280,7 +280,7 @@ template <typename S> struct DMRG {
                     me->ket->tensors[i] = left;
                     me->ket->save_tensor(i);
                     info = left->info->extract_state_info(forward);
-                    mmps = info->n_states_total;
+                    mmps = (int)info->n_states_total;
                     me->ket->info->bond_dim =
                         max(me->ket->info->bond_dim, (ubond_t)mmps);
                     me->ket->info->left_dims[i + 1] = info;
@@ -305,7 +305,7 @@ template <typename S> struct DMRG {
                     me->ket->tensors[i] = right;
                     me->ket->save_tensor(i);
                     info = right->info->extract_state_info(forward);
-                    mmps = info->n_states_total;
+                    mmps = (int)info->n_states_total;
                     me->ket->info->bond_dim =
                         max(me->ket->info->bond_dim, (ubond_t)mmps);
                     me->ket->info->right_dims[i] = info;
@@ -446,8 +446,8 @@ template <typename S> struct DMRG {
                     build_pdm ? 0.0 : noise, noise_type, 1.0, pket);
                 if (build_pdm)
                     MatrixFunctions::iadd(
-                        MatrixRef(dm->data, dm->total_memory, 1),
-                        MatrixRef(pdm->data, pdm->total_memory, 1), 1.0);
+                        MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                        MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
                 tdm += _t.get_time();
                 error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, (int)bond_dim, forward, true,
@@ -478,7 +478,7 @@ template <typename S> struct DMRG {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
@@ -488,7 +488,7 @@ template <typename S> struct DMRG {
             } else {
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
@@ -655,7 +655,7 @@ template <typename S> struct DMRG {
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 mket->info->bond_dim = max(mket->info->bond_dim, (ubond_t)mmps);
                 mket->info->left_dims[i + 1] = info;
                 mket->info->save_left_dims(i + 1);
@@ -679,7 +679,7 @@ template <typename S> struct DMRG {
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 mket->info->bond_dim = max(mket->info->bond_dim, (ubond_t)mmps);
                 mket->info->right_dims[i] = info;
                 mket->info->save_right_dims(i);
@@ -800,7 +800,7 @@ template <typename S> struct DMRG {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
@@ -810,7 +810,7 @@ template <typename S> struct DMRG {
             } else {
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
@@ -1830,8 +1830,8 @@ template <typename S> struct Linear {
                                 pbra);
                             if (build_pdm)
                                 MatrixFunctions::iadd(
-                                    MatrixRef(dm->data, dm->total_memory, 1),
-                                    MatrixRef(pdm->data, pdm->total_memory, 1),
+                                    MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                                    MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
                                     1.0);
                             if (real_bra != nullptr) {
                                 weight =
@@ -1902,7 +1902,7 @@ template <typename S> struct Linear {
                         mps->save_tensor(i);
                         info = left->info->extract_state_info(forward);
                         if (mps == me->bra) {
-                            bra_mmps = info->n_states_total;
+                            bra_mmps = (int)info->n_states_total;
                             mps->info->bond_dim =
                                 max(mps->info->bond_dim, (ubond_t)bra_mmps);
                         }
@@ -1929,7 +1929,7 @@ template <typename S> struct Linear {
                         mps->save_tensor(i);
                         info = right->info->extract_state_info(forward);
                         if (mps == me->bra) {
-                            bra_mmps = info->n_states_total;
+                            bra_mmps = (int)info->n_states_total;
                             mps->info->bond_dim =
                                 max(mps->info->bond_dim, (ubond_t)bra_mmps);
                         }
@@ -2187,8 +2187,8 @@ template <typename S> struct Linear {
                             build_pdm ? 0.0 : noise, noise_type, weight, pbra);
                         if (build_pdm)
                             MatrixFunctions::iadd(
-                                MatrixRef(dm->data, dm->total_memory, 1),
-                                MatrixRef(pdm->data, pdm->total_memory, 1),
+                                MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                                MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
                                 1.0);
                         if (real_bra != nullptr) {
                             weight = complex_weights[0] * (1 - right_weight);
@@ -2260,7 +2260,7 @@ template <typename S> struct Linear {
                     mps->canonical_form[i + 1] = 'R';
                 }
                 if (mps == me->bra) {
-                    bra_mmps = info->n_states_total;
+                    bra_mmps = (int)info->n_states_total;
                     mps->info->bond_dim =
                         max(mps->info->bond_dim, (ubond_t)bra_mmps);
                 }

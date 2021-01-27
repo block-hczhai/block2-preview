@@ -64,6 +64,7 @@ template <typename S> void run(const map<string, string> &params) {
 
     frame_() = make_shared<DataFrame>((size_t)(0.1 * memory),
                                       (size_t)(0.9 * memory), scratch);
+    frame_()->use_main_stack = false;
 
     // random scratch file prefix to avoid conflicts
     if (params.count("prefix") != 0 && params.at("prefix") != "auto")
@@ -135,15 +136,14 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("ipg") != 0)
         fcidump->params["isym"] = params.at("ipg");
 
-    if (params.count("mkl_threads") != 0) {
-#ifdef _HAS_INTEL_MKL
-        mkl_set_num_threads(Parsing::to_int(params.at("mkl_threads")));
-        mkl_set_dynamic(1);
-        cout << "using " << Parsing::to_int(params.at("mkl_threads"))
-             << " mkl threads" << endl;
-#else
-        throw runtime_error("cannot set number of mkl threads.");
-#endif
+    if (params.count("n_threads") != 0) {
+        int n_threads = Parsing::to_int(params.at("n_threads"));
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, n_threads,
+            n_threads, 1);
+        threading_()->seq_type = SeqTypes::None;
+        cout << *frame_() << endl;
+        cout << *threading_() << endl;
     }
 
     vector<uint8_t> orbsym = fcidump->orb_sym();
@@ -507,9 +507,7 @@ template <typename S> void run(const map<string, string> &params) {
         else if (params.at("noise_type") == "wavefunction")
             dmrg->noise_type = NoiseTypes::Wavefunction;
         else if (params.at("noise_type") == "perturbative")
-            dmrg->noise_type = NoiseTypes::Perturbative;
-        else if (params.at("noise_type") == "reduced_perturbative")
-            dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+            dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
         else {
             cerr << "unknown noise type : " << params.at("noise_type") << endl;
             abort();

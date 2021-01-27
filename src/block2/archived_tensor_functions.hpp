@@ -159,13 +159,13 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                         ->load_archive();
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
-                int ij = lower_bound(psubsl.begin(), psubsl.end(),
+                int ij = (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                      make_pair((uint8_t)(op->conj & 1), opdq)) -
-                         psubsl.begin();
+                         psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];
@@ -189,13 +189,13 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
-                    lower_bound(psubsl.begin(), psubsl.end(),
+                    (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                 make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
-                    psubsl.begin();
+                    psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     shared_ptr<SparseMatrix<S>> vmat =
                         vidx == -1 ? (*vmats)[iv] : (*vmats)[vidx++];
                     cmat->info->cinfo = cinfos[ij][k];

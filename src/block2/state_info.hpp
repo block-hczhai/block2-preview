@@ -152,14 +152,12 @@ struct StateInfo<S, typename enable_if<integral_constant<
         memcpy(other.quanta, quanta, _SI_MEM_SIZE(n) * sizeof(uint32_t));
     }
     void sort_states() {
-        int idx[n];
-        S q[n];
-        ubond_t nq[n];
-        memcpy(q, quanta, n * sizeof(S));
-        memcpy(nq, n_states, n * sizeof(ubond_t));
+        vector<int> idx(n);
+        vector<S> q(quanta, quanta + n);
+        vector<ubond_t> nq(n_states, n_states + n);
         for (int i = 0; i < n; i++)
             idx[i] = i;
-        sort(idx, idx + n, [&q](int i, int j) { return q[i] < q[j]; });
+        sort(idx.begin(), idx.end(), [&q](int i, int j) { return q[i] < q[j]; });
         for (int i = 0; i < n; i++)
             quanta[i] = q[idx[i]], n_states[i] = nq[idx[i]];
         n_states_total = 0;
@@ -193,7 +191,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         if (p == quanta + n || *p != q)
             return -1;
         else
-            return p - quanta;
+            return (int)(p - quanta);
     }
     void reduce_n_states(int m) {
         bool can_reduce = true;
@@ -278,7 +276,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
             vector<uint32_t> &v = mp.at(c.quanta[ic]);
             ci.n_states[ic] = iab;
             memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(uint32_t));
-            iab += v.size();
+            iab += (int)v.size();
         }
         ci.reallocate(iab);
         ci.n_states_total = c.n;
@@ -396,7 +394,7 @@ struct StateProbability<
         if (p == quanta + n || *p != q)
             return -1;
         else
-            return p - quanta;
+            return (int)(p - quanta);
     }
     static StateProbability<S>
     tensor_product_no_collect(const StateProbability<S> &a,

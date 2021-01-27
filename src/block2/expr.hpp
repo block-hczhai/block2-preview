@@ -531,7 +531,7 @@ inline void save_expr(const shared_ptr<OpExpr<S>> &x, ostream &ofs) {
         ofs.write((char *)&op->factor, sizeof(op->factor));
         ofs.write((char *)&op->conj, sizeof(op->conj));
         uint8_t has_ab =
-            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1));
+            (uint8_t)((uint8_t)(op->a != nullptr) | ((op->b != nullptr) << 1));
         ofs.write((char *)&has_ab, sizeof(has_ab));
         if (has_ab & 1)
             save_expr<S>(op->a, ofs);
@@ -555,7 +555,7 @@ inline void save_expr(const shared_ptr<OpExpr<S>> &x, ostream &ofs) {
         ofs.write((char *)&op->factor, sizeof(op->factor));
         ofs.write((char *)&op->conj, sizeof(op->conj));
         uint8_t has_abc =
-            (uint8_t)((op->a != nullptr) | ((op->b != nullptr) << 1) |
+            (uint8_t)((uint8_t)(op->a != nullptr) | ((op->b != nullptr) << 1) |
                       ((op->c != nullptr) << 2));
         ofs.write((char *)&has_abc, sizeof(has_abc));
         if (has_abc & 1)

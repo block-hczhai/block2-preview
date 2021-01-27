@@ -1,0 +1,27 @@
+rand_seed = 1000
+memory = 2E9
+scratch = ./scratch
+
+pg = d2h
+fcidump = ../data/CR2.SVP.FCIDUMP
+occ_file = ../data/CR2.SVP.OCC
+n_threads = 4
+qc_type = conventional
+
+# print_mpo
+print_mpo_dims
+print_fci_dims
+print_mps_dims
+
+bond_dims = 250 250 250 250 250 500
+noises = 1E-5 1E-6 0.0
+
+center = 0
+dot = 2
+
+n_sweeps = 10
+tol = 1E-7
+forward = 1
+
+noise_type = perturbative
+trunc_type = physical

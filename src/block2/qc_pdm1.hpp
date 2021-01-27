@@ -43,9 +43,18 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> d_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+#else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][4];
+#endif
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_sites; m++)
@@ -257,9 +266,15 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<shared_ptr<OpExpr<S>>> c_op(n_sites), d_op(n_sites);
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
+        vector<vector<shared_ptr<OpExpr<S>>>> pdm1_op(n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
+#else
         shared_ptr<OpExpr<S>> c_op[n_sites], d_op[n_sites];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites];
+#endif
         for (uint16_t m = 0; m < n_sites; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
                                                 S(1, 1, hamil.orb_sym[m]));

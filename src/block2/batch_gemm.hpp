@@ -408,7 +408,7 @@ struct BatchGEMMRef {
     shared_ptr<BatchGEMM> batch;
     MKL_INT i, k, n, nk;
     size_t nflop, work, rwork = 0;
-    MKL_INT ipost = 0;
+    size_t ipost = 0;
     BatchGEMMRef(const shared_ptr<BatchGEMM> &batch, size_t nflop, size_t work,
                  MKL_INT i, MKL_INT k, MKL_INT n, MKL_INT nk)
         : batch(batch), nflop(nflop), work(work), i(i), k(k), n(n), nk(nk) {}
@@ -670,11 +670,11 @@ struct BatchGEMMSeq {
         if (cur != 0) {
             if (batch[0]->gp.size() != 0)
                 refs.push_back(BatchGEMMRef(batch[0], cur0, cwork - pwork, ip,
-                                            kp, batch[1]->gp.size() - ip,
-                                            batch[0]->c.size() - kp));
+                                            kp, (int)batch[1]->gp.size() - ip,
+                                            (int)batch[0]->c.size() - kp));
             refs.push_back(BatchGEMMRef(batch[1], cur, cwork - pwork, ip, kp,
-                                        batch[1]->gp.size() - ip,
-                                        batch[1]->b.size() - kp));
+                                        (int)batch[1]->gp.size() - ip,
+                                        (int)batch[1]->b.size() - kp));
             if (pwork != 0) {
                 for (size_t kk = kp; kk < batch[0]->c.size(); kk++)
                     batch[0]->c[kk] -= pwork;
@@ -749,15 +749,15 @@ struct BatchGEMMSeq {
                 } else if (ptr[idx[kk]] >= ptrs.back() &&
                            ptr[idx[kk]] < ptrs.back() + lens.back()) {
                     shifts
-                        .back()[make_pair(ptr[idx[kk]] - ptrs.back(),
+                        .back()[make_pair((MKL_INT)(ptr[idx[kk]] - ptrs.back()),
                                           len[idx[kk]])]
                         .push_back(pos[idx[kk]]);
                     if (ptr[idx[kk]] + len[idx[kk]] > ptrs.back() + lens.back())
-                        lens.back() = ptr[idx[kk]] + len[idx[kk]] - ptrs.back();
+                        lens.back() = (MKL_INT)(ptr[idx[kk]] + len[idx[kk]] - ptrs.back());
                 } else if (ptr[idx[kk]] == ptrs.back() + lens.back()) {
                     lens.back() += len[idx[kk]];
                     shifts
-                        .back()[make_pair(ptr[idx[kk]] - ptrs.back(),
+                        .back()[make_pair((MKL_INT)(ptr[idx[kk]] - ptrs.back()),
                                           len[idx[kk]])]
                         .push_back(pos[idx[kk]]);
                 } else {
@@ -816,7 +816,7 @@ struct BatchGEMMSeq {
             }
             size_t max_pwork = *max_element(pwork.begin(), pwork.end());
             size_t ppost = post_batch.size(), ipost = 0;
-            while (max_pwork > (1 << ipost))
+            while (max_pwork > ((size_t)1 << ipost))
                 ipost++;
             refs[ib].ipost = ipost + 1;
             for (size_t ip = 0; ip < ipost + 1; ip++)
@@ -908,7 +908,7 @@ struct BatchGEMMSeq {
                     vts[tid].allocate(d_alloc);
                 size_t t_vshift = vts[tid].data - v.data;
 #pragma omp for schedule(static)
-                for (size_t i = 0; i < batch[1]->c.size(); i++)
+                for (int i = 0; i < (int)batch[1]->c.size(); i++)
                     batch[1]->perform_single(i, batch[1]->a[i], batch[1]->b[i],
                                              batch[1]->c[i] + t_vshift);
 #pragma omp single
@@ -935,7 +935,7 @@ struct BatchGEMMSeq {
                     if (batch[1]->c[i] >= v.data &&
                         batch[1]->c[i] < v.data + v.size())
                         batch[1]->perform_single(
-                            i, batch[1]->a[i], batch[1]->b[i], batch[1]->c[i]);
+                            (int)i, batch[1]->a[i], batch[1]->b[i], batch[1]->c[i]);
                 }
         }
         threading->activate_normal();
@@ -961,11 +961,16 @@ struct BatchGEMMSeq {
         if (j - i == 1)
             return;
         int m = (i + j) >> 1;
+#ifdef _MSC_VER
+        parallel_reduce(mats, i, m);
+        parallel_reduce(mats, m, j);
+#else
 #pragma omp task
         parallel_reduce(mats, i, m);
 #pragma omp task
         parallel_reduce(mats, m, j);
 #pragma omp taskwait
+#endif
         MatrixFunctions::iadd(mats[i], mats[m], 1.0);
     }
     // Matrix multiply vector (c) => vector (v)
@@ -1000,7 +1005,7 @@ struct BatchGEMMSeq {
         } else if (mode & SeqTypes::Tasked) {
             int ntop = threading->activate_operator();
             vector<MatrixRef> vts(ntop, v);
-            vector<MatrixRef> works(ntop, MatrixRef(nullptr, max_work, 1));
+            vector<MatrixRef> works(ntop, MatrixRef(nullptr, (MKL_INT)max_work, 1));
             if (batch[0]->c.size() == 0 && batch[1]->c.size() == 0)
                 return;
             assert(max_rwork == 0 && max_work != 0);
@@ -1014,7 +1019,7 @@ struct BatchGEMMSeq {
                 works[tid].allocate(d_alloc);
                 size_t t_vshift = vts[tid].data - (double *)0;
 #pragma omp for schedule(static)
-                for (size_t i = 0; i < batch[0]->c.size(); i++) {
+                for (int i = 0; i < (int)batch[0]->c.size(); i++) {
                     batch[0]->perform_single(i, batch[0]->a[i] + cshift,
                                              batch[0]->b[i], works[tid].data);
                     batch[1]->perform_single(i, batch[1]->a[i], works[tid].data,

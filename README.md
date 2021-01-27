@@ -39,6 +39,15 @@ Features
     * Block-sparse (outer) / elementwise-sparse (CSR, inner)
 * Fermionic MPS algebra (non-spin-adapted only)
 * Determinant overlap (non-spin-adapted only)
+* Multi-level parallel DMRG
+    * Parallelism over sites (2-site only)
+    * Parallelism over sum of MPOs (non-spin-adapted only)
+    * Parallelism over operators (distributed/shared memory)
+    * Parallelism over symmetry sectors (shared memory)
+    * Parallelism over dense matrix multiplications (MKL)
+* Orbital Reordering
+    * Fiedler
+    * GeneticAlgorithm
 
 Installation
 ------------
@@ -137,6 +146,13 @@ will use optimization flags such as -O3 (default).
 
 enables debug flags.
 
+### Supported Operating Systems and Compilers
+
+* Linux + gcc 9.2.0 + MKL 2019
+* MacOS 10.15 + Apple clang 12.0 + MKL 2021
+* MacOS 10.15 + icpc 2021.1 + MKL 2021
+* Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021
+
 GS-DMRG
 -------
 
@@ -178,7 +194,7 @@ Example input file for binary executable:
 
     pg = c1
     fcidump = data/HUBBARD-L16.FCIDUMP
-    mkl_threads = 1
+    n_threads = 4
     qc_type = conventional
 
     # print_mpo
@@ -196,15 +212,9 @@ Example input file for binary executable:
     tol = 1E-7
     forward = 1
 
-    noise_type = density_matrix
+    noise_type = perturbative
     trunc_type = physical
 
 To run this example:
 
     ./build/block2 input.txt
-
-Known Bugs
-----------
-
-* Imaginary TE not working with `SeqTypes::None`.
-* MPS algebra not working with MPS containing 2-site tensor.

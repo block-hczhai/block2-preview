@@ -419,7 +419,7 @@ struct FCIDUMP {
         vector<double> int_val(int_sz);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)
-        for (size_t ill = 0; ill < int_sz; ill++) {
+        for (int64_t ill = 0; ill < (int64_t)int_sz; ill++) {
             string ll = Parsing::trim(lines[il + ill]);
             if (ll.length() == 0 || ll[0] == '!') {
                 int_idx[ill][0] = numeric_limits<uint16_t>::max();

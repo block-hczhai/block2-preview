@@ -316,7 +316,7 @@ template <typename S> struct Partition {
     static void deallocate_op_infos_notrunc(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
             &op_infos_notrunc) {
-        for (int i = op_infos_notrunc.size() - 1; i >= 0; i--) {
+        for (int i = (int)op_infos_notrunc.size() - 1; i >= 0; i--) {
             op_infos_notrunc[i].second->cinfo->deallocate();
             op_infos_notrunc[i].second->deallocate();
         }

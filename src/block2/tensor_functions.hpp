@@ -75,9 +75,9 @@ template <typename S> struct TensorFunctions {
                 tfs[i]->opf->seq->cumulative_nflop = 0;
             }
 #pragma omp parallel for schedule(dynamic) num_threads(ntop)
-            for (size_t i = 0; i < n; i++) {
+            for (int i = 0; i < (int)n; i++) {
                 int tid = threading->get_thread_id();
-                op(tfs[tid], i);
+                op(tfs[tid], (size_t)i);
             }
             tf_sz[1].first = opf->seq->batch[0]->gp.size();
             tf_sz[1].second = opf->seq->batch[1]->gp.size();
@@ -151,8 +151,8 @@ template <typename S> struct TensorFunctions {
                     mats[tid]->allocate_like(mat);
                 }
 #pragma omp for schedule(dynamic)
-                for (size_t i = 0; i < n; i++)
-                    op(tfs[tid], mats[tid], i);
+                for (int i = 0; i < (int)n; i++)
+                    op(tfs[tid], mats[tid], (size_t)i);
 #pragma omp single
                 tfs[tid]->opf->parallel_reduce(mats, 0, ntop);
                 if (tid != 0) {
@@ -272,7 +272,7 @@ template <typename S> struct TensorFunctions {
                 assert(dopt->ropt->ops.count(op->ops[1]) != 0);
                 dlmat = dopt->lopt->ops.at(op->ops[0]);
                 drmat = dopt->ropt->ops.at(op->ops[1]);
-                dconj = op->conjs[0] | (op->conjs[1] << 1);
+                dconj = (uint8_t)op->conjs[0] | (op->conjs[1] << 1);
             } else {
                 // for mixed 2-index/3-index, i_op can be delayed or undelayed
                 if ((trace_right && ropt->ops.at(i_op)->data != nullptr) ||
@@ -292,13 +292,13 @@ template <typename S> struct TensorFunctions {
                 shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(i_op);
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
-                int ij = lower_bound(psubsl.begin(), psubsl.end(),
+                int ij = (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                      make_pair((uint8_t)(op->conj & 1), opdq)) -
-                         psubsl.begin();
+                         psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -321,13 +321,13 @@ template <typename S> struct TensorFunctions {
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
-                    lower_bound(psubsl.begin(), psubsl.end(),
+                    (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                 make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
-                    psubsl.begin();
+                    psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -379,13 +379,13 @@ template <typename S> struct TensorFunctions {
                 shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(i_op);
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
-                int ij = lower_bound(psubsl.begin(), psubsl.end(),
+                int ij = (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                      make_pair((uint8_t)(op->conj & 1), opdq)) -
-                         psubsl.begin();
+                         psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -408,13 +408,13 @@ template <typename S> struct TensorFunctions {
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
-                    lower_bound(psubsl.begin(), psubsl.end(),
+                    (int)(lower_bound(psubsl.begin(), psubsl.end(),
                                 make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
-                    psubsl.begin();
+                    psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
-                    int iv = lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin();
+                    int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
+                             vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -474,7 +474,7 @@ template <typename S> struct TensorFunctions {
                         for (auto &x : op->strings)
                             tf->tensor_product_partial_multiply(
                                 x, lopt, ropt, trace_right, pcmat, psubsl,
-                                cinfos, vdqs, vmats, vidx, i, false);
+                                cinfos, vdqs, vmats, vidx, (int)i, false);
                     });
             else
                 assert(false);
@@ -505,7 +505,7 @@ template <typename S> struct TensorFunctions {
                     const size_t i = idx % op->strings.size(),
                                  j = idx / op->strings.size();
                     tf->tensor_product_multiply(op->strings[i], lopt, ropt,
-                                                (*cmats)[j], (*vmats)[j], opdq,
+                                                (*cmats)[(int)j], (*vmats)[(int)j], opdq,
                                                 false);
                 });
         } break;
@@ -544,7 +544,7 @@ template <typename S> struct TensorFunctions {
             assert(dopt->ropt->ops.count(op->ops[1]) != 0);
             shared_ptr<SparseMatrix<S>> dlmat = dopt->lopt->ops.at(op->ops[0]);
             shared_ptr<SparseMatrix<S>> drmat = dopt->ropt->ops.at(op->ops[1]);
-            uint8_t dconj = op->conjs[0] | (op->conjs[1] << 1);
+            uint8_t dconj = (uint8_t)op->conjs[0] | (op->conjs[1] << 1);
             opf->three_tensor_product_multiply(op->conj, lmat, rmat, cmat, vmat,
                                                dconj, dlmat, drmat, dleft, opdq,
                                                op->factor);
@@ -602,7 +602,7 @@ template <typename S> struct TensorFunctions {
             assert(dopt->ropt->ops.count(op->ops[1]) != 0);
             shared_ptr<SparseMatrix<S>> dlmat = dopt->lopt->ops.at(op->ops[0]);
             shared_ptr<SparseMatrix<S>> drmat = dopt->ropt->ops.at(op->ops[1]);
-            uint8_t dconj = op->conjs[0] | (op->conjs[1] << 1);
+            uint8_t dconj = (uint8_t)op->conjs[0] | (op->conjs[1] << 1);
             opf->three_tensor_product_diagonal(op->conj, lmat, rmat, mat, dconj,
                                                dlmat, drmat, dleft, opdq,
                                                op->factor);
@@ -631,7 +631,7 @@ template <typename S> struct TensorFunctions {
                 opf->seq->auto_perform();
             else if (opf->seq->mode & SeqTypes::Tasked)
                 opf->seq->auto_perform(
-                    MatrixRef(mat->data, mat->total_memory, 1));
+                    MatrixRef(mat->data, (MKL_INT)mat->total_memory, 1));
         } break;
         case OpTypes::Zero:
             break;
@@ -905,7 +905,7 @@ template <typename S> struct TensorFunctions {
         vector<shared_ptr<OpExpr<S>>> rexpr(exprs->data.size());
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static, 20) num_threads(ntg)
-        for (size_t i = 0; i < exprs->data.size(); i++) {
+        for (int i = 0; i < (int)exprs->data.size(); i++) {
             shared_ptr<OpExpr<S>> expr = exprs->data[i];
             if (expr->get_type() == OpTypes::ExprRef)
                 expr = use_orig ? dynamic_pointer_cast<OpExprRef<S>>(expr)->orig
@@ -1033,7 +1033,7 @@ template <typename S> struct TensorFunctions {
                         for (size_t j = 0; j < op->ops.size(); j++)
                             rk.push_back(make_shared<OpProduct<S>>(
                                 op->ops[j], op->b, op->factor,
-                                op->conj ^ op->conjs[j]));
+                                op->conj ^ (uint8_t)op->conjs[j]));
                     }
                 }
                 for (auto &op : rk)

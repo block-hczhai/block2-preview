@@ -91,7 +91,7 @@ template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
                      : ((int)i * (i + 1) >> 1) + j;
     }
     static uint64_t find_index(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-        uint64_t p = (uint32_t)find_index(i, j), q = (uint32_t)find_index(k, l);
+        uint32_t p = (uint32_t)find_index(i, j), q = (uint32_t)find_index(k, l);
         return find_index(p, q);
     }
     ParallelProperty

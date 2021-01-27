@@ -365,7 +365,7 @@ template <typename S> struct MovingEnvironment {
         if (para_mps->ncenter != 0)
             return;
         assert(para_mps->conn_centers.size() != 0);
-        para_mps->ncenter = para_mps->conn_centers.size();
+        para_mps->ncenter = (int)para_mps->conn_centers.size();
         assert(para_mps->conn_matrices.size() == 0);
         para_mps->conn_matrices.resize(para_mps->ncenter);
         if (para_mps->rule != nullptr)
@@ -853,7 +853,7 @@ template <typename S> struct MovingEnvironment {
             if (para_mps->rule != nullptr)
                 para_mps->rule->comm->barrier();
             assert(para_mps->conn_centers.size() != 0);
-            para_mps->ncenter = para_mps->conn_centers.size();
+            para_mps->ncenter = (int)para_mps->conn_centers.size();
             para_mps->conn_matrices.resize(para_mps->ncenter);
             for (int i = 0; i < para_mps->ncenter; i++)
                 para_mps->conn_matrices[i] = make_shared<SparseMatrix<S>>();
@@ -1874,8 +1874,8 @@ template <typename S> struct MovingEnvironment {
         tmp->allocate(psi->info);
         tmp->randomize(-0.5, 0.5);
         double noise_scale = sqrt(noise) / tmp->norm();
-        MatrixFunctions::iadd(MatrixRef(psi->data, psi->total_memory, 1),
-                              MatrixRef(tmp->data, tmp->total_memory, 1),
+        MatrixFunctions::iadd(MatrixRef(psi->data, (MKL_INT)psi->total_memory, 1),
+                              MatrixRef(tmp->data, (MKL_INT)tmp->total_memory, 1),
                               noise_scale);
         tmp->deallocate();
     }
@@ -1890,7 +1890,7 @@ template <typename S> struct MovingEnvironment {
                 double mat_norm = (*mats)[i]->norm();
                 if (abs(mat_norm) > TINY)
                     MatrixFunctions::iscale(MatrixRef((*mats)[i]->data,
-                                                      (*mats)[i]->total_memory,
+                                                      (MKL_INT)(*mats)[i]->total_memory,
                                                       1),
                                             1 / mat_norm);
             }
@@ -1898,7 +1898,7 @@ template <typename S> struct MovingEnvironment {
         double norm = mats->norm();
         if (abs(norm) > TINY)
             MatrixFunctions::iscale(
-                MatrixRef(mats->data, mats->total_memory, 1),
+                MatrixRef(mats->data, (MKL_INT)mats->total_memory, 1),
                 sqrt(noise) / norm);
     }
     // Diagonalize density matrix and truncate to k eigenvalues
@@ -1968,7 +1968,7 @@ template <typename S> struct MovingEnvironment {
                 vector<int> mask(eigen_values.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
-                    smask[i] = mask[ss[i].first] > keep;
+                    smask[i] = mask[ss[i].first] > (int)keep;
                 }
                 for (int i = k; i < k_total; i++) {
                     double x = eigen_values[ss[i].first].data[ss[i].second];
@@ -2059,7 +2059,7 @@ template <typename S> struct MovingEnvironment {
                 vector<int> mask(s.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
-                    smask[i] = mask[ss[i].first] > keep;
+                    smask[i] = mask[ss[i].first] > (int)keep;
                 }
                 for (int i = k; i < k_total; i++) {
                     double x = s[ss[i].first]->data[ss[i].second];
@@ -2100,7 +2100,7 @@ template <typename S> struct MovingEnvironment {
         rinfo->is_fermion = false;
         rinfo->is_wavefunction = false;
         rinfo->delta_quantum = opdq;
-        int kk = ilr.size();
+        int kk = (int)ilr.size();
         rinfo->allocate(kk);
         for (int i = 0; i < kk; i++) {
             rinfo->quanta[i] = qs[ilr[i]];
@@ -2128,18 +2128,18 @@ template <typename S> struct MovingEnvironment {
         if (trace_right)
             for (int i = 0; i < wfninfo->n; i++) {
                 S pb = wfninfo->quanta[i].get_bra(wfninfo->delta_quantum);
-                int iq = lower_bound(qs.begin(), qs.end(), pb) - qs.begin();
+                size_t iq = lower_bound(qs.begin(), qs.end(), pb) - qs.begin();
                 idx_dm_to_wfn[iq].push_back(i);
             }
         else
             for (int i = 0; i < wfninfo->n; i++) {
                 S pk = -wfninfo->quanta[i].get_ket();
-                int iq = lower_bound(qs.begin(), qs.end(), pk) - qs.begin();
+                size_t iq = lower_bound(qs.begin(), qs.end(), pk) - qs.begin();
                 idx_dm_to_wfn[iq].push_back(i);
             }
         int kkw = 0, kk = (int)ilr.size();
         for (int i = 0; i < kk; i++)
-            kkw += idx_dm_to_wfn[ilr[i]].size();
+            kkw += (int)idx_dm_to_wfn[ilr[i]].size();
         winfo->allocate(kkw);
         for (int i = 0, j = 0; i < kk; i++) {
             for (int iw = 0; iw < (int)idx_dm_to_wfn[ilr[i]].size(); iw++) {
@@ -2169,7 +2169,7 @@ template <typename S> struct MovingEnvironment {
         rinfo->is_fermion = false;
         rinfo->is_wavefunction = false;
         rinfo->delta_quantum = dminfo->delta_quantum;
-        int kk = ilr.size();
+        int kk = (int)ilr.size();
         rinfo->allocate(kk);
         for (int i = 0; i < kk; i++) {
             rinfo->quanta[i] = dminfo->quanta[ilr[i]];
@@ -2210,7 +2210,7 @@ template <typename S> struct MovingEnvironment {
             }
         int kkw = 0, kk = (int)ilr.size();
         for (int i = 0; i < kk; i++)
-            kkw += idx_dm_to_wfn[ilr[i]].size();
+            kkw += (int)idx_dm_to_wfn[ilr[i]].size();
         winfo->allocate(kkw);
         for (int i = 0, j = 0; i < kk; i++) {
             for (int iw = 0; iw < (int)idx_dm_to_wfn[ilr[i]].size(); iw++) {
@@ -2306,7 +2306,7 @@ template <typename S> struct MovingEnvironment {
             rinfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
                 opdq, qs, r, false, ilr, im);
         }
-        int kk = ilr.size();
+        int kk = (int)ilr.size();
         left = make_shared<SparseMatrix<S>>();
         right = make_shared<SparseMatrix<S>>();
         left->allocate(linfo);
@@ -2314,7 +2314,7 @@ template <typename S> struct MovingEnvironment {
         int iss = 0;
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(left->data + linfo->n_states_total[i] + j,
                                   linfo->n_states_bra[i], 1),
@@ -2328,7 +2328,7 @@ template <typename S> struct MovingEnvironment {
                     int ir = rinfo->find_state(wfn->info->quanta[iw]);
                     assert(ir != -1);
                     if (decomp_type == DecompositionTypes::PureSVD) {
-                        for (int j = 0; j < im[i]; j++) {
+                        for (ubond_t j = 0; j < im[i]; j++) {
                             MatrixFunctions::copy(
                                 MatrixRef(right->data +
                                               rinfo->n_states_total[ir] +
@@ -2354,7 +2354,7 @@ template <typename S> struct MovingEnvironment {
                 right->normalize();
         } else {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(right->data + rinfo->n_states_total[i] +
                                       j * r[ss[iss + j].first]->shape[1],
@@ -2368,7 +2368,7 @@ template <typename S> struct MovingEnvironment {
                     int il = linfo->find_state(wfn->info->quanta[iw]);
                     assert(il != -1);
                     if (decomp_type == DecompositionTypes::PureSVD) {
-                        for (int j = 0; j < im[i]; j++) {
+                        for (ubond_t j = 0; j < im[i]; j++) {
                             MatrixFunctions::copy(
                                 MatrixRef(left->data +
                                               linfo->n_states_total[il] + j,
@@ -2435,7 +2435,7 @@ template <typename S> struct MovingEnvironment {
                 MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
                     dm->info, false, ilr, im);
         }
-        int kk = ilr.size();
+        int kk = (int)ilr.size();
         left = make_shared<SparseMatrix<S>>();
         right = make_shared<SparseMatrix<S>>();
         left->allocate(linfo);
@@ -2443,7 +2443,7 @@ template <typename S> struct MovingEnvironment {
         int iss = 0;
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(left->data + linfo->n_states_total[i] + j,
                                   linfo->n_states_bra[i], 1),
@@ -2465,7 +2465,7 @@ template <typename S> struct MovingEnvironment {
                 right->normalize();
         } else {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(right->data + rinfo->n_states_total[i] +
                                       j * (*right)[i].n,
@@ -2534,7 +2534,7 @@ template <typename S> struct MovingEnvironment {
             rinfo =
                 MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
                     dm->info, trace_right, ilr, im);
-        int kk = ilr.size();
+        int kk = (int)ilr.size();
         rot_mat = make_shared<SparseMatrix<S>>();
         new_wfns =
             vector<shared_ptr<SparseMatrixGroup<S>>>(wfns.size(), nullptr);
@@ -2549,7 +2549,7 @@ template <typename S> struct MovingEnvironment {
         int iss = 0;
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(rot_mat->data + rinfo->n_states_total[i] + j,
                                   rinfo->n_states_bra[i], 1),
@@ -2577,7 +2577,7 @@ template <typename S> struct MovingEnvironment {
                     new_wfns[k]->normalize();
         } else {
             for (int i = 0; i < kk; i++) {
-                for (int j = 0; j < im[i]; j++)
+                for (ubond_t j = 0; j < im[i]; j++)
                     MatrixFunctions::copy(
                         MatrixRef(rot_mat->data + rinfo->n_states_total[i] +
                                       j * (*rot_mat)[i].n,

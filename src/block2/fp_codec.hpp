@@ -186,7 +186,7 @@ struct FPCodec {
         ofs.write((char *)magic.c_str(), 4);
         ofs.write((char *)&chunk_size, sizeof(chunk_size));
         ndata += len;
-        int nchunk = len / chunk_size + !!(len % chunk_size);
+        int nchunk = (int)(len / chunk_size + !!(len % chunk_size));
         T *pdata = new T[len + 2];
         vector<size_t> cplens(nchunk);
         int ntg = threading->activate_global();
@@ -213,7 +213,7 @@ struct FPCodec {
         ifs.read((char *)magic.c_str(), 4);
         assert(magic == "fpc");
         ifs.read((char *)&chunk_size, sizeof(chunk_size));
-        int nchunk = len / chunk_size + !!(len % chunk_size);
+        int nchunk = (int)(len / chunk_size + !!(len % chunk_size));
         T *pdata = new T[len + 2];
         vector<size_t> cplens(nchunk);
         for (int ic = 0; ic < nchunk; ic++) {

@@ -51,7 +51,7 @@ template <typename EvalOp> struct GAOptimization {
         probs.resize(n_configs);
         cumu_probs.resize(n_configs);
         ords.resize(2 * n_sites * n_configs);
-        for (n_bunit = 0; (1 << n_bunit) < sizeof(uint16_t) * 8; n_bunit++)
+        for (n_bunit = 0; (1 << n_bunit) < (int)(sizeof(uint16_t) * 8); n_bunit++)
             ;
         n_bits = (n_sites >> n_bunit) + !!(n_sites & ((1 << n_bunit) - 1));
     }

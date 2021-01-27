@@ -314,7 +314,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     ->get_type() != OpTypes::Zero)
                                 mp[abs_value(
                                     MPO<S>::left_operator_names[i]->data[j])] =
-                                    j;
+                                    (int)j;
                         shared_ptr<SymbolicRowVector<S>> &exprs =
                             MPO<S>::schemer->left_new_operator_exprs;
                         for (size_t j = 0; j < exprs->data.size(); j++) {
@@ -443,7 +443,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     ->get_type() != OpTypes::Zero)
                                 mp[abs_value(
                                     MPO<S>::right_operator_names[i]->data[j])] =
-                                    j;
+                                    (int)j;
                         shared_ptr<SymbolicColumnVector<S>> &exprs =
                             MPO<S>::schemer->right_new_operator_exprs;
                         for (size_t j = 0; j < exprs->data.size(); j++) {
@@ -574,7 +574,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 int g = -1;
                 for (size_t k = 0; k < px.size(); k++)
                     if (px[k]->b == b && px[k]->conj == conj) {
-                        g = k;
+                        g = (int)k;
                         break;
                     }
                 if (g == -1)
@@ -762,7 +762,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         expr->data.resize(k);
         int ntg = ref != nullptr ? threading->activate_global() : 1;
 #pragma omp parallel for schedule(static, 20) num_threads(ntg)
-        for (size_t j = 0; j < name->data.size(); j++) {
+        for (int j = 0; j < (int)name->data.size(); j++) {
             shared_ptr<OpElement<S>> op =
                 dynamic_pointer_cast<OpElement<S>>(name->data[j]);
             name->data[j] = abs_value(name->data[j]);

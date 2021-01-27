@@ -31,13 +31,34 @@
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/time.h>
 #include <unistd.h>
+#define _mkdir(x) ::mkdir(x, 0755)
+#else
+#include <io.h>
+#include <direct.h>
+#endif
 #include <vector>
 
 using namespace std;
 
 namespace block2 {
+
+#ifdef _WIN32
+
+struct timeval {
+    long long tv_sec, tv_usec;
+};
+
+inline int gettimeofday(struct timeval* tp, struct timezone* tzp) {
+    chrono::system_clock::duration d = chrono::system_clock::now().time_since_epoch();
+    chrono::seconds s = chrono::duration_cast<chrono::seconds>(d);
+    tp->tv_sec = s.count();
+    tp->tv_usec = chrono::duration_cast<chrono::microseconds>(d - s).count();
+    return 0;
+}
+#endif
 
 // Wall time recorder
 struct Timer {
@@ -60,7 +81,7 @@ struct Random {
     }
     static void rand_seed(unsigned i = 0) {
         rng() = mt19937(
-            i ? i : chrono::steady_clock::now().time_since_epoch().count());
+            i ? i : (unsigned) chrono::steady_clock::now().time_since_epoch().count());
     }
     // return a integer in [a, b)
     static int rand_int(int a, int b) {
@@ -180,11 +201,19 @@ struct Parsing {
             return "";
     }
     static string read_link(const string &name) {
+#ifdef _WIN32
+        return "";
+#else
         char buf[255];
         ssize_t cnt = readlink(name.c_str(), buf, 255);
         return string(buf, cnt);
+#endif
     }
     static bool link_file(const string &source, const string &name) {
+#ifdef _WIN32
+        copy_file(source, name);
+        return true;
+#else
         if (link_exists(source)) {
             string real_src = read_link(source);
             if (get_filename(name) == real_src)
@@ -194,6 +223,7 @@ struct Parsing {
             remove_file(name);
         assert(get_pathname(source) == get_pathname(name));
         return symlink(get_filename(source).c_str(), name.c_str()) == 0;
+#endif
     }
     static void copy_file(const string &source, const string &dest) {
         ifstream ifs(source.c_str(), ios::binary);
@@ -211,9 +241,13 @@ struct Parsing {
         ofs.close();
     }
     static bool link_exists(const string &name) {
+#ifdef _WIN32
+        return false;
+#else
         struct stat buffer;
         return lstat(name.c_str(), &buffer) == 0 &&
                (buffer.st_mode & S_IFLNK) == S_IFLNK;
+#endif
     }
     static bool file_exists(const string &name) {
         struct stat buffer;
@@ -223,7 +257,7 @@ struct Parsing {
         struct stat buffer;
         return stat(name.c_str(), &buffer) == 0 && (buffer.st_mode & S_IFDIR);
     }
-    static void mkdir(const string &name) { ::mkdir(name.c_str(), 0755); }
+    static void mkdir(const string &name) { _mkdir(name.c_str()); }
 };
 
 } // namespace block2

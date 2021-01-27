@@ -275,7 +275,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
                 for (auto &jdet : idets)
                     mp.insert(
                         vector<uint8_t>(jdet.begin(), jdet.begin() + j + 1));
-            this->left_dims[j + 1]->allocate(mp.size());
+            this->left_dims[j + 1]->allocate((int)mp.size());
             auto it = mp.begin();
             for (int k = 0; k < this->left_dims[j + 1]->n; k++, it++) {
                 this->left_dims[j + 1]->quanta[k] =
@@ -285,11 +285,11 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             this->left_dims[j + 1]->sort_states();
             this->left_dims[j + 1]->collect();
         }
-        this->left_dims[i + 1]->allocate(dets.size());
+        this->left_dims[i + 1]->allocate((int)dets.size());
         for (int k = 0; k < this->left_dims[i + 1]->n; k++) {
             this->left_dims[i + 1]->quanta[k] =
                 det->det_quantum(dets[k][0], 0, i + 1);
-            this->left_dims[i + 1]->n_states[k] = dets[k].size();
+            this->left_dims[i + 1]->n_states[k] = (ubond_t)dets[k].size();
         }
         this->left_dims[i + 1]->sort_states();
         for (int k = i + 1; k < this->n_sites; k++)
@@ -305,7 +305,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
                 for (auto &jdet : idets)
                     mp.insert(
                         vector<uint8_t>(jdet.begin() + (j - i), jdet.end()));
-            this->right_dims[j]->allocate(mp.size());
+            this->right_dims[j]->allocate((int)mp.size());
             auto it = mp.begin();
             for (int k = 0; k < this->right_dims[j]->n; k++, it++) {
                 this->right_dims[j]->quanta[k] =
@@ -315,11 +315,11 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             this->right_dims[j]->sort_states();
             this->right_dims[j]->collect();
         }
-        this->right_dims[i]->allocate(dets.size());
+        this->right_dims[i]->allocate((int)dets.size());
         for (int k = 0; k < this->right_dims[i]->n; k++) {
             this->right_dims[i]->quanta[k] =
                 det->det_quantum(dets[k][0], i, this->n_sites);
-            this->right_dims[i]->n_states[k] = dets[k].size();
+            this->right_dims[i]->n_states[k] = (ubond_t)dets[k].size();
         }
         this->right_dims[i]->sort_states();
         for (int k = i - 1; k >= 0; k--)
@@ -339,7 +339,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             vector<int> dd_idx(dd.size());
             for (size_t k = 0; k < dd.size(); k++)
                 dd_energies[k] = fcidump->det_energy(dd[k], i_begin, i_end),
-                dd_idx[k] = k;
+                dd_idx[k] = (int)k;
             sort(dd_idx.begin(), dd_idx.end(), [&dd_energies](int ii, int jj) {
                 return dd_energies[ii] < dd_energies[jj];
             });
@@ -381,7 +381,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             this->left_dims[i + 1]->deallocate();
         }
         StateInfo<S> lref;
-        lref.allocate(qs.size());
+        lref.allocate((int)qs.size());
         int k = 0;
         for (auto &q : qs) {
             lref.quanta[k] = q.first;
@@ -422,7 +422,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
             this->right_dims[i]->deallocate();
         }
         StateInfo<S> rref;
-        rref.allocate(qs.size());
+        rref.allocate((int)qs.size());
         int k = 0;
         for (auto &q : qs) {
             rref.quanta[k] = q.first;

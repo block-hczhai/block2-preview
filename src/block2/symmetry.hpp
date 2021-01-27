@@ -347,7 +347,7 @@ struct SU2Long {
                tjc >= abs(tja - tjb);
     }
     SU2Long combine(SU2Long bra, SU2Long ket) const {
-        ket.set_twos_low((bra.twos() & (~1)) | ket.is_fermion());
+        ket.set_twos_low((bra.twos() & (~1)) | (int)ket.is_fermion());
         if (ket.get_bra(*this) != bra ||
             !triangle(ket.twos(), this->twos(), bra.twos()))
             return SU2Long(invalid);

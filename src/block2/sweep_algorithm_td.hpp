@@ -351,7 +351,7 @@ template <typename S> struct TDDMRG {
                         }
                     }
                     if (mps == rme->bra) {
-                        bra_mmps = info->n_states_total;
+                        bra_mmps = (int)info->n_states_total;
                         mps->info->bond_dim =
                             max(mps->info->bond_dim, (ubond_t)bra_mmps);
                     }
@@ -538,7 +538,7 @@ template <typename S> struct TDDMRG {
                     mps->canonical_form[i + 1] = 'R';
                 }
                 if (mps == rme->bra) {
-                    bra_mmps = info->n_states_total;
+                    bra_mmps = (int)info->n_states_total;
                     mps->info->bond_dim =
                         max(mps->info->bond_dim, (ubond_t)bra_mmps);
                 }
@@ -650,10 +650,10 @@ template <typename S> struct TDDMRG {
         if (center == string::npos)
             center = me->ket->canonical_form.find('S');
         assert(center != string::npos);
-        me->ket->load_tensor(center);
+        me->ket->load_tensor((int)center);
         me->ket->tensors[center]->normalize();
-        me->ket->save_tensor(center);
-        me->ket->unload_tensor(center);
+        me->ket->save_tensor((int)center);
+        me->ket->unload_tensor((int)center);
     }
     void init_moving_environments() {
         const string me_tag = Parsing::split(me->tag, "@", true)[0];
@@ -847,7 +847,7 @@ template <typename S> struct ImaginaryTE {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp(nullptr, h_eff->ket->total_memory, 1);
+            MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
@@ -919,7 +919,7 @@ template <typename S> struct ImaginaryTE {
                 MovingEnvironment<S>::density_matrix_add_matrices(
                     dm, me->ket->tensors[i], forward, pdpf, weights);
                 frame->activate(1);
-                for (int i = pdpf.size() - 1; i >= 0; i--)
+                for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
@@ -939,7 +939,7 @@ template <typename S> struct ImaginaryTE {
         } else {
             if (pdpf.size() != 0) {
                 frame->activate(1);
-                for (int i = pdpf.size() - 1; i >= 0; i--)
+                for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             }
@@ -953,7 +953,7 @@ template <typename S> struct ImaginaryTE {
                 me->ket->tensors[i] = left;
                 me->ket->save_tensor(i);
                 info = left->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
@@ -964,7 +964,7 @@ template <typename S> struct ImaginaryTE {
                 me->ket->tensors[i] = right;
                 me->ket->save_tensor(i);
                 info = right->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i] = info;
@@ -1120,7 +1120,7 @@ template <typename S> struct ImaginaryTE {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp(nullptr, h_eff->ket->total_memory, 1);
+            MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
@@ -1153,7 +1153,7 @@ template <typename S> struct ImaginaryTE {
                 MovingEnvironment<S>::density_matrix_add_matrices(
                     dm, h_eff->ket, forward, pdpf, weights);
                 frame->activate(1);
-                for (int i = pdpf.size() - 1; i >= 0; i--)
+                for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
@@ -1171,7 +1171,7 @@ template <typename S> struct ImaginaryTE {
         } else {
             if (pdpf.size() != 0) {
                 frame->activate(1);
-                for (int i = pdpf.size() - 1; i >= 0; i--)
+                for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             }
@@ -1183,7 +1183,7 @@ template <typename S> struct ImaginaryTE {
                     (i + 1 != me->n_sites - 1 || !advance))
                     me->ket->tensors[i + 1]->normalize();
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->left_dims[i + 1] = info;
@@ -1195,7 +1195,7 @@ template <typename S> struct ImaginaryTE {
                     me->ket->tensors[i]->normalize();
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
-                mmps = info->n_states_total;
+                mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
                     max(me->ket->info->bond_dim, (ubond_t)mmps);
                 me->ket->info->right_dims[i + 1] = info;
@@ -1322,10 +1322,10 @@ template <typename S> struct ImaginaryTE {
         if (center == string::npos)
             center = me->ket->canonical_form.find('S');
         assert(center != string::npos);
-        me->ket->load_tensor(center);
+        me->ket->load_tensor((int)center);
         me->ket->tensors[center]->normalize();
-        me->ket->save_tensor(center);
-        me->ket->unload_tensor(center);
+        me->ket->save_tensor((int)center);
+        me->ket->unload_tensor((int)center);
     }
     double solve(int n_sweeps, double beta, bool forward = true,
                  double tol = 1E-6) {

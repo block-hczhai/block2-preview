@@ -50,12 +50,27 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            d_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> tr_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            ts_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+#else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> tr_op[n_sites][2], ts_op[n_sites][2];
         shared_ptr<OpExpr<S>> a_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> p_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> q_op[n_sites][n_sites][4];
+#endif
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
         MPO<S>::const_e = hamil.e();
         if (hamil.delayed == DelayedOpNames::None)
@@ -118,7 +133,7 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                 pmat = make_shared<SymbolicColumnVector<S>>(lshape);
             else
                 pmat = make_shared<SymbolicMatrix<S>>(lshape, rshape);
-            int pit = count(ts.begin(), ts.end(), m);
+            int pit = (int)count(ts.begin(), ts.end(), m);
             Symbolic<S> &mat = *pmat;
             if (m == 0) {
                 p = 0;

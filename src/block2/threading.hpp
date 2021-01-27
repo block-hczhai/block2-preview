@@ -227,8 +227,10 @@ struct Threading {
         n_threads_mkl = 0;
 #endif
 #ifdef _OPENMP
+#ifndef _MSC_VER
         if (n_levels != 0)
             omp_set_max_active_levels(n_levels);
+#endif
 #endif
         n_threads_op = 0;
         n_threads_quanta = 0;
@@ -325,8 +327,10 @@ struct Threading {
 #endif
         }
 #ifdef _OPENMP
+#ifndef _MSC_VER
         if (n_levels != 0)
             omp_set_max_active_levels(n_levels);
+#endif
 #endif
     }
     friend ostream &operator<<(ostream &os, const Threading &th) {

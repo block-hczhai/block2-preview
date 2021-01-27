@@ -61,6 +61,37 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> d_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> ccdd_op(n_sites, vector<shared_ptr<OpExpr<S>>>(16));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        // here ad[i][j] = D_i * D_j
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> bd_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        // i <= j = k
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ccd_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> cdc_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> cdd_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> dcc_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> dcd_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ddc_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
+        vector<vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>> pdm2_op(n_sites,
+            vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>(n_sites,
+            vector<vector<vector<shared_ptr<OpExpr<S>>>>>(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(16)))));
+#else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> ccdd_op[n_sites][16];
         shared_ptr<OpExpr<S>> a_op[n_sites][n_sites][4];
@@ -76,6 +107,7 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> dcd_op[n_sites][n_sites][8];
         shared_ptr<OpExpr<S>> ddc_op[n_sites][n_sites][8];
         shared_ptr<OpExpr<S>> pdm2_op[n_sites][n_sites][n_sites][n_sites][16];
+#endif
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         int sz_ccdd[16], sz_ccd[8], sz_cdc[8], sz_cdd[8], sz_dcc[8], sz_dcd[8],

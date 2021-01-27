@@ -365,7 +365,7 @@ template <typename S> struct ParallelRule {
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^ conjs[0]),
+                                                      op->conj ^ (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
@@ -492,7 +492,7 @@ template <typename S> struct ParallelRule {
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^ conjs[0]),
+                                                      op->conj ^ (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;

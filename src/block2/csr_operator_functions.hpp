@@ -148,9 +148,9 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -206,9 +206,9 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -290,9 +290,9 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = cdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];

@@ -42,7 +42,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
                 const shared_ptr<OperatorFunctions<S>> &opf)
-        : MPO<S>(bra_basis.size()) {
+        : MPO<S>((int)bra_basis.size()) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -233,6 +233,28 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            d_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> mc_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            md_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> rd_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            r_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> mrd_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            mr_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+#else
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites][2], d_op[hamil.n_sites][2];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites][2], md_op[hamil.n_sites][2];
         shared_ptr<OpExpr<S>> rd_op[hamil.n_sites][2], r_op[hamil.n_sites][2];
@@ -243,6 +265,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> p_op[hamil.n_sites][hamil.n_sites][4];
         shared_ptr<OpExpr<S>> pd_op[hamil.n_sites][hamil.n_sites][4];
         shared_ptr<OpExpr<S>> q_op[hamil.n_sites][hamil.n_sites][4];
+#endif
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
         MPO<S>::const_e = hamil.e();
         if (hamil.delayed == DelayedOpNames::None)
@@ -322,8 +345,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         for (uint16_t m = 0; m < hamil.n_sites; m++)
             this->tensors[m] = make_shared<OperatorTensor<S>>();
         int ntg = threading->activate_global();
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (int xxm = 0; xxm < (int)(hamil.n_sites + need_repeat_m); xxm++) {
+            uint16_t xm = (uint16_t)xxm;
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (uint16_t xm = 0; xm < hamil.n_sites + need_repeat_m; xm++) {
+#endif
             uint16_t m = xm;
             int p;
             bool repeat_m = false;
@@ -1125,9 +1154,13 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         SeqTypes seqt = hamil.opf->seq->mode;
         hamil.opf->seq->mode = SeqTypes::None;
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
+#ifdef _MSC_VER
+        for (int m = 0; m < (int)hamil.n_sites; m++) {
+#else
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
+#endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat}, opt->ops);
         }
         hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -1149,9 +1182,16 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 *MPO<S>::schemer->left_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * hamil.n_sites; i++)
                 lop[i] = this->left_operator_names[m]->data[i];
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (int sj = 0; sj < (int)(4 * (hamil.n_sites - (m + 1))); sj++) {
+                uint8_t s = (uint8_t)(sj / (hamil.n_sites - (m + 1)));
+                uint16_t j = (uint16_t)(sj % (hamil.n_sites - (m + 1)) + m + 1);
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+#endif
                     vector<shared_ptr<OpExpr<S>>> exprs;
                     exprs.reserve((m + 1) * (m + 1));
                     for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
@@ -1219,9 +1259,16 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 *MPO<S>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * hamil.n_sites; i++)
                 rop[i] = this->right_operator_names[m + 1]->data[i];
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (int sj = 0; sj < (int)(4 * (m + 1)); sj++) {
+                uint8_t s = (uint8_t)(sj / (m + 1));
+                uint16_t j = (uint16_t)(sj % (m + 1));
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
+#endif
                     vector<shared_ptr<OpExpr<S>>> exprs;
                     exprs.reserve((hamil.n_sites - m - 1) *
                                   (hamil.n_sites - m - 1));
@@ -1291,6 +1338,23 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<shared_ptr<OpExpr<S>>> c_op(hamil.n_sites), d_op(hamil.n_sites);
+        vector<shared_ptr<OpExpr<S>>> mc_op(hamil.n_sites), md_op(hamil.n_sites);
+        vector<shared_ptr<OpExpr<S>>> trd_op(hamil.n_sites), tr_op(hamil.n_sites);
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+#else
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites], d_op[hamil.n_sites];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites], md_op[hamil.n_sites];
         shared_ptr<OpExpr<S>> trd_op[hamil.n_sites], tr_op[hamil.n_sites];
@@ -1300,6 +1364,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         shared_ptr<OpExpr<S>> p_op[hamil.n_sites][hamil.n_sites][2];
         shared_ptr<OpExpr<S>> pd_op[hamil.n_sites][hamil.n_sites][2];
         shared_ptr<OpExpr<S>> q_op[hamil.n_sites][hamil.n_sites][2];
+#endif
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
         MPO<S>::const_e = hamil.e();
         if (hamil.delayed == DelayedOpNames::None)
@@ -1359,8 +1424,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (uint16_t m = 0; m < hamil.n_sites; m++)
             this->tensors[m] = make_shared<OperatorTensor<S>>();
         int ntg = threading->activate_global();
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (int xxm = 0; xxm < (int)(hamil.n_sites + need_repeat_m); xxm++) {
+            uint16_t xm = (uint16_t)xxm;
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (uint16_t xm = 0; xm < hamil.n_sites + need_repeat_m; xm++) {
+#endif
             uint16_t m = xm;
             int p;
             bool repeat_m = false;
@@ -2008,9 +2079,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         SeqTypes seqt = hamil.opf->seq->mode;
         hamil.opf->seq->mode = SeqTypes::None;
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
+#ifdef _MSC_VER
+        for (int m = 0; m < (int)hamil.n_sites; m++) {
+#else
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
+#endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat}, opt->ops);
         }
         hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -2034,9 +2109,16 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 lop[i] = this->left_operator_names[m]->data[i];
             const vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
             const vector<double> su2_factor_q = {1.0, sqrt(3)};
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (int sj = 0; sj < (int)(2 * (hamil.n_sites - (m + 1))); sj++) {
+                uint8_t s = (uint8_t)(sj / (hamil.n_sites - (m + 1)));
+                uint16_t j = (uint16_t)(sj % (hamil.n_sites - (m + 1)) + m + 1);
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
+#endif
                     vector<shared_ptr<OpExpr<S>>> exprs;
                     exprs.reserve((m + 1) * (m + 1));
                     for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
@@ -2105,9 +2187,16 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 *MPO<S>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 2 * hamil.n_sites; i++)
                 rop[i] = this->right_operator_names[m + 1]->data[i];
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (int sj = 0; sj < (int)(2 * (m + 1)); sj++) {
+                uint8_t s = (uint8_t)(sj / (m + 1));
+                uint16_t j = (uint16_t)(sj % (m + 1));
+#else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg) collapse(2)
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
+#endif
                     vector<shared_ptr<OpExpr<S>>> exprs;
                     exprs.reserve((hamil.n_sites - m - 1) *
                                   (hamil.n_sites - m - 1));

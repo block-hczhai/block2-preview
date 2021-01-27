@@ -85,14 +85,19 @@ template <typename S> struct OperatorFunctions {
             return;
         assert(mats[i]->get_type() == SparseMatrixTypes::Normal);
         int m = (i + j) >> 1;
+#ifdef _MSC_VER
+        parallel_reduce(mats, i, m);
+        parallel_reduce(mats, m, j);
+#else
 #pragma omp task
         parallel_reduce(mats, i, m);
 #pragma omp task
         parallel_reduce(mats, m, j);
 #pragma omp taskwait
+#endif
         MatrixFunctions::iadd(
-            MatrixRef(mats[i]->data, 1, mats[i]->total_memory),
-            MatrixRef(mats[m]->data, 1, mats[m]->total_memory), 1.0);
+            MatrixRef(mats[i]->data, 1, (MKL_INT)mats[i]->total_memory),
+            MatrixRef(mats[m]->data, 1, (MKL_INT)mats[m]->total_memory), 1.0);
     }
     virtual void
     parallel_reduce(const vector<shared_ptr<SparseMatrixGroup<S>>> &mats, int i,
@@ -101,16 +106,21 @@ template <typename S> struct OperatorFunctions {
         if (j - i == 1)
             return;
         int m = (i + j) >> 1;
+#ifdef _MSC_VER
+        parallel_reduce(mats, i, m);
+        parallel_reduce(mats, m, j);
+#else
 #pragma omp task
         parallel_reduce(mats, i, m);
 #pragma omp task
         parallel_reduce(mats, m, j);
 #pragma omp taskwait
+#endif
         // avoid possible int32 overflow
         for (int j = 0; j < mats[i]->n; j++)
             MatrixFunctions::iadd(
-                MatrixRef((*mats[i])[j]->data, 1, (*mats[i])[j]->total_memory),
-                MatrixRef((*mats[m])[j]->data, 1, (*mats[m])[j]->total_memory),
+                MatrixRef((*mats[i])[j]->data, 1, (MKL_INT)(*mats[i])[j]->total_memory),
+                MatrixRef((*mats[m])[j]->data, 1, (MKL_INT)(*mats[m])[j]->total_memory),
                 1.0);
     }
     // a += b * scale
@@ -121,20 +131,20 @@ template <typename S> struct OperatorFunctions {
                b->get_type() == SparseMatrixTypes::Normal);
         if (a->info == b->info && !conj) {
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked) {
-                seq->iadd(MatrixRef(a->data, 1, a->total_memory),
-                          MatrixRef(b->data, 1, b->total_memory),
+                seq->iadd(MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
+                          MatrixRef(b->data, 1, (MKL_INT)b->total_memory),
                           scale * b->factor, a->factor);
                 a->factor = 1.0;
             } else {
                 if (a->factor != 1.0) {
                     MatrixFunctions::iscale(
-                        MatrixRef(a->data, 1, a->total_memory), a->factor);
+                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory), a->factor);
                     a->factor = 1.0;
                 }
                 if (scale != 0.0)
                     MatrixFunctions::iadd(
-                        MatrixRef(a->data, 1, a->total_memory),
-                        MatrixRef(b->data, 1, b->total_memory),
+                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
+                        MatrixRef(b->data, 1, (MKL_INT)b->total_memory),
                         scale * b->factor);
             }
         } else {
@@ -213,9 +223,9 @@ template <typename S> struct OperatorFunctions {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -259,15 +269,15 @@ template <typename S> struct OperatorFunctions {
             cinfo = c->info->cinfo,
             dinfo = dc->info->cinfo;
         assert(cinfo != nullptr && dinfo != nullptr);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
-        int idk = lower_bound(dinfo->quanta + dinfo->n[dconj],
+        int idk = (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
                               dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
-                  dinfo->quanta;
+                  dinfo->quanta);
         assert(idk < dinfo->n[dconj + 1]);
         int idxa = dinfo->idx[idk];
         int idxb = idk == dinfo->n[4] - 1 ? dinfo->nc : dinfo->idx[idk + 1];
@@ -277,8 +287,8 @@ template <typename S> struct OperatorFunctions {
                 int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl = lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
-                          dinfo->ic + idp;
+                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                          dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
@@ -324,17 +334,17 @@ template <typename S> struct OperatorFunctions {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
-                iv = cinfo->stride[il];
+                iv = (int)cinfo->stride[il];
             if (seq->mode == SeqTypes::Simple && il != ixa &&
-                iv <= cinfo->stride[il - 1])
+                iv <= (int)cinfo->stride[il - 1])
                 seq->simple_perform();
             double factor = cinfo->factor[il];
             switch (tt) {
@@ -402,15 +412,15 @@ template <typename S> struct OperatorFunctions {
             cinfo = c->info->cinfo,
             dinfo = dc->info->cinfo;
         assert(cinfo != nullptr && dinfo != nullptr);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
-        int idk = lower_bound(dinfo->quanta + dinfo->n[dconj],
+        int idk = (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
                               dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
-                  dinfo->quanta;
+                  dinfo->quanta);
         assert(idk < dinfo->n[dconj + 1]);
         int idxa = dinfo->idx[idk];
         int idxb = idk == dinfo->n[4] - 1 ? dinfo->nc : dinfo->idx[idk + 1];
@@ -418,14 +428,14 @@ template <typename S> struct OperatorFunctions {
             bool found = false;
             for (int il = ixa; il < ixb; il++) {
                 int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
-                    iv = cinfo->stride[il];
+                    iv = (int)cinfo->stride[il];
                 if (seq->mode == SeqTypes::Simple && il != ixa &&
-                    iv <= cinfo->stride[il - 1])
+                    iv <= (int)cinfo->stride[il - 1])
                     seq->simple_perform();
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl = lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
-                          dinfo->ic + idp;
+                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                          dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
@@ -508,9 +518,9 @@ template <typename S> struct OperatorFunctions {
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             c->info->cinfo;
         S abdq = cdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
-        int ik = lower_bound(cinfo->quanta + cinfo->n[conj],
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
                              cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta;
+                 cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];

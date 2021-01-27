@@ -95,7 +95,7 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
             for (int i = 0; i < info->n; i++) {
                 MatrixRef dmat = SparseMatrix<S>::operator[](i);
                 csr_data[i] = make_shared<CSRMatrixRef>(
-                    dmat.m, dmat.n, dmat.size(), dmat.data, nullptr, nullptr);
+                    dmat.m, dmat.n, (MKL_INT)dmat.size(), dmat.data, nullptr, nullptr);
             }
         } else {
             for (int i = 0; i < info->n; i++) {
@@ -115,7 +115,7 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
     }
     CSRMatrixRef &operator[](S q) const { return (*this)[info->find_state(q)]; }
     CSRMatrixRef &operator[](int idx) const {
-        assert(idx != -1 and idx < csr_data.size());
+        assert(idx != -1 && idx < csr_data.size());
         return *csr_data[idx];
     }
     void copy_data_from(const shared_ptr<SparseMatrix<S>> &other,
@@ -188,7 +188,7 @@ template <typename S> struct CSRSparseMatrix : SparseMatrix<S> {
         for (int i = 0; i < info->n; i++) {
             MatrixRef dmat = (*mat)[i];
             csr_data[i] = make_shared<CSRMatrixRef>(
-                dmat.m, dmat.n, dmat.size(), dmat.data, nullptr, nullptr);
+                dmat.m, dmat.n, (MKL_INT)dmat.size(), dmat.data, nullptr, nullptr);
         }
     }
     // construct real csr sparse matrix from dense sparse mat

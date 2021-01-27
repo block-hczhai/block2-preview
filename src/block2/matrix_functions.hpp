@@ -410,7 +410,7 @@ struct MatrixFunctions {
                                const MatrixRef &c, double scale,
                                uint32_t stride) {
         const double cfactor = 1.0;
-        switch (conja | (conjb << 1)) {
+        switch ((uint8_t)conja | (conjb << 1)) {
         case 0:
             if (a.m == 1 && a.n == 1) {
                 if (b.n == c.n) {
@@ -642,8 +642,8 @@ struct MatrixFunctions {
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
             deflation_max_size = k + k / 2;
-        MatrixRef pbs(nullptr, deflation_max_size * vs[0].size(), 1);
-        MatrixRef pss(nullptr, deflation_max_size * vs[0].size(), 1);
+        MatrixRef pbs(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()), 1);
+        MatrixRef pss(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()), 1);
         pbs.data = d_alloc->allocate(deflation_max_size * vs[0].size());
         pss.data = d_alloc->allocate(deflation_max_size * vs[0].size());
         vector<MatrixRef> bs(deflation_max_size,
@@ -690,11 +690,18 @@ struct MatrixFunctions {
                 int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                 {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++) {
+                        int i = ij / m, j = ij % m;
+#else
 #pragma omp for schedule(dynamic) collapse(2)
                     for (int i = 0; i < m; i++)
-                        for (int j = 0; j < m; j++)
+                        for (int j = 0; j < m; j++) {
+#endif
                             if (j <= i)
                                 alpha(i, j) = dot(bs[i], sigmas[j]);
+                    }
 #pragma omp single
                     eigs(alpha, ld);
                     // note alpha row/column is diff from python
@@ -1094,19 +1101,18 @@ struct MatrixFunctions {
         MKL_INT vm = v.m, vn = v.n, n = vm * vn;
         if (n < 4) {
             const MKL_INT lwork = 4 * n * n + 7;
-            double te[n], h[n * n], work[lwork];
-            MatrixRef e = MatrixRef(&te[0], vm, vn);
+            vector<double> te(n), h(n * n), work(lwork);
+            MatrixRef e = MatrixRef(te.data(), vm, vn);
             memset(e.data, 0, sizeof(double) * n);
-            memset(h, 0, sizeof(double) * n * n);
             for (MKL_INT i = 0; i < n; i++) {
                 e.data[i] = 1.0;
-                op(e, MatrixRef(h + i * n, vm, vn));
+                op(e, MatrixRef(h.data() + i * n, vm, vn));
                 h[i * (n + 1)] += consta;
                 e.data[i] = 0.0;
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                MKL_INT iptr = expo_pade(6, n, h, n, t, work).first;
-                MatrixFunctions::multiply(MatrixRef(work + iptr, n, n), true, v,
+                MKL_INT iptr = expo_pade(6, n, h.data(), n, t, work.data()).first;
+                MatrixFunctions::multiply(MatrixRef(work.data() + iptr, n, n), true, v,
                                           false, e, 1.0, 0.0);
                 memcpy(v.data, e.data, sizeof(double) * n);
             }

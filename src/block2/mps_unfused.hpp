@@ -135,7 +135,7 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
                               mps->info->target - r.quanta[ikkb]),
                     make_shared<Tensor>(mat->info->n_states_bra[i],
                                         m.n_states[ikka], r.n_states[ikkb])));
-                for (int ip = 0; ip < mat->info->n_states_bra[i]; ip++)
+                for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
                     memcpy(&ts->data[ikka].back().second->data[ip * lp],
                            mat->data + p + ip * mat->info->n_states_ket[i],
                            lp * sizeof(double));

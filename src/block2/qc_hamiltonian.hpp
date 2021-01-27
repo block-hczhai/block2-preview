@@ -548,7 +548,7 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             for (auto &p : ops_map)
                 p.second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
-            for (int j = site_op_infos[m].size() - 1; j >= 0; j--)
+            for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
@@ -880,7 +880,7 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             for (auto &p : ops_map)
                 p.second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
-            for (int j = site_op_infos[m].size() - 1; j >= 0; j--)
+            for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();

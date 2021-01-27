@@ -46,9 +46,17 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(4));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
+#else
         shared_ptr<OpExpr<S>> b_op[n_sites][4];
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][6];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][6];
+#endif
         const int sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 4; s++)
@@ -240,9 +248,17 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+#ifdef _MSC_VER
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+#else
         shared_ptr<OpExpr<S>> b_op[n_sites][2];
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][2];
         shared_ptr<OpExpr<S>> pdm1_op[n_sites][n_sites][2];
+#endif
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 2; s++)
                 b_op[m][s] = make_shared<OpElement<S>>(

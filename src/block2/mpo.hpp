@@ -511,8 +511,8 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                     mat->allocate(p.second->info);
                     mat->factor = p.second->factor;
                     if (p.second->info->n == p.second->total_memory) {
-                        MatrixRef mmat(mat->data, mat->total_memory, 1),
-                            pmat(p.second->data, p.second->total_memory, 1);
+                        MatrixRef mmat(mat->data, (MKL_INT)mat->total_memory, 1),
+                            pmat(p.second->data, (MKL_INT)p.second->total_memory, 1);
                         MatrixFunctions::copy(mmat, pmat);
                     } else {
                         for (int i = 0; i < mat->info->n; i++) {
