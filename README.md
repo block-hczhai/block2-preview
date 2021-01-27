@@ -47,7 +47,7 @@ Features
     * Parallelism over dense matrix multiplications (MKL)
 * Orbital Reordering
     * Fiedler
-    * GeneticAlgorithm
+    * Genetic algorithm
 
 Installation
 ------------
@@ -146,7 +146,7 @@ will use optimization flags such as -O3 (default).
 
 enables debug flags.
 
-### Supported Operating Systems and Compilers
+### Supported operating systems and compilers
 
 * Linux + gcc 9.2.0 + MKL 2019
 * MacOS 10.15 + Apple clang 12.0 + MKL 2021

@@ -12,6 +12,9 @@ class TestBatchGEMM : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(1969);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 1,
+            1, 4);
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -22,6 +25,7 @@ class TestBatchGEMM : public ::testing::Test {
 
 TEST_F(TestBatchGEMM, TestRotate) {
     shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(1 << 24);
+    seq->mode = SeqTypes::Auto;
     for (int i = 0; i < n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mc = Random::rand_int(1, 100), nc = Random::rand_int(1, 100);
@@ -71,6 +75,7 @@ TEST_F(TestBatchGEMM, TestRotate) {
 
 TEST_F(TestBatchGEMM, TestTensorProduct) {
     shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>();
+    seq->mode = SeqTypes::Auto;
     for (int i = 0; i < n_tests; i++) {
         int ii = Random::rand_int(0, 4), jj = Random::rand_int(0, 2);
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
