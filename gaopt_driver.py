@@ -90,6 +90,11 @@ opts = dict(
     mutate_rate=float(dic.get("mutation", 0.1))
 )
 
+# original cost
+if mrank == 0:
+    origf = OrbitalOrdering.evaluate(n_sites, kmat, VectorUInt16(range(0, n_sites)))
+    print("Default order : f = %20.12f" % origf, flush=True)
+
 # run
 midx, mf = None, None
 for i_task in range(0, n_tasks):
