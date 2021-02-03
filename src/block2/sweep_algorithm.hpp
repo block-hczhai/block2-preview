@@ -182,6 +182,8 @@ template <typename S> struct DMRG {
         if (davidson_soft_max_iter != 0 || noise != 0)
             pdi = one_dot_eigs_and_perturb(forward, fuse_left, i,
                                            davidson_conv_thrd, noise, pket);
+        else if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (pket != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
         if ((build_pdm || me->para_rule == nullptr ||
@@ -423,6 +425,8 @@ template <typename S> struct DMRG {
         if (davidson_soft_max_iter != 0 || noise != 0)
             pdi = two_dot_eigs_and_perturb(forward, i, davidson_conv_thrd,
                                            noise, pket);
+        else if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (pket != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
         if (build_pdm) {
@@ -619,7 +623,8 @@ template <typename S> struct DMRG {
                     mps_quanta[i].end());
             }
             h_eff->deallocate();
-        }
+        } else if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(!(noise_type & NoiseTypes::Perturbative));
             assert(decomp_type == DecompositionTypes::DensityMatrix);
@@ -785,7 +790,8 @@ template <typename S> struct DMRG {
                     mps_quanta[i].end());
             }
             h_eff->deallocate();
-        }
+        } else if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(!(noise_type & NoiseTypes::Perturbative));
             assert(decomp_type == DecompositionTypes::DensityMatrix);
