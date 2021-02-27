@@ -1963,6 +1963,10 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const Hamiltonian<S> &, const shared_ptr<OpElement<S>> &,
                       int>());
 
+    py::class_<LocalMPO<S>, shared_ptr<LocalMPO<S>>, MPO<S>>(m, "LocalMPO")
+        .def(py::init<const Hamiltonian<S> &,
+                      const vector<shared_ptr<OpElement<S>>> &>());
+
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)
         .def(py::init<const HamiltonianQC<S> &>())

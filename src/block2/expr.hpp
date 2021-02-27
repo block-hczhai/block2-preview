@@ -266,7 +266,7 @@ template <typename S> struct OpElement : OpExpr<S> {
     }
     bool operator==(const OpElement &other) const {
         return name == other.name && site_index == other.site_index &&
-               factor == other.factor;
+               ::abs(factor - other.factor) < 1E-12;
     }
     bool operator<(const OpElement &other) const {
         if (name != other.name)

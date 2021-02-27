@@ -28,6 +28,7 @@ from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
+from block2 import OrbitalOrdering, VectorUInt16
 import time
 import numpy as np
 
@@ -39,14 +40,74 @@ if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
+    from block2.su2 import VectorOpElement, LocalMPO
 else:
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
+    from block2.sz import VectorOpElement, LocalMPO
 
 
 class GFDMRGError(Exception):
     pass
+
+
+def orbital_reorder(h1e, g2e, method='gaopt'):
+    """
+    Find an optimal ordering of orbitals for DMRG.
+    Ref: J. Chem. Phys. 142, 034102 (2015)
+
+    Args:
+        method :
+            'gaopt' - genetic algorithm, take several seconds
+            'fiedler' - very fast, may be slightly worse than 'gaopt'
+
+    Return a index array "midx":
+        reordered_orb_sym = original_orb_sym[midx]
+    """
+    n_sites = h1e.shape[0]
+    hmat = np.zeros((n_sites, n_sites))
+    xmat = np.zeros((n_sites, n_sites))
+    from pyscf import ao2mo
+    if not isinstance(h1e, tuple):
+        hmat[:] = np.abs(h1e[:])
+        g2e = ao2mo.restore(1, g2e, n_sites)
+        for i in range(0, n_sites):
+            for j in range(0, n_sites):
+                xmat[i, j] = abs(g2e[i, j, j, i])
+    else:
+        assert SpinLabel == SZ
+        assert isinstance(h1e, tuple) and len(h1e) == 2
+        assert isinstance(g2e, tuple) and len(g2e) == 3
+        hmat[:] = 0.5 * np.abs(h1e[0][:]) + 0.5 * np.abs(h1e[1][:])
+        g2eaa = ao2mo.restore(1, g2e[0], n_sites)
+        g2ebb = ao2mo.restore(1, g2e[1], n_sites)
+        g2eab = ao2mo.restore(1, g2e[2], n_sites)
+        for i in range(0, n_sites):
+            for j in range(0, n_sites):
+                xmat[i, j] = 0.25 * abs(g2eaa[i, j, j, i]) \
+                    + 0.25 * abs(g2ebb[i, j, j, i]) \
+                    + 0.5 * abs(g2eab[i, j, j, i])
+    kmat = VectorDouble((np.array(hmat) * 1E-7 + np.array(xmat)).flatten())
+    if method == 'gaopt':
+        n_tasks = 32
+        opts = dict(
+            n_generations=10000, n_configs=n_sites * 2,
+            n_elite=8, clone_rate=0.1, mutate_rate=0.1
+        )
+        midx, mf = None, None
+        for _ in range(0, n_tasks):
+            idx = OrbitalOrdering.ga_opt(n_sites, kmat, **opts)
+            f = OrbitalOrdering.evaluate(n_sites, kmat, idx)
+            idx = np.array(idx)
+            if mf is None or f < mf:
+                midx, mf = idx, f
+    elif method == 'fiedler':
+        idx = OrbitalOrdering.fiedler(n_sites, kmat)
+        midx = np.array(idx)
+    else:
+        assert False
+    return midx
 
 
 class GFDMRG:
@@ -364,7 +425,7 @@ class GFDMRG:
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
                         eta, freqs, addition, cutoff=1E-14, diag_only=False,
-                        alpha=True, occs=None, bias=1.0):
+                        alpha=True, occs=None, bias=1.0, mo_coeff=None):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -433,11 +494,12 @@ class GFDMRG:
             if self.verbose >= 2:
                 print('CF = %s --> %s' % (cf, ket.canonical_form))
 
-        for ii, idx in enumerate(idxs):
-            if self.verbose >= 2:
-                print('>>> START Compression Site = %4d <<<' % idx)
-            t = time.perf_counter()
+        if mo_coeff is None:
+            gidxs = idxs
+        else:
+            gidxs = list(range(self.n_sites))
 
+        for ii, idx in enumerate(gidxs):
             if SpinLabel == SZ:
                 if addition:
                     ops[ii] = OpElement(OpNames.C, SiteIndex(
@@ -452,6 +514,11 @@ class GFDMRG:
                 else:
                     ops[ii] = OpElement(OpNames.D, SiteIndex(
                         (idx, ), ()), SU2(-1, 1, self.orb_sym[idx]))
+
+        for ii, idx in enumerate(idxs):
+            if self.verbose >= 2:
+                print('>>> START Compression Site = %4d <<<' % idx)
+            t = time.perf_counter()
 
             rket_info = MPSInfo(self.n_sites, self.hamil.vacuum,
                                 self.target + ops[ii].q_label, self.hamil.basis)
@@ -475,8 +542,19 @@ class GFDMRG:
             rket_info.save_mutable()
             rket_info.deallocate_mutable()
 
-            rmpos[ii] = SimplifiedMPO(
-                SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+            if mo_coeff is None:
+                # the mpo and gf are in the same basis
+                # the mpo is SiteMPO
+                rmpos[ii] = SimplifiedMPO(
+                    SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+            else:
+                # the mpo is in mo basis and gf is in ao basis
+                # the mpo is sum of SiteMPO (LocalMPO)
+                ao_ops = VectorOpElement([None] * self.n_sites)
+                for ix in range(self.n_sites):
+                    ao_ops[ix] = ops[ix] * mo_coeff[idx, ix]
+                rmpos[ii] = SimplifiedMPO(
+                    LocalMPO(self.hamil, ao_ops), NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
             if self.mpi is not None:
                 rmpos[ii] = ParallelMPO(rmpos[ii], self.prule)
@@ -609,7 +687,7 @@ class GFDMRG:
         release_memory()
 
 
-def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
+def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
@@ -622,7 +700,10 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
         mf : scf object
         freqs : np.ndarray of frequencies (real)
         delta : broadening (real)
-        mo_orbs : list of indices of molecular orbtials
+        ao_orbs : list of indices of atomic orbtials (if not None, gf will be in ao basis)
+        mo_orbs : list of indices of molecular orbtials (if not None, gf will be in mo basis)
+            one of ao_orbs or mo_orbs must be None
+            if both ao_orbs and mo_orbs are None, gf will be in mo basis
         gmres_tol : conjugate gradient (min res) conv tol (if too low will be extemely time-consuming)
         add_rem : '+' (addition) or '-' (removal) or '+-' (both)
         n_threads : number of threads (need parallel MKL library)
@@ -672,6 +753,7 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
     '''
     from pyscf import lo, symm, ao2mo
     assert load_dir is None or save_dir is None
+    assert ao_orbs is None or mo_orbs is None
 
     mol = mf.mol
 
@@ -729,13 +811,15 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
             ecore = 0
         na, nb = mol.nelec
 
-    if mo_orbs is None:
+    if mo_orbs is None and ao_orbs is None:
         mo_orbs = range(n_mo)
 
     dmrg = GFDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=mpi)
     if load_dir is None:
         save_fd = save_dir + "/GS_FCIDUMP" if save_dir is not None else None
+        print('best reorder (not applied) = ',
+              orbital_reorder(h1e, g2e, method='fiedler'))
         dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
                               orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e, save_fcidump=save_fd)
         dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
@@ -754,7 +838,9 @@ def dmrg_mo_gf(mf, freqs, delta, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
     for addit in [x == '+' for x in add_rem]:
         # only calculate alpha spin
         gf += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
-                                   gs_bond_dims, gs_noises, gs_tol, gs_n_steps, idxs=mo_orbs,
+                                   gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
+                                   idxs=mo_orbs if ao_orbs is None else ao_orbs,
+                                   mo_coeff=None if ao_orbs is None else mo_coeff,
                                    eta=delta, freqs=freqs, addition=addit, diag_only=diag_only,
                                    alpha=alpha)
 
@@ -854,5 +940,16 @@ if __name__ == "__main__":
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
                                 n_threads=n_threads, occs=occs, bias=1.0, save_dir=save_dir, load_dir=load_dir)
-        gfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
-        print(gfmat)
+        xgfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
+        print("MO to AO method = ", xgfmat)
+
+        pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
+                                gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
+                                gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
+                                gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
+                                ao_orbs=range(N),
+                                n_threads=n_threads, occs=occs, bias=1.0, save_dir=save_dir, load_dir=load_dir)
+        print("AO IN MO method = ", gfmat)
+
+        print('diff = ', gfmat - xgfmat)
+        print(np.linalg.norm(gfmat - xgfmat))

@@ -213,6 +213,75 @@ template <typename S> struct SiteMPO : MPO<S> {
     }
 };
 
+// sum of MPO of single site operators
+template <typename S> struct LocalMPO : MPO<S> {
+    using MPO<S>::n_sites;
+    using MPO<S>::site_op_infos;
+    LocalMPO(const Hamiltonian<S> &hamil,
+             const vector<shared_ptr<OpElement<S>>> &ops)
+        : MPO<S>(hamil.n_sites) {
+        shared_ptr<OpElement<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+        shared_ptr<OpElement<S>> h_op = make_shared<OpElement<S>>(
+            ops[0]->name, SiteIndex(), ops[0]->q_label);
+        MPO<S>::op = h_op;
+        assert((uint16_t)ops.size() == hamil.n_sites);
+        for (auto op : ops)
+            assert(op->q_label == ops[0]->q_label);
+        MPO<S>::const_e = 0.0;
+        if (hamil.delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        else
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
+        MPO<S>::site_op_infos = hamil.site_op_infos;
+        for (uint16_t m = 0; m < hamil.n_sites; m++) {
+            // site tensor
+            shared_ptr<Symbolic<S>> pmat;
+            if (m == 0) {
+                pmat = make_shared<SymbolicRowVector<S>>(2);
+                (*pmat)[{0, 0}] = ops[m];
+                (*pmat)[{0, 1}] = i_op;
+            } else if (m == hamil.n_sites - 1) {
+                pmat = make_shared<SymbolicColumnVector<S>>(2);
+                (*pmat)[{0, 0}] = i_op;
+                (*pmat)[{1, 0}] = ops[m];
+            } else {
+                pmat = make_shared<SymbolicMatrix<S>>(2, 2);
+                (*pmat)[{0, 0}] = i_op;
+                (*pmat)[{1, 0}] = ops[m];
+                (*pmat)[{1, 1}] = i_op;
+            }
+            shared_ptr<OperatorTensor<S>> opt =
+                make_shared<OperatorTensor<S>>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector<S>> plop;
+            if (m == hamil.n_sites - 1) {
+                plop = make_shared<SymbolicRowVector<S>>(1);
+                (*plop)[0] = m == 0 ? ops[m] : h_op;
+            } else {
+                plop = make_shared<SymbolicRowVector<S>>(2);
+                (*plop)[0] = m == 0 ? ops[m] : h_op;
+                (*plop)[1] = i_op;
+            }
+            this->left_operator_names.push_back(plop);
+            shared_ptr<SymbolicColumnVector<S>> prop;
+            if (m == 0) {
+                prop = make_shared<SymbolicColumnVector<S>>(1);
+                (*prop)[0] = m == hamil.n_sites - 1 ? ops[m] : h_op;
+            } else {
+                prop = make_shared<SymbolicColumnVector<S>>(2);
+                (*prop)[0] = i_op;
+                (*prop)[1] = m == hamil.n_sites - 1 ? ops[m] : h_op;
+            }
+            this->right_operator_names.push_back(prop);
+            // site operators
+            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            this->tensors.push_back(opt);
+        }
+    }
+};
+
 // Quantum Chemistry MPO schemes
 // NC: Normal (left block) / Complementary (right block) scheme
 // CN: Complementary (left block) / Normal (right block) scheme
@@ -234,26 +303,42 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
 #ifdef _MSC_VER
-        vector<vector<shared_ptr<OpExpr<S>>>> c_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(
+            hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
             d_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<shared_ptr<OpExpr<S>>>> mc_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+        vector<vector<shared_ptr<OpExpr<S>>>> mc_op(
+            hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
             md_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<shared_ptr<OpExpr<S>>>> rd_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+        vector<vector<shared_ptr<OpExpr<S>>>> rd_op(
+            hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
             r_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<shared_ptr<OpExpr<S>>>> mrd_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+        vector<vector<shared_ptr<OpExpr<S>>>> mrd_op(
+            hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
             mr_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
 #else
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites][2], d_op[hamil.n_sites][2];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites][2], md_op[hamil.n_sites][2];
@@ -1160,7 +1245,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
 #endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
-            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
+                                  opt->ops);
         }
         hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -1192,60 +1278,52 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
 #endif
-                    vector<shared_ptr<OpExpr<S>>> exprs;
-                    exprs.reserve((m + 1) * (m + 1));
-                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        int p = (k - m - 1) +
-                                (j - m - 1) * (hamil.n_sites - m - 1) +
-                                s * (hamil.n_sites - m - 1) *
-                                    (hamil.n_sites - m - 1);
-                        exprs.clear();
-                        p += 2 + 4 * hamil.n_sites;
-                        for (uint16_t g = 0; g < m + 1; g++)
-                            for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        (0.5 *
-                                         hamil.v(s & 1, s >> 1, j, g, k, h)) *
-                                        ad_op[g][h][s]);
-                        lop[p] = 0.5 * p_op[j][k][s];
-                        lexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 4 * (hamil.n_sites - m - 1) *
-                             (hamil.n_sites - m - 1);
-                        for (uint16_t g = 0; g < m + 1; g++)
-                            for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        (0.5 *
-                                         hamil.v(s & 1, s >> 1, j, g, k, h)) *
-                                        a_op[g][h][s]);
-                        lop[p] = 0.5 * pd_op[j][k][s];
-                        lexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 4 * (hamil.n_sites - m - 1) *
-                             (hamil.n_sites - m - 1);
-                        for (uint16_t g = 0; g < m + 1; g++)
-                            for (uint16_t h = 0; h < m + 1; h++) {
-                                if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        -hamil.v(s & 1, s >> 1, j, h, g, k) *
-                                        b_op[g][h][((s & 1) << 1) | (s >> 1)]);
-                                if ((s & 1) == (s >> 1))
-                                    for (uint8_t sp = 0; sp < 2; sp++)
-                                        if (abs(hamil.v(s & 1, sp, j, k, g,
-                                                        h)) > TINY)
-                                            exprs.push_back(
-                                                hamil.v(s & 1, sp, j, k, g, h) *
-                                                b_op[g][h][(sp << 1) | sp]);
-                            }
-                        lop[p] = q_op[j][k][s];
-                        lexpr[p] = sum(exprs);
-                    }
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((m + 1) * (m + 1));
+                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
+                    int p =
+                        (k - m - 1) + (j - m - 1) * (hamil.n_sites - m - 1) +
+                        s * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    exprs.clear();
+                    p += 2 + 4 * hamil.n_sites;
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (0.5 * hamil.v(s & 1, s >> 1, j, g, k, h)) *
+                                    ad_op[g][h][s]);
+                    lop[p] = 0.5 * p_op[j][k][s];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 4 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (0.5 * hamil.v(s & 1, s >> 1, j, g, k, h)) *
+                                    a_op[g][h][s]);
+                    lop[p] = 0.5 * pd_op[j][k][s];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 4 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++) {
+                            if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) > TINY)
+                                exprs.push_back(
+                                    -hamil.v(s & 1, s >> 1, j, h, g, k) *
+                                    b_op[g][h][((s & 1) << 1) | (s >> 1)]);
+                            if ((s & 1) == (s >> 1))
+                                for (uint8_t sp = 0; sp < 2; sp++)
+                                    if (abs(hamil.v(s & 1, sp, j, k, g, h)) >
+                                        TINY)
+                                        exprs.push_back(
+                                            hamil.v(s & 1, sp, j, k, g, h) *
+                                            b_op[g][h][(sp << 1) | sp]);
+                        }
+                    lop[p] = q_op[j][k][s];
+                    lexpr[p] = sum(exprs);
                 }
+            }
             // right transform
             m = trans_r - 1;
             int new_lshape = 2 + 4 * hamil.n_sites + 12 * (m + 1) * (m + 1);
@@ -1269,56 +1347,51 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             for (uint8_t s = 0; s < 4; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
 #endif
-                    vector<shared_ptr<OpExpr<S>>> exprs;
-                    exprs.reserve((hamil.n_sites - m - 1) *
-                                  (hamil.n_sites - m - 1));
-                    for (uint16_t k = 0; k < m + 1; k++) {
-                        int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
-                        exprs.clear();
-                        p += 2 + 4 * hamil.n_sites;
-                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        (0.5 *
-                                         hamil.v(s & 1, s >> 1, j, g, k, h)) *
-                                        ad_op[g][h][s]);
-                        rop[p] = 0.5 * p_op[j][k][s];
-                        rexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 4 * (m + 1) * (m + 1);
-                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        (0.5 *
-                                         hamil.v(s & 1, s >> 1, j, g, k, h)) *
-                                        a_op[g][h][s]);
-                        rop[p] = 0.5 * pd_op[j][k][s];
-                        rexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 4 * (m + 1) * (m + 1);
-                        for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                            for (uint16_t h = m + 1; h < hamil.n_sites; h++) {
-                                if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) >
-                                    TINY)
-                                    exprs.push_back(
-                                        -hamil.v(s & 1, s >> 1, j, h, g, k) *
-                                        b_op[g][h][((s & 1) << 1) | (s >> 1)]);
-                                if ((s & 1) == (s >> 1))
-                                    for (uint8_t sp = 0; sp < 2; sp++)
-                                        if (abs(hamil.v(s & 1, sp, j, k, g,
-                                                        h)) > TINY)
-                                            exprs.push_back(
-                                                hamil.v(s & 1, sp, j, k, g, h) *
-                                                b_op[g][h][(sp << 1) | sp]);
-                            }
-                        rop[p] = q_op[j][k][s];
-                        rexpr[p] = sum(exprs);
-                    }
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((hamil.n_sites - m - 1) *
+                              (hamil.n_sites - m - 1));
+                for (uint16_t k = 0; k < m + 1; k++) {
+                    int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
+                    exprs.clear();
+                    p += 2 + 4 * hamil.n_sites;
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (0.5 * hamil.v(s & 1, s >> 1, j, g, k, h)) *
+                                    ad_op[g][h][s]);
+                    rop[p] = 0.5 * p_op[j][k][s];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 4 * (m + 1) * (m + 1);
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(hamil.v(s & 1, s >> 1, j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (0.5 * hamil.v(s & 1, s >> 1, j, g, k, h)) *
+                                    a_op[g][h][s]);
+                    rop[p] = 0.5 * pd_op[j][k][s];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 4 * (m + 1) * (m + 1);
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++) {
+                            if (abs(hamil.v(s & 1, s >> 1, j, h, g, k)) > TINY)
+                                exprs.push_back(
+                                    -hamil.v(s & 1, s >> 1, j, h, g, k) *
+                                    b_op[g][h][((s & 1) << 1) | (s >> 1)]);
+                            if ((s & 1) == (s >> 1))
+                                for (uint8_t sp = 0; sp < 2; sp++)
+                                    if (abs(hamil.v(s & 1, sp, j, k, g, h)) >
+                                        TINY)
+                                        exprs.push_back(
+                                            hamil.v(s & 1, sp, j, k, g, h) *
+                                            b_op[g][h][(sp << 1) | sp]);
+                        }
+                    rop[p] = q_op[j][k][s];
+                    rexpr[p] = sum(exprs);
                 }
+            }
         }
         threading->activate_normal();
     }
@@ -1340,20 +1413,34 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
 #ifdef _MSC_VER
         vector<shared_ptr<OpExpr<S>>> c_op(hamil.n_sites), d_op(hamil.n_sites);
-        vector<shared_ptr<OpExpr<S>>> mc_op(hamil.n_sites), md_op(hamil.n_sites);
-        vector<shared_ptr<OpExpr<S>>> trd_op(hamil.n_sites), tr_op(hamil.n_sites);
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<shared_ptr<OpExpr<S>>> mc_op(hamil.n_sites),
+            md_op(hamil.n_sites);
+        vector<shared_ptr<OpExpr<S>>> trd_op(hamil.n_sites),
+            tr_op(hamil.n_sites);
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> ad_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pd_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(
+            hamil.n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
 #else
         shared_ptr<OpExpr<S>> c_op[hamil.n_sites], d_op[hamil.n_sites];
         shared_ptr<OpExpr<S>> mc_op[hamil.n_sites], md_op[hamil.n_sites];
@@ -2085,7 +2172,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
 #endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
-            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil.filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
+                                  opt->ops);
         }
         hamil.opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -2119,61 +2207,57 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = m + 1; j < hamil.n_sites; j++) {
 #endif
-                    vector<shared_ptr<OpExpr<S>>> exprs;
-                    exprs.reserve((m + 1) * (m + 1));
-                    for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
-                        int p = (k - m - 1) +
-                                (j - m - 1) * (hamil.n_sites - m - 1) +
-                                s * (hamil.n_sites - m - 1) *
-                                    (hamil.n_sites - m - 1);
-                        exprs.clear();
-                        p += 2 + 2 * hamil.n_sites;
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((m + 1) * (m + 1));
+                for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
+                    int p =
+                        (k - m - 1) + (j - m - 1) * (hamil.n_sites - m - 1) +
+                        s * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    exprs.clear();
+                    p += 2 + 2 * hamil.n_sites;
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil.v(j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                     (s ? -1 : 1)) *
+                                    ad_op[g][h][s]);
+                    lop[p] = su2_factor_p[s] * p_op[j][k][s];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 2 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil.v(j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                     (s ? -1 : 1)) *
+                                    a_op[g][h][s]);
+                    lop[p] = su2_factor_p[s] * pd_op[j][k][s];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 2 * (hamil.n_sites - m - 1) * (hamil.n_sites - m - 1);
+                    if (s == 0) {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(
-                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
-                                         (s ? -1 : 1)) *
-                                        ad_op[g][h][s]);
-                        lop[p] = su2_factor_p[s] * p_op[j][k][s];
-                        lexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 2 * (hamil.n_sites - m - 1) *
-                             (hamil.n_sites - m - 1);
+                                if (abs(2 * hamil.v(j, k, g, h) -
+                                        hamil.v(j, h, g, k)) > TINY)
+                                    exprs.push_back((su2_factor_q[0] *
+                                                     (2 * hamil.v(j, k, g, h) -
+                                                      hamil.v(j, h, g, k))) *
+                                                    b_op[g][h][0]);
+                    } else {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(
-                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
-                                         (s ? -1 : 1)) *
-                                        a_op[g][h][s]);
-                        lop[p] = su2_factor_p[s] * pd_op[j][k][s];
-                        lexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 2 * (hamil.n_sites - m - 1) *
-                             (hamil.n_sites - m - 1);
-                        if (s == 0) {
-                            for (uint16_t g = 0; g < m + 1; g++)
-                                for (uint16_t h = 0; h < m + 1; h++)
-                                    if (abs(2 * hamil.v(j, k, g, h) -
-                                            hamil.v(j, h, g, k)) > TINY)
-                                        exprs.push_back(
-                                            (su2_factor_q[0] *
-                                             (2 * hamil.v(j, k, g, h) -
-                                              hamil.v(j, h, g, k))) *
-                                            b_op[g][h][0]);
-                        } else {
-                            for (uint16_t g = 0; g < m + 1; g++)
-                                for (uint16_t h = 0; h < m + 1; h++)
-                                    if (abs(hamil.v(j, h, g, k)) > TINY)
-                                        exprs.push_back((su2_factor_q[1] *
-                                                         hamil.v(j, h, g, k)) *
-                                                        b_op[g][h][1]);
-                        }
-                        lop[p] = su2_factor_q[s] * q_op[j][k][s];
-                        lexpr[p] = sum(exprs);
+                                if (abs(hamil.v(j, h, g, k)) > TINY)
+                                    exprs.push_back((su2_factor_q[1] *
+                                                     hamil.v(j, h, g, k)) *
+                                                    b_op[g][h][1]);
                     }
+                    lop[p] = su2_factor_q[s] * q_op[j][k][s];
+                    lexpr[p] = sum(exprs);
                 }
+            }
             // right transform
             m = trans_r - 1;
             int new_lshape = 2 + 2 * hamil.n_sites + 6 * (m + 1) * (m + 1);
@@ -2197,57 +2281,56 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t j = 0; j < m + 1; j++) {
 #endif
-                    vector<shared_ptr<OpExpr<S>>> exprs;
-                    exprs.reserve((hamil.n_sites - m - 1) *
-                                  (hamil.n_sites - m - 1));
-                    for (uint16_t k = 0; k < m + 1; k++) {
-                        int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
-                        exprs.clear();
-                        p += 2 + 2 * hamil.n_sites;
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((hamil.n_sites - m - 1) *
+                              (hamil.n_sites - m - 1));
+                for (uint16_t k = 0; k < m + 1; k++) {
+                    int p = k + j * (m + 1) + s * (m + 1) * (m + 1);
+                    exprs.clear();
+                    p += 2 + 2 * hamil.n_sites;
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(hamil.v(j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                     (s ? -1 : 1)) *
+                                    ad_op[g][h][s]);
+                    rop[p] = su2_factor_p[s] * p_op[j][k][s];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 2 * (m + 1) * (m + 1);
+                    for (uint16_t g = m + 1; g < hamil.n_sites; g++)
+                        for (uint16_t h = m + 1; h < hamil.n_sites; h++)
+                            if (abs(hamil.v(j, g, k, h)) > TINY)
+                                exprs.push_back(
+                                    (su2_factor_p[s] * hamil.v(j, g, k, h) *
+                                     (s ? -1 : 1)) *
+                                    a_op[g][h][s]);
+                    rop[p] = su2_factor_p[s] * pd_op[j][k][s];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += 2 * (m + 1) * (m + 1);
+                    if (s == 0) {
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(
-                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
-                                         (s ? -1 : 1)) *
-                                        ad_op[g][h][s]);
-                        rop[p] = su2_factor_p[s] * p_op[j][k][s];
-                        rexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 2 * (m + 1) * (m + 1);
+                                if (abs(2 * hamil.v(j, k, g, h) -
+                                        hamil.v(j, h, g, k)) > TINY)
+                                    exprs.push_back((su2_factor_q[0] *
+                                                     (2 * hamil.v(j, k, g, h) -
+                                                      hamil.v(j, h, g, k))) *
+                                                    b_op[g][h][0]);
+                    } else {
                         for (uint16_t g = m + 1; g < hamil.n_sites; g++)
                             for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                if (abs(hamil.v(j, g, k, h)) > TINY)
-                                    exprs.push_back(
-                                        (su2_factor_p[s] * hamil.v(j, g, k, h) *
-                                         (s ? -1 : 1)) *
-                                        a_op[g][h][s]);
-                        rop[p] = su2_factor_p[s] * pd_op[j][k][s];
-                        rexpr[p] = sum(exprs);
-                        exprs.clear();
-                        p += 2 * (m + 1) * (m + 1);
-                        if (s == 0) {
-                            for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                                for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                    if (abs(2 * hamil.v(j, k, g, h) -
-                                            hamil.v(j, h, g, k)) > TINY)
-                                        exprs.push_back(
-                                            (su2_factor_q[0] *
-                                             (2 * hamil.v(j, k, g, h) -
-                                              hamil.v(j, h, g, k))) *
-                                            b_op[g][h][0]);
-                        } else {
-                            for (uint16_t g = m + 1; g < hamil.n_sites; g++)
-                                for (uint16_t h = m + 1; h < hamil.n_sites; h++)
-                                    if (abs(hamil.v(j, h, g, k)) > TINY)
-                                        exprs.push_back((su2_factor_q[1] *
-                                                         hamil.v(j, h, g, k)) *
-                                                        b_op[g][h][1]);
-                        }
-                        rop[p] = su2_factor_q[s] * q_op[j][k][s];
-                        rexpr[p] = sum(exprs);
+                                if (abs(hamil.v(j, h, g, k)) > TINY)
+                                    exprs.push_back((su2_factor_q[1] *
+                                                     hamil.v(j, h, g, k)) *
+                                                    b_op[g][h][1]);
                     }
+                    rop[p] = su2_factor_q[s] * q_op[j][k][s];
+                    rexpr[p] = sum(exprs);
                 }
+            }
         }
         threading->activate_normal();
     }
