@@ -10,7 +10,7 @@ Author:
 from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
-from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames
+from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt
 import numpy as np
 import time
 import os
@@ -43,13 +43,13 @@ if "nonspinadapted" in dic:
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO
+    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
     SX = SZ
 else:
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO
+    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
     SX = SU2
 
 # MPI
@@ -71,6 +71,7 @@ if DEBUG:
     _print("*" * 34 + " INPUT END   " + "*" * 34 + "\n")
 
 scratch = dic.get("prefix", "./node0/")
+restart_dir = dic.get("restart_dir", None)
 n_threads = int(dic.get("num_thrds", 28))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
@@ -78,6 +79,8 @@ sweep_tol = float(dic.get("sweep_tol", 1e-6))
 if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(scratch):
         os.mkdir(scratch)
+    if restart_dir is not None and not os.path.isdir(restart_dir):
+        os.mkdir(restart_dir)
     os.environ['TMPDIR'] = scratch
 if MPI is not None:
     MPI.barrier()
@@ -92,6 +95,8 @@ Global.frame.fp_codec = DoubleFPCodec(1E-16, 1024)
 Global.frame.load_buffering = False
 Global.frame.save_buffering = False
 Global.frame.use_main_stack = False
+if restart_dir is not None:
+    Global.frame.restart_dir = restart_dir
 _print(Global.frame)
 _print(Global.threading)
 
@@ -119,6 +124,25 @@ if pre_run or not no_pre_run:
     n_sites = fcidump.n_sites
     orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
     hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
+
+# parallelization over sites
+# use keyword: conn_centers auto 5      (5 is number of procs)
+#          or  conn_centers 10 20 30 40 (list of connection site indices)
+if "conn_centers" in dic:
+    assert MPI is not None
+    cc = dic["conn_centers"].split()
+    if cc[0] == "auto":
+        ncc = int(cc[1])
+        conn_centers = [np.arange(0, n_sites * ncc, n_sites, dtype=int) // ncc]
+        assert len(conn_centers) == ncc - 1
+    else:
+        conn_centers = [int(xcc) for xcc in cc]
+    _print("using connection sites: ", conn_centers)
+    assert MPI.size % (len(conn_centers) + 1) == 0
+    mps_prule = prule
+    prule = prule.split(MPI.size // (len(conn_centers) + 1))
+else:
+    conn_centers = None
 
 if dic.get("warmup", None) == "occ":
     _print("using occ init")
@@ -174,6 +198,10 @@ else:
     forward = mps.center == 0
 
 _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info.left_dims]))
+
+if conn_centers is not None:
+    assert mps.dot == 2
+    mps = ParallelMPS(mps, mps_prule)
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -244,6 +272,9 @@ if not pre_run:
     mps_info.save_mutable()
     mps_info.deallocate_mutable()
 
+    if conn_centers is not None:
+        mps.conn_centers = VectorInt(conn_centers)
+
     # GS DMRG
     if "restart_onepdm" not in dic and "restart_correlation" not in dic and "restart_oh" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
@@ -280,7 +311,10 @@ if not pre_run:
             mps.dot = 1
             if MPI is None or MPI.rank == 0:
                 mps.save_data()
-        
+
+        if conn_centers is not None:
+            me.finalize_environments()
+
         sweep_energies.append(np.array(dmrg.energies))
         discarded_weights.append(np.array(dmrg.discarded_weights))
         sweep_energies = np.vstack(sweep_energies)

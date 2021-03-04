@@ -82,3 +82,5 @@ The DMRG run will then stop as it would be converged after the current sweep is 
 8. if `warmup occ` then keyword `occ` must be set (a space-separated list of fractional occ numbers).
    Otherwise, no matter what `warmup ???` is set, the CheMPS2 type initial FCI is used.
 9. if a line in `dmrg.conf` starts with `!`, the line will be ignored.
+10. if `restart_dir` is given, after each sweep, the MPS will be backed up in `restart_dir`.
+11. if `conn_centers` is given, the parallelism over sites will be used (MPI required, `twodot` only). For example, `conn_centers auto 5` will divide the processors into 5 groups.
