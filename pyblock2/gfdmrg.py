@@ -498,6 +498,7 @@ class GFDMRG:
             gidxs = idxs
         else:
             gidxs = list(range(self.n_sites))
+            ops = [None] * self.n_sites
 
         for ii, idx in enumerate(gidxs):
             if SpinLabel == SZ:
