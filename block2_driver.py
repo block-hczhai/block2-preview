@@ -133,7 +133,7 @@ if "conn_centers" in dic:
     cc = dic["conn_centers"].split()
     if cc[0] == "auto":
         ncc = int(cc[1])
-        conn_centers = [np.arange(0, n_sites * ncc, n_sites, dtype=int) // ncc]
+        conn_centers = list(np.arange(0, n_sites * ncc, n_sites, dtype=int) // ncc)[1:]
         assert len(conn_centers) == ncc - 1
     else:
         conn_centers = [int(xcc) for xcc in cc]
