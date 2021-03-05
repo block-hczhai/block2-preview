@@ -202,7 +202,7 @@ _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mp
 if conn_centers is not None:
     assert mps.dot == 2
     mps = ParallelMPS(mps, mps_prule)
-    if mps.canonical_form[0] == 'C':
+    if mps.canonical_form[0] == 'C' and mps.canonical_form[1] == 'R':
         mps.canonical_form = 'K' + mps.canonical_form[1:]
 
 # prepare mpo
