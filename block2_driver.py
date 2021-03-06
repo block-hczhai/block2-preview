@@ -285,6 +285,9 @@ if not pre_run:
         me.save_partition_info = True
         me.init_environments(True)
 
+        if conn_centers is not None:
+            forward = mps.center == 0
+
         _print("env init finished", time.perf_counter() - tx)
 
         dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
