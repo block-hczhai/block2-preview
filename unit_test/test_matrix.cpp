@@ -463,8 +463,12 @@ TEST_F(TestMatrix, TestSVD) {
         shared_ptr<Tensor> rr = make_shared<Tensor>(vector<MKL_INT>{n, n});
         Random::fill_rand_double(a->data.data(), a->size());
         MatrixFunctions::copy(aa->ref(), a->ref());
-        MatrixFunctions::svd(a->ref(), l->ref(), s->ref().flip_dims(),
-                             r->ref());
+        if (Random::rand_int(0, 2))
+            MatrixFunctions::accurate_svd(a->ref(), l->ref(),
+                                          s->ref().flip_dims(), r->ref(), 1E-1);
+        else
+            MatrixFunctions::svd(a->ref(), l->ref(), s->ref().flip_dims(),
+                                 r->ref());
         MatrixFunctions::multiply(l->ref(), true, l->ref(), false, kk->ref(),
                                   1.0, 0.0);
         ASSERT_TRUE(MatrixFunctions::all_close(kk->ref(), IdentityMatrix(k),

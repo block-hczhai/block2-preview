@@ -539,6 +539,50 @@ struct MatrixFunctions {
         assert(info == 0);
         d_alloc->deallocate(work, lwork);
     }
+    // SVD for parallelism over sites; PRB 87, 155137 (2013)
+    static void accurate_svd(const MatrixRef &a, const MatrixRef &l,
+                             const MatrixRef &s, const MatrixRef &r,
+                             double eps = 1E-4) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MatrixRef aa(nullptr, a.m, a.n);
+        aa.data = d_alloc->allocate(aa.size());
+        copy(aa, a);
+        svd(aa, l, s, r);
+        MKL_INT k = min(a.m, a.n);
+        MKL_INT p = -1;
+        for (MKL_INT ip = 0; ip < k; ip++)
+            if (s.data[ip] < eps * s.data[0]) {
+                p = ip;
+                break;
+            }
+        if (p != -1) {
+            MatrixRef xa(nullptr, k - p, k - p), xl(nullptr, k - p, k - p),
+                xr(nullptr, k - p, k - p);
+            xa.data = d_alloc->allocate(xa.size());
+            xl.data = d_alloc->allocate(xl.size());
+            xr.data = d_alloc->allocate(xr.size());
+            rotate(a, xa, MatrixRef(l.data + p, l.m, l.n), true,
+                   MatrixRef(r.data + p * r.n, r.m - p, r.n), true, 1.0);
+            accurate_svd(xa, xl, MatrixRef(s.data + p, 1, k - p), xr, eps);
+            MatrixRef bl(nullptr, l.m, l.n), br(nullptr, r.m, r.n);
+            bl.data = d_alloc->allocate(bl.size());
+            br.data = d_alloc->allocate(br.size());
+            copy(bl, l);
+            copy(br, r);
+            multiply(MatrixRef(bl.data + p, bl.m, bl.n), false, xl, false,
+                     MatrixRef(l.data + p, l.m, l.n), 1.0, 0.0);
+            multiply(xr, false, MatrixRef(br.data + p * br.n, br.m - p, br.n),
+                     false, MatrixRef(r.data + p * r.n, r.m - p, r.n), 1.0,
+                     0.0);
+            d_alloc->deallocate(br.data, br.size());
+            d_alloc->deallocate(bl.data, bl.size());
+            d_alloc->deallocate(xr.data, xr.size());
+            d_alloc->deallocate(xl.data, xl.size());
+            d_alloc->deallocate(xa.data, xa.size());
+        }
+        d_alloc->deallocate(aa.data, aa.size());
+    }
     // LQ factorization
     static void lq(const MatrixRef &a, const MatrixRef &l, const MatrixRef &q) {
         shared_ptr<VectorAllocator<double>> d_alloc =
@@ -699,8 +743,8 @@ struct MatrixFunctions {
                     for (int i = 0; i < m; i++)
                         for (int j = 0; j < m; j++) {
 #endif
-                            if (j <= i)
-                                alpha(i, j) = dot(bs[i], sigmas[j]);
+                        if (j <= i)
+                            alpha(i, j) = dot(bs[i], sigmas[j]);
                     }
 #pragma omp single
                     eigs(alpha, ld);
@@ -716,7 +760,7 @@ struct MatrixFunctions {
                         for (int i = 0; i < m; i++)
                             if (i != j)
                                 iadd(bs[j], tmp[i], alpha(j, i));
-                    // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+                                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
 #pragma omp for schedule(static)
                     for (int j = 0; j < m; j++) {
                         copy(tmp[j], sigmas[j]);
@@ -1111,9 +1155,10 @@ struct MatrixFunctions {
                 e.data[i] = 0.0;
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                MKL_INT iptr = expo_pade(6, n, h.data(), n, t, work.data()).first;
-                MatrixFunctions::multiply(MatrixRef(work.data() + iptr, n, n), true, v,
-                                          false, e, 1.0, 0.0);
+                MKL_INT iptr =
+                    expo_pade(6, n, h.data(), n, t, work.data()).first;
+                MatrixFunctions::multiply(MatrixRef(work.data() + iptr, n, n),
+                                          true, v, false, e, 1.0, 0.0);
                 memcpy(v.data, e.data, sizeof(double) * n);
             }
             if (pcomm != nullptr)

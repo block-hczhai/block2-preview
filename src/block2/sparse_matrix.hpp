@@ -768,7 +768,8 @@ struct SparseMatrixInfo<
         vector<ubond_t> nqk(n_states_ket, n_states_ket + n);
         for (int i = 0; i < n; i++)
             idx[i] = i;
-        sort(idx.begin(), idx.end(), [&q](int i, int j) { return q[i] < q[j]; });
+        sort(idx.begin(), idx.end(),
+             [&q](int i, int j) { return q[i] < q[j]; });
         for (int i = 0; i < n; i++)
             quanta[i] = q[idx[i]], n_states_bra[i] = nqb[idx[i]],
             n_states_ket[i] = nqk[idx[i]];
@@ -1104,14 +1105,16 @@ template <typename S> struct SparseMatrix {
     }
     // return p = pinv(mat).T
     // only right pseudo: mat @ p.T = I
-    shared_ptr<SparseMatrix<S>> pseudo_inverse(ubond_t bond_dim) const {
+    shared_ptr<SparseMatrix<S>>
+    pseudo_inverse(ubond_t bond_dim, double svd_eps = 1E-4,
+                   double svd_cutoff = 1E-20) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         vector<shared_ptr<Tensor>> l, s, r;
         vector<S> qs;
-        right_svd(qs, l, s, r, bond_dim);
+        right_svd(qs, l, s, r, bond_dim, svd_eps);
         shared_ptr<SparseMatrix<S>> pinv =
             make_shared<SparseMatrix<S>>(d_alloc);
         pinv->allocate(
@@ -1125,7 +1128,7 @@ template <typename S> struct SparseMatrix {
             int k = qsmp.at(ql);
             MatrixRef ll = l[k]->ref(), rr = r[i]->ref(), ss = s[k]->ref();
             for (MKL_INT j = 0; j < r[i]->shape[0]; j++)
-                if (abs(s[k]->data[j]) > 1E-12)
+                if (abs(s[k]->data[j]) > svd_cutoff)
                     MatrixFunctions::multiply(
                         MatrixRef(&ll(0, j), ll.m, ll.n), false,
                         MatrixRef(&rr(j, 0), 1, rr.n), false, mm,
@@ -1137,7 +1140,7 @@ template <typename S> struct SparseMatrix {
     // s will be labelled by right q labels
     void left_svd(vector<S> &rqs, vector<shared_ptr<Tensor>> &l,
                   vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
-                  ubond_t bond_dim = 0) const {
+                  ubond_t bond_dim = 0, double svd_eps = 0) const {
         map<S, MKL_INT> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
@@ -1180,8 +1183,14 @@ template <typename S> struct SparseMatrix {
             shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
             shared_ptr<Tensor> tsr =
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
-            MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
-                                 tss->ref().flip_dims(), tsr->ref());
+            if (svd_eps != 0)
+                MatrixFunctions::accurate_svd(
+                    MatrixRef(dt + tmp[ir], nxl, nxr), tsl->ref(),
+                    tss->ref().flip_dims(), tsr->ref(), svd_eps);
+            else
+                MatrixFunctions::svd(MatrixRef(dt + tmp[ir], nxl, nxr),
+                                     tsl->ref(), tss->ref().flip_dims(),
+                                     tsr->ref());
             merged_l[ir] = tsl;
             s[ir] = tss;
             r[ir] = tsr;
@@ -1222,7 +1231,7 @@ template <typename S> struct SparseMatrix {
     // s will be labelled by left q labels
     void right_svd(vector<S> &lqs, vector<shared_ptr<Tensor>> &l,
                    vector<shared_ptr<Tensor>> &s, vector<shared_ptr<Tensor>> &r,
-                   ubond_t bond_dim = 0) const {
+                   ubond_t bond_dim = 0, double svd_eps = 0) const {
         map<S, MKL_INT> qs_mp;
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
@@ -1267,8 +1276,14 @@ template <typename S> struct SparseMatrix {
             shared_ptr<Tensor> tss = make_shared<Tensor>(vector<MKL_INT>{nxk});
             shared_ptr<Tensor> tsr =
                 make_shared<Tensor>(vector<MKL_INT>{nxk, nxr});
-            MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
-                                 tss->ref().flip_dims(), tsr->ref());
+            if (svd_eps != 0)
+                MatrixFunctions::accurate_svd(
+                    MatrixRef(dt + tmp[il], nxl, nxr), tsl->ref(),
+                    tss->ref().flip_dims(), tsr->ref(), svd_eps);
+            else
+                MatrixFunctions::svd(MatrixRef(dt + tmp[il], nxl, nxr),
+                                     tsl->ref(), tss->ref().flip_dims(),
+                                     tsr->ref());
             l[il] = tsl;
             s[il] = tss;
             merged_r[il] = tsr;
@@ -1839,7 +1854,8 @@ template <typename S> struct SparseMatrixGroup {
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
-                size_t ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
+                size_t ir =
+                    lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
                 MKL_INT n_states =
                     (MKL_INT)info->n_states_bra[i] * info->n_states_ket[i];
                 if (abs(xscales[ii]) > 1E-12)
@@ -1860,7 +1876,8 @@ template <typename S> struct SparseMatrixGroup {
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ir = 0; ir < nr; ir++) {
-            MKL_INT nxr = (MKL_INT)sz[ir], nxl = (MKL_INT)((tmp[ir + 1] - tmp[ir]) / nxr);
+            MKL_INT nxr = (MKL_INT)sz[ir],
+                    nxl = (MKL_INT)((tmp[ir + 1] - tmp[ir]) / nxr);
             assert((tmp[ir + 1] - tmp[ir]) % nxr == 0);
             MKL_INT nxk = min(nxl, nxr);
             shared_ptr<Tensor> tsl =
@@ -1882,7 +1899,8 @@ template <typename S> struct SparseMatrixGroup {
             for (int i = 0; i < info->n; i++) {
                 S q = info->is_wavefunction ? -info->quanta[i].get_ket()
                                             : info->quanta[i].get_ket();
-                size_t ir = lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
+                size_t ir =
+                    lower_bound(rqs.begin(), rqs.end(), q) - rqs.begin();
                 shared_ptr<Tensor> tsl = make_shared<Tensor>(vector<MKL_INT>{
                     (MKL_INT)info->n_states_bra[i], merged_l[ir]->shape[1]});
                 if (abs(xscales[ii]) > 1E-12)
@@ -1942,7 +1960,8 @@ template <typename S> struct SparseMatrixGroup {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
-                size_t il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
+                size_t il =
+                    lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
                 MKL_INT nxl = info->n_states_bra[i],
                         nxr = (MKL_INT)((tmp[il + 1] - tmp[il]) / nxl);
                 assert((tmp[il + 1] - tmp[il]) % nxl == 0);
@@ -1969,7 +1988,8 @@ template <typename S> struct SparseMatrixGroup {
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int il = 0; il < nl; il++) {
-            MKL_INT nxl = (MKL_INT)sz[il], nxr = (MKL_INT)((tmp[il + 1] - tmp[il]) / nxl);
+            MKL_INT nxl = (MKL_INT)sz[il],
+                    nxr = (MKL_INT)((tmp[il + 1] - tmp[il]) / nxl);
             assert((tmp[il + 1] - tmp[il]) % nxl == 0);
             MKL_INT nxk = min(nxl, nxr);
             shared_ptr<Tensor> tsl =
@@ -1990,7 +2010,8 @@ template <typename S> struct SparseMatrixGroup {
             const auto &info = xinfos[ii];
             for (int i = 0; i < info->n; i++) {
                 S q = info->quanta[i].get_bra(info->delta_quantum);
-                size_t il = lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
+                size_t il =
+                    lower_bound(lqs.begin(), lqs.end(), q) - lqs.begin();
                 shared_ptr<Tensor> tsr = make_shared<Tensor>(vector<MKL_INT>{
                     merged_r[il]->shape[0], (MKL_INT)info->n_states_ket[i]});
                 MKL_INT inr = info->n_states_ket[i],
