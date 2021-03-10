@@ -852,6 +852,15 @@ template <typename S> struct MovingEnvironment {
             }
             if (para_mps->rule != nullptr)
                 para_mps->rule->comm->barrier();
+            shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
+            while (para_mps->center != 0) {
+                if (iprint && (para_mps->rule == nullptr ||
+                               0 % para_mps->rule->comm->ngroup ==
+                                   para_mps->rule->comm->group))
+                    cout << "pre init .. " << para_mps->center << " : "
+                         << para_mps->canonical_form << endl;
+                para_mps->move_left(cg, para_mps->rule);
+            }
             assert(para_mps->conn_centers.size() != 0);
             para_mps->ncenter = (int)para_mps->conn_centers.size();
             para_mps->conn_matrices.resize(para_mps->ncenter);
@@ -1874,9 +1883,9 @@ template <typename S> struct MovingEnvironment {
         tmp->allocate(psi->info);
         tmp->randomize(-0.5, 0.5);
         double noise_scale = sqrt(noise) / tmp->norm();
-        MatrixFunctions::iadd(MatrixRef(psi->data, (MKL_INT)psi->total_memory, 1),
-                              MatrixRef(tmp->data, (MKL_INT)tmp->total_memory, 1),
-                              noise_scale);
+        MatrixFunctions::iadd(
+            MatrixRef(psi->data, (MKL_INT)psi->total_memory, 1),
+            MatrixRef(tmp->data, (MKL_INT)tmp->total_memory, 1), noise_scale);
         tmp->deallocate();
     }
     // Scale perturbative noise (before svd)
@@ -1889,10 +1898,10 @@ template <typename S> struct MovingEnvironment {
             for (int i = 0; i < mats->n; i++) {
                 double mat_norm = (*mats)[i]->norm();
                 if (abs(mat_norm) > TINY)
-                    MatrixFunctions::iscale(MatrixRef((*mats)[i]->data,
-                                                      (MKL_INT)(*mats)[i]->total_memory,
-                                                      1),
-                                            1 / mat_norm);
+                    MatrixFunctions::iscale(
+                        MatrixRef((*mats)[i]->data,
+                                  (MKL_INT)(*mats)[i]->total_memory, 1),
+                        1 / mat_norm);
             }
         }
         double norm = mats->norm();
