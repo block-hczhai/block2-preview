@@ -145,7 +145,7 @@ struct Tensor {
     void truncate_right(MKL_INT nr) {
         assert(shape.size() == 2);
         for (MKL_INT i = 1; i < shape[0]; i++)
-            memcpy(data.data() + i * nr, data.data() + i * shape[1],
+            memmove(data.data() + i * nr, data.data() + i * shape[1],
                    nr * sizeof(double));
         data.resize(shape[0] * nr);
         shape[1] = nr;
