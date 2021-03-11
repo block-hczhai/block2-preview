@@ -147,6 +147,9 @@ else:
 if dic.get("warmup", None) == "occ":
     _print("using occ init")
     assert "occ" in dic
+    if len(dic["occ"].split()) == 1:
+        with open(dic["occ"], 'r') as ofin:
+            dic["occ"] = ofin.readlines()[0]
     occs = VectorDouble([float(occ) for occ in dic["occ"].split() if len(occ) != 0])
     bias = float(dic.get("bias", 1.0))
 else:
@@ -180,7 +183,10 @@ elif pre_run or not no_pre_run:
         mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
     if MPI is None or MPI.rank == 0:
         mps_info.save_data(scratch + '/mps_info.bin')
-    mps = MPS(n_sites, 0, dot)
+    if conn_centers is not None:
+        mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+    else:
+        mps = MPS(n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     forward = mps.center == 0
@@ -192,18 +198,24 @@ else:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
         mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
-    mps = MPS(mps_info.n_sites, 0, dot)
+    if conn_centers is not None:
+        mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+    else:
+        mps = MPS(mps_info.n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     forward = mps.center == 0
 
 _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info.left_dims]))
 
-if conn_centers is not None:
+if conn_centers is not None and "fullrestart" in dic:
     assert mps.dot == 2
     mps = ParallelMPS(mps, mps_prule)
     if mps.canonical_form[0] == 'C' and mps.canonical_form[1] == 'R':
         mps.canonical_form = 'K' + mps.canonical_form[1:]
+    elif mps.canonical_form[-1] == 'C' and mps.canonical_form[-2] == 'L':
+        mps.canonical_form = mps.canonical_form[:-1] + 'S'
+        mps.center = mps.n_sites - 1
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -245,19 +257,21 @@ if pre_run or not no_pre_run:
 else:
     mpo = MPO(0)
     mpo.load_data(scratch + '/mpo.bin')
-    mpo.tf = TensorFunctions(OperatorFunctions(CG()))
+    cg = CG(200)
+    cg.initialize()
+    mpo.tf = TensorFunctions(OperatorFunctions(cg))
 
     _print('GS MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
     
     pmpo = MPO(0)
     pmpo.load_data(scratch + '/mpo-1pdm.bin')
-    pmpo.tf = TensorFunctions(OperatorFunctions(CG()))
+    pmpo.tf = TensorFunctions(OperatorFunctions(cg))
 
     _print('1PDM MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.left_operator_names]))
 
     nmpo = MPO(0)
     nmpo.load_data(scratch + '/mpo-1npc.bin')
-    nmpo.tf = TensorFunctions(OperatorFunctions(CG()))
+    nmpo.tf = TensorFunctions(OperatorFunctions(cg))
 
     _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
     
@@ -295,6 +309,7 @@ if not pre_run:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
         else:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
+        dmrg.cutoff = float(dic.get("cutoff", 1E-14))
         dmrg.decomp_type = DecompositionTypes.DensityMatrix
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
         sweep_energies = []
