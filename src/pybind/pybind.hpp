@@ -937,8 +937,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
-        .def("svd_eps", &ParallelMPS<S>::svd_eps)
-        .def("svd_cutoff", &ParallelMPS<S>::svd_cutoff);
+        .def_readwrite("svd_eps", &ParallelMPS<S>::svd_eps)
+        .def_readwrite("svd_cutoff", &ParallelMPS<S>::svd_cutoff);
 }
 
 template <typename S> void bind_operator(py::module &m) {
