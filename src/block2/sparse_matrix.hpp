@@ -1107,7 +1107,7 @@ template <typename S> struct SparseMatrix {
     // only right pseudo: mat @ p.T = I
     shared_ptr<SparseMatrix<S>>
     pseudo_inverse(ubond_t bond_dim, double svd_eps = 1E-4,
-                   double svd_cutoff = 1E-20) const {
+                   double svd_cutoff = 1E-12) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =

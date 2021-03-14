@@ -578,7 +578,9 @@ template <typename S> void bind_sparse(py::module &m) {
                  self->right_split(left, right, bond_dim);
                  return make_tuple(left, right);
              })
-        .def("pseudo_inverse", &SparseMatrix<S>::pseudo_inverse)
+        .def("pseudo_inverse", &SparseMatrix<S>::pseudo_inverse,
+             py::arg("bond_dim"), py::arg("svd_eps") = 1E-4,
+             py::arg("svd_cutoff") = 1E-12)
         .def("left_svd",
              [](SparseMatrix<S> *self) {
                  vector<S> qs;
@@ -933,8 +935,10 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("conn_centers", &ParallelMPS<S>::conn_centers)
         .def_readwrite("conn_matrices", &ParallelMPS<S>::conn_matrices)
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
-        .def("para_merge", &ParallelMPS<S>::para_merge)
-        .def("para_split", &ParallelMPS<S>::para_split);
+        .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
+        .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
+        .def("svd_eps", &ParallelMPS<S>::svd_eps)
+        .def("svd_cutoff", &ParallelMPS<S>::svd_cutoff);
 }
 
 template <typename S> void bind_operator(py::module &m) {

@@ -52,6 +52,8 @@ template <typename S> struct ParallelMPS : MPS<S> {
     shared_ptr<ParallelRule<S>> rule;
     int ncenter = 0;
     string ref_canonical_form;
+    double svd_eps = 1E-4;
+    double svd_cutoff = 1E-12;
     ParallelMPS(const shared_ptr<MPSInfo<S>> &info,
                 const shared_ptr<ParallelRule<S>> &rule = nullptr)
         : MPS<S>(info), rule(rule) {
@@ -168,7 +170,8 @@ template <typename S> struct ParallelMPS : MPS<S> {
             load_tensor(center);
             shared_ptr<SparseMatrix<S>> left, right;
             tensors[center]->right_split(left, right, info->bond_dim);
-            conn_matrices[pidx] = left->pseudo_inverse(info->bond_dim);
+            conn_matrices[pidx] =
+                left->pseudo_inverse(info->bond_dim, svd_eps, svd_cutoff);
             save_conn_matrix(pidx);
             info->right_dims[center] = right->info->extract_state_info(false);
             info->save_right_dims(center);
