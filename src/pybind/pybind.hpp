@@ -1306,7 +1306,11 @@ template <typename S> void bind_partition(py::module &m) {
                     py::arg("noise"), py::arg("noise_type"),
                     py::arg("scale") = 1.0, py::arg("pkets") = nullptr)
         .def_static("density_matrix_with_multi_target",
-                    &MovingEnvironment<S>::density_matrix_with_multi_target)
+                    &MovingEnvironment<S>::density_matrix_with_multi_target,
+                    py::arg("vacuum"), py::arg("psi"), py::arg("weights"),
+                    py::arg("trace_right"), py::arg("noise"),
+                    py::arg("noise_type"), py::arg("scale") = 1.0,
+                    py::arg("pkets") = nullptr)
         .def_static("density_matrix_add_wfn",
                     &MovingEnvironment<S>::density_matrix_add_wfn)
         .def_static(
@@ -1398,11 +1402,6 @@ template <typename S> void bind_partition(py::module &m) {
         .def_static("contract_multi_two_dot",
                     &MovingEnvironment<S>::contract_multi_two_dot, py::arg("i"),
                     py::arg("mps"), py::arg("reduced") = false)
-        .def_static("density_matrix_with_multi_target",
-                    &MovingEnvironment<S>::density_matrix_with_multi_target,
-                    py::arg("opdq"), py::arg("psi"), py::arg("weights"),
-                    py::arg("trace_right"), py::arg("noise"),
-                    py::arg("noise_type"))
         .def_static(
             "multi_split_density_matrix",
             [](const shared_ptr<SparseMatrix<S>> &dm,

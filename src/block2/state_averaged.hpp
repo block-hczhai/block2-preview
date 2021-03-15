@@ -39,6 +39,7 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::basis;
     using MPSInfo<S>::shallow_copy_to;
     vector<S> targets;
+    MultiMPSInfo(int n_sites) : MPSInfo<S>(n_sites) {}
     MultiMPSInfo(int n_sites, S vacuum, const vector<S> &targets,
                  const vector<shared_ptr<StateInfo<S>>> &basis,
                  bool init_fci = true)
@@ -80,6 +81,19 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
             left_dims_fci[i]->collect();
         for (int i = n_sites; i >= 0; i--)
             right_dims_fci[i]->collect();
+    }
+    void load_data(istream &ifs) override {
+        MPSInfo<S>::load_data(ifs);
+        int n_targets = 0;
+        ifs.read((char *)&n_targets, sizeof(n_targets));
+        targets.resize(n_targets);
+        ifs.read((char *)targets.data(), sizeof(S) * n_targets);
+    }
+    void save_data(ostream &ofs) const override {
+        MPSInfo<S>::save_data(ofs);
+        int n_targets = (int)targets.size();
+        ofs.write((char *)&n_targets, sizeof(n_targets));
+        ofs.write((char *)targets.data(), sizeof(S) * n_targets);
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<MultiMPSInfo<S>>(*this);

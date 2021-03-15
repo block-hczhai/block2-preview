@@ -1820,22 +1820,30 @@ template <typename S> struct MovingEnvironment {
     // Density matrix of a MultiMPS tensor
     // noise will be added several times (for each wfn)
     static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
-        S opdq, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
+        S vacuum, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
         const vector<double> weights, bool trace_right, double noise,
-        NoiseTypes noise_type) {
+        NoiseTypes noise_type, double scale = 1.0,
+        const shared_ptr<SparseMatrixGroup<S>> &pkets = nullptr) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
-        dm_info->initialize_dm(psi[0]->infos, opdq, trace_right);
+        dm_info->initialize_dm(psi[0]->infos, vacuum, trace_right);
         shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
         dm->allocate(dm_info);
         assert(weights.size() == psi.size());
         for (size_t i = 0; i < psi.size(); i++)
             for (int j = 0; j < psi[i]->n; j++) {
                 shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
-                wfn->factor = weights[i];
+                wfn->factor = weights[i] * sqrt(scale);
                 OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
                                                     sqrt(noise), noise_type);
             }
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
+            assert(pkets != nullptr);
+            scale_perturbative_noise(noise, noise_type, pkets);
+            for (int i = 1; i < pkets->n; i++)
+                OperatorFunctions<S>::trans_product(
+                    (*pkets)[i], dm, trace_right, 0.0, NoiseTypes::None);
+        }
         return dm;
     }
     // Add wavefunction to density matrix

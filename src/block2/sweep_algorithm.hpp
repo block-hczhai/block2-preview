@@ -249,7 +249,8 @@ template <typename S> struct DMRG {
                     if (build_pdm)
                         MatrixFunctions::iadd(
                             MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
-                            MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
+                            MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
+                            1.0);
                     tdm += _t.get_time();
                     error = MovingEnvironment<S>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
@@ -451,7 +452,8 @@ template <typename S> struct DMRG {
                 if (build_pdm)
                     MatrixFunctions::iadd(
                         MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
-                        MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
+                        MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
+                        1.0);
                 tdm += _t.get_time();
                 error = MovingEnvironment<S>::split_density_matrix(
                     dm, old_wfn, (int)bond_dim, forward, true,
@@ -604,29 +606,20 @@ template <typename S> struct DMRG {
         int mmps = 0;
         double error = 0.0;
         tuple<vector<double>, int, size_t, double> pdi;
+        shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
+        shared_ptr<SparseMatrix<S>> pdm = nullptr;
+        bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
         // effective hamiltonian
-        if (davidson_soft_max_iter != 0 || noise != 0) {
-            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-                me->multi_eff_ham(fuse_left ? FuseTypes::FuseL
-                                            : FuseTypes::FuseR,
-                                  forward, true);
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                              davidson_max_iter, me->para_rule);
-            for (int i = 0; i < mket->nroots; i++) {
-                mps_quanta[i] = h_eff->ket[i]->delta_quanta();
-                mps_quanta[i].erase(
-                    remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
-                              [this](const pair<S, double> &p) {
-                                  return p.second < this->quanta_cutoff;
-                              }),
-                    mps_quanta[i].end());
-            }
-            h_eff->deallocate();
-        } else if (me->para_rule != nullptr)
+        if (davidson_soft_max_iter != 0 || noise != 0)
+            pdi = multi_one_dot_eigs_and_perturb(forward, fuse_left, i,
+                                                 davidson_conv_thrd, noise,
+                                                 pket, mps_quanta);
+        else if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        if (me->para_rule == nullptr || me->para_rule->is_root()) {
-            assert(!(noise_type & NoiseTypes::Perturbative));
+        if (pket != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
+        if (build_pdm || me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             // change to fused form for splitting
             if (fuse_left != forward) {
@@ -643,17 +636,54 @@ template <typename S> struct DMRG {
                     prev_wfns[j]->deallocate();
                 if (prev_wfns.size() != 0)
                     prev_wfns[0]->deallocate_infos();
+                if (pket != nullptr) {
+                    vector<shared_ptr<SparseMatrixGroup<S>>> prev_pkets = {
+                        pket};
+                    if (!fuse_left && forward)
+                        pket =
+                            MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
+                                i, mket->info, prev_pkets,
+                                me->mpo->tf->opf->cg)[0];
+                    else if (fuse_left && !forward)
+                        pket =
+                            MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                                i, mket->info, prev_pkets,
+                                me->mpo->tf->opf->cg)[0];
+                    prev_pkets[0]->deallocate_infos();
+                    prev_pkets[0]->deallocate();
+                }
             }
+        }
+        if (build_pdm) {
+            _t.get_time();
+            assert(decomp_type == DecompositionTypes::DensityMatrix);
+            pdm = MovingEnvironment<S>::density_matrix_with_multi_target(
+                mket->info->vacuum, mket->wfns, mket->weights, forward,
+                me->para_rule != nullptr ? noise / me->para_rule->comm->size
+                                         : noise,
+                noise_type, 0.0, pket);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
+        }
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
             // splitting of wavefunction
             vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns,
                                                      new_wfns;
             shared_ptr<SparseMatrix<S>> dm, rot;
+            _t.get_time();
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                mket->info->vacuum, mket->wfns, mket->weights, forward, noise,
-                noise_type);
+                mket->info->vacuum, mket->wfns, mket->weights, forward,
+                build_pdm ? 0.0 : noise, noise_type, 1.0, pket);
+            if (build_pdm)
+                MatrixFunctions::iadd(
+                    MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                    MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
+            tdm += _t.get_time();
             error = MovingEnvironment<S>::multi_split_density_matrix(
                 dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot,
                 cutoff, trunc_type);
+            tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
             if (forward) {
@@ -722,7 +752,10 @@ template <typename S> struct DMRG {
             }
             dm->info->deallocate();
             dm->deallocate();
-
+            if (pdm != nullptr) {
+                pdm->info->deallocate();
+                pdm->deallocate();
+            }
             for (int j = (int)old_wfns.size() - 1; j >= 0; j--)
                 old_wfns[j]->deallocate();
             if (old_wfns.size() != 0)
@@ -748,6 +781,10 @@ template <typename S> struct DMRG {
                     mket->canonical_form[i] = 'T';
             }
         }
+        if (pket != nullptr) {
+            pket->deallocate();
+            pket->deallocate_infos();
+        }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
@@ -756,6 +793,42 @@ template <typename S> struct DMRG {
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
         return r;
+    }
+    virtual tuple<vector<double>, int, size_t, double>
+    multi_one_dot_eigs_and_perturb(
+        const bool forward, const bool fuse_left, const int i,
+        const double davidson_conv_thrd, const double noise,
+        shared_ptr<SparseMatrixGroup<S>> &pket,
+        vector<vector<pair<S, double>>> &mps_quanta) {
+        tuple<vector<double>, int, size_t, double> pdi;
+        shared_ptr<MultiMPS<S>> mket =
+            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+        _t.get_time();
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                              forward, true);
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        teff += _t.get_time();
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          me->para_rule);
+        for (int i = 0; i < mket->nroots; i++) {
+            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+            mps_quanta[i].erase(
+                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                          [this](const pair<S, double> &p) {
+                              return p.second < this->quanta_cutoff;
+                          }),
+                mps_quanta[i].end());
+        }
+        teig += _t.get_time();
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pket = h_eff->perturbative_noise(
+                forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
+                mket->info, mket->weights, noise_type, me->para_rule);
+        tprt += _t.get_time();
+        h_eff->deallocate();
+        return pdi;
     }
     // State-averaged two-site algorithm
     // canonical form for wavefunction: M = multi center
@@ -774,35 +847,46 @@ template <typename S> struct DMRG {
         int mmps = 0;
         double error = 0.0;
         tuple<vector<double>, int, size_t, double> pdi;
+        shared_ptr<SparseMatrixGroup<S>> pket = nullptr;
+        shared_ptr<SparseMatrix<S>> pdm = nullptr;
+        bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         vector<vector<pair<S, double>>> mps_quanta(mket->nroots);
-        if (davidson_soft_max_iter != 0 || noise != 0) {
-            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
-                me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
-                              davidson_max_iter, me->para_rule);
-            for (int i = 0; i < mket->nroots; i++) {
-                mps_quanta[i] = h_eff->ket[i]->delta_quanta();
-                mps_quanta[i].erase(
-                    remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
-                              [this](const pair<S, double> &p) {
-                                  return p.second < this->quanta_cutoff;
-                              }),
-                    mps_quanta[i].end());
-            }
-            h_eff->deallocate();
-        } else if (me->para_rule != nullptr)
+        if (davidson_soft_max_iter != 0 || noise != 0)
+            pdi = multi_two_dot_eigs_and_perturb(forward, i, davidson_conv_thrd,
+                                                 noise, pket, mps_quanta);
+        else if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
+        if (pket != nullptr)
+            sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
+        if (build_pdm) {
+            _t.get_time();
+            assert(decomp_type == DecompositionTypes::DensityMatrix);
+            pdm = MovingEnvironment<S>::density_matrix_with_multi_target(
+                mket->info->vacuum, old_wfns, mket->weights, forward,
+                me->para_rule != nullptr ? noise / me->para_rule->comm->size
+                                         : noise,
+                noise_type, 0.0, pket);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
+            tdm += _t.get_time();
+        }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
-            assert(!(noise_type & NoiseTypes::Perturbative));
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             shared_ptr<SparseMatrix<S>> dm;
+            _t.get_time();
             dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                mket->info->vacuum, old_wfns, mket->weights, forward, noise,
-                noise_type);
+                mket->info->vacuum, old_wfns, mket->weights, forward,
+                build_pdm ? 0.0 : noise, noise_type, 1.0, pket);
+            if (build_pdm)
+                MatrixFunctions::iadd(
+                    MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
+                    MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1), 1.0);
+            tdm += _t.get_time();
             error = MovingEnvironment<S>::multi_split_density_matrix(
                 dm, old_wfns, (int)bond_dim, forward, true, mket->wfns,
                 forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
                 trunc_type);
+            tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
@@ -838,6 +922,10 @@ template <typename S> struct DMRG {
             }
             dm->info->deallocate();
             dm->deallocate();
+            if (pdm != nullptr) {
+                pdm->info->deallocate();
+                pdm->deallocate();
+            }
             for (int k = mket->nroots - 1; k >= 0; k--)
                 old_wfns[k]->deallocate();
             old_wfns[0]->deallocate_infos();
@@ -860,6 +948,10 @@ template <typename S> struct DMRG {
                 me->ket->canonical_form[i + 1] = 'R';
             }
         }
+        if (pket != nullptr) {
+            pket->deallocate();
+            pket->deallocate_infos();
+        }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
@@ -868,6 +960,40 @@ template <typename S> struct DMRG {
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
         return r;
+    }
+    virtual tuple<vector<double>, int, size_t, double>
+    multi_two_dot_eigs_and_perturb(
+        const bool forward, const int i, const double davidson_conv_thrd,
+        const double noise, shared_ptr<SparseMatrixGroup<S>> &pket,
+        vector<vector<pair<S, double>>> &mps_quanta) {
+        tuple<vector<double>, int, size_t, double> pdi;
+        shared_ptr<MultiMPS<S>> mket =
+            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+        _t.get_time();
+        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+            me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        teff += _t.get_time();
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          me->para_rule);
+        for (int i = 0; i < mket->nroots; i++) {
+            mps_quanta[i] = h_eff->ket[i]->delta_quanta();
+            mps_quanta[i].erase(
+                remove_if(mps_quanta[i].begin(), mps_quanta[i].end(),
+                          [this](const pair<S, double> &p) {
+                              return p.second < this->quanta_cutoff;
+                          }),
+                mps_quanta[i].end());
+        }
+        teig += _t.get_time();
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
+            pket = h_eff->perturbative_noise(
+                forward, i, i + 1, FuseTypes::FuseLR, mket->info, mket->weights,
+                noise_type, me->para_rule);
+        tprt += _t.get_time();
+        h_eff->deallocate();
+        return pdi;
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bond_dim,
                                double noise, double davidson_conv_thrd) {
@@ -1343,12 +1469,12 @@ template <typename S> struct DMRG {
                      << setprecision(3) << current.current - start.current;
                 cout << fixed << setprecision(10);
                 if (get<0>(sweep_results).size() == 1)
-                    cout << " | E = " << setw(15) << get<0>(sweep_results)[0];
+                    cout << " | E = " << setw(18) << get<0>(sweep_results)[0];
                 else {
                     cout << " | E[" << setw(3) << get<0>(sweep_results).size()
                          << "] = ";
                     for (double x : get<0>(sweep_results))
-                        cout << setw(15) << x;
+                        cout << setw(18) << x;
                 }
                 if (energies.size() >= 2)
                     cout << " | DE = " << setw(6) << setprecision(2)
@@ -1836,8 +1962,10 @@ template <typename S> struct Linear {
                                 pbra);
                             if (build_pdm)
                                 MatrixFunctions::iadd(
-                                    MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
-                                    MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
+                                    MatrixRef(dm->data,
+                                              (MKL_INT)dm->total_memory, 1),
+                                    MatrixRef(pdm->data,
+                                              (MKL_INT)pdm->total_memory, 1),
                                     1.0);
                             if (real_bra != nullptr) {
                                 weight =
@@ -2193,8 +2321,10 @@ template <typename S> struct Linear {
                             build_pdm ? 0.0 : noise, noise_type, weight, pbra);
                         if (build_pdm)
                             MatrixFunctions::iadd(
-                                MatrixRef(dm->data, (MKL_INT)dm->total_memory, 1),
-                                MatrixRef(pdm->data, (MKL_INT)pdm->total_memory, 1),
+                                MatrixRef(dm->data, (MKL_INT)dm->total_memory,
+                                          1),
+                                MatrixRef(pdm->data, (MKL_INT)pdm->total_memory,
+                                          1),
                                 1.0);
                         if (real_bra != nullptr) {
                             weight = complex_weights[0] * (1 - right_weight);

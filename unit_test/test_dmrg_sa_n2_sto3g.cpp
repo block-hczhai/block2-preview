@@ -46,7 +46,8 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
+                                      OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
@@ -76,11 +77,13 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     shared_ptr<MovingEnvironment<S>> me =
         make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
     me->init_environments(false);
+    me->delayed_contraction = OpNamesSet::normal_ops();
     me->cached_contraction = true;
 
     // DMRG
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
     dmrg->iprint = 2;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     // deallocate persistent stack memory
