@@ -40,12 +40,16 @@ else:
 
 dic = parse(fin)
 if "nonspinadapted" in dic:
+    from block2 import VectorSZ as VectorSL
+    from block2.sz import MultiMPS, MultiMPSInfo
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
     SX = SZ
 else:
+    from block2 import VectorSU2 as VectorSL
+    from block2.su2 import MultiMPS, MultiMPSInfo
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -70,7 +74,7 @@ if DEBUG:
         _print ("%-25s %40s" % (key, val))
     _print("*" * 34 + " INPUT END   " + "*" * 34 + "\n")
 
-scratch = dic.get("prefix", "./node0/")
+scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
 n_threads = int(dic.get("num_thrds", 28))
 bond_dims, dav_thrds, noises = dic["schedule"]
@@ -108,21 +112,25 @@ if MPI is not None:
 if pre_run or not no_pre_run:
     nelec = int(dic["nelec"])
     spin = int(dic["spin"])
+    isym = int(dic.get("irrep", 1))
     fints = dic["orbitals"]
     if fints[-7:] == "FCIDUMP":
         fcidump = FCIDUMP()
         fcidump.read(fints)
         fcidump.params["nelec"] = str(nelec)
         fcidump.params["ms2"] = str(spin)
+        fcidump.params["isym"] = str(isym)
     else:
-        fcidump = read_integral(fints, nelec, spin)
+        fcidump = read_integral(fints, nelec, spin, isym=isym)
+    swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
 
     _print("read integral finished", time.perf_counter() - tx)
 
     vacuum = SX(0)
-    target = SX(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
+    target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
+    targets = VectorSL([target])
     n_sites = fcidump.n_sites
-    orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
+    orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
     hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
 
 # parallelization over sites
@@ -156,15 +164,16 @@ else:
     occs = None
 
 dot = 1 if "onedot" in dic else 2
+nroots = int(dic.get("nroots", 1))
 
 # prepare mps
 if "fullrestart" in dic:
     _print("full restart")
-    mps_info = MPSInfo(0)
+    mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = "KET"
     mps_info.load_mutable()
-    mps = MPS(mps_info)
+    mps = MPS(mps_info) if nroots == 1 else MultiMPS(mps_info)
     mps.load_data()
     mps.load_mutable()
     forward = mps.center == 0
@@ -175,7 +184,10 @@ if "fullrestart" in dic:
         mps.center -= 1
         forward = False
 elif pre_run or not no_pre_run:
-    mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+    if nroots == 1:
+        mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+    else:
+        mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
     mps_info.tag = "KET"
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
@@ -184,14 +196,20 @@ elif pre_run or not no_pre_run:
     if MPI is None or MPI.rank == 0:
         mps_info.save_data(scratch + '/mps_info.bin')
     if conn_centers is not None:
+        assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+    elif nroots != 1:
+        mps = MultiMPS(n_sites, 0, dot, nroots)
+        weights = dic.get("weights", None)
+        if weights is not None:
+            mps.weights = VectorDouble([float(x) for x in weights.split()])
     else:
         mps = MPS(n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     forward = mps.center == 0
 else:
-    mps_info = MPSInfo(0)
+    mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = "KET"
     if occs is None:
@@ -199,7 +217,13 @@ else:
     else:
         mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
     if conn_centers is not None:
+        assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+    elif nroots != 1:
+        mps = MultiMPS(n_sites, 0, dot, nroots)
+        weights = dic.get("weights", None)
+        if weights is not None:
+            mps.weights = VectorDouble([float(x) for x in weights.split()])
     else:
         mps = MPS(mps_info.n_sites, 0, dot)
     mps.initialize(mps_info)
