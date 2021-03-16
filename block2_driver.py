@@ -165,13 +165,14 @@ else:
 
 dot = 1 if "onedot" in dic else 2
 nroots = int(dic.get("nroots", 1))
+mps_tags = dic.get("mps_tags", "KET").split()
 
 # prepare mps
 if "fullrestart" in dic:
     _print("full restart")
     mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
-    mps_info.tag = "KET"
+    mps_info.tag = mps_tags[0]
     mps_info.load_mutable()
     mps = MPS(mps_info) if nroots == 1 else MultiMPS(mps_info)
     mps.load_data()
@@ -188,7 +189,7 @@ elif pre_run or not no_pre_run:
         mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
     else:
         mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
-    mps_info.tag = "KET"
+    mps_info.tag = mps_tags[0]
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
@@ -211,7 +212,7 @@ elif pre_run or not no_pre_run:
 else:
     mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
-    mps_info.tag = "KET"
+    mps_info.tag = mps_tags[0]
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
@@ -298,7 +299,85 @@ else:
     nmpo.tf = TensorFunctions(OperatorFunctions(cg))
 
     _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
+
+def split_mps(iroot, mps, mps_info):
+    mps.load_data() # this will avoid memory sharing
+    mps_info.load_mutable()
+    mps.load_mutable()
+
+    # break up a MultiMPS to single MPSs
+    if len(mps_info.targets) != 1:
+        smps_info = MultiMPSInfo(mps_info.n_sites, mps_info.vacuum,
+                                mps_info.targets, mps_info.basis)
+        smps_info.tag = mps_info.tag + "-%d" % iroot
+        smps_info.bond_dim = mps_info.bond_dim
+        for i in range(0, smps_info.n_sites + 1):
+            smps_info.left_dims[i] = mps_info.left_dims[i]
+            smps_info.right_dims[i] = mps_info.right_dims[i]
+        smps_info.save_mutable()
+        smps = MultiMPS(smps_info)
+        smps.n_sites = mps.n_sites
+        smps.center = mps.center
+        smps.dot = mps.dot
+        smps.canonical_form = '' + mps.canonical_form
+        smps.tensors = mps.tensors[:]
+        smps.wfns = mps.wfns[iroot:iroot+1]
+        smps.weights = mps.weights[iroot:iroot+1]
+        smps.weights[0] = 1
+        smps.nroots = 1
+        smps.save_mutable()
+    else:
+        smps_info = MPSInfo(mps_info.n_sites, mps_info.vacuum,
+                                mps_info.targets[0], mps_info.basis)
+        smps_info.tag = mps_info.tag + "-%d" % iroot
+        smps_info.bond_dim = mps_info.bond_dim
+        for i in range(0, smps_info.n_sites + 1):
+            smps_info.left_dims[i] = mps_info.left_dims[i]
+            smps_info.right_dims[i] = mps_info.right_dims[i]
+        smps_info.save_mutable()
+        smps = MPS(smps_info)
+        smps.n_sites = mps.n_sites
+        smps.center = mps.center
+        smps.dot = mps.dot
+        smps.canonical_form = '' + mps.canonical_form
+        smps.tensors = mps.tensors[:]
+        if smps.tensors[smps.center] is None:
+            smps.tensors[smps.center] = mps.wfns[iroot][0]
+        else:
+            assert smps.center + 1 < smps.n_sites
+            assert smps.tensors[smps.center + 1] is None
+            smps.tensors[smps.center + 1] = mps.wfns[iroot][0]
+        smps.save_mutable()
     
+    smps.dot = dot
+    forward = smps.center == 0
+    if smps.canonical_form[smps.center] == 'L' and smps.center != smps.n_sites - smps.dot:
+        smps.center += 1
+        forward = True
+    elif (smps.canonical_form[smps.center] == 'C' or smps.canonical_form[smps.center] == 'M') and smps.center != 0:
+        smps.center -= 1
+        forward = False
+    if smps.canonical_form[smps.center] == 'M' and not isinstance(smps, MultiMPS):
+        smps.canonical_form = smps.canonical_form[:smps.center] + 'C' + smps.canonical_form[smps.center + 1:]
+    if smps.canonical_form[-1] == 'M' and not isinstance(smps, MultiMPS):
+        smps.canonical_form = smps.canonical_form[:-1] + 'C'
+    if dot == 1:
+        if smps.canonical_form[0] == 'C' and smps.canonical_form[1] == 'R':
+            smps.canonical_form = 'K' + smps.canonical_form[1:]
+        elif smps.canonical_form[-1] == 'C' and smps.canonical_form[-2] == 'L':
+            smps.canonical_form = smps.canonical_form[:-1] + 'S'
+            smps.center = smps.n_sites - 1
+        if smps.canonical_form[0] == 'M' and smps.canonical_form[1] == 'R':
+            smps.canonical_form = 'J' + smps.canonical_form[1:]
+        elif smps.canonical_form[-1] == 'M' and smps.canonical_form[-2] == 'L':
+            smps.canonical_form = smps.canonical_form[:-1] + 'T'
+            smps.center = smps.n_sites - 1
+
+    mps.deallocate()
+    mps_info.deallocate_mutable()
+    smps.save_data()
+    return smps, smps_info, forward
+
 if not pre_run:
     if MPI is not None:
         mpo = ParallelMPO(mpo, prule)
@@ -315,8 +394,75 @@ if not pre_run:
     if conn_centers is not None:
         mps.conn_centers = VectorInt(conn_centers)
 
+    # state-specific DMRG (experimental)
+    if "statespecific" in dic:
+        assert isinstance(mps, MultiMPS)
+        assert nroots != 1
+        for iroot in range(mps.nroots):
+            _print('----- root = %3d / %3d -----' % (iroot, mps.nroots), flush=True)
+            smps, smps_info, forward = split_mps(iroot, mps, mps_info)
+            
+            me = MovingEnvironment(mpo, smps, smps, "DMRG")
+            me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = True
+            me.save_partition_info = True
+            me.init_environments(True)
+
+            if conn_centers is not None:
+                forward = smps.center == 0
+
+            _print("env init finished", time.perf_counter() - tx)
+
+            dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+            if "lowmem_noise" in dic:
+                dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+            else:
+                dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
+            dmrg.cutoff = float(dic.get("cutoff", 1E-14))
+            dmrg.decomp_type = DecompositionTypes.DensityMatrix
+            dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+            sweep_energies = []
+            discarded_weights = []
+            if "twodot_to_onedot" not in dic:
+                E_dmrg = dmrg.solve(len(bond_dims), forward, sweep_tol)
+            else:
+                tto = int(dic["twodot_to_onedot"])
+                assert len(bond_dims) > tto
+                dmrg.solve(tto, forward, 0)
+                # save the twodot part energies and discarded weights 
+                sweep_energies.append(np.array(dmrg.energies))
+                discarded_weights.append(np.array(dmrg.discarded_weights))
+                dmrg.me.dot = 1
+                dmrg.bond_dims = VectorUBond(bond_dims[tto:])
+                dmrg.noises = VectorDouble(noises[tto:])
+                dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
+                E_dmrg = dmrg.solve(len(bond_dims) - tto, smps.center == 0, sweep_tol)
+                mps.dot = 1
+                if MPI is None or MPI.rank == 0:
+                    mps.save_data()
+
+            if conn_centers is not None:
+                me.finalize_environments()
+
+            sweep_energies.append(np.array(dmrg.energies))
+            discarded_weights.append(np.array(dmrg.discarded_weights))
+            sweep_energies = np.vstack(sweep_energies)
+            discarded_weights = np.hstack(discarded_weights)
+
+            if MPI is None or MPI.rank == 0:
+                np.save(scratch + "/E_dmrg-%d.npy" % iroot, E_dmrg)
+                np.save(scratch + "/bond_dims-%d.npy" % iroot, bond_dims[:len(discarded_weights)])
+                np.save(scratch + "/sweep_energies-%d.npy" % iroot, sweep_energies)
+                np.save(scratch + "/discarded_weights-%d.npy" % iroot, discarded_weights)
+            _print("DMRG Energy for root %4d = %20.15f" % (iroot, E_dmrg))
+
+            if MPI is None or MPI.rank == 0:
+                smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
     # GS DMRG
-    if "restart_onepdm" not in dic and "restart_correlation" not in dic and "restart_oh" not in dic:
+    if "restart_onepdm" not in dic and "restart_correlation" not in dic \
+        and "restart_oh" not in dic and "statespecific" not in dic \
+        and "restart_tran_onepdm" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
@@ -374,9 +520,8 @@ if not pre_run:
         if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
 
-    # ONEPDM
-    if "restart_onepdm" in dic or "onepdm" in dic:
-        me = MovingEnvironment(pmpo, mps, mps, "1PDM")
+    def do_onepdm(bmps, kmps):
+        me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.save_partition_info = True
@@ -384,8 +529,8 @@ if not pre_run:
 
         _print("env init finished", time.perf_counter() - tx)
 
-        expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        expect.solve(True, mps.center == 0)
+        expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.solve(True, kmps.center == 0)
 
         if MPI is None or MPI.rank == 0:
             if SX == SZ:
@@ -395,16 +540,63 @@ if not pre_run:
                 dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
                 dm = np.transpose(dm, (0, 2, 1, 3))
                 dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
-                _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
             else:
                 dmr = expect.get_1pdm_spatial(me.n_sites)
                 dm = np.array(dmr).copy()
                 dmr.deallocate()
-                _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm)]))
+        
+            return dm
+        else:
+            return None
 
-            np.save(scratch + "/1pdm.npy", dm)
+    # ONEPDM
+    if "restart_onepdm" in dic or "onepdm" in dic:
+
+        if nroots == 1:
+            dm = do_onepdm(mps, mps)
+            if MPI is None or MPI.rank == 0:
+                if SX == SZ:
+                    _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                else:
+                    _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm)]))
+                np.save(scratch + "/1pdm.npy", dm)
+        else:
+            for iroot in range(mps.nroots):
+                _print('----- root = %3d / %3d -----' % (iroot, mps.nroots), flush=True)
+                smps, smps_info, forward = split_mps(iroot, mps, mps_info)
+                dm = do_onepdm(smps, smps)
+                if MPI is None or MPI.rank == 0:
+                    if SX == SZ:
+                        _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                    else:
+                        _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm)]))
+                    np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, iroot), dm)
+                    smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
+        if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
     
+    # Transition ONEPDM
+    if "restart_tran_onepdm" in dic or "tran_onepdm" in dic:
+        
+        assert nroots != 1
+        for iroot in range(mps.nroots):
+            for jroot in range(iroot + 1):
+                _print('----- root = %3d -> %3d / %3d -----' % (jroot, iroot, mps.nroots), flush=True)
+                simps, simps_info, _ = split_mps(iroot, mps, mps_info)
+                sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
+                dm = do_onepdm(simps, sjmps)
+                if MPI is None or MPI.rank == 0:
+                    np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, jroot), dm)
+            if MPI is None or MPI.rank == 0:
+                if SX == SZ:
+                    _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                else:
+                    _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm)]))
+                simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
+        if MPI is None or MPI.rank == 0:
+            mps_info.save_data(scratch + '/mps_info.bin')
 
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
@@ -434,7 +626,6 @@ if not pre_run:
 
             np.save(scratch + "/1npc.npy", dm)
             mps_info.save_data(scratch + '/mps_info.bin')
-        
 
     # OH
     if "restart_oh" in dic:

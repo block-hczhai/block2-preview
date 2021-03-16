@@ -19,7 +19,9 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
               "occ", "bias", "correlation", "restart_correlation",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
-              "sym", "irrep", "weights"}
+              "sym", "irrep", "weights", "statespecific", "mps_tags",
+              "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
+              "restart_tran_twopdm"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 
@@ -88,6 +90,12 @@ def parse(fname):
     if "restart_twopdm" in dic:
         dic["fullrestart"] = " "
     if "restart_correlation" in dic:
+        dic["fullrestart"] = " "
+    if "statespecific" in dic:
+        dic["fullrestart"] = " "
+    if "restart_tran_onepdm" in dic:
+        dic["fullrestart"] = " "
+    if "restart_tran_twopdm" in dic:
         dic["fullrestart"] = " "
 
     return dic

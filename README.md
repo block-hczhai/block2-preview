@@ -84,3 +84,4 @@ The DMRG run will then stop as it would be converged after the current sweep is 
 9. if a line in `dmrg.conf` starts with `!`, the line will be ignored.
 10. if `restart_dir` is given, after each sweep, the MPS will be backed up in `restart_dir`.
 11. if `conn_centers` is given, the parallelism over sites will be used (MPI required, `twodot` only). For example, `conn_centers auto 5` will divide the processors into 5 groups.
+12. if `mps_tags` is given (a single string or a list of strings), the MPS in scratch directory with the specific tag/tags will be loaded for restart (for `statespecific`, `restart_onepdm`, etc.) The default MPS tag for input/output is `KET`.
