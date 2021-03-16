@@ -614,7 +614,7 @@ template <typename S> struct MPSInfo {
         shallow_copy_to(info);
         return info;
     }
-    shared_ptr<MPSInfo<S>> deep_copy() const {
+    virtual shared_ptr<MPSInfo<S>> deep_copy() const {
         stringstream ss;
         save_data(ss);
         shared_ptr<MPSInfo<S>> info = make_shared<MPSInfo<S>>(0);

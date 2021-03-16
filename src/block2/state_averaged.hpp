@@ -101,6 +101,13 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         shallow_copy_to(info);
         return info;
     }
+    shared_ptr<MPSInfo<S>> deep_copy() const override {
+        stringstream ss;
+        save_data(ss);
+        shared_ptr<MultiMPSInfo<S>> info = make_shared<MultiMPSInfo<S>>(0);
+        info->load_data(ss);
+        return info;
+    }
 };
 
 // Matrix Product State for multiple targets and multiple wavefunctions
@@ -191,6 +198,26 @@ template <typename S> struct MultiMPS : MPS<S> {
            << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
+    shared_ptr<MultiMPS<S>> extract(int iroot, const string xtag) const {
+        shared_ptr<MultiMPSInfo<S>> xinfo =
+            dynamic_pointer_cast<MultiMPSInfo<S>>(info->deep_copy());
+        xinfo->load_mutable();
+        shared_ptr<MultiMPS<S>> xmps = make_shared<MultiMPS<S>>(xinfo);
+        xmps->load_data();
+        xmps->load_mutable();
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        xmps->nroots = 1;
+        xmps->wfns[0] = xmps->wfns[iroot];
+        xmps->wfns.resize(1);
+        xmps->weights[0] = 1.0;
+        xmps->weights.resize(1);
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
+    }
     void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S>> &mps) const {
         if (frame->prefix_can_write) {
             for (int j = 0; j < nroots; j++)
@@ -269,20 +296,18 @@ template <typename S> struct MultiMPS : MPS<S> {
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr)
                 tensors[i]->load_data(get_filename(i), true, i_alloc);
-            else if (i == center)
-                for (int j = 0; j < nroots; j++) {
-                    wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
-                    wfns[j]->infos = wfns[0]->infos;
-                }
+        for (int j = 0; j < nroots; j++) {
+            wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
+            wfns[j]->infos = wfns[0]->infos;
+        }
     }
     void save_mutable() const override {
         if (frame->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     tensors[i]->save_data(get_filename(i), true);
-                else if (i == center)
-                    for (int j = 0; j < nroots; j++)
-                        wfns[j]->save_data(get_wfn_filename(j), j == 0);
+            for (int j = 0; j < nroots; j++)
+                wfns[j]->save_data(get_wfn_filename(j), j == 0);
         }
     }
     void save_wavefunction(int i) const {
@@ -346,14 +371,13 @@ template <typename S> struct MultiMPS : MPS<S> {
         for (int i = n_sites - 1; i >= 0; i--)
             if (tensors[i] != nullptr)
                 tensors[i]->deallocate();
-            else if (i == center)
-                for (int j = nroots - 1; j >= 0; j--)
-                    wfns[j]->deallocate();
+        for (int j = nroots - 1; j >= 0; j--)
+            wfns[j]->deallocate();
         for (int i = n_sites - 1; i >= 0; i--)
             if (tensors[i] != nullptr)
                 tensors[i]->info->deallocate();
-            else if (i == center && nroots != 0)
-                wfns[0]->deallocate_infos();
+        if (nroots != 0)
+            wfns[0]->deallocate_infos();
     }
 };
 

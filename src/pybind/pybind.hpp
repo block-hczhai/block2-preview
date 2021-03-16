@@ -872,6 +872,7 @@ template <typename S> void bind_mps(py::module &m) {
     py::class_<MultiMPSInfo<S>, shared_ptr<MultiMPSInfo<S>>, MPSInfo<S>>(
         m, "MultiMPSInfo")
         .def_readwrite("targets", &MultiMPSInfo<S>::targets)
+        .def(py::init<int>())
         .def(py::init([](int n_sites, S vacuum, const vector<S> &target,
                          const vector<shared_ptr<StateInfo<S>>> &basis) {
             return make_shared<MultiMPSInfo<S>>(n_sites, vacuum, target, basis);
