@@ -88,9 +88,6 @@ void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
-    // deallocate persistent stack memory
-    mps_info->deallocate();
-
     for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
         cout << "== " << name << " (SA) =="
              << " E[" << setw(2) << i << "] = " << fixed << setw(22)
@@ -139,6 +136,9 @@ void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
                                : expect->get_1pdm();
             dm.deallocate();
         }
+
+    // deallocate persistent stack memory
+    mps_info->deallocate();
 }
 
 TEST_F(TestNPDMN2STO3GSA, TestSU2) {

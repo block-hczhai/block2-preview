@@ -8,7 +8,8 @@
       "environments": [
         {
           "MKLROOT": "C:\\Program Files (x86)\\Intel\\oneAPI\\mkl\\latest",
-          "OMPROOT": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\latest\\windows\\compiler"
+          "OMPROOT": "C:\\Program Files (x86)\\Intel\\oneAPI\\compiler\\latest\\windows\\compiler",
+          "CMAKE_PREFIX_PATH": "C:\\Users\\hczhai\\source\\repos\\googletest\\out\\install\\x64-Release"
         }
       ],
       "buildRoot": "${projectDir}\\my_test\\build\\${name}",
@@ -23,6 +24,11 @@
         },
         {
           "name": "LARGE_BOND",
+          "type": "BOOL",
+          "value": "ON"
+        },
+        {
+          "name": "BUILD_TEST",
           "type": "BOOL",
           "value": "ON"
         },
