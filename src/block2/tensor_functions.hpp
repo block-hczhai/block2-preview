@@ -27,6 +27,7 @@
 #include <cassert>
 #include <map>
 #include <memory>
+#include <unordered_map>
 
 using namespace std;
 
@@ -292,13 +293,14 @@ template <typename S> struct TensorFunctions {
                 shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(i_op);
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
-                int ij = (int)(lower_bound(psubsl.begin(), psubsl.end(),
-                                     make_pair((uint8_t)(op->conj & 1), opdq)) -
-                         psubsl.begin());
+                int ij = (int)(lower_bound(
+                                   psubsl.begin(), psubsl.end(),
+                                   make_pair((uint8_t)(op->conj & 1), opdq)) -
+                               psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
                     int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin());
+                                   vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -321,13 +323,14 @@ template <typename S> struct TensorFunctions {
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
-                    (int)(lower_bound(psubsl.begin(), psubsl.end(),
-                                make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
-                    psubsl.begin());
+                    (int)(lower_bound(
+                              psubsl.begin(), psubsl.end(),
+                              make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
+                          psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
                     int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin());
+                                   vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -379,13 +382,14 @@ template <typename S> struct TensorFunctions {
                 shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(i_op);
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
-                int ij = (int)(lower_bound(psubsl.begin(), psubsl.end(),
-                                     make_pair((uint8_t)(op->conj & 1), opdq)) -
-                         psubsl.begin());
+                int ij = (int)(lower_bound(
+                                   psubsl.begin(), psubsl.end(),
+                                   make_pair((uint8_t)(op->conj & 1), opdq)) -
+                               psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
                     int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin());
+                                   vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -408,13 +412,14 @@ template <typename S> struct TensorFunctions {
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
-                    (int)(lower_bound(psubsl.begin(), psubsl.end(),
-                                make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
-                    psubsl.begin());
+                    (int)(lower_bound(
+                              psubsl.begin(), psubsl.end(),
+                              make_pair((uint8_t)(!!(op->conj & 2)), opdq)) -
+                          psubsl.begin());
                 for (int k = 0; k < pks.count(); k++) {
                     S vdq = pks[k];
                     int iv = (int)(lower_bound(vdqs.begin(), vdqs.end(), vdq) -
-                             vdqs.begin());
+                                   vdqs.begin());
                     if (tvidx >= 0 && tvidx != iv)
                         continue;
                     shared_ptr<SparseMatrix<S>> vmat =
@@ -487,34 +492,65 @@ template <typename S> struct TensorFunctions {
         }
     }
     // vmats = expr x cmats
-    virtual void
-    tensor_product_multi_multiply(const shared_ptr<OpExpr<S>> &expr,
-                                  const shared_ptr<OperatorTensor<S>> &lopt,
-                                  const shared_ptr<OperatorTensor<S>> &ropt,
-                                  const shared_ptr<SparseMatrixGroup<S>> &cmats,
-                                  const shared_ptr<SparseMatrixGroup<S>> &vmats,
-                                  S opdq, bool all_reduce) const {
+    virtual void tensor_product_multi_multiply(
+        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OperatorTensor<S>> &lopt,
+        const shared_ptr<OperatorTensor<S>> &ropt,
+        const shared_ptr<SparseMatrixGroup<S>> &cmats,
+        const shared_ptr<SparseMatrixGroup<S>> &vmats,
+        const unordered_map<
+            S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
+            &cinfos,
+        S opdq, bool all_reduce) const {
+        unordered_map<S, int> vdqs;
+        vdqs.reserve(vmats->n);
+        for (int iv = 0; iv < vmats->n; iv++)
+            vdqs[vmats->infos[iv]->delta_quantum] = iv;
         switch (expr->get_type()) {
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
             parallel_reduce(
                 op->strings.size() * cmats->n, vmats,
-                [&op, &lopt, &ropt, &cmats, &opdq](
+                [&op, &lopt, &ropt, &cmats, &opdq, &vdqs, &cinfos](
                     const shared_ptr<TensorFunctions<S>> &tf,
                     const shared_ptr<SparseMatrixGroup<S>> &vmats, size_t idx) {
                     const size_t i = idx % op->strings.size(),
                                  j = idx / op->strings.size();
-                    tf->tensor_product_multiply(op->strings[i], lopt, ropt,
-                                                (*cmats)[(int)j], (*vmats)[(int)j], opdq,
-                                                false);
+                    shared_ptr<SparseMatrix<S>> pcmat = (*cmats)[(int)j];
+                    shared_ptr<SparseMatrixInfo<S>> pcmat_info =
+                        make_shared<SparseMatrixInfo<S>>(*pcmat->info);
+                    pcmat->info = pcmat_info;
+                    S cdq = pcmat->info->delta_quantum;
+                    S vdq = opdq + cdq;
+                    for (int iv = 0; iv < vdq.count(); iv++)
+                        if (vdqs.count(vdq[iv])) {
+                            pcmat->info->cinfo =
+                                cinfos.at(opdq.combine(vdq[iv], cdq));
+                            tf->tensor_product_multiply(
+                                op->strings[i], lopt, ropt, pcmat,
+                                (*vmats)[vdqs[vdq[iv]]], opdq, false);
+                        }
                 });
         } break;
         case OpTypes::Zero:
             break;
         default:
-            for (int i = 0; i < cmats->n; i++)
-                tensor_product_multiply(expr, lopt, ropt, (*cmats)[i],
-                                        (*vmats)[i], opdq, false);
+            for (int i = 0; i < cmats->n; i++) {
+                shared_ptr<SparseMatrix<S>> pcmat = (*cmats)[i];
+                shared_ptr<SparseMatrixInfo<S>> pcmat_info =
+                    make_shared<SparseMatrixInfo<S>>(*pcmat->info);
+                pcmat->info = pcmat_info;
+                S cdq = pcmat->info->delta_quantum;
+                S vdq = opdq + cdq;
+                for (int iv = 0; iv < vdq.count(); iv++)
+                    if (vdqs.count(vdq[iv])) {
+                        pcmat->info->cinfo =
+                            cinfos.at(opdq.combine(vdq[iv], cdq));
+                        tensor_product_multiply(expr, lopt, ropt, pcmat,
+                                                (*vmats)[vdqs[vdq[iv]]], opdq,
+                                                false);
+                    }
+            }
             break;
         }
     }

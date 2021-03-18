@@ -61,7 +61,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     S opdq;
     // Whether diagonal element of effective H should be computed
     bool compute_diag;
-    shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> wfn_info;
+    vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>> wfn_infos;
+    vector<S> operator_quanta;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -85,6 +86,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         S vdq = bra->info->delta_quantum;
         opdq = hop->q_label;
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
@@ -105,11 +107,16 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         *cmat = *ket;
         *vmat = *bra;
         // temp wavefunction info
-        wfn_info = make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-        wfn_info->initialize_wfn(cdq, vdq, opdq, msubsl[0], left_op_infos,
-                                 right_op_infos, ket->info, bra->info,
-                                 tf->opf->cg);
-        cmat->info->cinfo = wfn_info;
+        wfn_infos.resize(msl.size(), nullptr);
+        for (int i = 0; i < (int)msl.size(); i++)
+            if (msl[i].combine(vdq, cdq) != S(S::invalid)) {
+                wfn_infos[i] =
+                    make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
+                wfn_infos[i]->initialize_wfn(cdq, vdq, msl[i], msubsl[i],
+                                             left_op_infos, right_op_infos,
+                                             ket->info, bra->info, tf->opf->cg);
+            }
+        cmat->info->cinfo = wfn_infos[0];
     }
     // prepare batch gemm
     void precompute() const {
@@ -311,8 +318,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         cmat->data = b.data;
         vmat->data = c.data;
         cmat->factor = factor;
-        cmat->info->cinfo = wfn_info;
         S idx_opdq = dynamic_pointer_cast<OpElement<S>>(op->dops[idx])->q_label;
+        size_t ic = lower_bound(operator_quanta.begin(), operator_quanta.end(),
+                                idx_opdq) -
+                    operator_quanta.begin();
+        assert(ic < operator_quanta.size() && wfn_infos[ic] != nullptr);
+        cmat->info->cinfo = wfn_infos[ic];
         tf->tensor_product_multiply(op->mat->data[idx], op->lopt, op->ropt,
                                     cmat, vmat, idx_opdq, all_reduce);
     }
@@ -801,7 +812,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     void deallocate() {
         frame->activate(0);
-        wfn_info->deallocate();
+        for (int i = (int)wfn_infos.size() - 1; i >= 0; i--)
+            if (wfn_infos[i] != nullptr)
+                wfn_infos[i]->deallocate();
         if (compute_diag)
             diag->deallocate();
         op->deallocate();
@@ -965,6 +978,10 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     S opdq;
     // Whether diagonal element of effective H should be computed
     bool compute_diag;
+    vector<unordered_map<
+        S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
+        wfn_infos;
+    vector<S> operator_quanta;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -986,6 +1003,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         // unique sub labels
         opdq = hop->q_label;
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
@@ -1011,28 +1029,46 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         *cmat = *ket[0];
         *vmat = *bra[0];
         // temp wavefunction info
+        wfn_infos.resize(msl.size());
+        for (int i = 0; i < (int)msl.size(); i++)
+            for (int ic = 0; ic < cmat->n; ic++)
+                for (int iv = 0; iv < vmat->n; iv++) {
+                    S cdq = cmat->infos[ic]->delta_quantum;
+                    S vdq = vmat->infos[iv]->delta_quantum;
+                    S cvdq = msl[i].combine(vdq, cdq);
+                    if (cvdq == S(S::invalid) || wfn_infos[i].count(cvdq))
+                        continue;
+                    shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>
+                        wfn_info = make_shared<
+                            typename SparseMatrixInfo<S>::ConnectionInfo>();
+                    wfn_info->initialize_wfn(cdq, vdq, msl[i], msubsl[i],
+                                             left_op_infos, right_op_infos,
+                                             cmat->infos[ic], vmat->infos[iv],
+                                             tf->opf->cg);
+                    wfn_infos[i][cvdq] = wfn_info;
+                }
         for (int i = 0; i < cmat->n; i++) {
-            shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> wfn_info =
-                make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-            wfn_info->initialize_wfn(
-                cmat->infos[i]->delta_quantum, vmat->infos[i]->delta_quantum,
-                opdq, msubsl[0], left_op_infos, right_op_infos, cmat->infos[i],
-                vmat->infos[i], tf->opf->cg);
-            cmat->infos[i]->cinfo = wfn_info;
+            S cdq = cmat->infos[i]->delta_quantum;
+            S vdq = vmat->infos[i]->delta_quantum;
+            S cvdq = opdq.combine(vdq, cdq);
+            if (cvdq != S(S::invalid))
+                cmat->infos[i]->cinfo = wfn_infos[0][cvdq];
         }
     }
     // prepare batch gemm
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
-            tf->tensor_product_multi_multiply(
-                op->mat->data[0], op->lopt, op->ropt, cmat, vmat, opdq, false);
+            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
+                                              op->ropt, cmat, vmat,
+                                              wfn_infos[0], opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (double *)0;
-            tf->tensor_product_multi_multiply(
-                op->mat->data[0], op->lopt, op->ropt, cmat, vmat, opdq, false);
+            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
+                                              op->ropt, cmat, vmat,
+                                              wfn_infos[0], opdq, false);
         }
     }
     void post_precompute() const {
@@ -1169,10 +1205,13 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             // perform multiplication
             for (int ii = 0, pvidx = vidx; ii < (int)ket.size(); ii++) {
                 vidx = pvidx;
-                tf->tensor_product_partial_multiply(
-                    weights[ii] * pexpr, op->lopt, op->ropt, trace_right,
-                    (*ket[ii])[i], psubsl, cinfos[i], perturb_ket_labels,
-                    perturb_ket, vidx, low_mem ? -2 : -1, do_reduce);
+                double ket_norm = (*ket[ii])[i]->norm();
+                if (abs(ket_norm) > TINY)
+                    tf->tensor_product_partial_multiply(
+                        (weights[ii] / ket_norm) * pexpr, op->lopt, op->ropt,
+                        trace_right, (*ket[ii])[i], psubsl, cinfos[i],
+                        perturb_ket_labels, perturb_ket, vidx,
+                        low_mem ? -2 : -1, do_reduce);
             }
         }
         if (!reduced)
@@ -1235,9 +1274,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
+        S idx_opdq = dynamic_pointer_cast<OpElement<S>>(op->dops[idx])->q_label;
+        size_t ic = lower_bound(operator_quanta.begin(), operator_quanta.end(),
+                                idx_opdq) -
+                    operator_quanta.begin();
+        assert(ic < operator_quanta.size());
         tf->tensor_product_multi_multiply(op->mat->data[idx], op->lopt,
-                                          op->ropt, cmat, vmat, opdq,
-                                          all_reduce);
+                                          op->ropt, cmat, vmat, wfn_infos[ic],
+                                          idx_opdq, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
@@ -1310,9 +1354,6 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
                 OpNames::Zero)
                 continue;
-            else if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label !=
-                     opdq)
-                expectations.push_back(make_pair(op->dops[i], rr));
             else {
                 if (para_rule == nullptr || !para_rule->number(op->dops[i])) {
                     for (int j = 0; j < (int)ket.size(); j++) {
@@ -1357,8 +1398,24 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
     void deallocate() {
         frame->activate(0);
-        for (int i = cmat->n - 1; i >= 0; i--)
-            cmat->infos[i]->cinfo->deallocate();
+        for (int i = (int)wfn_infos.size() - 1; i >= 0; i--) {
+            vector<pair<
+                S *, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
+                mp;
+            mp.reserve(wfn_infos[i].size());
+            for (auto it = wfn_infos[i].cbegin(); it != wfn_infos[i].cend();
+                 it++)
+                mp.emplace_back(it->second->quanta, it->second);
+            sort(mp.begin(), mp.end(),
+                 [](const pair<S *, shared_ptr<typename SparseMatrixInfo<
+                                        S>::ConnectionInfo>> &a,
+                    const pair<S *, shared_ptr<typename SparseMatrixInfo<
+                                        S>::ConnectionInfo>> &b) {
+                     return a.first > b.first;
+                 });
+            for (const auto &t : mp)
+                t.second->deallocate();
+        }
         if (compute_diag)
             diag->deallocate();
         op->deallocate();

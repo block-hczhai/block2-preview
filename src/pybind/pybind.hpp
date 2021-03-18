@@ -1978,7 +1978,8 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const HamiltonianQC<S> &, QCTypes, int>());
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
-        .def(py::init<const Hamiltonian<S> &>());
+        .def(py::init<const Hamiltonian<S> &>())
+        .def(py::init<const Hamiltonian<S> &, uint8_t>());
 
     py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
         .def(py::init<const Hamiltonian<S> &>());

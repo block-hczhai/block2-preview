@@ -37,19 +37,25 @@ template <typename, typename = void> struct PDM1MPOQC;
 
 // "MPO" for one particle density matrix (non-spin-adapted)
 template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    PDM1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
+    PDM1MPOQC(const Hamiltonian<S> &hamil, uint8_t ds = 0)
+        : MPO<S>(hamil.n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
         shared_ptr<OpElement<S>> zero_op =
             make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+        assert(ds == 0);
 #ifdef _MSC_VER
-        vector<vector<shared_ptr<OpExpr<S>>>> c_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<shared_ptr<OpExpr<S>>>> d_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> d_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
 #else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites][4];
@@ -259,17 +265,28 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
 };
 
 // "MPO" for one particle density matrix (spin-adapted)
+// ds = 0 (default) normal 1pdm:
+//     dm[i, j]    = < a^\dagger_{ia} a^{ja} + a^\dagger_{ib} a^{jb} >
+//                 = sqrt(2) < a^{\dagger[1/2]}_i \otimes_[0] a^{[1/2]}_j >
+//                 = sqrt(2) < a^{[1/2]}_j \otimes_[0] a^{\dagger[1/2]}_i >
+// ds = 1 (spin-orbit) triplet excitation operators
+//     dm[i, j]    =      sqrt(2) < a^{\dagger[1/2]}_i \otimes_[1] a^{[1/2]}_j >
+//                 = (-1) sqrt(2) < a^{[1/2]}_j \otimes_[1] a^{\dagger[1/2]}_i >
 template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
-    PDM1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
+    PDM1MPOQC(const Hamiltonian<S> &hamil, uint8_t ds = 0)
+        : MPO<S>(hamil.n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+            OpNames::Zero, SiteIndex(), S(0, ds * 2, 0));
+        assert(ds == 0 || ds == 1);
 #ifdef _MSC_VER
         vector<shared_ptr<OpExpr<S>>> c_op(n_sites), d_op(n_sites);
-        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
-        vector<vector<shared_ptr<OpExpr<S>>>> pdm1_op(n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
+        vector<vector<shared_ptr<OpExpr<S>>>> pdm1_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(n_sites));
 #else
         shared_ptr<OpExpr<S>> c_op[n_sites], d_op[n_sites];
         shared_ptr<OpExpr<S>> b_op[n_sites][n_sites];
@@ -284,11 +301,11 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++) {
                 b_op[i][j] = make_shared<OpElement<S>>(
-                    OpNames::B, SiteIndex(i, j, 0),
-                    S(0, 0, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    OpNames::B, SiteIndex(i, j, ds),
+                    S(0, ds * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
                 pdm1_op[i][j] = make_shared<OpElement<S>>(
                     OpNames::PDM1, SiteIndex(i, j),
-                    S(0, 0, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    S(0, ds * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
             }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
@@ -364,7 +381,8 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     (*pmexpr)[p] = sqrt(2.0) * (c_op[m] * d_op[j]);
                     p++;
                     (*pmop)[p] = pdm1_op[j][m];
-                    (*pmexpr)[p] = sqrt(2.0) * (d_op[m] * c_op[j]);
+                    (*pmexpr)[p] =
+                        (ds ? -sqrt(2.0) : sqrt(2.0)) * (d_op[m] * c_op[j]);
                     p++;
                 }
                 // 1*1 : jj / cd (j > m) (last site only)

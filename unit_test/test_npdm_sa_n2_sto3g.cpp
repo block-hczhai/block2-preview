@@ -107,7 +107,8 @@ void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo = make_shared<SimplifiedMPO<S>>(pmpo, make_shared<RuleQC<S>>(), true);
+    pmpo = make_shared<SimplifiedMPO<S>>(
+        pmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     for (int iroot = 0; iroot < nroots; iroot++)

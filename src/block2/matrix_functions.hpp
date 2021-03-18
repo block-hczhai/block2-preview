@@ -171,6 +171,9 @@ struct MatrixFunctions {
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
                          bool conjb, const MatrixRef &c, double scale,
                          double cfactor) {
+        // if assertion failes here, check whether it is the case
+        // where different bra and ket are used with the transpose rule
+        // use no-transpose-rule to fix it
         if (!conja && !conjb) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             dgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
