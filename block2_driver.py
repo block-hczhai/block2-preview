@@ -45,7 +45,7 @@ if "nonspinadapted" in dic:
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
+    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
     SX = SZ
 else:
     from block2 import VectorSU2 as VectorSL
@@ -53,7 +53,7 @@ else:
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
+    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
     SX = SU2
 
 # MPI
@@ -172,6 +172,7 @@ dot = 1 if "onedot" in dic else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
 soc = "soc" in dic
+overlap = "overlap" in dic
 
 # prepare mps
 if "fullrestart" in dic:
@@ -256,7 +257,8 @@ if conn_centers is not None and "fullrestart" in dic:
         mps.canonical_form = mps.canonical_form[:-1] + 'S'
         mps.center = mps.n_sites - 1
 
-has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic
+has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
+    or "restart_tran_oh" in dic or "tran_oh" in dic
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -275,13 +277,9 @@ if pre_run or not no_pre_run:
     # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
     pmpo = PDM1MPOQC(hamil, 1 if soc else 0)
-    _print("simpl 1pdm mpo", time.perf_counter() - tx)
     pmpo = SimplifiedMPO(pmpo,
         NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
         True, True, OpNamesSet((OpNames.R, OpNames.RD)))
-    _print("simpl 1pdm mpo finished", time.perf_counter() - tx)
-
-    _print('1PDM MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.right_operator_names]))
 
     if MPI is None or MPI.rank == 0:
         pmpo.save_data(scratch + '/mpo-1pdm.bin')
@@ -289,14 +287,21 @@ if pre_run or not no_pre_run:
     # mpo for particle number correlation
     _print("build 1npc mpo", time.perf_counter() - tx)
     nmpo = NPC1MPOQC(hamil)
-    _print("simpl 1npc mpo", time.perf_counter() - tx)
     nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
-    _print("simpl 1npc mpo finished", time.perf_counter() - tx)
-
-    _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.right_operator_names]))
 
     if MPI is None or MPI.rank == 0:
         nmpo.save_data(scratch + '/mpo-1npc.bin')
+
+    # mpo for identity operator
+    _print("build identity mpo", time.perf_counter() - tx)
+    impo = IdentityMPO(hamil)
+    impo = SimplifiedMPO(impo,
+        NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
+        True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+
+    if MPI is None or MPI.rank == 0:
+        impo.save_data(scratch + '/mpo-ident.bin')
+
 else:
     mpo = MPO(0)
     mpo.load_data(scratch + '/mpo.bin')
@@ -317,6 +322,12 @@ else:
     nmpo.tf = TensorFunctions(OperatorFunctions(cg))
 
     _print('1NPC MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
+
+    impo = MPO(0)
+    impo.load_data(scratch + '/mpo-ident.bin')
+    impo.tf = TensorFunctions(OperatorFunctions(cg))
+
+    _print('IDENT MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in impo.left_operator_names]))
 
 def split_mps(iroot, mps, mps_info):
     mps.load_data() # this will avoid memory sharing
@@ -401,6 +412,7 @@ if not pre_run:
         mpo = ParallelMPO(mpo, prule)
         pmpo = ParallelMPO(pmpo, prule_npdm)
         nmpo = ParallelMPO(nmpo, prule_npdm)
+        impo = ParallelMPO(impo, prule)
 
     _print("para mpo finished", time.perf_counter() - tx)
 
@@ -480,7 +492,7 @@ if not pre_run:
     # GS DMRG
     if "restart_onepdm" not in dic and "restart_correlation" not in dic \
         and "restart_oh" not in dic and "statespecific" not in dic \
-        and "restart_tran_onepdm" not in dic:
+        and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
@@ -646,9 +658,8 @@ if not pre_run:
             np.save(scratch + "/1npc.npy", dm)
             mps_info.save_data(scratch + '/mps_info.bin')
 
-    # OH
-    if "restart_oh" in dic:
-        me = MovingEnvironment(mpo, mps, mps, "OH")
+    def do_oh(bmps, kmps):
+        me = MovingEnvironment(impo if overlap else mpo, bmps, kmps, "OH")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.save_partition_info = True
@@ -656,12 +667,60 @@ if not pre_run:
 
         _print("env init finished", time.perf_counter() - tx)
 
-        expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
-        E_oh = expect.solve(False, forward)
+        expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        E_oh = expect.solve(False, kmps.center == 0)
 
         if MPI is None or MPI.rank == 0:
-            np.save(scratch + "/E_oh.npy", E_oh)
+            return E_oh
+        else:
+            return None
+
+    # OH (Hamiltonian expectation on MPS)
+    if "restart_oh" in dic or "oh" in dic:
+
+        if nroots == 1:
+            E_oh = do_oh(mps, mps)
+            if MPI is None or MPI.rank == 0:
+                np.save(scratch + "/E_oh.npy", E_oh)
+                print("OH Energy = %20.15f" % E_oh)
+        else:
+            mat_oh = np.zeros((mps.nroots, ))
+            for iroot in range(mps.nroots):
+                _print('----- root = %3d / %3d -----' % (iroot, mps.nroots), flush=True)
+                smps, smps_info, forward = split_mps(iroot, mps, mps_info)
+                E_oh = do_oh(smps, smps)
+                if MPI is None or MPI.rank == 0:
+                    mat_oh[iroot] = E_oh
+                    print("OH Energy %4d - %4d = %20.15f" % (iroot, iroot, E_oh))
+                    smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+            if MPI is None or MPI.rank == 0:
+                np.save(scratch + "/E_oh.npy", mat_oh)
+
+        if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
-        _print("OH Energy = %20.15f" % E_oh)
+    
+    # Transition OH (OH between different MPS roots)
+    # note that there can be a undetermined +1/-1 factor due to the relative phase in two MPSs
+    # only mat_oh[i, j] with i >= j are filled
+    if "restart_tran_oh" in dic or "tran_oh" in dic:
+        
+        assert nroots != 1
+        mat_oh = np.zeros((mps.nroots, mps.nroots))
+        for iroot in range(mps.nroots):
+            for jroot in range(iroot + 1):
+                _print('----- root = %3d -> %3d / %3d -----' % (jroot, iroot, mps.nroots), flush=True)
+                simps, simps_info, _ = split_mps(iroot, mps, mps_info)
+                sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
+                E_oh = do_oh(simps, sjmps)
+                if MPI is None or MPI.rank == 0:
+                    mat_oh[iroot, jroot] = E_oh
+                    print("OH Energy %4d - %4d = %20.15f" % (iroot, jroot, E_oh))
+            if MPI is None or MPI.rank == 0:
+                simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+        if MPI is None or MPI.rank == 0:
+            np.save(scratch + "/E_oh.npy", mat_oh)
+
+        if MPI is None or MPI.rank == 0:
+            mps_info.save_data(scratch + '/mps_info.bin')
 
     mps_info.deallocate()

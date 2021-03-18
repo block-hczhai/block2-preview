@@ -15,13 +15,14 @@ import numpy as np
 KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter", 
               "twodot_to_onedot", "twodot", "onedot", "sweep_tol", 
               "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
-              "nonspinadapted", "noreorder", "num_thrds", "mem", 
+              "nonspinadapted", "noreorder", "num_thrds", "mem", "oh",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
               "occ", "bias", "correlation", "restart_correlation",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
-              "restart_tran_twopdm", "soc"}
+              "restart_tran_twopdm", "soc", "overlap", "tran_oh",
+              "restart_tran_oh"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 
@@ -96,6 +97,8 @@ def parse(fname):
     if "restart_tran_onepdm" in dic:
         dic["fullrestart"] = " "
     if "restart_tran_twopdm" in dic:
+        dic["fullrestart"] = " "
+    if "restart_tran_oh" in dic:
         dic["fullrestart"] = " "
 
     return dic
