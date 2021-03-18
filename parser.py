@@ -21,7 +21,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
-              "restart_tran_twopdm"}
+              "restart_tran_twopdm", "soc"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 

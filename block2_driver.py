@@ -43,7 +43,7 @@ if "nonspinadapted" in dic:
     from block2 import VectorSZ as VectorSL
     from block2.sz import MultiMPS, MultiMPSInfo
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
-    from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
     SX = SZ
@@ -51,7 +51,7 @@ else:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
-    from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS
     SX = SU2
@@ -110,25 +110,30 @@ if MPI is not None:
 
 # prepare hamiltonian
 if pre_run or not no_pre_run:
-    nelec = int(dic["nelec"])
-    spin = int(dic["spin"])
-    isym = int(dic.get("irrep", 1))
+    nelec = [int(x) for x in dic["nelec"].split()]
+    spin = [int(x) for x in dic.get("spin", "0").split()]
+    isym = [int(x) for x in dic.get("irrep", "1").split()]
     fints = dic["orbitals"]
     if fints[-7:] == "FCIDUMP":
         fcidump = FCIDUMP()
         fcidump.read(fints)
-        fcidump.params["nelec"] = str(nelec)
-        fcidump.params["ms2"] = str(spin)
-        fcidump.params["isym"] = str(isym)
+        fcidump.params["nelec"] = str(nelec[0])
+        fcidump.params["ms2"] = str(spin[0])
+        fcidump.params["isym"] = str(isym[0])
     else:
-        fcidump = read_integral(fints, nelec, spin, isym=isym)
+        fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
     swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
 
     _print("read integral finished", time.perf_counter() - tx)
 
     vacuum = SX(0)
     target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
-    targets = VectorSL([target])
+    targets = []
+    for inelec in nelec:
+        for ispin in spin:
+            for iisym in isym:
+                targets.append(SX(inelec, ispin, swap_pg(iisym)))
+    targets = VectorSL(targets)
     n_sites = fcidump.n_sites
     orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
     hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
@@ -166,16 +171,24 @@ else:
 dot = 1 if "onedot" in dic else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
+soc = "soc" in dic
 
 # prepare mps
 if "fullrestart" in dic:
     _print("full restart")
-    mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
+    mps_info = MPSInfo(0) if nroots == 1 and len(targets) == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = mps_tags[0]
     mps_info.load_mutable()
-    mps = MPS(mps_info) if nroots == 1 else MultiMPS(mps_info)
+    mps = MPS(mps_info) if nroots == 1 and len(targets) == 1 else MultiMPS(mps_info)
     mps.load_data()
+    if nroots != 1:
+        mps.nroots = nroots
+        mps.wfns = mps.wfns[:nroots]
+        mps.weights = mps.weights[:nroots]
+    weights = dic.get("weights", None)
+    if weights is not None:
+        mps.weights = VectorDouble([float(x) for x in weights.split()])
     mps.load_mutable()
     forward = mps.center == 0
     if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
@@ -185,9 +198,10 @@ if "fullrestart" in dic:
         mps.center -= 1
         forward = False
 elif pre_run or not no_pre_run:
-    if nroots == 1:
+    if nroots == 1 and len(targets) == 1:
         mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
     else:
+        print('TARGETS = ', list(targets), flush=True)
         mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
     mps_info.tag = mps_tags[0]
     if occs is None:
@@ -199,7 +213,7 @@ elif pre_run or not no_pre_run:
     if conn_centers is not None:
         assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
-    elif nroots != 1:
+    elif nroots != 1 or len(targets) != 1:
         mps = MultiMPS(n_sites, 0, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
@@ -210,7 +224,7 @@ elif pre_run or not no_pre_run:
     mps.random_canonicalize()
     forward = mps.center == 0
 else:
-    mps_info = MPSInfo(0) if nroots == 1 else MultiMPSInfo(0)
+    mps_info = MPSInfo(0) if nroots == 1 and len(targets) == 1 else MultiMPSInfo(0)
     mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = mps_tags[0]
     if occs is None:
@@ -220,7 +234,7 @@ else:
     if conn_centers is not None:
         assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
-    elif nroots != 1:
+    elif nroots != 1 or len(targets) != 1:
         mps = MultiMPS(n_sites, 0, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
@@ -242,6 +256,8 @@ if conn_centers is not None and "fullrestart" in dic:
         mps.canonical_form = mps.canonical_form[:-1] + 'S'
         mps.center = mps.n_sites - 1
 
+has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic
+
 # prepare mpo
 if pre_run or not no_pre_run:
     # mpo for dmrg
@@ -258,9 +274,11 @@ if pre_run or not no_pre_run:
 
     # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
-    pmpo = PDM1MPOQC(hamil)
+    pmpo = PDM1MPOQC(hamil, 1 if soc else 0)
     _print("simpl 1pdm mpo", time.perf_counter() - tx)
-    pmpo = SimplifiedMPO(pmpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+    pmpo = SimplifiedMPO(pmpo,
+        NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
+        True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl 1pdm mpo finished", time.perf_counter() - tx)
 
     _print('1PDM MPO BOND DIMS = ', ''.join(["%6d" % (x.m * x.n) for x in pmpo.right_operator_names]))
@@ -577,6 +595,7 @@ if not pre_run:
             mps_info.save_data(scratch + '/mps_info.bin')
     
     # Transition ONEPDM
+    # note that there can be a undetermined +1/-1 factor due to the relative phase in two MPSs
     if "restart_tran_onepdm" in dic or "tran_onepdm" in dic:
         
         assert nroots != 1
