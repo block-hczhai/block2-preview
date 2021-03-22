@@ -921,7 +921,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("get_wfn_filename", &MultiMPS<S>::get_wfn_filename)
         .def("save_wavefunction", &MultiMPS<S>::save_wavefunction)
         .def("load_wavefunction", &MultiMPS<S>::load_wavefunction)
-        .def("unload_wavefunction", &MultiMPS<S>::unload_wavefunction);
+        .def("unload_wavefunction", &MultiMPS<S>::unload_wavefunction)
+        .def("extract", &MultiMPS<S>::extract);
 
     py::class_<ParallelMPS<S>, shared_ptr<ParallelMPS<S>>, MPS<S>>(
         m, "ParallelMPS")

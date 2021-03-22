@@ -62,7 +62,7 @@ For unit tests, `googletest` is required.
 
     mkdir build
     cd build
-    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DTBB=ON
+    cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON
     make -j 10
 
 This will build the python extension (using 10 CPU cores) (serial code).
@@ -106,7 +106,7 @@ This can improve multi-threading performance.
 
 ### openMP
 
-If gnu openMP library `libiomp5` is not available, one can use intel openMP library.
+If gnu openMP library `libgomp` is not available, one can use intel openMP library.
 
 The following will switch to intel openMP library (incompatible with `-fopenmp`):
 

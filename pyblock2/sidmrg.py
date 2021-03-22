@@ -1,0 +1,741 @@
+
+#  block2: Efficient MPO implementation of quantum chemistry DMRG
+#  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+#
+
+"""
+DMRG with state interaction spin-orbit (SISO) coupling
+using pyscf and block2.
+
+Author: Huanchen Zhai, Mar 22, 2021
+"""
+
+from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
+from block2 import init_memory, release_memory, set_mkl_num_threads, SiteIndex
+from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
+from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
+import time
+import numpy as np
+
+# Set spin-adapted or non-spin-adapted here
+SpinLabel = SU2
+# SpinLabel = SZ
+
+if SpinLabel == SU2:
+    from block2 import VectorSU2 as VectorSL
+    from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
+    from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
+    from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
+    from block2.su2 import MultiMPSInfo, MultiMPS, ParallelMPO, ParallelRuleQC, ParallelRuleNPDMQC
+else:
+    from block2 import VectorSZ as VectorSL
+    from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
+    from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
+    from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
+    from block2.sz import MultiMPSInfo, MultiMPS, ParallelMPO, ParallelRuleQC, ParallelRuleNPDMQC
+
+try:
+    if SpinLabel == SU2:
+        from block2.su2 import MPICommunicator
+    else:
+        from block2.sz import MPICommunicator
+    MPI = MPICommunicator()
+    from mpi4py import MPI as PYMPI
+    comm = PYMPI.COMM_WORLD
+
+    def _print(*args, **kwargs):
+        if MPI.rank == 0:
+            print(*args, **kwargs)
+except ImportError:
+    MPI = None
+    _print = print
+
+
+class SIDMRGError(Exception):
+    pass
+
+
+class SIDMRG:
+    """
+    Multi-State DMRG for molecules.
+    """
+
+    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2,
+                 print_statistics=False, mpi=None, dctr=True):
+        """
+        Memory is in bytes.
+        verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
+        """
+
+        if mpi is not None:
+            memory = memory / mpi.size
+            if mpi.rank != 0:
+                verbose = 0
+                print_statistics = False
+
+        Random.rand_seed(0)
+        init_memory(isize=int(memory * 0.1),
+                    dsize=int(memory * 0.9), save_dir=scratch)
+        Global.threading = Threading(
+            ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
+        Global.threading.seq_type = SeqTypes.Simple
+        Global.frame.load_buffering = False
+        Global.frame.save_buffering = False
+        Global.frame.use_main_stack = False
+        self.fcidump = None
+        self.hamil = None
+        self.verbose = verbose
+        self.scratch = scratch
+        self.mpo_orig = None
+        self.print_statistics = print_statistics
+        self.mpi = mpi
+        self.dctr = dctr
+
+        if self.verbose >= 2:
+            print(Global.frame)
+            print(Global.threading)
+
+        if mpi is not None:
+            self.prule = ParallelRuleQC(mpi)
+            self.pdmrule = ParallelRuleNPDMQC(mpi)
+        else:
+            self.prule = None
+            self.pdmrule = None
+
+    def init_hamiltonian_fcidump(self, pg, filename):
+        """Read integrals from FCIDUMP file.
+        pg : point group, pg = 'c1', 'c2v' or 'd2h'
+        filename : FCIDUMP filename
+        """
+        if self.hamil is not None:
+            self.hamil.deallocate()
+        if self.fcidump is not None:
+            self.fcidump.deallocate()
+        if self.mpo_orig is not None:
+            self.mpo_orig.deallocate()
+        self.fcidump = FCIDUMP()
+        self.fcidump.read(filename)
+        swap_pg = getattr(PointGroup, "swap_" + pg)
+        self.orb_sym = VectorUInt8(map(swap_pg, self.fcidump.orb_sym))
+
+        vacuum = SpinLabel(0)
+        self.target = SpinLabel(self.fcidump.n_elec, self.fcidump.twos,
+                                swap_pg(self.fcidump.isym))
+        self.n_sites = self.fcidump.n_sites
+
+        self.hamil = HamiltonianQC(
+            vacuum, self.n_sites, self.orb_sym, self.fcidump)
+        assert pg in ["d2h", "c2v", "c1"]
+
+    def init_hamiltonian(self, pg, n_sites, n_elec, twos, isym, orb_sym,
+                         e_core, h1e, g2e, tol=1E-13, save_fcidump=None):
+        """Initialize integrals using h1e, g2e, etc."""
+        if self.hamil is not None:
+            self.hamil.deallocate()
+        if self.fcidump is not None:
+            self.fcidump.deallocate()
+        if self.mpo_orig is not None:
+            self.mpo_orig.deallocate()
+        self.fcidump = FCIDUMP()
+        if not isinstance(h1e, tuple):
+            mh1e = np.zeros((n_sites * (n_sites + 1) // 2))
+            k = 0
+            for i in range(0, n_sites):
+                for j in range(0, i + 1):
+                    assert abs(h1e[i, j] - h1e[j, i]) < tol
+                    mh1e[k] = h1e[i, j]
+                    k += 1
+            mg2e = g2e.flatten()
+            mh1e[np.abs(mh1e) < tol] = 0.0
+            mg2e[np.abs(mg2e) < tol] = 0.0
+            self.fcidump.initialize_su2(
+                n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
+        else:
+            assert SpinLabel == SZ
+            assert isinstance(h1e, tuple) and len(h1e) == 2
+            assert isinstance(g2e, tuple) and len(g2e) == 3
+            mh1e_a = np.zeros((n_sites * (n_sites + 1) // 2))
+            mh1e_b = np.zeros((n_sites * (n_sites + 1) // 2))
+            mh1e = (mh1e_a, mh1e_b)
+            for xmh1e, xh1e in zip(mh1e, h1e):
+                k = 0
+                for i in range(0, n_sites):
+                    for j in range(0, i + 1):
+                        assert abs(xh1e[i, j] - xh1e[j, i]) < tol
+                        xmh1e[k] = xh1e[i, j]
+                        k += 1
+                xmh1e[np.abs(xmh1e) < tol] = 0.0
+            mg2e = tuple(xg2e.flatten() for xg2e in g2e)
+            for xmg2e in mg2e:
+                xmg2e[np.abs(xmg2e) < tol] = 0.0
+            self.fcidump.initialize_sz(
+                n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
+        swap_pg = getattr(PointGroup, "swap_" + pg)
+        self.orb_sym = VectorUInt8(map(swap_pg, orb_sym))
+
+        vacuum = SpinLabel(0)
+        self.target = SpinLabel(n_elec, twos, swap_pg(isym))
+        self.n_sites = n_sites
+
+        self.hamil = HamiltonianQC(
+            vacuum, self.n_sites, self.orb_sym, self.fcidump)
+
+        if save_fcidump is not None:
+            self.fcidump.orb_sym = VectorUInt8(orb_sym)
+            self.fcidump.write(save_fcidump)
+        assert pg in ["d2h", "c2v", "c1"]
+
+    @staticmethod
+    def fmt_size(i, suffix='B'):
+        if i < 1000:
+            return "%d %s" % (i, suffix)
+        else:
+            a = 1024
+            for pf in "KMGTPEZY":
+                p = 2
+                for k in [10, 100, 1000]:
+                    if i < k * a:
+                        return "%%.%df %%s%%s" % p % (i / a, pf, suffix)
+                    p -= 1
+                a *= 1024
+        return "??? " + suffix
+
+    def dmrg(self, target, nroots, bond_dims, noises, dav_thrds, weights=None,
+        tag='KET', occs=None, bias=1.0, n_steps=30, conv_tol=1E-7, cutoff=1E-14):
+        """State-averaged multi-state DMRG.
+
+        Args:
+            target : quantum number of wavefunction
+            nroots : number of states to solve
+            weights : list(float) weight of each root
+            tag : str; MPS tag
+            bond_dims : list(int), MPS bond dims for each sweep
+            noises : list(double), noise for each sweep
+            dav_thrds : list(double), Davidson convergence for each sweep
+            occs : list(double) or None
+                if occs = None, use FCI init MPS
+                if occs = list(double), use occ init MPS
+            bias : double, effective when occs is not None
+                bias = 0.0: HF occ (e.g. occs => 2 2 2 ... 0 0 0)
+                bias = 1.0: no bias (e.g. occs => 1.7 1.8 ... 0.1 0.05)
+                bias = +inf: fully random (e.g. occs => 1 1 1 ... 1 1 1)
+                
+                increase bias if you want an init MPS with larger bond dim
+
+                0 <= occ <= 2
+                biased occ = 1 + (occ - 1) ** bias    (if occ > 1)
+                           = 1 - (1 - occ) ** bias    (if occ < 1)
+            n_steps : int, maximal number of sweeps
+            conv_tol : double, energy convergence
+            cutoff : cutoff of density matrix eigenvalues (default is the same as StackBlock)
+        """
+
+        if self.verbose >= 2:
+            print('>>> START State-Averaged DMRG <<<')
+        t = time.perf_counter()
+
+        # MPSInfo
+        targets = VectorSL([target])
+        print('TARGETS = ', list(targets), flush=True)
+        mps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum, targets, self.hamil.basis)
+        mps_info.tag = tag
+        if occs is None:
+            if self.verbose >= 2:
+                print("Using FCI INIT MPS")
+            mps_info.set_bond_dimension(bond_dims[0])
+        else:
+            if self.verbose >= 2:
+                print("Using occupation number INIT MPS")
+            mps_info.set_bond_dimension_using_occ(
+                bond_dims[0], VectorDouble(occs), bias=bias)
+        mps = MultiMPS(self.n_sites, 0, 2, nroots)
+        if weights is not None:
+            mps.weights = VectorDouble([float(x) for x in weights.split()])
+        mps.initialize(mps_info)
+        mps.random_canonicalize()
+
+        mps.save_mutable()
+        mps.deallocate()
+        mps_info.save_mutable()
+        mps_info.deallocate_mutable()
+
+        # MPO
+        tx = time.perf_counter()
+        mpo = MPOQC(self.hamil, QCTypes.Conventional)
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        self.mpo_orig = mpo
+
+        if self.mpi is not None:
+            mpo = ParallelMPO(mpo, self.prule)
+
+        if self.verbose >= 3:
+            print('MPO time = ', time.perf_counter() - tx)
+
+        if self.print_statistics:
+            print('MPO BOND DIMS = ', ''.join(
+                ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+            max_d = max(bond_dims)
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
+                                self.target, self.hamil.basis)
+            mps_info2.set_bond_dimension(max_d)
+            _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
+            print("INIT MPS BOND DIMS = ", ''.join(
+                ["%6d" % x.n_states_total for x in mps_info.left_dims]))
+            print("EST MAX MPS BOND DIMS = ", ''.join(
+                ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
+            print("EST PEAK MEM = ", SIDMRG.fmt_size(
+                mem2), " SCRATCH = ", SIDMRG.fmt_size(disk))
+            mps_info2.deallocate_mutable()
+            mps_info2.deallocate()
+
+        # DMRG
+        me = MovingEnvironment(mpo, mps, mps, "DMRG")
+        if self.dctr:
+            me.delayed_contraction = OpNamesSet.normal_ops()
+        tx = time.perf_counter()
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
+        me.save_partition_info = True
+        me.init_environments(self.verbose >= 4)
+        if self.verbose >= 3:
+            print('DMRG INIT time = ', time.perf_counter() - tx)
+        dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+        dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+        dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
+        dmrg.decomp_type = DecompositionTypes.DensityMatrix
+        dmrg.iprint = max(self.verbose - 1, 0)
+        dmrg.cutoff = cutoff
+        dmrg.solve(n_steps, mps.center == 0, conv_tol)
+
+        self.energies = dmrg.energies[-1]
+        self.bond_dim = bond_dims[-1]
+
+        mps.save_data()
+        mps_info.save_data(self.scratch + "/MPS_INFO.%s" % tag)
+        mps_info.deallocate()
+
+        if self.print_statistics:
+            dmain, dseco, imain, iseco = Global.frame.peak_used_memory
+            print("PEAK MEM USAGE:",
+                  "DMEM = ", SIDMRG.fmt_size(dmain + dseco),
+                  "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                  "IMEM = ", SIDMRG.fmt_size(imain + iseco),
+                  "(%.0f%%)" % (imain * 100 / (imain + iseco)))
+
+        if self.verbose >= 1:
+            print(("=== Energy = " + ("%15.8f") * len(self.energies)) % tuple(self.energies))
+
+        if self.verbose >= 2:
+            print('>>> COMPLETE DMRG | Time = %.2f <<<' %
+                  (time.perf_counter() - t))
+
+        return self.energies
+    
+    def prepare_mps(self, tags, iroots=None):
+        """Separate state-averaged MPS for later treatment.
+
+        Args:
+            tags : list(str)
+                MPS tags to include.
+            iroots : list(list(int)) or None
+                For each tag, which root to include.
+                If None, all roots are included.
+        """
+        if MPI is not None:
+            MPI.barrier()
+
+        impo = IdentityMPO(self.hamil)
+        impo = SimplifiedMPO(impo, NoTransposeRule(RuleQC()),
+            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        if self.mpi is not None:
+            impo = ParallelMPO(impo, self.prule)
+
+        mpss = []
+        assert iroots is None or len(iroots) == len(tags)
+        for it, tag in enumerate(tags):
+            mps_info = MultiMPSInfo(0)
+            mps_info.load_data(scratch + "/MPS_INFO.%s" % tag)
+            mps = MultiMPS(mps_info)
+            mps.load_data()
+            if iroots is None:
+                troots = range(mps.nroots)
+            else:
+                troots = iroots[it]
+            for ir in troots:
+                smps = mps.extract(ir, mps_info.tag + "-%d" % ir)
+                if smps.center != 0:
+                    me = MovingEnvironment(impo, smps, smps, "EX")
+                    me.delayed_contraction = OpNamesSet.normal_ops()
+                    me.cached_contraction = True
+                    me.save_partition_info = True
+                    me.init_environments(0)
+                    expect = Expect(me, smps.info.bond_dim + 100, smps.info.bond_dim + 100)
+                    expect.iprint = 0
+                    expect.solve(True, False)
+                    smps.save_data()
+                mpss.append(smps)
+        
+        impo.deallocate()
+        return mpss
+    
+    def energy_expectation(self, mpss):
+        """Energy expectation on MPS."""
+
+        if MPI is not None:
+            MPI.barrier()
+        
+        # MPO
+        mpo = MPOQC(self.hamil, QCTypes.Conventional)
+        mpo = SimplifiedMPO(mpo, RuleQC(), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        if self.mpi is not None:
+            mpo = ParallelMPO(mpo, self.prule)
+    
+        eners = []
+        for mps in mpss:
+            mps.load_data()
+            me = MovingEnvironment(mpo, mps, mps, "EX")
+            me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = True
+            me.save_partition_info = True
+            me.init_environments(self.verbose >= 4)
+            expect = Expect(me, mps.info.bond_dim + 100, mps.info.bond_dim + 100)
+            expect.iprint = max(self.verbose - 1, 0)
+            ener = expect.solve(False, mps.center == 0)
+            mps.save_data()
+            print("TAG = %5s TARGET = %r EXPT = %15.8f" % (mps.info.tag, mps.info.targets, ener))
+            eners.append(ener)
+        
+        mpo.deallocate()
+        return eners
+
+    def trans_onepdm(self, mpss, soc=True, has_tran=True):
+        """
+        transition one-particle density matrix
+        """
+        if MPI is not None:
+            MPI.barrier()
+
+        # MPO
+        pmpo = PDM1MPOQC(self.hamil, 1 if soc else 0)
+        pmpo = SimplifiedMPO(pmpo,
+            NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
+            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        if self.mpi is not None:
+            pmpo = ParallelMPO(pmpo, self.pdmrule)
+
+        pdms = np.zeros((len(mpss), len(mpss)), dtype=object)
+        for sbra, bmps_orig in enumerate(mpss):
+            for sket, kmps_orig in enumerate(mpss):
+                bmps = bmps_orig.extract(0, 'TMP-BRA')
+                kmps = kmps_orig.extract(0, 'TMP-KET')
+                assert bmps.center == 0 and kmps.center == 0
+                bmps.load_data()
+                kmps.load_data()
+                me = MovingEnvironment(pmpo, bmps, kmps, "EX")
+                me.delayed_contraction = OpNamesSet.normal_ops()
+                me.cached_contraction = True
+                me.save_partition_info = True
+                me.init_environments(self.verbose >= 4)
+                expect = Expect(me, bmps.info.bond_dim + 100, kmps.info.bond_dim + 100)
+                expect.iprint = max(self.verbose - 1, 0)
+                expect.solve(True, kmps.center == 0)
+                if SpinLabel == SU2:
+                    dmr = expect.get_1pdm_spatial(self.n_sites)
+                    dm = np.array(dmr).copy()
+                else:
+                    dmr = expect.get_1pdm(self.n_sites)
+                    dm = np.array(dmr).copy()
+                    dm = dm.reshape((self.n_sites, 2,
+                                    self.n_sites, 2))
+                    dm = np.transpose(dm, (0, 2, 1, 3))
+                dmr.deallocate()
+                print("IBRA = %2d (%5s - %10r) IKET = %2d (%5s - %10r) TRACE = %15.8f" % (sbra,
+                    bmps_orig.info.tag, bmps.info.targets[0], sket, kmps_orig.info.tag,
+                    kmps.info.targets[0], np.diag(dm).sum()))
+                pdms[sbra, sket] = dm
+
+        pmpo.deallocate()
+        return pdms
+    
+    def onepdm(self, mpss, soc=False, has_tran=False):
+        """
+        one-particle density matrix
+        pdm[i, j] -> <AD_{i,alpha} A_{j,alpha}> + <AD_{i,beta} A_{j,beta}>
+        """
+
+        if MPI is not None:
+            MPI.barrier()
+
+        # MPO
+        pmpo = PDM1MPOQC(self.hamil, 1 if soc else 0)
+        pmpo = SimplifiedMPO(pmpo,
+            NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
+            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        if self.mpi is not None:
+            pmpo = ParallelMPO(pmpo, self.pdmrule)
+
+        pdms = []
+        for mps_orig in mpss:
+            mps = mps_orig.extract(0, 'TMP-KET')
+            assert mps.center == 0
+            mps.load_data()
+            me = MovingEnvironment(pmpo, mps, mps, "EX")
+            me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = True
+            me.save_partition_info = True
+            me.init_environments(self.verbose >= 4)
+            expect = Expect(me, mps.info.bond_dim + 100, mps.info.bond_dim + 100)
+            expect.iprint = max(self.verbose - 1, 0)
+            expect.solve(True, mps.center == 0)
+            if SpinLabel == SU2:
+                dmr = expect.get_1pdm_spatial(self.n_sites)
+                dm = np.array(dmr).copy()
+            else:
+                dmr = expect.get_1pdm(self.n_sites)
+                dm = np.array(dmr).copy()
+                dm = dm.reshape((self.n_sites, 2,
+                                self.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+            dmr.deallocate()
+            print("TAG = %5s TARGET = %r TRACE = %15.8f" % (mps.info.tag,
+                mps.info.targets, np.diag(dm).sum()))
+            pdms.append(dm / np.sqrt(2))
+        
+        pmpo.deallocate()
+        return pdms
+
+    def __del__(self):
+        if self.hamil is not None:
+            self.hamil.deallocate()
+        if self.fcidump is not None:
+            self.fcidump.deallocate()
+        if self.mpo_orig is not None:
+            self.mpo_orig.deallocate()
+        release_memory()
+
+# hso (complex, pure imag) in unit cm-1
+def compute_hso(mol, mo_coeff, dm0, qed_fac=1):
+    from pyscf.data import nist
+    alpha2 = nist.ALPHA ** 2
+    au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
+    hso1e = mol.intor_asymmetric('int1e_pnucxp', 3)
+    hso1e = np.einsum('rij,ip,jq->rpq', hso1e, mo_coeff, mo_coeff)
+    hso2e = mol.intor('int2e_p1vxp1', 3).reshape(3, mol.nao, mol.nao, mol.nao, mol.nao)
+    hso2e = np.einsum('yijkl,im,jn,kp,lq->ymnpq', hso2e, mo_coeff, mo_coeff, mo_coeff, mo_coeff)
+    vj = np.einsum('yijkl,lk->yij', hso2e, dm0)
+    vk = np.einsum('yijkl,jk->yil', hso2e, dm0)
+    vk += np.einsum('yijkl,li->ykj', hso2e, dm0)
+    hso2e = vj - vk * 1.5
+    hso = qed_fac * (alpha2 / 4) * (hso1e + hso2e)
+    return hso * (au2cm * 1j)
+
+# separate T^1 to T^1_(-1,0,1)
+def spin_proj(pdm, tjo, tjb, tjk):
+    nmo = pdm.shape[0]
+    ppdm = np.zeros((tjb + 1, tjk + 1, tjo + 1, nmo, nmo))
+    cg = CG(200)
+    cg.initialize()
+    for ibra in range(tjb + 1):
+        for iket in range(tjk + 1):
+            for iop in range(tjo + 1):
+                tmb = -tjb + 2 * ibra
+                tmk = -tjk + 2 * iket
+                tmo = -tjo + 2 * iop
+                factor = (-1) ** ((tjb - tmb) // 2) * \
+                    cg.wigner_3j(tjb, tjo, tjk, -tmb, tmo, tmk)
+                if factor != 0:
+                    ppdm[ibra, iket, iop] = pdm * factor
+    return ppdm
+
+# from T^1_(-1,0,1) to Tx, Ty, Tz
+def xyz_proj(ppdm):
+    xpdm = np.zeros(ppdm.shape, dtype=complex)
+    xpdm[:, :, 0] = (0.5 + 0j) * (ppdm[:, :, 0] - ppdm[:, :, 2])
+    xpdm[:, :, 1] = (0.5j + 0) * (ppdm[:, :, 0] + ppdm[:, :, 2])
+    xpdm[:, :, 2] = (np.sqrt(0.5) + 0j) * ppdm[:, :, 1]
+    return xpdm
+
+if __name__ == "__main__":
+
+    # parameters
+    n_threads = 4
+    hf_type = "RHF"  # RHF or UHF
+    mpg = 'c2v'  # point group: d2h or c1
+    scratch = './tmp'
+
+    memory = 1E9  # in bytes
+    verbose = 1
+    do_ccsd = False # True: use ccsd init MPS; False: use random init MPS
+    bias = 10
+
+    # if n_sweeps is larger than len(bond_dims), the last value will be repeated
+    bond_dims = [250, 250, 250, 500, 500, 1000]
+    # unit : norm(wfn) ** 2 (same as StackBlock)
+    noises = [1E-6, 1E-7, 1E-8, 1E-9, 1E-9, 0]
+    # unit : norm(wfn) ** 2 (same as StackBlock)
+    dav_thrds = [1E-6, 1E-6, 1E-7, 1E-7, 1E-8, 1E-8, 1E-10]
+    n_sweeps = 30
+    conv_tol = 1E-14
+
+    import os
+    if MPI is None or MPI.rank == 0:
+        if not os.path.isdir(scratch):
+            os.makedirs(scratch)
+    if MPI is not None:
+        MPI.barrier()
+    os.environ['TMPDIR'] = scratch
+
+    from pyscf import gto, scf, symm, ao2mo, cc
+
+    mol = gto.M(atom="""
+        O  0.000000  0.000000  0.000000
+        H  0.758602  0.000000  0.504284
+        H  0.758602  0.000000  -0.504284
+    """, basis='sto3g', verbose=0, symmetry=mpg)
+    pg = mol.symmetry.lower()
+
+    if hf_type == "RHF":
+        mf = scf.RHF(mol)
+    elif hf_type == "UHF":
+        assert SpinLabel == SZ
+        mf = scf.UHF(mol)
+
+    if MPI is None or MPI.rank == 0:
+        ener = mf.kernel()
+    else:
+        ener = 0
+        mf.mo_coeff = None
+
+    if MPI is not None:
+        ener = comm.bcast(ener, root=0)
+        mf.mo_coeff = comm.bcast(mf.mo_coeff, root=0)
+
+    _print("SCF Energy = %20.15f" % ener)
+    _print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
+
+    if pg == 'd2h':
+        fcidump_sym = ["Ag", "B3u", "B2u", "B1g", "B1u", "B2g", "B3g", "Au"]
+    elif pg == 'c2v':
+        fcidump_sym = ['A1', 'B1', 'B2', 'A2']
+    elif pg == 'c1':
+        fcidump_sym = ["A"]
+    else:
+        raise SIDMRGError("Point group %d not supported yet!" % pg)
+
+    mo_coeff = mf.mo_coeff
+
+    if hf_type == "RHF":
+
+        n_mo = mo_coeff.shape[1]
+
+        orb_sym_str = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff)
+        orb_sym = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str])
+
+        h1e = mo_coeff.T @ mf.get_hcore() @ mo_coeff
+        g2e = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff), n_mo)
+        ecore = mol.energy_nuc()
+        na = nb = mol.nelectron // 2
+
+    else:
+
+        mo_coeff_a, mo_coeff_b = mo_coeff[0], mo_coeff[1]
+        n_mo = mo_coeff_b.shape[1]
+
+        orb_sym_str_a = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
+        orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
+
+        orb_sym = orb_sym_a
+
+        h1ea = mo_coeff_a.T @ mf.get_hcore() @ mo_coeff_a
+        h1eb = mo_coeff_b.T @ mf.get_hcore() @ mo_coeff_b
+        g2eaa = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_a), n_mo)
+        g2ebb = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_b), n_mo)
+        g2eab = ao2mo.kernel(
+            mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
+        h1e = (h1ea, h1eb)
+        g2e = (g2eaa, g2ebb, g2eab)
+        ecore = mol.energy_nuc()
+        na, nb = mol.nelec
+    
+    if do_ccsd:
+        if MPI is None or MPI.rank == 0:
+            mcc = cc.CCSD(mf)
+            mcc.kernel()
+            dmmo = mcc.make_rdm1()
+            if hf_type == "RHF":
+                occs = np.diag(dmmo)
+            else:
+                occs = np.diag(dmmo[0]) + np.diag(dmmo[1])
+        else:
+            occs = None
+        if MPI is not None:
+            occs = comm.bcast(occs, root=0)
+        _print('OCCS = ', occs)
+    else:
+        occs = None
+
+    dmrg = SIDMRG(scratch=scratch, memory=memory,
+                  verbose=verbose, omp_threads=n_threads, mpi=MPI)
+    dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
+                          orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
+    dmrg_opts = dict(bond_dims=bond_dims, noises=noises, dav_thrds=dav_thrds, occs=occs, bias=bias,
+                     n_steps=n_sweeps, conv_tol=conv_tol)
+    # SpinLabel(nelec, 2S, point group irrep)
+    e1 = dmrg.dmrg(target=SpinLabel(na + nb, 0, 0), nroots=4, tag='MPS1', **dmrg_opts)
+    e2 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 1), nroots=4, tag='MPS2', **dmrg_opts)
+    e3 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 2), nroots=4, tag='MPS3', **dmrg_opts)
+    e4 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 3), nroots=4, tag='MPS4', **dmrg_opts)
+    eners = np.concatenate([e1, e2, e3, e4])
+    mpss = dmrg.prepare_mps(tags=['MPS1', 'MPS2', 'MPS3', 'MPS4'])
+    dmmo = dmrg.onepdm(mpss)
+    hso = compute_hso(mol, mo_coeff, dmmo[0])
+    print('HSO.SHAPE = ', hso.shape)
+    pdms = dmrg.trans_onepdm(mpss)
+    print('PDMS.SHAPE = ', pdms.shape)
+    for pp in pdms[0, 4]:
+        print("".join(["%8.4f" % x for x in pp]))
+    print('-' * 60)
+    for pp in pdms[4, 0]:
+        print("".join(["%8.4f" % x for x in pp]))
+    print('-' * 60)
+    quit()
+    thrds = 15.0
+    n_mstates = sum([mpss[ibra].info.targets[0].twos + 1 for ibra in range(len(pdms))])
+    hfull = np.zeros((n_mstates, n_mstates), dtype=complex)
+    imb = 0
+    for ibra in range(len(pdms)):
+        imk = 0
+        for iket in range(len(pdms)):
+            pdm = pdms[ibra, iket]
+            tjb = mpss[ibra].info.targets[0].twos
+            tjk = mpss[iket].info.targets[0].twos
+            xpdm = xyz_proj(spin_proj(pdm, 2, tjb, tjk))
+            for ibm in range(xpdm.shape[0]):
+                for ikm in range(xpdm.shape[1]):
+                    somat = np.einsum('rij,rij->', xpdm[ibm, ikm], hso)
+                    hfull[ibm + imb, ikm + imk] = somat
+                    if abs(somat) > thrds:
+                        print(('I1 = %4d (E1 = %15.8f) S1 = %4.1f MS1 = %4.1f '
+                            + 'I2 = %4d (E2 = %15.8f) S2 = %4.1f MS2 = %4.1f Re = %9.3f Im = %9.3f')
+                            % (ibra, eners[ibra], tjb / 2, -tjb / 2 + ibm, iket, eners[iket], tjk / 2,
+                            -tjk / 2 + ikm, somat.real, somat.imag))
+            imk += tjk + 1
+        imb += tjb + 1
+
+    del dmrg  # IMPORTANT!!! --> to release stack memory
