@@ -456,6 +456,12 @@ class SIDMRG:
                 if SpinLabel == SU2:
                     dmr = expect.get_1pdm_spatial(self.n_sites)
                     dm = np.array(dmr).copy()
+                    qsbra = bmps.info.targets[0].twos
+                    qsket = kmps.info.targets[0].twos
+                    if qsket >= qsbra:
+                        dm = dm.T # fix strange SU2 transpose symmetry
+                    else:
+                        dm *= -np.sqrt(3)
                 else:
                     dmr = expect.get_1pdm(self.n_sites)
                     dm = np.array(dmr).copy()
@@ -531,7 +537,6 @@ class SIDMRG:
 def compute_hso(mol, mo_coeff, dm0, qed_fac=1):
     from pyscf.data import nist
     alpha2 = nist.ALPHA ** 2
-    au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
     hso1e = mol.intor_asymmetric('int1e_pnucxp', 3)
     hso1e = np.einsum('rij,ip,jq->rpq', hso1e, mo_coeff, mo_coeff)
     hso2e = mol.intor('int2e_p1vxp1', 3).reshape(3, mol.nao, mol.nao, mol.nao, mol.nao)
@@ -541,7 +546,7 @@ def compute_hso(mol, mo_coeff, dm0, qed_fac=1):
     vk += np.einsum('yijkl,li->ykj', hso2e, dm0)
     hso2e = vj - vk * 1.5
     hso = qed_fac * (alpha2 / 4) * (hso1e + hso2e)
-    return hso * (au2cm * 1j)
+    return hso * 1j
 
 # separate T^1 to T^1_(-1,0,1)
 def spin_proj(pdm, tjo, tjb, tjk):
@@ -600,6 +605,7 @@ if __name__ == "__main__":
     os.environ['TMPDIR'] = scratch
 
     from pyscf import gto, scf, symm, ao2mo, cc
+    from pyscf.data import nist
 
     mol = gto.M(atom="""
         O  0.000000  0.000000  0.000000
@@ -693,7 +699,8 @@ if __name__ == "__main__":
     dmrg = SIDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=MPI)
     dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
-                          orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e)
+                          orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e,
+                          save_fcidump=scratch + "/FCIDUMP")
     dmrg_opts = dict(bond_dims=bond_dims, noises=noises, dav_thrds=dav_thrds, occs=occs, bias=bias,
                      n_steps=n_sweeps, conv_tol=conv_tol)
     # SpinLabel(nelec, 2S, point group irrep)
@@ -708,34 +715,44 @@ if __name__ == "__main__":
     print('HSO.SHAPE = ', hso.shape)
     pdms = dmrg.trans_onepdm(mpss)
     print('PDMS.SHAPE = ', pdms.shape)
-    for pp in pdms[0, 4]:
-        print("".join(["%8.4f" % x for x in pp]))
-    print('-' * 60)
-    for pp in pdms[4, 0]:
-        print("".join(["%8.4f" % x for x in pp]))
-    print('-' * 60)
-    quit()
-    thrds = 15.0
+    thrds = 15.0 # cm-1
+    au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
     n_mstates = sum([mpss[ibra].info.targets[0].twos + 1 for ibra in range(len(pdms))])
-    hfull = np.zeros((n_mstates, n_mstates), dtype=complex)
+    hsiso = np.zeros((n_mstates, n_mstates), dtype=complex)
+    hdiag = np.zeros((n_mstates, ), dtype=complex)
+    qls = []
     imb = 0
     for ibra in range(len(pdms)):
         imk = 0
+        tjb = mpss[ibra].info.targets[0].twos
         for iket in range(len(pdms)):
             pdm = pdms[ibra, iket]
-            tjb = mpss[ibra].info.targets[0].twos
             tjk = mpss[iket].info.targets[0].twos
             xpdm = xyz_proj(spin_proj(pdm, 2, tjb, tjk))
             for ibm in range(xpdm.shape[0]):
                 for ikm in range(xpdm.shape[1]):
                     somat = np.einsum('rij,rij->', xpdm[ibm, ikm], hso)
-                    hfull[ibm + imb, ikm + imk] = somat
+                    hsiso[ibm + imb, ikm + imk] = somat
+                    somat *= au2cm
                     if abs(somat) > thrds:
                         print(('I1 = %4d (E1 = %15.8f) S1 = %4.1f MS1 = %4.1f '
                             + 'I2 = %4d (E2 = %15.8f) S2 = %4.1f MS2 = %4.1f Re = %9.3f Im = %9.3f')
                             % (ibra, eners[ibra], tjb / 2, -tjb / 2 + ibm, iket, eners[iket], tjk / 2,
                             -tjk / 2 + ikm, somat.real, somat.imag))
             imk += tjk + 1
+        for ibm in range(tjb + 1):
+            qls.append((ibra, eners[ibra], tjb / 2, -tjb / 2 + ibm))
+        hdiag[imb:imb + tjb + 1] = eners[ibra]
         imb += tjb + 1
+    symm_err = np.linalg.norm(np.abs(hsiso - hsiso.T.conj()))
+    print('SYMM Error (should be small) = ', symm_err)
+    assert symm_err < 1E-10
+    hfull = hsiso + np.diag(hdiag)
+    heig, hvec = np.linalg.eigh(hfull)
+    print('Total energies including SO-coupling:\n')
+    for i in range(len(heig)):
+        iv = np.argmax(np.abs(hvec[:, i]))
+        print(' State %4d Total energy: %15.8f | largest |coeff| %10.6f from I = %4d (E = %15.8f) S = %4.1f MS = %4.1f'
+            % (i, heig[i], np.abs(hvec[iv, i]), qls[iv][0], qls[iv][1], qls[iv][2], qls[iv][3]))
 
     del dmrg  # IMPORTANT!!! --> to release stack memory
