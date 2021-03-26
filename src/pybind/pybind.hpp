@@ -1840,6 +1840,12 @@ template <typename S> void bind_parallel(py::module &m) {
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
                       ParallelCommTypes>());
 
+    py::class_<ParallelRuleSiteQC<S>, shared_ptr<ParallelRuleSiteQC<S>>,
+               ParallelRule<S>>(m, "ParallelRuleSiteQC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
+
     py::class_<ParallelTensorFunctions<S>,
                shared_ptr<ParallelTensorFunctions<S>>, TensorFunctions<S>>(
         m, "ParallelTensorFunctions")

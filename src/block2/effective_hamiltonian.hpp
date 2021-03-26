@@ -393,13 +393,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         precompute();
         const function<void(const MatrixRef &, const MatrixRef &)> &f =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? (const function<void(const MatrixRef &, const MatrixRef &)>
-                       &)*tf
-                : [this](const MatrixRef &a, const MatrixRef &b) {
-                      return (*this)(a, b);
-                  };
+            [this](const MatrixRef &a, const MatrixRef &b) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b);
+                else
+                    return (*this)(a, b);
+            };
         auto op = [omega, eta, const_e, &f, &btmp,
                    &nmult](const MatrixRef &b, const MatrixRef &c) -> void {
             btmp.clear();
@@ -598,13 +598,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         assert(op->mat->data.size() > 0);
         precompute();
         const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? (const function<void(const MatrixRef &, const MatrixRef &,
-                                       double)> &)*tf
-                : [this](const MatrixRef &a, const MatrixRef &b, double scale) {
-                      return (*this)(a, b, 0, scale);
-                  };
+            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
         tf->opf->seq->cumulative_nflop = 0;
         f(kk, r1, beta);
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
@@ -661,13 +661,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         precompute();
         const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? (const function<void(const MatrixRef &, const MatrixRef &,
-                                       double)> &)*tf
-                : [this](const MatrixRef &a, const MatrixRef &b, double scale) {
-                      return (*this)(a, b, 0, scale);
-                  };
+            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
         // k1 ~ k3
         for (int i = 1; i < 4; i++) {
             MatrixFunctions::copy(r[0], v);
@@ -728,13 +728,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         precompute();
         const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? (const function<void(const MatrixRef &, const MatrixRef &,
-                                       double)> &)*tf
-                : [this](const MatrixRef &a, const MatrixRef &b, double scale) {
-                      return (*this)(a, b, 0, scale);
-                  };
+            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
         // k0 ~ k3
         for (int i = 0; i < 4; i++) {
             if (i == 0)

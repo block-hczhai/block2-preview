@@ -152,11 +152,12 @@ class GFDMRG:
 
         if mpi is not None:
             if SpinLabel == SU2:
-                from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC
+                from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelRuleSiteQC
             else:
-                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
+                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelRuleSiteQC
             self.prule = ParallelRuleQC(mpi)
             self.pdmrule = ParallelRuleNPDMQC(mpi)
+            self.siterule = ParallelRuleSiteQC(mpi)
         else:
             self.prule = None
             self.pdmrule = None

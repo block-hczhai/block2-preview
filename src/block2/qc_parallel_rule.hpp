@@ -139,4 +139,32 @@ template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     }
 };
 
+// Rule for parallel dispatcher for SiteMPO/LocalMPO
+template <typename S> struct ParallelRuleSiteQC : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    ParallelRuleSiteQC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                       ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRuleSiteQC<S>>(r->comm, r->comm_type);
+    }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (op->name) {
+        case OpNames::I:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
+        case OpNames::C:
+        case OpNames::D:
+        case OpNames::N:
+        case OpNames::NN:
+            return ParallelProperty(0, ParallelOpTypes::None);
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
 } // namespace block2
