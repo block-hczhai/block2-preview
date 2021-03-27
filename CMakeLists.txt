@@ -146,6 +146,13 @@ ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
 ELSE()
     SET(OMP_LIB GNU)
     FIND_LIBRARY(OMP_LIB_NAME NAMES gomp PATHS /usr/local/lib /usr/lib64)
+    IF (NOT OMP_LIB_NAME)
+        EXECUTE_PROCESS(
+            COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
+            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"    
+            OUTPUT_VARIABLE OMP_LIB_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
+        FIND_LIBRARY(OMP_LIB_NAME NAMES gomp PATHS ${OMP_LIB_HINT})
+    ENDIF()
     SET(MKL_OMP_LIB_NAME mkl_gnu_thread)
     SET(MKL_OMP_VALUE 1)
 ENDIF()
