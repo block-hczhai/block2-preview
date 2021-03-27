@@ -30,6 +30,7 @@ from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames,
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
 import time
 import numpy as np
+import copy
 
 # Set spin-adapted or non-spin-adapted here
 SpinLabel = SU2
@@ -457,11 +458,7 @@ class SIDMRG:
                     dmr = expect.get_1pdm_spatial(self.n_sites)
                     dm = np.array(dmr).copy()
                     qsbra = bmps.info.targets[0].twos
-                    qsket = kmps.info.targets[0].twos
-                    if qsket >= qsbra:
-                        dm = dm.T # fix strange SU2 transpose symmetry
-                    else:
-                        dm *= -np.sqrt(3)
+                    dm *= np.sqrt(qsbra + 1)
                 else:
                     dmr = expect.get_1pdm(self.n_sites)
                     dm = np.array(dmr).copy()
@@ -472,7 +469,7 @@ class SIDMRG:
                 print("IBRA = %2d (%5s - %10r) IKET = %2d (%5s - %10r) TRACE = %15.8f" % (sbra,
                     bmps_orig.info.tag, bmps.info.targets[0], sket, kmps_orig.info.tag,
                     kmps.info.targets[0], np.diag(dm).sum()))
-                pdms[sbra, sket] = dm
+                pdms[sbra, sket] = dm / np.sqrt(2)
 
         pmpo.deallocate()
         return pdms
@@ -519,7 +516,7 @@ class SIDMRG:
             dmr.deallocate()
             print("TAG = %5s TARGET = %r TRACE = %15.8f" % (mps.info.tag,
                 mps.info.targets, np.diag(dm).sum()))
-            pdms.append(dm / np.sqrt(2))
+            pdms.append(dm)
         
         pmpo.deallocate()
         return pdms
@@ -533,27 +530,43 @@ class SIDMRG:
             self.mpo_orig.deallocate()
         release_memory()
 
-# hso (complex, pure imag) in unit cm-1
-def compute_hso(mol, mo_coeff, dm0, qed_fac=1):
-    from pyscf.data import nist
-    alpha2 = nist.ALPHA ** 2
-    hso1e = mol.intor_asymmetric('int1e_pnucxp', 3)
-    hso1e = np.einsum('rij,ip,jq->rpq', hso1e, mo_coeff, mo_coeff)
+def get_jk(mol, dm0):
     hso2e = mol.intor('int2e_p1vxp1', 3).reshape(3, mol.nao, mol.nao, mol.nao, mol.nao)
-    hso2e = np.einsum('yijkl,im,jn,kp,lq->ymnpq', hso2e, mo_coeff, mo_coeff, mo_coeff, mo_coeff)
     vj = np.einsum('yijkl,lk->yij', hso2e, dm0)
     vk = np.einsum('yijkl,jk->yil', hso2e, dm0)
     vk += np.einsum('yijkl,li->ykj', hso2e, dm0)
+    return vj, vk
+
+def get_jk_amfi(mol, dm0):
+    '''Atomic-mean-field approximation'''
+    ao_loc = mol.ao_loc_nr()
+    nao = ao_loc[-1]
+    vj = np.zeros((3,nao,nao))
+    vk = np.zeros((3,nao,nao))
+    atom = copy.copy(mol)
+    aoslice = mol.aoslice_by_atom(ao_loc)
+    for ia in range(mol.natm):
+        b0, b1, p0, p1 = aoslice[ia]
+        atom._bas = mol._bas[b0:b1]
+        vj1, vk1 = get_jk(atom, dm0[p0:p1,p0:p1])
+        vj[:,p0:p1,p0:p1] = vj1
+        vk[:,p0:p1,p0:p1] = vk1
+    return vj, vk
+
+# hso (complex, pure imag) in unit cm-1
+def compute_hso_ao(mol, dm0, qed_fac=1, amfi=False):
+    from pyscf.data import nist
+    alpha2 = nist.ALPHA ** 2
+    hso1e = mol.intor_asymmetric('int1e_pnucxp', 3)
+    vj, vk = get_jk_amfi(mol, dm0) if amfi else get_jk(mol, dm0)
     hso2e = vj - vk * 1.5
     hso = qed_fac * (alpha2 / 4) * (hso1e + hso2e)
     return hso * 1j
 
 # separate T^1 to T^1_(-1,0,1)
-def spin_proj(pdm, tjo, tjb, tjk):
+def spin_proj(cg, pdm, tjo, tjb, tjk):
     nmo = pdm.shape[0]
     ppdm = np.zeros((tjb + 1, tjk + 1, tjo + 1, nmo, nmo))
-    cg = CG(200)
-    cg.initialize()
     for ibra in range(tjb + 1):
         for iket in range(tjk + 1):
             for iop in range(tjo + 1):
@@ -705,17 +718,27 @@ if __name__ == "__main__":
                      n_steps=n_sweeps, conv_tol=conv_tol)
     # SpinLabel(nelec, 2S, point group irrep)
     e1 = dmrg.dmrg(target=SpinLabel(na + nb, 0, 0), nroots=4, tag='MPS1', **dmrg_opts)
-    e2 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 1), nroots=4, tag='MPS2', **dmrg_opts)
-    e3 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 2), nroots=4, tag='MPS3', **dmrg_opts)
+    e2 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 2), nroots=4, tag='MPS2', **dmrg_opts)
+    e3 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 1), nroots=4, tag='MPS3', **dmrg_opts)
     e4 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 3), nroots=4, tag='MPS4', **dmrg_opts)
     eners = np.concatenate([e1, e2, e3, e4])
     mpss = dmrg.prepare_mps(tags=['MPS1', 'MPS2', 'MPS3', 'MPS4'])
-    dmmo = dmrg.onepdm(mpss)
-    hso = compute_hso(mol, mo_coeff, dmmo[0])
+    dmmo = dmrg.onepdm(mpss, )
+    mo_coeff_inv = np.linalg.inv(mo_coeff)
+    dm0ao = mo_coeff_inv.T @ dmmo[0] @ mo_coeff_inv
+    hsoao = compute_hso_ao(mol, dm0ao, amfi=True) * 2
+    if False:
+        v = 2.1281747964476273E-004j * 2
+        hsoao[:] = 0
+        hsoao[0, 4, 3] = hsoao[1, 2, 4] = hsoao[2, 3, 2] = v
+        hsoao[0, 3, 4] = hsoao[1, 4, 2] = hsoao[2, 2, 3] = -v
+    hso = np.einsum('rij,ip,jq->rpq', hsoao, mo_coeff, mo_coeff)
+    cg = CG(200)
+    cg.initialize()
     print('HSO.SHAPE = ', hso.shape)
     pdms = dmrg.trans_onepdm(mpss)
     print('PDMS.SHAPE = ', pdms.shape)
-    thrds = 15.0 # cm-1
+    thrds = 29.0 # cm-1
     au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
     n_mstates = sum([mpss[ibra].info.targets[0].twos + 1 for ibra in range(len(pdms))])
     hsiso = np.zeros((n_mstates, n_mstates), dtype=complex)
@@ -728,7 +751,7 @@ if __name__ == "__main__":
         for iket in range(len(pdms)):
             pdm = pdms[ibra, iket]
             tjk = mpss[iket].info.targets[0].twos
-            xpdm = xyz_proj(spin_proj(pdm, 2, tjb, tjk))
+            xpdm = xyz_proj(spin_proj(cg, pdm, 2, tjb, tjk))
             for ibm in range(xpdm.shape[0]):
                 for ikm in range(xpdm.shape[1]):
                     somat = np.einsum('rij,rij->', xpdm[ibm, ikm], hso)
@@ -751,8 +774,14 @@ if __name__ == "__main__":
     heig, hvec = np.linalg.eigh(hfull)
     print('Total energies including SO-coupling:\n')
     for i in range(len(heig)):
-        iv = np.argmax(np.abs(hvec[:, i]))
-        print(' State %4d Total energy: %15.8f | largest |coeff| %10.6f from I = %4d (E = %15.8f) S = %4.1f MS = %4.1f'
-            % (i, heig[i], np.abs(hvec[iv, i]), qls[iv][0], qls[iv][1], qls[iv][2], qls[iv][3]))
+        shvec = np.zeros(len(eners))
+        imb = 0
+        for ibra in range(len(eners)):
+            tjb = mpss[ibra].info.targets[0].twos
+            shvec[ibra] = np.linalg.norm(hvec[imb:imb + tjb + 1, i]) ** 2
+            imb += tjb + 1
+        iv = np.argmax(np.abs(shvec))
+        print(' State %4d Total energy: %15.8f | largest |coeff|**2 %10.6f from I = %4d E = %15.8f S = %4.1f'
+            % (i, heig[i], shvec[iv], iv, eners[iv], mpss[iv].info.targets[0].twos / 2))
 
     del dmrg  # IMPORTANT!!! --> to release stack memory
