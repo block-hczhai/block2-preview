@@ -458,6 +458,7 @@ class SIDMRG:
                     dmr = expect.get_1pdm_spatial(self.n_sites)
                     dm = np.array(dmr).copy()
                     qsbra = bmps.info.targets[0].twos
+                    # fix different Wigner–Eckart theorem convention
                     dm *= np.sqrt(qsbra + 1)
                 else:
                     dmr = expect.get_1pdm(self.n_sites)
@@ -717,10 +718,11 @@ if __name__ == "__main__":
     dmrg_opts = dict(bond_dims=bond_dims, noises=noises, dav_thrds=dav_thrds, occs=occs, bias=bias,
                      n_steps=n_sweeps, conv_tol=conv_tol)
     # SpinLabel(nelec, 2S, point group irrep)
-    e1 = dmrg.dmrg(target=SpinLabel(na + nb, 0, 0), nroots=4, tag='MPS1', **dmrg_opts)
-    e2 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 2), nroots=4, tag='MPS2', **dmrg_opts)
-    e3 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 1), nroots=4, tag='MPS3', **dmrg_opts)
-    e4 = dmrg.dmrg(target=SpinLabel(na + nb, 2, 3), nroots=4, tag='MPS4', **dmrg_opts)
+    charge = 0
+    e1 = dmrg.dmrg(target=SpinLabel(na + nb - charge, 0 + charge, 0), nroots=4, tag='MPS1', **dmrg_opts)
+    e2 = dmrg.dmrg(target=SpinLabel(na + nb - charge, 2 + charge, 2), nroots=4, tag='MPS2', **dmrg_opts)
+    e3 = dmrg.dmrg(target=SpinLabel(na + nb - charge, 2 + charge, 1), nroots=4, tag='MPS3', **dmrg_opts)
+    e4 = dmrg.dmrg(target=SpinLabel(na + nb - charge, 2 + charge, 3), nroots=4, tag='MPS4', **dmrg_opts)
     eners = np.concatenate([e1, e2, e3, e4])
     mpss = dmrg.prepare_mps(tags=['MPS1', 'MPS2', 'MPS3', 'MPS4'])
     dmmo = dmrg.onepdm(mpss, )
