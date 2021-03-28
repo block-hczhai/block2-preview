@@ -181,6 +181,13 @@ Test Green's-Function (GF)-DMRG (DDMRG++) (need `pyscf` module):
 
     python3 -m pyblock2.gfdmrg
 
+SI-DMRG
+-------
+
+Test State-Interaction (SI)-DMRG (need `pyscf` module):
+
+    python3 -m pyblock2.sidmrg
+
 Input File
 ----------
 
