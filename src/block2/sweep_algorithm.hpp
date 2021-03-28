@@ -762,6 +762,10 @@ template <typename S> struct DMRG {
                 old_wfns[0]->deallocate_infos();
             mket->save_data();
         } else {
+            if (pdm != nullptr) {
+                pdm->info->deallocate();
+                pdm->deallocate();
+            }
             mket->unload_tensor(i);
             if (forward) {
                 if (i != me->n_sites - 1) {
@@ -933,6 +937,10 @@ template <typename S> struct DMRG {
                 i, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
             mket->save_data();
         } else {
+            if (pdm != nullptr) {
+                pdm->info->deallocate();
+                pdm->deallocate();
+            }
             for (int k = mket->nroots - 1; k >= 0; k--)
                 old_wfns[k]->deallocate();
             old_wfns[0]->deallocate_infos();
