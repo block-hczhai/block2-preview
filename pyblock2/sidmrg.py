@@ -82,9 +82,6 @@ class SIDMRG:
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
         """
 
-        if mpi is not None:
-            memory = memory / mpi.size
-
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
                     dsize=int(memory * 0.9), save_dir=scratch)
