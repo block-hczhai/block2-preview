@@ -167,4 +167,27 @@ template <typename S> struct ParallelRuleSiteQC : ParallelRule<S> {
     }
 };
 
+// Rule for parallel dispatcher for IdentityMPO
+template <typename S> struct ParallelRuleIdentity : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    ParallelRuleIdentity(const shared_ptr<ParallelCommunicator<S>> &comm,
+                         ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRuleIdentity<S>>(r->comm, r->comm_type);
+    }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (op->name) {
+        case OpNames::I:
+            return ParallelProperty(0, ParallelOpTypes::None);
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
 } // namespace block2

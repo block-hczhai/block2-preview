@@ -21,7 +21,10 @@
 DDMRG++ for Green's Function.
 using pyscf and block2.
 
-Author: Huanchen Zhai, Nov 5, 2020
+Original version:
+     Huanchen Zhai, Nov 5, 2020
+Revised: support for mpi
+     Huanchen Zhai, Tianyu Zhu Mar 29, 2021
 """
 
 from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
@@ -33,19 +36,28 @@ import time
 import numpy as np
 
 # Set spin-adapted or non-spin-adapted here
-# SpinLabel = SU2
-SpinLabel = SZ
+SpinLabel = SU2
+#SpinLabel = SZ
 
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.su2 import VectorOpElement, LocalMPO
+    from block2.su2 import MPICommunicator
 else:
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.sz import VectorOpElement, LocalMPO
+    from block2.sz import MPICommunicator
+
+MPI = MPICommunicator()
+
+
+def _print(*args, **kwargs):
+    if MPI.rank == 0:
+        print(*args, **kwargs)
 
 
 class GFDMRGError(Exception):
@@ -106,7 +118,7 @@ def orbital_reorder(h1e, g2e, method='gaopt'):
         idx = OrbitalOrdering.fiedler(n_sites, kmat)
         midx = np.array(idx)
     else:
-        assert False
+        midx = np.array(range(n_sites))
     return midx
 
 
@@ -124,9 +136,6 @@ class GFDMRG:
 
         if mpi is not None:
             memory = memory / mpi.size
-            if mpi.rank != 0:
-                verbose = 0
-                print_statistics = False
 
         Random.rand_seed(0)
         init_memory(isize=int(memory * 0.1),
@@ -145,28 +154,39 @@ class GFDMRG:
         self.print_statistics = print_statistics
         self.mpi = mpi
         self.dctr = dctr
+        self.idx = None # reorder
+        self.ridx = None # inv reorder
 
         if self.verbose >= 2:
-            print(Global.frame)
-            print(Global.threading)
+            _print(Global.frame)
+            _print(Global.threading)
 
         if mpi is not None:
             if SpinLabel == SU2:
                 from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelRuleSiteQC
+                from block2.su2 import ParallelRuleSiteQC, ParallelRuleIdentity
             else:
-                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelRuleSiteQC
+                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
+                from block2.sz import ParallelRuleSiteQC, ParallelRuleIdentity
             self.prule = ParallelRuleQC(mpi)
             self.pdmrule = ParallelRuleNPDMQC(mpi)
             self.siterule = ParallelRuleSiteQC(mpi)
+            self.identrule = ParallelRuleIdentity(mpi)
         else:
             self.prule = None
             self.pdmrule = None
+            self.siterule = None
+            self.identrule = None
 
-    def init_hamiltonian_fcidump(self, pg, filename):
+    def init_hamiltonian_fcidump(self, pg, filename, idx=None):
         """Read integrals from FCIDUMP file."""
         assert self.fcidump is None
         self.fcidump = FCIDUMP()
         self.fcidump.read(filename)
+        if idx is not None:
+            self.fcidump.reorder(VectorUInt16(idx))
+            self.idx = idx
+            self.ridx = np.argsort(idx)
         self.orb_sym = VectorUInt8(
             map(PointGroup.swap_d2h, self.fcidump.orb_sym))
 
@@ -180,7 +200,8 @@ class GFDMRG:
         assert pg in ["d2h", "c1"]
 
     def init_hamiltonian(self, pg, n_sites, n_elec, twos, isym, orb_sym,
-                         e_core, h1e, g2e, tol=1E-13, save_fcidump=None):
+                         e_core, h1e, g2e, tol=1E-13, idx=None,
+                         save_fcidump=None):
         """Initialize integrals using h1e, g2e, etc."""
         assert self.fcidump is None
         self.fcidump = FCIDUMP()
@@ -217,7 +238,13 @@ class GFDMRG:
                 xmg2e[np.abs(xmg2e) < tol] = 0.0
             self.fcidump.initialize_sz(
                 n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
-        self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
+        self.fcidump.orb_sym = VectorUInt8(orb_sym)
+        if idx is not None:
+            self.fcidump.reorder(VectorUInt16(idx))
+            self.idx = idx
+            self.ridx = np.argsort(idx)
+        self.orb_sym = VectorUInt8(
+            map(PointGroup.swap_d2h, self.fcidump.orb_sym))
 
         vacuum = SpinLabel(0)
         self.target = SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))
@@ -250,8 +277,11 @@ class GFDMRG:
         """Ground-State DMRG."""
 
         if self.verbose >= 2:
-            print('>>> START GS-DMRG <<<')
+            _print('>>> START GS-DMRG <<<')
         t = time.perf_counter()
+
+        if self.mpi is not None:
+            self.mpi.barrier()
 
         # MultiMPSInfo
         mps_info = MPSInfo(self.n_sites, self.hamil.vacuum,
@@ -259,11 +289,13 @@ class GFDMRG:
         mps_info.tag = 'KET'
         if occs is None:
             if self.verbose >= 2:
-                print("Using FCI INIT MPS")
+                _print("Using FCI INIT MPS")
             mps_info.set_bond_dimension(bond_dims[0])
         else:
             if self.verbose >= 2:
-                print("Using occupation number INIT MPS")
+                _print("Using occupation number INIT MPS")
+            if self.idx is not None:
+                occs = self.fcidump.reorder(VectorDouble(occs), VectorUInt16(self.idx))
             mps_info.set_bond_dimension_using_occ(
                 bond_dims[0], VectorDouble(occs), bias=bias)
         mps = MPS(self.n_sites, 0, 2)
@@ -290,19 +322,19 @@ class GFDMRG:
             mpo = ParallelMPO(mpo, self.prule)
 
         if self.verbose >= 3:
-            print('MPO time = ', time.perf_counter() - tx)
+            _print('MPO time = ', time.perf_counter() - tx)
 
         if self.print_statistics:
-            print('GS MPO BOND DIMS = ', ''.join(
+            _print('GS MPO BOND DIMS = ', ''.join(
                 ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
             max_d = max(bond_dims)
             mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
                                 self.target, self.hamil.basis)
             mps_info2.set_bond_dimension(max_d)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            print("GS EST MAX MPS BOND DIMS = ", ''.join(
+            _print("GS EST MAX MPS BOND DIMS = ", ''.join(
                 ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            print("GS EST PEAK MEM = ", GFDMRG.fmt_size(
+            _print("GS EST PEAK MEM = ", GFDMRG.fmt_size(
                 mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
@@ -315,7 +347,7 @@ class GFDMRG:
         tx = time.perf_counter()
         me.init_environments(self.verbose >= 4)
         if self.verbose >= 3:
-            print('DMRG INIT time = ', time.perf_counter() - tx)
+            _print('DMRG INIT time = ', time.perf_counter() - tx)
         dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
         dmrg.davidson_soft_max_iter = 4000
         dmrg.noise_type = NoiseTypes.ReducedPerturbative
@@ -333,27 +365,30 @@ class GFDMRG:
 
         if self.print_statistics:
             dmain, dseco, imain, iseco = Global.frame.peak_used_memory
-            print("GS PEAK MEM USAGE:",
-                  "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
-                  "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-                  "IMEM = ", GFDMRG.fmt_size(imain + iseco),
-                  "(%.0f%%)" % (imain * 100 / (imain + iseco)))
+            _print("GS PEAK MEM USAGE:",
+                   "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                   "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                   "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                   "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         if self.verbose >= 1:
-            print("=== GS Energy = %20.15f" % self.gs_energy)
+            _print("=== GS Energy = %20.15f" % self.gs_energy)
 
         if self.verbose >= 2:
-            print('>>> COMPLETE GS-DMRG | Time = %.2f <<<' %
-                  (time.perf_counter() - t))
+            _print('>>> COMPLETE GS-DMRG | Time = %.2f <<<' %
+                   (time.perf_counter() - t))
 
     # one-particle density matrix
     # return value:
     #     pdm[0, :, :] -> <AD_{i,alpha} A_{j,alpha}>
     #     pdm[1, :, :] -> < AD_{i,beta}  A_{j,beta}>
-    def get_one_pdm(self, ridx=None):
+    def get_one_pdm(self):
         if self.verbose >= 2:
-            print('>>> START one-pdm <<<')
+            _print('>>> START one-pdm <<<')
         t = time.perf_counter()
+
+        if self.mpi is not None:
+            self.mpi.barrier()
 
         mps_info = MPSInfo(0)
         mps_info.load_data(self.scratch + "/GS_MPS_INFO")
@@ -389,8 +424,8 @@ class GFDMRG:
                              self.n_sites, 2))
             dm = np.transpose(dm, (0, 2, 1, 3))
 
-        if ridx is not None:
-            dm[:, :] = dm[ridx, :][:, ridx]
+        if self.ridx is not None:
+            dm[:, :] = dm[self.ridx, :][:, self.ridx]
 
         mps.save_data()
         mps_info.deallocate()
@@ -398,8 +433,8 @@ class GFDMRG:
         pmpo.deallocate()
 
         if self.verbose >= 2:
-            print('>>> COMPLETE one-pdm | Time = %.2f <<<' %
-                  (time.perf_counter() - t))
+            _print('>>> COMPLETE one-pdm | Time = %.2f <<<' %
+                   (time.perf_counter() - t))
 
         if SpinLabel == SU2:
             return np.concatenate([dm[None, :, :], dm[None, :, :]], axis=0) / 2
@@ -410,17 +445,22 @@ class GFDMRG:
         import shutil
         import pickle
         import os
-        pickle.dump(self.gs_energy, open(self.scratch + '/GS_ENERGY', 'wb'))
-        for k in os.listdir(self.scratch):
-            if '.KET.' in k or 'GS_' in k:
-                shutil.copy(self.scratch + "/" + k, save_dir + "/" + k)
+        if self.mpi.rank == 0:
+            pickle.dump(self.gs_energy, open(
+                self.scratch + '/GS_ENERGY', 'wb'))
+            for k in os.listdir(self.scratch):
+                if '.KET.' in k or 'GS_' in k:
+                    shutil.copy(self.scratch + "/" + k, save_dir + "/" + k)
+        self.mpi.barrier()
 
     def load_gs_mps(self, load_dir='./gs_mps'):
         import shutil
         import pickle
         import os
-        for k in os.listdir(load_dir):
-            shutil.copy(load_dir + "/" + k, self.scratch + "/" + k)
+        if self.mpi.rank == 0:
+            for k in os.listdir(load_dir):
+                shutil.copy(load_dir + "/" + k, self.scratch + "/" + k)
+        self.mpi.barrier()
         self.gs_energy = pickle.load(open(self.scratch + '/GS_ENERGY', 'rb'))
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
@@ -431,6 +471,9 @@ class GFDMRG:
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
         rmpos = [None] * len(idxs)
+
+        if self.mpi is not None:
+            self.mpi.barrier()
 
         if self.mpo_orig is None:
             mpo = MPOQC(self.hamil, QCTypes.Conventional)
@@ -460,16 +503,16 @@ class GFDMRG:
             mpo = ParallelMPO(mpo, self.prule)
 
         if self.print_statistics:
-            print('GF MPO BOND DIMS = ', ''.join(
+            _print('GF MPO BOND DIMS = ', ''.join(
                 ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
             max_d = max(bond_dims)
             mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
                                 self.target, self.hamil.basis)
             mps_info2.set_bond_dimension(max_d)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            print("GF EST MAX MPS BOND DIMS = ", ''.join(
+            _print("GF EST MAX MPS BOND DIMS = ", ''.join(
                 ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            print("GF EST PEAK MEM = ", GFDMRG.fmt_size(
+            _print("GF EST PEAK MEM = ", GFDMRG.fmt_size(
                 mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
@@ -478,9 +521,11 @@ class GFDMRG:
                              NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
         if self.mpi is not None:
-            impo = ParallelMPO(impo, self.prule)
+            impo = ParallelMPO(impo, self.identrule)
 
         def align_mps_center(ket, ref):
+            if self.mpi is not None:
+                self.mpi.barrier()
             cf = ket.canonical_form
             if ref.center == 0:
                 ket.center += 1
@@ -493,13 +538,19 @@ class GFDMRG:
                     ket.move_right(mpo.tf.opf.cg, self.prule)
                 ket.center -= 1
             if self.verbose >= 2:
-                print('CF = %s --> %s' % (cf, ket.canonical_form))
+                _print('CF = %s --> %s' % (cf, ket.canonical_form))
 
         if mo_coeff is None:
-            gidxs = idxs
+            if self.ridx is not None:
+                gidxs = self.ridx[np.array(idxs)]
+            else:
+                gidxs = idxs
         else:
+            if self.idx is not None:
+                mo_coeff = mo_coeff[:, self.idx]
             gidxs = list(range(self.n_sites))
             ops = [None] * self.n_sites
+            print('idxs = ', idxs, 'gidxs = ', gidxs)
 
         for ii, idx in enumerate(gidxs):
             if SpinLabel == SZ:
@@ -518,8 +569,10 @@ class GFDMRG:
                         (idx, ), ()), SU2(-1, 1, self.orb_sym[idx]))
 
         for ii, idx in enumerate(idxs):
+            if self.mpi is not None:
+                self.mpi.barrier()
             if self.verbose >= 2:
-                print('>>> START Compression Site = %4d <<<' % idx)
+                _print('>>> START Compression Site = %4d <<<' % idx)
             t = time.perf_counter()
 
             rket_info = MPSInfo(self.n_sites, self.hamil.vacuum,
@@ -528,11 +581,11 @@ class GFDMRG:
             rket_info.set_bond_dimension(mps.info.bond_dim)
             if occs is None:
                 if self.verbose >= 2:
-                    print("Using FCI INIT MPS")
+                    _print("Using FCI INIT MPS")
                 rket_info.set_bond_dimension(mps.info.bond_dim)
             else:
                 if self.verbose >= 2:
-                    print("Using occupation number INIT MPS")
+                    _print("Using occupation number INIT MPS")
                 rket_info.set_bond_dimension_using_occ(
                     mps.info.bond_dim, VectorDouble(occs), bias=bias)
             rkets[ii] = MPS(self.n_sites, mps.center, 2)
@@ -559,7 +612,7 @@ class GFDMRG:
                     LocalMPO(self.hamil, ao_ops), NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
             if self.mpi is not None:
-                rmpos[ii] = ParallelMPO(rmpos[ii], self.prule)
+                rmpos[ii] = ParallelMPO(rmpos[ii], self.siterule)
 
             pme = MovingEnvironment(mpo, rkets[ii], rkets[ii], "PERT")
             pme.init_environments(False)
@@ -579,8 +632,8 @@ class GFDMRG:
             cps.solve(gs_n_steps, mps.center == 0, gs_conv_tol)
 
             if self.verbose >= 2:
-                print('>>> COMPLETE Compression Site = %4d | Time = %.2f <<<' %
-                      (idx, time.perf_counter() - t))
+                _print('>>> COMPLETE Compression Site = %4d | Time = %.2f <<<' %
+                       (idx, time.perf_counter() - t))
 
         gf_mat = np.zeros((len(idxs), len(idxs), len(freqs)), dtype=complex)
 
@@ -603,8 +656,8 @@ class GFDMRG:
             linear.noise_type = NoiseTypes.ReducedPerturbative
             linear.decomp_type = DecompositionTypes.SVD
             # TZ: Not raising error even if CG is not converged
-            linear.minres_soft_max_iter = 4000
-            linear.minres_max_iter = 5000
+            linear.minres_soft_max_iter = 20000
+            linear.minres_max_iter = 21000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -612,8 +665,8 @@ class GFDMRG:
             for iw, w in enumerate(freqs):
 
                 if self.verbose >= 2:
-                    print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' %
-                          (w, idx, idx))
+                    _print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' %
+                           (w, idx, idx))
                 t = time.perf_counter()
 
                 linear.tme = None
@@ -626,12 +679,12 @@ class GFDMRG:
                 dmain, dseco, imain, iseco = Global.frame.peak_used_memory
 
                 if self.verbose >= 1:
-                    print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
-                          ("ADD" if addition else "REM", idx, idx, w, rgf, igf, time.perf_counter() - t))
+                    _print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
+                           ("ADD" if addition else "REM", idx, idx, w, rgf, igf, time.perf_counter() - t))
 
                 if self.verbose >= 2:
-                    print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
-                          (w, idx, idx, time.perf_counter() - t))
+                    _print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
+                           (w, idx, idx, time.perf_counter() - t))
 
                 if diag_only:
                     continue
@@ -644,7 +697,7 @@ class GFDMRG:
                             align_mps_center(rkets[jj], rkets[ii])
 
                         if self.verbose >= 2:
-                            print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' % (
+                            _print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' % (
                                 w, idx2, idx))
                         t = time.perf_counter()
 
@@ -661,21 +714,21 @@ class GFDMRG:
                         gf_mat[ii, jj, iw] = rgf + 1j * igf
 
                         if self.verbose >= 1:
-                            print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
-                                  ("ADD" if addition else "REM", idx2, idx, w, rgf, igf, time.perf_counter() - t))
+                            _print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
+                                   ("ADD" if addition else "REM", idx2, idx, w, rgf, igf, time.perf_counter() - t))
 
                         if self.verbose >= 2:
-                            print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
-                                  (w, idx2, idx, time.perf_counter() - t))
+                            _print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
+                                   (w, idx2, idx, time.perf_counter() - t))
         mps.save_data()
         mps_info.deallocate()
 
         if self.print_statistics:
-            print("GF PEAK MEM USAGE:",
-                  "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
-                  "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-                  "IMEM = ", GFDMRG.fmt_size(imain + iseco),
-                  "(%.0f%%)" % (imain * 100 / (imain + iseco)))
+            _print("GF PEAK MEM USAGE:",
+                   "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+                   "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
+                   "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                   "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
         return gf_mat
 
@@ -693,7 +746,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
-               load_dir=None, save_dir=None,
+               mo_basis=True, load_dir=None, save_dir=None, pdm_return=True, reorder_method=None,
                lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
@@ -748,14 +801,20 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         save_dir : if not None, save results to a separate dir after ground-state calculation
             Note: one of load_dir and save_dir must be None
         mpi : if not None, MPI is used
+        mo_basis: if False, will use Hamiltonian in AO basis
+        pdm_return: if False, not return 1-pdm 
+        reorder_method: None or 'fielder' or 'gaopt'
 
     Returns:
         gfmat : np.ndarray of dims (len(mo_orbs), len(mo_orbs), len(freqs)) (complex)
             GF matrix in the MO basis (for selected mo_orbs).
     '''
-    from pyscf import lo, symm, ao2mo
+    from pyscf import lib, lo, symm, ao2mo
     assert load_dir is None or save_dir is None
     assert ao_orbs is None or mo_orbs is None
+
+    if mpi is not None:
+        mpi = MPI
 
     mol = mf.mol
 
@@ -776,85 +835,157 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
 
     if not is_uhf:
 
-        n_mo = mo_coeff.shape[1]
+        if mo_basis:
+            n_mo = mo_coeff.shape[1]
 
-        orb_sym_str = symm.label_orb_symm(
-            mol, mol.irrep_name, mol.symm_orb, mo_coeff)
-        orb_sym = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str])
+            # orb_sym_str = symm.label_orb_symm(
+            #    mol, mol.irrep_name, mol.symm_orb, mo_coeff)
+            #orb_sym = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str])
+            orb_sym = [1] * n_mo
 
-        h1e = mo_coeff.T @ mf.get_hcore() @ mo_coeff
-        g2e = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff), n_mo)
-        ecore = mol.energy_nuc()
-        if ignore_ecore:
-            ecore = 0
-        na = nb = mol.nelectron // 2
+            h1e = mo_coeff.T @ mf.get_hcore() @ mo_coeff
+            g2e = ao2mo.restore(8, ao2mo.kernel(mf._eri, mo_coeff), n_mo)
+            ecore = mol.energy_nuc()
+            if ignore_ecore:
+                ecore = 0
+            na = nb = mol.nelectron // 2
+        else:
+            n_mo = mo_coeff.shape[1]
+
+            # orb_sym_str = symm.label_orb_symm(
+            #    mol, mol.irrep_name, mol.symm_orb, np.eye(n_mo))
+            #orb_sym = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str])
+            orb_sym = [1] * n_mo
+
+            h1e = mf.get_hcore()
+            g2e = mf._eri
+            ecore = mol.energy_nuc()
+            if ignore_ecore:
+                ecore = 0
+            na = nb = mol.nelectron // 2
 
     else:
 
-        mo_coeff_a, mo_coeff_b = mo_coeff[0], mo_coeff[1]
-        n_mo = mo_coeff_b.shape[1]
+        if mo_basis:
+            mo_coeff_a, mo_coeff_b = mo_coeff[0], mo_coeff[1]
+            n_mo = mo_coeff_b.shape[1]
 
-        orb_sym_str_a = symm.label_orb_symm(
-            mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
-        orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
+            # orb_sym_str_a = symm.label_orb_symm(
+            #    mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
+            #orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
 
-        orb_sym = orb_sym_a
+            #orb_sym = orb_sym_a
+            orb_sym = [1] * n_mo
 
-        h1ea = mo_coeff_a.T @ mf.get_hcore() @ mo_coeff_a
-        h1eb = mo_coeff_b.T @ mf.get_hcore() @ mo_coeff_b
-        g2eaa = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_a), n_mo)
-        g2ebb = ao2mo.restore(8, ao2mo.kernel(mol, mo_coeff_b), n_mo)
-        g2eab = ao2mo.kernel(
-            mol, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
-        h1e = (h1ea, h1eb)
-        g2e = (g2eaa, g2ebb, g2eab)
-        ecore = mol.energy_nuc()
-        if ignore_ecore:
-            ecore = 0
-        na, nb = mol.nelec
+            h1ea = mo_coeff_a.T @ mf.get_hcore() @ mo_coeff_a
+            h1eb = mo_coeff_b.T @ mf.get_hcore() @ mo_coeff_b
+            g2eaa = ao2mo.restore(8, ao2mo.kernel(mf._eri, mo_coeff_a), n_mo)
+            g2ebb = ao2mo.restore(8, ao2mo.kernel(mf._eri, mo_coeff_b), n_mo)
+            g2eab = ao2mo.kernel(
+                mf._eri, [mo_coeff_a, mo_coeff_a, mo_coeff_b, mo_coeff_b])
+            h1e = (h1ea, h1eb)
+            g2e = (g2eaa, g2ebb, g2eab)
+            ecore = mol.energy_nuc()
+            if ignore_ecore:
+                ecore = 0
+            na, nb = mol.nelectron
 
-    if mo_orbs is None and ao_orbs is None:
-        mo_orbs = range(n_mo)
+        else:
+            mo_coeff_a, mo_coeff_b = mo_coeff[0], mo_coeff[1]
+            n_mo = mo_coeff_b.shape[1]
+
+            # orb_sym_str_a = symm.label_orb_symm(
+            #    mol, mol.irrep_name, mol.symm_orb, mo_coeff_a)
+            #orb_sym_a = np.array([fcidump_sym.index(i) + 1 for i in orb_sym_str_a])
+
+            #orb_sym = orb_sym_a
+            orb_sym = [1] * n_mo
+
+            h1ea = mf.get_hcore()
+            h1eb = h1ea.copy()
+            g2eaa = mf._eri
+            g2ebb = g2eaa.copy()
+            g2eab = lib.unpack_tril(g2eaa)
+
+            h1e = (h1ea, h1eb)
+            g2e = (g2eaa, g2ebb, g2eab)
+            ecore = mol.energy_nuc()
+            if ignore_ecore:
+                ecore = 0
+            na, nb = mol.nelectron
+
 
     dmrg = GFDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=mpi)
+    re_idx = orbital_reorder(h1e, g2e, method=reorder_method)
+    _print('reorder method = %r reorder = %r' % (reorder_method, re_idx))
+
+    if mo_orbs is None and ao_orbs is None:
+        mo_orbs = range(n_mo)
+        mo_orbs = np.argsort(re_idx)[np.array(mo_orbs)]
+
     if load_dir is None:
         save_fd = save_dir + "/GS_FCIDUMP" if save_dir is not None else None
-        print('best reorder (not applied) = ',
-              orbital_reorder(h1e, g2e, method='fiedler'))
         dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
-                              orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e, save_fcidump=save_fd)
+                              orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e, idx=re_idx,
+                              save_fcidump=save_fd)
         dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
                   n_steps=gs_n_steps, conv_tol=gs_tol, occs=occs, bias=bias, cutoff=cutoff)
         if save_dir is not None:
-            print('saving ground state ...')
+            _print('saving ground state ...')
             dmrg.save_gs_mps(save_dir)
     else:
         dmrg.init_hamiltonian_fcidump(pg, load_dir + "/GS_FCIDUMP")
-        print('loading ground state ...')
+        dmrg.idx = re_idx
+        dmrg.ridx = np.argsort(re_idx)
+        _print('loading ground state ...')
         dmrg.load_gs_mps(load_dir)
 
     pdm = dmrg.get_one_pdm()
-    print('pdm = ', pdm)
-    gf = 0
-    for addit in [x == '+' for x in add_rem]:
-        # only calculate alpha spin
-        gf += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
-                                   gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
-                                   idxs=mo_orbs if ao_orbs is None else ao_orbs,
-                                   mo_coeff=None if ao_orbs is None else mo_coeff,
-                                   eta=delta, freqs=freqs, addition=addit, diag_only=diag_only,
-                                   alpha=alpha)
+    idxs = mo_orbs if ao_orbs is None else ao_orbs
+    if not is_uhf:
+        gf = np.zeros((len(idxs), len(idxs), len(freqs)), dtype=complex)
+    else:
+        gf_beta = np.zeros((len(idxs), len(idxs), len(freqs)), dtype=complex)
+    for iw in range(len(delta)):
+        gf_tmp = 0
+        for addit in [x == '+' for x in add_rem]:
+            # only calculate alpha spin
+            gf_tmp += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
+                                           gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
+                                           idxs=mo_orbs if ao_orbs is None else ao_orbs,
+                                           mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[0] if is_uhf else mo_coeff),
+                                           eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
+                                           alpha=alpha)
+        gf[:, :, iw] = gf_tmp[:, :, 0]
+
+        if is_uhf:
+            gf_beta_tmp = 0
+            for addit in [x == '+' for x in add_rem]:
+                # calculate beta spin
+                gf_beta_tmp += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
+                                                    gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
+                                                    idxs=mo_orbs if ao_orbs is None else ao_orbs,
+                                                    mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[1] if is_uhf else mo_coeff),
+                                                    eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
+                                                    alpha=False)
+            gf_beta[:, :, iw] = gf_beta_tmp[:, :, 0]
+
+    if is_uhf:
+        gf = np.asarray((gf, gf_beta))
 
     del dmrg
 
-    return pdm, gf
+    if pdm_return:
+        return pdm, gf
+    else:
+        return gf
 
 
 if __name__ == "__main__":
 
     # parameters
-    n_threads = 28
+    n_threads = 14
     hf_type = "RHF"  # RHF or UHF
     mpg = 'c1'  # point group: d2h or c1
     scratch = './tmp'
@@ -864,11 +995,13 @@ if __name__ == "__main__":
     do_ccsd = True
 
     import os
-    if not os.path.isdir(scratch):
-        os.mkdir(scratch)
-    if save_dir is not None:
-        if not os.path.isdir(save_dir):
-            os.mkdir(save_dir)
+    if MPI.rank == 0:
+        if not os.path.isdir(scratch):
+            os.mkdir(scratch)
+        if save_dir is not None:
+            if not os.path.isdir(save_dir):
+                os.mkdir(save_dir)
+    MPI.barrier()
     os.environ['TMPDIR'] = scratch
 
     from pyscf import gto, scf
@@ -889,8 +1022,8 @@ if __name__ == "__main__":
         mf = scf.UHF(mol)
         ener = mf.kernel()
 
-    print("SCF Energy = %20.15f" % ener)
-    print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
+    _print("SCF Energy = %20.15f" % ener)
+    _print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
 
     if do_ccsd:
         from pyscf import cc
@@ -904,9 +1037,16 @@ if __name__ == "__main__":
             # UHF: 0 <= occ <= 1, order: 0a, 0b, 1a, 1b, ..., len = n_mo * 2
             occs = np.array(
                 [i for j in zip(np.diag(dmmo[0]), np.diag(dmmo[1])) for i in j])
-        print('OCCS = ', occs)
+        _print('OCCS = ', occs)
     else:
         occs = None
+
+    if MPI is not None:
+        from mpi4py import MPI as MPIPY
+        comm = MPIPY.COMM_WORLD
+        occs = comm.bcast(occs, root=0)
+        ener = comm.bcast(ener, root=0)
+        mf.mo_coeff = comm.bcast(mf.mo_coeff, root=0)
 
     if lowdin:
 
@@ -916,14 +1056,14 @@ if __name__ == "__main__":
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=mo_orbs, scratch=scratch, add_rem='-',
                                 gf_bond_dims=[150], gf_noises=[1E-3, 5E-4], gf_tol=1E-4,
-                                gmres_tol=1E-8, lowdin=True, ignore_ecore=False, n_threads=n_threads)
+                                gmres_tol=1E-8, lowdin=True, ignore_ecore=False, n_threads=n_threads, mpi=True)
 
-        print(gfmat)  # alpha only
+        _print(gfmat)  # alpha only
 
         # alpha + beta
         pdos = (-2 / np.pi) * gfmat.imag.trace(axis1=0, axis2=1)
-        print("PDOS = ", pdos)
-        print("TIME = ", time.perf_counter() - t)
+        _print("PDOS = ", pdos)
+        _print("TIME = ", time.perf_counter() - t)
 
         import matplotlib.pyplot as plt
 
@@ -934,24 +1074,24 @@ if __name__ == "__main__":
 
     else:
 
-        eta = 0.005
+        eta = [0.005]
         freqs = [-0.2]
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                                 gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
-                                n_threads=n_threads, occs=occs, bias=1.0, save_dir=save_dir, load_dir=load_dir)
+                                n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,mpi=True)
         xgfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
-        print("MO to AO method = ", xgfmat)
+        _print("MO to AO method = ", xgfmat)
 
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                                 gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
                                 ao_orbs=range(N),
-                                n_threads=n_threads, occs=occs, bias=1.0, save_dir=save_dir, load_dir=load_dir)
-        print("AO IN MO method = ", gfmat)
+                                n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,mpi=True)
+        _print("AO IN MO method = ", gfmat)
 
-        print('diff = ', gfmat - xgfmat)
-        print(np.linalg.norm(gfmat - xgfmat))
+        _print('diff = ', gfmat - xgfmat)
+        _print(np.linalg.norm(gfmat - xgfmat))
