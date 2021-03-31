@@ -943,18 +943,17 @@ if __name__ == "__main__" and do_cu_atom:
     if MPI is None or MPI.rank == 0:
         mc.kernel(mo)
         eners = mc.e_states
-        dmmo = mc.make_rdm1()
+        dmao = mc.make_rdm1()
     else:
         mc.mo_coeff = None
         eners = None
-        dmmo = None
+        dmao = None
 
     if MPI is not None:
         mc.mo_coeff = comm.bcast(mc.mo_coeff, root=0)
         eners = comm.bcast(eners, root=0)
-        dmmo = comm.bcast(dmmo, root=0)
+        dmao = comm.bcast(dmao, root=0)
 
-    occs = np.diag(dmmo)
     _print("CASSCF Energies =", "".join(["%20.10f" % x for x in eners]))
 
     # wfn (nroots, multiplicity, irrep)
@@ -1009,10 +1008,9 @@ if __name__ == "__main__" and do_cu_atom:
     eners = np.concatenate(eners)
     mpss = dmrg.prepare_mps(tags=tags)
     mo_coeff_inv = np.linalg.inv(mo_coeff)
-    dm0ao = mo_coeff_inv.T @ dmmo @ mo_coeff_inv
     _print('\nGenerating Spin-Orbit Integrals:\n')
     if MPI is None or MPI.rank == 0:
-        hsoao = compute_hso_ao(mol, dm0ao, amfi=True) * 2
+        hsoao = compute_hso_ao(mol, dmao, amfi=True) * 2
         hso = np.einsum('rij,ip,jq->rpq', hsoao,
                         mo_coeff[:, ncore:ncore + nactorb],
                         mo_coeff[:, ncore:ncore + nactorb])
