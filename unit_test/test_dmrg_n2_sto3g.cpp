@@ -19,6 +19,7 @@ class TestDMRGN2STO3G : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
+        frame_()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             1);

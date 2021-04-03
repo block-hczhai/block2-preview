@@ -203,6 +203,7 @@ struct DataFrame {
     mutable vector<shared_future<void>> save_futures;
     bool load_buffering = false, save_buffering = false;
     bool use_main_stack = true;
+    bool minimal_disk_usage = false;
     shared_ptr<FPCodec<double>> fp_codec = nullptr;
     // isize and dsize are in Bytes
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
@@ -417,6 +418,7 @@ struct DataFrame {
     }
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << " UseMainStack = " << df.use_main_stack
+           << " MinDiskUsage = " << df.minimal_disk_usage
            << " IBuf = " << df.load_buffering << " OBuf = " << df.save_buffering
            << endl;
         if (df.fp_codec != nullptr)

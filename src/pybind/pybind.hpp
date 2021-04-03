@@ -1278,7 +1278,8 @@ template <typename S> void bind_partition(py::module &m) {
              &MovingEnvironment<S>::finalize_environments,
              py::arg("renormalize_ops") = true)
         .def("prepare", &MovingEnvironment<S>::prepare)
-        .def("move_to", &MovingEnvironment<S>::move_to)
+        .def("move_to", &MovingEnvironment<S>::move_to, py::arg("i"),
+             py::arg("preserve_data") = false)
         .def("partial_prepare", &MovingEnvironment<S>::partial_prepare)
         .def("get_left_archive_filename",
              &MovingEnvironment<S>::get_left_archive_filename)
@@ -2456,6 +2457,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("load_buffering", &DataFrame::load_buffering)
         .def_readwrite("save_buffering", &DataFrame::save_buffering)
         .def_readwrite("use_main_stack", &DataFrame::use_main_stack)
+        .def_readwrite("minimal_disk_usage", &DataFrame::minimal_disk_usage)
         .def_readwrite("fp_codec", &DataFrame::fp_codec)
         .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)

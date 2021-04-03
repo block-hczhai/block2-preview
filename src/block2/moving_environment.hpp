@@ -972,7 +972,7 @@ template <typename S> struct MovingEnvironment {
         }
     }
     // Move the center site by one
-    virtual void move_to(int i) {
+    virtual void move_to(int i, bool preserve_data = false) {
         string new_data_name = "";
         // here the ialloc part is still needed even if we have cached
         // but consider two cases (for why it can be skipped):
@@ -988,17 +988,31 @@ template <typename S> struct MovingEnvironment {
                 !(cached_info.first == OpCachingTypes::Left &&
                   cached_info.second == center))
                 frame->load_data(1, get_left_partition_filename(center));
+            // this will create left partition ++center (new_data_name)
             left_contract_rotate(++center);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
+            if (frame->minimal_disk_usage && !preserve_data &&
+                envs[center - 1]->right != nullptr) {
+                string old_data_name = get_right_partition_filename(center - 1);
+                if (Parsing::file_exists(old_data_name))
+                    Parsing::remove_file(old_data_name);
+            }
         } else if (i < center) {
             if (envs[center]->right != nullptr &&
                 !(cached_info.first == OpCachingTypes::Right &&
                   cached_info.second == center + dot - 1))
                 frame->load_data(1, get_right_partition_filename(center));
+            // this will create right partition --center (new_data_name)
             right_contract_rotate(--center);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
+            if (frame->minimal_disk_usage && !preserve_data &&
+                envs[center + 1]->left != nullptr) {
+                string old_data_name = get_left_partition_filename(center + 1);
+                if (Parsing::file_exists(old_data_name))
+                    Parsing::remove_file(old_data_name);
+            }
         }
         if (para_rule != nullptr)
             para_rule->comm->barrier();

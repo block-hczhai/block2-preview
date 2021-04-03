@@ -994,7 +994,7 @@ template <typename S> struct ImaginaryTE {
             }
             if (forward) {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                me->move_to(i + 1);
+                me->move_to(i + 1, true);
                 shared_ptr<EffectiveHamiltonian<S>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
@@ -1011,7 +1011,7 @@ template <typename S> struct ImaginaryTE {
                 }
             } else {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                me->move_to(i - 1);
+                me->move_to(i - 1, true);
                 shared_ptr<EffectiveHamiltonian<S>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
@@ -1227,7 +1227,7 @@ template <typename S> struct ImaginaryTE {
         int expok = 0;
         if (mode == TETypes::TangentSpace && forward &&
             i + 1 != me->n_sites - 1) {
-            me->move_to(i + 1);
+            me->move_to(i + 1, true);
             me->ket->load_tensor(i + 1);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
@@ -1243,7 +1243,7 @@ template <typename S> struct ImaginaryTE {
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
         } else if (mode == TETypes::TangentSpace && !forward && i != 0) {
-            me->move_to(i - 1);
+            me->move_to(i - 1, true);
             me->ket->load_tensor(i);
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,

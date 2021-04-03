@@ -17,6 +17,7 @@ class TestTSpaceAncillaH8STO6G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
         threading_()->seq_type = SeqTypes::Simple;

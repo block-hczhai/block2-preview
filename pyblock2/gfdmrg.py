@@ -146,6 +146,7 @@ class GFDMRG:
         Global.frame.load_buffering = False
         Global.frame.save_buffering = False
         Global.frame.use_main_stack = False
+        Global.frame.minimal_disk_usage = True
         self.fcidump = None
         self.hamil = None
         self.verbose = verbose
