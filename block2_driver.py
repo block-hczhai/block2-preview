@@ -76,6 +76,7 @@ if DEBUG:
 
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
+restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 n_threads = int(dic.get("num_thrds", 28))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
@@ -91,16 +92,20 @@ if MPI is not None:
 
 # global settings
 memory = int(int(dic.get("mem", "40").split()[0]) * 1e9)
+fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, n_threads, n_threads, 1)
 Global.threading.seq_type = SeqTypes.Tasked
-Global.frame.fp_codec = DoubleFPCodec(1E-16, 1024)
+Global.frame.fp_codec = DoubleFPCodec(fp_cps_cutoff, 1024)
 Global.frame.load_buffering = False
 Global.frame.save_buffering = False
 Global.frame.use_main_stack = False
+Global.frame.minimal_disk_usage = True
 if restart_dir is not None:
     Global.frame.restart_dir = restart_dir
+if restart_dir_per_sweep is not None:
+    Global.frame.restart_dir_per_sweep = restart_dir_per_sweep
 _print(Global.frame)
 _print(Global.threading)
 
@@ -609,14 +614,19 @@ if not pre_run:
     # Transition ONEPDM
     # note that there can be a undetermined +1/-1 factor due to the relative phase in two MPSs
     if "restart_tran_onepdm" in dic or "tran_onepdm" in dic:
-        
+
         assert nroots != 1
         for iroot in range(mps.nroots):
-            for jroot in range(iroot + 1):
+            for jroot in range(mps.nroots):
                 _print('----- root = %3d -> %3d / %3d -----' % (jroot, iroot, mps.nroots), flush=True)
                 simps, simps_info, _ = split_mps(iroot, mps, mps_info)
                 sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
                 dm = do_onepdm(simps, sjmps)
+                if SX == SU2:
+                    qsbra = simps.info.targets[0].twos
+                    # fix different Wigner–Eckart theorem convention
+                    dm *= np.sqrt(qsbra + 1)
+                dm = dm / np.sqrt(2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, jroot), dm)
             if MPI is None or MPI.rank == 0:

@@ -22,7 +22,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
               "restart_tran_twopdm", "soc", "overlap", "tran_oh",
-              "restart_tran_oh"}
+              "restart_tran_oh", "restart_dir_per_sweep", "fp_cps_cutoff"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 
