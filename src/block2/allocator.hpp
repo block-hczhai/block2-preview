@@ -185,7 +185,13 @@ inline shared_ptr<StackAllocator<double>> &dalloc_() {
 // and one double stack memory
 // Using frames alternatively to avoid data copying
 struct DataFrame {
-    string save_dir, mps_dir, restart_dir = "";
+    // save_dir: scartch folder for renormalized operators
+    // mps_dir: scartch folder for MPS (default is the same as save_dir)
+    // restart_dir: if not empty, save MPS to this dir after each sweep
+    // restart_dir_per_sweep: if not empty, save MPS to this dir with sweep
+    //   index as suffix, so that MPS from all sweeps will be kept in individual
+    //   dir
+    string save_dir, mps_dir, restart_dir = "", restart_dir_per_sweep = "";
     string prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
     bool partition_can_write = true;

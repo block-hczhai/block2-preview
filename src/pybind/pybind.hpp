@@ -2438,6 +2438,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("mps_dir", &DataFrame::mps_dir)
         .def_readwrite("restart_dir", &DataFrame::restart_dir)
+        .def_readwrite("restart_dir_per_sweep",
+                       &DataFrame::restart_dir_per_sweep)
         .def_readwrite("prefix", &DataFrame::prefix)
         .def_readwrite("prefix_distri", &DataFrame::prefix_distri)
         .def_readwrite("prefix_can_write", &DataFrame::prefix_can_write)

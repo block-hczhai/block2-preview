@@ -1101,6 +1101,15 @@ template <typename S> struct DMRG {
             me->ket->info->copy_mutable(frame->restart_dir);
             me->ket->copy_data(frame->restart_dir);
         }
+        if (frame->restart_dir_per_sweep != "" &&
+            (me->para_rule == nullptr || me->para_rule->is_root())) {
+            string rdps = frame->restart_dir_per_sweep + "." +
+                          Parsing::to_string((int)energies.size());
+            if (!Parsing::path_exists(rdps))
+                Parsing::mkdir(rdps);
+            me->ket->info->copy_mutable(rdps);
+            me->ket->copy_data(rdps);
+        }
         double max_dw = *max_element(sweep_discarded_weights.begin(),
                                      sweep_discarded_weights.end());
         return make_tuple(sweep_energies[idx], max_dw, sweep_quanta[idx]);
@@ -1416,6 +1425,17 @@ template <typename S> struct DMRG {
                 Parsing::mkdir(frame->restart_dir);
             para_mps->info->copy_mutable(frame->restart_dir);
             para_mps->copy_data(frame->restart_dir);
+        }
+        if (frame->restart_dir_per_sweep != "" &&
+            (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) &&
+            (me->para_rule == nullptr || me->para_rule->is_root())) {
+            para_mps->save_data();
+            string rdps = frame->restart_dir_per_sweep + "." +
+                          Parsing::to_string((int)energies.size());
+            if (!Parsing::path_exists(rdps))
+                Parsing::mkdir(rdps);
+            para_mps->info->copy_mutable(rdps);
+            para_mps->copy_data(rdps);
         }
         double max_dw = *max_element(sweep_discarded_weights.begin(),
                                      sweep_discarded_weights.end());
@@ -2545,6 +2565,15 @@ template <typename S> struct Linear {
                 Parsing::mkdir(frame->restart_dir);
             rme->bra->info->copy_mutable(frame->restart_dir);
             rme->bra->copy_data(frame->restart_dir);
+        }
+        if (frame->restart_dir_per_sweep != "" &&
+            (rme->para_rule == nullptr || rme->para_rule->is_root())) {
+            string rdps = frame->restart_dir_per_sweep + "." +
+                          Parsing::to_string((int)targets.size());
+            if (!Parsing::path_exists(rdps))
+                Parsing::mkdir(rdps);
+            rme->bra->info->copy_mutable(rdps);
+            rme->bra->copy_data(rdps);
         }
         double max_dw = *max_element(sweep_discarded_weights.begin(),
                                      sweep_discarded_weights.end());
