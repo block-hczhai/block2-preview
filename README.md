@@ -26,6 +26,7 @@ Features
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
     * 1PDM
+    * Transition 1PDM
     * 2PDM (non-spin-adapted only)
     * Spin / charge correlation
 * Quantum Chemistry MPO
@@ -48,6 +49,57 @@ Features
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
+
+References
+----------
+
+### Qauntum Chemisty DMRG
+
+* Chan, G. K.-L.; Head-Gordon, M. Highly correlated calculations with a polynomial cost algorithm: A study of the density matrix renormalization group. *The Journal of Chemical Physics* 2002, **116**, 4462–4476.
+* Sharma, S.; Chan, G. K.-L. Spin-adapted density matrix renormalization group algorithms for quantum chemistry. *The Journalof Chemical Physics* 2012, **136**, 124121.
+* Wouters, S.; Van Neck, D. The density matrix renormalization group for ab initio quantum chemistry. *The European Physical Journal D* 2014, **68**, 272.
+
+### Parallelization
+
+* Chan, G. K.-L. An algorithm for large scale density matrix renormalization group calculations. *The Journal of Chemical Physics* 2004, **120**, 3172–3178.
+* Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group  algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102.
+* Stoudenmire, E.; White, S. R. Real-space parallel density matrix renormalization group. *Physical Review B* 2013, **87**, 155137.
+* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. 2021, arXiv preprint arXiv:2103.09976.
+
+### Spin-Orbit Coupling
+
+* Sayfutyarova, E. R., Chan, G. K. L. A state interaction spin-orbit coupling density matrix renormalization group method. *The Journal of Chemical Physics* 2016, **144**, 234301.
+* Sayfutyarova, E. R., Chan, G. K. L. Electron paramagnetic resonance g-tensors from state interaction spin-orbit coupling density matrix renormalization group. *The Journal of Chemical Physics* 2018, **148**, 184103.
+
+### Green's Function
+
+* Ronca, E., Li, Z., Jimenez-Hoyos, C. A., Chan, G. K. L. Time-step targeting time-dependent and dynamical density matrix renormalization group algorithms with ab initio Hamiltonians. *Journal of Chemical Theory and Computation* 2017, **13**, 5560-5571.
+
+### Finite-Temperature DMRG
+
+* Feiguin, A. E., White, S. R. Finite-temperature density matrix renormalization using an enlarged Hilbert space. *Physical Review B* 2005, **72**, 220401.
+* Feiguin, A. E., White, S. R. Time-step targeting methods for real-time dynamics using the density matrix renormalization group. *Physical Review B* 2005, **72**, 020404.
+
+### Linear Response
+
+* Sharma, S., Chan, G. K. Communication: A flexible multi-reference perturbation theory by minimizing the Hylleraas functional with matrix product states. *Journal of Chemical Physics* 2014, **141**, 111101.
+
+### Perturbative Noise
+
+* White, S. R. Density matrix renormalization group algorithms with a single center site. *Physical Review B* 2005, **72**, 180403.
+* Hubig, C., McCulloch, I. P., Schollwöck, U., Wolf, F. A. Strictly single-site DMRG algorithm with subspace expansion. *Physical Review B* 2015, **91**, 155115.
+
+### Particle Density Matrix
+
+* Ghosh, D., Hachmann, J., Yanai, T., & Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117.
+
+### Determinant Coefficients
+
+* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. Externally corrected CCSD with renormalized perturbative triples (R-ecCCSD (T)) and density matrix renormalization group and selected configuration interaction external sources. 2021, arXiv preprint arXiv:2102.12703.
+
+### Orbital Reordering
+
+* Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.;Chan, G. K.-L. The ab-initio density  matrix renormalization group in practice. *The Journal of Chemical Physics* 2015, **142**, 034102.
 
 Installation
 ------------
