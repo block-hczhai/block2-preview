@@ -203,6 +203,9 @@ if "fullrestart" in dic:
     elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
         mps.center -= 1
         forward = False
+    elif mps.center == mps.n_sites - 1 and mps.dot == 2:
+        mps.center -= 1
+        forward = False
 elif pre_run or not no_pre_run:
     if nroots == 1 and len(targets) == 1:
         mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
