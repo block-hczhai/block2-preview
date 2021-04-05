@@ -204,7 +204,12 @@ if "fullrestart" in dic:
         mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2:
-        mps.center -= 1
+        if mps.canonical_form[mps.center] == 'K':
+            cg = CG(200)
+            cg.initialize()
+            mps.move_left(cg, prule)
+        mps.center = mps.n_sites - 2
+        mps.save_data()
         forward = False
 elif pre_run or not no_pre_run:
     if nroots == 1 and len(targets) == 1:
@@ -254,6 +259,7 @@ else:
     mps.random_canonicalize()
     forward = mps.center == 0
 
+_print("MPS = ", mps.canonical_form, mps.center, mps.dot)
 _print("GS INIT MPS BOND DIMS = ", ''.join(["%6d" % x.n_states_total for x in mps_info.left_dims]))
 
 if conn_centers is not None and "fullrestart" in dic:
