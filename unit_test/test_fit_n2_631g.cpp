@@ -17,7 +17,8 @@ class TestFITN2631G : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            1);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -122,7 +123,6 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
          << setw(10) << setprecision(3) << t.get_time() << endl;
 
     EXPECT_LT(abs(energy - energy), 1E-7);
-    mpo->deallocate();
 
     // MPO2 construction (Full space DMRG)
     cout << "MPO2 start" << endl;
@@ -168,17 +168,19 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "Identity MPO start" << endl;
     shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(
         mpo2->basis, mpo->basis, hamil.vacuum, hamil.opf);
+    // Attention: use trivial Rule or NoTransposeRule(RuleQC)
     impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    ubond_t bond_dim2 = 270;
+    ubond_t bond_dim2 = 270, bond_dim3 = 300;
     vector<ubond_t> bdims2 = {270, 350, 400};
     vector<ubond_t> bdims1 = {300};
+    vector<ubond_t> bdims3 = {300};
 
     shared_ptr<MPSInfo<S>> mps_info2 = make_shared<MPSInfo<S>>(
         mpo2->n_sites, hamil.vacuum, target, mpo2->basis);
     mps_info2->set_bond_dimension(bond_dim2);
-    mps_info2->tag = "BRA";
+    mps_info2->tag = "KET2";
 
     if (mps->center == mps->n_sites - 1)
         mps->center--;
@@ -219,9 +221,100 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     dmrg2->decomp_last_site = dcl;
     double ener2 = dmrg2->solve(5, mps2->center == 0, 1E-8);
 
+    // Now add KET1 & KET2 to BRA-ADD
+    // the center of the three mpss must match
+    shared_ptr<MPSInfo<S>> mps_info3 =
+        make_shared<MPSInfo<S>>(mpo->n_sites, hamil.vacuum, target, mpo->basis);
+    mps_info3->set_bond_dimension(bond_dim3);
+    mps_info3->tag = "BRA-ADD";
+
+    // align mps centers
+    if (mps->center != mps2->center) {
+        cout << "align mps centers ..." << endl;
+        cout << "MPS1 = " << mps->canonical_form << endl;
+        cout << "MPS2 = " << mps2->canonical_form << endl;
+        assert(mps->dot == 2 && mps2->dot == 2);
+        if (mps->center == 0) {
+            mps2->center += 1;
+            mps2->canonical_form[mps2->n_sites - 1] = 'S';
+            while (mps2->center != 0)
+                mps2->move_left(mpo->tf->opf->cg);
+        } else {
+            mps2->canonical_form[0] = 'K';
+            while (mps2->center != mps2->n_sites - 1)
+                mps2->move_right(mpo->tf->opf->cg);
+            mps2->center -= 1;
+        }
+    }
+
+    cout << "checking overlap ..." << endl;
+
+    // Overlap
+    ime = make_shared<MovingEnvironment<S>>(impo, mps2, mps, "IDT");
+    ime->init_environments();
+    shared_ptr<Expect<S>> ex = make_shared<Expect<S>>(ime, 400, 300);
+    double overlap = ex->solve(false);
+    cout << "OVERLAP = " << setprecision(10) << fixed << overlap << endl;
+
+    shared_ptr<MPS<S>> mps3 =
+        make_shared<MPS<S>>(mpo->n_sites, mps->center, dot);
+    mps3->initialize(mps_info3);
+    mps3->random_canonicalize();
+
+    // MPS/MPSInfo save mutable
+    mps3->save_mutable();
+    mps3->deallocate();
+    mps_info3->save_mutable();
+    mps_info3->deallocate_mutable();
+
+    // 0.25 * Identity MPO between mps3 / mps
+    shared_ptr<MPO<S>> impo25 = make_shared<IdentityMPO<S>>(
+        mpo->basis, mpo->basis, hamil.vacuum, hamil.opf);
+    impo25 = make_shared<SimplifiedMPO<S>>(impo25, make_shared<Rule<S>>());
+    impo25 = 0.25 * impo25;
+
+    // 0.75 * Identity MPO between mps3 / mps2
+    shared_ptr<MPO<S>> impo75 = make_shared<IdentityMPO<S>>(
+        mpo->basis, mpo2->basis, hamil.vacuum, hamil.opf);
+    impo75 = make_shared<SimplifiedMPO<S>>(impo75, make_shared<Rule<S>>());
+    impo75 = 0.75 * impo75;
+
+    shared_ptr<MovingEnvironment<S>> laddme =
+        make_shared<MovingEnvironment<S>>(impo25, mps3, mps, "ADDL");
+    laddme->init_environments();
+    shared_ptr<MovingEnvironment<S>> raddme =
+        make_shared<MovingEnvironment<S>>(impo75, mps3, mps2, "ADDR");
+    raddme->init_environments();
+    shared_ptr<MovingEnvironment<S>> pertme =
+        make_shared<MovingEnvironment<S>>(mpo, mps3, mps3, "PERT");
+    pertme->init_environments();
+
+    cout << "fit mps addition ..." << endl;
+
+    // mps3 = 0.25 mps + 0.75 mps2
+    // bdims3 = bond dim for mps3
+    // bdims1 = bond dim for mps
+    // bond_dim2 = bond dim for mps2
+    // note that pertme can also be nullptr, then no perturbative noise will be
+    // applied
+    shared_ptr<Linear<S>> addmps =
+        make_shared<Linear<S>>(pertme, laddme, raddme, bdims3, bdims1, noises);
+    addmps->eq_type = EquationTypes::FitAddition;
+    addmps->target_ket_bond_dim = bond_dim2;
+    addmps->iprint = 2;
+    addmps->decomp_type = dt;
+    addmps->decomp_last_site = dcl;
+    double mps3norm = addmps->solve(5, mps3->center == 0);
+    // this can be affected by the relative sign of mps and mps2
+    cout << "Norm of fitted MPS = " << setprecision(10) << fixed << mps3norm
+         << endl;
+
     // deallocate persistent stack memory
+    mps_info3->deallocate();
     mps_info2->deallocate();
     mps_info->deallocate();
+    impo75->deallocate();
+    impo25->deallocate();
     mpo2->deallocate();
     impo->deallocate();
     mpo->deallocate();

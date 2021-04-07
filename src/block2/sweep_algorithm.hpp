@@ -1606,7 +1606,8 @@ template <typename S> struct DMRG {
 enum struct EquationTypes : uint8_t {
     Normal,
     PerturbativeCompression,
-    GreensFunction
+    GreensFunction,
+    FitAddition
 };
 
 // Solve |x> in Linear Equation LHS|x> = RHS|r>
@@ -1618,6 +1619,12 @@ enum struct EquationTypes : uint8_t {
 // when lme != nullptr, eq_type == PerturbativeCompression
 //    then lme is only used to do perturbative noise
 //    the equation in this case is 1 |x> = RHS |r> (compression)
+// when eq_type == FitAddition
+//    This is 1 |x> = RHS|r> + THS|t>
+//    rme = <x|RHS|r>, tme = <x|THS|t>,
+//      (optionally: lme = <x|H|x> for perturbative noise)
+//    prefactor in addtion can be introduced by
+//    doing scalar multiplication on MPO in RHS/THS
 template <typename S> struct Linear {
     // lme = LHS ME, rme = RHS ME, tme = Target ME
     shared_ptr<MovingEnvironment<S>> lme, rme, tme;
@@ -1770,8 +1777,9 @@ template <typename S> struct Linear {
                            ((forward && i == me->n_sites - 1 && !fuse_left) ||
                             (!forward && i == 0 && fuse_left));
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
-        if (lme != nullptr &&
-            eq_type != EquationTypes::PerturbativeCompression) {
+        if ((lme != nullptr &&
+             eq_type != EquationTypes::PerturbativeCompression) ||
+            eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S>>();
             right_bra->allocate(me->bra->tensors[i]->info);
             if (eq_type == EquationTypes::GreensFunction) {
@@ -1789,9 +1797,27 @@ template <typename S> struct Linear {
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
-        if (eq_type == EquationTypes::PerturbativeCompression) {
-            assert(lme != nullptr);
-            if (noise != 0) {
+        if (eq_type == EquationTypes::FitAddition ||
+            eq_type == EquationTypes::PerturbativeCompression) {
+            if (eq_type == EquationTypes::FitAddition) {
+                shared_ptr<EffectiveHamiltonian<S>> t_eff = tme->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
+                    false, tme->bra->tensors[i], tme->ket->tensors[i]);
+                teff += _t.get_time();
+                auto tpdi = t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+                MatrixRef mbra(me->bra->tensors[i]->data,
+                               (MKL_INT)me->bra->tensors[i]->total_memory, 1);
+                MatrixRef sbra(right_bra->data,
+                               (MKL_INT)right_bra->total_memory, 1);
+                MatrixFunctions::iadd(mbra, sbra, 1);
+                tmult += _t.get_time();
+                targets[0] = MatrixFunctions::norm(mbra);
+                get<1>(pdi) += get<1>(tpdi);
+                get<2>(pdi) += get<2>(tpdi);
+                get<3>(pdi) += get<3>(tpdi);
+                t_eff->deallocate();
+            }
+            if (lme != nullptr && noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
                     false, lme->bra->tensors[i], lme->ket->tensors[i]);
@@ -1842,7 +1868,7 @@ template <typename S> struct Linear {
         }
         if (pbra != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
-        if (tme != nullptr) {
+        if (tme != nullptr && eq_type != EquationTypes::FitAddition) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff = tme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
                 tme->bra->tensors[i], tme->ket->tensors[i]);
@@ -2167,8 +2193,9 @@ template <typename S> struct Linear {
             pbra->deallocate();
             pbra->deallocate_infos();
         }
-        if (lme != nullptr &&
-            eq_type != EquationTypes::PerturbativeCompression) {
+        if ((lme != nullptr &&
+             eq_type != EquationTypes::PerturbativeCompression) ||
+            eq_type == EquationTypes::FitAddition) {
             if (eq_type == EquationTypes::GreensFunction)
                 real_bra->deallocate();
             right_bra->deallocate();
@@ -2205,8 +2232,9 @@ template <typename S> struct Linear {
         shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
         shared_ptr<SparseMatrix<S>> pdm = nullptr;
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
-        if (lme != nullptr &&
-            eq_type != EquationTypes::PerturbativeCompression) {
+        if ((lme != nullptr &&
+             eq_type != EquationTypes::PerturbativeCompression) ||
+            eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S>>();
             right_bra->allocate(me->bra->tensors[i]->info);
             if (eq_type == EquationTypes::GreensFunction) {
@@ -2222,9 +2250,27 @@ template <typename S> struct Linear {
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
-        if (eq_type == EquationTypes::PerturbativeCompression) {
-            assert(lme != nullptr);
-            if (noise != 0) {
+        if (eq_type == EquationTypes::FitAddition ||
+            eq_type == EquationTypes::PerturbativeCompression) {
+            if (eq_type == EquationTypes::FitAddition) {
+                shared_ptr<EffectiveHamiltonian<S>> t_eff =
+                    tme->eff_ham(FuseTypes::FuseLR, forward, false,
+                                 tme->bra->tensors[i], tme->ket->tensors[i]);
+                teff += _t.get_time();
+                auto tpdi = t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+                MatrixRef mbra(me->bra->tensors[i]->data,
+                               (MKL_INT)me->bra->tensors[i]->total_memory, 1);
+                MatrixRef sbra(right_bra->data,
+                               (MKL_INT)right_bra->total_memory, 1);
+                MatrixFunctions::iadd(mbra, sbra, 1);
+                tmult += _t.get_time();
+                targets[0] = MatrixFunctions::norm(mbra);
+                get<1>(pdi) += get<1>(tpdi);
+                get<2>(pdi) += get<2>(tpdi);
+                get<3>(pdi) += get<3>(tpdi);
+                t_eff->deallocate();
+            }
+            if (lme != nullptr && noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S>> l_eff =
                     lme->eff_ham(FuseTypes::FuseLR, forward, false,
                                  lme->bra->tensors[i], lme->ket->tensors[i]);
@@ -2273,7 +2319,7 @@ template <typename S> struct Linear {
         }
         if (pbra != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
-        if (tme != nullptr) {
+        if (tme != nullptr && eq_type != EquationTypes::FitAddition) {
             shared_ptr<EffectiveHamiltonian<S>> t_eff =
                 tme->eff_ham(FuseTypes::FuseLR, forward, false,
                              tme->bra->tensors[i], tme->ket->tensors[i]);
@@ -2462,8 +2508,9 @@ template <typename S> struct Linear {
             pbra->deallocate();
             pbra->deallocate_infos();
         }
-        if (lme != nullptr &&
-            eq_type != EquationTypes::PerturbativeCompression) {
+        if ((lme != nullptr &&
+             eq_type != EquationTypes::PerturbativeCompression) ||
+            eq_type == EquationTypes::FitAddition) {
             if (eq_type == EquationTypes::GreensFunction)
                 real_bra->deallocate();
             right_bra->deallocate();

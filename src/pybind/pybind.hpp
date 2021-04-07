@@ -2312,7 +2312,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Normal", EquationTypes::Normal)
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
-        .value("GreensFunction", EquationTypes::GreensFunction);
+        .value("GreensFunction", EquationTypes::GreensFunction)
+        .value("FitAddition", EquationTypes::FitAddition);
 
     py::enum_<TraceTypes>(m, "TraceTypes", py::arithmetic())
         .value("Nothing", TraceTypes::None)
