@@ -189,6 +189,9 @@ if "fullrestart" in dic:
     max_bdim = max([x.n_states_total for x in mps_info.left_dims])
     if mps_info.bond_dim < max_bdim:
         mps_info.bond_dim = max_bdim
+    max_bdim = max([x.n_states_total for x in mps_info.right_dims])
+    if mps_info.bond_dim < max_bdim:
+        mps_info.bond_dim = max_bdim
     mps = MPS(mps_info) if nroots == 1 and len(targets) == 1 else MultiMPS(mps_info)
     mps.load_data()
     if nroots != 1:
