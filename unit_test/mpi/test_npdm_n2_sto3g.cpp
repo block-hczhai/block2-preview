@@ -77,8 +77,10 @@ TEST_F(TestNPDM, TestSU2) {
 #endif
     shared_ptr<ParallelRule<SU2>> para_rule =
         make_shared<ParallelRuleQC<SU2>>(para_comm);
-    shared_ptr<ParallelRule<SU2>> npdm_para_rule =
-        make_shared<ParallelRuleNPDMQC<SU2>>(para_comm);
+    shared_ptr<ParallelRule<SU2>> pdm1_para_rule =
+        make_shared<ParallelRulePDM1QC<SU2>>(para_comm);
+    shared_ptr<ParallelRule<SU2>> pdm2_para_rule =
+        make_shared<ParallelRulePDM2QC<SU2>>(para_comm);
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -214,7 +216,7 @@ TEST_F(TestNPDM, TestSU2) {
 
     // 1PDM MPO parallelization
     cout << "1PDM MPO parallelization start" << endl;
-    pmpo = make_shared<ParallelMPO<SU2>>(pmpo, npdm_para_rule);
+    pmpo = make_shared<ParallelMPO<SU2>>(pmpo, pdm1_para_rule);
     cout << "1PDM MPO parallelization end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
@@ -230,7 +232,7 @@ TEST_F(TestNPDM, TestSU2) {
 
     // 1NPC MPO parallelization
     cout << "1NPC MPO parallelization start" << endl;
-    nmpo = make_shared<ParallelMPO<SU2>>(nmpo, npdm_para_rule);
+    nmpo = make_shared<ParallelMPO<SU2>>(nmpo, pdm1_para_rule);
     cout << "1NPC MPO parallelization end .. T = " << t.get_time() << endl;
     // cout << nmpo->get_blocking_formulas() << endl;
     // abort();
@@ -404,8 +406,10 @@ TEST_F(TestNPDM, TestSZ) {
 #endif
     shared_ptr<ParallelRule<SZ>> para_rule =
         make_shared<ParallelRuleQC<SZ>>(para_comm);
-    shared_ptr<ParallelRule<SZ>> npdm_para_rule =
-        make_shared<ParallelRuleNPDMQC<SZ>>(para_comm);
+    shared_ptr<ParallelRule<SZ>> pdm1_para_rule =
+        make_shared<ParallelRulePDM1QC<SZ>>(para_comm);
+    shared_ptr<ParallelRule<SZ>> pdm2_para_rule =
+        make_shared<ParallelRulePDM2QC<SZ>>(para_comm);
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -797,7 +801,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 1PDM MPO parallelization
     cout << "1PDM MPO parallelization start" << endl;
-    pmpo = make_shared<ParallelMPO<SZ>>(pmpo, npdm_para_rule);
+    pmpo = make_shared<ParallelMPO<SZ>>(pmpo, pdm1_para_rule);
     cout << "1PDM MPO parallelization end .. T = " << t.get_time() << endl;
     // cout << pmpo->get_blocking_formulas() << endl;
     // abort();
@@ -815,7 +819,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 2PDM MPO parallelization
     cout << "2PDM MPO parallelization start" << endl;
-    p2mpo = make_shared<ParallelMPO<SZ>>(p2mpo, npdm_para_rule);
+    p2mpo = make_shared<ParallelMPO<SZ>>(p2mpo, pdm2_para_rule);
     cout << "2PDM MPO parallelization end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
@@ -830,7 +834,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     // 1NPC MPO parallelization
     cout << "1NPC MPO parallelization start" << endl;
-    nmpo = make_shared<ParallelMPO<SZ>>(nmpo, npdm_para_rule);
+    nmpo = make_shared<ParallelMPO<SZ>>(nmpo, pdm1_para_rule);
     cout << "1NPC MPO parallelization end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;

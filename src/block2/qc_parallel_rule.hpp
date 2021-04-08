@@ -76,6 +76,140 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     }
 };
 
+// Rule for parallel dispatcher for quantum chemistry 1PDM
+// this one should provide better scalability than ParallelRuleNPDMQC
+template <typename S> struct ParallelRulePDM1QC : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    mutable ParallelRulePartitionTypes partition;
+    ParallelRulePDM1QC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                       ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRulePDM1QC<S>>(r->comm, r->comm_type);
+    }
+    void set_partition(ParallelRulePartitionTypes partition) const override {
+        this->partition = partition;
+    }
+    static uint64_t find_index(uint32_t i, uint32_t j) { return i < j ? j : i; }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (partition) {
+        case ParallelRulePartitionTypes::Left:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
+        case ParallelRulePartitionTypes::Right:
+            switch (op->name) {
+            case OpNames::I:
+                return ParallelProperty(0, ParallelOpTypes::Repeated);
+            case OpNames::C:
+            case OpNames::D:
+            case OpNames::N:
+            case OpNames::NN:
+                return ParallelProperty(si[0] % comm->size,
+                                        ParallelOpTypes::None);
+            case OpNames::A:
+            case OpNames::AD:
+            case OpNames::B:
+            case OpNames::BD:
+                return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                        ParallelOpTypes::None);
+            default:
+                assert(false);
+            }
+        case ParallelRulePartitionTypes::Middle:
+            switch (op->name) {
+            case OpNames::PDM1:
+                return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                        ParallelOpTypes::Number);
+            default:
+                return ParallelProperty(0, ParallelOpTypes::Repeated);
+            }
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
+// Rule for parallel dispatcher for quantum chemistry 2PDM
+// this one should provide better scalability than ParallelRuleNPDMQC
+template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    mutable ParallelRulePartitionTypes partition;
+    ParallelRulePDM2QC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                       ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRulePDM2QC<S>>(r->comm, r->comm_type);
+    }
+    void set_partition(ParallelRulePartitionTypes partition) const override {
+        this->partition = partition;
+    }
+    static uint64_t find_index(uint32_t i, uint32_t j) {
+        return i < j ? ((int)j * (j + 1) >> 1) + i
+                     : ((int)i * (i + 1) >> 1) + j;
+    }
+    static uint64_t find_index(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+        array<uint16_t, 4> arr = {i, j, k, l};
+        sort(arr.begin(), arr.end());
+        if (j == k)
+            return j;
+        else
+            return find_index(k, l);
+    }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (partition) {
+        case ParallelRulePartitionTypes::Left:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
+        case ParallelRulePartitionTypes::Right:
+            switch (op->name) {
+            case OpNames::I:
+                return ParallelProperty(0, ParallelOpTypes::Repeated);
+            case OpNames::C:
+            case OpNames::D:
+            case OpNames::N:
+            case OpNames::NN:
+                return ParallelProperty(si[0] % comm->size,
+                                        ParallelOpTypes::Repeated);
+            case OpNames::A:
+            case OpNames::AD:
+            case OpNames::B:
+            case OpNames::BD:
+            case OpNames::CCD:
+            case OpNames::CDC:
+            case OpNames::CDD:
+            case OpNames::DCC:
+            case OpNames::DCD:
+            case OpNames::DDC:
+                return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                        ParallelOpTypes::None);
+            case OpNames::CCDD:
+                return ParallelProperty(find_index(si[0], si[1], si[2], si[3]) %
+                                            comm->size,
+                                        ParallelOpTypes::None);
+            default:
+                assert(false);
+            }
+        case ParallelRulePartitionTypes::Middle:
+            switch (op->name) {
+            case OpNames::PDM2:
+                return ParallelProperty(find_index(si[0], si[1], si[2], si[3]) %
+                                            comm->size,
+                                        ParallelOpTypes::Number);
+            default:
+                return ParallelProperty(0, ParallelOpTypes::Repeated);
+            }
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
 // Rule for parallel dispatcher for quantum chemistry NPDM
 template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
     using ParallelRule<S>::comm;

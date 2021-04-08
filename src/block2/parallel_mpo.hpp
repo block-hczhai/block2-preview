@@ -55,6 +55,7 @@ template <typename S> struct ClassicParallelMPO : MPO<S> {
         MPO<S>::left_operator_exprs = mpo->left_operator_exprs;
         MPO<S>::right_operator_exprs = mpo->right_operator_exprs;
         MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
+        rule->set_partition(ParallelRulePartitionTypes::Left);
         for (size_t ix = 0; ix < MPO<S>::left_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::left_operator_exprs[ix];
             x = x->copy();
@@ -65,6 +66,7 @@ template <typename S> struct ClassicParallelMPO : MPO<S> {
                     rule->owner(MPO<S>::left_operator_names[ix]->data[j]));
             }
         }
+        rule->set_partition(ParallelRulePartitionTypes::Right);
         for (size_t ix = 0; ix < MPO<S>::right_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::right_operator_exprs[ix];
             x = x->copy();
@@ -75,6 +77,7 @@ template <typename S> struct ClassicParallelMPO : MPO<S> {
                     rule->owner(MPO<S>::right_operator_names[ix]->data[j]));
             }
         }
+        rule->set_partition(ParallelRulePartitionTypes::Middle);
         for (size_t ix = 0; ix < MPO<S>::middle_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::middle_operator_exprs[ix];
             x = x->copy();
@@ -149,6 +152,7 @@ template <typename S> struct ParallelMPO : MPO<S> {
         MPO<S>::left_operator_exprs = mpo->left_operator_exprs;
         MPO<S>::right_operator_exprs = mpo->right_operator_exprs;
         MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
+        rule->set_partition(ParallelRulePartitionTypes::Left);
         for (size_t ix = 0; ix < MPO<S>::left_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::left_operator_exprs[ix];
             x = x->copy();
@@ -159,6 +163,7 @@ template <typename S> struct ParallelMPO : MPO<S> {
                     ix <= 1, true);
             }
         }
+        rule->set_partition(ParallelRulePartitionTypes::Right);
         for (size_t ix = 0; ix < MPO<S>::right_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::right_operator_exprs[ix];
             x = x->copy();
@@ -169,6 +174,7 @@ template <typename S> struct ParallelMPO : MPO<S> {
                     ix >= MPO<S>::right_operator_exprs.size() - 2);
             }
         }
+        rule->set_partition(ParallelRulePartitionTypes::Middle);
         for (size_t ix = 0; ix < MPO<S>::middle_operator_exprs.size(); ix++) {
             auto &x = MPO<S>::middle_operator_exprs[ix];
             x = x->copy();

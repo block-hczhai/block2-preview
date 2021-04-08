@@ -535,6 +535,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         vector<size_t> results_idx;
         results.reserve(op->mat->data.size());
         results_idx.reserve(op->mat->data.size());
+        if (para_rule != nullptr)
+            para_rule->set_partition(ParallelRulePartitionTypes::Middle);
         for (size_t i = 0; i < op->mat->data.size(); i++) {
             if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
                 OpNames::Zero)
@@ -1349,6 +1351,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         vector<size_t> results_idx;
         results.reserve(op->mat->data.size() * ket.size());
         results_idx.reserve(op->mat->data.size());
+        if (para_rule != nullptr)
+            para_rule->set_partition(ParallelRulePartitionTypes::Middle);
         for (size_t i = 0; i < op->mat->data.size(); i++) {
             vector<double> rr(ket.size(), 0);
             if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==

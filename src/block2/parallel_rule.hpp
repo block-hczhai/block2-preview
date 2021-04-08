@@ -42,7 +42,8 @@ template <typename S> struct ParallelCommunicator {
     ParallelCommunicator()
         : size(1), rank(0), root(0), group(0), grank(0), gsize(1), ngroup(1) {}
     ParallelCommunicator(int size, int rank, int root)
-        : size(size), rank(rank), root(root), group(0), grank(rank), gsize(size), ngroup(1) {}
+        : size(size), rank(rank), root(root), group(0), grank(rank),
+          gsize(size), ngroup(1) {}
     virtual ~ParallelCommunicator() = default;
     ParallelTypes get_parallel_type() const { return para_type; }
     virtual shared_ptr<ParallelCommunicator<S>> split(int igroup, int irank) {
@@ -118,6 +119,8 @@ struct ParallelProperty {
 
 enum struct ParallelCommTypes : uint8_t { None = 0, NonBlocking = 1 };
 
+enum struct ParallelRulePartitionTypes : uint8_t { Left, Right, Middle };
+
 inline bool operator&(ParallelCommTypes a, ParallelCommTypes b) {
     return ((uint8_t)a & (uint8_t)b) != 0;
 }
@@ -141,6 +144,8 @@ template <typename S> struct ParallelRule {
     ParallelTypes get_parallel_type() const {
         return comm->get_parallel_type();
     }
+    // For NPDM, the parallel rule can be different for different partition
+    virtual void set_partition(ParallelRulePartitionTypes partition) const {}
     virtual shared_ptr<ParallelRule<S>> split(int gsize) const {
         int igroup = comm->rank / gsize, irank = comm->rank % gsize;
         assert(comm->size % gsize == 0);
@@ -365,7 +370,8 @@ template <typename S> struct ParallelRule {
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^ (uint8_t)conjs[0]),
+                                                      op->conj ^
+                                                          (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
@@ -492,7 +498,8 @@ template <typename S> struct ParallelRule {
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
                             make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^ (uint8_t)conjs[0]),
+                                                      op->conj ^
+                                                          (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;

@@ -1781,6 +1781,7 @@ template <typename S> void bind_parallel(py::module &m) {
         .def_readwrite("comm", &ParallelRule<S>::comm)
         .def_readwrite("comm_type", &ParallelRule<S>::comm_type)
         .def("get_parallel_type", &ParallelRule<S>::get_parallel_type)
+        .def("set_partition", &ParallelRule<S>::set_partition)
         .def("split", &ParallelRule<S>::split)
         .def("__call__", &ParallelRule<S>::operator())
         .def("is_root", &ParallelRule<S>::is_root)
@@ -1837,6 +1838,18 @@ template <typename S> void bind_parallel(py::module &m) {
 
     py::class_<ParallelRuleNPDMQC<S>, shared_ptr<ParallelRuleNPDMQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleNPDMQC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
+    
+    py::class_<ParallelRulePDM1QC<S>, shared_ptr<ParallelRulePDM1QC<S>>,
+               ParallelRule<S>>(m, "ParallelRulePDM1QC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
+
+    py::class_<ParallelRulePDM2QC<S>, shared_ptr<ParallelRulePDM2QC<S>>,
+               ParallelRule<S>>(m, "ParallelRulePDM2QC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
                       ParallelCommTypes>());
@@ -2332,6 +2345,12 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("NonBlocking", ParallelCommTypes::NonBlocking)
         .def(py::self & py::self)
         .def(py::self | py::self);
+
+    py::enum_<ParallelRulePartitionTypes>(m, "ParallelRulePartitionTypes",
+                                          py::arithmetic())
+        .value("Left", ParallelRulePartitionTypes::Left)
+        .value("Right", ParallelRulePartitionTypes::Right)
+        .value("Middle", ParallelRulePartitionTypes::Middle);
 
     py::enum_<ParallelTypes>(m, "ParallelTypes", py::arithmetic())
         .value("Serial", ParallelTypes::Serial)
