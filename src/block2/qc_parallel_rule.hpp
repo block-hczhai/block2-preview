@@ -154,10 +154,10 @@ template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
     static uint64_t find_index(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         array<uint16_t, 4> arr = {i, j, k, l};
         sort(arr.begin(), arr.end());
-        if (j == k)
-            return j;
+        if (arr[1] == arr[2])
+            return arr[3];
         else
-            return find_index(k, l);
+            return find_index(arr[2], arr[3]);
     }
     ParallelProperty
     operator()(const shared_ptr<OpElement<S>> &op) const override {
@@ -179,17 +179,16 @@ template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
             case OpNames::AD:
             case OpNames::B:
             case OpNames::BD:
+                return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                        ParallelOpTypes::None);
             case OpNames::CCD:
             case OpNames::CDC:
             case OpNames::CDD:
             case OpNames::DCC:
             case OpNames::DCD:
             case OpNames::DDC:
-                return ParallelProperty(find_index(si[0], si[1]) % comm->size,
-                                        ParallelOpTypes::None);
             case OpNames::CCDD:
-                return ParallelProperty(find_index(si[0], si[1], si[2], si[3]) %
-                                            comm->size,
+                return ParallelProperty(si[0] % comm->size,
                                         ParallelOpTypes::None);
             default:
                 assert(false);
