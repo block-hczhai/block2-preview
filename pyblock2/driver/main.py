@@ -119,7 +119,7 @@ if pre_run or not no_pre_run:
     spin = [int(x) for x in dic.get("spin", "0").split()]
     isym = [int(x) for x in dic.get("irrep", "1").split()]
     fints = dic["orbitals"]
-    if fints[-7:] == "FCIDUMP":
+    if open(fints, 'rb').read(4) != b'\x89HDF':
         fcidump = FCIDUMP()
         fcidump.read(fints)
         fcidump.params["nelec"] = str(nelec[0])

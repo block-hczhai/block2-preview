@@ -45,7 +45,7 @@ def _print(*args, **kwargs):
 fints = arg_dic["integral"]
 fcidump = None
 if 's' not in arg_dic:
-    if fints[-7:] == "FCIDUMP":
+    if open(fints, 'rb').read(4) != b'\x89HDF':
         fcidump = FCIDUMP()
         fcidump.read(fints)
     else:
@@ -64,7 +64,7 @@ if 's' not in arg_dic:
 else:
     if len(fints.split(':')) == 2:
         fa, fb = fints.split(':')
-        if fb[-7:] == "FCIDUMP":
+        if open(fb, 'rb').read(4) != b'\x89HDF':
             fcidump = FCIDUMP()
             fcidump.read(fb)
         else:
