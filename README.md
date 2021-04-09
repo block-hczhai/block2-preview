@@ -2,9 +2,15 @@
 block2
 ======
 
-Efficient MPO implementation of quantum chemistry DMRG
+The block2 code provides an efficient highly scalable
+implementation of the Density Matrix Renormalization Group (DMRG) for quantum chemistry,
+based on Matrix Product Operator (MPO) formalism.
 
-Copyright (C) 2020 Huanchen Zhai
+Main contributors:
+
+* Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
+* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI
+* Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
 Features
 --------
@@ -205,47 +211,54 @@ enables debug flags.
 * MacOS 10.15 + icpc 2021.1 + MKL 2021
 * Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021
 
-GS-DMRG
--------
+Usage
+-----
+
+The code can either be used as a binary executable or through python interface.
+
+The following are some examples using the python interface.
+
+### GS-DMRG
 
 Test Ground-State DMRG (need `pyscf` module):
 
     python3 -m pyblock2.gsdmrg
 
-FT-DMRG
--------
+###  FT-DMRG
 
 Test Finite-Temperature (FT)-DMRG (need `pyscf` module):
 
     python3 -m pyblock2.ftdmrg
 
-LT-DMRG
--------
+### LT-DMRG
 
 Test Low-Temperature (LT)-DMRG (need `pyscf` module):
 
     python3 -m pyblock2.ltdmrg
 
-GF-DMRG
--------
+### GF-DMRG
 
 Test Green's-Function (GF)-DMRG (DDMRG++) (need `pyscf` module):
 
     python3 -m pyblock2.gfdmrg
 
-SI-DMRG
--------
+### SI-DMRG
 
 Test State-Interaction (SI)-DMRG (need `pyscf` module):
 
     python3 -m pyblock2.sidmrg
 
-Input File
-----------
+### StackBlock Compatibility
 
-The code can either be used as a binary executable or through python interface.
+A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/main.py`.
+This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
+The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
+See `docs/driver.md` for detailed documentations for this interface.
+Examples using this interface can be found at `tests/driver`.
 
-Example input file for binary executable:
+### Input File (block2 style)
+
+Example input file for binary executable `build/block2`:
 
     rand_seed = 1000
     memory = 4E9
@@ -277,3 +290,12 @@ Example input file for binary executable:
 To run this example:
 
     ./build/block2 input.txt
+
+### Using C++ Interpreter cling
+
+Since `block2` is designed as a header-only C++ library, it can be conveniently executed
+using C++ interpreter [cling](https://github.com/root-project/cling)
+(which can be installed via [anaconda](https://anaconda.org/conda-forge/cling))
+without any compilation. This can be useful for testing samll changes in the C++ code.
+
+Example C++ code for `cling` can be found at `tests/cling/hubbard.cl`.
