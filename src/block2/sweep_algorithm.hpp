@@ -24,6 +24,8 @@
 #include "matrix.hpp"
 #include "moving_environment.hpp"
 #include "parallel_mps.hpp"
+#include "qc_pdm1.hpp"
+#include "qc_pdm2.hpp"
 #include "sparse_matrix.hpp"
 #include <cassert>
 #include <cstdint>
@@ -3540,58 +3542,25 @@ template <typename S> struct Expect {
             return r.expectations[0].second;
         }
     }
-    // only works for SU2
     MatrixRef get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        MatrixRef r(nullptr, n_physical_sites, n_physical_sites);
-        r.allocate();
-        r.clear();
-        for (auto &v : expectations)
-            for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
-                assert(op->name == OpNames::PDM1);
-                r(op->site_index[0], op->site_index[1]) = x.second;
-            }
-        return r;
+        return PDM1MPOQC<S>::get_matrix_spatial(expectations, n_physical_sites);
     }
-    // only works for SZ
     MatrixRef get_1pdm(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        MatrixRef r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
-        r.allocate();
-        r.clear();
-        for (auto &v : expectations)
-            for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
-                assert(op->name == OpNames::PDM1);
-                r(2 * op->site_index[0] + op->site_index.s(0),
-                  2 * op->site_index[1] + op->site_index.s(1)) = x.second;
-            }
-        return r;
+        return PDM1MPOQC<S>::get_matrix(expectations, n_physical_sites);
     }
-    // only works for SZ
+    shared_ptr<Tensor> get_2pdm_spatial(uint16_t n_physical_sites = 0U) {
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        return PDM2MPOQC<S>::get_matrix_spatial(expectations, n_physical_sites);
+    }
     shared_ptr<Tensor> get_2pdm(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        shared_ptr<Tensor> r = make_shared<Tensor>(
-            vector<MKL_INT>{n_physical_sites * 2, n_physical_sites * 2,
-                            n_physical_sites * 2, n_physical_sites * 2});
-        r->clear();
-        for (auto &v : expectations)
-            for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
-                assert(op->name == OpNames::PDM2);
-                (*r)({op->site_index[0] * 2 + op->site_index.s(0),
-                      op->site_index[1] * 2 + op->site_index.s(1),
-                      op->site_index[2] * 2 + op->site_index.s(2),
-                      op->site_index[3] * 2 + op->site_index.s(3)}) = x.second;
-            }
-        return r;
+        return PDM2MPOQC<S>::get_matrix(expectations, n_physical_sites);
     }
     // only works for SU2
     // number of particle correlation

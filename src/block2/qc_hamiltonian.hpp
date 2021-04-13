@@ -766,6 +766,48 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 if (!(delayed & DelayedOpNames::Normal))
                     p.second = site_norm_ops[m].at(p.first);
                 break;
+            case OpNames::CCDD:
+                if (!(delayed & DelayedOpNames::CCDD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(0,
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::A, SiteIndex(m, m, s), vacuum)),
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::AD, SiteIndex(m, m, s), vacuum)),
+                                 p.second);
+                }
+                break;
+            case OpNames::CCD:
+                if (!(delayed & DelayedOpNames::CCD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(0,
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::A, SiteIndex(m, m, s), vacuum)),
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::D, SiteIndex(m), vacuum)),
+                                 p.second);
+                }
+                break;
+            case OpNames::CDD:
+                if (!(delayed & DelayedOpNames::CDD)) {
+                    s = op.site_index.ss();
+                    p.second = make_shared<SparseMatrix<S>>(d_alloc);
+                    p.second->allocate(info);
+                    // q_label is not used for comparison
+                    opf->product(0,
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::B, SiteIndex(m, m, s), vacuum)),
+                                 site_norm_ops[m].at(make_shared<OpElement<S>>(
+                                     OpNames::D, SiteIndex(m), vacuum)),
+                                 p.second);
+                }
+                break;
             case OpNames::H:
                 if (!(delayed & DelayedOpNames::H)) {
                     p.second = make_shared<SparseMatrix<S>>(d_alloc);

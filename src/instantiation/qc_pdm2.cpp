@@ -21,3 +21,4 @@
 #include "instantiation.hpp"
 
 template struct block2::PDM2MPOQC<block2::SZ>;
+template struct block2::PDM2MPOQC<block2::SU2>;

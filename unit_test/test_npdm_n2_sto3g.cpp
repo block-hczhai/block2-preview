@@ -12,7 +12,8 @@ class TestNPDM : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -22,6 +23,47 @@ class TestNPDM : public ::testing::Test {
         frame_() = nullptr;
     }
 };
+
+void load_twopdm(const string &filename_2pdm,
+                 vector<tuple<int, int, int, int, double>> *two_pdm) {
+    ifstream ifs(filename_2pdm.c_str());
+    ASSERT_TRUE(ifs.good());
+    vector<string> lines = Parsing::readlines(&ifs);
+    ASSERT_FALSE(ifs.bad());
+    ifs.close();
+    for (auto &line : lines) {
+        vector<string> items = Parsing::split(line, " ", true);
+        if (items.size() == 6)
+            two_pdm[Parsing::to_int(items[0])].push_back(
+                make_tuple(Parsing::to_int(items[1]), Parsing::to_int(items[2]),
+                           Parsing::to_int(items[3]), Parsing::to_int(items[4]),
+                           Parsing::to_double(items[5])));
+    }
+
+    two_pdm[3] = two_pdm[1];
+    two_pdm[1] = two_pdm[2];
+    two_pdm[2] = two_pdm[3];
+    two_pdm[4] = two_pdm[3];
+    two_pdm[5] = two_pdm[3];
+    sort(two_pdm[3].begin(), two_pdm[3].end(),
+         [](const tuple<int, int, int, int, double> &i,
+            const tuple<int, int, int, int, double> &j) {
+             return make_tuple(get<0>(i), get<1>(i), get<3>(i), get<2>(i)) <
+                    make_tuple(get<0>(j), get<1>(j), get<3>(j), get<2>(j));
+         });
+    sort(two_pdm[4].begin(), two_pdm[4].end(),
+         [](const tuple<int, int, int, int, double> &i,
+            const tuple<int, int, int, int, double> &j) {
+             return make_tuple(get<1>(i), get<0>(i), get<2>(i), get<3>(i)) <
+                    make_tuple(get<1>(j), get<0>(j), get<2>(j), get<3>(j));
+         });
+    sort(two_pdm[5].begin(), two_pdm[5].end(),
+         [](const tuple<int, int, int, int, double> &i,
+            const tuple<int, int, int, int, double> &j) {
+             return make_tuple(get<1>(i), get<0>(i), get<3>(i), get<2>(i)) <
+                    make_tuple(get<1>(j), get<0>(j), get<3>(j), get<2>(j));
+         });
+}
 
 TEST_F(TestNPDM, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
@@ -138,6 +180,9 @@ TEST_F(TestNPDM, TestSU2) {
         {9, 6, 0.071579631086},  {9, 7, -0.001562034805},
         {9, 8, -0.010381216191}, {9, 9, 0.105937776172}};
 
+    vector<tuple<int, int, int, int, double>> two_pdm[6];
+    load_twopdm("data/N2.STO3G.2PDM", two_pdm);
+
     Timer t;
     t.get_time();
     // MPO construction
@@ -162,6 +207,17 @@ TEST_F(TestNPDM, TestSU2) {
     pmpo =
         make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<RuleQC<SU2>>(), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
+
+    // 2PDM MPO construction
+    cout << "2PDM MPO start" << endl;
+    shared_ptr<MPO<SU2>> p2mpo = make_shared<PDM2MPOQC<SU2>>(hamil);
+    cout << "2PDM MPO end .. T = " << t.get_time() << endl;
+
+    // 2PDM MPO simplification
+    cout << "2PDM MPO simplification start" << endl;
+    p2mpo = make_shared<SimplifiedMPO<SU2>>(p2mpo, make_shared<RuleQC<SU2>>(),
+                                            true);
+    cout << "2PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
     cout << "1NPC MPO start" << endl;
@@ -207,7 +263,7 @@ TEST_F(TestNPDM, TestSU2) {
 
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
-        vector<double> noises =  {1E-8, 0};
+        vector<double> noises = {1E-8, 0};
         shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
@@ -231,9 +287,9 @@ TEST_F(TestNPDM, TestSU2) {
         for (int i = 0; i < dm.m; i++)
             for (int j = 0; j < dm.n; j++)
                 if (abs(dm(i, j)) > TINY) {
-                    cout << "== SU2 1PDM / " << dot << "-site ==" << setw(5)
-                         << i << setw(5) << j << fixed << setw(22) << fixed
-                         << setprecision(12) << dm(i, j)
+                    cout << "== SU2 1PDM SPAT / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dm(i, j)
                          << " error = " << scientific << setprecision(3)
                          << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k]))
                          << endl;
@@ -248,6 +304,149 @@ TEST_F(TestNPDM, TestSU2) {
         EXPECT_EQ(k, (int)one_pdm.size());
 
         dm.deallocate();
+
+        dm = expect->get_1pdm();
+        int kk[2] = {0, 0};
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (abs(dm(i, j)) > TINY) {
+                    EXPECT_EQ(i % 2, j % 2);
+                    int ii = i / 2, jj = j / 2, p = i % 2;
+
+                    cout << "== SU2 1PDM / " << dot << "-site ==" << setw(6)
+                         << (p == 0 ? "alpha" : "beta") << setw(5) << ii
+                         << setw(5) << jj << fixed << setw(22) << fixed
+                         << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10)
+                         << abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2) << endl;
+
+                    EXPECT_EQ(ii, get<0>(one_pdm[kk[p]]));
+                    EXPECT_EQ(jj, get<1>(one_pdm[kk[p]]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-6);
+
+                    kk[p]++;
+                }
+
+        EXPECT_EQ(kk[0], (int)one_pdm.size());
+        EXPECT_EQ(kk[1], (int)one_pdm.size());
+
+        dm.deallocate();
+
+        // 2PDM ME
+        shared_ptr<MovingEnvironment<SU2>> p2me =
+            make_shared<MovingEnvironment<SU2>>(p2mpo, mps, mps, "2PDM");
+        t.get_time();
+        cout << "2PDM INIT start" << endl;
+        p2me->init_environments(false);
+        cout << "2PDM INIT end .. T = " << t.get_time() << endl;
+
+        // 2PDM
+        expect = make_shared<Expect<SU2>>(p2me, bond_dim, bond_dim);
+        expect->solve(true, mps->center == 0);
+
+        int m[6] = {0, 0, 0, 0, 0, 0};
+        double max_error = 0.0;
+        shared_ptr<Tensor> dm2 = expect->get_2pdm();
+        for (int i = 0; i < dm2->shape[0]; i++)
+            for (int j = 0; j < dm2->shape[1]; j++)
+                for (int k = 0; k < dm2->shape[2]; k++)
+                    for (int l = 0; l < dm2->shape[3]; l++)
+                        if (abs((*dm2)({i, j, k, l})) > TINY) {
+
+                            int p = -1;
+                            double f = 1.0;
+
+                            int ii = i / 2, jj = j / 2, kk = k / 2, ll = l / 2;
+
+                            if (i % 2 == 0 && j % 2 == 0 && k % 2 == 0 &&
+                                l % 2 == 0)
+                                p = 0, f = 1.0;
+                            else if (i % 2 == 1 && j % 2 == 1 && k % 2 == 1 &&
+                                     l % 2 == 1)
+                                p = 1, f = 1.0;
+                            else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 1 &&
+                                     l % 2 == 0)
+                                p = 2, f = 1.0;
+                            else if (i % 2 == 0 && j % 2 == 1 && k % 2 == 0 &&
+                                     l % 2 == 1)
+                                p = 3, f = -1.0, swap(kk, ll);
+                            else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 1 &&
+                                     l % 2 == 0)
+                                p = 4, f = -1.0, swap(ii, jj);
+                            else if (i % 2 == 1 && j % 2 == 0 && k % 2 == 0 &&
+                                     l % 2 == 1)
+                                p = 5, f = 1.0, swap(ii, jj), swap(kk, ll);
+
+                            EXPECT_NE(p, -1);
+
+                            EXPECT_EQ(ii, get<0>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(jj, get<1>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(kk, get<2>(two_pdm[p][m[p]]));
+                            EXPECT_EQ(ll, get<3>(two_pdm[p][m[p]]));
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) -
+                                          f * get<4>(two_pdm[p][m[p]])),
+                                      1E-6);
+
+                            max_error = max(max_error,
+                                            abs((*dm2)({i, j, k, l}) -
+                                                f * get<4>(two_pdm[p][m[p]])));
+
+                            m[p]++;
+                        }
+
+        for (int p = 0; p < 6; p++)
+            EXPECT_EQ(m[p], (int)two_pdm[p].size());
+
+        cout << "== SU2 2PDM / " << dot << "-site =="
+             << " max error = " << scientific << setprecision(3) << setw(10)
+             << max_error << endl;
+
+        m[0] = m[1] = m[2] = 0;
+        max_error = 0.0;
+        dm2 = expect->get_2pdm_spatial();
+        for (int i = 0; i < dm2->shape[0]; i++)
+            for (int j = 0; j < dm2->shape[1]; j++)
+                for (int k = 0; k < dm2->shape[2]; k++)
+                    for (int l = 0; l < dm2->shape[3]; l++)
+                        if (abs((*dm2)({i, j, k, l})) > TINY) {
+
+                            double v = 0;
+                            if (m[0] < two_pdm[0].size() &&
+                                two_pdm[0][m[0]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[0][m[0]])))
+                                v += get<4>(two_pdm[0][m[0]]), m[0]++;
+                            if (m[1] < two_pdm[1].size() &&
+                                two_pdm[1][m[1]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[1][m[1]])))
+                                v += get<4>(two_pdm[1][m[1]]), m[1]++;
+                            if (m[2] < two_pdm[2].size() &&
+                                two_pdm[2][m[2]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[2][m[2]])))
+                                v += get<4>(two_pdm[2][m[2]]) * 2, m[2]++;
+
+                            cout << i << " " << j << " " << k << " " << l << " "
+                                 << setprecision(10) << (*dm2)({i, j, k, l})
+                                 << " " << v << endl;
+
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-6);
+
+                            max_error =
+                                max(max_error, abs((*dm2)({i, j, k, l}) - v));
+
+                            if (max_error > 1E-6)
+                                abort();
+                        }
+
+        for (int p = 0; p < 3; p++)
+            EXPECT_EQ(m[p], (int)two_pdm[p].size());
+
+        cout << "== SU2 2PDM SPAT / " << dot << "-site =="
+             << " max error = " << scientific << setprecision(3) << setw(10)
+             << max_error << endl;
 
         // 1NPC ME
         shared_ptr<MovingEnvironment<SU2>> nme =
@@ -333,17 +532,17 @@ TEST_F(TestNPDM, TestSZ) {
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
-        {0, 0, 0.999994641296},  {0, 1, -0.000012699067},
-        {0, 2, 0.000119280310},  {1, 0, -0.000012699067},
-        {1, 1, 0.995715744728},  {1, 2, -0.002820893894},
-        {2, 0, 0.000119280310},  {2, 1, -0.002820893894},
-        {2, 2, 0.992735757778},  {3, 3, 0.999996382406},
-        {3, 4, -0.000118011417}, {3, 5, 0.000081931760},
-        {4, 3, -0.000118011417}, {4, 4, 0.993185629977},
-        {4, 5, 0.009181753485},  {5, 3, 0.000081931760},
-        {5, 4, 0.009181753485},  {5, 5, 0.009824647386},
-        {6, 6, 0.965706279830},  {7, 7, 0.038567318450},
-        {8, 8, 0.965706279554},  {9, 9, 0.038567318595}};
+        {0, 0, 1.999989282592},  {0, 1, -0.000025398134},
+        {0, 2, 0.000238560621},  {1, 0, -0.000025398134},
+        {1, 1, 1.991431489457},  {1, 2, -0.005641787787},
+        {2, 0, 0.000238560621},  {2, 1, -0.005641787787},
+        {2, 2, 1.985471515555},  {3, 3, 1.999992764813},
+        {3, 4, -0.000236022833}, {3, 5, 0.000163863520},
+        {4, 3, -0.000236022833}, {4, 4, 1.986371259953},
+        {4, 5, 0.018363506969},  {5, 3, 0.000163863520},
+        {5, 4, 0.018363506969},  {5, 5, 0.019649294772},
+        {6, 6, 1.931412559660},  {7, 7, 0.077134636900},
+        {8, 8, 1.931412559108},  {9, 9, 0.077134637190}};
 
     vector<tuple<int, int, double>> one_npc_pure = {
         {0, 0, 0.999994641296},   {0, 1, 0.999990443218},
@@ -650,45 +849,7 @@ TEST_F(TestNPDM, TestSZ) {
         {19, 16, -0.011309669930}, {19, 18, 0.014401569491}};
 
     vector<tuple<int, int, int, int, double>> two_pdm[6];
-
-    string filename_2pdm = "data/N2.STO3G.2PDM";
-    ifstream ifs(filename_2pdm.c_str());
-    ASSERT_TRUE(ifs.good());
-    vector<string> lines = Parsing::readlines(&ifs);
-    ASSERT_FALSE(ifs.bad());
-    ifs.close();
-    for (auto &line : lines) {
-        vector<string> items = Parsing::split(line, " ", true);
-        if (items.size() == 6)
-            two_pdm[Parsing::to_int(items[0])].push_back(
-                make_tuple(Parsing::to_int(items[1]), Parsing::to_int(items[2]),
-                           Parsing::to_int(items[3]), Parsing::to_int(items[4]),
-                           Parsing::to_double(items[5])));
-    }
-
-    two_pdm[3] = two_pdm[1];
-    two_pdm[1] = two_pdm[2];
-    two_pdm[2] = two_pdm[3];
-    two_pdm[4] = two_pdm[3];
-    two_pdm[5] = two_pdm[3];
-    sort(two_pdm[3].begin(), two_pdm[3].end(),
-         [](const tuple<int, int, int, int, double> &i,
-            const tuple<int, int, int, int, double> &j) {
-             return make_tuple(get<0>(i), get<1>(i), get<3>(i), get<2>(i)) <
-                    make_tuple(get<0>(j), get<1>(j), get<3>(j), get<2>(j));
-         });
-    sort(two_pdm[4].begin(), two_pdm[4].end(),
-         [](const tuple<int, int, int, int, double> &i,
-            const tuple<int, int, int, int, double> &j) {
-             return make_tuple(get<1>(i), get<0>(i), get<2>(i), get<3>(i)) <
-                    make_tuple(get<1>(j), get<0>(j), get<2>(j), get<3>(j));
-         });
-    sort(two_pdm[5].begin(), two_pdm[5].end(),
-         [](const tuple<int, int, int, int, double> &i,
-            const tuple<int, int, int, int, double> &j) {
-             return make_tuple(get<1>(i), get<0>(i), get<3>(i), get<2>(i)) <
-                    make_tuple(get<1>(j), get<0>(j), get<3>(j), get<2>(j));
-         });
+    load_twopdm("data/N2.STO3G.2PDM", two_pdm);
 
     Timer t;
     t.get_time();
@@ -787,8 +948,31 @@ TEST_F(TestNPDM, TestSZ) {
             make_shared<Expect<SZ>>(pme, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
-        MatrixRef dm = expect->get_1pdm();
-        int k[2] = {0, 0};
+        MatrixRef dm = expect->get_1pdm_spatial();
+        int k = 0;
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (abs(dm(i, j)) > TINY) {
+                    cout << "== SZ 1PDM SPAT / " << dot << "-site ==" << setw(5)
+                         << i << setw(5) << j << fixed << setw(22) << fixed
+                         << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k]))
+                         << endl;
+
+                    EXPECT_EQ(i, get<0>(one_pdm[k]));
+                    EXPECT_EQ(j, get<1>(one_pdm[k]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
+
+                    k++;
+                }
+
+        EXPECT_EQ(k, (int)one_pdm.size());
+
+        dm.deallocate();
+
+        dm = expect->get_1pdm();
+        int kk[2] = {0, 0};
         for (int i = 0; i < dm.m; i++)
             for (int j = 0; j < dm.n; j++)
                 if (abs(dm(i, j)) > TINY) {
@@ -800,18 +984,18 @@ TEST_F(TestNPDM, TestSZ) {
                          << setw(5) << jj << fixed << setw(22) << fixed
                          << setprecision(12) << dm(i, j)
                          << " error = " << scientific << setprecision(3)
-                         << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k[p]]))
-                         << endl;
+                         << setw(10)
+                         << abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2) << endl;
 
-                    EXPECT_EQ(ii, get<0>(one_pdm[k[p]]));
-                    EXPECT_EQ(jj, get<1>(one_pdm[k[p]]));
-                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k[p]])), 1E-6);
+                    EXPECT_EQ(ii, get<0>(one_pdm[kk[p]]));
+                    EXPECT_EQ(jj, get<1>(one_pdm[kk[p]]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-6);
 
-                    k[p]++;
+                    kk[p]++;
                 }
 
-        EXPECT_EQ(k[0], (int)one_pdm.size());
-        EXPECT_EQ(k[1], (int)one_pdm.size());
+        EXPECT_EQ(kk[0], (int)one_pdm.size());
+        EXPECT_EQ(kk[1], (int)one_pdm.size());
 
         dm.deallocate();
 
@@ -881,6 +1065,45 @@ TEST_F(TestNPDM, TestSZ) {
             EXPECT_EQ(m[p], (int)two_pdm[p].size());
 
         cout << "== SZ 2PDM / " << dot << "-site =="
+             << " max error = " << scientific << setprecision(3) << setw(10)
+             << max_error << endl;
+
+        m[0] = m[1] = m[2] = 0;
+        max_error = 0.0;
+        dm2 = expect->get_2pdm_spatial();
+        for (int i = 0; i < dm2->shape[0]; i++)
+            for (int j = 0; j < dm2->shape[1]; j++)
+                for (int k = 0; k < dm2->shape[2]; k++)
+                    for (int l = 0; l < dm2->shape[3]; l++)
+                        if (abs((*dm2)({i, j, k, l})) > TINY) {
+
+                            double v = 0;
+                            if (m[0] < two_pdm[0].size() &&
+                                two_pdm[0][m[0]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[0][m[0]])))
+                                v += get<4>(two_pdm[0][m[0]]), m[0]++;
+                            if (m[1] < two_pdm[1].size() &&
+                                two_pdm[1][m[1]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[1][m[1]])))
+                                v += get<4>(two_pdm[1][m[1]]), m[1]++;
+                            if (m[2] < two_pdm[2].size() &&
+                                two_pdm[2][m[2]] ==
+                                    make_tuple(i, j, k, l,
+                                               get<4>(two_pdm[2][m[2]])))
+                                v += get<4>(two_pdm[2][m[2]]) * 2, m[2]++;
+
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-6);
+
+                            max_error =
+                                max(max_error, abs((*dm2)({i, j, k, l}) - v));
+                        }
+
+        for (int p = 0; p < 3; p++)
+            EXPECT_EQ(m[p], (int)two_pdm[p].size());
+
+        cout << "== SZ 2PDM SPAT / " << dot << "-site =="
              << " max error = " << scientific << setprecision(3) << setw(10)
              << max_error << endl;
 

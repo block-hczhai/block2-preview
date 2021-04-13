@@ -1669,8 +1669,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{pi, p + i - (m + 1)}] = trd_op[i];
                         for (uint16_t k = 0; k < m; k++) {
                             mat[{pd + k, p + i - (m + 1)}] =
-                                2.0 * ((-0.5) * pd_op[i][k][0] +
-                                       (-0.5 * sqrt(3)) * pd_op[i][k][1]);
+                                2.0 * ((-0.5) * pd_op[k][i][0] +
+                                       (0.5 * sqrt(3)) * pd_op[k][i][1]);
                             mat[{pc + k, p + i - (m + 1)}] =
                                 2.0 * ((0.5) * q_op[k][i][0] +
                                        (-0.5 * sqrt(3)) * q_op[k][i][1]);
@@ -1707,8 +1707,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{pi, p + i - (m + 1)}] = tr_op[i];
                         for (uint16_t k = 0; k < m; k++) {
                             mat[{pc + k, p + i - (m + 1)}] =
-                                2.0 * ((-0.5) * p_op[i][k][0] +
-                                       (0.5 * sqrt(3)) * p_op[i][k][1]);
+                                2.0 * ((-0.5) * p_op[k][i][0] +
+                                       (-0.5 * sqrt(3)) * p_op[k][i][1]);
                             mat[{pd + k, p + i - (m + 1)}] =
                                 2.0 * ((0.5) * q_op[i][k][0] +
                                        (0.5 * sqrt(3)) * q_op[i][k][1]);
@@ -1887,8 +1887,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                             mat[{p + i, pc + k}] =
-                                2.0 * ((-0.5) * p_op[k][i][0] +
-                                       (0.5 * sqrt(3)) * p_op[k][i][1]);
+                                2.0 * ((-0.5) * p_op[i][k][0] +
+                                       (-0.5 * sqrt(3)) * p_op[i][k][1]);
                             mat[{p + i, pd + k}] =
                                 2.0 * ((0.5) * q_op[i][k][0] +
                                        (-0.5 * sqrt(3)) * q_op[i][k][1]);
@@ -1927,8 +1927,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = m + 1; k < hamil.n_sites; k++) {
                             mat[{p + i, pd + k}] =
-                                2.0 * ((-0.5) * pd_op[k][i][0] +
-                                       (-0.5 * sqrt(3)) * pd_op[k][i][1]);
+                                2.0 * ((-0.5) * pd_op[i][k][0] +
+                                       (0.5 * sqrt(3)) * pd_op[i][k][1]);
                             mat[{p + i, pc + k}] =
                                 2.0 * ((0.5) * q_op[k][i][0] +
                                        (0.5 * sqrt(3)) * q_op[k][i][1]);

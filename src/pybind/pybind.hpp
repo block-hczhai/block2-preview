@@ -196,7 +196,13 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_su2_t()) {
 }
 
 template <typename S>
-auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {}
+auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
+
+    py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
+        .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
+        .def("get_matrix", &PDM2MPOQC<S>::get_matrix)
+        .def("get_matrix_spatial", &PDM2MPOQC<S>::get_matrix_spatial);
+}
 
 template <typename S>
 auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
@@ -244,7 +250,9 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
             "s_minimal", [](py::object) { return PDM2MPOQC<S>::s_minimal; })
         .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
         .def(py::init<const Hamiltonian<S> &, uint16_t>(), py::arg("hamil"),
-             py::arg("mask"));
+             py::arg("mask"))
+        .def("get_matrix", &PDM2MPOQC<S>::get_matrix)
+        .def("get_matrix_spatial", &PDM2MPOQC<S>::get_matrix_spatial);
 
     py::class_<SumMPOQC<S>, shared_ptr<SumMPOQC<S>>, MPO<S>>(m, "SumMPOQC")
         .def_readwrite("ts", &SumMPOQC<S>::ts)
@@ -1740,6 +1748,8 @@ template <typename S> void bind_algorithms(py::module &m) {
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1pdm", &Expect<S>::get_1pdm,
              py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_2pdm_spatial", &Expect<S>::get_2pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_2pdm", &Expect<S>::get_2pdm,
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1npc_spatial", &Expect<S>::get_1npc_spatial, py::arg("s"),
@@ -1841,7 +1851,7 @@ template <typename S> void bind_parallel(py::module &m) {
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
                       ParallelCommTypes>());
-    
+
     py::class_<ParallelRulePDM1QC<S>, shared_ptr<ParallelRulePDM1QC<S>>,
                ParallelRule<S>>(m, "ParallelRulePDM1QC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
@@ -2006,7 +2016,9 @@ template <typename S> void bind_mpo(py::module &m) {
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
         .def(py::init<const Hamiltonian<S> &>())
-        .def(py::init<const Hamiltonian<S> &, uint8_t>());
+        .def(py::init<const Hamiltonian<S> &, uint8_t>())
+        .def("get_matrix", &PDM1MPOQC<S>::get_matrix)
+        .def("get_matrix_spatial", &PDM1MPOQC<S>::get_matrix_spatial);
 
     py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
         .def(py::init<const Hamiltonian<S> &>());

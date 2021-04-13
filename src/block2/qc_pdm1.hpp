@@ -262,6 +262,35 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {}
+    static MatrixRef get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+        uint16_t n_sites) {
+        MatrixRef r(nullptr, n_sites * 2, n_sites * 2);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                r(2 * op->site_index[0] + op->site_index.s(0),
+                  2 * op->site_index[1] + op->site_index.s(1)) = x.second;
+            }
+        return r;
+    }
+    static MatrixRef get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+        uint16_t n_sites) {
+        MatrixRef r(nullptr, n_sites, n_sites);
+        r.allocate();
+        r.clear();
+        MatrixRef t = get_matrix(expectations, n_sites);
+        for (uint16_t i = 0; i < n_sites; i++)
+            for (uint16_t j = 0; j < n_sites; j++)
+                r(i, j) = t(2 * i + 0, 2 * j + 0) + t(2 * i + 1, 2 * j + 1);
+        t.deallocate();
+        return r;
+    }
 };
 
 // "MPO" for one particle density matrix (spin-adapted)
@@ -463,6 +492,37 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
     }
     void deallocate() override {}
+    // only for singlet
+    static MatrixRef get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+        uint16_t n_sites) {
+        MatrixRef r(nullptr, n_sites * 2, n_sites * 2);
+        r.allocate();
+        r.clear();
+        MatrixRef t = get_matrix_spatial(expectations, n_sites);
+        for (uint16_t i = 0; i < n_sites; i++)
+            for (uint16_t j = 0; j < n_sites; j++) {
+                r(2 * i + 0, 2 * j + 0) = t(i, j) / 2;
+                r(2 * i + 1, 2 * j + 1) = t(i, j) / 2;
+            }
+        t.deallocate();
+        return r;
+    }
+    static MatrixRef get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+        uint16_t n_sites) {
+        MatrixRef r(nullptr, n_sites, n_sites);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                r(op->site_index[0], op->site_index[1]) = x.second;
+            }
+        return r;
+    }
 };
 
 } // namespace block2

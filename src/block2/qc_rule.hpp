@@ -162,17 +162,19 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                                                -op->q_label, op->factor),
                                            true, -1)
                                      : nullptr;
+        // Aij[S] = mul('Ci', 'Cj', S)
         case OpNames::A:
-            return (mask & (1 << A)) && op->site_index[0] < op->site_index[1]
+            return (mask & (1 << A)) && op->site_index[0] > op->site_index[1]
                        ? make_shared<OpElementRef<S>>(
                              make_shared<OpElement<S>>(
                                  OpNames::A, op->site_index.flip_spatial(),
                                  op->q_label, op->factor),
                              false, op->site_index.s() ? -1 : 1)
                        : nullptr;
+        // ADij[S] = mul('Dj', 'Di', S)
         case OpNames::AD:
             return (mask & (1 << A))
-                       ? (op->site_index[0] >= op->site_index[1]
+                       ? (op->site_index[0] <= op->site_index[1]
                               ? make_shared<OpElementRef<S>>(
                                     make_shared<OpElement<S>>(
                                         OpNames::A, op->site_index,
@@ -186,7 +188,7 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                                     true, -1))
                        : nullptr;
         case OpNames::P:
-            return (mask & (1 << P)) && op->site_index[0] < op->site_index[1]
+            return (mask & (1 << P)) && op->site_index[0] > op->site_index[1]
                        ? make_shared<OpElementRef<S>>(
                              make_shared<OpElement<S>>(
                                  OpNames::P, op->site_index.flip_spatial(),
@@ -195,7 +197,7 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                        : nullptr;
         case OpNames::PD:
             return (mask & (1 << P))
-                       ? (op->site_index[0] >= op->site_index[1]
+                       ? (op->site_index[0] <= op->site_index[1]
                               ? make_shared<OpElementRef<S>>(
                                     make_shared<OpElement<S>>(
                                         OpNames::P, op->site_index,
@@ -208,16 +210,34 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                                         -op->q_label, op->factor),
                                     true, -1))
                        : nullptr;
+        // Bij[S] = mul('Ci', 'Dj', S)
         case OpNames::B:
-            return (mask & (1 << B)) && op->site_index[0] < op->site_index[1]
+            return (mask & (1 << B)) && op->site_index[0] > op->site_index[1]
                        ? make_shared<OpElementRef<S>>(
                              make_shared<OpElement<S>>(
                                  OpNames::B, op->site_index.flip_spatial(),
                                  -op->q_label, op->factor),
                              true, op->site_index.s() ? -1 : 1)
                        : nullptr;
+        // BDij[S] = mul('Di', 'Cj', S)
+        case OpNames::BD:
+            return ((mask & (1 << B)) &&
+                    (op->site_index[0] != op->site_index[1]))
+                       ? (op->site_index[0] < op->site_index[1]
+                              ? make_shared<OpElementRef<S>>(
+                                    make_shared<OpElement<S>>(
+                                        OpNames::B, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, 1)
+                              : make_shared<OpElementRef<S>>(
+                                    make_shared<OpElement<S>>(
+                                        OpNames::B,
+                                        op->site_index.flip_spatial(),
+                                        op->q_label, op->factor),
+                                    false, op->site_index.s() ? -1 : 1))
+                       : nullptr;
         case OpNames::Q:
-            return (mask & (1 << Q)) && op->site_index[0] < op->site_index[1]
+            return (mask & (1 << Q)) && op->site_index[0] > op->site_index[1]
                        ? make_shared<OpElementRef<S>>(
                              make_shared<OpElement<S>>(
                                  OpNames::Q, op->site_index.flip_spatial(),

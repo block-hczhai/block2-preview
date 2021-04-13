@@ -296,6 +296,7 @@ extern template struct block2::PDM1MPOQC<block2::SU2>;
 
 // qc_pdm2.hpp
 extern template struct block2::PDM2MPOQC<block2::SZ>;
+extern template struct block2::PDM2MPOQC<block2::SU2>;
 
 // qc_rule.hpp
 extern template struct block2::RuleQC<block2::SZ>;
