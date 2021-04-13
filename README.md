@@ -24,16 +24,15 @@ Features
         * Decomposition types: density matrix / SVD
         * Noise types: wavefunction / density matrix / perturbative
     * Multi-Target State-Averaged Excited-State DMRG
-    * MPS compression
+    * MPS compression / addition
     * Expectation
     * Imaginary time evolution (tangent space / RK4)
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
-    * 1PDM
+    * 1PDM / 2PDM
     * Transition 1PDM
-    * 2PDM (non-spin-adapted only)
     * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition

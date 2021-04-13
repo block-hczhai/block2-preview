@@ -788,9 +788,9 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                     // q_label is not used for comparison
                     opf->product(0,
                                  site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                     OpNames::A, SiteIndex(m, m, s), vacuum)),
+                                     OpNames::C, SiteIndex(m), vacuum)),
                                  site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                     OpNames::D, SiteIndex(m), vacuum)),
+                                     OpNames::B, SiteIndex(m, m, s), vacuum)),
                                  p.second);
                 }
                 break;
@@ -802,9 +802,9 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                     // q_label is not used for comparison
                     opf->product(0,
                                  site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                     OpNames::B, SiteIndex(m, m, s), vacuum)),
+                                     OpNames::C, SiteIndex(m), vacuum)),
                                  site_norm_ops[m].at(make_shared<OpElement<S>>(
-                                     OpNames::D, SiteIndex(m), vacuum)),
+                                     OpNames::AD, SiteIndex(m, m, s), vacuum)),
                                  p.second);
                 }
                 break;

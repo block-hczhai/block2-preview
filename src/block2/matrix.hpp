@@ -146,7 +146,7 @@ struct Tensor {
         assert(shape.size() == 2);
         for (MKL_INT i = 1; i < shape[0]; i++)
             memmove(data.data() + i * nr, data.data() + i * shape[1],
-                   nr * sizeof(double));
+                    nr * sizeof(double));
         data.resize(shape[0] * nr);
         shape[1] = nr;
     }
@@ -165,12 +165,9 @@ struct Tensor {
     double &operator()(initializer_list<MKL_INT> idx) {
         size_t i = 0;
         int k = 0;
-        for (auto &ix : idx) {
-            if (k != 0)
-                i *= shape[k - 1];
-            i += ix, k++;
-        }
-        return data[i];
+        for (auto &ix : idx)
+            i = i * shape[k++] + ix;
+        return data.at(i);
     }
     friend ostream &operator<<(ostream &os, const Tensor &ts) {
         os << "TENSOR ( ";

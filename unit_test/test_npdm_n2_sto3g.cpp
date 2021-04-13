@@ -352,7 +352,7 @@ TEST_F(TestNPDM, TestSU2) {
             for (int j = 0; j < dm2->shape[1]; j++)
                 for (int k = 0; k < dm2->shape[2]; k++)
                     for (int l = 0; l < dm2->shape[3]; l++)
-                        if (abs((*dm2)({i, j, k, l})) > TINY) {
+                        if (abs((*dm2)({i, j, k, l})) > 1E-14) {
 
                             int p = -1;
                             double f = 1.0;
@@ -409,7 +409,7 @@ TEST_F(TestNPDM, TestSU2) {
             for (int j = 0; j < dm2->shape[1]; j++)
                 for (int k = 0; k < dm2->shape[2]; k++)
                     for (int l = 0; l < dm2->shape[3]; l++)
-                        if (abs((*dm2)({i, j, k, l})) > TINY) {
+                        if (abs((*dm2)({i, j, k, l})) > 1E-14) {
 
                             double v = 0;
                             if (m[0] < two_pdm[0].size() &&
@@ -428,17 +428,11 @@ TEST_F(TestNPDM, TestSU2) {
                                                get<4>(two_pdm[2][m[2]])))
                                 v += get<4>(two_pdm[2][m[2]]) * 2, m[2]++;
 
-                            cout << i << " " << j << " " << k << " " << l << " "
-                                 << setprecision(10) << (*dm2)({i, j, k, l})
-                                 << " " << v << endl;
-
                             EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-6);
 
                             max_error =
                                 max(max_error, abs((*dm2)({i, j, k, l}) - v));
 
-                            if (max_error > 1E-6)
-                                abort();
                         }
 
         for (int p = 0; p < 3; p++)
