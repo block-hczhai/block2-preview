@@ -1089,6 +1089,38 @@ template <typename S> struct DMRG {
             sweep_energies.push_back(r.energies);
             sweep_discarded_weights.push_back(r.error);
             sweep_quanta.push_back(r.quanta);
+            if (frame->restart_dir_optimal_mps != "" ||
+                frame->restart_dir_optimal_mps_per_sweep != "") {
+                size_t midx =
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x.back() < y.back();
+                        }) -
+                    sweep_energies.begin();
+                if (midx == sweep_energies.size() - 1) {
+                    if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                        if (frame->restart_dir_optimal_mps != "") {
+                            string rdoe = frame->restart_dir_optimal_mps;
+                            if (!Parsing::path_exists(rdoe))
+                                Parsing::mkdir(rdoe);
+                            me->ket->info->copy_mutable(rdoe);
+                            me->ket->copy_data(rdoe);
+                        }
+                        if (frame->restart_dir_optimal_mps_per_sweep != "") {
+                            string rdps =
+                                frame->restart_dir_optimal_mps_per_sweep + "." +
+                                Parsing::to_string((int)energies.size());
+                            if (!Parsing::path_exists(rdps))
+                                Parsing::mkdir(rdps);
+                            me->ket->info->copy_mutable(rdps);
+                            me->ket->copy_data(rdps);
+                        }
+                    }
+                    if (me->para_rule != nullptr)
+                        me->para_rule->comm->barrier();
+                }
+            }
         }
         size_t idx =
             min_element(sweep_energies.begin(), sweep_energies.end(),
@@ -2601,6 +2633,39 @@ template <typename S> struct Linear {
                      << fixed << t.get_time() << endl;
             sweep_targets.push_back(r.targets);
             sweep_discarded_weights.push_back(r.error);
+            if (frame->restart_dir_optimal_mps != "" ||
+                frame->restart_dir_optimal_mps_per_sweep != "") {
+                size_t midx =
+                    min_element(
+                        sweep_targets.begin(), sweep_targets.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x[0] < y[0];
+                        }) -
+                    sweep_targets.begin();
+                if (midx == sweep_targets.size() - 1) {
+                    if (rme->para_rule == nullptr ||
+                        rme->para_rule->is_root()) {
+                        if (frame->restart_dir_optimal_mps != "") {
+                            string rdoe = frame->restart_dir_optimal_mps;
+                            if (!Parsing::path_exists(rdoe))
+                                Parsing::mkdir(rdoe);
+                            rme->bra->info->copy_mutable(rdoe);
+                            rme->bra->copy_data(rdoe);
+                        }
+                        if (frame->restart_dir_optimal_mps_per_sweep != "") {
+                            string rdps =
+                                frame->restart_dir_optimal_mps_per_sweep + "." +
+                                Parsing::to_string((int)targets.size());
+                            if (!Parsing::path_exists(rdps))
+                                Parsing::mkdir(rdps);
+                            rme->bra->info->copy_mutable(rdps);
+                            rme->bra->copy_data(rdps);
+                        }
+                    }
+                    if (rme->para_rule != nullptr)
+                        rme->para_rule->comm->barrier();
+                }
+            }
         }
         size_t idx =
             min_element(sweep_targets.begin(), sweep_targets.end(),

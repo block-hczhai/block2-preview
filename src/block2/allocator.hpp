@@ -191,7 +191,19 @@ struct DataFrame {
     // restart_dir_per_sweep: if not empty, save MPS to this dir with sweep
     //   index as suffix, so that MPS from all sweeps will be kept in individual
     //   dir
-    string save_dir, mps_dir, restart_dir = "", restart_dir_per_sweep = "";
+    // restart_dir_optimal_mps: if not empty, save MPS to this dir whenever
+    //     an optimal solution is reached in one sweep
+    //     For DMRG, this is the MPS with the lowest energy
+    //   Note that if the best solution from the current sweep is worse than
+    //     the best solution from the previous sweep (for example in a reverse
+    //     schedule), the best solution from the current sweep is saved
+    // restart_dir_optimal_mps_per_sweep:
+    //   if not empty, save the optimal MPS from each sweep to this dir
+    //     with sweep index as suffix
+    string save_dir, mps_dir;
+    string restart_dir = "", restart_dir_per_sweep = "";
+    string restart_dir_optimal_mps = "";
+    string restart_dir_optimal_mps_per_sweep = "";
     string prefix = "F", prefix_distri = "F0";
     bool prefix_can_write = true;
     bool partition_can_write = true;
