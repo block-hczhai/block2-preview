@@ -1675,6 +1675,7 @@ template <typename S> struct Linear {
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
     EquationTypes eq_type = EquationTypes::Normal;
+    ExpectationAlgorithmTypes ex_type = ExpectationAlgorithmTypes::Normal;
     bool forward;
     uint8_t iprint = 2;
     double cutoff = 1E-14;
@@ -1907,7 +1908,8 @@ template <typename S> struct Linear {
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
                 tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
-            auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            auto tpdi =
+                t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
             targets.clear();
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -1919,7 +1921,7 @@ template <typename S> struct Linear {
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            tpdi = t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2358,7 +2360,8 @@ template <typename S> struct Linear {
                 tme->eff_ham(FuseTypes::FuseLR, forward, false,
                              tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
-            auto tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            auto tpdi =
+                t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
             targets.clear();
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2370,7 +2373,7 @@ template <typename S> struct Linear {
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, tme->para_rule);
+            tpdi = t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2865,6 +2868,7 @@ template <typename S> struct Expect {
     vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> expectations;
     bool forward;
     TruncationTypes trunc_type = TruncationTypes::Physical;
+    ExpectationAlgorithmTypes ex_type = ExpectationAlgorithmTypes::Automatic;
     uint8_t iprint = 2;
     double cutoff = 0.0;
     double beta = 0.0;
@@ -2949,7 +2953,7 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
             me->bra->tensors[i], me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -3096,7 +3100,7 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, false, me->bra->tensors[i],
                         me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> old_wfns =
             me->bra == me->ket
@@ -3223,7 +3227,7 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                               forward, true);
-        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -3417,7 +3421,7 @@ template <typename S> struct Expect {
         }
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, forward, false);
-        auto pdi = h_eff->expect(me->mpo->const_e, me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
         h_eff->deallocate();
         vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
             me->bra == me->ket

@@ -119,8 +119,10 @@ template <typename S> struct OperatorFunctions {
         // avoid possible int32 overflow
         for (int j = 0; j < mats[i]->n; j++)
             MatrixFunctions::iadd(
-                MatrixRef((*mats[i])[j]->data, 1, (MKL_INT)(*mats[i])[j]->total_memory),
-                MatrixRef((*mats[m])[j]->data, 1, (MKL_INT)(*mats[m])[j]->total_memory),
+                MatrixRef((*mats[i])[j]->data, 1,
+                          (MKL_INT)(*mats[i])[j]->total_memory),
+                MatrixRef((*mats[m])[j]->data, 1,
+                          (MKL_INT)(*mats[m])[j]->total_memory),
                 1.0);
     }
     // a += b * scale
@@ -138,7 +140,8 @@ template <typename S> struct OperatorFunctions {
             } else {
                 if (a->factor != 1.0) {
                     MatrixFunctions::iscale(
-                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory), a->factor);
+                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
+                        a->factor);
                     a->factor = 1.0;
                 }
                 if (scale != 0.0)
@@ -224,8 +227,8 @@ template <typename S> struct OperatorFunctions {
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -270,12 +273,13 @@ template <typename S> struct OperatorFunctions {
             dinfo = dc->info->cinfo;
         assert(cinfo != nullptr && dinfo != nullptr);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
-        int idk = (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
+        int idk =
+            (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
                               dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
                   dinfo->quanta);
         assert(idk < dinfo->n[dconj + 1]);
@@ -287,7 +291,8 @@ template <typename S> struct OperatorFunctions {
                 int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                int idl =
+                    (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
                           dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
@@ -314,6 +319,87 @@ template <typename S> struct OperatorFunctions {
                 break;
         }
     }
+    template <typename T, typename X>
+    static void simple_sort(vector<T> &arr, X extract) {
+        if (arr.size() == 0)
+            return;
+        sort(arr.begin(), arr.end(), [&extract](const T &x, const T &y) {
+            return extract(x) < extract(y);
+        });
+        vector<T> sorted = arr;
+        vector<int> len(1, 1);
+        vector<size_t> start(1, 0);
+        auto prev = extract(arr[0]);
+        for (size_t k = 1; k < arr.size(); k++) {
+            auto cur = extract(arr[k]);
+            if (cur == prev)
+                len.back()++;
+            else
+                len.push_back(1), prev = cur, start.push_back(k);
+        }
+        for (size_t j = 0; j < arr.size();)
+            for (size_t k = 0; k < len.size(); k++)
+                if (len[k] != 0)
+                    sorted[j++] = arr[start[k]], start[k]++, len[k]--;
+        arr = sorted;
+    }
+    // b = < v | a | c >
+    virtual void
+    tensor_partial_expectation(uint8_t conj,
+                               const shared_ptr<SparseMatrix<S>> &a,
+                               const shared_ptr<SparseMatrix<S>> &b,
+                               const shared_ptr<SparseMatrix<S>> &c,
+                               const shared_ptr<SparseMatrix<S>> &v, S opdq,
+                               double scale = 1.0) const {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal &&
+               c->get_type() == SparseMatrixTypes::Normal &&
+               v->get_type() == SparseMatrixTypes::Normal);
+        scale = scale * a->factor * v->factor * c->factor;
+        assert(b->factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
+            c->info->cinfo;
+        S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
+        assert(ik < cinfo->n[conj + 1]);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        vector<pair<array<int, 4>, double>> abcv(ixb - ixa);
+        for (int il = ixa; il < ixb; il++) {
+            int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
+                iv = (int)cinfo->stride[il];
+            double factor = cinfo->factor[il];
+            abcv[il - ixa] = make_pair(array<int, 4>{ia, ib, ic, iv}, factor);
+        }
+        simple_sort(abcv, [](const pair<array<int, 4>, double> &x) {
+            return x.first[1];
+        });
+        for (int il = 0; il < (int)abcv.size(); il++) {
+            int ia = abcv[il].first[0], ib = abcv[il].first[1],
+                ic = abcv[il].first[2], iv = abcv[il].first[3];
+            // cout << il << " " << ib << " " << (il != 0 && ib <= abcv[il - 1].first[1]) << endl;
+            // if (seq->mode == SeqTypes::Simple && il != 0 &&
+            //     ib <= abcv[il - 1].first[1])
+                seq->simple_perform();
+            double factor = abcv[il].second;
+            if (seq->mode != SeqTypes::None)
+                seq->rotate((*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv],
+                            (*c)[ic], scale * factor);
+            else
+                seq->cumulative_nflop += MatrixFunctions::rotate(
+                    (*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv], (*c)[ic],
+                    scale * factor);
+        }
+        if (seq->mode == SeqTypes::Simple)
+            seq->simple_perform();
+    }
+    // v = (a x b) @ c
     virtual void
     tensor_product_multiply(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
                             const shared_ptr<SparseMatrix<S>> &b,
@@ -335,8 +421,8 @@ template <typename S> struct OperatorFunctions {
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -413,12 +499,13 @@ template <typename S> struct OperatorFunctions {
             dinfo = dc->info->cinfo;
         assert(cinfo != nullptr && dinfo != nullptr);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
-        int idk = (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
+        int idk =
+            (int)(lower_bound(dinfo->quanta + dinfo->n[dconj],
                               dinfo->quanta + dinfo->n[dconj + 1], dabdq) -
                   dinfo->quanta);
         assert(idk < dinfo->n[dconj + 1]);
@@ -434,7 +521,8 @@ template <typename S> struct OperatorFunctions {
                     seq->simple_perform();
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
+                int idl =
+                    (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
                           dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
@@ -519,8 +607,8 @@ template <typename S> struct OperatorFunctions {
             c->info->cinfo;
         S abdq = cdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -595,6 +683,18 @@ template <typename S> struct OperatorFunctions {
                 }
             }
         }
+    }
+    virtual double dot_product(const shared_ptr<SparseMatrix<S>> &a,
+                               const shared_ptr<SparseMatrix<S>> &b,
+                               double scale = 1.0) {
+        assert(a->get_type() == SparseMatrixTypes::Normal &&
+               b->get_type() == SparseMatrixTypes::Normal);
+        assert(a->total_memory == b->total_memory);
+        double r = 0;
+        MatrixRef amat(a->data, (MKL_INT)a->total_memory, 1);
+        MatrixRef bmat(b->data, (MKL_INT)b->total_memory, 1);
+        seq->cumulative_nflop += a->total_memory;
+        return MatrixFunctions::dot(amat, bmat) * scale;
     }
     // Product with transposed tensor: [a] x [b]^T or [a]^T x [b]
     static void

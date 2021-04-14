@@ -554,6 +554,161 @@ template <typename S> struct TensorFunctions {
             break;
         }
     }
+    // fast expectation algorithm for NPDM, by reusing partially contracted
+    // left part, assuming there are smaller number of unique left operators
+    virtual vector<pair<shared_ptr<OpExpr<S>>, double>>
+    tensor_product_expectation(const vector<shared_ptr<OpExpr<S>>> &names,
+                               const vector<shared_ptr<OpExpr<S>>> &exprs,
+                               const shared_ptr<OperatorTensor<S>> &lopt,
+                               const shared_ptr<OperatorTensor<S>> &ropt,
+                               const shared_ptr<SparseMatrix<S>> &cmat,
+                               const shared_ptr<SparseMatrix<S>> &vmat) {
+        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(names.size());
+        map<tuple<uint8_t, S, S>,
+            unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
+            partials;
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>(d_alloc);
+        assert(names.size() == exprs.size());
+        S ket_dq = cmat->info->delta_quantum;
+        S bra_dq = vmat->info->delta_quantum;
+        for (size_t k = 0; k < exprs.size(); k++) {
+            // may happen for NPDM with ancilla
+            assert(dynamic_pointer_cast<OpElement<S>>(names[k])->name !=
+                   OpNames::Zero);
+            shared_ptr<OpExpr<S>> expr = exprs[k];
+            S opdq = dynamic_pointer_cast<OpElement<S>>(names[k])->q_label;
+            if (opdq.combine(bra_dq, ket_dq) == S(S::invalid))
+                continue;
+            switch (expr->get_type()) {
+            case OpTypes::SumProd:
+                throw runtime_error("Tensor product expectation with delayed "
+                                    "contraction not yet supported.");
+                break;
+            case OpTypes::Prod: {
+                shared_ptr<OpProduct<S>> op =
+                    dynamic_pointer_cast<OpProduct<S>>(expr);
+                assert(op->a != nullptr && op->b != nullptr);
+                assert(lopt->ops.count(op->a) != 0 &&
+                       ropt->ops.count(op->b) != 0);
+                shared_ptr<SparseMatrix<S>> lmat = lopt->ops.at(op->a);
+                shared_ptr<SparseMatrix<S>> rmat =
+                    make_shared<SparseMatrix<S>>(d_alloc);
+                rmat->info = ropt->ops.at(op->b)->info;
+                if (!partials[make_tuple(op->conj, rmat->info->delta_quantum,
+                                         opdq)]
+                         .count(op->a)) {
+                    rmat->allocate(rmat->info);
+                    partials[make_tuple(op->conj, rmat->info->delta_quantum,
+                                        opdq)][op->a] = rmat;
+                }
+            } break;
+            case OpTypes::Sum: {
+                shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(expr);
+                for (size_t j = 0; j < sop->strings.size(); j++) {
+                    shared_ptr<OpProduct<S>> op = sop->strings[j];
+                    assert(op->a != nullptr && op->b != nullptr);
+                    assert(lopt->ops.count(op->a) != 0 &&
+                           ropt->ops.count(op->b) != 0);
+                    shared_ptr<SparseMatrix<S>> lmat = lopt->ops.at(op->a);
+                    shared_ptr<SparseMatrix<S>> rmat =
+                        make_shared<SparseMatrix<S>>(d_alloc);
+                    rmat->info = ropt->ops.at(op->b)->info;
+                    if (!partials[make_tuple(op->conj,
+                                             rmat->info->delta_quantum, opdq)]
+                             .count(op->a)) {
+                        partials[make_tuple(op->conj, rmat->info->delta_quantum,
+                                            opdq)][op->a] = rmat;
+                    }
+                }
+            } break;
+            case OpTypes::Zero:
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        }
+        vector<tuple<uint8_t, S, shared_ptr<OpExpr<S>>,
+                     shared_ptr<SparseMatrix<S>>>>
+            vparts;
+        for (auto &m : partials)
+            for (auto &mm : m.second) {
+                vparts.push_back(make_tuple(get<0>(m.first), get<2>(m.first),
+                                            mm.first, mm.second));
+                mm.second->allocate(mm.second->info);
+            }
+        parallel_for(vparts.size(),
+                   [&vparts, &lopt, &cmat,
+                    &vmat](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                       uint8_t conj = get<0>(vparts[i]);
+                       S opdq = get<1>(vparts[i]);
+                       shared_ptr<SparseMatrix<S>> lmat =
+                           lopt->ops.at(get<2>(vparts[i]));
+                       shared_ptr<SparseMatrix<S>> rmat = get<3>(vparts[i]);
+                       tf->opf->tensor_partial_expectation(conj, lmat, rmat,
+                                                           cmat, vmat, opdq);
+                   });
+        vector<size_t> prod_idxs;
+        prod_idxs.reserve(exprs.size());
+        for (size_t k = 0; k < exprs.size(); k++) {
+            shared_ptr<OpExpr<S>> expr = exprs[k];
+            S opdq = dynamic_pointer_cast<OpElement<S>>(names[k])->q_label;
+            expectations[k] = make_pair(names[k], 0.0);
+            if (opdq.combine(bra_dq, ket_dq) == S(S::invalid))
+                continue;
+            switch (expr->get_type()) {
+            case OpTypes::Prod:
+                prod_idxs.push_back(k);
+                break;
+            case OpTypes::Sum: {
+                shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(expr);
+                int ntop = threading->activate_operator();
+                double r = 0;
+#pragma omp parallel for schedule(dynamic) num_threads(ntop) reduction(+ : r)
+                for (int j = 0; j < (int)sop->strings.size(); j++) {
+                    shared_ptr<OpProduct<S>> op = sop->strings[j];
+                    shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(op->b);
+                    shared_ptr<SparseMatrix<S>> lmat =
+                        partials
+                            .at(make_tuple(op->conj, rmat->info->delta_quantum,
+                                           opdq))
+                            .at(op->a);
+                    r += opf->dot_product(lmat, rmat, op->factor);
+                }
+                threading->activate_normal();
+                expectations[k] = make_pair(names[k], r);
+            } break;
+            case OpTypes::Zero:
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        }
+        parallel_for(
+            prod_idxs.size(),
+            [&prod_idxs, &ropt, &partials, &exprs, &names, &expectations](
+                const shared_ptr<TensorFunctions<S>> &tf, size_t pk) {
+                size_t k = prod_idxs[pk];
+                shared_ptr<OpExpr<S>> expr = exprs[k];
+                S opdq = dynamic_pointer_cast<OpElement<S>>(names[k])->q_label;
+                shared_ptr<OpProduct<S>> op =
+                    dynamic_pointer_cast<OpProduct<S>>(expr);
+                shared_ptr<SparseMatrix<S>> rmat = ropt->ops.at(op->b);
+                shared_ptr<SparseMatrix<S>> lmat =
+                    partials
+                        .at(make_tuple(op->conj, rmat->info->delta_quantum,
+                                       opdq))
+                        .at(op->a);
+                expectations[k] = make_pair(
+                    names[k], tf->opf->dot_product(lmat, rmat, op->factor));
+            });
+        for (auto &vpart : vparts)
+            get<3>(vpart)->deallocate();
+        return expectations;
+    }
     // vmat = expr x cmat
     virtual void
     tensor_product_multiply(const shared_ptr<OpExpr<S>> &expr,

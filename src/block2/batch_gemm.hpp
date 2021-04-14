@@ -423,6 +423,9 @@ struct BatchGEMMSeq {
     shared_ptr<vector<double>> vdata;
     vector<shared_ptr<BatchGEMM>> batch;
     vector<shared_ptr<BatchGEMM>> post_batch;
+    // conj_ for change work array position
+    // for "rotate" for partial expectation
+    vector<bool> cjc;
     vector<BatchGEMMRef> refs;
     size_t cumulative_nflop = 0;
     size_t max_batch_flops = 1LU << 30;
@@ -443,6 +446,7 @@ struct BatchGEMMSeq {
         seq->batch.clear();
         seq->batch.push_back(make_shared<BatchGEMM>());
         seq->batch.push_back(make_shared<BatchGEMM>());
+        seq->cjc.clear();
         return seq;
     }
     // [a] = cfactor * [a] + scale * [b]
@@ -461,7 +465,7 @@ struct BatchGEMMSeq {
                   double cfactor) {
         batch[1]->multiply(a, conja, b, conjb, c, scale, cfactor);
     }
-    // [c] = scale * [bra] x [a] x [ket]
+    // [c] = scale * [bra](.T) x [a] x [ket](.T)
     void rotate(const MatrixRef &a, const MatrixRef &c, const MatrixRef &bra,
                 bool conj_bra, const MatrixRef &ket, bool conj_ket,
                 double scale) {
@@ -469,6 +473,22 @@ struct BatchGEMMSeq {
                        conj_ket ? ket.m : ket.n);
         batch[0]->multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         batch[1]->multiply(bra, conj_bra, work, false, c, scale, 1.0);
+        if (mode & SeqTypes::Tasked)
+            max_work = max(max_work, work.size());
+        batch[0]->work += work.size();
+        batch[1]->work += work.size();
+    }
+    // [c](.T) = scale * [bra].T x [a](.T) x [ket]
+    void rotate(const MatrixRef &a, bool conj_a, const MatrixRef &c,
+                bool conj_c, const MatrixRef &bra, const MatrixRef &ket,
+                double scale) {
+        MatrixRef work((double *)0 + batch[0]->work, conj_a ? a.n : a.m, ket.n);
+        batch[0]->multiply(a, conj_a, ket, false, work, 1.0, 0.0);
+        if (!conj_c)
+            batch[1]->multiply(bra, true, work, false, c, scale, 1.0);
+        else
+            batch[1]->multiply(work, true, bra, false, c, scale, 1.0);
+        cjc.push_back(conj_c);
         if (mode & SeqTypes::Tasked)
             max_work = max(max_work, work.size());
         batch[0]->work += work.size();
@@ -753,7 +773,8 @@ struct BatchGEMMSeq {
                                           len[idx[kk]])]
                         .push_back(pos[idx[kk]]);
                     if (ptr[idx[kk]] + len[idx[kk]] > ptrs.back() + lens.back())
-                        lens.back() = (MKL_INT)(ptr[idx[kk]] + len[idx[kk]] - ptrs.back());
+                        lens.back() = (MKL_INT)(ptr[idx[kk]] + len[idx[kk]] -
+                                                ptrs.back());
                 } else if (ptr[idx[kk]] == ptrs.back() + lens.back()) {
                     lens.back() += len[idx[kk]];
                     shifts
@@ -847,8 +868,16 @@ struct BatchGEMMSeq {
             size_t shift = work - (double *)0;
             for (size_t i = 0; i < batch[0]->c.size(); i++)
                 batch[0]->c[i] += shift;
-            for (size_t i = 0; i < batch[1]->b.size(); i++)
-                batch[1]->b[i] += shift;
+            if (cjc.size() == 0)
+                for (size_t i = 0; i < batch[1]->b.size(); i++)
+                    batch[1]->b[i] += shift;
+            else {
+                for (size_t i = 0; i < batch[1]->b.size(); i++)
+                    if (!cjc[i])
+                        batch[1]->b[i] += shift;
+                    else
+                        batch[1]->a[i] += shift;
+            }
         }
         if (max_rwork != 0) {
             rwork = vdata->data() + max_work;
@@ -934,8 +963,9 @@ struct BatchGEMMSeq {
                     const MatrixRef &v = vs[tid + ig * ntop];
                     if (batch[1]->c[i] >= v.data &&
                         batch[1]->c[i] < v.data + v.size())
-                        batch[1]->perform_single(
-                            (int)i, batch[1]->a[i], batch[1]->b[i], batch[1]->c[i]);
+                        batch[1]->perform_single((int)i, batch[1]->a[i],
+                                                 batch[1]->b[i],
+                                                 batch[1]->c[i]);
                 }
         }
         threading->activate_normal();
@@ -1005,7 +1035,8 @@ struct BatchGEMMSeq {
         } else if (mode & SeqTypes::Tasked) {
             int ntop = threading->activate_operator();
             vector<MatrixRef> vts(ntop, v);
-            vector<MatrixRef> works(ntop, MatrixRef(nullptr, (MKL_INT)max_work, 1));
+            vector<MatrixRef> works(ntop,
+                                    MatrixRef(nullptr, (MKL_INT)max_work, 1));
             if (batch[0]->c.size() == 0 && batch[1]->c.size() == 0)
                 return;
             assert(max_rwork == 0 && max_work != 0);
@@ -1043,6 +1074,7 @@ struct BatchGEMMSeq {
             b->clear();
         post_batch.clear();
         refs.clear();
+        cjc.clear();
         max_rwork = max_work = 0;
     }
     friend ostream &operator<<(ostream &os, const BatchGEMMSeq &c) {

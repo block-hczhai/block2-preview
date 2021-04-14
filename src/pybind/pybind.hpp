@@ -966,6 +966,10 @@ template <typename S> void bind_operator(py::module &m) {
              &OperatorFunctions<S>::tensor_product_diagonal, py::arg("conj"),
              py::arg("a"), py::arg("b"), py::arg("c"), py::arg("opdq"),
              py::arg("scale") = 1.0)
+        .def("tensor_partial_expectation",
+             &OperatorFunctions<S>::tensor_partial_expectation, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
+             py::arg("opdq"), py::arg("scale") = 1.0)
         .def("tensor_product_multiply",
              &OperatorFunctions<S>::tensor_product_multiply, py::arg("conj"),
              py::arg("a"), py::arg("b"), py::arg("c"), py::arg("v"),
@@ -1685,6 +1689,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &Linear<S>::trunc_type)
         .def_readwrite("decomp_type", &Linear<S>::decomp_type)
         .def_readwrite("eq_type", &Linear<S>::eq_type)
+        .def_readwrite("ex_type", &Linear<S>::ex_type)
         .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
@@ -1738,6 +1743,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("expectations", &Expect<S>::expectations)
         .def_readwrite("forward", &Expect<S>::forward)
         .def_readwrite("trunc_type", &Expect<S>::trunc_type)
+        .def_readwrite("ex_type", &Expect<S>::ex_type)
+        .def("update_one_dot", &Expect<S>::update_one_dot)
+        .def("update_multi_one_dot", &Expect<S>::update_multi_one_dot)
         .def("update_two_dot", &Expect<S>::update_two_dot)
         .def("update_multi_two_dot", &Expect<S>::update_multi_two_dot)
         .def("blocking", &Expect<S>::blocking)
@@ -2294,6 +2302,12 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("FuseR", FuseTypes::FuseR)
         .value("FuseLR", FuseTypes::FuseLR);
 
+    py::enum_<ExpectationAlgorithmTypes>(m, "ExpectationAlgorithmTypes",
+                                         py::arithmetic())
+        .value("Automatic", ExpectationAlgorithmTypes::Automatic)
+        .value("Normal", ExpectationAlgorithmTypes::Normal)
+        .value("Fast", ExpectationAlgorithmTypes::Fast);
+
     py::enum_<TETypes>(m, "TETypes", py::arithmetic())
         .value("ImagTE", TETypes::ImagTE)
         .value("RealTE", TETypes::RealTE)
@@ -2849,9 +2863,18 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("multiply", &BatchGEMMSeq::multiply, py::arg("a"),
              py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
              py::arg("scale"), py::arg("cfactor"))
-        .def("rotate", &BatchGEMMSeq::rotate, py::arg("a"), py::arg("c"),
-             py::arg("bra"), py::arg("conj_bra"), py::arg("ket"),
-             py::arg("conj_ket"), py::arg("scale"))
+        .def("rotate",
+             (void *(const MatrixRef &, const MatrixRef &, const MatrixRef &,
+                     bool, const MatrixRef &, bool, double)) &
+                 BatchGEMMSeq::rotate,
+             py::arg("a"), py::arg("c"), py::arg("bra"), py::arg("conj_bra"),
+             py::arg("ket"), py::arg("conj_ket"), py::arg("scale"))
+        .def("rotate",
+             (void *(const MatrixRef &, bool, const MatrixRef &, bool,
+                     const MatrixRef &, const MatrixRef &, double)) &
+                 BatchGEMMSeq::rotate,
+             py::arg("a"), py::arg("conj_a"), py::arg("c"), py::arg("conj_c"),
+             py::arg("bra"), py::arg("ket"), py::arg("scale"))
         .def("tensor_product_diagonal", &BatchGEMMSeq::tensor_product_diagonal,
              py::arg("a"), py::arg("b"), py::arg("c"), py::arg("scale"))
         .def("tensor_product", &BatchGEMMSeq::tensor_product, py::arg("a"),

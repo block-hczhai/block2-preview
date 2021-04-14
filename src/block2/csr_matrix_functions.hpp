@@ -119,6 +119,48 @@ struct CSRMatrixFunctions {
         const MKL_INT inc = 1;
         return ddot(&a.nnz, a.data, &inc, b.data, &inc);
     }
+    static double sparse_dot(const CSRMatrixRef &a, const CSRMatrixRef &b) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        double r = 0;
+        if (a.nnz == a.size()) {
+            if (b.nnz == b.size())
+                r = MatrixFunctions::dot(a.dense_ref(), b.dense_ref());
+            else {
+                MatrixRef bd(d_alloc->allocate(b.size()), b.m, b.n);
+                b.to_dense(bd);
+                r = MatrixFunctions::dot(a.dense_ref(), bd);
+                bd.deallocate(d_alloc);
+            }
+            return r;
+        } else if (b.nnz == b.size()) {
+            MatrixRef ad(d_alloc->allocate(a.size()), a.m, a.n);
+            a.to_dense(ad);
+            r = MatrixFunctions::dot(ad, b.dense_ref());
+            ad.deallocate(d_alloc);
+            return r;
+        }
+        const MKL_INT *arows = a.rows, *acols = a.cols;
+        const MKL_INT *brows = b.rows, *bcols = b.cols;
+        double *adata = a.data, *bdata = b.data;
+        const MKL_INT am = a.m, an = a.n, bm = b.m, bn = b.n;
+        assert(am == bm && an == bn);
+        MKL_INT k = 0;
+        for (MKL_INT i = 0; i < am; i++) {
+            MKL_INT ja = arows[i], jar = arows[i + 1];
+            MKL_INT jb = brows[i], jbr = brows[i + 1];
+            for (; ja < jar && jb < jbr; k++) {
+                if (acols[ja] == bcols[jb]) {
+                    r += adata[ja] * bdata[jb];
+                    ja++, jb++;
+                } else if (acols[ja] > bcols[jb])
+                    jb++;
+                else
+                    ja++;
+            }
+        }
+        return r;
+    }
     // a = a + scale * op(b)
     static void iadd(CSRMatrixRef &a, const CSRMatrixRef &b, double scale,
                      bool conj = false) {
@@ -541,6 +583,21 @@ struct CSRMatrixFunctions {
         work.allocate(d_alloc);
         multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
         MatrixFunctions::multiply(bra, conj_bra, work, false, c, scale, 1.0);
+        work.deallocate(d_alloc);
+    }
+    // c(.T) = bra.T * a(.T) * ket for partial expectation
+    static void rotate(const CSRMatrixRef &a, bool conj_a, const MatrixRef &c,
+                       bool conj_c, const MatrixRef &bra, const MatrixRef &ket,
+                       double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MatrixRef work(nullptr, conj_a ? a.n : a.m, ket.n);
+        work.allocate(d_alloc);
+        multiply(a, conj_a, ket, false, work, 1.0, 0.0);
+        if (!conj_c)
+            MatrixFunctions::multiply(bra, true, work, false, c, scale, 1.0);
+        else
+            MatrixFunctions::multiply(work, true, bra, false, c, scale, 1.0);
         work.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters

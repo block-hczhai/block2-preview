@@ -149,8 +149,8 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -175,6 +175,57 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             }
         }
     }
+    // b = < v | a | c >
+    void tensor_partial_expectation(uint8_t conj,
+                                    const shared_ptr<SparseMatrix<S>> &a,
+                                    const shared_ptr<SparseMatrix<S>> &b,
+                                    const shared_ptr<SparseMatrix<S>> &c,
+                                    const shared_ptr<SparseMatrix<S>> &v,
+                                    S opdq, double scale = 1.0) const override {
+        if (a->get_type() == SparseMatrixTypes::Normal &&
+            b->get_type() == SparseMatrixTypes::Normal &&
+            c->get_type() == SparseMatrixTypes::Normal &&
+            v->get_type() == SparseMatrixTypes::Normal)
+            return OperatorFunctions<S>::tensor_partial_expectation(
+                conj, a, b, c, v, opdq, scale);
+        shared_ptr<CSRSparseMatrix<S>> ca, cb;
+        int irot = 0;
+        if (a->get_type() == SparseMatrixTypes::CSR)
+            ca = dynamic_pointer_cast<CSRSparseMatrix<S>>(a), irot |= 1;
+        if (b->get_type() == SparseMatrixTypes::CSR)
+            cb = dynamic_pointer_cast<CSRSparseMatrix<S>>(b), irot |= 2;
+        assert(v->get_type() != SparseMatrixTypes::CSR);
+        assert(c->get_type() != SparseMatrixTypes::CSR);
+        assert(irot == 1);
+        scale = scale * a->factor * v->factor * c->factor;
+        assert(b->factor == 1.0);
+        if (abs(scale) < TINY)
+            return;
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
+            c->info->cinfo;
+        S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
+        assert(ik < cinfo->n[conj + 1]);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        for (int il = ixa; il < ixb; il++) {
+            int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
+                iv = cinfo->stride[il];
+            double factor = cinfo->factor[il];
+            seq->cumulative_nflop +=
+                (size_t)(*c)[ic].m * (*c)[ic].n *
+                    ((conj & 1) ? (*a)[ia].m : (*a)[ia].n) +
+                (size_t)(*v)[iv].m * (*v)[iv].n *
+                    ((conj & 1) ? (*a)[ia].n : (*a)[ia].m);
+            CSRMatrixFunctions::rotate((*ca)[ia], conj & 1, (*b)[ib], conj & 2,
+                                       (*v)[iv], (*c)[ic], scale * factor);
+        }
+    }
+    // v = (a x b) @ c
     void
     tensor_product_multiply(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
                             const shared_ptr<SparseMatrix<S>> &b,
@@ -207,8 +258,8 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             c->info->cinfo;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -291,8 +342,8 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
             c->info->cinfo;
         S abdq = cdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
-                             cinfo->quanta + cinfo->n[conj + 1], abdq) -
-                 cinfo->quanta);
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
         assert(ik < cinfo->n[conj + 1]);
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
@@ -320,6 +371,47 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
                 assert(false);
             }
         }
+    }
+    double dot_product(const shared_ptr<SparseMatrix<S>> &a,
+                       const shared_ptr<SparseMatrix<S>> &b,
+                       double scale = 1.0) override {
+        if (a->get_type() == SparseMatrixTypes::Normal &&
+            b->get_type() == SparseMatrixTypes::Normal)
+            return OperatorFunctions<S>::dot_product(a, b, scale);
+        shared_ptr<CSRSparseMatrix<S>> ca, cb;
+        int itp = 0;
+        if (a->get_type() == SparseMatrixTypes::CSR)
+            ca = dynamic_pointer_cast<CSRSparseMatrix<S>>(a), itp |= 1;
+        if (b->get_type() == SparseMatrixTypes::CSR)
+            cb = dynamic_pointer_cast<CSRSparseMatrix<S>>(b), itp |= 2;
+        assert(itp == 1 || itp == 2 || itp == 3);
+        assert(a->info->n == b->info->n &&
+               a->info->delta_quantum == b->info->delta_quantum);
+        double r = 0;
+        for (int i = 0; i < a->info->n; i++) {
+            CSRMatrixRef ma, mb;
+            switch (itp) {
+            case 1:
+                ma = (*ca)[i];
+                mb = CSRMatrixRef((*b)[i].m, (*b)[i].n, (MKL_INT)(*b)[i].size(),
+                                  (*b)[i].data, nullptr, nullptr);
+                break;
+            case 2:
+                ma = CSRMatrixRef((*a)[i].m, (*a)[i].n, (MKL_INT)(*a)[i].size(),
+                                  (*a)[i].data, nullptr, nullptr);
+                mb = (*cb)[i];
+                break;
+            case 3:
+                ma = (*ca)[i];
+                mb = (*cb)[i];
+                break;
+            default:
+                assert(false);
+            }
+            r += CSRMatrixFunctions::sparse_dot(ma, mb);
+        }
+        seq->cumulative_nflop += a->info->get_total_memory();
+        return r * scale;
     }
 };
 

@@ -192,7 +192,7 @@ struct MatrixFunctions {
                   &a.n, &cfactor, c.data, &c.n);
         }
     }
-    // c = bra * a * ket(.T)
+    // c = bra(.T) * a * ket(.T)
     // return nflop
     static size_t rotate(const MatrixRef &a, const MatrixRef &c,
                          const MatrixRef &bra, bool conj_bra,
@@ -205,6 +205,23 @@ struct MatrixFunctions {
         multiply(bra, conj_bra, work, false, c, scale, 1.0);
         work.deallocate(d_alloc);
         return (size_t)ket.m * ket.n * work.m + (size_t)work.m * work.n * c.m;
+    }
+    // c(.T) = bra.T * a(.T) * ket
+    // return nflop
+    static size_t rotate(const MatrixRef &a, bool conj_a, const MatrixRef &c,
+                         bool conj_c, const MatrixRef &bra,
+                         const MatrixRef &ket, double scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MatrixRef work(nullptr, conj_a ? a.n : a.m, ket.n);
+        work.allocate(d_alloc);
+        multiply(a, conj_a, ket, false, work, 1.0, 0.0);
+        if (!conj_c)
+            multiply(bra, true, work, false, c, scale, 1.0);
+        else
+            multiply(work, true, bra, false, c, scale, 1.0);
+        work.deallocate(d_alloc);
+        return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * bra.n;
     }
     // dleft == true : c = bra (= da x db) * a * ket
     // dleft == false: c = bra * a * ket (= da x db)

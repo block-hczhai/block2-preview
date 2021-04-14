@@ -45,6 +45,8 @@ enum FuseTypes : uint8_t {
     FuseLR = 3
 };
 
+enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
+
 template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
 
 // Effective Hamiltonian
@@ -507,7 +509,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, double>>, size_t, double>
-    expect(double const_e,
+    expect(double const_e, ExpectationAlgorithmTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
         if (const_e != 0 && op->mat->data.size() > 0) {
@@ -518,62 +520,75 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             if (para_rule == nullptr || para_rule->is_root())
                 op->mat->data[0] = expr + const_e * (iop * iop);
         }
-        Timer t;
-        t.get_time();
-        MatrixRef ktmp(ket->data, (MKL_INT)ket->total_memory, 1);
-        MatrixRef rtmp(bra->data, (MKL_INT)bra->total_memory, 1);
-        MatrixRef btmp(nullptr, (MKL_INT)bra->total_memory, 1);
-        btmp.allocate();
+        if (ex_type == ExpectationAlgorithmTypes::Automatic)
+            ex_type = op->mat->data.size() > 1
+                          ? ExpectationAlgorithmTypes::Fast
+                          : ExpectationAlgorithmTypes::Normal;
         SeqTypes mode = tf->opf->seq->mode;
         tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
+        Timer t;
+        t.get_time();
         vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
-        expectations.reserve(op->mat->data.size());
-        vector<double> results;
-        vector<size_t> results_idx;
-        results.reserve(op->mat->data.size());
-        results_idx.reserve(op->mat->data.size());
-        if (para_rule != nullptr)
-            para_rule->set_partition(ParallelRulePartitionTypes::Middle);
-        for (size_t i = 0; i < op->mat->data.size(); i++) {
-            if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
+        // may happen for NPDM with ancilla
+        if (op->mat->data.size() == 1 &&
+            dynamic_pointer_cast<OpElement<S>>(op->dops[0])->name ==
                 OpNames::Zero)
-                continue;
-            S idx_opdq =
-                dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label;
-            S ket_dq = ket->info->delta_quantum;
-            S bra_dq = bra->info->delta_quantum;
-            if (idx_opdq.combine(bra_dq, ket_dq) == S(S::invalid))
-                expectations.push_back(make_pair(op->dops[i], 0.0));
-            else {
-                double r = 0.0;
-                if (para_rule == nullptr || !para_rule->number(op->dops[i])) {
-                    btmp.clear();
-                    (*this)(ktmp, btmp, (int)i, 1.0, true);
-                    r = MatrixFunctions::dot(btmp, rtmp);
-                } else {
-                    if (para_rule->own(op->dops[i])) {
+            ;
+        else if (ex_type == ExpectationAlgorithmTypes::Normal) {
+            MatrixRef ktmp(ket->data, (MKL_INT)ket->total_memory, 1);
+            MatrixRef rtmp(bra->data, (MKL_INT)bra->total_memory, 1);
+            MatrixRef btmp(nullptr, (MKL_INT)bra->total_memory, 1);
+            btmp.allocate();
+            expectations.reserve(op->mat->data.size());
+            vector<double> results;
+            vector<size_t> results_idx;
+            results.reserve(op->mat->data.size());
+            results_idx.reserve(op->mat->data.size());
+            if (para_rule != nullptr)
+                para_rule->set_partition(ParallelRulePartitionTypes::Middle);
+            for (size_t i = 0; i < op->mat->data.size(); i++) {
+                assert(dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name !=
+                       OpNames::Zero);
+                S idx_opdq =
+                    dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label;
+                S ket_dq = ket->info->delta_quantum;
+                S bra_dq = bra->info->delta_quantum;
+                if (idx_opdq.combine(bra_dq, ket_dq) == S(S::invalid))
+                    expectations.push_back(make_pair(op->dops[i], 0.0));
+                else {
+                    double r = 0.0;
+                    if (para_rule == nullptr ||
+                        !para_rule->number(op->dops[i])) {
                         btmp.clear();
-                        (*this)(ktmp, btmp, (int)i, 1.0, false);
+                        (*this)(ktmp, btmp, (int)i, 1.0, true);
                         r = MatrixFunctions::dot(btmp, rtmp);
+                    } else {
+                        if (para_rule->own(op->dops[i])) {
+                            btmp.clear();
+                            (*this)(ktmp, btmp, (int)i, 1.0, false);
+                            r = MatrixFunctions::dot(btmp, rtmp);
+                        }
+                        results.push_back(r);
+                        results_idx.push_back(expectations.size());
                     }
-                    results.push_back(r);
-                    results_idx.push_back(expectations.size());
+                    expectations.push_back(make_pair(op->dops[i], r));
                 }
-                expectations.push_back(make_pair(op->dops[i], r));
             }
-        }
-        btmp.deallocate();
+            btmp.deallocate();
+            if (results.size() != 0) {
+                assert(para_rule != nullptr);
+                para_rule->comm->allreduce_sum(results.data(), results.size());
+                for (size_t i = 0; i < results.size(); i++)
+                    expectations[results_idx[i]].second = results[i];
+            }
+        } else
+            expectations = tf->tensor_product_expectation(
+                op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
         if (const_e != 0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
-        if (results.size() != 0) {
-            assert(para_rule != nullptr);
-            para_rule->comm->allreduce_sum(results.data(), results.size());
-            for (size_t i = 0; i < results.size(); i++)
-                expectations[results_idx[i]].second = results[i];
-        }
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1323,7 +1338,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
-    expect(double const_e,
+    expect(double const_e, ExpectationAlgorithmTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
         if (const_e != 0 && op->mat->data.size() > 0) {

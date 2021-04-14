@@ -386,7 +386,7 @@ TEST_F(TestNPDM, TestSU2) {
                             EXPECT_EQ(ll, get<3>(two_pdm[p][m[p]]));
                             EXPECT_LT(abs((*dm2)({i, j, k, l}) -
                                           f * get<4>(two_pdm[p][m[p]])),
-                                      1E-6);
+                                      2E-6);
 
                             max_error = max(max_error,
                                             abs((*dm2)({i, j, k, l}) -
@@ -428,7 +428,7 @@ TEST_F(TestNPDM, TestSU2) {
                                                get<4>(two_pdm[2][m[2]])))
                                 v += get<4>(two_pdm[2][m[2]]) * 2, m[2]++;
 
-                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-6);
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 2E-6);
 
                             max_error =
                                 max(max_error, abs((*dm2)({i, j, k, l}) - v));
