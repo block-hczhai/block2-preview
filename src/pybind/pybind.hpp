@@ -2864,14 +2864,16 @@ template <typename S = void> void bind_matrix(py::module &m) {
              py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
              py::arg("scale"), py::arg("cfactor"))
         .def("rotate",
-             (void *(const MatrixRef &, const MatrixRef &, const MatrixRef &,
-                     bool, const MatrixRef &, bool, double)) &
+             (void (BatchGEMMSeq::*)(const MatrixRef &, const MatrixRef &,
+                                     const MatrixRef &, bool, const MatrixRef &,
+                                     bool, double)) &
                  BatchGEMMSeq::rotate,
              py::arg("a"), py::arg("c"), py::arg("bra"), py::arg("conj_bra"),
              py::arg("ket"), py::arg("conj_ket"), py::arg("scale"))
         .def("rotate",
-             (void *(const MatrixRef &, bool, const MatrixRef &, bool,
-                     const MatrixRef &, const MatrixRef &, double)) &
+             (void (BatchGEMMSeq::*)(const MatrixRef &, bool, const MatrixRef &,
+                                     bool, const MatrixRef &, const MatrixRef &,
+                                     double)) &
                  BatchGEMMSeq::rotate,
              py::arg("a"), py::arg("conj_a"), py::arg("c"), py::arg("conj_c"),
              py::arg("bra"), py::arg("ket"), py::arg("scale"))

@@ -423,7 +423,7 @@ struct BatchGEMMSeq {
     shared_ptr<vector<double>> vdata;
     vector<shared_ptr<BatchGEMM>> batch;
     vector<shared_ptr<BatchGEMM>> post_batch;
-    // conj_ for change work array position
+    // conj_c for change work array position
     // for "rotate" for partial expectation
     vector<bool> cjc;
     vector<BatchGEMMRef> refs;
