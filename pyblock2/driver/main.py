@@ -194,6 +194,9 @@ if "fullrestart" in dic:
         mps_info.bond_dim = max_bdim
     mps = MPS(mps_info) if nroots == 1 and len(targets) == 1 else MultiMPS(mps_info)
     mps.load_data()
+    if mps.dot != dot:
+        mps.dot = dot
+        mps.save_data()
     if nroots != 1:
         mps.nroots = nroots
         mps.wfns = mps.wfns[:nroots]
