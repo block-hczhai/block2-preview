@@ -195,7 +195,7 @@ template <typename S> struct MPSInfo {
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
-    virtual void set_bond_dimension_fci() {
+    virtual void set_bond_dimension_full_fci() {
         left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] =
@@ -206,6 +206,9 @@ template <typename S> struct MPSInfo {
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *basis[i], *right_dims_fci[i + 1], target));
+    }
+    virtual void set_bond_dimension_fci() {
+        set_bond_dimension_full_fci();
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
             StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
@@ -778,6 +781,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::left_dims_fci;
     using MPSInfo<S>::right_dims_fci;
     using MPSInfo<S>::shallow_copy_to;
+    using MPSInfo<S>::set_bond_dimension_fci;
     vector<ActiveTypes> casci_mask;
     static vector<ActiveTypes> active_space(int n_sites, S target,
                                             int n_active_sites,
@@ -810,7 +814,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         if (init_fci)
             set_bond_dimension_fci();
     }
-    void set_bond_dimension_fci() override {
+    void set_bond_dimension_full_fci() override {
         assert(casci_mask.size() == n_sites);
         StateInfo<S> empty = StateInfo<S>(vacuum);
         S frozen_state;
@@ -865,14 +869,6 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 assert(false);
                 break;
             }
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
-            StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
-        }
-        for (int i = 0; i <= n_sites; i++)
-            left_dims_fci[i]->collect();
-        for (int i = n_sites; i >= 0; i--)
-            right_dims_fci[i]->collect();
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<CASCIMPSInfo<S>>(*this);
@@ -898,6 +894,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::n_sites;
     using MPSInfo<S>::basis;
     using MPSInfo<S>::shallow_copy_to;
+    using MPSInfo<S>::set_bond_dimension_fci;
     int n_ext;    //!> Number of external orbitals: CI space
     int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2
                   //! gives MR-CISD
@@ -918,7 +915,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         for (int i = n_sites; i >= 0; i--)
             right_dims[i]->collect();
     }
-    void set_bond_dimension_fci() override {
+    void set_bond_dimension_full_fci() override {
         // Same as in the base class: Create left/right fci dims w/o
         // restrictions
         left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
@@ -940,15 +937,6 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
                 }
             }
         }
-        // vv same as in base class: Take intersection of left/right fci dims
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
-            StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
-        }
-        for (int i = 0; i <= n_sites; i++)
-            left_dims_fci[i]->collect();
-        for (int i = n_sites; i >= 0; i--)
-            right_dims_fci[i]->collect();
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<MRCIMPSInfo<S>>(*this);

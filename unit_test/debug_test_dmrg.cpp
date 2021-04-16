@@ -58,7 +58,7 @@ TEST_F(TestDMRG, Test) {
     fcidump->read(filename);
     cout << "INT end .. T = " << t.get_time() << endl;
 
-    bool reorder = true;
+    bool reorder = false;
     if (reorder) {
         Random::rand_seed(1234);
         // auto hmat = fcidump->abs_h1e_matrix();
@@ -156,6 +156,7 @@ TEST_F(TestDMRG, Test) {
     // CCSD init
     shared_ptr<MPSInfo<SU2>> mps_info =
         make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
+    // mps_info->set_bond_dimension_full_fci();
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -248,7 +249,7 @@ TEST_F(TestDMRG, Test) {
     dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davthrs;
     dmrg->iprint = 2;
-    // dmrg->cutoff = 0;
+    // dmrg->cutoff = 1E-20;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;

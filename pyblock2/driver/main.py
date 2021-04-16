@@ -223,6 +223,8 @@ elif pre_run or not no_pre_run:
     else:
         print('TARGETS = ', list(targets), flush=True)
         mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
+    if "full_fci_space" in dic:
+        mps_info.set_bond_dimension_full_fci()
     mps_info.tag = mps_tags[0]
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
@@ -358,6 +360,8 @@ def split_mps(iroot, mps, mps_info):
     if len(mps_info.targets) != 1:
         smps_info = MultiMPSInfo(mps_info.n_sites, mps_info.vacuum,
                                 mps_info.targets, mps_info.basis)
+        if "full_fci_space" in dic:
+            smps_info.set_bond_dimension_full_fci()
         smps_info.tag = mps_info.tag + "-%d" % iroot
         smps_info.bond_dim = mps_info.bond_dim
         for i in range(0, smps_info.n_sites + 1):
@@ -378,6 +382,8 @@ def split_mps(iroot, mps, mps_info):
     else:
         smps_info = MPSInfo(mps_info.n_sites, mps_info.vacuum,
                                 mps_info.targets[0], mps_info.basis)
+        if "full_fci_space" in dic:
+            smps_info.set_bond_dimension_full_fci()
         smps_info.tag = mps_info.tag + "-%d" % iroot
         smps_info.bond_dim = mps_info.bond_dim
         for i in range(0, smps_info.n_sites + 1):

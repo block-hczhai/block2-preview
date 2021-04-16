@@ -16,18 +16,23 @@ DEBUG = True
 if len(sys.argv) > 1:
     arg_dic = {}
     for i in range(1, len(sys.argv)):
-        if sys.argv[i] == '-s':
-            arg_dic['s'] = ''
+        if sys.argv[i] == '-s' or sys.argv[i] == '-fiedler':
+            arg_dic[sys.argv[i][1:]] = ''
         elif sys.argv[i].startswith('-'):
             arg_dic[sys.argv[i][1:]] = sys.argv[i + 1]
 else:
     raise ValueError("""
         Usage:
-            (A) python gaopt_driver.py -config gaopt.conf -integral FCIDUMP
-            (B) python gaopt_driver.py -config gaopt.conf -integral ints.h5
-            (C) python gaopt_driver.py -s -config gaopt.conf -integral kmat (read kmat)
-            (D) python gaopt_driver.py ... -w kmat (write kmat)
-            (E) python gaopt_driver.py ... -wint FCIDUMP.NEW (write reordered FCIDUMP)
+            (A) python gaopt.py -integral FCIDUMP
+            (B) python gaopt.py -config gaopt.conf -integral FCIDUMP
+            (C) python gaopt.py -config gaopt.conf -integral ints.h5
+            (D) python gaopt.py -s -config gaopt.conf -integral kmat (read kmat)
+            (E) python gaopt.py ... -w kmat (write kmat)
+            (F) python gaopt.py ... -wint FCIDUMP.NEW (write reordered FCIDUMP)
+            (G) python gaopt.py -ord RestartReorder.dat -wint FCIDUMP.NEW
+                (read from StackBlock reorder file, write reordered FCIDUMP)
+            (H) python gaopt.py -fiedler -wint FCIDUMP.NEW
+                (write fiedler reordered FCIDUMP)
     """)
 
 # MPI
@@ -97,6 +102,22 @@ if mrank == 0:
 
 # run
 midx, mf = None, None
+
+if "ord" in arg_dic:
+    print("read reordering from", arg_dic["ord"])
+    idx = [int(x) for x in open(arg_dic["ord"], "r").readline().split()]
+    f = OrbitalOrdering.evaluate(n_sites, kmat, VectorUInt16(idx))
+    idx = np.array(idx) + 1
+    midx, mf = idx, f
+    n_tasks = 0
+elif "fiedler" in arg_dic:
+    print("use fiedler reorder")
+    idx = OrbitalOrdering.fiedler(n_sites, kmat)
+    f = OrbitalOrdering.evaluate(n_sites, kmat, idx)
+    idx = np.array(idx) + 1
+    midx, mf = idx, f
+    n_tasks = 0
+
 for i_task in range(0, n_tasks):
     Random.rand_seed(1234 + i_task)
     if i_task * msize // n_tasks == mrank:

@@ -562,7 +562,7 @@ template <typename S> struct TensorFunctions {
                                const shared_ptr<OperatorTensor<S>> &lopt,
                                const shared_ptr<OperatorTensor<S>> &ropt,
                                const shared_ptr<SparseMatrix<S>> &cmat,
-                               const shared_ptr<SparseMatrix<S>> &vmat) {
+                               const shared_ptr<SparseMatrix<S>> &vmat) const {
         vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(names.size());
         map<tuple<uint8_t, S, S>,
             unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>

@@ -210,6 +210,12 @@ enables debug flags.
 * MacOS 10.15 + icpc 2021.1 + MKL 2021
 * Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021
 
+Sometimes, when you have to use `block2` together with other python modules (such as `pyscf` or `pyblock`),
+it may have some problem coexisting with each other.
+In general, change the import order may help.
+For `pyscf`, `import block2` at the very beginning of the script may help.
+For `pyblock`, recompiling `block2` use `cmake .. -DUSE_MKL=OFF -DBUILD_LIB=ON -OMP_LIB=SEQ` may help.
+
 Usage
 -----
 

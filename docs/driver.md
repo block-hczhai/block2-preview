@@ -89,3 +89,6 @@ The DMRG run will then stop as it would be converged after the current sweep is 
 14. if `soc` keyword is in the input (with no associated value), the (normal or transition) one pdm for triplet excitation operators will be calculated (which can be used for spin-orbit coupling calculation). This keyword should be used together with `onepdm`, `tran_onepdm`, `restart_onepdm`, or `restart_tran_onepdm`. Not supported for `nonspinadapted`.
 15. for `nroots > 1`, `oh` or `restart_oh` will calculate the expectation of Hamiltonian on every state. `tran_oh` or `restart_tran_oh` will calculate the expectation of Hamiltonian on every possible pair of states as bra and ket states.
 16. if `overlap` keyword is in the input (with no associated value), the expectation of identity operator will be calculated (which can be used for the overlap matrix between states). This keyword should be used together with `oh`, `tran_oh`, `restart_oh`, or `restart_tran_oh`.
+17. `fp_cps_cutoff` sets float-point number cutoff for saving disk storage. Default is `1E-16`.
+18. if `full_fci_space` keyword is in the input (with no associated value), the full fci space is used
+(including block quantum numbers outside the space of the wavefunction target quantum number).

@@ -203,6 +203,53 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
             TensorFunctions<S>::tensor_product_multi_multiply(
                 expr, lopt, ropt, cmats, vmats, cinfos, opdq, false);
     }
+    vector<pair<shared_ptr<OpExpr<S>>, double>> tensor_product_expectation(
+        const vector<shared_ptr<OpExpr<S>>> &names,
+        const vector<shared_ptr<OpExpr<S>>> &exprs,
+        const shared_ptr<OperatorTensor<S>> &lopt,
+        const shared_ptr<OperatorTensor<S>> &ropt,
+        const shared_ptr<SparseMatrix<S>> &cmat,
+        const shared_ptr<SparseMatrix<S>> &vmat) const override {
+        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(names.size());
+        vector<double> results(names.size(), 0);
+        assert(names.size() == exprs.size());
+        S ket_dq = cmat->info->delta_quantum;
+        S bra_dq = vmat->info->delta_quantum;
+        rule->set_partition(ParallelRulePartitionTypes::Middle);
+        vector<shared_ptr<OpExpr<S>>> pnames;
+        vector<shared_ptr<OpExpr<S>>> pexprs;
+        vector<size_t> pidxs;
+        for (size_t k = 0; k < exprs.size(); k++) {
+            expectations[k] = make_pair(names[k], 0.0);
+            S opdq = dynamic_pointer_cast<OpElement<S>>(names[k])->q_label;
+            if (opdq.combine(bra_dq, ket_dq) == S(S::invalid))
+                continue;
+            shared_ptr<OpExpr<S>> expr = exprs[k];
+            if (!rule->number(names[k]) || rule->own(names[k]))
+                pidxs.push_back(k);
+        }
+        pnames.reserve(pidxs.size());
+        pexprs.reserve(pidxs.size());
+        for (size_t kk = 0; kk < pidxs.size(); kk++) {
+            pnames.push_back(names[pidxs[kk]]);
+            shared_ptr<OpExpr<S>> expr = exprs[pidxs[kk]];
+            if (expr->get_type() == OpTypes::ExprRef) {
+                shared_ptr<OpExprRef<S>> op =
+                    dynamic_pointer_cast<OpExprRef<S>>(expr);
+                expr = dynamic_pointer_cast<OpExprRef<S>>(expr)->op;
+            }
+            pexprs.push_back(expr);
+        }
+        vector<pair<shared_ptr<OpExpr<S>>, double>> pexpectations =
+            TensorFunctions<S>::tensor_product_expectation(pnames, pexprs, lopt,
+                                                           ropt, cmat, vmat);
+        for (size_t kk = 0; kk < pidxs.size(); kk++)
+            results[pidxs[kk]] = pexpectations[kk].second;
+        rule->comm->allreduce_sum(results.data(), results.size());
+        for (size_t i = 0; i < names.size(); i++)
+            expectations[i].second = results[i];
+        return expectations;
+    }
     // vmat = expr x cmat
     void tensor_product_multiply(const shared_ptr<OpExpr<S>> &expr,
                                  const shared_ptr<OperatorTensor<S>> &lopt,
