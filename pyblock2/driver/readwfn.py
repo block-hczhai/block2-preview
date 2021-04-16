@@ -64,12 +64,13 @@ expect = "expect" in arg_dic
 if "config" in arg_dic:
     config = arg_dic["config"]
     dic = parse(config)
+    dd = os.path.dirname(config)
     scratch = dic.get("prefix", "./") + "/node0"
     if not os.path.isabs(scratch):
-        scratch = os.path.dirname(config) + "/" + scratch
+        scratch = ('.' if dd == '' else dd) + "/" + scratch
     integral = dic["orbitals"]
     if not os.path.isabs(integral):
-        integral = os.path.dirname(config) + "/" + integral
+        integral = ('.' if dd == '' else dd) + "/" + integral
     dot = 1 if "twodot_to_onedot" in dic or "onedot" in dic else 2
     su2 = "nonspinadapted" not in dic
 if "prefix" in arg_dic:
