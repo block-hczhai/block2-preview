@@ -214,7 +214,7 @@ Sometimes, when you have to use `block2` together with other python modules (suc
 it may have some problem coexisting with each other.
 In general, change the import order may help.
 For `pyscf`, `import block2` at the very beginning of the script may help.
-For `pyblock`, recompiling `block2` use `cmake .. -DUSE_MKL=OFF -DBUILD_LIB=ON -OMP_LIB=SEQ` may help.
+For `pyblock`, recompiling `block2` use `cmake .. -DUSE_MKL=OFF -DBUILD_LIB=ON -OMP_LIB=SEQ -DLARGE_BOND=ON` may help.
 
 Usage
 -----
