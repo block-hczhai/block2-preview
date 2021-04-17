@@ -74,17 +74,6 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
     }
     void set_bond_dimension_fci() override {
         set_bond_dimension_full_fci();
-        S max_target = *max_element(targets.begin(), targets.end());
-        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
-        for (int i = 0; i < n_sites; i++)
-            left_dims_fci[i + 1] =
-                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *left_dims_fci[i], *basis[i], max_target));
-        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
-        for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_fci[i] =
-                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *basis[i], *right_dims_fci[i + 1], max_target));
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::multi_target_filter(*left_dims_fci[i],
                                               *right_dims_fci[i], targets);

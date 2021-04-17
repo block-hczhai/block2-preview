@@ -895,6 +895,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::basis;
     using MPSInfo<S>::shallow_copy_to;
     using MPSInfo<S>::set_bond_dimension_fci;
+    using MPSInfo<S>::set_bond_dimension_full_fci;
     int n_ext;    //!> Number of external orbitals: CI space
     int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2
                   //! gives MR-CISD
@@ -918,16 +919,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     void set_bond_dimension_full_fci() override {
         // Same as in the base class: Create left/right fci dims w/o
         // restrictions
-        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
-        for (int i = 0; i < n_sites; i++)
-            left_dims_fci[i + 1] =
-                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *left_dims_fci[i], *basis[i], target));
-        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
-        for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_fci[i] =
-                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *basis[i], *right_dims_fci[i + 1], target));
+        MPSInfo<S>::set_bond_dimension_full_fci();
         // Now, restrict right_dims_fci
         for (int i = n_sites - n_ext; i < n_sites; ++i) {
             auto &state_info = right_dims_fci[i];
