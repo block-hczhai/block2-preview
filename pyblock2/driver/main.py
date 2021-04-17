@@ -8,7 +8,7 @@ Author:
 """
 
 from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
-from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ
+from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt
 import numpy as np
@@ -88,6 +88,15 @@ restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 n_threads = int(dic.get("num_thrds", 28))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
+
+if dic.get("trunc_type", "physical") == "physical":
+    trunc_type = TruncationTypes.Physical
+else:
+    trunc_type = TruncationTypes.Reduced
+if dic.get("decomp_type", "density_matrix") == "density_matrix":
+    decomp_type = DecompositionTypes.DensityMatrix
+else:
+    decomp_type = DecompositionTypes.SVD
 
 if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(scratch):
@@ -507,7 +516,8 @@ if not pre_run:
             else:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
             dmrg.cutoff = float(dic.get("cutoff", 1E-14))
-            dmrg.decomp_type = DecompositionTypes.DensityMatrix
+            dmrg.decomp_type = decomp_type
+            dmrg.trunc_type = trunc_type
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
             sweep_energies = []
             discarded_weights = []
@@ -568,7 +578,8 @@ if not pre_run:
         else:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
         dmrg.cutoff = float(dic.get("cutoff", 1E-14))
-        dmrg.decomp_type = DecompositionTypes.DensityMatrix
+        dmrg.decomp_type = decomp_type
+        dmrg.trunc_type = trunc_type
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
         sweep_energies = []
         discarded_weights = []

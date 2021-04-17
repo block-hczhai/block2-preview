@@ -94,3 +94,5 @@ The DMRG run will then stop as it would be converged after the current sweep is 
 (including block quantum numbers outside the space of the wavefunction target quantum number).
 19. `bias` (if not `1.0`) sets an power based bias to occ. `cbias` (if not `0.0`) sets a constant shift towards the equal-possibility occ. `cbias` is applied before `bias`. `cbias` is normally useful for shifting integral occ, while `bias` only shifts fractional occ.
 20. if `trans_mps_info` keyword is in the input (with no associated value), the `MPSInfo` will be initialized using `SZ` quantum numbers if in `SU2` mode, or using `SU2` quantum numbers if in `SZ` mode. A transformation of `MPSInfo` is then performed between `SZ` and `SU2` quantum numbers. `MultiMPSInfo` cannot be supported with this keyword.
+21. `trunc_type` can be `physical` (default) or `reduced`, where `reduced` re-weight eigenvalues by their multiplicities (only useful in `SU2` mode).
+22. `decomp_type` can be `density_matrix` (default) or `svd`, where `svd` may be less numerical stable and not working with `nroots > 1`.
