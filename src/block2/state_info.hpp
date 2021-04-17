@@ -455,11 +455,17 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
                 nst[abs(mm.twos())].first += si->n_states[iq];
                 nst[abs(mm.twos())].second++;
             }
-            for (int lims = abs(m.second[0].twos()), twos = lims; twos >= 0; twos -= 2) {
+            for (int lims = abs(m.second[0].twos()), twos = lims; twos >= 0;
+                 twos -= 2) {
                 S2 q(m.first.first, twos, m.first.second);
-                ubond_t a = nst[twos].first / nst[twos].second;
+                ubond_t a = nst[twos].second == 0
+                                ? 0
+                                : nst[twos].first / nst[twos].second;
                 if (twos != lims) {
-                    ubond_t b = nst[twos + 2].first / nst[twos + 2].second;
+                    ubond_t b =
+                        nst[twos + 2].second == 0
+                            ? 0
+                            : nst[twos + 2].first / nst[twos + 2].second;
                     if (a > b)
                         vso.push_back(make_pair(q, a - b));
                 } else if (a > 0)
