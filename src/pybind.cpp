@@ -49,6 +49,9 @@ PYBIND11_MODULE(block2, m) {
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
     bind_class<SZ>(m_sz, "SZ");
 
+    bind_trans<SU2, SZ>(m_su2, "sz");
+    bind_trans<SZ, SU2>(m_sz, "su2");
+
 #ifdef _USE_SCI
     bind_sci_wrapper<SZ>(m_sz);
 #ifdef _SCI_WRAPPER2
@@ -58,5 +61,4 @@ PYBIND11_MODULE(block2, m) {
     bind_mpo_sci<SZ>(m_sz);
     bind_types_sci<>(m);
 #endif
-
 }

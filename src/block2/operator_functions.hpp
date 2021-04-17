@@ -383,9 +383,8 @@ template <typename S> struct OperatorFunctions {
         for (int il = 0; il < (int)abcv.size(); il++) {
             int ia = abcv[il].first[0], ib = abcv[il].first[1],
                 ic = abcv[il].first[2], iv = abcv[il].first[3];
-            // cout << il << " " << ib << " " << (il != 0 && ib <= abcv[il - 1].first[1]) << endl;
-            // if (seq->mode == SeqTypes::Simple && il != 0 &&
-            //     ib <= abcv[il - 1].first[1])
+            if (seq->mode == SeqTypes::Simple && il != 0 &&
+                ib <= abcv[il - 1].first[1])
                 seq->simple_perform();
             double factor = abcv[il].second;
             if (seq->mode != SeqTypes::None)

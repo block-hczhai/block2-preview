@@ -796,6 +796,8 @@ template <typename S> void bind_mps(py::module &m) {
              (void (MPSInfo<S>::*)(const string &)) & MPSInfo<S>::load_data)
         .def("save_data", (void (MPSInfo<S>::*)(const string &) const) &
                               MPSInfo<S>::save_data)
+        .def("get_max_bond_dimension", &MPSInfo<S>::get_max_bond_dimension)
+        .def("check_bond_dimensions", &MPSInfo<S>::check_bond_dimensions)
         .def("set_bond_dimension_using_occ",
              &MPSInfo<S>::set_bond_dimension_using_occ, py::arg("m"),
              py::arg("occ"), py::arg("bias") = 1.0)
@@ -2073,6 +2075,16 @@ template <typename S> void bind_class(py::module &m, const string &name) {
     bind_spin_specific<S>(m);
 }
 
+template <typename S, typename T>
+void bind_trans(py::module &m, const string &aux_name) {
+
+    m.def(("trans_state_info_to_" + aux_name).c_str(),
+          &TransStateInfo<S, T>::forward);
+    m.def(("trans_mps_info_to_" + aux_name).c_str(),
+          &TransMPSInfo<S, T>::forward);
+
+}
+
 template <typename S = void> void bind_data(py::module &m) {
 
     py::bind_vector<vector<int>>(m, "VectorInt");
@@ -3036,6 +3048,9 @@ extern template void bind_hamiltonian<SU2>(py::module &m);
 extern template void bind_algorithms<SU2>(py::module &m);
 extern template void bind_mpo<SU2>(py::module &m);
 extern template void bind_parallel<SU2>(py::module &m);
+
+extern template void bind_trans<SU2, SZ>(py::module &m, const string &aux_name);
+extern template void bind_trans<SZ, SU2>(py::module &m, const string &aux_name);
 
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());

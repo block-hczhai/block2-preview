@@ -157,7 +157,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
         vector<ubond_t> nq(n_states, n_states + n);
         for (int i = 0; i < n; i++)
             idx[i] = i;
-        sort(idx.begin(), idx.end(), [&q](int i, int j) { return q[i] < q[j]; });
+        sort(idx.begin(), idx.end(),
+             [&q](int i, int j) { return q[i] < q[j]; });
         for (int i = 0; i < n; i++)
             quanta[i] = q[idx[i]], n_states[i] = nq[idx[i]];
         n_states_total = 0;
@@ -419,6 +420,76 @@ struct StateProbability<
         for (int i = 0; i < c.n; i++)
             os << c.quanta[i].to_str() << " : " << c.probs[i] << endl;
         return os;
+    }
+};
+
+template <typename S1, typename S2, typename = void, typename = void>
+struct TransStateInfo {
+    static shared_ptr<StateInfo<S2>>
+    forward(const shared_ptr<StateInfo<S1>> &si) {
+        return TransStateInfo<S2, S1>::backward(si);
+    }
+    static shared_ptr<StateInfo<S1>>
+    backward(const shared_ptr<StateInfo<S2>> &si) {
+        return TransStateInfo<S2, S1>::forward(si);
+    }
+};
+
+// Translation between SU2 and SZ StateInfo
+template <typename S1, typename S2>
+struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
+    static shared_ptr<StateInfo<S2>>
+    forward(const shared_ptr<StateInfo<S1>> &si) {
+        vector<pair<S2, ubond_t>> vso;
+        map<pair<int, int>, vector<S1>> mp;
+        for (int i = 0; i < si->n; i++) {
+            S1 q = si->quanta[i];
+            mp[make_pair(q.n(), q.pg())].push_back(q);
+        }
+        for (auto &m : mp) {
+            sort(m.second.begin(), m.second.end(),
+                 [](S1 a, S1 b) { return abs(a.twos()) > abs(b.twos()); });
+            vector<pair<ubond_t, int>> nst(abs(m.second[0].twos()) + 1);
+            for (auto &mm : m.second) {
+                int iq = si->find_state(mm);
+                nst[abs(mm.twos())].first += si->n_states[iq];
+                nst[abs(mm.twos())].second++;
+            }
+            for (int lims = abs(m.second[0].twos()), twos = lims; twos >= 0; twos -= 2) {
+                S2 q(m.first.first, twos, m.first.second);
+                ubond_t a = nst[twos].first / nst[twos].second;
+                if (twos != lims) {
+                    ubond_t b = nst[twos + 2].first / nst[twos + 2].second;
+                    if (a > b)
+                        vso.push_back(make_pair(q, a - b));
+                } else if (a > 0)
+                    vso.push_back(make_pair(q, a));
+            }
+        }
+        shared_ptr<StateInfo<S2>> so = make_shared<StateInfo<S2>>();
+        so->allocate((int)vso.size());
+        for (int i = 0; i < (int)vso.size(); i++)
+            so->quanta[i] = vso[i].first, so->n_states[i] = vso[i].second;
+        so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S1>>
+    backward(const shared_ptr<StateInfo<S2>> &si) {
+        map<S1, ubond_t> mp;
+        for (int i = 0; i < si->n; i++) {
+            S2 q = si->quanta[i];
+            for (int j = -q.twos(); j <= q.twos(); j += 2)
+                mp[S1(q.n(), j, q.pg())] += si->n_states[i];
+        }
+        shared_ptr<StateInfo<S1>> so = make_shared<StateInfo<S1>>();
+        so->allocate((int)mp.size());
+        int i = 0;
+        for (auto m : mp) {
+            so->quanta[i] = m.first, so->n_states[i] = m.second;
+            i++;
+        }
+        so->sort_states();
+        return so;
     }
 };
 

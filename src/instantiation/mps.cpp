@@ -33,3 +33,6 @@ template struct block2::CASCIMPSInfo<block2::SU2>;
 template struct block2::MRCIMPSInfo<block2::SU2>;
 template struct block2::AncillaMPSInfo<block2::SU2>;
 template struct block2::MPS<block2::SU2>;
+
+template struct block2::TransMPSInfo<block2::SZ, block2::SU2>;
+template struct block2::TransMPSInfo<block2::SU2, block2::SZ>;

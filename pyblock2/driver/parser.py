@@ -17,13 +17,13 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix", 
               "nonspinadapted", "noreorder", "num_thrds", "mem", "oh",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
-              "occ", "bias", "correlation", "restart_correlation",
+              "occ", "bias", "cbias", "correlation", "restart_correlation",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
               "restart_tran_twopdm", "soc", "overlap", "tran_oh",
               "restart_tran_oh", "restart_dir_per_sweep", "fp_cps_cutoff",
-              "full_fci_space"}
+              "full_fci_space", "trans_mps_info"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell", "cloning", "mutation", "elite", "scale", "method"}
 

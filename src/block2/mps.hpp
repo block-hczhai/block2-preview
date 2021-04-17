@@ -510,6 +510,19 @@ template <typename S> struct MPSInfo {
                 }
                 right_dims[i]->n_states_total = new_total;
             }
+        check_bond_dimensions();
+    }
+    ubond_t get_max_bond_dimension() const {
+        total_bond_t max_bdim = 0;
+        for (int i = 0; i <= n_sites; i++)
+            max_bdim = max(left_dims[i]->n_states_total, max_bdim);
+        for (int i = n_sites; i >= 0; i--)
+            max_bdim = max(right_dims[i]->n_states_total, max_bdim);
+        return (ubond_t)min(max_bdim,
+                            (total_bond_t)numeric_limits<ubond_t>::max());
+    }
+    // remove unavailable bond dimensions
+    void check_bond_dimensions() {
         for (int i = -1; i < n_sites - 1; i++) {
             StateInfo<S> t = StateInfo<S>::tensor_product(
                 *left_dims[i + 1], *basis[i + 1], *left_dims_fci[i + 2]);
@@ -540,6 +553,10 @@ template <typename S> struct MPSInfo {
             right_dims[i - 1]->n_states_total = new_total;
             t.deallocate();
         }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i]->collect();
     }
     shared_ptr<SparseMatrix<S>>
     swap_wfn_to_fused_left(int i, const shared_ptr<SparseMatrix<S>> &old_wfn,
@@ -683,6 +700,52 @@ template <typename S> struct MPSInfo {
     void deallocate() {
         deallocate_right();
         deallocate_left();
+    }
+};
+
+template <typename S1, typename S2, typename = void, typename = void>
+struct TransMPSInfo {
+    static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
+                                           S2 target) {
+        return TransMPSInfo<S2, S1>::backward(si, target);
+    }
+    static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
+                                            S1 target) {
+        return TransMPSInfo<S2, S1>::forward(si, target);
+    }
+};
+
+// Translation between SU2 and SZ MPSInfo
+template <typename S1, typename S2>
+struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
+    template <typename SX, typename SY>
+    static shared_ptr<MPSInfo<SY>> transform(const shared_ptr<MPSInfo<SX>> &si,
+                                             SY target) {
+        int n_sites = si->n_sites;
+        SY vacuum(si->vacuum.n(), abs(si->vacuum.twos()), si->vacuum.pg());
+        vector<shared_ptr<StateInfo<SY>>> basis(n_sites);
+        for (int i = 0; i < n_sites; i++)
+            basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i]);
+        shared_ptr<MPSInfo<SY>> so =
+            make_shared<MPSInfo<SY>>(n_sites, vacuum, target, basis);
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims[i] =
+                TransStateInfo<SX, SY>::forward(si->left_dims[i]);
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims[i] =
+                TransStateInfo<SX, SY>::forward(si->right_dims[i]);
+        so->check_bond_dimensions();
+        so->bond_dim = so->get_max_bond_dimension();
+        so->tag = si->tag;
+        return so;
+    }
+    static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
+                                           S2 target) {
+        return transform<S1, S2>(si, target);
+    }
+    static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
+                                            S1 target) {
+        return transform<S2, S1>(si, target);
     }
 };
 

@@ -200,6 +200,9 @@ extern template struct block2::MRCIMPSInfo<block2::SU2>;
 extern template struct block2::AncillaMPSInfo<block2::SU2>;
 extern template struct block2::MPS<block2::SU2>;
 
+extern template struct block2::TransMPSInfo<block2::SZ, block2::SU2>;
+extern template struct block2::TransMPSInfo<block2::SU2, block2::SZ>;
+
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SZ>;
 extern template struct block2::UnfusedMPS<block2::SZ>;
@@ -334,6 +337,9 @@ extern template struct block2::StateProbability<block2::SZ>;
 
 extern template struct block2::StateInfo<block2::SU2>;
 extern template struct block2::StateProbability<block2::SU2>;
+
+extern template struct block2::TransStateInfo<block2::SZ, block2::SU2>;
+extern template struct block2::TransStateInfo<block2::SU2, block2::SZ>;
 
 // sweep_algorithm_td.hpp
 extern template struct block2::TDDMRG<block2::SZ>;

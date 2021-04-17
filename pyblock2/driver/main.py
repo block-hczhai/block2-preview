@@ -46,7 +46,11 @@ if "nonspinadapted" in dic:
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.sz import trans_state_info_to_su2 as trans_si
+    from block2.su2 import MPSInfo as TrMPSInfo
+    from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SZ
+    TrSX = SU2
 else:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo
@@ -54,7 +58,11 @@ else:
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.su2 import trans_state_info_to_sz as trans_si
+    from block2.sz import MPSInfo as TrMPSInfo
+    from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SU2
+    TrSX = SZ
 
 # MPI
 MPI = MPICommunicator()
@@ -169,6 +177,13 @@ if dic.get("warmup", None) == "occ":
         with open(dic["occ"], 'r') as ofin:
             dic["occ"] = ofin.readlines()[0]
     occs = VectorDouble([float(occ) for occ in dic["occ"].split() if len(occ) != 0])
+    assert len(occs) == n_sites or len(occs) == n_sites * 2
+    cbias = float(dic.get("cbias", 0.0))
+    if cbias != 0.0:
+        if len(occs) == n_sites:
+            occs = VectorDouble([c - cbias if c >= 1 else c + cbias for c in occs])
+        else:
+            occs = VectorDouble([c - cbias if c >= 0.5 else c + cbias for c in occs])
     bias = float(dic.get("bias", 1.0))
 else:
     occs = None
@@ -221,18 +236,32 @@ if "fullrestart" in dic:
         mps.save_data()
         forward = False
 elif pre_run or not no_pre_run:
-    if nroots == 1 and len(targets) == 1:
-        mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+    if "trans_mps_info" in dic:
+        assert nroots == 1 and len(targets) == 1
+        tr_vacuum = TrSX(vacuum.n, abs(vacuum.twos), vacuum.pg)
+        tr_target = TrSX(target.n, abs(target.twos), target.pg)
+        tr_basis = TrVectorStateInfo([trans_si(b) for b in hamil.basis])
+        tr_mps_info = TrMPSInfo(n_sites, tr_vacuum, tr_target, tr_basis)
+        assert "full_fci_space" not in dic
+        tr_mps_info.tag = mps_tags[0]
+        if occs is None:
+            tr_mps_info.set_bond_dimension(bond_dims[0])
+        else:
+            tr_mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
+        mps_info = trans_mi(tr_mps_info, target)
     else:
-        print('TARGETS = ', list(targets), flush=True)
-        mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
-    if "full_fci_space" in dic:
-        mps_info.set_bond_dimension_full_fci()
-    mps_info.tag = mps_tags[0]
-    if occs is None:
-        mps_info.set_bond_dimension(bond_dims[0])
-    else:
-        mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
+        if nroots == 1 and len(targets) == 1:
+            mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+        else:
+            print('TARGETS = ', list(targets), flush=True)
+            mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
+        if "full_fci_space" in dic:
+            mps_info.set_bond_dimension_full_fci()
+        mps_info.tag = mps_tags[0]
+        if occs is None:
+            mps_info.set_bond_dimension(bond_dims[0])
+        else:
+            mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
     if MPI is None or MPI.rank == 0:
         mps_info.save_data(scratch + '/mps_info.bin')
     if conn_centers is not None:

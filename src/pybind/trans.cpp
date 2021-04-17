@@ -18,13 +18,7 @@
  *
  */
 
-#include "instantiation.hpp"
+#include "pybind.hpp"
 
-template struct block2::StateInfo<block2::SZ>;
-template struct block2::StateProbability<block2::SZ>;
-
-template struct block2::StateInfo<block2::SU2>;
-template struct block2::StateProbability<block2::SU2>;
-
-template struct block2::TransStateInfo<block2::SZ, block2::SU2>;
-template struct block2::TransStateInfo<block2::SU2, block2::SZ>;
+template void bind_trans<SU2, SZ>(py::module &m, const string &aux_name);
+template void bind_trans<SZ, SU2>(py::module &m, const string &aux_name);
