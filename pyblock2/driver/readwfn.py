@@ -22,7 +22,7 @@ DEBUG = True
 if len(sys.argv) > 1:
     arg_dic = {}
     for i in range(1, len(sys.argv)):
-        if sys.argv[i] == '-su2' or sys.argv[i] == '-sz' or sys.argv[i] == '-expect':
+        if sys.argv[i] in ['-su2', '-sz', '-expect', '-reduntant']:
             arg_dic[sys.argv[i][1:]] = ''
         elif sys.argv[i].startswith('-'):
             arg_dic[sys.argv[i][1:]] = sys.argv[i + 1]
@@ -33,15 +33,20 @@ else:
         Usage:
             (A) python readwfn.py -config dmrg.conf -out ./out
             (B) python readwfn.py dmrg.conf
-            (B) python readwfn.py dmrg.conf -expect
-            (C) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -su2
-            (D) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -sz
+            (C) python readwfn.py dmrg.conf -expect
+            (D) python readwfn.py dmrg.conf -reduntant
+            (E) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -su2
+            (F) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -sz
         
         Args:
             config: StackBlock input file
             out: dir for storing block2 MPS
             expect: if given, the energy expectation value of MPS
                 is calculated using block2 and printed at the end
+            reduntant: if given, the reduntant parameter in the
+                StackBlock MPS will be retained.
+                Note that removing reduntant parameters do not
+                affect quality of MPS.
 
             when no config file is given/available:
                 integral: path to integral file
@@ -61,6 +66,7 @@ dot = 1
 su2 = True
 out_dir = "./out"
 expect = "expect" in arg_dic
+redunt = "reduntant" in arg_dic
 if "config" in arg_dic:
     config = arg_dic["config"]
     dic = parse(config)
@@ -184,7 +190,8 @@ orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
 hamil = HamiltonianQC(vaccum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis)
-mps_info.set_bond_dimension_full_fci()
+if redunt:
+    mps_info.set_bond_dimension_full_fci()
 
 mps_info.left_dims[0] = StateInfo(vaccum)
 mps_info.save_left_dims(0)
@@ -198,7 +205,11 @@ for i in range(0, center + 1):
         st.quanta[j] = SX(xst.quanta[j].n, xst.quanta[j].s.irrep,
             PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
         st.n_states[j] = xst.n_states[j]
+        if not redunt and mps_info.left_dims_fci[i + 1].find_state(st.quanta[j]) == -1:
+            st.n_states[j] = 0
     st.sort_states()
+    if not redunt:
+        st.collect()
     mps_info.left_dims[i + 1] = st
     mps_info.save_left_dims(i + 1)
 
@@ -291,6 +302,8 @@ for i in range(1, center):
         xq = st.quanta[k]
         q = SX(xq.n, xq.s.irrep, PointGroup.swap_d2h(xq.symm.irrep + 1))
         iq = mps.tensors[i].info.find_state(q)
+        if not redunt and not (iq != -1 and iq < mps.tensors[i].info.n):
+            continue
         assert iq != -1 and iq < mps.tensors[i].info.n
         mat = mps.tensors[i][iq]
         assert rot[k].ref.size == np.array(mat).size
@@ -311,6 +324,8 @@ for (il, ir), mat in wave.non_zero_blocks:
     qr = SX(xqr.n, xqr.s.irrep, PointGroup.swap_d2h(xqr.symm.irrep + 1))
     q = wfn.info.delta_quantum.combine(ql, -qr)
     iq = wfn.info.find_state(q)
+    if not redunt and iq == -1:
+        continue
     assert iq != -1
     xmat = wfn[iq]
     assert xmat.m == mat.ref.shape[0]
