@@ -45,7 +45,8 @@ if "nonspinadapted" in dic:
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
     from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -57,7 +58,8 @@ else:
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -128,7 +130,9 @@ _print(Global.threading)
 
 if MPI is not None:
     prule = ParallelRuleQC(MPI)
-    prule_npdm = ParallelRuleNPDMQC(MPI)
+    prule_pdm1 = ParallelRulePDM1QC(MPI)
+    prule_pdm2 = ParallelRulePDM2QC(MPI)
+    prule_ident = ParallelRuleIdentity(MPI)
 
 # prepare hamiltonian
 if pre_run or not no_pre_run:
@@ -477,9 +481,9 @@ def split_mps(iroot, mps, mps_info):
 if not pre_run:
     if MPI is not None:
         mpo = ParallelMPO(mpo, prule)
-        pmpo = ParallelMPO(pmpo, prule_npdm)
-        nmpo = ParallelMPO(nmpo, prule_npdm)
-        impo = ParallelMPO(impo, prule)
+        pmpo = ParallelMPO(pmpo, prule_pdm1)
+        nmpo = ParallelMPO(nmpo, prule_pdm1)
+        impo = ParallelMPO(impo, prule_ident)
 
     _print("para mpo finished", time.perf_counter() - tx)
 
@@ -632,18 +636,12 @@ if not pre_run:
         expect.solve(True, kmps.center == 0)
 
         if MPI is None or MPI.rank == 0:
-            if SX == SZ:
-                dmr = expect.get_1pdm(me.n_sites)
-                dm = np.array(dmr).copy()
-                dmr.deallocate()
-                dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
-                dm = np.transpose(dm, (0, 2, 1, 3))
-                dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
-            else:
-                dmr = expect.get_1pdm_spatial(me.n_sites)
-                dm = np.array(dmr).copy()
-                dmr.deallocate()
-        
+            dmr = expect.get_1pdm(me.n_sites)
+            dm = np.array(dmr).copy()
+            dmr.deallocate()
+            dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
+            dm = np.transpose(dm, (0, 2, 1, 3))
+            dm = np.concatenate([dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
             return dm
         else:
             return None
@@ -654,10 +652,7 @@ if not pre_run:
         if nroots == 1:
             dm = do_onepdm(mps, mps)
             if MPI is None or MPI.rank == 0:
-                if SX == SZ:
-                    _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
-                else:
-                    _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm)]))
+                _print("DMRG OCC = ", "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                 np.save(scratch + "/1pdm.npy", dm)
         else:
             for iroot in range(mps.nroots):
@@ -665,10 +660,7 @@ if not pre_run:
                 smps, smps_info, forward = split_mps(iroot, mps, mps_info)
                 dm = do_onepdm(smps, smps)
                 if MPI is None or MPI.rank == 0:
-                    if SX == SZ:
-                        _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
-                    else:
-                        _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm)]))
+                    _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, iroot), dm)
                     smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
@@ -694,10 +686,7 @@ if not pre_run:
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, jroot), dm)
             if MPI is None or MPI.rank == 0:
-                if SX == SZ:
-                    _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
-                else:
-                    _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm)]))
+                _print("DMRG OCC (state %4d) = " % iroot, "".join(["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
         if MPI is None or MPI.rank == 0:
