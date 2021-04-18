@@ -13,7 +13,9 @@ class TestDMRG : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        threading_() = make_shared<Threading>(ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16, 16, 16);
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
+            16, 16);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -27,11 +29,11 @@ class TestDMRG : public ::testing::Test {
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
-    // string occ_filename = "data/CR2.SVP.OCC";
-    string occ_filename = "../my_test/cuprate/new2/CPR.CCSD.OCC";
+    string occ_filename = "data/CR2.SVP.OCC";
+    // string occ_filename = "../my_test/cuprate/new2/CPR.CCSD.OCC";
     occs = read_occ(occ_filename);
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
-    string filename = "../my_test/cuprate/new2/FCIDUMP";
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "../my_test/cuprate/new2/FCIDUMP";
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
@@ -163,6 +165,17 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->solve(30, true);
+
+    shared_ptr<MPO<SZ>> pmpo = make_shared<PDM1MPOQC<SZ>>(hamil);
+    pmpo =
+        make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<RuleQC<SZ>>(), true);
+    shared_ptr<MovingEnvironment<SZ>> pme =
+        make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
+    pme->init_environments(true);
+    shared_ptr<Expect<SZ>> expect = make_shared<Expect<SZ>>(pme, 750, 750);
+    expect->solve(true, mps->center == 0);
+    MatrixRef dm = expect->get_1pdm_spatial();
+    dm.deallocate();
 
     // deallocate persistent stack memory
     mps_info->deallocate();

@@ -11,6 +11,7 @@ class TestNPDM : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             8);
@@ -204,8 +205,9 @@ TEST_F(TestNPDM, TestSU2) {
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo =
-        make_shared<SimplifiedMPO<SU2>>(pmpo, make_shared<RuleQC<SU2>>(), true);
+    pmpo = make_shared<SimplifiedMPO<SU2>>(
+        pmpo, make_shared<RuleQC<SU2>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 2PDM MPO construction
@@ -215,8 +217,9 @@ TEST_F(TestNPDM, TestSU2) {
 
     // 2PDM MPO simplification
     cout << "2PDM MPO simplification start" << endl;
-    p2mpo = make_shared<SimplifiedMPO<SU2>>(p2mpo, make_shared<RuleQC<SU2>>(),
-                                            true);
+    p2mpo = make_shared<SimplifiedMPO<SU2>>(
+        p2mpo, make_shared<RuleQC<SU2>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "2PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
@@ -432,7 +435,6 @@ TEST_F(TestNPDM, TestSU2) {
 
                             max_error =
                                 max(max_error, abs((*dm2)({i, j, k, l}) - v));
-
                         }
 
         for (int p = 0; p < 3; p++)

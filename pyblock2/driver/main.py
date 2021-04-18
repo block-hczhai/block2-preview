@@ -59,7 +59,7 @@ else:
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO
-    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
+    from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -625,7 +625,9 @@ if not pre_run:
 
     def do_onepdm(bmps, kmps):
         me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
-        me.delayed_contraction = OpNamesSet.normal_ops()
+        # currently delayed_contraction is not compatible to
+        # ExpectationAlgorithmTypes.Fast
+        # me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.save_partition_info = True
         me.init_environments(True)
@@ -695,7 +697,7 @@ if not pre_run:
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
         me = MovingEnvironment(nmpo, mps, mps, "1NPC")
-        me.delayed_contraction = OpNamesSet.normal_ops()
+        # me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.save_partition_info = True
         me.init_environments(True)

@@ -592,6 +592,11 @@ template <typename S> struct TensorFunctions {
                 assert(op->a != nullptr && op->b != nullptr);
                 assert(lopt->ops.count(op->a) != 0 &&
                        ropt->ops.count(op->b) != 0);
+                if (lopt->get_type() == OperatorTensorTypes::Delayed ||
+                    ropt->get_type() == OperatorTensorTypes::Delayed)
+                    throw runtime_error(
+                        "Tensor product expectation with delayed "
+                        "contraction not yet supported.");
                 shared_ptr<SparseMatrix<S>> lmat = lopt->ops.at(op->a);
                 shared_ptr<SparseMatrix<S>> rmat =
                     make_shared<SparseMatrix<S>>(d_alloc);
@@ -611,6 +616,11 @@ template <typename S> struct TensorFunctions {
                     assert(op->a != nullptr && op->b != nullptr);
                     assert(lopt->ops.count(op->a) != 0 &&
                            ropt->ops.count(op->b) != 0);
+                    if (lopt->get_type() == OperatorTensorTypes::Delayed ||
+                        ropt->get_type() == OperatorTensorTypes::Delayed)
+                        throw runtime_error(
+                            "Tensor product expectation with delayed "
+                            "contraction not yet supported.");
                     shared_ptr<SparseMatrix<S>> lmat = lopt->ops.at(op->a);
                     shared_ptr<SparseMatrix<S>> rmat =
                         make_shared<SparseMatrix<S>>(d_alloc);
@@ -640,16 +650,16 @@ template <typename S> struct TensorFunctions {
                 mm.second->allocate(mm.second->info);
             }
         parallel_for(vparts.size(),
-                   [&vparts, &lopt, &cmat,
-                    &vmat](const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
-                       uint8_t conj = get<0>(vparts[i]);
-                       S opdq = get<1>(vparts[i]);
-                       shared_ptr<SparseMatrix<S>> lmat =
-                           lopt->ops.at(get<2>(vparts[i]));
-                       shared_ptr<SparseMatrix<S>> rmat = get<3>(vparts[i]);
-                       tf->opf->tensor_partial_expectation(conj, lmat, rmat,
-                                                           cmat, vmat, opdq);
-                   });
+                     [&vparts, &lopt, &cmat, &vmat](
+                         const shared_ptr<TensorFunctions<S>> &tf, size_t i) {
+                         uint8_t conj = get<0>(vparts[i]);
+                         S opdq = get<1>(vparts[i]);
+                         shared_ptr<SparseMatrix<S>> lmat =
+                             lopt->ops.at(get<2>(vparts[i]));
+                         shared_ptr<SparseMatrix<S>> rmat = get<3>(vparts[i]);
+                         tf->opf->tensor_partial_expectation(conj, lmat, rmat,
+                                                             cmat, vmat, opdq);
+                     });
         vector<size_t> prod_idxs;
         prod_idxs.reserve(exprs.size());
         for (size_t k = 0; k < exprs.size(); k++) {
