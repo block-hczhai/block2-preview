@@ -396,6 +396,14 @@ class GFDMRG:
         mps = MPS(mps_info)
         mps.load_data()
 
+        mps.info.load_mutable()
+        max_bdim = max([x.n_states_total for x in mps.info.left_dims])
+        if mps.info.bond_dim < max_bdim:
+            mps.info.bond_dim = max_bdim
+        max_bdim = max([x.n_states_total for x in mps.info.right_dims])
+        if mps.info.bond_dim < max_bdim:
+            mps.info.bond_dim = max_bdim
+
         if self.mpi is not None:
             if SpinLabel == SU2:
                 from block2.su2 import ParallelMPO
