@@ -23,6 +23,7 @@
 #include "mps.hpp"
 #include <algorithm>
 #include <cassert>
+#include <complex>
 #include <cstdint>
 #include <vector>
 
@@ -46,6 +47,29 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         : targets(targets), MPSInfo<S>(n_sites, vacuum, vacuum, basis, false) {
         if (init_fci)
             set_bond_dimension_fci();
+    }
+    // translate MPSInfo/MultiMPSInfo to MultiMPSInfo
+    // fci part only
+    static shared_ptr<MultiMPSInfo<S>>
+    from_mps_info(const shared_ptr<MPSInfo<S>> &info) {
+        shared_ptr<MultiMPSInfo<S>> minfo =
+            info->get_type() & MPSTypes::MultiWfn
+                ? make_shared<MultiMPSInfo<S>>(
+                      info->n_sites, info->vacuum,
+                      dynamic_pointer_cast<MultiMPSInfo<S>>(info)->targets,
+                      info->basis, false)
+                : make_shared<MultiMPSInfo<S>>(info->n_sites, info->vacuum,
+                                               vector<S>{info->target},
+                                               info->basis, false);
+        for (int i = 0; i <= minfo->n_sites; i++)
+            minfo->left_dims_fci[i] =
+                make_shared<StateInfo<S>>(info->left_dims_fci[i]->deep_copy());
+        for (int i = minfo->n_sites; i >= 0; i--)
+            minfo->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(info->right_dims_fci[i]->deep_copy());
+        minfo->bond_dim = info->bond_dim;
+        minfo->tag = info->tag;
+        return minfo;
     }
     MPSTypes get_type() const override { return MPSTypes::MultiWfn; }
     vector<S> get_complementary(S q) const override {
@@ -200,6 +224,64 @@ template <typename S> struct MultiMPS : MPS<S> {
         ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
            << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
+    }
+    // translate real MPS to complex MPS
+    static shared_ptr<MultiMPS<S>> make_complex(const shared_ptr<MPS<S>> &mps,
+                                                const string &xtag) {
+        const int nroots = 2;
+        shared_ptr<MultiMPSInfo<S>> xinfo =
+            MultiMPSInfo<S>::from_mps_info(mps->info);
+        xinfo->load_mutable();
+        shared_ptr<MultiMPS<S>> xmps = make_shared<MultiMPS<S>>(xinfo);
+        xmps->MPS<S>::load_data();
+        xmps->MPS<S>::load_mutable();
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        xmps->nroots = nroots;
+        xmps->wfns.resize(nroots);
+        xmps->weights = vector<double>(nroots, 1.0);
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        for (int i = 0; i < nroots; i++) {
+            xmps->wfns[i] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            xmps->wfns[i]->allocate(vector<shared_ptr<SparseMatrixInfo<S>>>{
+                xmps->tensors[xmps->center]->info});
+        }
+        assert(xmps->tensors[xmps->center]->info->is_wavefunction);
+        (*xmps->wfns[0])[0]->copy_data_from(xmps->tensors[xmps->center]);
+        xmps->tensors[xmps->center] = nullptr;
+        string og = "CKS", rp = "MJT";
+        for (int i = 0; i < xmps->n_sites; i++)
+            for (size_t j = 0; j < og.length(); j++)
+                if (xmps->canonical_form[i] == og[j])
+                    xmps->canonical_form[i] = rp[j];
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
+    }
+    void iscale(const complex<double> &d) {
+        double dre = d.real(), dim = d.imag();
+        assert(nroots == 2);
+        load_wavefunction(center);
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MatrixRef tre(nullptr, (MKL_INT)wfns[0]->total_memory, 1);
+        MatrixRef tim(nullptr, (MKL_INT)wfns[1]->total_memory, 1);
+        tre.data = d_alloc->allocate(wfns[0]->total_memory);
+        tim.data = d_alloc->allocate(wfns[1]->total_memory);
+        MatrixRef wre(wfns[0]->data, (MKL_INT)wfns[0]->total_memory, 1);
+        MatrixRef wim(wfns[1]->data, (MKL_INT)wfns[1]->total_memory, 1);
+        MatrixFunctions::copy(tre, wre);
+        MatrixFunctions::copy(tim, wim);
+        MatrixFunctions::iscale(wre, dre);
+        MatrixFunctions::iscale(wim, dre);
+        MatrixFunctions::iadd(wre, tim, -dim);
+        MatrixFunctions::iadd(wim, tre, dim);
+        d_alloc->deallocate(tim.data, wfns[1]->total_memory);
+        d_alloc->deallocate(tre.data, wfns[0]->total_memory);
+        save_wavefunction(center);
     }
     shared_ptr<MultiMPS<S>> extract(int iroot, const string xtag) const {
         shared_ptr<MultiMPSInfo<S>> xinfo =
