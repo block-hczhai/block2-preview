@@ -27,6 +27,7 @@
 #include "block2/archived_tensor_functions.hpp"
 #include "block2/batch_gemm.hpp"
 #include "block2/cg.hpp"
+#include "block2/complex_matrix_functions.hpp"
 #include "block2/csr_matrix.hpp"
 #include "block2/csr_matrix_functions.hpp"
 #include "block2/csr_operator_functions.hpp"

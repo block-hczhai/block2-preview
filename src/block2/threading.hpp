@@ -24,6 +24,10 @@
 #include "omp.h"
 #endif
 #ifdef _HAS_INTEL_MKL
+#ifndef MKL_Complex16
+#include <complex>
+#define MKL_Complex16 std::complex<double>
+#endif
 #include "mkl.h"
 #endif
 #include <cassert>

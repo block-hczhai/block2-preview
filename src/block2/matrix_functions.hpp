@@ -1194,6 +1194,7 @@ struct MatrixFunctions {
         MKL_INT m = min((MKL_INT)deflation_max_size, n - 1);
         MKL_INT lwork = n * (m + 2) + 5 * (m + 2) * (m + 2) + 7;
         vector<double> w(n), work(lwork);
+        anorm += abs(consta) * n;
         if (anorm < 1E-10)
             anorm = 1.0;
         MKL_INT nmult = MatrixFunctions::expo_krylov(

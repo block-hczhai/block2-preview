@@ -2085,7 +2085,6 @@ void bind_trans(py::module &m, const string &aux_name) {
           &TransStateInfo<S, T>::forward);
     m.def(("trans_mps_info_to_" + aux_name).c_str(),
           &TransMPSInfo<S, T>::forward);
-
 }
 
 template <typename S = void> void bind_data(py::module &m) {
@@ -2657,6 +2656,29 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("allocate", &MatrixRef::allocate, py::arg("alloc") = nullptr)
         .def("deallocate", &MatrixRef::deallocate, py::arg("alloc") = nullptr);
 
+    py::class_<ComplexMatrixRef, shared_ptr<ComplexMatrixRef>>(
+        m, "ComplexMatrix", py::buffer_protocol())
+        .def_buffer([](ComplexMatrixRef *self) -> py::buffer_info {
+            return py::buffer_info(
+                self->data, sizeof(complex<double>),
+                py::format_descriptor<complex<double>>::format(), 2,
+                {(ssize_t)self->m, (ssize_t)self->n},
+                {sizeof(complex<double>) * (ssize_t)self->n,
+                 sizeof(complex<double>)});
+        })
+        .def_readwrite("m", &ComplexMatrixRef::m)
+        .def_readwrite("n", &ComplexMatrixRef::n)
+        .def("__repr__",
+             [](ComplexMatrixRef *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("allocate", &ComplexMatrixRef::allocate,
+             py::arg("alloc") = nullptr)
+        .def("deallocate", &ComplexMatrixRef::deallocate,
+             py::arg("alloc") = nullptr);
+
     py::class_<CSRMatrixRef, shared_ptr<CSRMatrixRef>>(m, "CSRMatrix")
         .def(py::init<>())
         .def(py::init<MKL_INT, MKL_INT>())
@@ -2744,6 +2766,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
                 MatrixFunctions::eigs(MatrixRef(a.mutable_data(), n, n),
                                       DiagonalMatrix(w.mutable_data(), n));
             });
+
+    py::class_<ComplexMatrixFunctions>(m, "ComplexMatrixFunctions");
 
     py::class_<CSRMatrixFunctions>(m, "CSRMatrixFunctions");
 
