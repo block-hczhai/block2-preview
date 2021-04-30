@@ -31,7 +31,9 @@ Features
     * Multi-Target State-Averaged Excited-State DMRG
     * MPS compression / addition
     * Expectation
-    * Imaginary time evolution (tangent space / RK4)
+    * Imaginary/Real time evolution
+        * Time-step targeting method
+        * Time dependent variational principle method
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
@@ -74,7 +76,8 @@ Features
    developer/dmrg
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: API Reference
 
    api/global
+   api/fft

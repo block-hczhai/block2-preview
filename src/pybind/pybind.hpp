@@ -43,6 +43,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<long long int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Tensor>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<Tensor>>>);
@@ -2106,6 +2107,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<char>>(m, "VectorChar");
     py::bind_vector<vector<long long int>>(m, "VectorLLInt");
     py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
+    py::bind_vector<vector<pair<long long int, int>>>(m, "VectorPLLIntInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
@@ -2503,6 +2505,80 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<double, size_t>())
         .def_readwrite("ndata", &FPCodec<double>::ndata)
         .def_readwrite("ncpsd", &FPCodec<double>::ncpsd);
+
+    py::class_<Prime, shared_ptr<Prime>>(m, "Prime")
+        .def(py::init<>())
+        .def("factors", [](Prime *self, Prime::LL n) {
+            vector<pair<Prime::LL, int>> factors;
+            self->factors(n, factors);
+            return factors;
+        });
+
+    py::class_<FFT, shared_ptr<FFT>>(m, "FFT")
+        .def(py::init<>())
+        .def("init", &FFT::init)
+        .def("fft",
+             [](FFT *self, const py::array_t<complex<double>> &arr) {
+                 py::array_t<complex<double>> arx =
+                     py::array_t<complex<double>>(arr.size());
+                 memcpy(arx.mutable_data(), arr.data(),
+                        arr.size() * sizeof(complex<double>));
+                 self->fft(arx.mutable_data(), arx.size(), true);
+                 return arx;
+             })
+        .def("ifft",
+             [](FFT *self, const py::array_t<complex<double>> &arr) {
+                 py::array_t<complex<double>> arx =
+                     py::array_t<complex<double>>(arr.size());
+                 memcpy(arx.mutable_data(), arr.data(),
+                        arr.size() * sizeof(complex<double>));
+                 self->fft(arx.mutable_data(), arx.size(), false);
+                 return arx;
+             })
+        .def_static("fftshift",
+                    [](const py::array_t<complex<double>> &arr) {
+                        py::array_t<complex<double>> arx =
+                            py::array_t<complex<double>>(arr.size());
+                        memcpy(arx.mutable_data(), arr.data(),
+                               arr.size() * sizeof(complex<double>));
+                        FFT::fftshift(arx.mutable_data(), arx.size(), true);
+                        return arx;
+                    })
+        .def_static("ifftshift",
+                    [](const py::array_t<complex<double>> &arr) {
+                        py::array_t<complex<double>> arx =
+                            py::array_t<complex<double>>(arr.size());
+                        memcpy(arx.mutable_data(), arr.data(),
+                               arr.size() * sizeof(complex<double>));
+                        FFT::fftshift(arx.mutable_data(), arx.size(), false);
+                        return arx;
+                    })
+        .def_static("fftfreq", [](long long int n, double d) {
+            py::array_t<double> arx = py::array_t<double>(n);
+            FFT::fftfreq(arx.mutable_data(), n, d);
+            return arx;
+        });
+
+    py::class_<DFT, shared_ptr<DFT>>(m, "DFT")
+        .def(py::init<>())
+        .def("init", &DFT::init)
+        .def("fft",
+             [](DFT *self, const py::array_t<complex<double>> &arr) {
+                 py::array_t<complex<double>> arx =
+                     py::array_t<complex<double>>(arr.size());
+                 memcpy(arx.mutable_data(), arr.data(),
+                        arr.size() * sizeof(complex<double>));
+                 self->fft(arx.mutable_data(), arx.size(), true);
+                 return arx;
+             })
+        .def("ifft", [](DFT *self, const py::array_t<complex<double>> &arr) {
+            py::array_t<complex<double>> arx =
+                py::array_t<complex<double>>(arr.size());
+            memcpy(arx.mutable_data(), arr.data(),
+                   arr.size() * sizeof(complex<double>));
+            self->fft(arx.mutable_data(), arx.size(), false);
+            return arx;
+        });
 
     py::class_<DataFrame, shared_ptr<DataFrame>>(m, "DataFrame")
         .def(py::init<>())
