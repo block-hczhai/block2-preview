@@ -38,11 +38,11 @@ SpinLabel = SZ
 if SpinLabel == SU2:
     from block2.su2 import HamiltonianQC, AncillaMPSInfo, MPS
     from block2.su2 import AncillaMPO, PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.su2 import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Linear
+    from block2.su2 import MovingEnvironment, TimeEvolution, Expect, IdentityMPO, Linear
 else:
     from block2.sz import HamiltonianQC, AncillaMPSInfo, MPS
     from block2.sz import AncillaMPO, PDM1MPOQC, PDM2MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC
-    from block2.sz import MovingEnvironment, ImaginaryTE, Expect, IdentityMPO, Linear
+    from block2.sz import MovingEnvironment, TimeEvolution, Expect, IdentityMPO, Linear
 
 
 class FTDMRGError(Exception):
@@ -218,7 +218,7 @@ class FTDMRG:
         me.init_environments(self.verbose >= 3)
         if self.verbose >= 2:
             print('TE INIT time = ', time.perf_counter() - tx)
-        te = ImaginaryTE(me, VectorUBond(bond_dims), method, n_sub_sweeps)
+        te = TimeEvolution(me, VectorUBond(bond_dims), method, n_sub_sweeps)
         te.iprint = self.verbose
         te.solve(n_steps, beta_step, mps.center == 0)
 

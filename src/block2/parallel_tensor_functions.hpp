@@ -191,17 +191,17 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         const unordered_map<
             S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
             &cinfos,
-        S opdq, bool all_reduce) const override {
+        S opdq, double factor, bool all_reduce) const override {
         if (expr->get_type() == OpTypes::ExprRef) {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
             TensorFunctions<S>::tensor_product_multi_multiply(
-                op->op, lopt, ropt, cmats, vmats, cinfos, opdq, false);
+                op->op, lopt, ropt, cmats, vmats, cinfos, opdq, factor, false);
             if (all_reduce)
                 rule->comm->allreduce_sum(vmats);
         } else
             TensorFunctions<S>::tensor_product_multi_multiply(
-                expr, lopt, ropt, cmats, vmats, cinfos, opdq, false);
+                expr, lopt, ropt, cmats, vmats, cinfos, opdq, factor, false);
     }
     vector<pair<shared_ptr<OpExpr<S>>, double>> tensor_product_expectation(
         const vector<shared_ptr<OpExpr<S>>> &names,

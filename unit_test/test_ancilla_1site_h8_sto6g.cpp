@@ -125,8 +125,8 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
     te_energies.push_back(ex->solve(false));
 
     // Imaginary TE
-    shared_ptr<ImaginaryTE<S>> te =
-        make_shared<ImaginaryTE<S>>(me, bdims, TETypes::RK4);
+    shared_ptr<TimeEvolution<S>> te =
+        make_shared<TimeEvolution<S>>(me, bdims, TETypes::RK4);
     te->iprint = 2;
     te->n_sub_sweeps = 6;
     te->solve(1, beta / 2, imps->center == 0);

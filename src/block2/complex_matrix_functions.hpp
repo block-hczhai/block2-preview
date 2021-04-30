@@ -450,24 +450,20 @@ struct ComplexMatrixFunctions {
         auto cop = [&op, vm, vn, n](const ComplexMatrixRef &a,
                                     const ComplexMatrixRef &b) -> void {
             vector<double> dar(n), dai(n), dbr(n, 0), dbi(n, 0);
-            extract_complex(ComplexMatrixRef(a, vm, vn),
-                            MatrixRef(dar.data(), vm, vn),
+            extract_complex(a, MatrixRef(dar.data(), vm, vn),
                             MatrixRef(dai.data(), vm, vn));
             op(MatrixRef(dar.data(), vm, vn), MatrixRef(dbr.data(), vm, vn));
             op(MatrixRef(dai.data(), vm, vn), MatrixRef(dbi.data(), vm, vn));
-            fill_complex(ComplexMatrixRef(b, vm, vn),
-                         MatrixRef(dbr.data(), vm, vn),
+            fill_complex(b, MatrixRef(dbr.data(), vm, vn),
                          MatrixRef(dbi.data(), vm, vn));
         };
         vector<complex<double>> v(n);
-        fill_complex(ComplexMatrixRef(v, vm, vn), MatrixRef(vr.data(), vm, vn),
-                     MatrixRef(vi.data(), vm, vn));
+        ComplexMatrixRef cv(v.data(), vm, vn);
+        fill_complex(cv, vr, vi);
         MKL_INT nmult =
-            expo_apply_complex_op(cop, t, anorm, v, consta, iprint,
+            expo_apply_complex_op(cop, t, anorm, cv, consta, iprint,
                                   (PComm)pcomm, conv_thrd, deflation_max_size);
-        extract_complex(ComplexMatrixRef(v, vm, vn),
-                        MatrixRef(vr.data(), vm, vn),
-                        MatrixRef(vi.data(), vm, vn));
+        extract_complex(cv, vr, vi);
         return nmult;
     }
     // apply exponential of a matrix to a vector
