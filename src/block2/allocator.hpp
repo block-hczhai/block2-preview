@@ -460,6 +460,7 @@ inline shared_ptr<DataFrame> &frame_() {
     return frame;
 }
 
+/** Global variable for accessing global stack memory and file I/O in scratch space. */
 #define frame (frame_())
 
 // Function pointer for signal checking

@@ -26,7 +26,9 @@ Features
     * Multi-Target State-Averaged Excited-State DMRG
     * MPS compression / addition
     * Expectation
-    * Imaginary time evolution (tangent space / RK4)
+    * Imaginary/Real time evolution
+        * Time-step targeting method
+        * Time dependent variational principle method
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
@@ -50,7 +52,7 @@ Features
     * Parallelism over sum of MPOs (non-spin-adapted only)
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
-    * Parallelism over dense matrix multiplications (MKL)
+    * Parallelism within dense matrix multiplications (MKL)
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
