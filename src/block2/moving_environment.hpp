@@ -1470,6 +1470,10 @@ template <typename S> struct MovingEnvironment {
                 iL = center, iR = center, iM = center - 1;
             else if (fuse_type == FuseTypes::FuseL)
                 iL = center, iR = center, iM = center;
+            else if (fuse_type == FuseTypes::NoFuseL)
+                iL = center, iR = center - 1, iM = center - 1;
+            else if (fuse_type == FuseTypes::NoFuseR)
+                iL = center + 1, iR = center, iM = center;
             else
                 assert(false);
         } else
@@ -1847,7 +1851,7 @@ template <typename S> struct MovingEnvironment {
         for (size_t i = 0; i < psi.size(); i++)
             for (int j = 0; j < psi[i]->n; j++) {
                 shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
-                wfn->factor = weights[i] * sqrt(scale);
+                wfn->factor = sqrt(weights[i] * scale);
                 OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
                                                     sqrt(noise), noise_type);
             }
@@ -1894,6 +1898,24 @@ template <typename S> struct MovingEnvironment {
             OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0);
         }
         psi->data = ptr, psi->factor = 1.0;
+    }
+    // Density matrix of several MPS tensors summed with weights
+    static void density_matrix_add_matrix_groups(
+        const shared_ptr<SparseMatrix<S>> &dm,
+        const vector<shared_ptr<SparseMatrixGroup<S>>> &psi, bool trace_right,
+        const vector<MatrixRef> &mats, const vector<double> &weights) {
+        int p = 0, np = psi.size() * psi[0]->n;
+        assert(mats.size() == (weights.size() - 1) * np);
+        for (size_t k = 1; k < weights.size(); k++)
+            for (size_t i = 0; i < psi.size(); i++)
+                for (int j = 0; j < psi[i]->n; j++) {
+                    shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
+                    wfn->data = mats[p++].data;
+                    wfn->factor = sqrt(weights[k] / np);
+                    OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
+                                                        0.0);
+                }
+        assert((size_t)p == mats.size());
     }
     // Direct add noise to wavefunction (before svd)
     static void wavefunction_add_noise(const shared_ptr<SparseMatrix<S>> &psi,

@@ -234,13 +234,14 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         const unordered_map<
             S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
             &cinfos,
-        S opdq, bool all_reduce) const override {
+        S opdq, double factor, bool all_reduce) const override {
         unordered_map<S, int> vdqs;
         vdqs.reserve(vmats->n);
         for (int iv = 0; iv < vmats->n; iv++)
             vdqs[vmats->infos[iv]->delta_quantum] = iv;
         for (int i = 0; i < cmats->n; i++) {
             shared_ptr<SparseMatrix<S>> pcmat = (*cmats)[i];
+            pcmat->factor = factor;
             shared_ptr<SparseMatrixInfo<S>> pcmat_info =
                 make_shared<SparseMatrixInfo<S>>(*pcmat->info);
             pcmat->info = pcmat_info;

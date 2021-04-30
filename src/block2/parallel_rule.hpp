@@ -57,6 +57,9 @@ template <typename S> struct ParallelCommunicator {
     virtual void broadcast(double *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void broadcast(complex<double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void ibroadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
         assert(size == 1);
     }

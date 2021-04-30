@@ -1802,6 +1802,14 @@ template <typename S> struct SparseMatrixGroup {
         MatrixFunctions::iscale(MatrixRef(data, (MKL_INT)total_memory, 1), d);
     }
     void normalize() const { iscale(1 / norm()); }
+    static void
+    normalize_all(const vector<shared_ptr<SparseMatrixGroup<S>>> &mats) {
+        double normsq = 0;
+        for (auto &mat : mats)
+            normsq += pow(mat->norm(), 2);
+        for (auto &mat : mats)
+            mat->iscale(1 / sqrt(normsq));
+    }
     shared_ptr<SparseMatrix<S>> operator[](int idx) const {
         assert(idx >= 0 && idx < n);
         shared_ptr<SparseMatrix<S>> r = make_shared<SparseMatrix<S>>();

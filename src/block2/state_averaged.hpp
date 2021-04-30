@@ -250,7 +250,7 @@ template <typename S> struct MultiMPS : MPS<S> {
         assert(xmps->tensors[xmps->center]->info->is_wavefunction);
         (*xmps->wfns[0])[0]->copy_data_from(xmps->tensors[xmps->center]);
         xmps->tensors[xmps->center] = nullptr;
-        string og = "CKS", rp = "MJT";
+        const string og = "CKS", rp = "MJT";
         for (int i = 0; i < xmps->n_sites; i++)
             for (size_t j = 0; j < og.length(); j++)
                 if (xmps->canonical_form[i] == og[j])

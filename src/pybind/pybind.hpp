@@ -751,6 +751,7 @@ template <typename S> void bind_sparse(py::module &m) {
         .def("norm", &SparseMatrixGroup<S>::norm)
         .def("iscale", &SparseMatrixGroup<S>::iscale, py::arg("d"))
         .def("normalize", &SparseMatrixGroup<S>::normalize)
+        .def_static("normalize_all", &SparseMatrixGroup<S>::normalize_all)
         .def("left_svd",
              [](SparseMatrixGroup<S> *self) {
                  vector<S> qs;
@@ -1218,9 +1219,15 @@ template <typename S> void bind_partition(py::module &m) {
                        &EffectiveHamiltonian<S, MultiMPS<S>>::compute_diag)
         .def("__call__", &EffectiveHamiltonian<S, MultiMPS<S>>::operator(),
              py::arg("b"), py::arg("c"), py::arg("idx") = 0,
-             py::arg("all_reduce") = true)
+             py::arg("factor") = 1.0, py::arg("all_reduce") = true)
         .def("eigs", &EffectiveHamiltonian<S, MultiMPS<S>>::eigs)
         .def("expect", &EffectiveHamiltonian<S, MultiMPS<S>>::expect)
+        .def("rk4_apply", &EffectiveHamiltonian<S, MultiMPS<S>>::rk4_apply,
+             py::arg("beta"), py::arg("const_e"),
+             py::arg("eval_energy") = false, py::arg("para_rule") = nullptr)
+        .def("expo_apply", &EffectiveHamiltonian<S, MultiMPS<S>>::expo_apply,
+             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false,
+             py::arg("para_rule") = nullptr)
         .def("deallocate", &EffectiveHamiltonian<S, MultiMPS<S>>::deallocate);
 
     py::class_<MovingEnvironment<S>, shared_ptr<MovingEnvironment<S>>>(
@@ -1341,6 +1348,8 @@ template <typename S> void bind_partition(py::module &m) {
             &MovingEnvironment<S>::density_matrix_add_perturbative_noise)
         .def_static("density_matrix_add_matrices",
                     &MovingEnvironment<S>::density_matrix_add_matrices)
+        .def_static("density_matrix_add_matrix_groups",
+                    &MovingEnvironment<S>::density_matrix_add_matrix_groups)
         .def_static("truncate_density_matrix",
                     [](const shared_ptr<SparseMatrix<S>> &dm, int k,
                        double cutoff, TruncationTypes trunc_type) {
@@ -1592,50 +1601,54 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("solve", &TDDMRG<S>::solve, py::arg("n_sweeps"), py::arg("beta"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
-    py::class_<typename ImaginaryTE<S>::Iteration,
-               shared_ptr<typename ImaginaryTE<S>::Iteration>>(
-        m, "ImaginaryTEIteration")
+    py::class_<typename TimeEvolution<S>::Iteration,
+               shared_ptr<typename TimeEvolution<S>::Iteration>>(
+        m, "TimeEvolutionIteration")
         .def(py::init<double, double, double, int, int, int, size_t, double>())
         .def(py::init<double, double, double, int, int, int>())
-        .def_readwrite("mmps", &ImaginaryTE<S>::Iteration::mmps)
-        .def_readwrite("energy", &ImaginaryTE<S>::Iteration::energy)
-        .def_readwrite("normsq", &ImaginaryTE<S>::Iteration::normsq)
-        .def_readwrite("error", &ImaginaryTE<S>::Iteration::error)
-        .def_readwrite("nexpo", &ImaginaryTE<S>::Iteration::nexpo)
-        .def_readwrite("nexpok", &ImaginaryTE<S>::Iteration::nexpok)
-        .def_readwrite("texpo", &ImaginaryTE<S>::Iteration::texpo)
-        .def_readwrite("nflop", &ImaginaryTE<S>::Iteration::nflop)
-        .def("__repr__", [](typename ImaginaryTE<S>::Iteration *self) {
+        .def_readwrite("mmps", &TimeEvolution<S>::Iteration::mmps)
+        .def_readwrite("energy", &TimeEvolution<S>::Iteration::energy)
+        .def_readwrite("normsq", &TimeEvolution<S>::Iteration::normsq)
+        .def_readwrite("error", &TimeEvolution<S>::Iteration::error)
+        .def_readwrite("nexpo", &TimeEvolution<S>::Iteration::nexpo)
+        .def_readwrite("nexpok", &TimeEvolution<S>::Iteration::nexpok)
+        .def_readwrite("texpo", &TimeEvolution<S>::Iteration::texpo)
+        .def_readwrite("nflop", &TimeEvolution<S>::Iteration::nflop)
+        .def("__repr__", [](typename TimeEvolution<S>::Iteration *self) {
             stringstream ss;
             ss << *self;
             return ss.str();
         });
 
-    py::class_<ImaginaryTE<S>, shared_ptr<ImaginaryTE<S>>>(m, "ImaginaryTE")
+    py::class_<TimeEvolution<S>, shared_ptr<TimeEvolution<S>>>(m,
+                                                               "TimeEvolution")
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, TETypes>())
         .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
                       const vector<ubond_t> &, TETypes, int>())
-        .def_readwrite("iprint", &ImaginaryTE<S>::iprint)
-        .def_readwrite("cutoff", &ImaginaryTE<S>::cutoff)
-        .def_readwrite("me", &ImaginaryTE<S>::me)
-        .def_readwrite("bond_dims", &ImaginaryTE<S>::bond_dims)
-        .def_readwrite("noises", &ImaginaryTE<S>::noises)
-        .def_readwrite("energies", &ImaginaryTE<S>::energies)
-        .def_readwrite("normsqs", &ImaginaryTE<S>::normsqs)
-        .def_readwrite("forward", &ImaginaryTE<S>::forward)
-        .def_readwrite("n_sub_sweeps", &ImaginaryTE<S>::n_sub_sweeps)
-        .def_readwrite("weights", &ImaginaryTE<S>::weights)
-        .def_readwrite("mode", &ImaginaryTE<S>::mode)
-        .def_readwrite("noise_type", &ImaginaryTE<S>::noise_type)
-        .def_readwrite("trunc_type", &ImaginaryTE<S>::trunc_type)
-        .def_readwrite("trunc_pattern", &ImaginaryTE<S>::trunc_pattern)
-        .def("update_one_dot", &ImaginaryTE<S>::update_one_dot)
-        .def("update_two_dot", &ImaginaryTE<S>::update_two_dot)
-        .def("blocking", &ImaginaryTE<S>::blocking)
-        .def("sweep", &ImaginaryTE<S>::sweep)
-        .def("normalize", &ImaginaryTE<S>::normalize)
-        .def("solve", &ImaginaryTE<S>::solve, py::arg("n_sweeps"),
+        .def_readwrite("iprint", &TimeEvolution<S>::iprint)
+        .def_readwrite("cutoff", &TimeEvolution<S>::cutoff)
+        .def_readwrite("me", &TimeEvolution<S>::me)
+        .def_readwrite("bond_dims", &TimeEvolution<S>::bond_dims)
+        .def_readwrite("noises", &TimeEvolution<S>::noises)
+        .def_readwrite("energies", &TimeEvolution<S>::energies)
+        .def_readwrite("normsqs", &TimeEvolution<S>::normsqs)
+        .def_readwrite("forward", &TimeEvolution<S>::forward)
+        .def_readwrite("n_sub_sweeps", &TimeEvolution<S>::n_sub_sweeps)
+        .def_readwrite("weights", &TimeEvolution<S>::weights)
+        .def_readwrite("mode", &TimeEvolution<S>::mode)
+        .def_readwrite("noise_type", &TimeEvolution<S>::noise_type)
+        .def_readwrite("trunc_type", &TimeEvolution<S>::trunc_type)
+        .def_readwrite("trunc_pattern", &TimeEvolution<S>::trunc_pattern)
+        .def_readwrite("decomp_type", &TimeEvolution<S>::decomp_type)
+        .def("update_one_dot", &TimeEvolution<S>::update_one_dot)
+        .def("update_two_dot", &TimeEvolution<S>::update_two_dot)
+        .def("update_multi_one_dot", &TimeEvolution<S>::update_multi_one_dot)
+        .def("update_multi_two_dot", &TimeEvolution<S>::update_multi_two_dot)
+        .def("blocking", &TimeEvolution<S>::blocking)
+        .def("sweep", &TimeEvolution<S>::sweep)
+        .def("normalize", &TimeEvolution<S>::normalize)
+        .def("solve", &TimeEvolution<S>::solve, py::arg("n_sweeps"),
              py::arg("beta"), py::arg("forward") = true, py::arg("tol") = 1E-6);
 
     py::class_<typename Linear<S>::Iteration,
@@ -2085,7 +2098,6 @@ void bind_trans(py::module &m, const string &aux_name) {
           &TransStateInfo<S, T>::forward);
     m.def(("trans_mps_info_to_" + aux_name).c_str(),
           &TransMPSInfo<S, T>::forward);
-
 }
 
 template <typename S = void> void bind_data(py::module &m) {
@@ -2657,6 +2669,29 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("allocate", &MatrixRef::allocate, py::arg("alloc") = nullptr)
         .def("deallocate", &MatrixRef::deallocate, py::arg("alloc") = nullptr);
 
+    py::class_<ComplexMatrixRef, shared_ptr<ComplexMatrixRef>>(
+        m, "ComplexMatrix", py::buffer_protocol())
+        .def_buffer([](ComplexMatrixRef *self) -> py::buffer_info {
+            return py::buffer_info(
+                self->data, sizeof(complex<double>),
+                py::format_descriptor<complex<double>>::format(), 2,
+                {(ssize_t)self->m, (ssize_t)self->n},
+                {sizeof(complex<double>) * (ssize_t)self->n,
+                 sizeof(complex<double>)});
+        })
+        .def_readwrite("m", &ComplexMatrixRef::m)
+        .def_readwrite("n", &ComplexMatrixRef::n)
+        .def("__repr__",
+             [](ComplexMatrixRef *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("allocate", &ComplexMatrixRef::allocate,
+             py::arg("alloc") = nullptr)
+        .def("deallocate", &ComplexMatrixRef::deallocate,
+             py::arg("alloc") = nullptr);
+
     py::class_<CSRMatrixRef, shared_ptr<CSRMatrixRef>>(m, "CSRMatrix")
         .def(py::init<>())
         .def(py::init<MKL_INT, MKL_INT>())
@@ -2744,6 +2779,8 @@ template <typename S = void> void bind_matrix(py::module &m) {
                 MatrixFunctions::eigs(MatrixRef(a.mutable_data(), n, n),
                                       DiagonalMatrix(w.mutable_data(), n));
             });
+
+    py::class_<ComplexMatrixFunctions>(m, "ComplexMatrixFunctions");
 
     py::class_<CSRMatrixFunctions>(m, "CSRMatrixFunctions");
 

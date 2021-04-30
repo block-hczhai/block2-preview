@@ -343,10 +343,10 @@ extern template struct block2::TransStateInfo<block2::SU2, block2::SZ>;
 
 // sweep_algorithm_td.hpp
 extern template struct block2::TDDMRG<block2::SZ>;
-extern template struct block2::ImaginaryTE<block2::SZ>;
+extern template struct block2::TimeEvolution<block2::SZ>;
 
 extern template struct block2::TDDMRG<block2::SU2>;
-extern template struct block2::ImaginaryTE<block2::SU2>;
+extern template struct block2::TimeEvolution<block2::SU2>;
 
 // sweep_algorithm.hpp
 extern template struct block2::DMRG<block2::SZ>;

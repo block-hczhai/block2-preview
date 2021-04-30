@@ -501,7 +501,7 @@ template <typename S> struct TensorFunctions {
         const unordered_map<
             S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
             &cinfos,
-        S opdq, bool all_reduce) const {
+        S opdq, double factor, bool all_reduce) const {
         unordered_map<S, int> vdqs;
         vdqs.reserve(vmats->n);
         for (int iv = 0; iv < vmats->n; iv++)
@@ -511,12 +511,13 @@ template <typename S> struct TensorFunctions {
             shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
             parallel_reduce(
                 op->strings.size() * cmats->n, vmats,
-                [&op, &lopt, &ropt, &cmats, &opdq, &vdqs, &cinfos](
+                [&op, &lopt, &ropt, &cmats, &opdq, &vdqs, &cinfos, factor](
                     const shared_ptr<TensorFunctions<S>> &tf,
                     const shared_ptr<SparseMatrixGroup<S>> &vmats, size_t idx) {
                     const size_t i = idx % op->strings.size(),
                                  j = idx / op->strings.size();
                     shared_ptr<SparseMatrix<S>> pcmat = (*cmats)[(int)j];
+                    pcmat->factor = factor;
                     shared_ptr<SparseMatrixInfo<S>> pcmat_info =
                         make_shared<SparseMatrixInfo<S>>(*pcmat->info);
                     pcmat->info = pcmat_info;
@@ -537,6 +538,7 @@ template <typename S> struct TensorFunctions {
         default:
             for (int i = 0; i < cmats->n; i++) {
                 shared_ptr<SparseMatrix<S>> pcmat = (*cmats)[i];
+                pcmat->factor = factor;
                 shared_ptr<SparseMatrixInfo<S>> pcmat_info =
                     make_shared<SparseMatrixInfo<S>>(*pcmat->info);
                 pcmat->info = pcmat_info;

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "complex_matrix_functions.hpp"
 #include "mpo.hpp"
 #include "mps.hpp"
 #include "partition.hpp"
@@ -124,12 +125,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (double *)0;
+            cmat->factor = 1.0;
             tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (double *)0;
+            cmat->factor = 1.0;
             tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
         }
@@ -693,12 +696,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            MatrixFunctions::copy(r[i], v);
             double factor = exp(beta * (i + 1) / 3 * const_e);
-            for (size_t j = 0; j < 4; j++) {
-                MatrixFunctions::iadd(r[i], k[j], cs[i][j]);
-                MatrixFunctions::iscale(r[i], factor);
-            }
+            MatrixFunctions::copy(r[i], v);
+            MatrixFunctions::iscale(r[i], factor);
+            for (size_t j = 0; j < 4; j++)
+                MatrixFunctions::iadd(r[i], k[j], cs[i][j] * factor);
         }
         double norm = MatrixFunctions::norm(r[2]);
         double energy = -const_e;
@@ -764,12 +766,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            MatrixFunctions::copy(r[i], v);
             double factor = exp(beta * (i + 1) / 3 * const_e);
-            for (size_t j = 0; j < 4; j++) {
-                MatrixFunctions::iadd(r[i], k[j], cs[i][j]);
-                MatrixFunctions::iscale(r[i], factor);
-            }
+            MatrixFunctions::copy(r[i], v);
+            MatrixFunctions::iscale(r[i], factor);
+            for (size_t j = 0; j < 4; j++)
+                MatrixFunctions::iadd(r[i], k[j], cs[i][j] * factor);
         }
         double norm = MatrixFunctions::norm(r[2]);
         double energy = -const_e;
@@ -1078,14 +1079,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
                                               op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, false);
+                                              wfn_infos[0], opdq, 1.0, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (double *)0;
             tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
                                               op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, false);
+                                              wfn_infos[0], opdq, 1.0, false);
         }
     }
     void post_precompute() const {
@@ -1105,7 +1106,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
-        assert(mps_info->get_type() == MPSTypes::MultiWfn);
+        assert(mps_info->get_type() & MPSTypes::MultiWfn);
         shared_ptr<MultiMPSInfo<S>> minfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(mps_info);
         vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
@@ -1286,7 +1287,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
     // [c] = [H_eff[idx]] x [b]
     void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
-                    bool all_reduce = true) {
+                    double factor = 1.0, bool all_reduce = true) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
@@ -1298,7 +1299,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         assert(ic < operator_quanta.size());
         tf->tensor_product_multi_multiply(op->mat->data[idx], op->lopt,
                                           op->ropt, cmat, vmat, wfn_infos[ic],
-                                          idx_opdq, all_reduce);
+                                          idx_opdq, factor, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
@@ -1379,7 +1380,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                         ktmp.data = ket[j]->data;
                         rtmp.data = bra[j]->data;
                         btmp.clear();
-                        (*this)(ktmp, btmp, (int)i, true);
+                        (*this)(ktmp, btmp, (int)i, 1.0, true);
                         rr[j] = MatrixFunctions::dot(btmp, rtmp);
                     }
                 } else {
@@ -1388,7 +1389,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                             ktmp.data = ket[j]->data;
                             rtmp.data = bra[j]->data;
                             btmp.clear();
-                            (*this)(ktmp, btmp, (int)i, false);
+                            (*this)(ktmp, btmp, (int)i, 1.0, false);
                             rr[j] = MatrixFunctions::dot(btmp, rtmp);
                         }
                     }
@@ -1414,6 +1415,178 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(expectations, (size_t)nflop, t.get_time());
+    }
+    // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
+    // k1~k4, energy, norm, nexpo, nflop, texpo
+    pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
+    rk4_apply(complex<double> beta, double const_e, bool eval_energy = false,
+              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(ket.size() == 2);
+        MatrixRef vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
+        MatrixRef vi(ket[1]->data, (MKL_INT)ket[1]->total_memory, 1);
+        vector<MatrixRef> k, r;
+        Timer t;
+        t.get_time();
+        frame->activate(1);
+        for (int i = 0; i < 3; i++) {
+            r.push_back(MatrixRef(nullptr, (MKL_INT)ket[0]->total_memory, 1));
+            r[i + i].allocate();
+            r.push_back(MatrixRef(nullptr, (MKL_INT)ket[1]->total_memory, 1));
+            r[i + i + 1].allocate();
+        }
+        frame->activate(0);
+        for (int i = 0; i < 4; i++) {
+            k.push_back(MatrixRef(nullptr, (MKL_INT)ket[0]->total_memory, 1));
+            k[i + i].allocate(), k[i + i].clear();
+            k.push_back(MatrixRef(nullptr, (MKL_INT)ket[1]->total_memory, 1));
+            k[i + i + 1].allocate(), k[i + i + 1].clear();
+        }
+        tf->opf->seq->cumulative_nflop = 0;
+        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<double>> cs = vector<vector<double>>{
+            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
+                           -5.0 / 162.0},
+            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
+        precompute();
+        const function<void(const MatrixRef &, const MatrixRef &,
+                            const MatrixRef &, const MatrixRef &,
+                            complex<double>)> &f =
+            [this](const MatrixRef &are, const MatrixRef &aim,
+                   const MatrixRef &bre, const MatrixRef &bim,
+                   complex<double> scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked)) {
+                    if (scale.real() != 0) {
+                        this->tf->operator()(are, bre, scale.real());
+                        this->tf->operator()(aim, bim, scale.real());
+                    }
+                    if (scale.imag() != 0) {
+                        this->tf->operator()(are, bim, scale.imag());
+                        this->tf->operator()(aim, bre, -scale.imag());
+                    }
+                } else {
+                    if (scale.real() != 0) {
+                        (*this)(are, bre, 0, scale.real());
+                        (*this)(aim, bim, 0, scale.real());
+                    }
+                    if (scale.imag() != 0) {
+                        (*this)(are, bim, 0, scale.imag());
+                        (*this)(aim, bre, 0, -scale.imag());
+                    }
+                }
+            };
+        // k0 ~ k3
+        for (int i = 0; i < 4; i++) {
+            if (i == 0)
+                f(vr, vi, k[i + i], k[i + i + 1], beta);
+            else {
+                MatrixFunctions::copy(r[0], vr);
+                MatrixFunctions::copy(r[1], vi);
+                MatrixFunctions::iadd(r[0], k[i + i - 2], ks[i]);
+                MatrixFunctions::iadd(r[1], k[i + i - 1], ks[i]);
+                f(r[0], r[1], k[i + i], k[i + i + 1], beta);
+            }
+        }
+        // r0 ~ r2
+        for (int i = 0; i < 3; i++) {
+            complex<double> factor =
+                exp(beta * (double)((i + 1) / 3) * const_e);
+            r[i + i].clear(), r[i + i + 1].clear();
+            if (factor.real() != 0) {
+                MatrixFunctions::iadd(r[i + i], vr, factor.real());
+                MatrixFunctions::iadd(r[i + i + 1], vi, factor.real());
+            }
+            if (factor.imag() != 0) {
+                MatrixFunctions::iadd(r[i + i], vi, factor.imag());
+                MatrixFunctions::iadd(r[i + i + 1], vr, -factor.imag());
+            }
+            for (size_t j = 0; j < 4; j++) {
+                if (factor.real() != 0) {
+                    MatrixFunctions::iadd(r[i + i], k[j + j],
+                                          cs[i][j] * factor.real());
+                    MatrixFunctions::iadd(r[i + i + 1], k[j + j + 1],
+                                          cs[i][j] * factor.real());
+                }
+                if (factor.imag() != 0) {
+                    MatrixFunctions::iadd(r[i + i], k[j + j + 1],
+                                          cs[i][j] * factor.imag());
+                    MatrixFunctions::iadd(r[i + i + 1], k[j + j],
+                                          -cs[i][j] * factor.imag());
+                }
+            }
+        }
+        double norm_re = MatrixFunctions::norm(r[2 + 2]);
+        double norm_im = MatrixFunctions::norm(r[2 + 2 + 1]);
+        double norm = sqrt(norm_re * norm_re + norm_im * norm_im);
+        double energy = -const_e;
+        if (eval_energy) {
+            k[0].clear();
+            k[1].clear();
+            f(r[2 + 2], r[2 + 2 + 1], k[0], k[1], 1.0);
+            energy = (MatrixFunctions::dot(r[2 + 2], k[0]) +
+                      MatrixFunctions::dot(r[2 + 2 + 1], k[1])) /
+                     (norm * norm);
+        }
+        for (int i = 3; i >= 0; i--)
+            k[i + i + 1].deallocate(), k[i + i].deallocate();
+        post_precompute();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_pair(r, make_tuple(energy, norm, 4 + eval_energy,
+                                       (size_t)nflop, t.get_time()));
+    }
+    // [ket] = exp( [H_eff] ) | [ket] > (exact)
+    // energy, norm, nexpo, nflop, texpo
+    // nexpo is number of complex matrix multiplications
+    tuple<double, double, int, size_t, double>
+    expo_apply(complex<double> beta, double const_e, bool iprint = false,
+               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(compute_diag);
+        assert(ket.size() == 2);
+        double anorm = MatrixFunctions::norm(
+            MatrixRef(diag->data, (MKL_INT)diag->total_memory, 1));
+        MatrixRef vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
+        MatrixRef vi(ket[1]->data, (MKL_INT)ket[1]->total_memory, 1);
+        Timer t;
+        t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
+        precompute();
+        int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
+                     (tf->opf->seq->mode & SeqTypes::Tasked))
+                        ? ComplexMatrixFunctions::expo_apply(
+                              *tf, beta, anorm, vr, vi, const_e, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm)
+                        : ComplexMatrixFunctions::expo_apply(
+                              *this, beta, anorm, vr, vi, const_e, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm);
+        double norm_re = MatrixFunctions::norm(vr);
+        double norm_im = MatrixFunctions::norm(vi);
+        double norm = sqrt(norm_re * norm_re + norm_im * norm_im);
+        MatrixRef tmp_re(nullptr, (MKL_INT)ket[0]->total_memory, 1);
+        MatrixRef tmp_im(nullptr, (MKL_INT)ket[1]->total_memory, 1);
+        tmp_re.allocate();
+        tmp_im.allocate();
+        tmp_re.clear();
+        tmp_im.clear();
+        if (tf->opf->seq->mode == SeqTypes::Auto ||
+            (tf->opf->seq->mode & SeqTypes::Tasked))
+            (*tf)(vr, tmp_re), (*tf)(vi, tmp_im);
+        else
+            (*this)(vr, tmp_re), (*this)(vi, tmp_im);
+        double energy = (MatrixFunctions::dot(vr, tmp_re) +
+                         MatrixFunctions::dot(vi, tmp_im)) /
+                        (norm * norm);
+        tmp_im.deallocate();
+        tmp_re.deallocate();
+        post_precompute();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);

@@ -23,8 +23,13 @@
 #include "allocator.hpp"
 #include "threading.hpp"
 #ifdef _HAS_INTEL_MKL
+#ifndef MKL_Complex16
+#include <complex>
+#define MKL_Complex16 std::complex<double>
+#endif
 #include "mkl.h"
 #endif
+#include <complex>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -113,6 +118,79 @@ struct IdentityMatrix : DiagonalMatrix {
     void clear() {}
     friend ostream &operator<<(ostream &os, const IdentityMatrix &mat) {
         os << "IDENT MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        return os;
+    }
+};
+
+// complex dense matrix
+struct ComplexMatrixRef {
+    MKL_INT m, n; // m is rows, n is cols
+    complex<double> *data;
+    ComplexMatrixRef(complex<double> *data, MKL_INT m, MKL_INT n)
+        : data(data), m(m), n(n) {}
+    complex<double> &operator()(MKL_INT i, MKL_INT j) const {
+        return *(data + (size_t)i * n + j);
+    }
+    size_t size() const { return (size_t)m * n; }
+    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        data = (complex<double> *)(alloc == nullptr ? dalloc : alloc)
+                   ->allocate(size() * 2);
+    }
+    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc : alloc)
+            ->deallocate((double *)data, size() * 2);
+        data = nullptr;
+    }
+    void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
+    ComplexMatrixRef flip_dims() const { return ComplexMatrixRef(data, n, m); }
+    ComplexMatrixRef shift_ptr(size_t l) const {
+        return ComplexMatrixRef(data + l, m, n);
+    }
+    friend ostream &operator<<(ostream &os, const ComplexMatrixRef &mat) {
+        os << "CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        for (MKL_INT i = 0; i < mat.m; i++) {
+            os << "[ ";
+            for (MKL_INT j = 0; j < mat.n; j++)
+                os << setw(20) << setprecision(14) << mat(i, j) << " ";
+            os << "]" << endl;
+        }
+        return os;
+    }
+    complex<double> trace() const {
+        assert(m == n);
+        complex<double> r = 0;
+        for (MKL_INT i = 0; i < m; i++)
+            r += this->operator()(i, i);
+        return r;
+    }
+};
+
+// Diagonal complex matrix
+struct ComplexDiagonalMatrix : ComplexMatrixRef {
+    complex<double> zero = 0.0;
+    ComplexDiagonalMatrix(complex<double> *data, MKL_INT n)
+        : ComplexMatrixRef(data, n, n) {}
+    complex<double> &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? *(data + i) : const_cast<complex<double> &>(zero);
+    }
+    size_t size() const { return (size_t)m; }
+    // need override since size() is changed (which is not virtual)
+    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        data = (complex<double> *)(alloc == nullptr ? dalloc : alloc)
+                   ->allocate(size() * 2);
+    }
+    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc : alloc)
+            ->deallocate((double *)data, size() * 2);
+        data = nullptr;
+    }
+    void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
+    friend ostream &operator<<(ostream &os, const ComplexDiagonalMatrix &mat) {
+        os << "DIAG CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        os << "[ ";
+        for (MKL_INT j = 0; j < mat.n; j++)
+            os << setw(20) << setprecision(14) << mat(j, j) << " ";
+        os << "]" << endl;
         return os;
     }
 };
