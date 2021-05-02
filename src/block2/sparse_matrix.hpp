@@ -986,6 +986,7 @@ template <typename S> struct SparseMatrix {
         return r;
     }
     virtual double norm() const {
+        assert(total_memory <= (size_t)numeric_limits<MKL_INT>::max());
         return MatrixFunctions::norm(MatrixRef(data, (MKL_INT)total_memory, 1));
     }
     // ratio of zero elements to total size
@@ -997,6 +998,7 @@ template <typename S> struct SparseMatrix {
     }
     void iscale(double d) const {
         assert(factor == 1.0);
+        assert(total_memory <= (size_t)numeric_limits<MKL_INT>::max());
         MatrixFunctions::iscale(MatrixRef(data, (MKL_INT)total_memory, 1), d);
     }
     void normalize() const { iscale(1 / norm()); }
@@ -1796,10 +1798,27 @@ template <typename S> struct SparseMatrixGroup {
         return r;
     }
     double norm() const {
-        return MatrixFunctions::norm(MatrixRef(data, (MKL_INT)total_memory, 1));
+        if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
+            return MatrixFunctions::norm(
+                MatrixRef(data, (MKL_INT)total_memory, 1));
+        else {
+            double normsq = 0.0;
+            for (int i = 0; i < n; i++) {
+                assert((*this)[i]->total_memory <=
+                       (size_t)numeric_limits<MKL_INT>::max());
+                double norm = (*this)[i]->norm();
+                normsq += norm * norm;
+            }
+            return sqrt(abs(normsq));
+        }
     }
     void iscale(double d) const {
-        MatrixFunctions::iscale(MatrixRef(data, (MKL_INT)total_memory, 1), d);
+        if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
+            MatrixFunctions::iscale(MatrixRef(data, (MKL_INT)total_memory, 1),
+                                    d);
+        else
+            for (int i = 0; i < n; i++)
+                (*this)[i]->iscale(d);
     }
     void normalize() const { iscale(1 / norm()); }
     static void
