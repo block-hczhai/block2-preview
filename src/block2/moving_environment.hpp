@@ -1941,18 +1941,26 @@ template <typename S> struct MovingEnvironment {
         if (!(noise_type & NoiseTypes::Unscaled)) {
             for (int i = 0; i < mats->n; i++) {
                 double mat_norm = (*mats)[i]->norm();
-                if (abs(mat_norm) > TINY)
+                if (abs(mat_norm) > TINY) {
+                    assert((*mats)[i]->total_memory <=
+                           numeric_limits<MKL_INT>::max());
                     MatrixFunctions::iscale(
                         MatrixRef((*mats)[i]->data,
                                   (MKL_INT)(*mats)[i]->total_memory, 1),
                         1 / mat_norm);
+                }
             }
         }
         double norm = mats->norm();
         if (abs(norm) > TINY)
-            MatrixFunctions::iscale(
-                MatrixRef(mats->data, (MKL_INT)mats->total_memory, 1),
-                sqrt(noise) / norm);
+            for (int i = 0; i < mats->n; i++) {
+                assert((*mats)[i]->total_memory <=
+                       numeric_limits<MKL_INT>::max());
+                MatrixFunctions::iscale(
+                    MatrixRef((*mats)[i]->data,
+                              (MKL_INT)(*mats)[i]->total_memory, 1),
+                    sqrt(noise) / norm);
+            }
     }
     // Diagonalize density matrix and truncate to k eigenvalues
     static double truncate_density_matrix(const shared_ptr<SparseMatrix<S>> &dm,
