@@ -13,7 +13,7 @@ Fast Fourier Transform (FFT)
 ============================
 
 A collection of FFT algorithms is implemented here. The implementation focuses more on
-flexiablily and readability, rather than optimal performance (but the performance should
+flexibility and readability, rather than optimal performance (but the performance should
 be acceptable).
 
 The ``block2`` implementation is faster than ``numpy`` implementation for some special

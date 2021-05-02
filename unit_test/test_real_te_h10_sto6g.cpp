@@ -4,21 +4,22 @@
 
 using namespace block2;
 
-class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
+class TestRealTEH10STO6G : public ::testing::Test {
   protected:
     size_t isize = 1L << 28;
     size_t dsize = 1L << 32;
 
     template <typename S>
     void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
-                   int dot);
+                   int dot, TETypes te_type);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
+            16, 1);
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -29,12 +30,27 @@ class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
 };
 
 template <typename S>
-void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
-                                          const HamiltonianQC<S> &hamil,
-                                          const string &name, int dot) {
+void TestRealTEH10STO6G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
+                                   const string &name, int dot,
+                                   TETypes te_type) {
 
     double igf_std = -0.2286598562666365;
     double energy_std = -5.424385375684663;
+    double energy_dyn = 0.590980380450;
+
+    // TDVP results
+    vector<complex<double>> te_refs = {
+        {0.497396368871, -0.029426410575}, {0.494212938342, -0.058663437101},
+        {0.488941571448, -0.087524400468}, {0.481633079931, -0.115827961232},
+        {0.472357195502, -0.143400616680}, {0.461201219425, -0.170078998109},
+        {0.448268361065, -0.195711913852}, {0.433675816788, -0.220162093193},
+        {0.417552647151, -0.243307597267}, {0.400037514407, -0.265042874961},
+        {0.381276343871, -0.285279454006}, {0.361419971751, -0.303946269378},
+        {0.340621838809, -0.320989642299}, {0.319035783923, -0.336372933090},
+        {0.296813984751, -0.350075899481}, {0.274105084524, -0.362093798584},
+        {0.251052535170, -0.372436275343}, {0.227793177711, -0.381126082909},
+        {0.204456071825, -0.388197681130}, {0.181161577863, -0.393695758351},
+    };
 
     Timer t;
     t.get_time();
@@ -52,7 +68,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
     cout << "C/D MPO start" << endl;
     bool su2 = S(1, 1, 0).multiplicity() == 2;
     shared_ptr<OpElement<S>> c_op, d_op;
-    uint16_t isite = 5;
+    uint16_t isite = 4;
     if (su2) {
         c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {}),
                                          S(1, 1, hamil.orb_sym[isite]));
@@ -174,62 +190,48 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
     cps->eq_type = EquationTypes::PerturbativeCompression;
     double norm = cps->solve(20, mps->center == 0, 1E-12);
 
-    // Y MPS
-    shared_ptr<MPSInfo<S>> ymps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target + d_op->q_label, hamil.basis);
-    ymps_info->set_bond_dimension(bra_bond_dim);
-    ymps_info->tag = "YBRA";
+    // complex MPS
+    shared_ptr<MultiMPS<S>> cpx_ref = MultiMPS<S>::make_complex(dmps, "CPX-R");
+    shared_ptr<MultiMPS<S>> cpx_mps = MultiMPS<S>::make_complex(dmps, "CPX-D");
 
-    shared_ptr<MPS<S>> ymps =
-        make_shared<MPS<S>>(hamil.n_sites, mps->center, dot);
-    ymps->initialize(ymps_info);
-    ymps->random_canonicalize();
-
-    // MPS/MPSInfo save mutable
-    ymps->save_mutable();
-    ymps->deallocate();
-    ymps_info->save_mutable();
-    ymps_info->deallocate_mutable();
-
-    double eta = 0.05, omega = -0.17;
-
-    // LEFT ME
-    shared_ptr<MovingEnvironment<S>> lme =
-        make_shared<MovingEnvironment<S>>(lmpo, ymps, ymps, "LHS");
+    double dt = 0.1;
+    int n_steps = 20;
+    shared_ptr<MovingEnvironment<S>> xme =
+        make_shared<MovingEnvironment<S>>(lmpo, cpx_mps, cpx_mps, "XTD");
+    shared_ptr<MovingEnvironment<S>> mme =
+        make_shared<MovingEnvironment<S>>(impo, cpx_ref, cpx_mps, "II");
     lmpo->const_e -= energy;
-    lme->init_environments();
+    xme->init_environments();
+    shared_ptr<TimeEvolution<S>> te =
+        make_shared<TimeEvolution<S>>(xme, bra_bdims, te_type);
+    te->iprint = 2;
+    te->n_sub_sweeps = te->mode == TETypes::TangentSpace ? 1 : 2;
+    te->normalize_mps = false;
+    shared_ptr<Expect<S, complex<double>>> ex =
+        make_shared<Expect<S, complex<double>>>(mme, bra_bond_dim,
+                                                bra_bond_dim);
+    vector<complex<double>> overlaps;
+    for (int i = 0; i < n_steps; i++) {
+        if (te->mode == TETypes::TangentSpace)
+            te->solve(2, complex<double>(0, dt / 2), cpx_mps->center == 0);
+        else
+            te->solve(1, complex<double>(0, dt), cpx_mps->center == 0);
+        mme->init_environments();
+        EXPECT_LT(abs(te->energies.back() - energy_dyn), 1E-7);
+        complex<double> overlap = ex->solve(false);
+        overlaps.push_back(overlap);
+        cout << setprecision(12);
+        cout << i * dt << " " << overlap << endl;
+    }
 
-    // RIGHT (identity) ME
-    shared_ptr<MovingEnvironment<S>> rme =
-        make_shared<MovingEnvironment<S>>(impo, ymps, dmps, "RHS");
-    rme->init_environments();
-
-    // TARGET ME
-    shared_ptr<MovingEnvironment<S>> tme =
-        make_shared<MovingEnvironment<S>>(cmpo, mps, ymps, "TARGET");
-    tme->init_environments();
-
-    // Linear
-    shared_ptr<Linear<S>> linear =
-        make_shared<Linear<S>>(lme, rme, tme, bra_bdims, bra_bdims, noises);
-    linear->eq_type = EquationTypes::GreensFunction;
-    linear->gf_eta = eta;
-    linear->gf_omega = omega;
-    linear->precondition_cg = true;
-    linear->noise_type = NoiseTypes::ReducedPerturbative;
-    linear->decomp_type = DecompositionTypes::SVD;
-    linear->right_weight = 0.2;
-    linear->iprint = 2;
-    double igf = linear->solve(20, ymps->center == 0, 1E-12);
-    igf = linear->targets.back().back();
-
-    cout << "== " << name << " (IGF) ==" << setw(20) << target
-         << " E = " << fixed << setw(22) << setprecision(12) << igf
-         << " error = " << scientific << setprecision(3) << setw(10)
-         << (igf - igf_std) << " T = " << fixed << setw(10) << setprecision(3)
-         << t.get_time() << endl;
-
-    EXPECT_LT(abs(igf - igf_std), 1E-4);
+    for (size_t i = 0; i < overlaps.size(); i++) {
+        cout << "== " << name << " =="
+             << " DT = " << setw(10) << fixed << setprecision(4) << (i * dt)
+             << " EX = " << fixed << setw(22) << setprecision(12) << overlaps[i]
+             << " ERROR = " << scientific << setprecision(3) << setw(10)
+             << (overlaps[i] - te_refs[i]) << endl;
+        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-7);
+    }
 
     dmps_info->deallocate();
     mps_info->deallocate();
@@ -237,10 +239,10 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
     mpo->deallocate();
 }
 
-TEST_F(TestRTEGreenFunctionH10STO6G, TestSU2) {
+TEST_F(TestRealTEH10STO6G, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
-    string filename = "data/H10.STO6G.R1.8.FCIDUMP";
+    string filename = "data/H10.STO6G.R1.8.FCIDUMP.LOWDIN";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -253,17 +255,19 @@ TEST_F(TestRTEGreenFunctionH10STO6G, TestSU2) {
     int norb = fcidump->n_sites();
     HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
-    test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
+    test_dmrg<SU2>(target, hamil, "SU2/2-site/TDVP", 2, TETypes::TangentSpace);
+    test_dmrg<SU2>(target, hamil, " SU2/2-site/RK4", 2, TETypes::RK4);
+    test_dmrg<SU2>(target, hamil, "SU2/1-site/TDVP", 1, TETypes::TangentSpace);
+    test_dmrg<SU2>(target, hamil, " SU2/1-site/RK4", 1, TETypes::RK4);
 
     hamil.deallocate();
     fcidump->deallocate();
 }
 
-TEST_F(TestRTEGreenFunctionH10STO6G, TestSZ) {
+TEST_F(TestRealTEH10STO6G, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
-    string filename = "data/H10.STO6G.R1.8.FCIDUMP";
+    string filename = "data/H10.STO6G.R1.8.FCIDUMP.LOWDIN";
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -278,8 +282,10 @@ TEST_F(TestRTEGreenFunctionH10STO6G, TestSZ) {
     int norb = fcidump->n_sites();
     HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
-    test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
+    test_dmrg<SZ>(target, hamil, " SZ/2-site/TDVP", 2, TETypes::TangentSpace);
+    test_dmrg<SZ>(target, hamil, "  SZ/2-site/RK4", 2, TETypes::RK4);
+    test_dmrg<SZ>(target, hamil, " SZ/1-site/TDVP", 1, TETypes::TangentSpace);
+    test_dmrg<SZ>(target, hamil, "  SZ/1-site/RK4", 1, TETypes::RK4);
 
     hamil.deallocate();
     fcidump->deallocate();

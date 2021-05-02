@@ -201,8 +201,12 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 
     py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
         .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
-        .def("get_matrix", &PDM2MPOQC<S>::get_matrix)
-        .def("get_matrix_spatial", &PDM2MPOQC<S>::get_matrix_spatial);
+        .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<double>)
+        .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<complex<double>>)
+        .def("get_matrix_spatial",
+             &PDM2MPOQC<S>::template get_matrix_spatial<double>)
+        .def("get_matrix_spatial",
+             &PDM2MPOQC<S>::template get_matrix_spatial<complex<double>>);
 }
 
 template <typename S>
@@ -252,8 +256,12 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
         .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
         .def(py::init<const Hamiltonian<S> &, uint16_t>(), py::arg("hamil"),
              py::arg("mask"))
-        .def("get_matrix", &PDM2MPOQC<S>::get_matrix)
-        .def("get_matrix_spatial", &PDM2MPOQC<S>::get_matrix_spatial);
+        .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<double>)
+        .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<complex<double>>)
+        .def("get_matrix_spatial",
+             &PDM2MPOQC<S>::template get_matrix_spatial<double>)
+        .def("get_matrix_spatial",
+             &PDM2MPOQC<S>::template get_matrix_spatial<complex<double>>);
 
     py::class_<SumMPOQC<S>, shared_ptr<SumMPOQC<S>>, MPO<S>>(m, "SumMPOQC")
         .def_readwrite("ts", &SumMPOQC<S>::ts)
@@ -1489,6 +1497,66 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S>::get_site_ops);
 }
 
+template <typename S, typename FL>
+void bind_expect(py::module &m, const string &name) {
+
+    py::class_<typename Expect<S, FL>::Iteration,
+               shared_ptr<typename Expect<S, FL>::Iteration>>(
+        m, (name + "Iteration").c_str())
+        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, FL>> &, double,
+                      double, size_t, double>())
+        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, FL>> &, double,
+                      double>())
+        .def_readwrite("bra_error", &Expect<S, FL>::Iteration::bra_error)
+        .def_readwrite("ket_error", &Expect<S, FL>::Iteration::ket_error)
+        .def_readwrite("tmult", &Expect<S, FL>::Iteration::tmult)
+        .def_readwrite("nflop", &Expect<S, FL>::Iteration::nflop)
+        .def("__repr__", [](typename Expect<S, FL>::Iteration *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::class_<Expect<S, FL>, shared_ptr<Expect<S, FL>>>(m, name.c_str())
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t,
+                      ubond_t>())
+        .def(
+            py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t, ubond_t,
+                     double, const vector<double> &, const vector<int> &>())
+        .def_readwrite("iprint", &Expect<S, FL>::iprint)
+        .def_readwrite("cutoff", &Expect<S, FL>::cutoff)
+        .def_readwrite("beta", &Expect<S, FL>::beta)
+        .def_readwrite("partition_weights", &Expect<S, FL>::partition_weights)
+        .def_readwrite("me", &Expect<S, FL>::me)
+        .def_readwrite("bra_bond_dim", &Expect<S, FL>::bra_bond_dim)
+        .def_readwrite("ket_bond_dim", &Expect<S, FL>::ket_bond_dim)
+        .def_readwrite("expectations", &Expect<S, FL>::expectations)
+        .def_readwrite("forward", &Expect<S, FL>::forward)
+        .def_readwrite("trunc_type", &Expect<S, FL>::trunc_type)
+        .def_readwrite("ex_type", &Expect<S, FL>::ex_type)
+        .def_readwrite("algo_type", &Expect<S, FL>::algo_type)
+        .def("update_one_dot", &Expect<S, FL>::update_one_dot)
+        .def("update_multi_one_dot", &Expect<S, FL>::update_multi_one_dot)
+        .def("update_two_dot", &Expect<S, FL>::update_two_dot)
+        .def("update_multi_two_dot", &Expect<S, FL>::update_multi_two_dot)
+        .def("blocking", &Expect<S, FL>::blocking)
+        .def("sweep", &Expect<S, FL>::sweep)
+        .def("solve", &Expect<S, FL>::solve, py::arg("propagate"),
+             py::arg("forward") = true)
+        .def("get_1pdm_spatial", &Expect<S, FL>::get_1pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1pdm", &Expect<S, FL>::get_1pdm,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_2pdm_spatial", &Expect<S, FL>::get_2pdm_spatial,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_2pdm", &Expect<S, FL>::get_2pdm,
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1npc_spatial", &Expect<S, FL>::get_1npc_spatial, py::arg("s"),
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_1npc", &Expect<S, FL>::get_1npc, py::arg("s"),
+             py::arg("n_physical_sites") = (uint16_t)0U);
+}
+
 template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename DMRG<S>::Iteration,
@@ -1642,6 +1710,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &TimeEvolution<S>::trunc_type)
         .def_readwrite("trunc_pattern", &TimeEvolution<S>::trunc_pattern)
         .def_readwrite("decomp_type", &TimeEvolution<S>::decomp_type)
+        .def_readwrite("normalize_mps", &TimeEvolution<S>::normalize_mps)
         .def("update_one_dot", &TimeEvolution<S>::update_one_dot)
         .def("update_two_dot", &TimeEvolution<S>::update_two_dot)
         .def("update_multi_one_dot", &TimeEvolution<S>::update_multi_one_dot)
@@ -1712,6 +1781,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("decomp_type", &Linear<S>::decomp_type)
         .def_readwrite("eq_type", &Linear<S>::eq_type)
         .def_readwrite("ex_type", &Linear<S>::ex_type)
+        .def_readwrite("algo_type", &Linear<S>::algo_type)
         .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
@@ -1733,59 +1803,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def("solve", &Linear<S>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6);
 
-    py::class_<typename Expect<S>::Iteration,
-               shared_ptr<typename Expect<S>::Iteration>>(m, "ExpectIteration")
-        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, double>> &,
-                      double, double, size_t, double>())
-        .def(py::init<const vector<pair<shared_ptr<OpExpr<S>>, double>> &,
-                      double, double>())
-        .def_readwrite("bra_error", &Expect<S>::Iteration::bra_error)
-        .def_readwrite("ket_error", &Expect<S>::Iteration::ket_error)
-        .def_readwrite("tmult", &Expect<S>::Iteration::tmult)
-        .def_readwrite("nflop", &Expect<S>::Iteration::nflop)
-        .def("__repr__", [](typename Expect<S>::Iteration *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
-    py::class_<Expect<S>, shared_ptr<Expect<S>>>(m, "Expect")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t,
-                      ubond_t>())
-        .def(
-            py::init<const shared_ptr<MovingEnvironment<S>> &, ubond_t, ubond_t,
-                     double, const vector<double> &, const vector<int> &>())
-        .def_readwrite("iprint", &Expect<S>::iprint)
-        .def_readwrite("cutoff", &Expect<S>::cutoff)
-        .def_readwrite("beta", &Expect<S>::beta)
-        .def_readwrite("partition_weights", &Expect<S>::partition_weights)
-        .def_readwrite("me", &Expect<S>::me)
-        .def_readwrite("bra_bond_dim", &Expect<S>::bra_bond_dim)
-        .def_readwrite("ket_bond_dim", &Expect<S>::ket_bond_dim)
-        .def_readwrite("expectations", &Expect<S>::expectations)
-        .def_readwrite("forward", &Expect<S>::forward)
-        .def_readwrite("trunc_type", &Expect<S>::trunc_type)
-        .def_readwrite("ex_type", &Expect<S>::ex_type)
-        .def("update_one_dot", &Expect<S>::update_one_dot)
-        .def("update_multi_one_dot", &Expect<S>::update_multi_one_dot)
-        .def("update_two_dot", &Expect<S>::update_two_dot)
-        .def("update_multi_two_dot", &Expect<S>::update_multi_two_dot)
-        .def("blocking", &Expect<S>::blocking)
-        .def("sweep", &Expect<S>::sweep)
-        .def("solve", &Expect<S>::solve, py::arg("propagate"),
-             py::arg("forward") = true)
-        .def("get_1pdm_spatial", &Expect<S>::get_1pdm_spatial,
-             py::arg("n_physical_sites") = (uint16_t)0U)
-        .def("get_1pdm", &Expect<S>::get_1pdm,
-             py::arg("n_physical_sites") = (uint16_t)0U)
-        .def("get_2pdm_spatial", &Expect<S>::get_2pdm_spatial,
-             py::arg("n_physical_sites") = (uint16_t)0U)
-        .def("get_2pdm", &Expect<S>::get_2pdm,
-             py::arg("n_physical_sites") = (uint16_t)0U)
-        .def("get_1npc_spatial", &Expect<S>::get_1npc_spatial, py::arg("s"),
-             py::arg("n_physical_sites") = (uint16_t)0U)
-        .def("get_1npc", &Expect<S>::get_1npc, py::arg("s"),
-             py::arg("n_physical_sites") = (uint16_t)0U);
+    bind_expect<S, double>(m, "Expect");
+    bind_expect<S, complex<double>>(m, "ComplexExpect");
 }
 
 template <typename S> void bind_parallel(py::module &m) {
@@ -2047,8 +2066,12 @@ template <typename S> void bind_mpo(py::module &m) {
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
         .def(py::init<const Hamiltonian<S> &>())
         .def(py::init<const Hamiltonian<S> &, uint8_t>())
-        .def("get_matrix", &PDM1MPOQC<S>::get_matrix)
-        .def("get_matrix_spatial", &PDM1MPOQC<S>::get_matrix_spatial);
+        .def("get_matrix", &PDM1MPOQC<S>::template get_matrix<double>)
+        .def("get_matrix", &PDM1MPOQC<S>::template get_matrix<complex<double>>)
+        .def("get_matrix_spatial",
+             &PDM1MPOQC<S>::template get_matrix_spatial<double>)
+        .def("get_matrix_spatial",
+             &PDM1MPOQC<S>::template get_matrix_spatial<complex<double>>);
 
     py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
         .def(py::init<const Hamiltonian<S> &>());
@@ -2340,6 +2363,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Normal", ExpectationAlgorithmTypes::Normal)
         .value("Fast", ExpectationAlgorithmTypes::Fast);
 
+    py::enum_<ExpectationTypes>(m, "ExpectationTypes", py::arithmetic())
+        .value("Real", ExpectationTypes::Real)
+        .value("Complex", ExpectationTypes::Complex);
+
     py::enum_<TETypes>(m, "TETypes", py::arithmetic())
         .value("ImagTE", TETypes::ImagTE)
         .value("RealTE", TETypes::RealTE)
@@ -2463,9 +2490,6 @@ template <typename S = void> void bind_io(py::module &m) {
     m.def("read_occ", &read_occ);
     m.def("write_occ", &write_occ);
 
-    m.def("get_partition_weights", &get_partition_weights, py::arg("beta"),
-          py::arg("energies"), py::arg("multiplicities"));
-
     py::class_<Allocator<uint32_t>, shared_ptr<Allocator<uint32_t>>>(
         m, "IntAllocator")
         .def(py::init<>());
@@ -2541,6 +2565,15 @@ template <typename S = void> void bind_io(py::module &m) {
                             py::array_t<complex<double>>(arr.size());
                         memcpy(arx.mutable_data(), arr.data(),
                                arr.size() * sizeof(complex<double>));
+                        FFT::fftshift(arx.mutable_data(), arx.size(), true);
+                        return arx;
+                    })
+        .def_static("fftshift",
+                    [](const py::array_t<double> &arr) {
+                        py::array_t<double> arx =
+                            py::array_t<double>(arr.size());
+                        memcpy(arx.mutable_data(), arr.data(),
+                               arr.size() * sizeof(double));
                         FFT::fftshift(arx.mutable_data(), arx.size(), true);
                         return arx;
                     })

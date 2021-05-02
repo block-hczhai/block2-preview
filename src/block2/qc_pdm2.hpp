@@ -1115,10 +1115,11 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
             this->tensors[m]->deallocate();
     }
-    static shared_ptr<Tensor> get_matrix(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        shared_ptr<Tensor> r = make_shared<Tensor>(vector<MKL_INT>{
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(vector<MKL_INT>{
             n_sites * 2, n_sites * 2, n_sites * 2, n_sites * 2});
         r->clear();
         for (auto &v : expectations)
@@ -1133,13 +1134,14 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
             }
         return r;
     }
-    static shared_ptr<Tensor> get_matrix_spatial(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        shared_ptr<Tensor> r = make_shared<Tensor>(
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
             vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites});
         r->clear();
-        shared_ptr<Tensor> t = get_matrix(expectations, n_sites);
+        shared_ptr<GTensor<FL>> t = get_matrix(expectations, n_sites);
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint16_t k = 0; k < n_sites; k++)
@@ -2136,10 +2138,11 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
             this->tensors[m]->deallocate();
     }
-    static shared_ptr<Tensor> get_matrix_reduced(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix_reduced(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        shared_ptr<Tensor> r = make_shared<Tensor>(
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
             vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites, 2});
         r->clear();
         for (auto &v : expectations)
@@ -2153,49 +2156,51 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_su2_t> : MPO<S> {
         return r;
     }
     // only for singlet
-    static shared_ptr<Tensor> get_matrix(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        shared_ptr<Tensor> r = make_shared<Tensor>(vector<MKL_INT>{
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(vector<MKL_INT>{
             n_sites * 2, n_sites * 2, n_sites * 2, n_sites * 2});
         r->clear();
-        shared_ptr<Tensor> t = get_matrix_reduced(expectations, n_sites);
+        shared_ptr<GTensor<FL>> t = get_matrix_reduced(expectations, n_sites);
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint16_t k = 0; k < n_sites; k++)
                     for (uint16_t l = 0; l <= k; l++) {
-                        double a = -(*t)({i, j, k, l, 0}) +
-                                   sqrt(3) * (*t)({i, j, k, l, 1});
-                        double b = -(*t)({i, j, l, k, 0}) +
-                                   sqrt(3) * (*t)({i, j, l, k, 1});
+                        FL a = -(*t)({i, j, k, l, 0}) +
+                               sqrt(3) * (*t)({i, j, k, l, 1});
+                        FL b = -(*t)({i, j, l, k, 0}) +
+                               sqrt(3) * (*t)({i, j, l, k, 1});
                         (*r)({i * 2 + 0, j * 2 + 0, k * 2 + 0, l * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 1, k * 2 + 1, l * 2 + 1}) =
-                                (a - b) / 6;
+                                (a - b) / 6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, k * 2 + 1, l * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 0, k * 2 + 0, l * 2 + 1}) =
-                                (2 * a + b) / 6;
+                                (2.0 * a + b) / 6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, k * 2 + 0, l * 2 + 1}) =
                             (*r)({i * 2 + 1, j * 2 + 0, k * 2 + 1, l * 2 + 0}) =
-                                -(2 * b + a) / 6;
+                                -(2.0 * b + a) / 6.0;
                         (*r)({i * 2 + 0, j * 2 + 0, l * 2 + 0, k * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 1, l * 2 + 1, k * 2 + 1}) =
-                                (b - a) / 6;
+                                (b - a) / 6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, l * 2 + 1, k * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 0, l * 2 + 0, k * 2 + 1}) =
-                                (2 * b + a) / 6;
+                                (2.0 * b + a) / 6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, l * 2 + 0, k * 2 + 1}) =
                             (*r)({i * 2 + 1, j * 2 + 0, l * 2 + 1, k * 2 + 0}) =
-                                -(2 * a + b) / 6;
+                                -(2.0 * a + b) / 6.0;
                     }
         return r;
     }
-    static shared_ptr<Tensor> get_matrix_spatial(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        shared_ptr<Tensor> r = make_shared<Tensor>(
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
             vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites});
         r->clear();
-        shared_ptr<Tensor> t = get_matrix_reduced(expectations, n_sites);
+        shared_ptr<GTensor<FL>> t = get_matrix_reduced(expectations, n_sites);
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint16_t k = 0; k < n_sites; k++)

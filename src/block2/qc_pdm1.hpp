@@ -262,10 +262,11 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {}
-    static MatrixRef get_matrix(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static GMatrix<FL> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        MatrixRef r(nullptr, n_sites * 2, n_sites * 2);
+        GMatrix<FL> r(nullptr, n_sites * 2, n_sites * 2);
         r.allocate();
         r.clear();
         for (auto &v : expectations)
@@ -278,13 +279,14 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             }
         return r;
     }
-    static MatrixRef get_matrix_spatial(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static GMatrix<FL> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        MatrixRef r(nullptr, n_sites, n_sites);
+        GMatrix<FL> r(nullptr, n_sites, n_sites);
         r.allocate();
         r.clear();
-        MatrixRef t = get_matrix(expectations, n_sites);
+        GMatrix<FL> t = get_matrix(expectations, n_sites);
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
                 r(i, j) = t(2 * i + 0, 2 * j + 0) + t(2 * i + 1, 2 * j + 1);
@@ -493,25 +495,27 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
     }
     void deallocate() override {}
     // only for singlet
-    static MatrixRef get_matrix(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static GMatrix<FL> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        MatrixRef r(nullptr, n_sites * 2, n_sites * 2);
+        GMatrix<FL> r(nullptr, n_sites * 2, n_sites * 2);
         r.allocate();
         r.clear();
-        MatrixRef t = get_matrix_spatial(expectations, n_sites);
+        GMatrix<FL> t = get_matrix_spatial(expectations, n_sites);
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++) {
-                r(2 * i + 0, 2 * j + 0) = t(i, j) / 2;
-                r(2 * i + 1, 2 * j + 1) = t(i, j) / 2;
+                r(2 * i + 0, 2 * j + 0) = t(i, j) / 2.0;
+                r(2 * i + 1, 2 * j + 1) = t(i, j) / 2.0;
             }
         t.deallocate();
         return r;
     }
-    static MatrixRef get_matrix_spatial(
-        const vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> &expectations,
+    template <typename FL>
+    static GMatrix<FL> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        MatrixRef r(nullptr, n_sites, n_sites);
+        GMatrix<FL> r(nullptr, n_sites, n_sites);
         r.allocate();
         r.clear();
         for (auto &v : expectations)

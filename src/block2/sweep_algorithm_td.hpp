@@ -774,6 +774,7 @@ template <typename S> struct TimeEvolution {
     vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
     double cutoff = 1E-14;
+    bool normalize_mps = true;
     TimeEvolution(const shared_ptr<MovingEnvironment<S>> &me,
                   const vector<ubond_t> &bond_dims,
                   TETypes mode = TETypes::TangentSpace, int n_sub_sweeps = 1)
@@ -950,7 +951,8 @@ template <typename S> struct TimeEvolution {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
-                if (mode == TETypes::RK4 && (i != me->n_sites - 1 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != me->n_sites - 1 || !advance))
                     right->normalize();
                 me->ket->tensors[i] = left;
                 me->ket->save_tensor(i);
@@ -961,7 +963,8 @@ template <typename S> struct TimeEvolution {
                 me->ket->info->left_dims[i + 1] = info;
                 me->ket->info->save_left_dims(i + 1);
             } else {
-                if (mode == TETypes::RK4 && (i != 0 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != 0 || !advance))
                     left->normalize();
                 me->ket->tensors[i] = right;
                 me->ket->save_tensor(i);
@@ -1003,7 +1006,8 @@ template <typename S> struct TimeEvolution {
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                    right->normalize();
+                    if (normalize_mps)
+                        right->normalize();
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
                     MovingEnvironment<S>::contract_one_dot(i + 1, right,
@@ -1020,7 +1024,8 @@ template <typename S> struct TimeEvolution {
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                    left->normalize();
+                    if (normalize_mps)
+                        left->normalize();
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
                     MovingEnvironment<S>::contract_one_dot(i - 1, left, me->ket,
@@ -1182,7 +1187,7 @@ template <typename S> struct TimeEvolution {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
-                if (mode == TETypes::RK4 &&
+                if (normalize_mps && mode == TETypes::RK4 &&
                     (i + 1 != me->n_sites - 1 || !advance))
                     me->ket->tensors[i + 1]->normalize();
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
@@ -1194,7 +1199,8 @@ template <typename S> struct TimeEvolution {
                 me->ket->canonical_form[i] = 'L';
                 me->ket->canonical_form[i + 1] = 'C';
             } else {
-                if (mode == TETypes::RK4 && (i != 0 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != 0 || !advance))
                     me->ket->tensors[i]->normalize();
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
@@ -1239,7 +1245,8 @@ template <typename S> struct TimeEvolution {
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                me->ket->tensors[i + 1]->normalize();
+                if (normalize_mps)
+                    me->ket->tensors[i + 1]->normalize();
                 me->ket->save_tensor(i + 1);
             }
             me->ket->unload_tensor(i + 1);
@@ -1255,7 +1262,8 @@ template <typename S> struct TimeEvolution {
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                me->ket->tensors[i]->normalize();
+                if (normalize_mps)
+                    me->ket->tensors[i]->normalize();
                 me->ket->save_tensor(i);
             }
             me->ket->unload_tensor(i);
@@ -1453,7 +1461,8 @@ template <typename S> struct TimeEvolution {
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
             if (forward) {
-                if (mode == TETypes::RK4 && (i != me->n_sites - 1 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != me->n_sites - 1 || !advance))
                     SparseMatrixGroup<S>::normalize_all(new_wfns);
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
@@ -1463,7 +1472,8 @@ template <typename S> struct TimeEvolution {
                 mket->info->left_dims[i + 1] = info;
                 mket->info->save_left_dims(i + 1);
             } else {
-                if (mode == TETypes::RK4 && (i != 0 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != 0 || !advance))
                     SparseMatrixGroup<S>::normalize_all(new_wfns);
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
@@ -1477,6 +1487,8 @@ template <typename S> struct TimeEvolution {
         }
         if (mode == TETypes::TangentSpace &&
             ((forward && i != me->n_sites - 1) || (!forward && i != 0))) {
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
             if (me->para_rule != nullptr) {
                 if (me->para_rule->is_root())
                     for (size_t j = 0; j < new_wfns.size(); j++)
@@ -1490,6 +1502,8 @@ template <typename S> struct TimeEvolution {
                     shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                         make_shared<VectorAllocator<uint32_t>>();
                     for (size_t j = 0; j < new_wfns.size(); j++) {
+                        new_wfns[j] =
+                            make_shared<SparseMatrixGroup<S>>(d_alloc);
                         new_wfns[j]->load_data(
                             mket->get_wfn_filename((int)j -
                                                    (int)new_wfns.size()),
@@ -1499,7 +1513,8 @@ template <typename S> struct TimeEvolution {
                 }
             }
             for (size_t j = 0; j < mket->wfns.size(); j++)
-                mket->wfns[j] = make_shared<SparseMatrixGroup<S>>();
+                mket->wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            mket->tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
             if (forward) {
                 me->move_to(i + 1, true);
                 vector<shared_ptr<SparseMatrixGroup<S>>> kwfns = mket->wfns;
@@ -1509,11 +1524,12 @@ template <typename S> struct TimeEvolution {
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
+                mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                    SparseMatrixGroup<S>::normalize_all(new_wfns);
+                    if (normalize_mps)
+                        SparseMatrixGroup<S>::normalize_all(new_wfns);
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    mket->wfns = kwfns;
                     MovingEnvironment<S>::contract_multi_one_dot(
                         i + 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i + 1);
@@ -1528,11 +1544,12 @@ template <typename S> struct TimeEvolution {
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
+                mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                    SparseMatrixGroup<S>::normalize_all(new_wfns);
+                    if (normalize_mps)
+                        SparseMatrixGroup<S>::normalize_all(new_wfns);
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    mket->wfns = kwfns;
                     MovingEnvironment<S>::contract_multi_one_dot(
                         i - 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i - 1);
@@ -1613,7 +1630,6 @@ template <typename S> struct TimeEvolution {
                     mket->canonical_form[i] = 'T';
             }
         } else {
-            mket->unload_tensor(i);
             if (forward) {
                 if (i != me->n_sites - 1) {
                     mket->tensors[i] = make_shared<SparseMatrix<S>>();
@@ -1736,7 +1752,7 @@ template <typename S> struct TimeEvolution {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
-                if (mode == TETypes::RK4 &&
+                if (normalize_mps && mode == TETypes::RK4 &&
                     (i + 1 != me->n_sites - 1 || !advance))
                     SparseMatrixGroup<S>::normalize_all(mket->wfns);
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
@@ -1748,7 +1764,8 @@ template <typename S> struct TimeEvolution {
                 me->ket->canonical_form[i] = 'L';
                 me->ket->canonical_form[i + 1] = 'M';
             } else {
-                if (mode == TETypes::RK4 && (i != 0 || !advance))
+                if (normalize_mps && mode == TETypes::RK4 &&
+                    (i != 0 || !advance))
                     SparseMatrixGroup<S>::normalize_all(mket->wfns);
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
@@ -1803,7 +1820,8 @@ template <typename S> struct TimeEvolution {
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                if (normalize_mps)
+                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
                 mket->save_wavefunction(i + 1);
             }
             mket->unload_wavefunction(i + 1);
@@ -1818,7 +1836,8 @@ template <typename S> struct TimeEvolution {
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                if (normalize_mps)
+                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
                 mket->save_wavefunction(i);
             }
             mket->unload_wavefunction(i);
@@ -1973,7 +1992,8 @@ template <typename S> struct TimeEvolution {
                     normsqs.push_back(get<1>(r));
                 }
             }
-            normalize();
+            if (normalize_mps)
+                normalize();
         }
         this->forward = forward;
         return energies.back();

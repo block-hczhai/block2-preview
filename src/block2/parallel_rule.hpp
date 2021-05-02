@@ -73,6 +73,9 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void allreduce_sum(double *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_sum(complex<double> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) {
         assert(size == 1);
     }

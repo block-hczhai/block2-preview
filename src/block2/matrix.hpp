@@ -41,11 +41,14 @@ using namespace std;
 
 namespace block2 {
 
+// General Matrix
+template <typename FL> struct GMatrix;
+
 // 2D dense matrix stored in stack memory
-struct MatrixRef {
+template <> struct GMatrix<double> {
     MKL_INT m, n; // m is rows, n is cols
     double *data;
-    MatrixRef(double *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
+    GMatrix(double *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
     double &operator()(MKL_INT i, MKL_INT j) const {
         return *(data + (size_t)i * n + j);
     }
@@ -58,9 +61,9 @@ struct MatrixRef {
         data = nullptr;
     }
     void clear() { memset(data, 0, size() * sizeof(double)); }
-    MatrixRef flip_dims() const { return MatrixRef(data, n, m); }
-    MatrixRef shift_ptr(size_t l) const { return MatrixRef(data + l, m, n); }
-    friend ostream &operator<<(ostream &os, const MatrixRef &mat) {
+    GMatrix flip_dims() const { return GMatrix(data, n, m); }
+    GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
+    friend ostream &operator<<(ostream &os, const GMatrix &mat) {
         os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         for (MKL_INT i = 0; i < mat.m; i++) {
             os << "[ ";
@@ -78,6 +81,8 @@ struct MatrixRef {
         return r;
     }
 };
+
+typedef GMatrix<double> MatrixRef;
 
 // Diagonal matrix
 struct DiagonalMatrix : MatrixRef {
@@ -123,10 +128,10 @@ struct IdentityMatrix : DiagonalMatrix {
 };
 
 // complex dense matrix
-struct ComplexMatrixRef {
+template <> struct GMatrix<complex<double>>  {
     MKL_INT m, n; // m is rows, n is cols
     complex<double> *data;
-    ComplexMatrixRef(complex<double> *data, MKL_INT m, MKL_INT n)
+    GMatrix(complex<double> *data, MKL_INT m, MKL_INT n)
         : data(data), m(m), n(n) {}
     complex<double> &operator()(MKL_INT i, MKL_INT j) const {
         return *(data + (size_t)i * n + j);
@@ -142,11 +147,11 @@ struct ComplexMatrixRef {
         data = nullptr;
     }
     void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
-    ComplexMatrixRef flip_dims() const { return ComplexMatrixRef(data, n, m); }
-    ComplexMatrixRef shift_ptr(size_t l) const {
-        return ComplexMatrixRef(data + l, m, n);
+    GMatrix flip_dims() const { return GMatrix(data, n, m); }
+    GMatrix shift_ptr(size_t l) const {
+        return GMatrix(data + l, m, n);
     }
-    friend ostream &operator<<(ostream &os, const ComplexMatrixRef &mat) {
+    friend ostream &operator<<(ostream &os, const GMatrix &mat) {
         os << "CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         for (MKL_INT i = 0; i < mat.m; i++) {
             os << "[ ";
@@ -164,6 +169,8 @@ struct ComplexMatrixRef {
         return r;
     }
 };
+
+typedef GMatrix<complex<double>> ComplexMatrixRef;
 
 // Diagonal complex matrix
 struct ComplexDiagonalMatrix : ComplexMatrixRef {
@@ -196,20 +203,21 @@ struct ComplexDiagonalMatrix : ComplexMatrixRef {
 };
 
 // General rank-n dense tensor
-struct Tensor {
+template <typename FL>
+struct GTensor {
     vector<MKL_INT> shape;
-    vector<double> data;
-    Tensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {
+    vector<FL> data;
+    GTensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {
         data.resize((size_t)m * k * n);
     }
-    Tensor(const vector<MKL_INT> &shape) : shape(shape) {
+    GTensor(const vector<MKL_INT> &shape) : shape(shape) {
         size_t x = 1;
         for (MKL_INT sh : shape)
             x = x * (size_t)sh;
         data.resize(x);
     }
     size_t size() const { return data.size(); }
-    void clear() { memset(data.data(), 0, size() * sizeof(double)); }
+    void clear() { memset(data.data(), 0, size() * sizeof(FL)); }
     void truncate(MKL_INT n) {
         assert(shape.size() == 1);
         data.resize(n);
@@ -224,30 +232,30 @@ struct Tensor {
         assert(shape.size() == 2);
         for (MKL_INT i = 1; i < shape[0]; i++)
             memmove(data.data() + i * nr, data.data() + i * shape[1],
-                    nr * sizeof(double));
+                    nr * sizeof(FL));
         data.resize(shape[0] * nr);
         shape[1] = nr;
     }
-    MatrixRef ref() {
+    GMatrix<FL> ref() {
         if (shape.size() == 3 && shape[1] == 1)
-            return MatrixRef(data.data(), shape[0], shape[2]);
+            return GMatrix<FL>(data.data(), shape[0], shape[2]);
         else if (shape.size() == 2)
-            return MatrixRef(data.data(), shape[0], shape[1]);
+            return GMatrix<FL>(data.data(), shape[0], shape[1]);
         else if (shape.size() == 1)
-            return MatrixRef(data.data(), shape[0], 1);
+            return GMatrix<FL>(data.data(), shape[0], 1);
         else {
             assert(false);
-            return MatrixRef(data.data(), 0, 1);
+            return GMatrix<FL>(data.data(), 0, 1);
         }
     }
-    double &operator()(initializer_list<MKL_INT> idx) {
+    FL &operator()(initializer_list<MKL_INT> idx) {
         size_t i = 0;
         int k = 0;
         for (auto &ix : idx)
             i = i * shape[k++] + ix;
         return data.at(i);
     }
-    friend ostream &operator<<(ostream &os, const Tensor &ts) {
+    friend ostream &operator<<(ostream &os, const GTensor &ts) {
         os << "TENSOR ( ";
         for (auto sh : ts.shape)
             os << sh << " ";
@@ -259,5 +267,8 @@ struct Tensor {
         return os;
     }
 };
+
+typedef GTensor<double> Tensor;
+typedef GTensor<complex<double>> ComplexTensor;
 
 } // namespace block2

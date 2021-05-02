@@ -238,6 +238,16 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_sum(complex<double> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_DOUBLE, MPI_SUM, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_max(double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {

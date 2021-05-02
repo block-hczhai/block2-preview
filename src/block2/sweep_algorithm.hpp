@@ -1675,7 +1675,8 @@ template <typename S> struct Linear {
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
     EquationTypes eq_type = EquationTypes::Normal;
-    ExpectationAlgorithmTypes ex_type = ExpectationAlgorithmTypes::Normal;
+    ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Normal;
+    ExpectationTypes ex_type = ExpectationTypes::Real;
     bool forward;
     uint8_t iprint = 2;
     double cutoff = 1E-14;
@@ -1908,8 +1909,8 @@ template <typename S> struct Linear {
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
                 tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
-            auto tpdi =
-                t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
+            auto tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                      tme->para_rule);
             targets.clear();
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -1921,7 +1922,8 @@ template <typename S> struct Linear {
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
+            tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                 tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2360,8 +2362,8 @@ template <typename S> struct Linear {
                 tme->eff_ham(FuseTypes::FuseLR, forward, false,
                              tme->bra->tensors[i], tme->ket->tensors[i]);
             teff += _t.get_time();
-            auto tpdi =
-                t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
+            auto tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                      tme->para_rule);
             targets.clear();
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2373,7 +2375,8 @@ template <typename S> struct Linear {
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, ex_type, tme->para_rule);
+            tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                 tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
             get<1>(pdi)++;
             get<2>(pdi) += get<1>(tpdi);
@@ -2845,59 +2848,86 @@ template <typename S> struct Linear {
     }
 };
 
-inline vector<long double>
-get_partition_weights(double beta, const vector<double> &energies,
-                      const vector<int> &multiplicities) {
-    vector<long double> partition_weights(energies.size());
-    for (size_t i = 0; i < energies.size(); i++)
-        partition_weights[i] =
-            multiplicities[i] *
-            expl(-(long double)beta *
-                 ((long double)energies[i] - (long double)energies[0]));
-    long double psum =
-        accumulate(partition_weights.begin(), partition_weights.end(), 0.0L);
-    for (size_t i = 0; i < energies.size(); i++)
-        partition_weights[i] /= psum;
-    return partition_weights;
-}
+template <typename FL> struct PartitionWeights;
+
+template <> struct PartitionWeights<double> {
+    typedef vector<long double> type;
+    inline static vector<long double> get_partition_weights() {
+        return vector<long double>{1.0L};
+    }
+    inline static vector<long double>
+    get_partition_weights(double beta, const vector<double> &energies,
+                          const vector<int> &multiplicities) {
+        vector<long double> partition_weights(energies.size());
+        for (size_t i = 0; i < energies.size(); i++)
+            partition_weights[i] =
+                multiplicities[i] *
+                expl(-(long double)beta *
+                     ((long double)energies[i] - (long double)energies[0]));
+        long double psum = accumulate(partition_weights.begin(),
+                                      partition_weights.end(), 0.0L);
+        for (size_t i = 0; i < energies.size(); i++)
+            partition_weights[i] /= psum;
+        return partition_weights;
+    }
+    inline static ExpectationTypes get_type() { return ExpectationTypes::Real; }
+};
+
+template <> struct PartitionWeights<complex<double>> {
+    typedef vector<complex<double>> type;
+    inline static vector<complex<double>> get_partition_weights() {
+        return vector<complex<double>>{complex<double>(1, 0),
+                                       complex<double>(0, 1)};
+    }
+    inline static vector<complex<double>>
+    get_partition_weights(double beta, const vector<double> &energies,
+                          const vector<int> &multiplicities) {
+        throw runtime_error("Not implemented!");
+        return vector<complex<double>>{complex<double>(1, 0),
+                                       complex<double>(0, 1)};
+    }
+    inline static ExpectationTypes get_type() {
+        return ExpectationTypes::Complex;
+    }
+};
 
 // Expectation value
-template <typename S> struct Expect {
+template <typename S, typename FL = double> struct Expect {
     shared_ptr<MovingEnvironment<S>> me;
     ubond_t bra_bond_dim, ket_bond_dim;
-    vector<vector<pair<shared_ptr<OpExpr<S>>, double>>> expectations;
+    vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> expectations;
     bool forward;
     TruncationTypes trunc_type = TruncationTypes::Physical;
-    ExpectationAlgorithmTypes ex_type = ExpectationAlgorithmTypes::Automatic;
+    ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Automatic;
+    ExpectationTypes ex_type = PartitionWeights<FL>::get_type();
     uint8_t iprint = 2;
     double cutoff = 0.0;
     double beta = 0.0;
     // partition function (for thermal-averaged MultiMPS)
-    vector<long double> partition_weights;
+    typename PartitionWeights<FL>::type partition_weights;
     Expect(const shared_ptr<MovingEnvironment<S>> &me, ubond_t bra_bond_dim,
            ubond_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
           forward(false) {
         expectations.resize(me->n_sites - me->dot + 1);
-        partition_weights = vector<long double>{1.0L};
+        partition_weights = PartitionWeights<FL>::get_partition_weights();
     }
     Expect(const shared_ptr<MovingEnvironment<S>> &me, ubond_t bra_bond_dim,
            ubond_t ket_bond_dim, double beta, const vector<double> &energies,
            const vector<int> &multiplicities)
         : Expect(me, bra_bond_dim, ket_bond_dim) {
         this->beta = beta;
-        this->partition_weights =
-            get_partition_weights(beta, energies, multiplicities);
+        partition_weights = PartitionWeights<FL>::get_partition_weights(
+            beta, energies, multiplicities);
     }
     struct Iteration {
-        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations;
         double bra_error, ket_error;
         double tmult;
         size_t nflop;
-        Iteration(
-            const vector<pair<shared_ptr<OpExpr<S>>, double>> &expectations,
-            double bra_error, double ket_error, size_t nflop = 0,
-            double tmult = 1.0)
+        Iteration(const vector<pair<shared_ptr<OpExpr<S>>, FL>> &expectations,
+                  double bra_error, double ket_error, size_t nflop = 0,
+                  double tmult = 1.0)
             : expectations(expectations), bra_error(bra_error),
               ket_error(ket_error), nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
@@ -2953,7 +2983,8 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
             me->bra->tensors[i], me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
+        auto pdi =
+            h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -3080,7 +3111,12 @@ template <typename S> struct Expect {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(
+            get<0>(pdi).size());
+        for (size_t k = 0; k < get<0>(pdi).size(); k++)
+            expectations[k] =
+                make_pair(get<0>(pdi)[k].first, (FL)get<0>(pdi)[k].second);
+        return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
     }
     Iteration update_two_dot(int i, bool forward, bool propagate,
@@ -3100,7 +3136,8 @@ template <typename S> struct Expect {
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, false, me->bra->tensors[i],
                         me->ket->tensors[i]);
-        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
+        auto pdi =
+            h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S>>> old_wfns =
             me->bra == me->ket
@@ -3176,7 +3213,12 @@ template <typename S> struct Expect {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi), bra_error, ket_error, get<1>(pdi),
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(
+            get<0>(pdi).size());
+        for (size_t k = 0; k < get<0>(pdi).size(); k++)
+            expectations[k] =
+                make_pair(get<0>(pdi)[k].first, (FL)get<0>(pdi)[k].second);
+        return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
     }
     Iteration update_multi_one_dot(int i, bool forward, bool propagate,
@@ -3226,8 +3268,9 @@ template <typename S> struct Expect {
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                              forward, true);
-        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
+                              forward, false);
+        auto pdi =
+            h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         h_eff->deallocate();
         double bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -3388,13 +3431,13 @@ template <typename S> struct Expect {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(
             get<0>(pdi).size());
         for (size_t k = 0; k < get<0>(pdi).size(); k++) {
-            long double x = 0.0;
+            typename PartitionWeights<FL>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            expectations[k] = make_pair(get<0>(pdi)[k].first, (double)x);
+            expectations[k] = make_pair(get<0>(pdi)[k].first, (FL)x);
         }
         return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
@@ -3421,7 +3464,8 @@ template <typename S> struct Expect {
         }
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, forward, false);
-        auto pdi = h_eff->expect(me->mpo->const_e, ex_type, me->para_rule);
+        auto pdi =
+            h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         h_eff->deallocate();
         vector<vector<shared_ptr<SparseMatrixGroup<S>>>> old_wfnss =
             me->bra == me->ket
@@ -3512,13 +3556,13 @@ template <typename S> struct Expect {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations(
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(
             get<0>(pdi).size());
         for (size_t k = 0; k < get<0>(pdi).size(); k++) {
-            long double x = 0.0;
+            typename PartitionWeights<FL>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            expectations[k] = make_pair(get<0>(pdi)[k].first, (double)x);
+            expectations[k] = make_pair(get<0>(pdi)[k].first, (FL)x);
         }
         return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
@@ -3577,7 +3621,7 @@ template <typename S> struct Expect {
             expectations[i] = r.expectations;
         }
     }
-    double solve(bool propagate, bool forward = true) {
+    FL solve(bool propagate, bool forward = true) {
         Timer start, current;
         start.get_time();
         for (auto &x : expectations)
@@ -3611,22 +3655,22 @@ template <typename S> struct Expect {
             return r.expectations[0].second;
         }
     }
-    MatrixRef get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
+    GMatrix<FL> get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM1MPOQC<S>::get_matrix_spatial(expectations, n_physical_sites);
     }
-    MatrixRef get_1pdm(uint16_t n_physical_sites = 0U) {
+    GMatrix<FL> get_1pdm(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM1MPOQC<S>::get_matrix(expectations, n_physical_sites);
     }
-    shared_ptr<Tensor> get_2pdm_spatial(uint16_t n_physical_sites = 0U) {
+    shared_ptr<GTensor<FL>> get_2pdm_spatial(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM2MPOQC<S>::get_matrix_spatial(expectations, n_physical_sites);
     }
-    shared_ptr<Tensor> get_2pdm(uint16_t n_physical_sites = 0U) {
+    shared_ptr<GTensor<FL>> get_2pdm(uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM2MPOQC<S>::get_matrix(expectations, n_physical_sites);
@@ -3634,10 +3678,10 @@ template <typename S> struct Expect {
     // only works for SU2
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
-    MatrixRef get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
+    GMatrix<FL> get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        MatrixRef r(nullptr, n_physical_sites, n_physical_sites);
+        GMatrix<FL> r(nullptr, n_physical_sites, n_physical_sites);
         r.allocate();
         r.clear();
         for (auto &v : expectations)
@@ -3654,10 +3698,10 @@ template <typename S> struct Expect {
     // only works for SZ
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
-    MatrixRef get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) {
+    GMatrix<FL> get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        MatrixRef r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
+        GMatrix<FL> r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
         r.allocate();
         r.clear();
         for (auto &v : expectations)

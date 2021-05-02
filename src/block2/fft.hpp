@@ -802,18 +802,14 @@ template <typename F, int P> struct FactorizedFFT<F, P> {
         }
         cooley_tukey(arr, n, forth, pr.data(), b.data(), b.size());
     }
-    static void fftshift(complex<double> *arr, size_t n, bool forth) {
-        vector<complex<double>> arx(arr, arr + n);
+    template <typename FL> static void fftshift(FL *arr, size_t n, bool forth) {
+        vector<FL> arx(arr, arr + n);
         if (forth) {
-            memcpy(arr + n / 2, arx.data(),
-                   (n - n / 2) * sizeof(complex<double>));
-            memcpy(arr, arx.data() + (n - n / 2),
-                   (n / 2) * sizeof(complex<double>));
+            memcpy(arr + n / 2, arx.data(), (n - n / 2) * sizeof(FL));
+            memcpy(arr, arx.data() + (n - n / 2), (n / 2) * sizeof(FL));
         } else {
-            memcpy(arr + (n - n / 2), arx.data(),
-                   (n / 2) * sizeof(complex<double>));
-            memcpy(arr, arx.data() + n / 2,
-                   (n - n / 2) * sizeof(complex<double>));
+            memcpy(arr + (n - n / 2), arx.data(), (n / 2) * sizeof(FL));
+            memcpy(arr, arx.data() + n / 2, (n - n / 2) * sizeof(FL));
         }
     }
     static void fftfreq(double *arr, Prime::LL n, double d) {

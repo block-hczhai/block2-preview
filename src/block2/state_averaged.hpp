@@ -233,8 +233,10 @@ template <typename S> struct MultiMPS : MPS<S> {
             MultiMPSInfo<S>::from_mps_info(mps->info);
         xinfo->load_mutable();
         shared_ptr<MultiMPS<S>> xmps = make_shared<MultiMPS<S>>(xinfo);
-        xmps->MPS<S>::load_data();
-        xmps->MPS<S>::load_mutable();
+        mps->load_data();
+        mps->load_mutable();
+        *(dynamic_pointer_cast<MPS<S>>(xmps)) = *mps;
+        xmps->info = xinfo;
         xinfo->tag = xtag;
         xinfo->save_mutable();
         xmps->nroots = nroots;
@@ -242,14 +244,21 @@ template <typename S> struct MultiMPS : MPS<S> {
         xmps->weights = vector<double>(nroots, 1.0);
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
+        int ctr = xmps->center;
+        if (!xmps->tensors[ctr]->info->is_wavefunction)
+            for (ctr = 0; ctr < xmps->n_sites &&
+                          (xmps->tensors[ctr] == nullptr ||
+                           !xmps->tensors[ctr]->info->is_wavefunction);
+                 ctr++)
+                ;
+        assert(xmps->tensors[ctr]->info->is_wavefunction);
         for (int i = 0; i < nroots; i++) {
             xmps->wfns[i] = make_shared<SparseMatrixGroup<S>>(d_alloc);
             xmps->wfns[i]->allocate(vector<shared_ptr<SparseMatrixInfo<S>>>{
-                xmps->tensors[xmps->center]->info});
+                xmps->tensors[ctr]->info});
         }
-        assert(xmps->tensors[xmps->center]->info->is_wavefunction);
-        (*xmps->wfns[0])[0]->copy_data_from(xmps->tensors[xmps->center]);
-        xmps->tensors[xmps->center] = nullptr;
+        (*xmps->wfns[0])[0]->copy_data_from(xmps->tensors[ctr]);
+        xmps->tensors[ctr] = nullptr;
         const string og = "CKS", rp = "MJT";
         for (int i = 0; i < xmps->n_sites; i++)
             for (size_t j = 0; j < og.length(); j++)
