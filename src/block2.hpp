@@ -41,6 +41,7 @@
 #include "block2/fp_codec.hpp"
 #include "block2/hamiltonian.hpp"
 #include "block2/hubbard.hpp"
+#include "block2/integral_compressed.hpp"
 #include "block2/integral.hpp"
 #include "block2/matrix.hpp"
 #include "block2/matrix_functions.hpp"

@@ -21,3 +21,5 @@
 #include "instantiation.hpp"
 
 template struct block2::FPCodec<double>;
+template struct block2::CompressedVector<double>;
+template struct block2::CompressedVectorMT<double>;

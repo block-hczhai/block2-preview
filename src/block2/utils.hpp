@@ -93,6 +93,12 @@ struct Random {
         assert(b > a);
         return uniform_real_distribution<double>(a, b)(rng());
     }
+    static void fill_rand_float(float *data, size_t n, float a = 0,
+                                 float b = 1) {
+        uniform_real_distribution<float> distr(a, b);
+        for (size_t i = 0; i < n; i++)
+            data[i] = distr(rng());
+    }
     static void fill_rand_double(double *data, size_t n, double a = 0,
                                  double b = 1) {
         uniform_real_distribution<double> distr(a, b);

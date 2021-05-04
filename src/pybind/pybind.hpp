@@ -2528,7 +2528,82 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<double>())
         .def(py::init<double, size_t>())
         .def_readwrite("ndata", &FPCodec<double>::ndata)
-        .def_readwrite("ncpsd", &FPCodec<double>::ncpsd);
+        .def_readwrite("ncpsd", &FPCodec<double>::ncpsd)
+        .def("encode",
+             [](FPCodec<double> *self, py::array_t<double> arr) {
+                 double *tmp = new double[arr.size() + 2];
+                 size_t len = self->encode(arr.mutable_data(), arr.size(), tmp);
+                 assert(len <= arr.size() + 2);
+                 py::array_t<double> arx = py::array_t<double>(len + 1);
+                 arx.mutable_data()[0] = arr.size();
+                 memcpy(arx.mutable_data() + 1, tmp, len * sizeof(double));
+                 delete[] tmp;
+                 return arx;
+             })
+        .def("decode",
+             [](FPCodec<double> *self, py::array_t<double> arr) {
+                 size_t arr_len = arr.mutable_data()[0];
+                 py::array_t<double> arx = py::array_t<double>(arr_len);
+                 size_t len = self->decode(arr.mutable_data() + 1, arr_len,
+                                           arx.mutable_data());
+                 assert(len == arr.size() - 1);
+                 return arx;
+             })
+        .def("write_array",
+             [](FPCodec<double> *self, py::array_t<double> arr) {
+                 stringstream ss;
+                 self->write_array(ss, arr.mutable_data(), arr.size());
+                 assert(ss.tellp() % sizeof(double) == 0);
+                 size_t len = ss.tellp() / sizeof(double);
+                 py::array_t<double> arx = py::array_t<double>(len + 1);
+                 arx.mutable_data()[0] = arr.size();
+                 ss.clear();
+                 ss.seekg(0);
+                 ss.read((char *)(arx.mutable_data() + 1),
+                         sizeof(double) * len);
+                 return arx;
+             })
+        .def("read_array",
+             [](FPCodec<double> *self, py::array_t<double> arr) {
+                 size_t arr_len = arr.mutable_data()[0];
+                 stringstream ss;
+                 ss.write((char *)(arr.mutable_data() + 1),
+                          (arr.size() - 1) * sizeof(double));
+                 py::array_t<double> arx = py::array_t<double>(arr_len);
+                 ss.clear();
+                 ss.seekg(0);
+                 self->read_array(ss, arx.mutable_data(), arr_len);
+                 return arx;
+             })
+        .def("save",
+             [](FPCodec<double> *self, const string &filename,
+                py::array_t<double> arr) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("DoubleFPCodec::save on '" + filename +
+                                         "' failed.");
+                 ofs << arr.size();
+                 self->write_array(ofs, arr.mutable_data(), arr.size());
+                 if (!ofs.good())
+                     throw runtime_error("DoubleFPCodec::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](FPCodec<double> *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("DoubleFPCodec::load_data on '" + filename +
+                                    "' failed.");
+            size_t arr_len;
+            ifs >> arr_len;
+            py::array_t<double> arx = py::array_t<double>(arr_len);
+            self->read_array(ifs, arx.mutable_data(), arr_len);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("DoubleFPCodec::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return arx;
+        });
 
     py::class_<Prime, shared_ptr<Prime>>(m, "Prime")
         .def(py::init<>())
@@ -2996,9 +3071,159 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def_readwrite("ts", &FCIDUMP::ts)
         .def_readwrite("vs", &FCIDUMP::vs)
         .def_readwrite("vabs", &FCIDUMP::vabs)
+        .def_readwrite("vgs", &FCIDUMP::vgs)
         .def_readwrite("const_e", &FCIDUMP::const_e)
         .def_readwrite("total_memory", &FCIDUMP::total_memory)
         .def_readwrite("uhf", &FCIDUMP::uhf);
+
+    py::class_<CompressedFCIDUMP, shared_ptr<CompressedFCIDUMP>, FCIDUMP>(
+        m, "CompressedFCIDUMP")
+        .def(py::init<double>())
+        .def(py::init<double, int>())
+        .def(py::init<double, int, size_t>())
+        .def("freeze", &CompressedFCIDUMP::freeze)
+        .def("unfreeze", &CompressedFCIDUMP::unfreeze)
+        .def_readwrite("prec", &CompressedFCIDUMP::prec)
+        .def_readwrite("ncache", &CompressedFCIDUMP::ncache)
+        .def_readwrite("chunk_size", &CompressedFCIDUMP::chunk_size)
+        .def_readwrite("cps_ts", &CompressedFCIDUMP::cps_ts)
+        .def_readwrite("cps_vs", &CompressedFCIDUMP::cps_vs)
+        .def_readwrite("cps_vabs", &CompressedFCIDUMP::cps_vabs)
+        .def_readwrite("cps_vgs", &CompressedFCIDUMP::cps_vgs)
+        .def("initialize_su2",
+             [](CompressedFCIDUMP *self, uint16_t n_sites, uint16_t n_elec,
+                uint16_t twos, uint16_t isym, double e,
+                const py::array_t<double> &t, const py::array_t<double> &v) {
+                 stringstream st, sv;
+                 st.write((char *)t.data(), sizeof(double) * t.size());
+                 st.clear(), st.seekg(0);
+                 sv.write((char *)v.data(), sizeof(double) * v.size());
+                 sv.clear(), sv.seekg(0);
+                 self->initialize_su2(n_sites, n_elec, twos, isym, e, st,
+                                      t.size(), sv, v.size());
+             })
+        .def("initialize_su2",
+             [](CompressedFCIDUMP *self, uint16_t n_sites, uint16_t n_elec,
+                uint16_t twos, uint16_t isym, double e, const string &ft,
+                const string &fv) {
+                 ifstream ift(ft.c_str(), ios::binary);
+                 ifstream ifv(fv.c_str(), ios::binary);
+                 if (!ift.good())
+                     throw runtime_error(
+                         "CompressedFCIDUMP::initialize_su2 on '" + ft +
+                         "' failed.");
+                 if (!ifv.good())
+                     throw runtime_error(
+                         "CompressedFCIDUMP::initialize_su2 on '" + fv +
+                         "' failed.");
+                 size_t t_len, v_len;
+                 ift >> t_len;
+                 ifv >> v_len;
+                 self->initialize_su2(n_sites, n_elec, twos, isym, e, ift,
+                                      t_len, ifv, v_len);
+                 if (ift.fail() || ift.bad())
+                     throw runtime_error(
+                         "CompressedFCIDUMP::initialize_su2 on '" + ft +
+                         "' failed.");
+                 if (ifv.fail() || ifv.bad())
+                     throw runtime_error(
+                         "CompressedFCIDUMP::initialize_su2 on '" + fv +
+                         "' failed.");
+                 ifv.close();
+                 ift.close();
+             })
+        .def("initialize_sz", [](CompressedFCIDUMP *self, uint16_t n_sites,
+                                 uint16_t n_elec, uint16_t twos, uint16_t isym,
+                                 double e, const py::tuple &t,
+                                 const py::tuple &v) {
+            assert(t.size() == 2 && v.size() == 3);
+            if (py::isinstance<py::array_t<double>>(t[0])) {
+                py::array_t<double> ta = t[0].cast<py::array_t<double>>();
+                py::array_t<double> tb = t[1].cast<py::array_t<double>>();
+                py::array_t<double> va = v[0].cast<py::array_t<double>>();
+                py::array_t<double> vb = v[1].cast<py::array_t<double>>();
+                py::array_t<double> vab = v[2].cast<py::array_t<double>>();
+                stringstream sta, stb, sva, svb, svab;
+                sta.write((char *)ta.data(), sizeof(double) * ta.size());
+                sta.clear(), sta.seekg(0);
+                stb.write((char *)tb.data(), sizeof(double) * tb.size());
+                stb.clear(), stb.seekg(0);
+                sva.write((char *)va.data(), sizeof(double) * va.size());
+                sva.clear(), sva.seekg(0);
+                svb.write((char *)vb.data(), sizeof(double) * vb.size());
+                svb.clear(), svb.seekg(0);
+                svab.write((char *)vab.data(), sizeof(double) * vab.size());
+                svab.clear(), svab.seekg(0);
+                self->initialize_sz(n_sites, n_elec, twos, isym, e, sta,
+                                    ta.size(), stb, tb.size(), sva, va.size(),
+                                    svb, vb.size(), svab, vab.size());
+            } else {
+                string fta = t[0].cast<string>();
+                string ftb = t[1].cast<string>();
+                string fva = v[0].cast<string>();
+                string fvb = v[1].cast<string>();
+                string fvab = v[2].cast<string>();
+                ifstream ifta(fta.c_str(), ios::binary);
+                ifstream iftb(ftb.c_str(), ios::binary);
+                ifstream ifva(fva.c_str(), ios::binary);
+                ifstream ifvb(fvb.c_str(), ios::binary);
+                ifstream ifvab(fvab.c_str(), ios::binary);
+                if (!ifta.good())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fta +
+                        "' failed.");
+                if (!iftb.good())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + ftb +
+                        "' failed.");
+                if (!ifva.good())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fva +
+                        "' failed.");
+                if (!ifvb.good())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fvb +
+                        "' failed.");
+                if (!ifvab.good())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fvab +
+                        "' failed.");
+                size_t ta_len, tb_len, va_len, vb_len, vab_len;
+                ifta >> ta_len;
+                iftb >> tb_len;
+                ifva >> va_len;
+                ifvb >> vb_len;
+                ifvab >> vab_len;
+                self->initialize_sz(n_sites, n_elec, twos, isym, e, ifta,
+                                    ta_len, iftb, tb_len, ifva, va_len, ifvb,
+                                    vb_len, ifvab, vab_len);
+                if (ifta.fail() || ifta.bad())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fta +
+                        "' failed.");
+                if (iftb.fail() || iftb.bad())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + ftb +
+                        "' failed.");
+                if (ifva.fail() || ifva.bad())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fva +
+                        "' failed.");
+                if (ifvb.fail() || ifvb.bad())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fvb +
+                        "' failed.");
+                if (ifvab.fail() || ifvab.bad())
+                    throw runtime_error(
+                        "CompressedFCIDUMP::initialize_sz on '" + fvab +
+                        "' failed.");
+                ifvab.close();
+                ifvb.close();
+                ifva.close();
+                iftb.close();
+                ifta.close();
+            }
+        });
 
     py::class_<OrbitalOrdering, shared_ptr<OrbitalOrdering>>(m,
                                                              "OrbitalOrdering")

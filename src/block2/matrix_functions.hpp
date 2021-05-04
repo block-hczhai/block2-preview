@@ -692,16 +692,18 @@ struct MatrixFunctions {
     // Davidson algorithm
     // aa: diag elements of a (for precondition)
     // bs: input/output vector
+    // ors: orthogonal states to be projected out
     template <typename MatMul, typename PComm>
     static vector<double>
     davidson(MatMul &op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
              int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
              double conv_thrd = 5E-6, int max_iter = 5000,
              int soft_max_iter = -1, int deflation_min_size = 2,
-             int deflation_max_size = 50) {
+             int deflation_max_size = 50,
+             const vector<MatrixRef> &ors = vector<MatrixRef>()) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
-        int k = (int)vs.size();
+        int k = (int)vs.size(), nor = (int)ors.size();
         if (deflation_min_size < k)
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
@@ -714,6 +716,13 @@ struct MatrixFunctions {
                              MatrixRef(nullptr, vs[0].m, vs[0].n));
         vector<MatrixRef> sigmas(deflation_max_size,
                                  MatrixRef(nullptr, vs[0].m, vs[0].n));
+        vector<double> or_normsqs(nor);
+        for (int i = 0; i < nor; i++) {
+            for (int j = 0; j < i; j++)
+                if (or_normsqs[j] > 1E-14)
+                    iadd(ors[i], ors[j], -dot(ors[j], ors[i]) / or_normsqs[j]);
+            or_normsqs[i] = dot(ors[i], ors[i]);
+        }
         for (int i = 0; i < deflation_max_size; i++) {
             bs[i].data = pbs.data + bs[i].size() * i;
             sigmas[i].data = pss.data + sigmas[i].size() * i;
@@ -724,6 +733,18 @@ struct MatrixFunctions {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -dot(bs[j], bs[i]));
             iscale(bs[i], 1.0 / sqrt(dot(bs[i], bs[i])));
+        }
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < nor; j++)
+                if (or_normsqs[j] > 1E-14)
+                    iadd(bs[i], ors[j], -dot(ors[j], bs[i]) / or_normsqs[j]);
+            double normsq = dot(bs[i], bs[i]);
+            if (normsq < 1E-14) {
+                cout << "Cannot generate initial guess " << i
+                     << " for Davidson orthogonal to all given states!" << endl;
+                assert(false);
+            }
+            iscale(bs[i], 1.0 / sqrt(normsq));
         }
         vector<double> eigvals(k);
         MatrixRef q(nullptr, bs[0].m, bs[0].n);
@@ -806,6 +827,9 @@ struct MatrixFunctions {
                 }
                 copy(q, sigmas[ck]);
                 iadd(q, bs[ck], -ld(ck, ck));
+                for (int j = 0; j < nor; j++)
+                    if (or_normsqs[j] > 1E-14)
+                        iadd(q, ors[j], -dot(ors[j], q) / or_normsqs[j]);
                 qq = dot(q, q);
                 if (iprint)
                     cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
@@ -832,6 +856,9 @@ struct MatrixFunctions {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     for (int j = 0; j < m; j++)
                         iadd(q, bs[j], -dot(bs[j], q));
+                    for (int j = 0; j < nor; j++)
+                        if (or_normsqs[j] > 1E-14)
+                            iadd(q, ors[j], -dot(ors[j], q) / or_normsqs[j]);
                     iscale(q, 1.0 / sqrt(dot(q, q)));
                     copy(bs[m], q);
                 }

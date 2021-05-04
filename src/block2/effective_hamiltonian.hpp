@@ -339,12 +339,19 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     tuple<double, int, size_t, double>
     eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
-         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+         const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+         const vector<shared_ptr<SparseMatrix<S>>> &ortho_bra =
+             vector<shared_ptr<SparseMatrix<S>>>()) {
         int ndav = 0;
         assert(compute_diag);
         DiagonalMatrix aa(diag->data, (MKL_INT)diag->total_memory);
         vector<MatrixRef> bs = vector<MatrixRef>{
             MatrixRef(ket->data, (MKL_INT)ket->total_memory, 1)};
+        vector<MatrixRef> ors =
+            vector<MatrixRef>(ortho_bra.size(), MatrixRef(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = MatrixRef(ortho_bra[i]->data,
+                               (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame->activate(0);
         Timer t;
         t.get_time();
@@ -356,11 +363,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 ? MatrixFunctions::davidson(
                       *tf, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter)
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors)
                 : MatrixFunctions::davidson(
                       *this, aa, bs, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter);
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)

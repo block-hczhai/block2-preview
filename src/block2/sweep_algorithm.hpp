@@ -67,6 +67,7 @@ inline bool has_abort_file() {
 template <typename S> struct DMRG {
     shared_ptr<MovingEnvironment<S>> me;
     vector<shared_ptr<MovingEnvironment<S>>> ext_mes;
+    vector<shared_ptr<MPS<S>>> ext_mpss;
     vector<ubond_t> bond_dims;
     vector<double> noises;
     vector<vector<double>> energies;
@@ -88,11 +89,12 @@ template <typename S> struct DMRG {
     double cutoff = 1E-14;
     double quanta_cutoff = 1E-3;
     bool decomp_last_site = true;
+    bool state_specific = false;
     size_t sweep_cumulative_nflop = 0;
     size_t sweep_max_pket_size = 0;
     size_t sweep_max_eff_ham_size = 0;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
-           tsvd = 0;
+           tsvd = 0, torth = 0;
     bool print_connection_time = false;
     Timer _t, _t2;
     DMRG(const shared_ptr<MovingEnvironment<S>> &me,
@@ -171,6 +173,32 @@ template <typename S> struct DMRG {
             prev_wfn->info->deallocate();
             prev_wfn->deallocate();
         }
+        // state specific
+        for (auto &mps : ext_mpss) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else
+                    assert(false);
+            }
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
         int mmps = 0;
         double error = 0.0;
         tuple<double, int, size_t, double> pdi;
@@ -220,6 +248,41 @@ template <typename S> struct DMRG {
                     prev_pkets[0]->deallocate_infos();
                     prev_pkets[0]->deallocate();
                 }
+            }
+        }
+        // state specific
+        for (auto &mps : ext_mpss) {
+            if ((me->para_rule == nullptr || me->para_rule->is_root()) &&
+                !skip_decomp) {
+                if (fuse_left != forward) {
+                    // change to fused form for splitting
+                    shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                    if (!fuse_left && forward)
+                        mps->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_left(
+                                i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                    else if (fuse_left && !forward)
+                        mps->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_right(
+                                i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                    prev_wfn->info->deallocate();
+                    prev_wfn->deallocate();
+                }
+            }
+            if (skip_decomp) {
+                if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                    mps->save_tensor(i);
+                    mps->unload_tensor(i);
+                    mps->canonical_form[i] = forward ? 'S' : 'K';
+                } else {
+                    mps->unload_tensor(i);
+                    mps->canonical_form[i] = forward ? 'S' : 'K';
+                }
+            } else {
+                if (forward)
+                    mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+                else
+                    mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
             }
         }
         if (build_pdm && !skip_decomp) {
@@ -387,7 +450,27 @@ template <typename S> struct DMRG {
                              const double noise,
                              shared_ptr<SparseMatrixGroup<S>> &pket) {
         tuple<double, int, size_t, double> pdi;
+        vector<shared_ptr<SparseMatrix<S>>> ortho_bra;
         _t.get_time();
+        if (state_specific) {
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S>> i_eff =
+                    ext_mes[ist]->eff_ham(fuse_left ? FuseTypes::FuseL
+                                                    : FuseTypes::FuseR,
+                                          forward, false, ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
+        torth += _t.get_time();
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
@@ -395,8 +478,11 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, me->para_rule);
+                          davidson_soft_max_iter, me->para_rule, ortho_bra);
         teig += _t.get_time();
+        if (state_specific)
+            for (auto &wfn : ortho_bra)
+                wfn->deallocate();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(
                 forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -417,6 +503,15 @@ template <typename S> struct DMRG {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
+        // state specific
+        for (auto &mps : ext_mpss) {
+            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S>::contract_two_dot(i, mps);
+            else {
+                mps->load_tensor(i);
+                mps->tensors[i + 1] = nullptr;
+            }
+        }
         shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
         int mmps = 0;
         double error = 0.0;
@@ -432,6 +527,13 @@ template <typename S> struct DMRG {
             me->para_rule->comm->barrier();
         if (pket != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
+        // state specific
+        for (auto &mps : ext_mpss) {
+            if (forward)
+                mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+            else
+                mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+        }
         if (build_pdm) {
             _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
@@ -551,7 +653,26 @@ template <typename S> struct DMRG {
         const bool forward, const int i, const double davidson_conv_thrd,
         const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) {
         tuple<double, int, size_t, double> pdi;
+        vector<shared_ptr<SparseMatrix<S>>> ortho_bra;
         _t.get_time();
+        if (state_specific) {
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S>> i_eff =
+                    ext_mes[ist]->eff_ham(FuseTypes::FuseLR, forward, false,
+                                          ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
+        torth += _t.get_time();
         shared_ptr<EffectiveHamiltonian<S>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
@@ -559,8 +680,11 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, me->para_rule);
+                          davidson_soft_max_iter, me->para_rule, ortho_bra);
         teig += _t.get_time();
+        if (state_specific)
+            for (auto &wfn : ortho_bra)
+                wfn->deallocate();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, me->ket->info,
@@ -1038,7 +1162,7 @@ template <typename S> struct DMRG {
     virtual tuple<vector<double>, double, vector<vector<pair<S, double>>>>
     sweep(bool forward, ubond_t bond_dim, double noise,
           double davidson_conv_thrd) {
-        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
+        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         frame->fpwrite = frame->fpread = 0;
         if (frame->fp_codec != nullptr)
@@ -1304,7 +1428,7 @@ template <typename S> struct DMRG {
         assert(me->ket->get_type() == MPSTypes::MultiCenter);
         shared_ptr<ParallelMPS<S>> para_mps =
             dynamic_pointer_cast<ParallelMPS<S>>(me->ket);
-        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
+        teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         frame->fpwrite = frame->fpread = 0;
         if (frame->fp_codec != nullptr)
@@ -1409,7 +1533,8 @@ template <typename S> struct DMRG {
             sout << " | Teff = " << teff << " | Tprt = " << tprt
                  << " | Teig = " << teig << " | Tblk = " << tblk
                  << " | Tmve = " << tmve << " | Tdm = " << tdm
-                 << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
+                 << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd
+                 << " | Torth = " << torth;
             sout << endl;
             cout << sout.rdbuf();
         }
@@ -1616,7 +1741,8 @@ template <typename S> struct DMRG {
                     sout << " | Teff = " << teff << " | Tprt = " << tprt
                          << " | Teig = " << teig << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
-                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd;
+                         << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd
+                         << " | Torth = " << torth;
                     sout << endl;
                     cout << sout.rdbuf();
                     if (para_mps != nullptr && para_mps->rule != nullptr) {

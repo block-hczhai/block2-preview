@@ -156,6 +156,8 @@ extern template struct block2::FactorizedFFT<block2::BluesteinFFT<>, 2, 3, 5, 7,
 
 // fp_codec.hpp
 extern template struct block2::FPCodec<double>;
+extern template struct block2::CompressedVector<double>;
+extern template struct block2::CompressedVectorMT<double>;
 
 // hamiltonian.hpp
 extern template struct block2::Hamiltonian<block2::SZ>;

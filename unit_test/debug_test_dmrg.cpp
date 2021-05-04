@@ -36,7 +36,8 @@ class TestDMRG : public ::testing::Test {
 };
 
 TEST_F(TestDMRG, Test) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP> fcidump = make_shared<CompressedFCIDUMP>(1E-13);
+    // shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
 
@@ -83,7 +84,7 @@ TEST_F(TestDMRG, Test) {
         //         kk = 1 + pow(kk - 1, bias);
         //     else if (kk < 1)
         //         kk = 1 - pow(1 - kk, bias);
-        int ntasks = 10;
+        int ntasks = 1;
         int n_generations = 12000;
         int n_configs = 100;
         int n_elite = 8;

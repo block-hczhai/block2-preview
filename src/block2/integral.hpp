@@ -219,11 +219,11 @@ struct FCIDUMP {
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
     virtual ~FCIDUMP() = default;
-    void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                       uint16_t isym, double e, const double *ta, size_t lta,
-                       const double *tb, size_t ltb, const double *va,
-                       size_t lva, const double *vb, size_t lvb,
-                       const double *vab, size_t lvab) {
+    virtual void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                               uint16_t isym, double e, const double *ta,
+                               size_t lta, const double *tb, size_t ltb,
+                               const double *va, size_t lva, const double *vb,
+                               size_t lvb, const double *vab, size_t lvab) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -284,9 +284,10 @@ struct FCIDUMP {
     }
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
-    void initialize_su2(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                        uint16_t isym, double e, const double *t, size_t lt,
-                        const double *v, size_t lv) {
+    virtual void initialize_su2(uint16_t n_sites, uint16_t n_elec,
+                                uint16_t twos, uint16_t isym, double e,
+                                const double *t, size_t lt, const double *v,
+                                size_t lv) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -325,7 +326,7 @@ struct FCIDUMP {
         uhf = false;
     }
     // Writing FCIDUMP file to disk
-    void write(const string &filename) const {
+    virtual void write(const string &filename) const {
         ofstream ofs(filename.c_str());
         if (!ofs.good())
             throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
@@ -370,7 +371,7 @@ struct FCIDUMP {
         ofs.close();
     }
     // Parsing a FCIDUMP file
-    void read(const string &filename) {
+    virtual void read(const string &filename) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -542,7 +543,7 @@ struct FCIDUMP {
     }
     // Remove integral elements that violate point group symmetry
     // orbsym: in XOR convention
-    double symmetrize(const vector<uint8_t> &orbsym) {
+    virtual double symmetrize(const vector<uint8_t> &orbsym) {
         uint16_t n = n_sites();
         assert((int)orbsym.size() == n);
         double error = 0.0;
@@ -695,7 +696,7 @@ struct FCIDUMP {
             rdata[i] = data[ord[i]];
         return rdata;
     }
-    void reorder(const vector<uint16_t> &ord) {
+    virtual void reorder(const vector<uint16_t> &ord) {
         uint16_t n = n_sites();
         assert(ord.size() == n);
         shared_ptr<vector<double>> rdata =
