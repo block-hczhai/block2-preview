@@ -269,19 +269,15 @@ template <typename S> struct DMRG {
                     prev_wfn->deallocate();
                 }
             }
-            if (skip_decomp) {
-                if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                    mps->save_tensor(i);
-                    mps->unload_tensor(i);
-                    mps->canonical_form[i] = forward ? 'S' : 'K';
-                } else {
-                    mps->unload_tensor(i);
-                    mps->canonical_form[i] = forward ? 'S' : 'K';
-                }
-            } else {
-                if (forward)
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (skip_decomp)
+                mps->canonical_form[i] = forward ? 'S' : 'K';
+            else {
+                mps->canonical_form[i] = forward ? 'K' : 'S';
+                if (forward && i != me->n_sites - 1)
                     mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
-                else
+                else if (!forward && i != 0)
                     mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
             }
         }
@@ -528,11 +524,24 @@ template <typename S> struct DMRG {
         if (pket != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
         // state specific
-        for (auto &mps : ext_mpss) {
-            if (forward)
+        vector<shared_ptr<MPS<S>>> rev_ext_mpss(ext_mpss.rbegin(),
+                                                ext_mpss.rend());
+        for (auto &mps : rev_ext_mpss) {
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (forward) {
                 mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
-            else
+                mps->canonical_form[i + 1] = 'C';
+                if (mps->center == mps->n_sites - 1)
+                    mps->center = mps->n_sites - 2;
+            } else {
+                mps->canonical_form[i] = 'C';
                 mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+                mps->canonical_form[i] = 'C';
+            }
+            if (me->para_rule == nullptr || me->para_rule->is_root())
+                MovingEnvironment<S>::propagate_wfn(
+                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
         }
         if (build_pdm) {
             _t.get_time();

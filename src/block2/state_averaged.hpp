@@ -71,6 +71,20 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         minfo->tag = info->tag;
         return minfo;
     }
+    shared_ptr<MPSInfo<S>> make_single() const {
+        assert(targets.size() == 1);
+        shared_ptr<MPSInfo<S>> minfo =
+            make_shared<MPSInfo<S>>(n_sites, vacuum, targets[0], basis, false);
+        for (int i = 0; i <= minfo->n_sites; i++)
+            minfo->left_dims_fci[i] =
+                make_shared<StateInfo<S>>(left_dims_fci[i]->deep_copy());
+        for (int i = minfo->n_sites; i >= 0; i--)
+            minfo->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(right_dims_fci[i]->deep_copy());
+        minfo->bond_dim = MPSInfo<S>::bond_dim;
+        minfo->tag = MPSInfo<S>::tag;
+        return minfo;
+    }
     MPSTypes get_type() const override { return MPSTypes::MultiWfn; }
     vector<S> get_complementary(S q) const override {
         vector<S> r;
@@ -224,6 +238,41 @@ template <typename S> struct MultiMPS : MPS<S> {
         ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
            << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
+    }
+    shared_ptr<MPS<S>> make_single(const string &xtag) {
+        shared_ptr<MultiMPSInfo<S>> minfo =
+            dynamic_pointer_cast<MultiMPSInfo<S>>(info);
+        assert(nroots == 1);
+        shared_ptr<MPSInfo<S>> xinfo = minfo->make_single();
+        xinfo->load_mutable();
+        shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(xinfo);
+        load_data();
+        load_mutable();
+        *xmps = *(MPS<S> *)this;
+        xmps->info = xinfo;
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        int ctr = xmps->center;
+        if (xmps->tensors[ctr] != nullptr)
+            for (ctr = 0; ctr < xmps->n_sites && xmps->tensors[ctr] != nullptr;)
+                ctr++;
+        assert(xmps->tensors[ctr] == nullptr);
+        xmps->tensors[ctr] = make_shared<SparseMatrix<S>>(d_alloc);
+        assert(wfns[0]->infos.size() == 1);
+        xmps->tensors[ctr]->allocate(wfns[0]->infos[0]);
+        xmps->tensors[ctr]->copy_data_from((*wfns[0])[0]);
+        const string rp = "CKS", og = "MJT";
+        for (int i = 0; i < xmps->n_sites; i++)
+            for (size_t j = 0; j < og.length(); j++)
+                if (xmps->canonical_form[i] == og[j])
+                    xmps->canonical_form[i] = rp[j];
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
     }
     // translate real MPS to complex MPS
     static shared_ptr<MultiMPS<S>> make_complex(const shared_ptr<MPS<S>> &mps,

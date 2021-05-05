@@ -936,6 +936,8 @@ template <typename S> struct MovingEnvironment {
                 (ket->canonical_form[n_sites - 1] == 'C' ||
                  ket->canonical_form[n_sites - 1] == 'M')) {
                 center = n_sites - 1;
+                ket->canonical_form[center] =
+                    ket->canonical_form[center] == 'C' ? 'S' : 'T';
                 frame->reset(1);
                 if (envs[center - 1]->left != nullptr)
                     frame->load_data(1,
@@ -952,6 +954,10 @@ template <typename S> struct MovingEnvironment {
                     envs[i]->right_op_infos = envs[i - 1]->right_op_infos;
                     envs[i]->right = envs[i - 1]->right;
                 } else if (center == 0) {
+                    if (ket->canonical_form[center] == 'C')
+                        ket->canonical_form[center] = 'K';
+                    else if (ket->canonical_form[center] == 'M')
+                        ket->canonical_form[center] = 'J';
                     frame->reset(1);
                     if (envs[center + 1]->right != nullptr)
                         frame->load_data(

@@ -483,21 +483,48 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(r, nmult, (size_t)nflop, t.get_time());
     }
-    // [bra] = [H_eff] x [ket]
-    // norm, nmult, nflop, tmult
-    tuple<double, int, size_t, double>
-    multiply(double const_e,
-             const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        bra->clear();
+    shared_ptr<OpExpr<S>>
+    add_const_term(double const_e,
+                   const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
         if (const_e != 0) {
             // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
                 OpNames::I, SiteIndex(),
                 dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
-            if (para_rule == nullptr || para_rule->is_root())
-                op->mat->data[0] = expr + const_e * (iop * iop);
+            if (para_rule == nullptr || para_rule->is_root()) {
+                if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
+                    op->ropt->get_type() == OperatorTensorTypes::Delayed) {
+                    bool dleft =
+                        op->lopt->get_type() == OperatorTensorTypes::Delayed;
+                    shared_ptr<DelayedOperatorTensor<S>> dopt =
+                        dynamic_pointer_cast<DelayedOperatorTensor<S>>(
+                            dleft ? op->lopt : op->ropt);
+                    shared_ptr<OpElement<S>> xiop =
+                        dynamic_pointer_cast<OpElement<S>>(iop);
+                    if (dopt->lopt->ops.count(iop) != 0 &&
+                        dopt->ropt->ops.count(iop) != 0)
+                        op->mat->data[0] =
+                            expr +
+                            (shared_ptr<OpExpr<S>>)make_shared<OpSumProd<S>>(
+                                xiop, xiop,
+                                vector<shared_ptr<OpElement<S>>>{xiop, xiop},
+                                vector<bool>{false, false}, const_e, 0);
+                    else
+                        op->mat->data[0] = expr + const_e * (iop * iop);
+                } else
+                    op->mat->data[0] = expr + const_e * (iop * iop);
+            }
         }
+        return expr;
+    }
+    // [bra] = [H_eff] x [ket]
+    // norm, nmult, nflop, tmult
+    tuple<double, int, size_t, double>
+    multiply(double const_e,
+             const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        bra->clear();
+        shared_ptr<OpExpr<S>> expr = add_const_term(const_e, para_rule);
         Timer t;
         t.get_time();
         // Auto mode cannot add const_e term
@@ -525,14 +552,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0 && op->mat->data.size() > 0) {
-            expr = op->mat->data[0];
-            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
-                OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
-            if (para_rule == nullptr || para_rule->is_root())
-                op->mat->data[0] = expr + const_e * (iop * iop);
-        }
+        if (const_e != 0 && op->mat->data.size() > 0)
+            expr = add_const_term(const_e, para_rule);
         assert(ex_type == ExpectationTypes::Real);
         if (algo_type == ExpectationAlgorithmTypes::Automatic)
             algo_type = op->mat->data.size() > 1
@@ -639,13 +660,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         f(kk, r1, beta);
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
-            OpNames::I, SiteIndex(),
-            dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
-        if (para_rule == nullptr || para_rule->is_root())
-            op->mat->data[0] = iop * iop;
-        else
-            op->mat->data[0] = make_shared<OpExpr<S>>();
+        op->mat->data[0] = make_shared<OpExpr<S>>();
+        add_const_term(1.0, para_rule);
         f(kk, r0, 1.0);
         op->mat->data[0] = expr;
         // if (const_e != 0)
@@ -1347,6 +1363,41 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners, ndav, (size_t)nflop, t.get_time());
     }
+    shared_ptr<OpExpr<S>>
+    add_const_term(double const_e,
+                   const shared_ptr<ParallelRule<S>> &para_rule) {
+        shared_ptr<OpExpr<S>> expr = op->mat->data[0];
+        if (const_e != 0) {
+            // q_label does not matter
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+                OpNames::I, SiteIndex(),
+                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
+            if (para_rule == nullptr || para_rule->is_root()) {
+                if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
+                    op->ropt->get_type() == OperatorTensorTypes::Delayed) {
+                    bool dleft =
+                        op->lopt->get_type() == OperatorTensorTypes::Delayed;
+                    shared_ptr<DelayedOperatorTensor<S>> dopt =
+                        dynamic_pointer_cast<DelayedOperatorTensor<S>>(
+                            dleft ? op->lopt : op->ropt);
+                    shared_ptr<OpElement<S>> xiop =
+                        dynamic_pointer_cast<OpElement<S>>(iop);
+                    if (dopt->lopt->ops.count(iop) != 0 &&
+                        dopt->ropt->ops.count(iop) != 0)
+                        op->mat->data[0] =
+                            expr +
+                            (shared_ptr<OpExpr<S>>)make_shared<OpSumProd<S>>(
+                                xiop, xiop,
+                                vector<shared_ptr<OpElement<S>>>{xiop, xiop},
+                                vector<bool>{false, false}, const_e, 0);
+                    else
+                        op->mat->data[0] = expr + const_e * (iop * iop);
+                } else
+                    op->mat->data[0] = expr + const_e * (iop * iop);
+            }
+        }
+        return expr;
+    }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
@@ -1354,14 +1405,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0 && op->mat->data.size() > 0) {
-            expr = op->mat->data[0];
-            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
-                OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
-            if (para_rule == nullptr || para_rule->is_root())
-                op->mat->data[0] = expr + const_e * (iop * iop);
-        }
+        if (const_e != 0 && op->mat->data.size() > 0)
+            expr = add_const_term(const_e, para_rule);
         Timer t;
         t.get_time();
         MatrixRef ktmp(nullptr, (MKL_INT)ket[0]->total_memory, 1);

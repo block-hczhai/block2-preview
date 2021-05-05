@@ -900,6 +900,7 @@ template <typename S> void bind_mps(py::module &m) {
                          const vector<shared_ptr<StateInfo<S>>> &basis) {
             return make_shared<MultiMPSInfo<S>>(n_sites, vacuum, target, basis);
         }))
+        .def("make_single", &MultiMPSInfo<S>::make_single)
         .def_static("from_mps_info", &MultiMPSInfo<S>::from_mps_info);
 
     py::class_<MPS<S>, shared_ptr<MPS<S>>>(m, "MPS")
@@ -948,6 +949,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def("unload_wavefunction", &MultiMPS<S>::unload_wavefunction)
         .def("extract", &MultiMPS<S>::extract)
         .def("iscale", &MultiMPS<S>::iscale)
+        .def("make_single", &MultiMPS<S>::make_single)
         .def_static("make_complex", &MultiMPS<S>::make_complex);
 
     py::class_<ParallelMPS<S>, shared_ptr<ParallelMPS<S>>, MPS<S>>(

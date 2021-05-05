@@ -786,7 +786,8 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
                         dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
             return make_shared<OpSum<S>>(strs);
         }
-    } else if (a->get_type() == OpTypes::Prod) {
+    } else if (a->get_type() == OpTypes::Prod ||
+               a->get_type() == OpTypes::SumProd) {
         if (b->get_type() == OpTypes::Sum) {
             vector<shared_ptr<OpProduct<S>>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum<S>>(b)->strings.size() + 1);
@@ -795,7 +796,8 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
                         dynamic_pointer_cast<OpSum<S>>(b)->strings.begin(),
                         dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
             return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Prod) {
+        } else if (b->get_type() == OpTypes::Prod ||
+                   b->get_type() == OpTypes::SumProd) {
             vector<shared_ptr<OpProduct<S>>> strs;
             strs.reserve(2);
             strs.push_back(dynamic_pointer_cast<OpProduct<S>>(a));
@@ -812,7 +814,8 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
             strs.push_back(make_shared<OpProduct<S>>(
                 dynamic_pointer_cast<OpElement<S>>(b), 1.0));
             return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Prod) {
+        } else if (b->get_type() == OpTypes::Prod ||
+                   b->get_type() == OpTypes::SumProd) {
             vector<shared_ptr<OpProduct<S>>> strs;
             strs.reserve(dynamic_pointer_cast<OpSum<S>>(a)->strings.size() + 1);
             strs.insert(strs.end(),
