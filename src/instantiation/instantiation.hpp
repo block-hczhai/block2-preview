@@ -310,10 +310,10 @@ extern template struct block2::PDM2MPOQC<block2::SU2>;
 
 // qc_rule.hpp
 extern template struct block2::RuleQC<block2::SZ>;
-extern template struct block2::AntiHermitianRule<block2::SZ>;
+extern template struct block2::AntiHermitianRuleQC<block2::SZ>;
 
 extern template struct block2::RuleQC<block2::SU2>;
-extern template struct block2::AntiHermitianRule<block2::SU2>;
+extern template struct block2::AntiHermitianRuleQC<block2::SU2>;
 
 // qc_sum_mpo.hpp
 extern template struct block2::SumMPOQC<block2::SZ>;

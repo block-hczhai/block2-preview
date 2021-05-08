@@ -2019,9 +2019,9 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("prim_rule", &NoTransposeRule<S>::prim_rule)
         .def(py::init<const shared_ptr<Rule<S>> &>());
 
-    py::class_<AntiHermitianRule<S>, shared_ptr<AntiHermitianRule<S>>, Rule<S>>(
-        m, "AntiHermitianRule")
-        .def_readwrite("prim_rule", &AntiHermitianRule<S>::prim_rule)
+    py::class_<AntiHermitianRuleQC<S>, shared_ptr<AntiHermitianRuleQC<S>>,
+               Rule<S>>(m, "AntiHermitianRuleQC")
+        .def_readwrite("prim_rule", &AntiHermitianRuleQC<S>::prim_rule)
         .def(py::init<const shared_ptr<Rule<S>> &>());
 
     py::class_<RuleQC<S>, shared_ptr<RuleQC<S>>, Rule<S>>(m, "RuleQC")

@@ -251,9 +251,9 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
 };
 
 // For anti-Hermitian Hamiltonian with only one-body terms
-template <typename S> struct AntiHermitianRule : Rule<S> {
+template <typename S> struct AntiHermitianRuleQC : Rule<S> {
     shared_ptr<Rule<S>> prim_rule;
-    AntiHermitianRule(const shared_ptr<Rule<S>> &rule) : prim_rule(rule) {}
+    AntiHermitianRuleQC(const shared_ptr<Rule<S>> &rule) : prim_rule(rule) {}
     shared_ptr<OpElementRef<S>>
     operator()(const shared_ptr<OpElement<S>> &op) const override {
         shared_ptr<OpElementRef<S>> r = prim_rule->operator()(op);

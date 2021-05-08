@@ -104,7 +104,7 @@ void TestRotationH10STO6G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     // MPO simplification
     cout << "MPO ROT simplification start" << endl;
     mpo_rot = make_shared<SimplifiedMPO<S>>(
-        mpo_rot, make_shared<AntiHermitianRule<S>>(make_shared<RuleQC<S>>()),
+        mpo_rot, make_shared<AntiHermitianRuleQC<S>>(make_shared<RuleQC<S>>()),
         true);
     cout << "MPO ROT simplification end .. T = " << t.get_time() << endl;
 
