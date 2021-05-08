@@ -45,7 +45,7 @@ if "nonspinadapted" in dic:
     from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
@@ -58,7 +58,7 @@ else:
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO
+    from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
@@ -325,7 +325,10 @@ if conn_centers is not None and "fullrestart" in dic:
         mps.center = mps.n_sites - 1
 
 has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
+    or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
     or "restart_tran_oh" in dic or "tran_oh" in dic
+has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
+    or "tran_twopdm" in dic or "twopdm" in dic
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -350,6 +353,17 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         pmpo.save_data(scratch + '/mpo-1pdm.bin')
+
+    if has_2pdm:
+        # mpo for 2pdm
+        _print("build 2pdm mpo", time.perf_counter() - tx)
+        p2mpo = PDM2MPOQC(hamil)
+        p2mpo = SimplifiedMPO(p2mpo,
+            NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
+            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+
+        if MPI is None or MPI.rank == 0:
+            p2mpo.save_data(scratch + '/mpo-2pdm.bin')
     
     # mpo for particle number correlation
     _print("build 1npc mpo", time.perf_counter() - tx)
@@ -482,6 +496,8 @@ if not pre_run:
     if MPI is not None:
         mpo = ParallelMPO(mpo, prule)
         pmpo = ParallelMPO(pmpo, prule_pdm1)
+        if has_2pdm:
+            p2mpo = ParallelMPO(p2mpo, prule_pdm2)
         nmpo = ParallelMPO(nmpo, prule_pdm1)
         impo = ParallelMPO(impo, prule_ident)
 
@@ -495,26 +511,44 @@ if not pre_run:
     if conn_centers is not None:
         mps.conn_centers = VectorInt(conn_centers)
 
-    # state-specific DMRG (experimental)
+    # state-specific DMRG
     if "statespecific" in dic:
         assert isinstance(mps, MultiMPS)
         assert nroots != 1
+
         for iroot in range(mps.nroots):
+            tx = time.perf_counter()
             _print('----- root = %3d / %3d -----' % (iroot, mps.nroots), flush=True)
-            smps, smps_info, forward = split_mps(iroot, mps, mps_info)
-            
-            me = MovingEnvironment(mpo, smps, smps, "DMRG")
+            ext_mpss.append(mps.extract(iroot, mps.info.tag + "-%d" % iroot)
+                               .make_single(mps.info.tag + "-S%d" % iroot))
+            if ext_mpss[0].center != ext_mpss[iroot].center:
+                _print('change canonical form ...')
+                cf = str(ext_mpss[iroot].canonical_form)
+                ime = MovingEnvironment(impo, ext_mpss[iroot], ext_mpss[iroot], "IEX")
+                ime.delayed_contraction = OpNamesSet.normal_ops()
+                ime.cached_contraction = True
+                ime.init_environments(False)
+                expect = Expect(ime, ext_mpss[iroot].info.bond_dim, ext_mpss[iroot].info.bond_dim)
+                expect.solve(True, ext_mpss[iroot].center == 0)
+                ext_mpss[iroot].save_data()
+                _print(cf + ' -> ' + ext_mpss[iroot].canonical_form)
+
+            me = MovingEnvironment(mpo, ext_mpss[ir], ext_mpss[ir], "DMRG")
             me.delayed_contraction = OpNamesSet.normal_ops()
             me.cached_contraction = True
             me.save_partition_info = True
             me.init_environments(True)
 
-            if conn_centers is not None:
-                forward = smps.center == 0
-
             _print("env init finished", time.perf_counter() - tx)
 
             dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+            dmrg.ext_mpss = VectorMPS(ext_mpss[:ir])
+            dmrg.state_specific = True
+            for ext_mps in dmrg.ext_mpss:
+                ext_me = MovingEnvironment(impo, ext_mpss[ir], ext_mps, "EX" + ext_mps.info.tag)
+                ext_me.delayed_contraction = OpNamesSet.normal_ops()
+                ext_me.init_environments(True)
+                dmrg.ext_mes.append(ext_me)
             if "lowmem_noise" in dic:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
             else:
@@ -523,6 +557,7 @@ if not pre_run:
             dmrg.decomp_type = decomp_type
             dmrg.trunc_type = trunc_type
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+
             sweep_energies = []
             discarded_weights = []
             if "twodot_to_onedot" not in dic:
@@ -562,7 +597,8 @@ if not pre_run:
                 smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
     # GS DMRG
-    if "restart_onepdm" not in dic and "restart_correlation" not in dic \
+    if "restart_onepdm" not in dic and "restart_twopdm" not in dic \
+        and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
         and "restart_oh" not in dic and "statespecific" not in dic \
         and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
@@ -668,7 +704,7 @@ if not pre_run:
 
         if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
-    
+
     # Transition ONEPDM
     # note that there can be a undetermined +1/-1 factor due to the relative phase in two MPSs
     if "restart_tran_onepdm" in dic or "tran_onepdm" in dic:
@@ -721,6 +757,47 @@ if not pre_run:
                 dmr.deallocate()
 
             np.save(scratch + "/1npc.npy", dm)
+            mps_info.save_data(scratch + '/mps_info.bin')
+
+    def do_twopdm(bmps, kmps):
+        me = MovingEnvironment(p2mpo, bmps, kmps, "2PDM")
+        me.cached_contraction = True
+        me.save_partition_info = True
+        me.init_environments(True)
+
+        _print("env init finished", time.perf_counter() - tx)
+
+        expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.solve(True, kmps.center == 0)
+
+        if MPI is None or MPI.rank == 0:
+            dmr = expect.get_2pdm(me.n_sites)
+            dm = np.array(dmr, copy=True)
+            dm = dm.reshape((me.n_sites, 2, me.n_sites, 2, me.n_sites, 2, me.n_sites, 2))
+            dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+            dm = np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
+                               dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
+            return dm
+        else:
+            return None
+
+    # TWOPDM
+    if "restart_twopdm" in dic or "twopdm" in dic:
+
+        if nroots == 1:
+            dm = do_twopdm(mps, mps)
+            if MPI is None or MPI.rank == 0:
+                np.save(scratch + "/2pdm.npy", dm)
+        else:
+            for iroot in range(mps.nroots):
+                _print('----- root = %3d / %3d -----' % (iroot, mps.nroots), flush=True)
+                smps, smps_info, forward = split_mps(iroot, mps, mps_info)
+                dm = do_twopdm(smps, smps)
+                if MPI is None or MPI.rank == 0:
+                    np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, iroot), dm)
+                    smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
+        if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
 
     def do_oh(bmps, kmps):

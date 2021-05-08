@@ -982,8 +982,8 @@ struct MatrixFunctions {
         }
         return make_pair(iput, ns);
     }
-    // Computes w = exp(t*A)*v - for a (sparse) symmetric matrix A.
-    // Adapted from expokit fortran code dsexpv.f:
+    // Computes w = exp(t*A)*v - for a (sparse) symmetric / general matrix A.
+    // Adapted from expokit fortran code dsexpv.f/dgexpy.f:
     //   Roger B. Sidje (rbs@maths.uq.edu.au)
     //   EXPOKIT: Software Package for Computing Matrix Exponentials.
     //   ACM - Transactions On Mathematical Software, 24(1):130-156, 1998
@@ -991,11 +991,11 @@ struct MatrixFunctions {
     template <typename MatMul, typename PComm>
     static MKL_INT expo_krylov(MatMul &op, MKL_INT n, MKL_INT m, double t,
                                double *v, double *w, double &tol, double anorm,
-                               double *work, MKL_INT lwork, bool iprint,
-                               const PComm &pcomm = nullptr) {
+                               double *work, MKL_INT lwork, bool symmetric,
+                               bool iprint, const PComm &pcomm = nullptr) {
         const MKL_INT inc = 1;
         const double sqr1 = sqrt(0.1), zero = 0.0;
-        const MKL_INT mxstep = 500, mxreject = 0, ideg = 6;
+        const MKL_INT mxstep = symmetric ? 500 : 1000, mxreject = 0, ideg = 6;
         const double delta = 1.2, gamma = 0.9;
         MKL_INT iflag = 0;
         if (lwork < n * (m + 2) + 5 * (m + 2) * (m + 2) + ideg + 1)
@@ -1040,23 +1040,34 @@ struct MatrixFunctions {
                 work[iv + i] = p1 * w[i];
             if (pcomm == nullptr || pcomm->root == pcomm->rank)
                 memset(work + ih, 0, sizeof(double) * mh * mh);
-            // Lanczos loop
+            // Lanczos loop / Arnoldi loop
             MKL_INT j1v = iv + n;
             double hj1j = 0.0;
             for (MKL_INT j = 0; j < m; j++) {
                 nmult++;
                 op(work + j1v - n, work + j1v);
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    if (j != 0) {
-                        p1 = -work[ih + j * mh + j - 1];
-                        daxpy(&n, &p1, work + j1v - n - n, &inc, work + j1v,
-                              &inc);
+                    if (symmetric) {
+                        if (j != 0) {
+                            p1 = -work[ih + j * mh + j - 1];
+                            daxpy(&n, &p1, work + j1v - n - n, &inc, work + j1v,
+                                  &inc);
+                        }
+                        double hjj =
+                            -ddot(&n, work + j1v - n, &inc, work + j1v, &inc);
+                        work[ih + j * (mh + 1)] = -hjj;
+                        daxpy(&n, &hjj, work + j1v - n, &inc, work + j1v, &inc);
+                        hj1j = dnrm2(&n, work + j1v, &inc);
+                    } else {
+                        for (MKL_INT i = 0; i <= j; i++) {
+                            double hij = -ddot(&n, work + iv + i * n, &inc,
+                                               work + j1v, &inc);
+                            daxpy(&n, &hij, work + iv + i * n, &inc, work + j1v,
+                                  &inc);
+                            work[ih + j * mh + i] = -hij;
+                        }
+                        hj1j = dnrm2(&n, work + j1v, &inc);
                     }
-                    double hjj =
-                        -ddot(&n, work + j1v - n, &inc, work + j1v, &inc);
-                    work[ih + j * (mh + 1)] = -hjj;
-                    daxpy(&n, &hjj, work + j1v - n, &inc, work + j1v, &inc);
-                    hj1j = dnrm2(&n, work + j1v, &inc);
                 }
                 if (pcomm != nullptr)
                     pcomm->broadcast(&hj1j, 1, pcomm->root);
@@ -1072,7 +1083,8 @@ struct MatrixFunctions {
                 }
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     work[ih + j * mh + j + 1] = hj1j;
-                    work[ih + (j + 1) * mh + j] = hj1j;
+                    if (symmetric)
+                        work[ih + (j + 1) * mh + j] = hj1j;
                     hj1j = 1.0 / hj1j;
                     dscal(&n, &hj1j, work + j1v, &inc);
                 }
@@ -1089,7 +1101,8 @@ struct MatrixFunctions {
             MKL_INT ireject = 0;
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 // set 1 for the 2-corrected scheme
-                work[ih + m * mh + m - 1] = 0.0;
+                if (symmetric)
+                    work[ih + m * mh + m - 1] = 0.0;
                 work[ih + m * mh + m + 1] = 1.0;
                 // loop while ireject<mxreject until the tolerance is reached
                 for (ireject = 0;;) {
@@ -1186,7 +1199,7 @@ struct MatrixFunctions {
     // v: input/output vector
     template <typename MatMul, typename PComm>
     static int expo_apply(MatMul &op, double t, double anorm, MatrixRef &v,
-                          double consta = 0.0, bool iprint = false,
+                          double consta, bool symmetric, bool iprint = false,
                           const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
                           int deflation_max_size = 20) {
         MKL_INT vm = v.m, vn = v.n, n = vm * vn;
@@ -1226,7 +1239,7 @@ struct MatrixFunctions {
             anorm = 1.0;
         MKL_INT nmult = MatrixFunctions::expo_krylov(
             lop, n, m, t, v.data, w.data(), conv_thrd, anorm, work.data(),
-            lwork, iprint, (PComm)pcomm);
+            lwork, symmetric, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return (int)nmult;
     }

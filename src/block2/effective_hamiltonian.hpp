@@ -819,7 +819,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
     tuple<double, double, int, size_t, double>
-    expo_apply(double beta, double const_e, bool iprint = false,
+    expo_apply(double beta, double const_e, bool symmetric, bool iprint = false,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(compute_diag);
         double anorm = MatrixFunctions::norm(
@@ -832,10 +832,10 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
                      (tf->opf->seq->mode & SeqTypes::Tasked))
                         ? MatrixFunctions::expo_apply(
-                              *tf, beta, anorm, v, const_e, iprint,
+                              *tf, beta, anorm, v, const_e, symmetric, iprint,
                               para_rule == nullptr ? nullptr : para_rule->comm)
                         : MatrixFunctions::expo_apply(
-                              *this, beta, anorm, v, const_e, iprint,
+                              *this, beta, anorm, v, const_e, symmetric, iprint,
                               para_rule == nullptr ? nullptr : para_rule->comm);
         double norm = MatrixFunctions::norm(v);
         MatrixRef tmp(nullptr, (MKL_INT)ket->total_memory, 1);

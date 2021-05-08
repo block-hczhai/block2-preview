@@ -28,10 +28,12 @@ Features
     * Ground-State DMRG
         * Decomposition types: density matrix / SVD
         * Noise types: wavefunction / density matrix / perturbative
-    * Multi-Target State-Averaged Excited-State DMRG
+    * Multi-Target Excited-State DMRG
+        * State-averaged / state-specific
     * MPS compression / addition
     * Expectation
-    * Imaginary/Real time evolution
+    * Imaginary / real time evolution
+        * Hermitian / non-Hermitian Hamiltonian
         * Time-step targeting method
         * Time dependent variational principle method
     * Green's function

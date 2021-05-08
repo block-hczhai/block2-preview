@@ -72,6 +72,7 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
                          op_expr_less<SZ>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MovingEnvironment<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SZ>>>);
 // SU2
@@ -98,6 +99,7 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
                          op_expr_less<SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MovingEnvironment<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<string, string>);
@@ -937,6 +939,8 @@ template <typename S> void bind_mps(py::module &m) {
              py::arg("info") = nullptr)
         .def("deallocate", &MPS<S>::deallocate);
 
+    py::bind_vector<vector<shared_ptr<MPS<S>>>>(m, "VectorMPS");
+
     py::class_<MultiMPS<S>, shared_ptr<MultiMPS<S>>, MPS<S>>(m, "MultiMPS")
         .def(py::init<const shared_ptr<MultiMPSInfo<S>> &>())
         .def(py::init<int, int, int, int>())
@@ -1163,8 +1167,8 @@ template <typename S> void bind_partition(py::module &m) {
              py::arg("const_e"), py::arg("eval_energy") = false,
              py::arg("para_rule") = nullptr)
         .def("expo_apply", &EffectiveHamiltonian<S>::expo_apply,
-             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false,
-             py::arg("para_rule") = nullptr)
+             py::arg("beta"), py::arg("const_e"), py::arg("symmetric"),
+             py::arg("iprint") = false, py::arg("para_rule") = nullptr)
         .def("deallocate", &EffectiveHamiltonian<S>::deallocate);
 
     py::bind_vector<vector<shared_ptr<EffectiveHamiltonian<S>>>>(
@@ -1662,6 +1666,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_type", &TDDMRG<S>::trunc_type)
         .def_readwrite("decomp_type", &TDDMRG<S>::decomp_type)
         .def_readwrite("decomp_last_site", &TDDMRG<S>::decomp_last_site)
+        .def_readwrite("hermitian", &TDDMRG<S>::hermitian)
         .def_readwrite("sweep_cumulative_nflop",
                        &TDDMRG<S>::sweep_cumulative_nflop)
         .def("update_one_dot", &TDDMRG<S>::update_one_dot)
@@ -1713,6 +1718,9 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("trunc_pattern", &TimeEvolution<S>::trunc_pattern)
         .def_readwrite("decomp_type", &TimeEvolution<S>::decomp_type)
         .def_readwrite("normalize_mps", &TimeEvolution<S>::normalize_mps)
+        .def_readwrite("hermitian", &TimeEvolution<S>::hermitian)
+        .def_readwrite("sweep_cumulative_nflop",
+                       &TimeEvolution<S>::sweep_cumulative_nflop)
         .def("update_one_dot", &TimeEvolution<S>::update_one_dot)
         .def("update_two_dot", &TimeEvolution<S>::update_two_dot)
         .def("update_multi_one_dot", &TimeEvolution<S>::update_multi_one_dot)
@@ -2009,6 +2017,11 @@ template <typename S> void bind_mpo(py::module &m) {
     py::class_<NoTransposeRule<S>, shared_ptr<NoTransposeRule<S>>, Rule<S>>(
         m, "NoTransposeRule")
         .def_readwrite("prim_rule", &NoTransposeRule<S>::prim_rule)
+        .def(py::init<const shared_ptr<Rule<S>> &>());
+
+    py::class_<AntiHermitianRule<S>, shared_ptr<AntiHermitianRule<S>>, Rule<S>>(
+        m, "AntiHermitianRule")
+        .def_readwrite("prim_rule", &AntiHermitianRule<S>::prim_rule)
         .def(py::init<const shared_ptr<Rule<S>> &>());
 
     py::class_<RuleQC<S>, shared_ptr<RuleQC<S>>, Rule<S>>(m, "RuleQC")

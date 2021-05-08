@@ -32,12 +32,17 @@ struct CompressedTInt {
     // Number of orbitals
     uint16_t n;
     shared_ptr<CompressedVector<double>> cps_data;
-    CompressedTInt(uint16_t n) : n(n), cps_data(nullptr) {}
+    bool general;
+    CompressedTInt(uint16_t n, bool general = false)
+        : n(n), cps_data(nullptr), general(general) {}
     uint32_t find_index(uint16_t i, uint16_t j) const {
-        return i < j ? ((uint32_t)j * (j + 1) >> 1) + i
-                     : ((uint32_t)i * (i + 1) >> 1) + j;
+        return general ? (uint32_t)i * n + j
+                       : (i < j ? ((uint32_t)j * (j + 1) >> 1) + i
+                                : ((uint32_t)i * (i + 1) >> 1) + j);
     }
-    size_t size() const { return ((size_t)n * (n + 1) >> 1); }
+    size_t size() const {
+        return general ? (size_t)n * n : ((size_t)n * (n + 1) >> 1);
+    }
     void clear() { cps_data->clear(); }
     double &operator()(uint16_t i, uint16_t j) {
         return (*cps_data)[find_index(i, j)];
@@ -49,13 +54,13 @@ struct CompressedTInt {
     void reorder(const CompressedTInt &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
         for (uint16_t i = 0; i < n; i++)
-            for (uint16_t j = 0; j <= i; j++)
+            for (uint16_t j = 0; j < (general ? n : i + 1); j++)
                 (*this)(i, j) = other(ord[i], ord[j]);
     }
     friend ostream &operator<<(ostream &os, CompressedTInt x) {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
-            for (uint16_t j = 0; j <= i; j++)
+            for (uint16_t j = 0; j < (x.general ? x.n : i + 1); j++)
                 if (x(i, j) != 0.0)
                     os << setw(20) << x(i, j) << setw(4) << i + 1 << setw(4)
                        << j + 1 << setw(4) << 0 << setw(4) << 0 << endl;
@@ -235,6 +240,8 @@ struct CompressedFCIDUMP : FCIDUMP {
         params["iuhf"] = "1";
         cps_ts.push_back(CompressedTInt(n_sites));
         cps_ts.push_back(CompressedTInt(n_sites));
+        if (lta != cps_ts[0].size())
+            cps_ts[0].general = cps_ts[1].general = true;
         assert(lta == cps_ts[0].size() && ltb == cps_ts[1].size());
         cps_vs.push_back(CompressedV8Int(n_sites));
         cps_vs.push_back(CompressedV8Int(n_sites));
@@ -290,6 +297,8 @@ struct CompressedFCIDUMP : FCIDUMP {
         params["isym"] = Parsing::to_string(isym);
         params["iuhf"] = "0";
         cps_ts.push_back(CompressedTInt(n_sites));
+        if (lt != cps_ts[0].size())
+            cps_ts[0].general = true;
         assert(lt == cps_ts[0].size());
         cps_vs.push_back(CompressedV8Int(n_sites));
         if (cps_vs[0].size() == lv) {
@@ -324,6 +333,8 @@ struct CompressedFCIDUMP : FCIDUMP {
             ofs << "  IUHF=1," << endl;
         if (general)
             ofs << "  IGENERAL=1," << endl;
+        if (cps_ts[0].general)
+            ofs << "  ITGENERAL=1," << endl;
         ofs << " &END" << endl;
         auto write_const = [](ofstream &os, double x) {
             os << fixed << setprecision(16);
@@ -425,6 +436,8 @@ struct CompressedFCIDUMP : FCIDUMP {
                   Parsing::to_int(params["igeneral"]) == 1;
         if (!uhf) {
             cps_ts.push_back(CompressedTInt(n));
+            cps_ts[0].general = params.count("itgeneral") != 0 &&
+                                Parsing::to_int(params["itgeneral"]) == 1;
             cps_ts[0].cps_data = make_shared<CompressedVector<double>>(
                 cps_ts[0].size(), prec, chunk_size, ncache);
             cps_ts[0].clear();
@@ -461,6 +474,9 @@ struct CompressedFCIDUMP : FCIDUMP {
         } else {
             cps_ts.push_back(CompressedTInt(n));
             cps_ts.push_back(CompressedTInt(n));
+            cps_ts[0].general = cps_ts[1].general =
+                params.count("itgeneral") != 0 &&
+                Parsing::to_int(params["itgeneral"]) == 1;
             cps_ts[0].cps_data = make_shared<CompressedVector<double>>(
                 cps_ts[0].size(), prec, chunk_size, ncache);
             cps_ts[1].cps_data = make_shared<CompressedVector<double>>(
@@ -531,7 +547,7 @@ struct CompressedFCIDUMP : FCIDUMP {
         unfreeze();
         for (auto &t : cps_ts)
             for (int i = 0; i < n; i++)
-                for (int j = 0; j <= i; j++)
+                for (int j = 0; j < (t.general ? n : i + 1); j++)
                     if (orbsym[i] ^ orbsym[j])
                         error += abs(t(i, j)), t(i, j) = 0;
         for (auto &v : cps_vgs)

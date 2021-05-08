@@ -21,4 +21,7 @@
 #include "instantiation.hpp"
 
 template struct block2::RuleQC<block2::SZ>;
+template struct block2::AntiHermitianRule<block2::SZ>;
+
 template struct block2::RuleQC<block2::SU2>;
+template struct block2::AntiHermitianRule<block2::SU2>;

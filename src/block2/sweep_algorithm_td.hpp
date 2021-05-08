@@ -77,6 +77,7 @@ template <typename S> struct TDDMRG {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool decomp_last_site = true;
+    bool hermitian = true; //!< Whether the Hamiltonian is Hermitian (symmetric)
     size_t sweep_cumulative_nflop = 0;
     TDDMRG(const shared_ptr<MovingEnvironment<S>> &me,
            const vector<ubond_t> &bond_dims,
@@ -164,8 +165,8 @@ template <typename S> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(double));
             pdi = lvmt.second;
         } else
-            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(
                 forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -447,8 +448,8 @@ template <typename S> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(double));
             pdi = lvmt.second;
         } else
-            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, lme->bra->info,
@@ -775,6 +776,8 @@ template <typename S> struct TimeEvolution {
     uint8_t iprint = 2;
     double cutoff = 1E-14;
     bool normalize_mps = true;
+    bool hermitian = true; //!< Whether the Hamiltonian is Hermitian (symmetric)
+    size_t sweep_cumulative_nflop = 0;
     TimeEvolution(const shared_ptr<MovingEnvironment<S>> &me,
                   const vector<ubond_t> &bond_dims,
                   TETypes mode = TETypes::TangentSpace, int n_sub_sweeps = 1)
@@ -853,8 +856,8 @@ template <typename S> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(double));
             tmp.deallocate();
@@ -862,8 +865,8 @@ template <typename S> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1002,7 +1005,7 @@ template <typename S> struct TimeEvolution {
                 me->move_to(i + 1, true);
                 shared_ptr<EffectiveHamiltonian<S>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1020,7 +1023,7 @@ template <typename S> struct TimeEvolution {
                 me->move_to(i - 1, true);
                 shared_ptr<EffectiveHamiltonian<S>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
                                              iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1131,8 +1134,8 @@ template <typename S> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(double));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(double));
             tmp.deallocate();
@@ -1140,8 +1143,8 @@ template <typename S> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1241,8 +1244,8 @@ template <typename S> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
                             me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
-                                         me->para_rule);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                         iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1258,8 +1261,8 @@ template <typename S> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,
                             me->bra->tensors[i], me->ket->tensors[i]);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
-                                         me->para_rule);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                         iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1340,7 +1343,7 @@ template <typename S> struct TimeEvolution {
             memcpy(tmp_re.data, h_eff->ket[0]->data,
                    h_eff->ket[0]->total_memory * sizeof(double));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(double));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
                                     me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
@@ -1691,7 +1694,7 @@ template <typename S> struct TimeEvolution {
             memcpy(tmp_re.data, h_eff->ket[0]->data,
                    h_eff->ket[0]->total_memory * sizeof(double));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(double));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
                                     me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
@@ -1887,6 +1890,7 @@ template <typename S> struct TimeEvolution {
                                         double noise) {
         me->prepare();
         vector<double> energies, normsqs;
+        sweep_cumulative_nflop = 0;
         vector<int> sweep_range;
         double largest_error = 0.0;
         if (forward)
@@ -1911,6 +1915,7 @@ template <typename S> struct TimeEvolution {
             }
             t.get_time();
             Iteration r = blocking(i, forward, advance, beta, bond_dim, noise);
+            sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -1955,6 +1960,7 @@ template <typename S> struct TimeEvolution {
             noises.resize(n_sweeps, noises.back());
         Timer start, current;
         start.get_time();
+        current.get_time();
         energies.clear();
         normsqs.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
@@ -1975,7 +1981,7 @@ template <typename S> struct TimeEvolution {
                 auto r = sweep(forward, isw == n_sub_sweeps - 1, beta,
                                bond_dims[iw], noises[iw]);
                 forward = !forward;
-                current.get_time();
+                double tswp = current.get_time();
                 if (iprint == 1) {
                     cout << fixed << setprecision(8);
                     cout << " .. Energy = " << setw(15) << get<0>(r)
@@ -1985,8 +1991,20 @@ template <typename S> struct TimeEvolution {
                 }
                 if (iprint >= 1)
                     cout << "Time elapsed = " << fixed << setw(10)
-                         << setprecision(3) << current.current - start.current
+                         << setprecision(3) << current.current - start.current;
+                cout << fixed << setprecision(10);
+                cout << " | E = " << setw(18) << get<0>(r);
+                cout << " | Norm^2 = " << setw(18) << get<1>(r);
+                cout << " | DW = " << setw(6) << setprecision(2) << scientific
+                     << get<2>(r) << endl;
+                if (iprint >= 2) {
+                    cout << fixed << setprecision(3);
+                    cout << "Time sweep = " << setw(12) << tswp;
+                    cout << " | "
+                         << Parsing::to_size_string(sweep_cumulative_nflop,
+                                                    "FLOP/SWP")
                          << endl;
+                }
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));
                     normsqs.push_back(get<1>(r));
