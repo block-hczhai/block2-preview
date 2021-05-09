@@ -65,6 +65,44 @@ struct TInt {
             for (uint16_t j = 0; j < (general ? n : i + 1); j++)
                 (*this)(i, j) = other(ord[i], ord[j]);
     }
+    void rotate(const TInt &other, const vector<double> &rot_mat) {
+        assert(n == other.n);
+        vector<double> tmp((size_t)n * n);
+        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+        {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ij = 0; ij < n * n; ij++) {
+                int i = ij / n, j = ij % n;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += other(i, q) * rot_mat[q * n + j];
+                tmp[(size_t)i * n + j] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ij = 0; ij < n * n; ij++) {
+                int i = ij / n, j = ij % n;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+#endif
+                if (general && j > i)
+                    continue;
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(size_t)q * n + j] * rot_mat[q * n + i];
+                (*this)(i, j) = x;
+            }
+        }
+    }
     friend ostream &operator<<(ostream &os, TInt x) {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
@@ -99,6 +137,87 @@ struct V1Int {
                     for (uint32_t l = 0; l < n; l++)
                         (*this)(i, j, k, l) =
                             other(ord[i], ord[j], ord[k], ord[l]);
+    }
+    void rotate(const V1Int &other, const vector<double> &rot_mat) {
+        assert(n == other.n);
+        vector<double> tmp(size());
+#ifdef _MSC_VER
+        assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
+#endif
+        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+        {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += other(i, j, k, q) * rot_mat[q * n + l];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
+                         rot_mat[q * n + k];
+                (*this)(i, j, k, l) = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += (*this)(i, q, k, l) * rot_mat[q * n + j];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
+                         rot_mat[q * n + i];
+                (*this)(i, j, k, l) = x;
+            }
+        }
     }
     friend ostream &operator<<(ostream &os, V1Int x) {
         os << fixed << setprecision(16);
@@ -146,6 +265,90 @@ struct V4Int {
                         (*this)(i, j, k, l) =
                             other(ord[i], ord[j], ord[k], ord[l]);
     }
+    void rotate(const V4Int &other, const vector<double> &rot_mat) {
+        assert(n == other.n);
+        vector<double> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
+#ifdef _MSC_VER
+        assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
+#endif
+        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+        {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += other(i, j, k, q) * rot_mat[q * n + l];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
+                         rot_mat[q * n + k];
+                tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
+                         rot_mat[q * n + j];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+                            if (j > i || l > k)
+                                continue;
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
+                         rot_mat[q * n + i];
+                (*this)(i, j, k, l) = x;
+            }
+        }
+    }
     friend ostream &operator<<(ostream &os, V4Int x) {
         os << fixed << setprecision(16);
         for (uint32_t i = 0; i < x.n; i++)
@@ -192,6 +395,91 @@ struct V8Int {
                         if (ij >= kl)
                             (*this)(i, j, k, l) =
                                 other(ord[i], ord[j], ord[k], ord[l]);
+    }
+    void rotate(const V8Int &other, const vector<double> &rot_mat) {
+        assert(n == other.n);
+        vector<double> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
+#ifdef _MSC_VER
+        assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
+#endif
+        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+        {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += other(i, j, k, q) * rot_mat[q * n + l];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
+                         rot_mat[q * n + k];
+                tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
+                         rot_mat[q * n + j];
+                tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
+            }
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+                int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
+                    k = (ijkl / n) % n, l = ijkl % n;
+#else
+#pragma omp for schedule(dynamic) collapse(4)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++) {
+                            if (j > i || l > k ||
+                                (k * (k + 1) >> 1) + l > (i * (i + 1) >> 1) + j)
+                                continue;
+#endif
+                double x = 0;
+                for (int q = 0; q < n; q++)
+                    x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
+                         rot_mat[q * n + i];
+                (*this)(i, j, k, l) = x;
+            }
+        }
     }
     friend ostream &operator<<(ostream &os, V8Int x) {
         os << fixed << setprecision(16);
@@ -331,6 +619,36 @@ struct FCIDUMP {
             vgs[0].data = data + ts[0].size();
             memcpy(vgs[0].data, v, sizeof(double) * lv);
         }
+        memcpy(ts[0].data, t, sizeof(double) * lt);
+        uhf = false;
+    }
+    // Initialize with only h1e integral
+    virtual void initialize_h1e(uint16_t n_sites, uint16_t n_elec,
+                                uint16_t twos, uint16_t isym, double e,
+                                const double *t, size_t lt) {
+        params.clear();
+        ts.clear();
+        vs.clear();
+        vabs.clear();
+        vgs.clear();
+        this->const_e = e;
+        params["norb"] = Parsing::to_string(n_sites);
+        params["nelec"] = Parsing::to_string(n_elec);
+        params["ms2"] = Parsing::to_string(twos);
+        params["isym"] = Parsing::to_string(isym);
+        params["iuhf"] = "0";
+        ts.push_back(TInt(n_sites));
+        if (lt != ts[0].size())
+            ts[0].general = true;
+        assert(lt == ts[0].size());
+        vs.push_back(V8Int(n_sites));
+        general = false;
+        total_memory = ts[0].size() + vs[0].size();
+        vdata = make_shared<vector<double>>(total_memory);
+        data = vdata->data();
+        ts[0].data = data;
+        vs[0].data = data + ts[0].size();
+        memset(vs[0].data, 0, sizeof(double) * vs[0].size());
         memcpy(ts[0].data, t, sizeof(double) * lt);
         uhf = false;
     }
@@ -742,6 +1060,37 @@ struct FCIDUMP {
         ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
         if (params.count("orbsym"))
             set_orb_sym(reorder(orb_sym(), ord));
+    }
+    // orbital rotation
+    // rot_mat: (old, new)
+    virtual void rotate(const vector<double> &rot_mat) {
+        uint16_t n = n_sites();
+        assert((int)rot_mat.size() == (int)n * n);
+        shared_ptr<vector<double>> rdata =
+            make_shared<vector<double>>(total_memory);
+        vector<TInt> rts(ts);
+        vector<V1Int> rvgs(vgs);
+        vector<V4Int> rvabs(vabs);
+        vector<V8Int> rvs(vs);
+        for (size_t i = 0; i < ts.size(); i++) {
+            rts[i].data = ts[i].data - data + rdata->data();
+            rts[i].rotate(ts[i], rot_mat);
+        }
+        for (size_t i = 0; i < vgs.size(); i++) {
+            rvgs[i].data = vgs[i].data - data + rdata->data();
+            rvgs[i].rotate(vgs[i], rot_mat);
+        }
+        for (size_t i = 0; i < vabs.size(); i++) {
+            rvabs[i].data = vabs[i].data - data + rdata->data();
+            rvabs[i].rotate(vabs[i], rot_mat);
+        }
+        for (size_t i = 0; i < vs.size(); i++) {
+            rvs[i].data = vs[i].data - data + rdata->data();
+            rvs[i].rotate(vs[i], rot_mat);
+        }
+        vdata = rdata;
+        data = rdata->data();
+        ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
     }
     // One-electron integral element (SU(2))
     virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }

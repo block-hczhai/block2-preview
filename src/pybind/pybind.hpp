@@ -2973,11 +2973,27 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                                         "VectorVectorTensor");
 
     py::class_<MatrixFunctions>(m, "MatrixFunctions")
-        .def_static(
-            "eigs", [](int n, py::array_t<double> &a, py::array_t<double> &w) {
-                MatrixFunctions::eigs(MatrixRef(a.mutable_data(), n, n),
-                                      DiagonalMatrix(w.mutable_data(), n));
-            });
+        .def_static("det",
+                    [](py::array_t<double> &a) {
+                        MKL_INT n = (MKL_INT)Prime::sqrt((Prime::LL)a.size());
+                        assert(n * n == (MKL_INT)a.size());
+                        return MatrixFunctions::det(
+                            MatrixRef(a.mutable_data(), n, n));
+                    })
+        .def_static("eigs",
+                    [](py::array_t<double> &a, py::array_t<double> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        MatrixFunctions::eigs(
+                            MatrixRef(a.mutable_data(), n, n),
+                            DiagonalMatrix(w.mutable_data(), n));
+                    })
+        .def_static("block_eigs", [](py::array_t<double> &a,
+                                     py::array_t<double> &w,
+                                     const vector<uint8_t> &x) {
+            MKL_INT n = (MKL_INT)w.size();
+            MatrixFunctions::block_eigs(MatrixRef(a.mutable_data(), n, n),
+                                        DiagonalMatrix(w.mutable_data(), n), x);
+        });
 
     py::class_<ComplexMatrixFunctions>(m, "ComplexMatrixFunctions");
 
@@ -2995,6 +3011,12 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def(py::init<>())
         .def("read", &FCIDUMP::read)
         .def("write", &FCIDUMP::write)
+        .def("initialize_h1e",
+             [](FCIDUMP *self, uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+                uint16_t isym, double e, const py::array_t<double> &t) {
+                 self->initialize_h1e(n_sites, n_elec, twos, isym, e, t.data(),
+                                      t.size());
+             })
         .def("initialize_su2",
              [](FCIDUMP *self, uint16_t n_sites, uint16_t n_elec, uint16_t twos,
                 uint16_t isym, double e, const py::array_t<double> &t,
@@ -3074,6 +3096,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("abs_h1e_matrix", &FCIDUMP::abs_h1e_matrix)
         .def("reorder",
              (void (FCIDUMP::*)(const vector<uint16_t> &)) & FCIDUMP::reorder)
+        .def("rotate", &FCIDUMP::rotate)
         .def_static("array_reorder", &FCIDUMP::reorder<double>)
         .def_static("array_reorder", &FCIDUMP::reorder<uint8_t>)
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,

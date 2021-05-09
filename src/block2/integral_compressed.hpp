@@ -575,6 +575,11 @@ struct CompressedFCIDUMP : FCIDUMP {
         freeze();
         return error;
     }
+    // orbital rotation
+    // rot_mat: (old, new)
+    void rotate(const vector<double> &rot_mat) override {
+        throw runtime_error("Not implemented!");
+    }
     void reorder(const vector<uint16_t> &ord) override {
         uint16_t n = n_sites();
         assert(ord.size() == n);

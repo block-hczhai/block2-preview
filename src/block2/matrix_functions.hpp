@@ -97,6 +97,10 @@ extern void dorglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                    double *a, const MKL_INT *lda, const double *tau,
                    double *work, const MKL_INT *lwork, MKL_INT *info);
 
+// LU factorization
+extern void dgetrf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+
 // eigenvalue problem
 extern void dsyev(const char *jobz, const char *uplo, const MKL_INT *n,
                   double *a, const MKL_INT *lda, double *w, double *work,
@@ -143,6 +147,22 @@ struct MatrixFunctions {
     static double norm(const MatrixRef &a) {
         MKL_INT n = a.m * a.n, inc = 1;
         return dnrm2(&n, a.data, &inc);
+    }
+    // determinant
+    static double det(const MatrixRef &a) {
+        assert(a.m == a.n);
+        vector<double> aa;
+        vector<MKL_INT> ipiv;
+        aa.reserve(a.m * a.n);
+        ipiv.reserve(a.m);
+        memcpy(aa.data(), a.data, sizeof(double) * a.m * a.n);
+        MKL_INT info = -1;
+        dgetrf(&a.m, &a.n, aa.data(), &a.m, ipiv.data(), &info);
+        assert(info == 0);
+        double det = 1.0;
+        for (int i = 0; i < a.m; i++)
+            det *= ipiv[i] != i + 1 ? -aa[i * a.m + i] : aa[i * a.m + i];
+        return det;
     }
     static double dot(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == b.m && a.n == b.n);
@@ -650,6 +670,43 @@ struct MatrixFunctions {
         d_alloc->deallocate(t, a.m * a.n);
         d_alloc->deallocate(tau, k);
         d_alloc->deallocate(work, lwork);
+    }
+    // b = a.T
+    static void transpose(const MatrixRef &a, const MatrixRef &b) {
+        b.clear();
+        iadd(b, a, 1.0, true);
+    }
+    // diagonalization for each symmetry block
+    static void block_eigs(const MatrixRef &a, const DiagonalMatrix &w,
+                           const vector<uint8_t> &x) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        uint8_t maxx = *max_element(x.begin(), x.end()) + 1;
+        vector<vector<MKL_INT>> mp(maxx);
+        assert(a.m == a.n && w.n == a.n && (MKL_INT)x.size() == a.n);
+        for (MKL_INT i = 0; i < a.n; i++)
+            mp[x[i]].push_back(i);
+        for (uint8_t i = 0; i < maxx; i++)
+            if (mp[i].size() != 0) {
+                double *work = d_alloc->allocate(mp[i].size() * mp[i].size());
+                double *wwork = d_alloc->allocate(mp[i].size());
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        work[j * mp[i].size() + k] = a(mp[i][j], mp[i][k]);
+                eigs(MatrixRef(work, (MKL_INT)mp[i].size(),
+                               (MKL_INT)mp[i].size()),
+                     DiagonalMatrix(wwork, (MKL_INT)mp[i].size()));
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (MKL_INT k = 0; k < a.n; k++)
+                        a(mp[i][j], k) = 0.0, a(k, mp[i][j]) = 0.0;
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        a(mp[i][j], mp[i][k]) = work[j * mp[i].size() + k];
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    w(mp[i][j], mp[i][j]) = wwork[j];
+                d_alloc->deallocate(wwork, mp[i].size());
+                d_alloc->deallocate(work, mp[i].size() * mp[i].size());
+            }
     }
     // eigenvectors are row vectors
     static void eigs(const MatrixRef &a, const DiagonalMatrix &w) {

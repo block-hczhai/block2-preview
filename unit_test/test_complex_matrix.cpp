@@ -75,3 +75,66 @@ TEST_F(TestComplexMatrix, TestExponential) {
         a.deallocate();
     }
 }
+
+TEST_F(TestComplexMatrix, TestEig) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 150);
+        ComplexMatrixRef a((complex<double> *)dalloc_()->allocate(m * m * 2), m,
+                           m);
+        ComplexMatrixRef ap((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        ComplexMatrixRef aq((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        ComplexMatrixRef ag((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        ComplexDiagonalMatrix w((complex<double> *)dalloc_()->allocate(m * 2),
+                                m);
+        Random::fill_rand_double((double *)a.data, a.size() * 2);
+        for (MKL_INT ki = 0; ki < m; ki++)
+            for (MKL_INT kj = 0; kj < m; kj++)
+                ap(ki, kj) = a(ki, kj);
+        ComplexMatrixFunctions::eig(a, w);
+        ComplexMatrixFunctions::multiply(a, false, ap, true, ag, 1.0, 0.0);
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) /= w(k, k);
+        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 0.0));
+        // a[i, j] u[k, j] = w[k, k] u[k, i]
+        // a[i, j] = uinv[j, k] w[k, k] u[k, i] = uinv[j, k] a[i, jp] u[k, jp]
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = a(k, j) * w(k, k);
+        ComplexMatrixFunctions::inverse(a);
+        ComplexMatrixFunctions::multiply(ag, true, a, true, aq, 1.0, 0.0);
+        ASSERT_TRUE(MatrixFunctions::all_close(ap, aq, 1E-9, 0.0));
+        w.deallocate();
+        ag.deallocate();
+        aq.deallocate();
+        ap.deallocate();
+        a.deallocate();
+    }
+}
+
+TEST_F(TestComplexMatrix, TestInverse) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 200);
+        ComplexMatrixRef a((complex<double> *)dalloc_()->allocate(m * m * 2), m,
+                           m);
+        ComplexMatrixRef ap((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        ComplexMatrixRef ag((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        Random::fill_rand_double((double *)a.data, a.size() * 2);
+        for (MKL_INT ki = 0; ki < m; ki++)
+            for (MKL_INT kj = 0; kj < m; kj++)
+                ap(ki, kj) = a(ki, kj);
+        ComplexMatrixFunctions::inverse(a);
+        ComplexMatrixFunctions::multiply(a, false, ap, false, ag, 1.0, 0.0);
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ASSERT_LT(abs(ag(j, k) - (k == j ? 1.0 : 0.0)), 1E-9);
+        ag.deallocate();
+        ap.deallocate();
+        a.deallocate();
+    }
+}

@@ -60,7 +60,7 @@ template <> struct GMatrix<double> {
         (alloc == nullptr ? dalloc : alloc)->deallocate(data, size());
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(double)); }
+    void clear() const { memset(data, 0, size() * sizeof(double)); }
     GMatrix flip_dims() const { return GMatrix(data, n, m); }
     GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
     friend ostream &operator<<(ostream &os, const GMatrix &mat) {
@@ -128,7 +128,7 @@ struct IdentityMatrix : DiagonalMatrix {
 };
 
 // complex dense matrix
-template <> struct GMatrix<complex<double>>  {
+template <> struct GMatrix<complex<double>> {
     MKL_INT m, n; // m is rows, n is cols
     complex<double> *data;
     GMatrix(complex<double> *data, MKL_INT m, MKL_INT n)
@@ -148,9 +148,7 @@ template <> struct GMatrix<complex<double>>  {
     }
     void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
     GMatrix flip_dims() const { return GMatrix(data, n, m); }
-    GMatrix shift_ptr(size_t l) const {
-        return GMatrix(data + l, m, n);
-    }
+    GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
     friend ostream &operator<<(ostream &os, const GMatrix &mat) {
         os << "CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         for (MKL_INT i = 0; i < mat.m; i++) {
@@ -203,8 +201,7 @@ struct ComplexDiagonalMatrix : ComplexMatrixRef {
 };
 
 // General rank-n dense tensor
-template <typename FL>
-struct GTensor {
+template <typename FL> struct GTensor {
     vector<MKL_INT> shape;
     vector<FL> data;
     GTensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {

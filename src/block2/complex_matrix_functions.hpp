@@ -42,14 +42,15 @@ extern void zscal(const MKL_INT *n, const complex<double> *sa,
 
 // vector copy
 // vector [dy] = [dx]
-extern void zcopy(const int *n, const complex<double> *dx, const int *incx,
-                  complex<double> *dy, const int *incy) noexcept;
+extern void zcopy(const MKL_INT *n, const complex<double> *dx,
+                  const MKL_INT *incx, complex<double> *dy,
+                  const MKL_INT *incy) noexcept;
 
 // vector addition
 // vector [sy] = vector [sy] + complex [sa] * vector [sx]
-extern void zaxpy(const int *n, const complex<double> *sa,
-                  const complex<double> *sx, const int *incx,
-                  complex<double> *sy, const int *incy) noexcept;
+extern void zaxpy(const MKL_INT *n, const complex<double> *sa,
+                  const complex<double> *sx, const MKL_INT *incx,
+                  complex<double> *sy, const MKL_INT *incy) noexcept;
 
 // vector dot product
 extern void zdotc(complex<double> *pres, const MKL_INT *n,
@@ -62,12 +63,28 @@ extern double dznrm2(const MKL_INT *n, const complex<double> *x,
 
 // matrix multiplication
 // mat [c] = complex [alpha] * mat [a] * mat [b] + complex [beta] * mat [c]
-extern void zgemm(const char *transa, const char *transb, const int *m,
-                  const int *n, const int *k, const complex<double> *alpha,
-                  const complex<double> *a, const int *lda,
-                  const complex<double> *b, const int *ldb,
-                  const complex<double> *beta, complex<double> *c,
-                  const int *ldc) noexcept;
+extern void zgemm(const char *transa, const char *transb, const MKL_INT *m,
+                  const MKL_INT *n, const MKL_INT *k,
+                  const complex<double> *alpha, const complex<double> *a,
+                  const MKL_INT *lda, const complex<double> *b,
+                  const MKL_INT *ldb, const complex<double> *beta,
+                  complex<double> *c, const MKL_INT *ldc) noexcept;
+
+// LU factorization
+extern void zgetrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+
+// matrix inverse
+extern void zgetri(const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                   MKL_INT *ipiv, complex<double> *work, const MKL_INT *lwork,
+                   MKL_INT *info);
+
+// eigenvalue problem
+extern void zgeev(const char *jobvl, const char *jobvr, const MKL_INT *n,
+                  complex<double> *a, const MKL_INT *lda, complex<double> *w,
+                  complex<double> *vl, const MKL_INT *ldvl, complex<double> *vr,
+                  const MKL_INT *ldvr, complex<double> *work,
+                  const MKL_INT *lwork, double *rwork, MKL_INT *info);
 
 // matrix-vector multiplication
 // vec [y] = complex [alpha] * mat [a] * vec [x] + complex [beta] * vec [y]
@@ -78,9 +95,9 @@ extern void zgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   complex<double> *y, const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void zgesv(const int *n, const int *nrhs, complex<double> *a,
-                  const int *lda, int *ipiv, complex<double> *b, const int *ldb,
-                  int *info);
+extern void zgesv(const MKL_INT *n, const MKL_INT *nrhs, complex<double> *a,
+                  const MKL_INT *lda, MKL_INT *ipiv, complex<double> *b,
+                  const MKL_INT *ldb, MKL_INT *info);
 
 #endif
 }
@@ -110,6 +127,60 @@ struct ComplexMatrixFunctions {
     static double norm(const ComplexMatrixRef &a) {
         MKL_INT n = a.m * a.n, inc = 1;
         return dznrm2(&n, a.data, &inc);
+    }
+    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
+    static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n && w.n == a.n);
+        MKL_INT lwork = 34 * a.n, info;
+        complex<double> *work = (complex<double> *)d_alloc->allocate(lwork * 2);
+        double *rwork = d_alloc->allocate(a.m * 2);
+        complex<double> *vl =
+            (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
+        zgeev("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
+              work, &lwork, rwork, &info);
+        assert(info == 0);
+        for (size_t k = 0; k < a.m * a.n; k++)
+            a.data[k] = conj(vl[k]);
+        d_alloc->deallocate((double *)vl, a.m * a.n * 2);
+        d_alloc->deallocate(rwork, a.m * 2);
+        d_alloc->deallocate((double *)work, lwork * 2);
+    }
+    // matrix inverse
+    static void inverse(const ComplexMatrixRef &a) {
+        assert(a.m == a.n);
+        vector<MKL_INT> ipiv;
+        vector<complex<double>> work;
+        ipiv.reserve(a.m);
+        MKL_INT lwork = 34 * a.n, info = -1;
+        work.reserve(lwork);
+        zgetrf(&a.m, &a.n, a.data, &a.m, ipiv.data(), &info);
+        assert(info == 0);
+        zgetri(&a.n, a.data, &a.m, ipiv.data(), work.data(), &lwork, &info);
+        assert(info == 0);
+    }
+    // matrix logarithm using diagonalization
+    static void logarithm(const ComplexMatrixRef &a) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n);
+        ComplexDiagonalMatrix w(nullptr, a.m);
+        w.data = (complex<double> *)d_alloc->allocate(a.m * 2);
+        ComplexMatrixRef wa(nullptr, a.m, a.n);
+        wa.data = (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
+        ComplexMatrixRef ua(nullptr, a.m, a.n);
+        ua.data = (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
+        memcpy(ua.data, a.data, sizeof(complex<double>) * a.size());
+        eig(ua, w);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
+                wa(i, j) = ua(i, j) * log(w(i, i));
+        inverse(ua);
+        multiply(wa, true, ua, true, a, 1.0, 0.0);
+        d_alloc->deallocate((double *)ua.data, a.m * a.n * 2);
+        d_alloc->deallocate((double *)wa.data, a.m * a.n * 2);
+        d_alloc->deallocate((double *)w.data, a.m * 2);
     }
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const ComplexMatrixRef &a, bool conja,
