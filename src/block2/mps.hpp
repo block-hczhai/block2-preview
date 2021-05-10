@@ -1591,6 +1591,20 @@ template <typename S> struct MPS {
         shallow_copy_to(mps);
         return mps;
     }
+    virtual shared_ptr<MPS<S>> deep_copy(const string &xtag) const {
+        shared_ptr<MPSInfo<S>> xinfo = info->deep_copy();
+        xinfo->load_mutable();
+        shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(xinfo);
+        xmps->load_data();
+        xmps->load_mutable();
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
+    }
     virtual void copy_data(const string &dir) const {
         if (frame->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)

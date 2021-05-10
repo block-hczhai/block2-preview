@@ -927,6 +927,11 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
     dmrg = GFDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=mpi)
     re_idx = orbital_reorder(h1e, g2e, method=reorder_method)
+    if mpi is not None:
+        from mpi4py import MPI as MPIPY
+        comm = MPIPY.COMM_WORLD
+        re_idx = comm.bcast(re_idx, root=0)
+
     _print('reorder method = %r reorder = %r' % (reorder_method, re_idx))
 
     if mo_orbs is None and ao_orbs is None:

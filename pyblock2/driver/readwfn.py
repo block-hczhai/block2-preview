@@ -37,7 +37,7 @@ else:
             (D) python readwfn.py dmrg.conf -reduntant
             (E) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -su2
             (F) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -sz
-        
+
         Args:
             config: StackBlock input file
             out: dir for storing block2 MPS
@@ -109,8 +109,8 @@ from block.operator import Wavefunction
 page = DMRGDataPage(save_dir=scratch)
 
 opts = dict(fcidump=integral, pg='d2h',
-    su2=su2, output_level=-1, memory=25000,
-    omp_threads=1, mkl_threads=1, page=page)
+            su2=su2, output_level=-1, memory=25000,
+            omp_threads=1, mkl_threads=1, page=page)
 
 hamil_cxt = BlockHamiltonian.get(**opts)
 hamil = hamil_cxt.__enter__()
@@ -157,7 +157,8 @@ for i in range(1, center):
     if su2:
         load_rotation_matrix(VectorInt(range(i + 1)), rotation_matrix, -1)
     else:
-        load_rotation_matrix(VectorInt(range(2 * (i + 1))), rotation_matrix, -1)
+        load_rotation_matrix(
+            VectorInt(range(2 * (i + 1))), rotation_matrix, -1)
     rots.append(rotation_matrix)
 
 from block2 import SU2, SZ, Global, VectorDouble, VectorUInt16
@@ -203,7 +204,7 @@ for i in range(0, center + 1):
     st.n = n
     for j in range(n):
         st.quanta[j] = SX(xst.quanta[j].n, xst.quanta[j].s.irrep,
-            PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
+                          PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
         st.n_states[j] = xst.n_states[j]
         if not redunt and mps_info.left_dims_fci[i + 1].find_state(st.quanta[j]) == -1:
             st.n_states[j] = 0
@@ -223,7 +224,7 @@ for i in range(center + 1, n_sites):
     st.n = n
     for j in range(n):
         st.quanta[j] = SX(xst.quanta[j].n, xst.quanta[j].s.irrep,
-            PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
+                          PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
         st.n_states[j] = xst.n_states[j]
     st.sort_states()
     mps_info.right_dims[i] = st
@@ -233,6 +234,7 @@ mps_info.save_mutable()
 
 mps = MPS(n_sites, center, dot)
 mps.initialize(mps_info)
+
 
 def swap_order_left(idx):
     dd = {}
@@ -250,12 +252,14 @@ def swap_order_left(idx):
             nx = l.n_states[ibba] * m.n_states[ibbb]
             dx.append((l.quanta[ibba], m.quanta[ibbb], g, g + nx))
             g += nx
-        dx.sort(key=lambda x: (x[0].n, x[0].twos, pgd2h[x[0].pg], x[1].n, x[1].twos, pgd2h[x[1].pg]))
+        dx.sort(key=lambda x: (
+            x[0].n, x[0].twos, pgd2h[x[0].pg], x[1].n, x[1].twos, pgd2h[x[1].pg]))
         pp = []
         for xx in dx:
             pp += list(range(xx[2], xx[3]))
         dd[r.quanta[ik]] = np.argsort(pp)
     return dd
+
 
 def swap_order_right(idx):
     dd = {}
@@ -273,12 +277,14 @@ def swap_order_right(idx):
             nx = m.n_states[ibba] * r.n_states[ibbb]
             dx.append((m.quanta[ibba], r.quanta[ibbb], g, g + nx))
             g += nx
-        dx.sort(key=lambda x: (x[1].n, x[1].twos, pgd2h[x[1].pg], x[0].n, x[0].twos, pgd2h[x[0].pg]))
+        dx.sort(key=lambda x: (
+            x[1].n, x[1].twos, pgd2h[x[1].pg], x[0].n, x[0].twos, pgd2h[x[0].pg]))
         pp = []
         for xx in dx:
             pp += list(range(xx[2], xx[3]))
         dd[l.quanta[ik]] = np.argsort(pp)
     return dd
+
 
 if su2:
     mps.tensors[0].data = np.array([1.0, 1.0, 1.0])
@@ -334,9 +340,9 @@ for (il, ir), mat in wave.non_zero_blocks:
     xx = xx[swl[ql], :][:, swr[qr]]
     f = -1 if ql.twos == -2 or ql.twos == 2 else 1
     if (not su2) and dot == 2 and qr.n == 2 and qr.twos == 0 and xmat.n == 4:
-        xx[: , 1:3] *= -1
+        xx[:, 1:3] *= -1
     elif (not su2) and dot == 2 and qr.n == 2 and qr.twos == 0 and qr.pg == orb_sym[-1] ^ orb_sym[-2]:
-        xx[: , :] *= -1
+        xx[:, :] *= -1
     wfn[iq] = f * np.ascontiguousarray(xx)
 
 mps.save_mutable()

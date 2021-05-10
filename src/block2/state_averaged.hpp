@@ -71,10 +71,9 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         minfo->tag = info->tag;
         return minfo;
     }
-    shared_ptr<MPSInfo<S>> make_single() const {
-        assert(targets.size() == 1);
-        shared_ptr<MPSInfo<S>> minfo =
-            make_shared<MPSInfo<S>>(n_sites, vacuum, targets[0], basis, false);
+    shared_ptr<MPSInfo<S>> make_single(int itarget) const {
+        shared_ptr<MPSInfo<S>> minfo = make_shared<MPSInfo<S>>(
+            n_sites, vacuum, targets[itarget], basis, false);
         for (int i = 0; i <= minfo->n_sites; i++)
             minfo->left_dims_fci[i] =
                 make_shared<StateInfo<S>>(left_dims_fci[i]->deep_copy());
@@ -243,11 +242,17 @@ template <typename S> struct MultiMPS : MPS<S> {
         shared_ptr<MultiMPSInfo<S>> minfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(info);
         assert(nroots == 1);
-        shared_ptr<MPSInfo<S>> xinfo = minfo->make_single();
+        shared_ptr<MPSInfo<S>> xinfo = minfo->make_single(0);
         xinfo->load_mutable();
         shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(xinfo);
         load_data();
         load_mutable();
+        int iinfo = 0;
+        double norm = (*wfns[0])[0]->norm(), normx;
+        for (int i = 0; i < wfns[0]->n; i++)
+            if ((normx = (*wfns[0])[i]->norm()) > norm)
+                norm = normx, iinfo = i;
+        xinfo->target = minfo->targets[iinfo];
         *xmps = *(MPS<S> *)this;
         xmps->info = xinfo;
         xinfo->tag = xtag;
@@ -260,9 +265,8 @@ template <typename S> struct MultiMPS : MPS<S> {
                 ctr++;
         assert(xmps->tensors[ctr] == nullptr);
         xmps->tensors[ctr] = make_shared<SparseMatrix<S>>(d_alloc);
-        assert(wfns[0]->infos.size() == 1);
-        xmps->tensors[ctr]->allocate(wfns[0]->infos[0]);
-        xmps->tensors[ctr]->copy_data_from((*wfns[0])[0]);
+        xmps->tensors[ctr]->allocate(wfns[0]->infos[iinfo]);
+        xmps->tensors[ctr]->copy_data_from((*wfns[0])[iinfo]);
         const string rp = "CKS", og = "MJT";
         for (int i = 0; i < xmps->n_sites; i++)
             for (size_t j = 0; j < og.length(); j++)

@@ -935,6 +935,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def("save_tensor", &MPS<S>::save_tensor)
         .def("load_tensor", &MPS<S>::load_tensor)
         .def("unload_tensor", &MPS<S>::unload_tensor)
+        .def("deep_copy", &MPS<S>::deep_copy)
         .def("estimate_storage", &MPS<S>::estimate_storage,
              py::arg("info") = nullptr)
         .def("deallocate", &MPS<S>::deallocate);
@@ -1590,6 +1591,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("quanta_cutoff", &DMRG<S>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S>::me)
         .def_readwrite("ext_mes", &DMRG<S>::ext_mes)
+        .def_readwrite("ext_mpss", &DMRG<S>::ext_mpss)
+        .def_readwrite("state_specific", &DMRG<S>::state_specific)
         .def_readwrite("bond_dims", &DMRG<S>::bond_dims)
         .def_readwrite("noises", &DMRG<S>::noises)
         .def_readwrite("davidson_conv_thrds", &DMRG<S>::davidson_conv_thrds)

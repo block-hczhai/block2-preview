@@ -121,7 +121,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                                              left_op_infos, right_op_infos,
                                              ket->info, bra->info, tf->opf->cg);
             }
-        cmat->info->cinfo = wfn_infos[0];
+        cmat->info->cinfo = nullptr;
+        for (int i = 0; i < (int)msl.size(); i++)
+            if (wfn_infos[i] != nullptr) {
+                cmat->info->cinfo = wfn_infos[i];
+                break;
+            }
     }
     // prepare batch gemm
     void precompute() const {

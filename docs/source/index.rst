@@ -69,6 +69,7 @@ Features
    :caption: User Guide
 
    user/installation
+   user/basic
    user/references
 
 .. toctree::
@@ -76,6 +77,7 @@ Features
    :caption: Developer Guide
 
    developer/dmrg
+   developer/assertions
 
 .. toctree::
    :maxdepth: 2

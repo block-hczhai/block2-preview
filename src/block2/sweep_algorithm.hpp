@@ -530,6 +530,7 @@ template <typename S> struct DMRG {
             mps->save_tensor(i);
             mps->unload_tensor(i);
             if (forward) {
+                mps->canonical_form[i] = 'C';
                 mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
                 mps->canonical_form[i + 1] = 'C';
                 if (mps->center == mps->n_sites - 1)
