@@ -151,10 +151,12 @@ def orbital_reorder(fcidump, method='gaopt'):
     Ref: J. Chem. Phys. 142, 034102 (2015)
 
     Args:
+        fcidump : block2.FCIDUMP object
         method :
             'gaopt <filename>/default' - genetic algorithm, take several seconds
             'fiedler' - very fast, may be slightly worse than 'gaopt'
             'manual <filename>' - manual reorder read from file
+            'irrep <pointgroup>' - group same irrep together
 
     Return a index array "midx":
         reordered_orb_sym = original_orb_sym[midx]
