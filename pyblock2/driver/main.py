@@ -9,14 +9,15 @@ Author:
 
 from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
-from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec, VectorUInt16
-from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, OrbitalOrdering
+from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
+from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
+from block2 import MatrixFunctions
 import numpy as np
 import time
 import os
 import sys
 
-from parser import parse, parse_gaopt, read_integral, format_schedule
+from parser import parse, orbital_reorder, read_integral, format_schedule
 
 DEBUG = True
 
@@ -47,6 +48,7 @@ if "nonspinadapted" in dic:
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
+    from block2.sz import AntiHermitianRuleQC, TimeEvolution
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
     from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -60,6 +62,7 @@ else:
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
+    from block2.su2 import AntiHermitianRuleQC, TimeEvolution
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -99,6 +102,7 @@ scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 n_threads = int(dic.get("num_thrds", 28))
+mkl_threads = int(dic.get("mkl_thrds", 1))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
 
@@ -110,6 +114,10 @@ if dic.get("decomp_type", "density_matrix") == "density_matrix":
     decomp_type = DecompositionTypes.DensityMatrix
 else:
     decomp_type = DecompositionTypes.SVD
+if dic.get("te_type", "rk4") == "rk4":
+    te_type = TETypes.RK4
+else:
+    te_type = TETypes.TangentSpace
 
 if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(scratch):
@@ -126,7 +134,8 @@ fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(
-    ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, n_threads, n_threads, 1)
+    ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
+    n_threads * mkl_threads, n_threads, mkl_threads)
 Global.threading.seq_type = SeqTypes.Tasked
 Global.frame.fp_codec = DoubleFPCodec(fp_cps_cutoff, 1024)
 Global.frame.load_buffering = False
@@ -147,75 +156,31 @@ if MPI is not None:
     prule_ident = ParallelRuleIdentity(MPI)
 
 
-def orbital_reorder(fcidump, method='gaopt'):
-    """
-    Find an optimal ordering of orbitals for DMRG.
-    Ref: J. Chem. Phys. 142, 034102 (2015)
-
-    Args:
-        method :
-            'gaopt <filename>/default' - genetic algorithm, take several seconds
-            'fiedler' - very fast, may be slightly worse than 'gaopt'
-            'manual <filename>' - manual reorder read from file
-
-    Return a index array "midx":
-        reordered_orb_sym = original_orb_sym[midx]
-    """
-    n_sites = fcidump.n_sites
-    hmat = fcidump.abs_h1e_matrix()
-    xmat = fcidump.abs_exchange_matrix()
-    kmat = VectorDouble(np.array(hmat) * 1E-7 + np.array(xmat))
-    if method.startswith("gaopt "):
-        method = method[len("gaopt "):]
-        dic = parse_gaopt(
-            method) if method != '' and method != 'default' else {}
-        assert dic.get("method", "gauss") == "gauss"
-        assert float(dic.get("scale", 1.0)) == 1.0
-        n_tasks = int(dic.get("maxcomm", 32))
-        opts = dict(
-            n_generations=int(dic.get("maxgen", 10000)),
-            n_configs=int(dic.get("maxcell", n_sites * 2)),
-            n_elite=int(dic.get("elite", 8)),
-            clone_rate=1.0 - float(dic.get("cloning", 0.9)),
-            mutate_rate=float(dic.get("mutation", 0.1))
-        )
-        midx, mf = None, None
-        for _ in range(0, n_tasks):
-            idx = OrbitalOrdering.ga_opt(n_sites, kmat, **opts)
-            f = OrbitalOrdering.evaluate(n_sites, kmat, idx)
-            idx = np.array(idx)
-            if mf is None or f < mf:
-                midx, mf = idx, f
-    elif method == 'fiedler':
-        idx = OrbitalOrdering.fiedler(n_sites, kmat)
-        midx = np.array(idx)
-    elif method.startswith("manual "):
-        method = method[len("manual "):]
-        idx = [int(x)
-               for x in open(method[len("manual "):], "r").readline().split()]
-        f = OrbitalOrdering.evaluate(n_sites, kmat, VectorUInt16(idx))
-        idx = np.array(idx)
-        midx, mf = idx, f
-    else:
-        raise ValueError("Unknown reorder method: %s" % method)
-    fcidump.reorder(VectorUInt16(midx))
-    return midx
-
-
 # prepare hamiltonian
 if pre_run or not no_pre_run:
     nelec = [int(x) for x in dic["nelec"].split()]
     spin = [int(x) for x in dic.get("spin", "0").split()]
     isym = [int(x) for x in dic.get("irrep", "1").split()]
-    fints = dic["orbitals"]
-    if open(fints, 'rb').read(4) != b'\x89HDF':
+    if "orbital_rotation" in dic:
+        orb_sym = np.load(scratch + "/nat_orb_sym.npy")
+        kappa = np.load(scratch + "/nat_kappa.npy")
+        n_sites = len(orb_sym)
         fcidump = FCIDUMP()
-        fcidump.read(fints)
-        fcidump.params["nelec"] = str(nelec[0])
-        fcidump.params["ms2"] = str(spin[0])
-        fcidump.params["isym"] = str(isym[0])
+        fcidump.initialize_h1e(n_sites, nelec[0], spin[0], isym[0], 0.0, kappa)
+        assert "nofiedler" in dic or "noreorder" in dic
+        if "target_t" not in dic:
+            dic["target_t"] = "1"
     else:
-        fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
+        orb_sym = None
+        fints = dic["orbitals"]
+        if open(fints, 'rb').read(4) != b'\x89HDF':
+            fcidump = FCIDUMP()
+            fcidump.read(fints)
+            fcidump.params["nelec"] = str(nelec[0])
+            fcidump.params["ms2"] = str(spin[0])
+            fcidump.params["isym"] = str(isym[0])
+        else:
+            fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
     else:
@@ -226,6 +191,11 @@ if pre_run or not no_pre_run:
             orb_idx = orbital_reorder(
                 fcidump, method='manual ' + dic["reorder"])
             _print("using manual reorder = ", orb_idx)
+        elif "irrep_reorder" in dic:
+            orb_idx = orbital_reorder(
+                fcidump, method='irrep ' + dic.get("sym", "d2h"))
+            _print("using irrep reorder = ", orb_idx)
+            _print("reordered irrep = ", fcidump.orb_sym)
         else:
             orb_idx = orbital_reorder(fcidump, method='fiedler')
             _print("using fiedler reorder = ", orb_idx)
@@ -244,13 +214,19 @@ if pre_run or not no_pre_run:
                 targets.append(SX(inelec, ispin, swap_pg(iisym)))
     targets = VectorSL(targets)
     n_sites = fcidump.n_sites
-    orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
-    hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
+    if orb_sym is None:
+        orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
+    if "symmetrize_ints" in dic:
+        sym_error = fcidump.symmetrize(orb_sym)
+        _print("integral sym error = %12.4g" % sym_error)
+    hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
 else:
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
     else:
-        orb_idx = np.load(scratch + '/orbital_reorder.npy', orb_idx)
+        orb_idx = np.load(scratch + '/orbital_reorder.npy')
+    orb_sym = None
+    fcidump = None
 
 # parallelization over sites
 # use keyword: conn_centers auto 5      (5 is number of procs)
@@ -437,6 +413,7 @@ has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
     or "restart_tran_oh" in dic or "tran_oh" in dic
 has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
     or "restart_twopdm" in dic or "twopdm" in dic
+anti_herm = "orbital_rotation" in dic
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -444,8 +421,8 @@ if pre_run or not no_pre_run:
     _print("build mpo", time.perf_counter() - tx)
     mpo = MPOQC(hamil, QCTypes.Conventional)
     _print("simpl mpo", time.perf_counter() - tx)
-    mpo = SimplifiedMPO(mpo, RuleQC(), True, True,
-                        OpNamesSet((OpNames.R, OpNames.RD)))
+    mpo = SimplifiedMPO(mpo, AntiHermitianRuleQC(RuleQC()) if anti_herm else RuleQC(),
+                        True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
 
     _print('GS MPO BOND DIMS = ', ''.join(
@@ -618,6 +595,7 @@ def split_mps(iroot, mps, mps_info):
     smps.save_data()
     return smps, smps_info, forward
 
+
 def get_mps_from_tags(iroot):
     _print('----- root = %3d tag = %s -----' % (iroot, mps_tags[iroot]))
     smps_info = MPSInfo(0)
@@ -659,6 +637,7 @@ def get_mps_from_tags(iroot):
         _print(cf + ' -> ' + smps.canonical_form)
     forward = smps.center == 0
     return smps, smps.info, forward
+
 
 def get_state_specific_mps(iroot, mps_info):
     smps_info = MPSInfo(0)
@@ -834,7 +813,8 @@ if not pre_run:
     if "restart_onepdm" not in dic and "restart_twopdm" not in dic \
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "statespecific" not in dic \
-            and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic:
+            and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
+            and "delta_t" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
@@ -897,6 +877,51 @@ if not pre_run:
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
 
+    # Time Evolution (no complex number)
+    if "delta_t" in dic:
+        dt = float(dic["delta_t"])
+        tt = float(dic["target_t"])
+        n_steps = int(abs(tt) / abs(dt) + 0.1)
+        assert np.abs(abs(n_steps * dt) - abs(tt)) < 1E-10
+        _print("Time Evolution NSTEPS = %d" % n_steps)
+        me = MovingEnvironment(mpo, mps, mps, "DMRG")
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
+        me.save_partition_info = True
+        me.init_environments(outputlevel >= 2)
+
+        te = TimeEvolution(me, VectorUBond(bond_dims), te_type)
+        te.hermitian = not anti_herm
+        te.iprint = max(min(outputlevel, 3), 0)
+        te.n_sub_sweeps = 1 if te.mode == TETypes.TangentSpace else 2
+        te.normalize_mps = False
+        te_times = []
+        te_energies = []
+        te_normsqs = []
+        te_discarded_weights = []
+        for i in range(n_steps):
+            if te.mode == TETypes.TangentSpace:
+                te.solve(2, -dt / 2, mps.center == 0)
+            else:
+                te.solve(1, -dt, mps.center == 0)
+            _print("T = %10.5f <E> = %20.15f <Norm^2> = %20.15f" %
+                   ((i + 1) * dt, te.energies[-1], te.normsqs[-1]))
+            te_times.append((i + 1) * dt)
+            te_energies.append(te.energies[-1])
+            te_normsqs.append(te.normsqs[-1])
+            te_discarded_weights.append(te.discarded_weights[-1])
+        _print("Max Discarded Weight = %9.5g" % max(te_discarded_weights))
+
+        np.save(scratch + "/te_times.npy", np.array(te_times))
+        np.save(scratch + "/te_energies.npy", np.array(te_energies))
+        np.save(scratch + "/te_normsqs.npy", np.array(te_normsqs))
+        np.save(scratch + "/te_discarded_weights.npy",
+                np.array(te_discarded_weights))
+
+        if MPI is None or MPI.rank == 0:
+            mps_info.save_data(scratch + '/mps_info.bin')
+            mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
+
     def do_onepdm(bmps, kmps):
         me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
         # currently delayed_contraction is not compatible to
@@ -938,6 +963,93 @@ if not pre_run:
                 np.save(scratch + "/1pdm.npy", dm)
                 mps_info.save_data(scratch + '/mps_info.bin')
                 mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
+
+                # natural orbital generation
+                if "nat_orbs" in dic:
+                    spdm = np.sum(dm, axis=0)
+                    # need pdm after orbital rotation
+                    if orb_idx is not None:
+                        spdm[:, :] = spdm[orb_idx, :][:, orb_idx]
+                    _print("REORDERED OCC = ", "".join(
+                        ["%6.3f" % x for x in np.diag(spdm)]))
+                    spdm = spdm.flatten()
+                    nat_occs = np.zeros((n_sites, ))
+                    if orb_sym is None:
+                        raise ValueError(
+                            "Need FCIDUMP construction (namely, not a pre run) for 'nat_orbs'!")
+                    MatrixFunctions.block_eigs(spdm, nat_occs, orb_sym)
+                    _print("NAT OCC = ", "".join(
+                        ["%9.6f" % x for x in nat_occs]))
+                    rot = np.array(spdm.reshape(
+                        (n_sites, n_sites)).T, copy=True)
+                    np.save(scratch + "/nat_occs.npy", nat_occs)
+                    np.save(scratch + "/nat_orb_sym.npy", np.array(orb_sym))
+                    for isym in set(orb_sym):
+                        mask = np.array(orb_sym) == isym
+                        mrot = rot[mask, :][:, mask]
+                        mrot_det = np.linalg.det(mrot)
+                        _print("ISYM = %d MDET = %15.10f" % (isym, mrot_det))
+                        if mrot_det < 0:
+                            mask0 = np.arange(len(mask), dtype=int)[mask][0]
+                            rot[mask0] = -rot[mask0]
+                    rot_det = np.linalg.det(rot)
+                    _print("DET = %15.10f" % rot_det)
+                    assert rot_det > 0
+                    np.save(scratch + "/nat_rotation.npy", rot)
+
+                    # kappa = logm(rot)
+                    kappa = np.zeros_like(rot)
+                    for isym in set(orb_sym):
+                        mask = np.array(orb_sym) == isym
+                        mrot = rot[mask, :][:, mask]
+                        rs = mrot + mrot.T
+                        rl, rv = np.linalg.eigh(rs)
+                        assert np.linalg.norm(
+                            rs - rv @ np.diag(rl) @ rv.T) < 1E-10
+                        rd = rv.T @ mrot @ rv
+                        ra, rdet = 1, rd[0, 0]
+                        for i in range(1, len(rd)):
+                            ra, rdet = rdet, rd[i, i] * rdet - \
+                                rd[i - 1, i] * rd[i, i - 1] * ra
+                        _print("ISYM = %d MDET = %15.10f" % (isym, rdet))
+                        assert rdet > 0
+                        ld = np.zeros_like(rd)
+                        for i in range(0, len(rd) // 2 * 2, 2):
+                            xcos = (rd[i, i] + rd[i + 1, i + 1]) / 2
+                            xsin = (rd[i, i + 1] - rd[i + 1, i]) / 2
+                            theta = np.arctan2(xsin, xcos)
+                            ld[i, i + 1] = theta
+                            ld[i + 1, i] = -theta
+                        mkappa = rv @ ld @ rv.T
+                        gkappa = np.zeros((kappa.shape[0], mkappa.shape[1]))
+                        gkappa[mask, :] = mkappa
+                        kappa[:, mask] = gkappa
+                    import scipy.linalg
+                    assert np.linalg.norm(
+                        scipy.linalg.expm(kappa) - rot) < 1E-10
+                    assert np.linalg.norm(kappa + kappa.T) < 1E-10
+
+                    np.save(scratch + "/nat_kappa.npy", kappa)
+
+                    # integral rotation
+                    nat_fname = dic["nat_orbs"].strip()
+                    if len(nat_fname) > 0:
+                        if fcidump is None:
+                            raise ValueError(
+                                "Need FCIDUMP construction (namely, not a pre run) for 'nat_orbs'!")
+                        # the following code will not check values inside fcidump
+                        # since all MPOs are already constructed
+                        _print("rotating integrals to natural orbitals ...")
+                        fcidump.rotate(VectorDouble(rot.flatten()))
+                        _print("finished.")
+                        if "symmetrize_ints" in dic:
+                            rot_sym_error = fcidump.symmetrize(orb_sym)
+                            _print("rotated integral sym error = %12.4g" %
+                                   rot_sym_error)
+                        _print("writing natural orbital integrals ...")
+                        fcidump.write(nat_fname)
+                        _print("finished.")
+
         else:
             for iroot in range(nroots):
                 _print('----- root = %3d / %3d -----' % (iroot, nroots))

@@ -70,6 +70,7 @@ Features
 
    user/installation
    user/basic
+   user/advanced
    user/references
 
 .. toctree::

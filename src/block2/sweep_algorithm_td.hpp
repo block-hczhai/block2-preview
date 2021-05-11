@@ -63,7 +63,6 @@ template <typename S> struct TDDMRG {
     shared_ptr<MovingEnvironment<S>> lme, rme;
     vector<ubond_t> bond_dims;
     vector<double> noises;
-    vector<double> errors;
     vector<double> energies;
     vector<double> normsqs;
     vector<double> discarded_weights;
@@ -715,9 +714,9 @@ template <typename S> struct TDDMRG {
                          << setprecision(3) << current.current - start.current;
                     cout << fixed << setprecision(8);
                     cout << " | E = " << setw(15) << get<0>(sweep_results);
-                    cout << " | Norm = " << setw(15)
+                    cout << " | Norm^2 = " << setw(15)
                          << sqrt(get<1>(sweep_results));
-                    cout << " | MaxError = " << scientific << setw(9)
+                    cout << " | DW = " << scientific << setw(9)
                          << setprecision(2) << get<2>(sweep_results);
                     if (iprint >= 2) {
                         size_t dmain = frame->peak_used_memory[0];
@@ -762,9 +761,9 @@ template <typename S> struct TimeEvolution {
     shared_ptr<MovingEnvironment<S>> me;
     vector<ubond_t> bond_dims;
     vector<double> noises;
-    vector<double> errors;
     vector<double> energies;
     vector<double> normsqs;
+    vector<double> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     TruncPatternTypes trunc_pattern = TruncPatternTypes::None;
@@ -1963,6 +1962,7 @@ template <typename S> struct TimeEvolution {
         current.get_time();
         energies.clear();
         normsqs.clear();
+        discarded_weights.clear();
         for (int iw = 0; iw < n_sweeps; iw++) {
             for (int isw = 0; isw < n_sub_sweeps; isw++) {
                 if (iprint >= 1) {
@@ -1982,21 +1982,15 @@ template <typename S> struct TimeEvolution {
                                bond_dims[iw], noises[iw]);
                 forward = !forward;
                 double tswp = current.get_time();
-                if (iprint == 1) {
-                    cout << fixed << setprecision(8);
-                    cout << " .. Energy = " << setw(15) << get<0>(r)
-                         << " Norm = " << setw(15) << sqrt(get<1>(r))
-                         << " MaxError = " << setw(15) << setprecision(12)
-                         << get<2>(r) << " ";
-                }
-                if (iprint >= 1)
+                if (iprint >= 1) {
                     cout << "Time elapsed = " << fixed << setw(10)
                          << setprecision(3) << current.current - start.current;
-                cout << fixed << setprecision(10);
-                cout << " | E = " << setw(18) << get<0>(r);
-                cout << " | Norm^2 = " << setw(18) << get<1>(r);
-                cout << " | DW = " << setw(6) << setprecision(2) << scientific
-                     << get<2>(r) << endl;
+                    cout << fixed << setprecision(10);
+                    cout << " | E = " << setw(18) << get<0>(r);
+                    cout << " | Norm^2 = " << setw(18) << get<1>(r);
+                    cout << " | DW = " << setw(6) << setprecision(2)
+                         << scientific << get<2>(r) << endl;
+                }
                 if (iprint >= 2) {
                     cout << fixed << setprecision(3);
                     cout << "Time sweep = " << setw(12) << tswp;
@@ -2008,6 +2002,7 @@ template <typename S> struct TimeEvolution {
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));
                     normsqs.push_back(get<1>(r));
+                    discarded_weights.push_back(get<2>(r));
                 }
             }
             if (normalize_mps)

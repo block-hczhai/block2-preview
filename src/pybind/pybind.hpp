@@ -1712,6 +1712,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("noises", &TimeEvolution<S>::noises)
         .def_readwrite("energies", &TimeEvolution<S>::energies)
         .def_readwrite("normsqs", &TimeEvolution<S>::normsqs)
+        .def_readwrite("discarded_weights", &TimeEvolution<S>::discarded_weights)
         .def_readwrite("forward", &TimeEvolution<S>::forward)
         .def_readwrite("n_sub_sweeps", &TimeEvolution<S>::n_sub_sweeps)
         .def_readwrite("weights", &TimeEvolution<S>::weights)

@@ -15,17 +15,26 @@ import numpy as np
 KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "twodot_to_onedot", "twodot", "onedot", "sweep_tol",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix",
-              "noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
-              "num_thrds", "mem", "oh", "nonspinadapted",
+              "noreorder", "fiedler", "reorder", "gaopt", "nofiedler", "irrep_reorder",
+              "num_thrds", "mkl_thrds", "mem", "oh", "nonspinadapted", "nat_orbs",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
-              "twopdm", "restart_twopdm", "startM", "maxM",
+              "twopdm", "restart_twopdm", "startM", "maxM", "symmetrize_ints",
               "occ", "bias", "cbias", "correlation", "restart_correlation",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
               "restart_tran_twopdm", "soc", "overlap", "tran_oh",
               "restart_tran_oh", "restart_dir_per_sweep", "fp_cps_cutoff",
-              "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type"}
+              "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type",
+              "orbital_rotation", "delta_t", "target_t", "te_type"}
+
+REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
+                "irrep_reorder"}
+
+RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
+                "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
+                "restart_tran_oh", "restart_tran_oh", "statespecific",
+                "orbital_rotation"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell",
               "cloning", "mutation", "elite", "scale", "method"}
@@ -71,7 +80,7 @@ def parse(fname):
 
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()
-    maxiter = int(dic["maxiter"]) - int(np.sum(nsweeps))
+    maxiter = int(dic.get("maxiter", 1)) - int(np.sum(nsweeps))
     assert maxiter > 0
     nsweeps.append(maxiter)
 
@@ -90,31 +99,19 @@ def parse(fname):
         raise ValueError("onedot conflicits with twodot_to_onedot.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
-    crs = list(set(dic.keys()) & {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler"})
+    crs = list(set(dic.keys()) & REORDER_KEYS)
     if len(crs) > 1:
-        raise ValueError("Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crx[1]))
+        raise ValueError(
+            "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crx[1]))
 
     # restart check
     if "restart_oh" in dic:
         # OH is always fullrestart, and should not do dmrg or pdm
-        dic["fullrestart"] = " "
         dic.pop("onepdm", None)
         dic.pop("twopdm", None)
         dic.pop("correlation", None)
-    if "restart_onepdm" in dic:
-        dic["fullrestart"] = " "
-    if "restart_twopdm" in dic:
-        dic["fullrestart"] = " "
-    if "restart_correlation" in dic:
-        dic["fullrestart"] = " "
-    if "statespecific" in dic:
-        dic["fullrestart"] = " "
-    if "restart_tran_onepdm" in dic:
-        dic["fullrestart"] = " "
-    if "restart_tran_twopdm" in dic:
-        dic["fullrestart"] = " "
-    if "restart_tran_oh" in dic:
-        dic["fullrestart"] = " "
+    if len(set(dic.keys()) & RESTART_KEYS) != 0:
+        dic["fullrestart"] = ""
 
     return dic
 
@@ -146,6 +143,83 @@ def parse_gaopt(fname):
         raise ValueError("Unrecognized keys (%s)" % diff)
 
     return dic
+
+
+def orbital_reorder(fcidump, method='gaopt'):
+    """
+    Find an optimal ordering of orbitals for DMRG.
+    Ref: J. Chem. Phys. 142, 034102 (2015)
+
+    Args:
+        method :
+            'gaopt <filename>/default' - genetic algorithm, take several seconds
+            'fiedler' - very fast, may be slightly worse than 'gaopt'
+            'manual <filename>' - manual reorder read from file
+
+    Return a index array "midx":
+        reordered_orb_sym = original_orb_sym[midx]
+    """
+    from block2 import VectorDouble, OrbitalOrdering, VectorUInt16
+    n_sites = fcidump.n_sites
+    hmat = fcidump.abs_h1e_matrix()
+    xmat = fcidump.abs_exchange_matrix()
+    kmat = VectorDouble(np.array(hmat) * 1E-7 + np.array(xmat))
+    if method.startswith("gaopt "):
+        method = method[len("gaopt "):]
+        dic = parse_gaopt(
+            method) if method != '' and method != 'default' else {}
+        assert dic.get("method", "gauss") == "gauss"
+        assert float(dic.get("scale", 1.0)) == 1.0
+        n_tasks = int(dic.get("maxcomm", 32))
+        opts = dict(
+            n_generations=int(dic.get("maxgen", 10000)),
+            n_configs=int(dic.get("maxcell", n_sites * 2)),
+            n_elite=int(dic.get("elite", 8)),
+            clone_rate=1.0 - float(dic.get("cloning", 0.9)),
+            mutate_rate=float(dic.get("mutation", 0.1))
+        )
+        midx, mf = None, None
+        for _ in range(0, n_tasks):
+            idx = OrbitalOrdering.ga_opt(n_sites, kmat, **opts)
+            f = OrbitalOrdering.evaluate(n_sites, kmat, idx)
+            idx = np.array(idx)
+            if mf is None or f < mf:
+                midx, mf = idx, f
+    elif method == 'fiedler':
+        idx = OrbitalOrdering.fiedler(n_sites, kmat)
+        midx = np.array(idx)
+    elif method.startswith("irrep "):
+        method = method[len("irrep "):]
+        if method == 'd2h':
+            # D2H
+            # 0   1   2   3   4   5   6   7   8   (FCIDUMP)
+            #     A1g B3u B2u B1g B1u B2g B3g A1u
+            # optimal
+            #     A1g B1u B3u B2g B2u B3g B1g A1u
+            optimal_reorder = [0, 1, 3, 5, 7, 2, 4, 6, 8]
+        elif method == 'c2v':
+            # C2V
+            # 0  1  2  3  4  (FCIDUMP)
+            #    A1 B1 B2 A2
+            # optimal
+            #    A1 B1 B2 A2
+            optimal_reorder = [0, 1, 2, 3, 4]
+        else:
+            optimal_reorder = [0, 1, 3, 5, 7, 2, 4, 6, 8]
+        orb_opt = [optimal_reorder[x] for x in np.array(fcidump.orb_sym)]
+        idx = np.argsort(orb_opt)
+        midx = np.array(idx)
+    elif method.startswith("manual "):
+        method = method[len("manual "):]
+        idx = [int(x)
+               for x in open(method[len("manual "):], "r").readline().split()]
+        f = OrbitalOrdering.evaluate(n_sites, kmat, VectorUInt16(idx))
+        idx = np.array(idx)
+        midx, mf = idx, f
+    else:
+        raise ValueError("Unknown reorder method: %s" % method)
+    fcidump.reorder(VectorUInt16(midx))
+    return midx
 
 
 def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
@@ -216,10 +290,11 @@ def get_schedule(dic):
     start_m = int(dic.get("startM", 250))
     max_m = int(dic.get("maxM", 0))
     if max_m <= 0:
-        raise ValueError("A positive maxM must be set for default schedule, " + 
-            "current value : %d" % max_m)
+        raise ValueError("A positive maxM must be set for default schedule, "
+                         + "current value : %d" % max_m)
     elif max_m < start_m:
-        raise ValueError("maxM %d cannot be smaller than startM %d" % (max_m, start_m))
+        raise ValueError(
+            "maxM %d cannot be smaller than startM %d" % (max_m, start_m))
     sch_type = dic.get("schedule", "")
     sweep_tol = float(dic.get("sweep_tol", 0))
     if sweep_tol == 0:
