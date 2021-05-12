@@ -85,4 +85,4 @@ Features
    :caption: API Reference
 
    api/global
-   api/fft
+   api/tools

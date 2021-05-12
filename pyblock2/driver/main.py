@@ -11,7 +11,7 @@ from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, 
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
-from block2 import MatrixFunctions
+from block2 import MatrixFunctions, KuhnMunkres
 import numpy as np
 import time
 import os
@@ -970,6 +970,7 @@ if not pre_run:
                     # need pdm after orbital rotation
                     if orb_idx is not None:
                         spdm[:, :] = spdm[orb_idx, :][:, orb_idx]
+                    xpdm = spdm.copy()
                     _print("REORDERED OCC = ", "".join(
                         ["%6.3f" % x for x in np.diag(spdm)]))
                     spdm = spdm.flatten()
@@ -980,28 +981,43 @@ if not pre_run:
                     MatrixFunctions.block_eigs(spdm, nat_occs, orb_sym)
                     _print("NAT OCC = ", "".join(
                         ["%9.6f" % x for x in nat_occs]))
+                    # (old, new)
                     rot = np.array(spdm.reshape(
                         (n_sites, n_sites)).T, copy=True)
-                    np.save(scratch + "/nat_occs.npy", nat_occs)
                     np.save(scratch + "/nat_orb_sym.npy", np.array(orb_sym))
                     for isym in set(orb_sym):
                         mask = np.array(orb_sym) == isym
-                        mrot = rot[mask, :][:, mask]
-                        mrot_det = np.linalg.det(mrot)
-                        _print("ISYM = %d MDET = %15.10f" % (isym, mrot_det))
-                        if mrot_det < 0:
-                            mask0 = np.arange(len(mask), dtype=int)[mask][0]
-                            rot[mask0] = -rot[mask0]
+                        if "nat_km_reorder" in dic:
+                            kmidx = np.argsort(KuhnMunkres(1 - rot[mask, :][:, mask] ** 2).solve()[1])
+                            _print("init = ", np.sum(np.diag(rot[mask, :][:, mask]) ** 2))
+                            rot[:, mask] = rot[:, mask][:, kmidx]
+                            nat_occs[mask] = nat_occs[mask][kmidx]
+                            _print("final = ", np.sum(np.diag(rot[mask, :][:, mask]) ** 2))
+                        if "nat_positive_def" in dic:
+                            for j in range(len(nat_occs[mask])):
+                                mrot = rot[mask, :][:j + 1, :][:, mask][:, :j + 1]
+                                mrot_det = np.linalg.det(mrot)
+                                _print("ISYM = %d J = %d MDET = %15.10f" % (isym, j, mrot_det))
+                                if mrot_det < 0:
+                                    mask0 = np.arange(len(mask), dtype=int)[mask][j]
+                                    rot[:, mask0] = -rot[:, mask0]
+                        else:
+                            mrot = rot[mask, :][:, mask]
+                            mrot_det = np.linalg.det(mrot)
+                            _print("ISYM = %d MDET = %15.10f" % (isym, mrot_det))
+                            if mrot_det < 0:
+                                mask0 = np.arange(len(mask), dtype=int)[mask][0]
+                                rot[:, mask0] = -rot[:, mask0]
+                    if "nat_km_reorder" in dic:
+                        _print("REORDERED NAT OCC = ", "".join(["%9.6f" % x for x in nat_occs]))
+                    assert np.linalg.norm(rot @ np.diag(nat_occs) @ rot.T - xpdm) < 1E-10
+                    np.save(scratch + "/nat_occs.npy", nat_occs)
                     rot_det = np.linalg.det(rot)
                     _print("DET = %15.10f" % rot_det)
                     assert rot_det > 0
                     np.save(scratch + "/nat_rotation.npy", rot)
 
-                    # kappa = logm(rot)
-                    kappa = np.zeros_like(rot)
-                    for isym in set(orb_sym):
-                        mask = np.array(orb_sym) == isym
-                        mrot = rot[mask, :][:, mask]
+                    def my_logm(mrot):
                         rs = mrot + mrot.T
                         rl, rv = np.linalg.eigh(rs)
                         assert np.linalg.norm(
@@ -1011,7 +1027,6 @@ if not pre_run:
                         for i in range(1, len(rd)):
                             ra, rdet = rdet, rd[i, i] * rdet - \
                                 rd[i - 1, i] * rd[i, i - 1] * ra
-                        _print("ISYM = %d MDET = %15.10f" % (isym, rdet))
                         assert rdet > 0
                         ld = np.zeros_like(rd)
                         for i in range(0, len(rd) // 2 * 2, 2):
@@ -1020,15 +1035,25 @@ if not pre_run:
                             theta = np.arctan2(xsin, xcos)
                             ld[i, i + 1] = theta
                             ld[i + 1, i] = -theta
-                        mkappa = rv @ ld @ rv.T
+                        return rv @ ld @ rv.T
+
+                    import scipy.linalg
+                    # kappa = scipy.linalg.logm(rot)
+                    kappa = np.zeros_like(rot)
+                    for isym in set(orb_sym):
+                        mask = np.array(orb_sym) == isym
+                        mrot = rot[mask, :][:, mask]
+                        mkappa = my_logm(mrot)
+                        # mkappa = scipy.linalg.logm(mrot)
+                        # assert mkappa.dtype == float
                         gkappa = np.zeros((kappa.shape[0], mkappa.shape[1]))
                         gkappa[mask, :] = mkappa
                         kappa[:, mask] = gkappa
-                    import scipy.linalg
                     assert np.linalg.norm(
                         scipy.linalg.expm(kappa) - rot) < 1E-10
                     assert np.linalg.norm(kappa + kappa.T) < 1E-10
 
+                    # rot is (old, new) => kappa should be minus
                     np.save(scratch + "/nat_kappa.npy", kappa)
 
                     # integral rotation
@@ -1040,6 +1065,7 @@ if not pre_run:
                         # the following code will not check values inside fcidump
                         # since all MPOs are already constructed
                         _print("rotating integrals to natural orbitals ...")
+                        # (old, new)
                         fcidump.rotate(VectorDouble(rot.flatten()))
                         _print("finished.")
                         if "symmetrize_ints" in dic:

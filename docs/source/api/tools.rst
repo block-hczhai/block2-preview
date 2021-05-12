@@ -1,6 +1,18 @@
 
+Tools
+=====
+
+Kuhn-Munkres Algorithm
+----------------------
+
+The :class:`KuhnMunkres` class implements the Kuhn-Munkres algorithm for
+finding the best matching in a bipartite with the lowest cost.
+
+.. doxygenstruct:: block2::KuhnMunkres
+    :members:
+
 Number Theory Algorithms
-========================
+------------------------
 
 The :class:`Prime` class includes some number theory algorithms necessary for
 integer factorization and finding primitive roots, which is used in some
@@ -10,7 +22,7 @@ Fast Fourier Transform algorithms.
     :members:
 
 Fast Fourier Transform (FFT)
-============================
+----------------------------
 
 A collection of FFT algorithms is implemented here. The implementation focuses more on
 flexibility and readability, rather than optimal performance (but the performance should

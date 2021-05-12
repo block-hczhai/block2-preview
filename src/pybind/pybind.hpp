@@ -1712,7 +1712,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("noises", &TimeEvolution<S>::noises)
         .def_readwrite("energies", &TimeEvolution<S>::energies)
         .def_readwrite("normsqs", &TimeEvolution<S>::normsqs)
-        .def_readwrite("discarded_weights", &TimeEvolution<S>::discarded_weights)
+        .def_readwrite("discarded_weights",
+                       &TimeEvolution<S>::discarded_weights)
         .def_readwrite("forward", &TimeEvolution<S>::forward)
         .def_readwrite("n_sub_sweeps", &TimeEvolution<S>::n_sub_sweeps)
         .def_readwrite("weights", &TimeEvolution<S>::weights)
@@ -2622,6 +2623,26 @@ template <typename S = void> void bind_io(py::module &m) {
                                     "' failed.");
             ifs.close();
             return arx;
+        });
+
+    py::class_<KuhnMunkres, shared_ptr<KuhnMunkres>>(m, "KuhnMunkres")
+        .def(py::init([](const py::array_t<double> &cost) {
+            assert(cost.ndim() == 2);
+            const int m = (int)cost.shape()[0], n = (int)cost.shape()[1];
+            const int asi = (int)cost.strides()[0] / sizeof(double),
+                      asj = (int)cost.strides()[1] / sizeof(double);
+            vector<double> arr(m * n);
+            for (int i = 0; i < m; i++)
+                for (int j = 0; j < n; j++)
+                    arr[i * n + j] = cost.data()[asi * i + asj * j];
+            return make_shared<KuhnMunkres>(arr, m, n);
+        }))
+        .def("solve", [](KuhnMunkres *self) {
+            auto r = self->solve();
+            py::array_t<int> idx(r.second.size());
+            memcpy(idx.mutable_data(), r.second.data(),
+                   r.second.size() * sizeof(int));
+            return make_pair(r.first, idx);
         });
 
     py::class_<Prime, shared_ptr<Prime>>(m, "Prime")

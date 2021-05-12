@@ -119,7 +119,7 @@ Since in every time step an orthogonal transformation is applied on the MPS,
 the expectation value of the orthogonal transformation
 (printed as the energy expectation) calculated on the MPS should always be zero.
 
-Note that largest discarded weight is ``6.19e-08``, and the norm of MPS is not far away from 1.
+Note that largest discarded weight is ``1.04e-07``, and the norm of MPS is not far away from 1.
 So the transormation should be relatively accurate.
 
 Finally, we calculate the energy expectation value using the transformed integral (``C2.NAT.FCIDUMP``)
@@ -138,6 +138,7 @@ and the transformed MPS (stored in the scratch folder), using the following inpu
     maxiter 30
 
     restart_oh
+    restart_onepdm
     noreorder
 
 Note that ``noreorder`` must be used, since the MPS generated in the previous step is in

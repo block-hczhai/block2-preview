@@ -374,7 +374,7 @@ state-averaged A\ :sub:`1g` states: ::
 
 .. note ::
 
-    There can be a undetermined +1/-1 factor in Transition density matrices due to the relative phase in two MPSs.
+    There can be a overall undetermined +1/-1 factor in Transition density matrices due to the relative phase in two MPSs.
 
 The following input file computes the state-specific 2-particle transition density matrix for two
 refined A\ :sub:`1g` states: ::
@@ -436,7 +436,7 @@ Load MPS for Density Matrix Calculation
 ---------------------------------------
 
 The density matrix and transition density matrix calculation can be carried out separately, by
-restarting from a existing MPS, state-averged MPSs or state-specific MPSs (stored in scartch folder
+restarting from an existing MPS, state-averged MPSs or state-specific MPSs (stored in scartch folder
 from a previous DMRG energy calculation).
 
 Assuming a previous ground-state energy calculation has been finished, 

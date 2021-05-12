@@ -43,6 +43,7 @@
 #include "block2/hubbard.hpp"
 #include "block2/integral_compressed.hpp"
 #include "block2/integral.hpp"
+#include "block2/matching.hpp"
 #include "block2/matrix.hpp"
 #include "block2/matrix_functions.hpp"
 #include "block2/moving_environment.hpp"
