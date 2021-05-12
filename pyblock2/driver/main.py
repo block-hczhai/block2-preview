@@ -301,8 +301,12 @@ elif "fullrestart" in dic:
         targets) == 1 else MultiMPS(mps_info)
     mps.load_data()
     if mps.dot != dot and nroots == 1:
+        if MPI is not None:
+            MPI.barrier()
         mps.dot = dot
         mps.save_data()
+        if MPI is not None:
+            MPI.barrier()
     if nroots != 1:
         mps.nroots = nroots
         mps.wfns = mps.wfns[:nroots]
@@ -319,6 +323,8 @@ elif "fullrestart" in dic:
         mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2 and nroots == 1:
+        if MPI is not None:
+            MPI.barrier()
         if mps.canonical_form[mps.center] == 'K':
             cg = CG(200)
             cg.initialize()
@@ -326,6 +332,8 @@ elif "fullrestart" in dic:
         mps.center = mps.n_sites - 2
         mps.save_data()
         forward = False
+        if MPI is not None:
+            MPI.barrier()
 elif pre_run or not no_pre_run:
     if "trans_mps_info" in dic:
         assert nroots == 1 and len(targets) == 1
