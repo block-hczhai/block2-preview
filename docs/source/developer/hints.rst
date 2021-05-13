@@ -1,8 +1,8 @@
 
-Meaning of Assertions
-=====================
+Debugging Hints
+===============
 
-Here we list some of common assertion failure and the solution.
+Here we list some of common assertion failure, errors, wrong outputs, and the solutions.
 
 .. highlight:: text
 
@@ -92,3 +92,41 @@ Note that inside ``block2``, we do not explicitly synchronize integral. In futur
 the integral can even be distributed, such that synchronization will not be meaningful.
 
 **Solution:** Synchronizing the input integrals ``h1e`` and ``g2e`` can solve this problem.
+
+[2021-05-12]
+^^^^^^^^^^^^
+
+**Error Message:** (note that this problem in ``main.py`` has been fixed in commit 4f87784) ::
+
+    Traceback (most recent call last):
+    File "block2/pyblock2/driver/main.py", line 302, in <module>
+        mps.load_data()
+    RuntimeError: MPS::load_data on '/central/scratch/.../F.MPS.KET.-1' failed.
+
+or ::
+
+    Traceback (most recent call last):
+    File "block2/pyblock2/driver/main.py", line 313, in <module>
+        mps.load_mutable()
+    RuntimeError: SparseMatrix:load_data on '/central/scratch/.../F.MPS.KET.14' failed.
+
+or ::
+
+    Traceback (most recent call last):
+    File "block2/pyblock2/driver/main.py", line 313, in <module>
+        mps.load_mutable()
+    ValueError: cannot create std::vector larger than max_size()
+
+**Conditions:** More than one MPI processors, python driver, happening with a very low probablity.
+
+**Reason:** The problematic code is: ::
+
+    mps.load_data()
+    if mps.dot != dot and nroots == 1:
+        mps.dot = dot
+        mps.save_data()
+
+And the non-root MPI proc can load data before or after the root proc saves the data. The wrong loaded data can cause the
+subsequent ``mps.load_mutable()`` to fail.
+
+**Solution:** Adding ``MPI.barrier()`` around ``mps.save_data()``.

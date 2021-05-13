@@ -78,7 +78,7 @@ Features
    :caption: Developer Guide
 
    developer/dmrg
-   developer/assertions
+   developer/hints
 
 .. toctree::
    :maxdepth: 2
