@@ -37,7 +37,7 @@ The DMRG occupation number (in original ordering) will be printed at the end of 
     $ grep OCC dmrg-1.out
     DMRG OCC =   1.957 1.625 1.870 1.870 0.361 0.098 0.098 0.006 0.008 0.008 0.008 0.013 0.014 0.014 0.011 0.006 0.006 0.006 0.005 0.005 0.002 0.002 0.002 0.001 0.001 0.001
     $ grep Energy dmrg-1.out
-    DMRG Energy =  -75.728467269121111
+    DMRG Energy =  -75.728467269121097
 
 Second, we use the keyword ``nat_orbs`` to compute the natural orbitals. The value of the keyword ``nat_orbs``
 specifies the filename for storing the rotated integrals (FCIDUMP).
@@ -61,7 +61,15 @@ The following input file is used for this step (it can also be combined with the
 
     restart_onepdm
     nat_orbs C2.NAT.FCIDUMP
+    nat_km_reorder
+    nat_positive_def
     irrep_reorder
+
+Where the optional keyword ``nat_km_reorder`` can be used to remove the artifical reordering in the natural orbitals
+using Kuhn-Munkres algorithm. The optional keyword ``nat_positive_def`` can be used to avoid artifical rotation in the
+logarithm of the rotation matrix, by make the rotation matrix quasi-positive-definite, with "quasi" in the sense that
+the rotation matrix is not Hermitian. The two options may be good for weakly correlated systems, but have limited effects
+for highly correlated systems (but for highly correlated systems it is also recommended to be used).
 
 The occupation number in natural orbitals will be printed at the end of the calculation: ::
 
@@ -69,6 +77,10 @@ The occupation number in natural orbitals will be printed at the end of the calc
     DMRG OCC =   1.957 1.625 1.870 1.870 0.361 0.098 0.098 0.006 0.008 0.008 0.008 0.013 0.014 0.014 0.011 0.006 0.006 0.006 0.005 0.005 0.002 0.002 0.002 0.001 0.001 0.001
     REORDERED OCC =   1.957 0.002 0.361 0.006 0.013 0.008 0.002 0.006 0.011 0.001 0.006 1.625 0.008 1.870 0.005 0.098 0.001 0.014 0.005 1.870 0.008 0.001 0.014 0.098 0.006 0.002
     NAT OCC =   0.000465 0.003017 0.006424 0.007848 0.360936 1.968407 0.000081 0.000916 0.001991 0.004082 0.015623 1.628182 0.003669 0.008706 1.870680 0.000424 0.002862 0.110463 0.003667 0.008705 1.870678 0.000424 0.002862 0.110480 0.006422 0.001989
+
+With the optional keyword ``nat_km_reorder`` there will be an extra line: ::
+
+    REORDERED NAT OCC =   1.968407 0.000465 0.360936 0.006424 0.007848 0.003017 0.001991 0.000081 0.004082 0.000916 0.015623 1.628182 0.008706 1.870680 0.003669 0.110463 0.000424 0.002862 0.003667 1.870678 0.008705 0.000424 0.002862 0.110480 0.006422 0.001989
 
 The rotation matrix for natural orbitals, the logarithm of the rotation matrix, and the occupation number in natural orbitals
 are stored as ``nat_rotation.npy``, ``nat_kappa.npy``, ``nat_occs.npy`` in scartch folder, respectively. In this example,
@@ -95,31 +107,35 @@ The following input file is used for this step: ::
     end
 
     orbital_rotation
-    delta_t 0.02
+    delta_t 0.05
     outputlevel 1
     noreorder
 
 Note that ``noreorder`` must be used for orbital rotation. The orbital reordering
 in previous step has already been taken into account.
 
+The keyword ``te_type`` can be used to set the time-evolution algorithm. The default is ``rk4``,
+which is the original time-step-targeting (TST) method. Another possible choice is ``tdvp``,
+which is the time dependent variational principle with the projector-splitting (TDVP-PS) algorithm.
+
 The output looks like the following: ::
 
     $ grep DW dmrg-3.out 
-    Time elapsed =      1.183 | E =      -0.0000000000 | Norm^2 =       0.9999999933 | DW = 5.19e-09
-    Time elapsed =      2.727 | E =      -0.0000000000 | Norm^2 =       0.9999999878 | DW = 4.37e-09
-    Time elapsed =      1.546 | E =       0.0000000000 | Norm^2 =       0.9999999678 | DW = 1.05e-08
-    Time elapsed =      3.108 | E =      -0.0000000000 | Norm^2 =       0.9999999579 | DW = 6.31e-09
+    Time elapsed =      2.263 | E =       0.0000000000 | Norm^2 =       0.9999999999 | DW = 1.76e-10
+    Time elapsed =      4.910 | E =      -0.0000000000 | Norm^2 =       0.9999999997 | DW = 1.43e-10
+    Time elapsed =      1.663 | E =      -0.0000000000 | Norm^2 =       0.9999999988 | DW = 4.46e-10
+    Time elapsed =      3.475 | E =       0.0000000000 | Norm^2 =       0.9999999983 | DW = 2.50e-10
     ... ...
-    Time elapsed =      1.665 | E =      -0.0000000000 | Norm^2 =       0.9999906353 | DW = 1.04e-07
-    Time elapsed =      3.321 | E =      -0.0000000000 | Norm^2 =       0.9999904773 | DW = 5.86e-08
-    Time elapsed =      1.646 | E =      -0.0000000000 | Norm^2 =       0.9999902248 | DW = 1.08e-07
-    Time elapsed =      3.289 | E =      -0.0000000000 | Norm^2 =       0.9999900580 | DW = 6.19e-08
+    Time elapsed =      3.011 | E =       0.0000000000 | Norm^2 =       0.9999999315 | DW = 1.04e-09
+    Time elapsed =      4.753 | E =       0.0000000000 | Norm^2 =       0.9999999284 | DW = 8.68e-10
+    Time elapsed =      1.786 | E =       0.0000000000 | Norm^2 =       0.9999999245 | DW = 1.07e-09
+    Time elapsed =      3.835 | E =       0.0000000000 | Norm^2 =       0.9999999213 | DW = 9.09e-10
 
 Since in every time step an orthogonal transformation is applied on the MPS,
 the expectation value of the orthogonal transformation
 (printed as the energy expectation) calculated on the MPS should always be zero.
 
-Note that largest discarded weight is ``1.04e-07``, and the norm of MPS is not far away from 1.
+Note that largest discarded weight is ``1.07e-09``, and the norm of MPS is not far away from 1.
 So the transormation should be relatively accurate.
 
 Finally, we calculate the energy expectation value using the transformed integral (``C2.NAT.FCIDUMP``)
@@ -149,7 +165,9 @@ loaded from integrals on the MPS loaded from scartch folder.
 We have the following output: ::
 
     $ grep Energy dmrg-4.out
-    OH Energy =  -75.726795187335256
+    OH Energy =  -75.728457535820155
 
+The difference compared to the energy generated in the first step
+``DMRG Energy =  -75.728467269121097`` is only 9.7E-6.
 One can increase the bond dimension in the evolution to make this closer to the value printed
 in the first step.
