@@ -78,6 +78,7 @@ Features
    :caption: Developer Guide
 
    developer/dmrg
+   developer/pg-mapping
    developer/hints
 
 .. toctree::

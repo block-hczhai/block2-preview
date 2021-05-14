@@ -29,6 +29,8 @@
 #include "threading.hpp"
 #include <cassert>
 #include <memory>
+#include <set>
+#include <unordered_map>
 #include <vector>
 
 using namespace std;
@@ -39,6 +41,235 @@ namespace block2 {
 template <typename S> struct IdentityMPO : MPO<S> {
     using MPO<S>::n_sites;
     using MPO<S>::site_op_infos;
+    // identity between differect pg
+    IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
+                const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
+                S delta_quantum, const shared_ptr<OperatorFunctions<S>> &opf,
+                const vector<uint8_t> &bra_orb_sym = vector<uint8_t>(),
+                const vector<uint8_t> &ket_orb_sym = vector<uint8_t>())
+        : MPO<S>((int)bra_basis.size()) {
+        shared_ptr<OpElement<S>> i_op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(bra_basis.size() == ket_basis.size());
+        assert(bra_orb_sym.size() == ket_orb_sym.size());
+        unordered_map<uint8_t, uint8_t> ket_to_bra_map;
+        vector<pair<uint8_t, uint8_t>> map_que(ket_orb_sym.size());
+        for (size_t ik = 0; ik < ket_orb_sym.size(); ik++)
+            map_que[ik] = make_pair(ket_orb_sym[ik], bra_orb_sym[ik]);
+        size_t imq = 0;
+        while (imq != map_que.size()) {
+            if (ket_to_bra_map.count(map_que[imq].first))
+                assert(ket_to_bra_map.at(map_que[imq].first) ==
+                       map_que[imq].second);
+            else {
+                ket_to_bra_map[map_que[imq].first] = map_que[imq].second;
+                for (auto &mm : ket_to_bra_map)
+                    if (!ket_to_bra_map.count(map_que[imq].first ^ mm.first))
+                        map_que.push_back(
+                            make_pair(map_que[imq].first ^ mm.first,
+                                      map_que[imq].second ^ mm.second));
+            }
+            imq++;
+        }
+        MPO<S>::op =
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), delta_quantum);
+        MPO<S>::const_e = 0.0;
+        // site operator infos
+        site_op_infos.resize(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++) {
+            shared_ptr<SparseMatrixInfo<S>> info =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            set<S> dqs;
+            if (ket_to_bra_map.size() == 0) {
+                // for CSR case, we cannot determine irrep mapping automatically
+                // a mapping list must be given
+                assert(bra_basis[m]->n == ket_basis[m]->n);
+                for (size_t i = 0; i < bra_basis[m]->n; i++)
+                    dqs.insert(
+                        (bra_basis[m]->quanta[i] - ket_basis[m]->quanta[i])[0]);
+            } else {
+                for (size_t i = 0; i < bra_basis[m]->n; i++)
+                    for (size_t j = 0; j < ket_basis[m]->n; j++) {
+                        S qb = bra_basis[m]->quanta[i],
+                          qk = ket_basis[m]->quanta[j];
+                        S qbp = qk;
+                        qbp.set_pg(qb.pg());
+                        if (ket_to_bra_map.at((uint8_t)qk.pg()) ==
+                                (uint8_t)qb.pg() &&
+                            qbp == qb)
+                            dqs.insert((qb - qk)[0]);
+                    }
+            }
+            for (auto dq : dqs) {
+                info = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                info->initialize(*bra_basis[m], *ket_basis[m], dq, false);
+                site_op_infos[m].push_back(make_pair(dq, info));
+            }
+        }
+        vector<set<S>> left_dqs(n_sites + 1), right_dqs(n_sites + 1);
+        right_dqs[n_sites].insert(vacuum);
+        left_dqs[0].insert(vacuum);
+        for (int m = 0; m < n_sites; m++) {
+            for (auto pdq : left_dqs[m])
+                for (auto &soi : site_op_infos[m])
+                    left_dqs[m + 1].insert(pdq + soi.first);
+        }
+        for (int m = n_sites - 1; m >= 0; m--) {
+            for (auto pdq : right_dqs[m + 1])
+                for (auto &soi : site_op_infos[m])
+                    right_dqs[m].insert(soi.first + pdq);
+        }
+        vector<vector<S>> vldqs(n_sites + 1), vrdqs(n_sites + 1);
+        for (int m = 0; m <= n_sites; m++) {
+            vector<S> new_left_dqs, new_right_dqs;
+            for (auto &dq : left_dqs[m])
+                if (right_dqs[m].count(delta_quantum - dq)) {
+                    vldqs[m].push_back(dq);
+                    vrdqs[m].push_back(delta_quantum - dq);
+                }
+        }
+        bool has_sparse = false;
+        for (uint16_t m = 0; m < n_sites; m++) {
+            // site tensor
+            shared_ptr<Symbolic<S>> pmat;
+            assert(vldqs[m + 1].size() != 0 && vldqs[m].size() != 0);
+            if (m == 0)
+                pmat =
+                    make_shared<SymbolicRowVector<S>>((int)vldqs[m + 1].size());
+            else if (m == n_sites - 1)
+                pmat =
+                    make_shared<SymbolicColumnVector<S>>((int)vldqs[m].size());
+            else
+                pmat = make_shared<SymbolicMatrix<S>>((int)vldqs[m].size(),
+                                                      (int)vldqs[m + 1].size());
+            for (int xi = 0; xi < vldqs[m].size(); xi++)
+                for (int xj = 0; xj < vldqs[m + 1].size(); xj++) {
+                    S dq = vldqs[m + 1][xj] - vldqs[m][xi];
+                    for (int xk = 0; xk < site_op_infos[m].size(); xk++)
+                        if (site_op_infos[m][xk].first == dq) {
+                            if (dq.pg() == 0)
+                                (*pmat)[{xi, xj}] = i_op;
+                            else
+                                (*pmat)[{xi, xj}] = make_shared<OpElement<S>>(
+                                    OpNames::I, SiteIndex((uint16_t)dq.pg()),
+                                    dq);
+                        }
+                }
+            shared_ptr<OperatorTensor<S>> opt =
+                make_shared<OperatorTensor<S>>();
+            opt->lmat = opt->rmat = pmat;
+            // operator names
+            shared_ptr<SymbolicRowVector<S>> plop =
+                make_shared<SymbolicRowVector<S>>((int)vldqs[m + 1].size());
+            for (int xj = 0; xj < vldqs[m + 1].size(); xj++) {
+                S dq = vldqs[m + 1][xj];
+                if (dq.pg() == 0)
+                    (*plop)[xj] = i_op;
+                else
+                    (*plop)[xj] = make_shared<OpElement<S>>(
+                        OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
+            }
+            this->left_operator_names.push_back(plop);
+            shared_ptr<SymbolicColumnVector<S>> prop =
+                make_shared<SymbolicColumnVector<S>>((int)vrdqs[m].size());
+            for (int xi = 0; xi < vrdqs[m].size(); xi++) {
+                S dq = vrdqs[m][xi];
+                if (dq.pg() == 0)
+                    (*prop)[xi] = i_op;
+                else
+                    (*prop)[xi] = make_shared<OpElement<S>>(
+                        OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
+            }
+            this->right_operator_names.push_back(prop);
+            bool no_sparse = bra_basis[m]->n == bra_basis[m]->n_states_total &&
+                             ket_basis[m]->n == ket_basis[m]->n_states_total;
+            map<S, MKL_INT> qbra_shift;
+            // site operators
+            for (int xk = 0; xk < site_op_infos[m].size(); xk++) {
+                S dq = site_op_infos[m][xk].first;
+                shared_ptr<SparseMatrixInfo<S>> info =
+                    site_op_infos[m][xk].second;
+                S mat_dq = info->delta_quantum;
+                shared_ptr<OpElement<S>> xop =
+                    dq.pg() == 0
+                        ? i_op
+                        : make_shared<OpElement<S>>(
+                              OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
+                assert(xop->q_label == info->delta_quantum);
+                if (no_sparse) {
+                    shared_ptr<SparseMatrix<S>> mat =
+                        make_shared<SparseMatrix<S>>(d_alloc);
+                    opt->ops[xop] = mat;
+                    mat->allocate(info);
+                    if (ket_to_bra_map.size() == 0) {
+                        for (MKL_INT i = 0; i < mat->total_memory; i++)
+                            mat->data[i] = 1;
+                    } else {
+                        for (int i = 0; i < info->n; i++)
+                            if (ket_to_bra_map.at(
+                                    (uint8_t)info->quanta[i].get_ket().pg()) ==
+                                (uint8_t)info->quanta[i].get_bra(mat_dq).pg())
+                                (*mat)[i].data[0] = 1;
+                            else
+                                (*mat)[i].data[0] = 0;
+                    }
+                } else {
+                    has_sparse = true;
+                    MPO<S>::sparse_form[m] = 'S';
+                    shared_ptr<CSRSparseMatrix<S>> mat =
+                        make_shared<CSRSparseMatrix<S>>(d_alloc);
+                    opt->ops[xop] = mat;
+                    mat->initialize(info);
+                    for (int i = 0; i < info->n; i++) {
+                        shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                        cmat->nnz = min(cmat->m, cmat->n);
+                        cmat->allocate();
+                        if (ket_to_bra_map.size() == 0 ||
+                            ket_to_bra_map.at(
+                                (uint8_t)info->quanta[i].get_ket().pg()) ==
+                                (uint8_t)info->quanta[i].get_bra(mat_dq).pg()) {
+                            for (MKL_INT j = 0; j < cmat->nnz; j++)
+                                cmat->data[j] = 1;
+                            if (cmat->nnz != cmat->size()) {
+                                MKL_INT sh =
+                                    qbra_shift[info->quanta[i].get_bra(mat_dq)];
+                                assert(sh + cmat->nnz <= cmat->m);
+                                for (MKL_INT j = 0; j < sh; j++)
+                                    cmat->rows[j] = 0;
+                                for (MKL_INT j = 0; j < cmat->nnz; j++)
+                                    cmat->rows[j + sh] = j, cmat->cols[j] = j;
+                                for (MKL_INT j = cmat->nnz; j <= cmat->m - sh;
+                                     j++)
+                                    cmat->rows[j + sh] = cmat->nnz;
+                                qbra_shift[info->quanta[i].get_bra(mat_dq)] +=
+                                    cmat->nnz;
+                            }
+                        } else {
+                            for (MKL_INT j = 0; j < cmat->nnz; j++)
+                                cmat->data[j] = 0;
+                            if (cmat->nnz != cmat->size()) {
+                                for (MKL_INT j = 0; j < cmat->nnz; j++)
+                                    cmat->rows[j] = j, cmat->cols[j] = j;
+                                for (MKL_INT j = cmat->nnz; j <= cmat->m; j++)
+                                    cmat->rows[j] = cmat->nnz;
+                            }
+                        }
+                    }
+                }
+            }
+            this->tensors.push_back(opt);
+        }
+        if (has_sparse) {
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(opf->cg));
+            MPO<S>::tf->opf->seq = opf->seq;
+        } else
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(opf);
+    }
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
                 const shared_ptr<OperatorFunctions<S>> &opf)

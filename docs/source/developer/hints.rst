@@ -87,7 +87,7 @@ Then there will be an array-size mismatching due to the difference in integrals.
 If only one MPI is used, there is no such behavior.
 This is because the input integrals ``h1e`` and ``g2e`` are not synchronized.
 In ``QCTypes.Conventional``, communication between MPI procs only happens at the middle site.
-After this communication, the inconsistentcy between integrals can cause an artifical change in energy.
+After this communication, the inconsistentcy between integrals can cause an artificial change in energy.
 Note that inside ``block2``, we do not explicitly synchronize integral. In future, for larger systems,
 the integral can even be distributed, such that synchronization will not be meaningful.
 
@@ -130,3 +130,46 @@ And the non-root MPI proc can load data before or after the root proc saves the 
 subsequent ``mps.load_mutable()`` to fail.
 
 **Solution:** Adding ``MPI.barrier()`` around ``mps.save_data()``.
+
+Linear
+------
+
+[2021-05-14]
+^^^^^^^^^^^^
+
+**Assertion:** ::
+
+    block2/moving_environment.hpp:110: block2::MovingEnvironment<S>::MovingEnvironment(const std::shared_ptr<block2::MPO<S> >&, const std::shared_ptr<block2::MPS<S> >&, const std::shared_ptr<block2::MPS<S> >&, const string&) [with S = block2::SU2Long; std::string = std::__cxx11::basic_string<char>]: Assertion `bra->center == ket->center && bra->dot == ket->dot' failed.
+
+**Conditions:** Different bra and ket.
+
+**Reason:** The bra and ket for initialization of MovingEnvironment do not have the same center.
+
+**Solution:** Initializing bra or ket with consistent center, or do a sweep to align the MPS center.
+
+[2021-05-14]
+^^^^^^^^^^^^
+
+**Assertion:** ::
+
+    block2/operator_functions.hpp:194: void block2::OperatorFunctions<S>::tensor_rotate(const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, bool, double) const [with S = block2::SU2Long]: Assertion `adq == cdq && a->info->n >= c->info->n' failed.
+
+**Conditions:** Different bra and ket.
+
+**Reason:** The bra and ket has different MPSInfo, but the two MPSInfo has the same tag. When saving to/loading from disk,
+the information stored in the two MPSInfo can interfere with each other.
+
+**Solution:** Use different tags for different MPSInfo.
+
+[2021-05-14]
+^^^^^^^^^^^^
+
+**Assertion:** ::
+
+    block2/csr_matrix_functions.hpp:387: static void block2::CSRMatrixFunctions::multiply(const MatrixRef&, bool, const block2::CSRMatrixRef&, bool, const MatrixRef&, double, double): Assertion `(conja ? a.m : a.n) == (conjb ? b.n : b.m)' failed.
+
+**Conditions:** Different bra and ket, CSR, IdentityMPO with bra and ket with different bases.
+
+**Reason:** Wrong basis was used in the constructor of IdentityMPO.
+
+**Solution:** Change ``IdentityMPO(mpo_bra.basis, mpo_bra.basis, ...)`` to ``IdentityMPO(mpo_bra.basis, mpo_ket.basis, ...)``.

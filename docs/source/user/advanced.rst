@@ -65,8 +65,8 @@ The following input file is used for this step (it can also be combined with the
     nat_positive_def
     irrep_reorder
 
-Where the optional keyword ``nat_km_reorder`` can be used to remove the artifical reordering in the natural orbitals
-using Kuhn-Munkres algorithm. The optional keyword ``nat_positive_def`` can be used to avoid artifical rotation in the
+Where the optional keyword ``nat_km_reorder`` can be used to remove the artificial reordering in the natural orbitals
+using Kuhn-Munkres algorithm. The optional keyword ``nat_positive_def`` can be used to avoid artificial rotation in the
 logarithm of the rotation matrix, by make the rotation matrix quasi-positive-definite, with "quasi" in the sense that
 the rotation matrix is not Hermitian. The two options may be good for weakly correlated systems, but have limited effects
 for highly correlated systems (but for highly correlated systems it is also recommended to be used).

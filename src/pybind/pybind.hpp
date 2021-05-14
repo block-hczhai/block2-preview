@@ -2065,6 +2065,13 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, S,
                       const shared_ptr<OperatorFunctions<S>> &>())
+        .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, S, S,
+                      const shared_ptr<OperatorFunctions<S>> &>())
+        .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, S, S,
+                      const shared_ptr<OperatorFunctions<S>> &,
+                      const vector<uint8_t> &, const vector<uint8_t> &>())
         .def(py::init<const Hamiltonian<S> &>());
 
     py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
