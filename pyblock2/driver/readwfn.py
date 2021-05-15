@@ -67,6 +67,7 @@ su2 = True
 out_dir = "./out"
 expect = "expect" in arg_dic
 redunt = "reduntant" in arg_dic
+mps_tags = ["KET"]
 if "config" in arg_dic:
     config = arg_dic["config"]
     dic = parse(config)
@@ -79,6 +80,7 @@ if "config" in arg_dic:
         integral = ('.' if dd == '' else dd) + "/" + integral
     dot = 1 if "twodot_to_onedot" in dic or "onedot" in dic else 2
     su2 = "nonspinadapted" not in dic
+    mps_tags = dic.get("mps_tags", "KET").split()
 if "prefix" in arg_dic:
     scratch = arg_dic["prefix"] + "/node0"
 if "integral" in arg_dic:
@@ -191,6 +193,7 @@ orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
 hamil = HamiltonianQC(vaccum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis)
+mps_info.tag = mps_tags[0]
 if redunt:
     mps_info.set_bond_dimension_full_fci()
 
@@ -355,6 +358,7 @@ max_bdim = max([x.n_states_total for x in mps_info.right_dims])
 if mps_info.bond_dim < max_bdim:
     mps_info.bond_dim = max_bdim
 mps_info.save_data(out_dir + '/mps_info.bin')
+mps_info.save_data(out_dir + '/%s-mps_info.bin' % mps_tags[0])
 
 if expect:
     mpo = MPOQC(hamil, QCTypes.Conventional)
