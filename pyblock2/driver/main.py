@@ -630,7 +630,11 @@ def get_mps_from_tags(iroot):
             smps.move_left(cg, prule)
             smps.center = smps.n_sites - 2
         smps.dot = dot
+        if MPI is not None:
+            MPI.barrier()
         smps.save_data()
+        if MPI is not None:
+            MPI.barrier()
     if smps.center != 0:
         _print('change canonical form ...')
         cf = str(smps.canonical_form)
@@ -641,7 +645,11 @@ def get_mps_from_tags(iroot):
         expect = Expect(ime, smps.info.bond_dim, smps.info.bond_dim)
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, smps.center == 0)
+        if MPI is not None:
+            MPI.barrier()
         smps.save_data()
+        if MPI is not None:
+            MPI.barrier()
         _print(cf + ' -> ' + smps.canonical_form)
     forward = smps.center == 0
     return smps, smps.info, forward
