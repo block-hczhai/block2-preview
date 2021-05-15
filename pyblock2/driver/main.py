@@ -608,7 +608,11 @@ def get_mps_from_tags(iroot):
     _print('----- root = %3d tag = %s -----' % (iroot, mps_tags[iroot]))
     smps_info = MPSInfo(0)
     smps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[iroot])
+    if MPI is not None:
+        MPI.barrier()
     smps = MPS(smps_info).deep_copy(smps_info.tag + "-%d" % iroot)
+    if MPI is not None:
+        MPI.barrier()
     smps_info = smps.info
     smps_info.load_mutable()
     max_bdim = max([x.n_states_total for x in smps_info.left_dims])
@@ -658,7 +662,11 @@ def get_mps_from_tags(iroot):
 def get_state_specific_mps(iroot, mps_info):
     smps_info = MPSInfo(0)
     smps_info.load_data(scratch + "/mps_info-ss-%d.bin" % iroot)
+    if MPI is not None:
+        MPI.barrier()
     smps = MPS(smps_info).deep_copy(mps_info.tag + "-%d" % iroot)
+    if MPI is not None:
+        MPI.barrier()
     smps_info = smps.info
     smps_info.load_mutable()
     max_bdim = max([x.n_states_total for x in smps_info.left_dims])
@@ -680,7 +688,11 @@ def get_state_specific_mps(iroot, mps_info):
             smps.move_left(cg, prule)
             smps.center = smps.n_sites - 2
         smps.dot = dot
+        if MPI is not None:
+            MPI.barrier()
         smps.save_data()
+        if MPI is not None:
+            MPI.barrier()
     forward = smps.center == 0
     return smps, smps_info, forward
 
