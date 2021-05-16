@@ -473,7 +473,7 @@ class GFDMRG:
         self.gs_energy = pickle.load(open(self.scratch + '/GS_ENERGY', 'rb'))
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
-                        gs_bond_dims, gs_noises, gs_conv_tol, gs_n_steps, idxs,
+                        cps_bond_dims, cps_noises, cps_conv_tol, cps_n_steps, idxs,
                         eta, freqs, addition, cutoff=1E-14, diag_only=False,
                         alpha=True, occs=None, bias=1.0, mo_coeff=None):
         """Green's function."""
@@ -623,22 +623,27 @@ class GFDMRG:
             if self.mpi is not None:
                 rmpos[ii] = ParallelMPO(rmpos[ii], self.siterule)
 
-            pme = MovingEnvironment(mpo, rkets[ii], rkets[ii], "PERT")
-            pme.init_environments(False)
+            if len(cps_noises) == 1 and cps_noises[0] == 0:
+                pme = None
+            else:
+                pme = MovingEnvironment(mpo, rkets[ii], rkets[ii], "PERT")
+                pme.init_environments(False)
             rme = MovingEnvironment(rmpos[ii], rkets[ii], mps, "RHS")
             rme.init_environments(False)
             if self.dctr:
-                pme.delayed_contraction = OpNamesSet.normal_ops()
+                if pme is not None:
+                    pme.delayed_contraction = OpNamesSet.normal_ops()
                 rme.delayed_contraction = OpNamesSet.normal_ops()
 
-            cps = Linear(pme, rme, VectorUBond(gs_bond_dims),
-                         VectorUBond([mps.info.bond_dim]), VectorDouble(gs_noises))
+            cps = Linear(pme, rme, VectorUBond(cps_bond_dims),
+                         VectorUBond([mps.info.bond_dim]), VectorDouble(cps_noises))
             cps.noise_type = NoiseTypes.ReducedPerturbative
             cps.decomp_type = DecompositionTypes.SVD
-            cps.eq_type = EquationTypes.PerturbativeCompression
+            if pme is not None:
+                cps.eq_type = EquationTypes.PerturbativeCompression
             cps.iprint = max(self.verbose - 1, 0)
             cps.cutoff = cutoff
-            cps.solve(gs_n_steps, mps.center == 0, gs_conv_tol)
+            cps.solve(cps_n_steps, mps.center == 0, cps_conv_tol)
 
             if self.verbose >= 2:
                 _print('>>> COMPLETE Compression Site = %4d | Time = %.2f <<<' %
@@ -754,6 +759,7 @@ class GFDMRG:
 def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add_rem='+-',
                n_threads=8, memory=1E9, verbose=1, ignore_ecore=True,
                gs_bond_dims=[500], gs_noises=[1E-5, 1E-5, 1E-6, 1E-7, 0], gs_tol=1E-10, gs_n_steps=30,
+               cps_bond_dims=[500], cps_noises=[0], cps_tol=1E-10, cps_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
                mo_basis=True, load_dir=None, save_dir=None, pdm_return=True, reorder_method=None,
                lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14, mpi=None):
@@ -778,6 +784,10 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         gs_noises : np.ndarray of float64. Ground-State DMRG noises for each sweep
         gs_tol : float64. Ground-State DMRG energy convergence.
         gs_n_steps : int. Ground-State DMRG max number of sweeps.
+        cps_bond_dims : np.ndarray of integers. Compression MPS bond dims for each sweep
+        cps_noises : np.ndarray of float64. Compression noises for each sweep
+        cps_tol : float64. Compression energy convergence.
+        cps_n_steps : int. Compression max number of sweeps.
         gf_bond_dims : np.ndarray of integers. Green's function MPS bond dims for each sweep
         gf_noises : np.ndarray of float64. Green's function noises for each sweep
         gf_tol : float64. Green's function Im GF (i, i) convergence.
@@ -966,7 +976,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         for addit in [x == '+' for x in add_rem]:
             # only calculate alpha spin
             gf_tmp += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
-                                           gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
+                                           cps_bond_dims, cps_noises, cps_tol, cps_n_steps,
                                            idxs=mo_orbs if ao_orbs is None else ao_orbs,
                                            mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[0] if is_uhf else mo_coeff),
                                            eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
@@ -978,7 +988,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
             for addit in [x == '+' for x in add_rem]:
                 # calculate beta spin
                 gf_beta_tmp += dmrg.greens_function(gf_bond_dims, gf_noises, gmres_tol, gf_tol, gf_n_steps,
-                                                    gs_bond_dims, gs_noises, gs_tol, gs_n_steps,
+                                                    cps_bond_dims, cps_noises, cps_tol, cps_n_steps,
                                                     idxs=mo_orbs if ao_orbs is None else ao_orbs,
                                                     mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[1] if is_uhf else mo_coeff),
                                                     eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
@@ -1093,6 +1103,7 @@ if __name__ == "__main__":
         t = time.perf_counter()
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                                 gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
+                                cps_bond_dims=[500], cps_noises=[0], cps_tol=1E-14, cps_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
                                 n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,mpi=True)
@@ -1101,6 +1112,7 @@ if __name__ == "__main__":
 
         pdm, gfmat = dmrg_mo_gf(mf, freqs=freqs, delta=eta, mo_orbs=None, scratch=scratch, add_rem='+-',
                                 gs_bond_dims=[500], gs_noises=[1E-7, 1E-8, 1E-10, 0], gs_tol=1E-14, gs_n_steps=30,
+                                cps_bond_dims=[500], cps_noises=[0], cps_tol=1E-14, cps_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
                                 ao_orbs=range(N),
