@@ -929,8 +929,8 @@ if not pre_run:
 
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/cps_norm.npy", norm)
-            lmps_info.save_data(scratch + '/mps_info-cps.bin')
-            lmps_info.save_data(scratch + '/mps_info.bin')
+            mps_info.save_data(scratch + '/mps_info.bin')
+            mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
 
     # Time Evolution (no complex number)
     if "delta_t" in dic:
