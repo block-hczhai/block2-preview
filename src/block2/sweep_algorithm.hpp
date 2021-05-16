@@ -1807,6 +1807,7 @@ template <typename S> struct Linear {
     vector<double> minres_conv_thrds;
     int minres_max_iter = 5000;
     int minres_soft_max_iter = -1;
+    int conv_required_sweeps = 3;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
@@ -2880,6 +2881,11 @@ template <typename S> struct Linear {
                         abs(target_difference) < tol &&
                         noises[iw] == noises.back() &&
                         bra_bond_dims[iw] == bra_bond_dims.back();
+            for (int iconv = 1; iconv < conv_required_sweeps && converged;
+                 iconv++)
+                converged = converged && (int)targets.size() >= 2 + iconv &&
+                            abs(targets[targets.size() - 1 - iconv][0] -
+                                targets[targets.size() - 2 - iconv][0]) < tol;
             forward = !forward;
             double tswp = current.get_time();
             if (iprint >= 1) {

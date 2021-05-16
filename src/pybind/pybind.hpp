@@ -1807,6 +1807,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("minres_conv_thrds", &Linear<S>::minres_conv_thrds)
         .def_readwrite("minres_max_iter", &Linear<S>::minres_max_iter)
         .def_readwrite("minres_soft_max_iter", &Linear<S>::minres_soft_max_iter)
+        .def_readwrite("conv_required_sweeps", &Linear<S>::conv_required_sweeps)
         .def_readwrite("gf_omega", &Linear<S>::gf_omega)
         .def_readwrite("gf_eta", &Linear<S>::gf_eta)
         .def_readwrite("right_weight", &Linear<S>::right_weight)
