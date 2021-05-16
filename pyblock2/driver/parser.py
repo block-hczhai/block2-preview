@@ -282,7 +282,7 @@ def format_schedule(sch):
     if len(bdim) == 0:
         return ""
     lines = []
-    for i in range(1, len(bdim)):
+    for i in range(0, len(bdim)):
         if len(lines) != 0 and [bdim[i], noi[i], tol[i]] == lines[-1][2:5]:
             lines[-1][1] = i
         else:

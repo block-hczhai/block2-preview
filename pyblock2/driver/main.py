@@ -280,7 +280,7 @@ soc = "soc" in dic
 overlap = "overlap" in dic
 
 # prepare mps
-if len(mps_tags) > 1:
+if len(mps_tags) > 1 or "compression" in dic:
     nroots = len(mps_tags)
     mps = None
     mps_info = None
@@ -914,6 +914,8 @@ if not pre_run:
     # Compression
     if "compression" in dic:
         lmps, lmps_info, _ = get_mps_from_tags(-1)
+        mps = lmps.deep_copy(mps_tags[0])
+        mps_info = mps.info
         me = MovingEnvironment(impo if overlap else mpo, mps, lmps, "CPS")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
