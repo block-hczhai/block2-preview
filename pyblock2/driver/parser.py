@@ -27,7 +27,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "nat_orbs", "nat_km_reorder", "nat_positive_def",
               "restart_tran_oh", "restart_dir_per_sweep", "fp_cps_cutoff",
               "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type",
-              "orbital_rotation", "delta_t", "target_t", "te_type"}
+              "orbital_rotation", "delta_t", "target_t", "te_type",
+              "read_mps_tags", "compression"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

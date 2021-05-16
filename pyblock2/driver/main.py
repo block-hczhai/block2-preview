@@ -48,7 +48,7 @@ if "nonspinadapted" in dic:
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
-    from block2.sz import AntiHermitianRuleQC, TimeEvolution
+    from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
     from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -62,7 +62,7 @@ else:
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
-    from block2.su2 import AntiHermitianRuleQC, TimeEvolution
+    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -275,6 +275,7 @@ else:
 dot = 1 if "onedot" in dic else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
+read_tags = dic.get("read_mps_tags", "KET").split()
 soc = "soc" in dic
 overlap = "overlap" in dic
 
@@ -418,7 +419,7 @@ if conn_centers is not None and "fullrestart" in dic:
 
 has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
     or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
-    or "restart_tran_oh" in dic or "tran_oh" in dic
+    or "restart_tran_oh" in dic or "tran_oh" in dic or "compression" in dic
 has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
     or "restart_twopdm" in dic or "twopdm" in dic
 anti_herm = "orbital_rotation" in dic
@@ -605,9 +606,14 @@ def split_mps(iroot, mps, mps_info):
 
 
 def get_mps_from_tags(iroot):
-    _print('----- root = %3d tag = %s -----' % (iroot, mps_tags[iroot]))
+    if iroot >= 0:
+        _print('----- root = %3d tag = %s -----' % (iroot, mps_tags[iroot]))
+        tag = mps_tags[iroot]
+    else:
+        _print('----- cps tag = %s -----' % read_tags[0])
+        tag = read_tags[0]
     smps_info = MPSInfo(0)
-    smps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[iroot])
+    smps_info.load_data(scratch + "/%s-mps_info.bin" % tag)
     if MPI is not None:
         MPI.barrier()
     smps = MPS(smps_info).deep_copy(smps_info.tag + "-%d" % iroot)
@@ -842,7 +848,7 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "statespecific" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
-            and "delta_t" not in dic:
+            and "delta_t" not in dic and "compression" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
@@ -904,6 +910,27 @@ if not pre_run:
         if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
+
+    # Compression
+    if "compression" in dic:
+        lmps, lmps_info, _ = get_mps_from_tags(-1)
+        me = MovingEnvironment(impo if overlap else mpo, mps, lmps, "CPS")
+        me.delayed_contraction = OpNamesSet.normal_ops()
+        me.cached_contraction = True
+        me.save_partition_info = True
+        me.init_environments(outputlevel >= 2)
+
+        cps = Linear(me, VectorUBond(bond_dims), VectorUBond([lmps.info.bond_dim]))
+        cps.iprint = max(min(outputlevel, 3), 0)
+        cps.cutoff = float(dic.get("cutoff", 1E-14))
+        cps.decomp_type = decomp_type
+        cps.trunc_type = trunc_type
+        norm = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+
+        if MPI is None or MPI.rank == 0:
+            np.save(scratch + "/cps_norm.npy", norm)
+            lmps_info.save_data(scratch + '/mps_info-cps.bin')
+            lmps_info.save_data(scratch + '/mps_info.bin')
 
     # Time Evolution (no complex number)
     if "delta_t" in dic:
