@@ -56,22 +56,22 @@ template <typename S> struct IdentityMPO : MPO<S> {
             make_shared<VectorAllocator<double>>();
         assert(bra_basis.size() == ket_basis.size());
         assert(bra_orb_sym.size() == ket_orb_sym.size());
-        unordered_map<uint8_t, uint8_t> ket_to_bra_map;
+        unordered_map<uint8_t, set<uint8_t>> ket_to_bra_map;
         vector<pair<uint8_t, uint8_t>> map_que(ket_orb_sym.size());
         for (size_t ik = 0; ik < ket_orb_sym.size(); ik++)
             map_que[ik] = make_pair(ket_orb_sym[ik], bra_orb_sym[ik]);
         size_t imq = 0;
         while (imq != map_que.size()) {
-            if (ket_to_bra_map.count(map_que[imq].first))
-                assert(ket_to_bra_map.at(map_que[imq].first) ==
-                       map_que[imq].second);
-            else {
-                ket_to_bra_map[map_que[imq].first] = map_que[imq].second;
+            if (!ket_to_bra_map.count(map_que[imq].first) ||
+                !ket_to_bra_map.at(map_que[imq].first)
+                     .count(map_que[imq].second)) {
+                ket_to_bra_map[map_que[imq].first].insert(map_que[imq].second);
                 for (auto &mm : ket_to_bra_map)
                     if (!ket_to_bra_map.count(map_que[imq].first ^ mm.first))
-                        map_que.push_back(
-                            make_pair(map_que[imq].first ^ mm.first,
-                                      map_que[imq].second ^ mm.second));
+                        for (auto &mms : mm.second)
+                            map_que.push_back(
+                                make_pair(map_que[imq].first ^ mm.first,
+                                          map_que[imq].second ^ mms));
             }
             imq++;
         }
@@ -98,8 +98,8 @@ template <typename S> struct IdentityMPO : MPO<S> {
                           qk = ket_basis[m]->quanta[j];
                         S qbp = qk;
                         qbp.set_pg(qb.pg());
-                        if (ket_to_bra_map.at((uint8_t)qk.pg()) ==
-                                (uint8_t)qb.pg() &&
+                        if (ket_to_bra_map.at((uint8_t)qk.pg())
+                                .count((uint8_t)qb.pg()) &&
                             qbp == qb)
                             dqs.insert((qb - qk)[0]);
                     }
@@ -187,7 +187,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
             this->right_operator_names.push_back(prop);
             bool no_sparse = bra_basis[m]->n == bra_basis[m]->n_states_total &&
                              ket_basis[m]->n == ket_basis[m]->n_states_total;
-            map<S, MKL_INT> qbra_shift;
+            map<S, MKL_INT> qbra_shift, qket_shift;
             // site operators
             for (int xk = 0; xk < site_op_infos[m].size(); xk++) {
                 S dq = site_op_infos[m][xk].first;
@@ -210,9 +210,11 @@ template <typename S> struct IdentityMPO : MPO<S> {
                             mat->data[i] = 1;
                     } else {
                         for (int i = 0; i < info->n; i++)
-                            if (ket_to_bra_map.at(
-                                    (uint8_t)info->quanta[i].get_ket().pg()) ==
-                                (uint8_t)info->quanta[i].get_bra(mat_dq).pg())
+                            if (ket_to_bra_map
+                                    .at((uint8_t)info->quanta[i].get_ket().pg())
+                                    .count((uint8_t)info->quanta[i]
+                                               .get_bra(mat_dq)
+                                               .pg()))
                                 (*mat)[i].data[0] = 1;
                             else
                                 (*mat)[i].data[0] = 0;
@@ -229,24 +231,34 @@ template <typename S> struct IdentityMPO : MPO<S> {
                         cmat->nnz = min(cmat->m, cmat->n);
                         cmat->allocate();
                         if (ket_to_bra_map.size() == 0 ||
-                            ket_to_bra_map.at(
-                                (uint8_t)info->quanta[i].get_ket().pg()) ==
-                                (uint8_t)info->quanta[i].get_bra(mat_dq).pg()) {
+                            ket_to_bra_map
+                                .at((uint8_t)info->quanta[i].get_ket().pg())
+                                .count((uint8_t)info->quanta[i]
+                                           .get_bra(mat_dq)
+                                           .pg())) {
                             for (MKL_INT j = 0; j < cmat->nnz; j++)
                                 cmat->data[j] = 1;
                             if (cmat->nnz != cmat->size()) {
                                 MKL_INT sh =
                                     qbra_shift[info->quanta[i].get_bra(mat_dq)];
+                                MKL_INT shk =
+                                    qket_shift[info->quanta[i].get_ket()];
                                 assert(sh + cmat->nnz <= cmat->m);
+                                assert(shk + cmat->nnz <= cmat->n);
                                 for (MKL_INT j = 0; j < sh; j++)
                                     cmat->rows[j] = 0;
                                 for (MKL_INT j = 0; j < cmat->nnz; j++)
-                                    cmat->rows[j + sh] = j, cmat->cols[j] = j;
+                                    cmat->rows[j + sh] = j,
+                                                   cmat->cols[j] = j + shk;
                                 for (MKL_INT j = cmat->nnz; j <= cmat->m - sh;
                                      j++)
                                     cmat->rows[j + sh] = cmat->nnz;
-                                qbra_shift[info->quanta[i].get_bra(mat_dq)] +=
-                                    cmat->nnz;
+                                if (cmat->m > cmat->n)
+                                    qbra_shift[info->quanta[i].get_bra(
+                                        mat_dq)] += cmat->nnz;
+                                else if (cmat->n > cmat->m)
+                                    qket_shift[info->quanta[i].get_ket()] +=
+                                        cmat->nnz;
                             }
                         } else {
                             for (MKL_INT j = 0; j < cmat->nnz; j++)
