@@ -55,12 +55,49 @@ template <typename S> struct SparseTensor {
     }
 };
 
-template <typename, typename = void> struct UnfusedMPS;
+template <typename S1, typename S2, typename = void, typename = void>
+struct TransSparseTensor;
+
+// Translation between SU2 and SZ MPSInfo
+template <typename S1, typename S2>
+struct TransSparseTensor<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
+    static shared_ptr<SparseTensor<S2>>
+    forward(const shared_ptr<SparseTensor<S1>> &spt,
+            const shared_ptr<StateInfo<S1>> &basis, const shared_ptr<CG<S1>> &cg,
+            bool left) {
+        shared_ptr<SparseTensor<S2>> rst = make_shared<SparseTensor<S2>>();
+        assert(basis->n == (int)spt.data.size());
+        // need to compute shift for S2
+        // need algebra for tensor
+        // need to consider coupling order
+        for (int ip = 0; ip < basis->n; ip++) {
+            S1 mq = basis->quanta[ip];
+            for (auto &r : spt.data[ip]) {
+                S1 lq = r.first.first, rq = r.first.second;
+                for (int imz = -mq.twos(); imz <= mq.twos(); imz += 2)
+                    for (int ilz = -lq.twos(); ilz <= lq.twos(); ilz += 2)
+                        for (int irz = -rq.twos(); irz <= rq.twos(); irz += 2) {
+                            S2 mqz(mq.n(), imz, mq.pg());
+                            S2 lqz(lq.n(), ilz, lq.pg());
+                            S2 rqz(rq.n(), irz, rq.pg());
+                            double factor =
+                                left ? cg->cg(lq.twos(), mq.twos(), rq.twos(),
+                                              ilz, imz, irz)
+                                     : cg->cg(mq.twos(), rq.twos(), lq.twos(),
+                                              imz, irz, ilz);
+                        }
+            }
+        }
+        return nullptr;
+    }
+};
 
 // MPS represented in three-index tensor
-template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
+template <typename S> struct UnfusedMPS {
     shared_ptr<MPSInfo<S>> info;
     vector<shared_ptr<SparseTensor<S>>> tensors;
+    string canonical_form;
+    int center, n_sites, dot;
     UnfusedMPS() {}
     UnfusedMPS(const shared_ptr<MPS<S>> &mps) { this->initialize(mps); }
     static shared_ptr<SparseTensor<S>>
@@ -172,6 +209,10 @@ template <typename S> struct UnfusedMPS<S, typename S::is_sz_t> {
     }
     void initialize(const shared_ptr<MPS<S>> &mps) {
         this->info = mps->info;
+        canonical_form = mps->canonical_form;
+        center = mps->center;
+        n_sites = mps->n_sites;
+        dot = mps->dot;
         tensors.resize(mps->n_sites);
         for (int i = 0; i < mps->n_sites; i++)
             tensors[i] = transform_mps_tensor(i, mps);

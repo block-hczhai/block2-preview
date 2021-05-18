@@ -214,22 +214,6 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 template <typename S>
 auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
 
-    py::class_<UnfusedMPS<S>, shared_ptr<UnfusedMPS<S>>>(m, "UnfusedMPS")
-        .def(py::init<>())
-        .def(py::init<const shared_ptr<MPS<S>> &>())
-        .def_readwrite("info", &UnfusedMPS<S>::info)
-        .def_readwrite("tensors", &UnfusedMPS<S>::tensors)
-        .def_static("transform_left_fused",
-                    &UnfusedMPS<S>::transform_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
-        .def_static("transform_right_fused",
-                    &UnfusedMPS<S>::transform_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
-        .def_static("transform_mps_tensor",
-                    &UnfusedMPS<S>::transform_mps_tensor, py::arg("i"),
-                    py::arg("mps"))
-        .def("initialize", &UnfusedMPS<S>::initialize);
-
     py::class_<DeterminantTRIE<S>, shared_ptr<DeterminantTRIE<S>>>(
         m, "DeterminantTRIE")
         .def(py::init<int>(), py::arg("n_sites"))
@@ -974,6 +958,27 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("ncenter", &ParallelMPS<S>::ncenter)
         .def_readwrite("svd_eps", &ParallelMPS<S>::svd_eps)
         .def_readwrite("svd_cutoff", &ParallelMPS<S>::svd_cutoff);
+
+    py::class_<UnfusedMPS<S>, shared_ptr<UnfusedMPS<S>>>(m, "UnfusedMPS")
+        .def(py::init<>())
+        .def(py::init<const shared_ptr<MPS<S>> &>())
+        .def_readwrite("info", &UnfusedMPS<S>::info)
+        .def_readwrite("tensors", &UnfusedMPS<S>::tensors)
+        .def_readwrite("n_sites", &UnfusedMPS<S>::n_sites)
+        .def_readwrite("center", &UnfusedMPS<S>::center)
+        .def_readwrite("dot", &UnfusedMPS<S>::dot)
+        .def_readwrite("canonical_form", &UnfusedMPS<S>::canonical_form)
+        .def_static("transform_left_fused",
+                    &UnfusedMPS<S>::transform_left_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("wfn"))
+        .def_static("transform_right_fused",
+                    &UnfusedMPS<S>::transform_right_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("wfn"))
+        .def_static("transform_mps_tensor",
+                    &UnfusedMPS<S>::transform_mps_tensor, py::arg("i"),
+                    py::arg("mps"))
+        .def("initialize", &UnfusedMPS<S>::initialize);
+
 }
 
 template <typename S> void bind_operator(py::module &m) {

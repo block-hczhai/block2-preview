@@ -215,6 +215,7 @@ extern template struct block2::SparseTensor<block2::SZ>;
 extern template struct block2::UnfusedMPS<block2::SZ>;
 
 extern template struct block2::SparseTensor<block2::SU2>;
+extern template struct block2::UnfusedMPS<block2::SU2>;
 
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ>;
