@@ -1,6 +1,8 @@
 
 .. highlight:: bash
 
+.. _user_advanced:
+
 Advanced Usage
 ==============
 

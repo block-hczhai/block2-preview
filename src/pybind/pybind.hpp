@@ -632,6 +632,7 @@ template <typename S> void bind_sparse(py::module &m) {
                  (*self)[idx] = v;
              })
         .def("from_dense", &CSRSparseMatrix<S>::from_dense)
+        .def("wrap_dense", &CSRSparseMatrix<S>::wrap_dense)
         .def("to_dense", &CSRSparseMatrix<S>::to_dense);
 
     py::class_<ArchivedSparseMatrix<S>, shared_ptr<ArchivedSparseMatrix<S>>,
@@ -978,7 +979,6 @@ template <typename S> void bind_mps(py::module &m) {
                     &UnfusedMPS<S>::transform_mps_tensor, py::arg("i"),
                     py::arg("mps"))
         .def("initialize", &UnfusedMPS<S>::initialize);
-
 }
 
 template <typename S> void bind_operator(py::module &m) {
@@ -1912,6 +1912,12 @@ template <typename S> void bind_parallel(py::module &m) {
 
     py::class_<ParallelRuleQC<S>, shared_ptr<ParallelRuleQC<S>>,
                ParallelRule<S>>(m, "ParallelRuleQC")
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+                      ParallelCommTypes>());
+
+    py::class_<ParallelRuleOneBodyQC<S>, shared_ptr<ParallelRuleOneBodyQC<S>>,
+               ParallelRule<S>>(m, "ParallelRuleOneBodyQC")
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
         .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
                       ParallelCommTypes>());

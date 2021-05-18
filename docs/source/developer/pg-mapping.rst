@@ -1,4 +1,6 @@
 
+.. _dev_pg_mapping:
+
 Point Group Mapping
 ===================
 

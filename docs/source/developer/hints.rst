@@ -173,3 +173,16 @@ the information stored in the two MPSInfo can interfere with each other.
 **Reason:** Wrong basis was used in the constructor of IdentityMPO.
 
 **Solution:** Change ``IdentityMPO(mpo_bra.basis, mpo_bra.basis, ...)`` to ``IdentityMPO(mpo_bra.basis, mpo_ket.basis, ...)``.
+
+[2021-05-18]
+^^^^^^^^^^^^
+
+**Assertion:** ::
+
+    block2/csr_matrix_functions.hpp:396: static void block2::CSRMatrixFunctions::multiply(const MatrixRef&, bool, const block2::CSRMatrixRef&, bool, const MatrixRef&, double, double): Assertion `st == SPARSE_STATUS_SUCCESS' failed.
+
+**Conditions:** CSR, ``SeqTypes.Tasked``.
+
+**Reason:** ``SeqTypes.Tasked`` cannot be used together with CSR.
+
+**Solution:** Change ``Global.threading.seq_type = SeqTypes.Tasked`` to ``Global.threading.seq_type = SeqTypes.Nothing``.

@@ -94,7 +94,7 @@ struct TInt {
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
 #endif
-                if (general && j > i)
+                if (!general && j > i)
                     continue;
                 double x = 0;
                 for (int q = 0; q < n; q++)

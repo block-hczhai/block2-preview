@@ -47,7 +47,7 @@ if "nonspinadapted" in dic:
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
+    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
     from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
@@ -61,7 +61,7 @@ else:
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity
+    from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
     from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
@@ -151,6 +151,7 @@ _print(Global.threading)
 
 if MPI is not None:
     prule = ParallelRuleQC(MPI)
+    prule_one_body = ParallelRuleOneBodyQC(MPI)
     prule_pdm1 = ParallelRulePDM1QC(MPI)
     prule_pdm2 = ParallelRulePDM2QC(MPI)
     prule_ident = ParallelRuleIdentity(MPI)
@@ -164,6 +165,7 @@ if pre_run or not no_pre_run:
     if "orbital_rotation" in dic:
         orb_sym = np.load(scratch + "/nat_orb_sym.npy")
         kappa = np.load(scratch + "/nat_kappa.npy")
+        kappa = kappa.flatten()
         n_sites = len(orb_sym)
         fcidump = FCIDUMP()
         fcidump.initialize_h1e(n_sites, nelec[0], spin[0], isym[0], 0.0, kappa)
@@ -423,6 +425,7 @@ has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
 has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
     or "restart_twopdm" in dic or "twopdm" in dic
 anti_herm = "orbital_rotation" in dic
+one_body_only = "orbital_rotation" in dic
 
 # prepare mpo
 if pre_run or not no_pre_run:
@@ -705,7 +708,10 @@ def get_state_specific_mps(iroot, mps_info):
 
 if not pre_run:
     if MPI is not None:
-        mpo = ParallelMPO(mpo, prule)
+        if one_body_only:
+            mpo = ParallelMPO(mpo, prule_one_body)
+        else:
+            mpo = ParallelMPO(mpo, prule)
         pmpo = ParallelMPO(pmpo, prule_pdm1)
         if has_2pdm:
             p2mpo = ParallelMPO(p2mpo, prule_pdm2)
@@ -958,9 +964,9 @@ if not pre_run:
         te_discarded_weights = []
         for i in range(n_steps):
             if te.mode == TETypes.TangentSpace:
-                te.solve(2, -dt / 2, mps.center == 0)
+                te.solve(2, dt / 2, mps.center == 0)
             else:
-                te.solve(1, -dt, mps.center == 0)
+                te.solve(1, dt, mps.center == 0)
             _print("T = %10.5f <E> = %20.15f <Norm^2> = %20.15f" %
                    ((i + 1) * dt, te.energies[-1], te.normsqs[-1]))
             te_times.append((i + 1) * dt)

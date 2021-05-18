@@ -78,6 +78,7 @@ Features
    :caption: Developer Guide
 
    developer/dmrg
+   developer/orbital-rotation
    developer/pg-mapping
    developer/hints
 

@@ -76,6 +76,44 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
     }
 };
 
+// Rule for parallel dispatcher for quantum chemistry MPO with only one-body
+// term
+template <typename S> struct ParallelRuleOneBodyQC : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    ParallelRuleOneBodyQC(const shared_ptr<ParallelCommunicator<S>> &comm,
+                          ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    shared_ptr<ParallelRule<S>> split(int gsize) const override {
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
+        return make_shared<ParallelRuleOneBodyQC<S>>(r->comm, r->comm_type);
+    }
+    static int find_index(uint16_t i, uint16_t j) {
+        return i < j ? ((int)j * (j + 1) >> 1) + i
+                     : ((int)i * (i + 1) >> 1) + j;
+    }
+    ParallelProperty
+    operator()(const shared_ptr<OpElement<S>> &op) const override {
+        SiteIndex si = op->site_index;
+        switch (op->name) {
+        case OpNames::I:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
+        case OpNames::C:
+        case OpNames::D:
+        case OpNames::R:
+        case OpNames::RD:
+            return ParallelProperty(si[0] % comm->size, ParallelOpTypes::None);
+        case OpNames::H:
+            return ParallelProperty(0, ParallelOpTypes::Partial);
+        case OpNames::TEMP:
+            return ParallelProperty(find_index(si[0], si[1]) % comm->size,
+                                    ParallelOpTypes::None);
+        default:
+            assert(false);
+        }
+        return ParallelRule<S>::operator()(op);
+    }
+};
+
 // Rule for parallel dispatcher for quantum chemistry 1PDM
 // this one should provide better scalability than ParallelRuleNPDMQC
 template <typename S> struct ParallelRulePDM1QC : ParallelRule<S> {
