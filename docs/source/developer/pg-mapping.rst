@@ -287,3 +287,19 @@ Some reference output for this example: ::
     D2H ORB SYM =  VectorUInt8[ 5 0 6 5 3 5 0 0 5 0 3 6 5 0 3 6 7 2 7 2 7 2 1 4 0 5 ]
     Norm =    0.999999999998821
     D2H Energy =  -75.728449053829152
+
+Initial Guess for Compression
+-----------------------------
+
+For large systems, the initial guess for ``Linear`` (``mps_c2v`` or ``mps_d2h`` in the above examples)
+may be too bad, and very small overlap (``F`` value) with ``mps`` can be observed.
+The MPS bond dimension will be kept as 1 or a very small number (it should be at least one, since
+by default the random FCI initial guess is used, where at least one state is kept for each quantum number
+in the initial guess).
+
+To solve this problem, one can add ``cps.cutoff = 0`` before the line ``norm = cps.solve(...)``.
+Alternatively, one can add ``cps.trunc_type = TruncationTypes.KeepOne * n`` before the line ``norm = cps.solve(...)``,
+where ``n`` is a small positive integer.
+
+Generating initial guess using occupation numbers may also alleviate this problem, but using the
+above settings, better initial guess with occupation numbers is not mandatory.

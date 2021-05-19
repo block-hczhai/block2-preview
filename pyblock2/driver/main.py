@@ -108,6 +108,8 @@ sweep_tol = float(dic.get("sweep_tol", 1e-6))
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
+elif dic.get("trunc_type", "physical").startswith("keep "):
+    trunc_type = TruncationTypes.KeepOne * int(dic["trunc_type"][len("keep "):].strip())
 else:
     trunc_type = TruncationTypes.Reduced
 if dic.get("decomp_type", "density_matrix") == "density_matrix":
