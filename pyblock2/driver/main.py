@@ -108,6 +108,8 @@ sweep_tol = float(dic.get("sweep_tol", 1e-6))
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
+elif dic.get("trunc_type", "physical").startswith("keep "):
+    trunc_type = TruncationTypes.KeepOne * int(dic["trunc_type"][len("keep "):].strip())
 else:
     trunc_type = TruncationTypes.Reduced
 if dic.get("decomp_type", "density_matrix") == "density_matrix":
@@ -282,7 +284,7 @@ soc = "soc" in dic
 overlap = "overlap" in dic
 
 # prepare mps
-if len(mps_tags) > 1 or "compression" in dic:
+if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic):
     nroots = len(mps_tags)
     mps = None
     mps_info = None
@@ -920,8 +922,9 @@ if not pre_run:
     # Compression
     if "compression" in dic:
         lmps, lmps_info, _ = get_mps_from_tags(-1)
-        mps = lmps.deep_copy(mps_tags[0])
-        mps_info = mps.info
+        if "random_mps_init" not in dic:
+            mps = lmps.deep_copy(mps_tags[0])
+            mps_info = mps.info
         me = MovingEnvironment(impo if overlap else mpo, mps, lmps, "CPS")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
