@@ -255,7 +255,31 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
-    dmrg->solve(30, true);
+    dmrg->solve(2, true);
+
+    shared_ptr<MPSInfo<SU2>> bra_info =
+        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
+    bra_info->set_bond_dimension(bond_dim);
+    bra_info->tag = "BRA";
+
+    shared_ptr<MPS<SU2>> bra = make_shared<MPS<SU2>>(norb, 0, 2);
+    bra->initialize(bra_info);
+    bra->random_canonicalize();
+    bra->save_mutable();
+    bra_info->save_mutable();
+
+    shared_ptr<MPO<SU2>> impo = make_shared<IdentityMPO<SU2>>(hamil);
+    impo = make_shared<SimplifiedMPO<SU2>>(impo, make_shared<Rule<SU2>>());
+
+    shared_ptr<MovingEnvironment<SU2>> ime =
+        make_shared<MovingEnvironment<SU2>>(impo, bra, mps, "RHS");
+    ime->init_environments();
+    vector<ubond_t> bra_dims = {250};
+    vector<ubond_t> ket_dims = {250};
+    shared_ptr<Linear<SU2>> linear =
+        make_shared<Linear<SU2>>(ime, bra_dims, ket_dims);
+    linear->cutoff = 1E-14;
+    double igf = linear->solve(20, bra->center == 0, 1E-12);
 
     // deallocate persistent stack memory
     mps_info->deallocate();
