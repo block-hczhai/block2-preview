@@ -155,6 +155,11 @@ because here the MPS is transformed from the previous D2h MPS with the center at
 
 If the MPS contains big-site, there can be a much larger error in the energy due to the reordering
 of states in the big-site MPS tensor. Re-optimizing the big-site tensor may solve this problem.
+In addition, ``me.delayed_contraction = OpNamesSet.normal_ops()`` *must not* be set. 
+Otherwise, the following assertion occurs: ::
+
+    Assertion`a->get_type() == SparseMatrixTypes::Normal && b->get_type() == SparseMatrixTypes::Normal && c->get_type() == SparseMatrixTypes::Normal && v->get_type() == SparseMatrixTypes::Normal && da->get_type() == SparseMatrixTypes::Normal && db->get_type() == SparseMatrixTypes::Normal' failed.
+
 
 .. highlight:: text
 
