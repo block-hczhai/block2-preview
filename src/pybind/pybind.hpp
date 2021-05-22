@@ -969,16 +969,26 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("center", &UnfusedMPS<S>::center)
         .def_readwrite("dot", &UnfusedMPS<S>::dot)
         .def_readwrite("canonical_form", &UnfusedMPS<S>::canonical_form)
-        .def_static("transform_left_fused",
-                    &UnfusedMPS<S>::transform_left_fused, py::arg("i"),
+        .def_static("forward_left_fused",
+                    &UnfusedMPS<S>::forward_left_fused, py::arg("i"),
                     py::arg("mps"), py::arg("wfn"))
-        .def_static("transform_right_fused",
-                    &UnfusedMPS<S>::transform_right_fused, py::arg("i"),
+        .def_static("forward_right_fused",
+                    &UnfusedMPS<S>::forward_right_fused, py::arg("i"),
                     py::arg("mps"), py::arg("wfn"))
-        .def_static("transform_mps_tensor",
-                    &UnfusedMPS<S>::transform_mps_tensor, py::arg("i"),
+        .def_static("forward_mps_tensor",
+                    &UnfusedMPS<S>::forward_mps_tensor, py::arg("i"),
                     py::arg("mps"))
-        .def("initialize", &UnfusedMPS<S>::initialize);
+        .def_static("backward_left_fused",
+                    &UnfusedMPS<S>::backward_left_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+        .def_static("backward_right_fused",
+                    &UnfusedMPS<S>::backward_right_fused, py::arg("i"),
+                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+        .def_static("backward_mps_tensor",
+                    &UnfusedMPS<S>::backward_mps_tensor, py::arg("i"),
+                    py::arg("mps"), py::arg("spt"))
+        .def("initialize", &UnfusedMPS<S>::initialize)
+        .def("finalize", &UnfusedMPS<S>::finalize);
 }
 
 template <typename S> void bind_operator(py::module &m) {
@@ -2161,6 +2171,18 @@ void bind_trans(py::module &m, const string &aux_name) {
           &TransStateInfo<S, T>::forward);
     m.def(("trans_mps_info_to_" + aux_name).c_str(),
           &TransMPSInfo<S, T>::forward);
+}
+
+template <typename S, typename T>
+auto bind_trans_spin_specific(py::module &m, const string &aux_name)
+    -> decltype(typename S::is_su2_t(typename T::is_sz_t())) {
+
+    m.def(("trans_connection_state_info_to_" + aux_name).c_str(),
+          &TransStateInfo<T, S>::backward_connection);
+    m.def(("trans_sparse_tensor_to_" + aux_name).c_str(),
+          &TransSparseTensor<S, T>::forward);
+    m.def(("trans_unfused_mps_to_" + aux_name).c_str(),
+          &TransUnfusedMPS<S, T>::forward);
 }
 
 template <typename S = void> void bind_data(py::module &m) {
@@ -3505,10 +3527,13 @@ extern template void bind_algorithms<SU2>(py::module &m);
 extern template void bind_mpo<SU2>(py::module &m);
 extern template void bind_parallel<SU2>(py::module &m);
 
-extern template void bind_trans<SU2, SZ>(py::module &m, const string &aux_name);
-extern template void bind_trans<SZ, SU2>(py::module &m, const string &aux_name);
-
 extern template auto bind_spin_specific<SZ>(py::module &m)
     -> decltype(typename SZ::is_sz_t());
+
+extern template void bind_trans<SU2, SZ>(py::module &m, const string &aux_name);
+extern template void bind_trans<SZ, SU2>(py::module &m, const string &aux_name);
+extern template auto bind_trans_spin_specific<SU2, SZ>(py::module &m,
+                                                       const string &aux_name)
+    -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
 #endif

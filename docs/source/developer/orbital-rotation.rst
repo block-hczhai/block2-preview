@@ -314,7 +314,7 @@ Finally, we can check the energy expectation of the transformed MPS in the new b
 
 .. highlight:: text
 
-Some reference output for this example: ::
+Some reference outputs for this example: ::
 
     D2H ORB SYM =  VectorUInt8[ 0 0 0 0 0 0 5 5 5 5 5 5 7 7 7 2 2 2 6 6 6 3 3 3 1 4 ]
     DMRG Energy =  -75.728487321653233
@@ -491,7 +491,7 @@ Also note that ``SeqTypes.Nothing`` (instead of ``SeqTypes.Tasked``) should be u
 
 .. highlight:: text
 
-Some reference output for this example: ::
+Some reference outputs for this example: ::
 
     D2H ORB SYM =  VectorUInt8[ 0 0 0 0 0 0 5 5 5 5 5 5 7 7 7 2 2 2 6 6 6 3 3 3 1 4 ]
     MRCI DMRG Energy =  -75.727859086194130

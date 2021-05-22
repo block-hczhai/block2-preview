@@ -52,6 +52,8 @@ PYBIND11_MODULE(block2, m) {
     bind_trans<SU2, SZ>(m_su2, "sz");
     bind_trans<SZ, SU2>(m_sz, "su2");
 
+    bind_trans_spin_specific<SU2, SZ>(m_su2, "sz");
+
 #ifdef _USE_SCI
     bind_sci_wrapper<SZ>(m_sz);
 #ifdef _SCI_WRAPPER2

@@ -207,6 +207,17 @@ struct StateInfo<S, typename enable_if<integral_constant<
                 }
         }
     }
+    static StateInfo complementary(const StateInfo &a, S target) {
+        StateInfo c;
+        c.allocate(a.n);
+        memcpy(c.quanta, a.quanta, c.n * sizeof(S));
+        memcpy(c.n_states, a.n_states, c.n * sizeof(ubond_t));
+        for (int i = 0; i < a.n; i++)
+            c.quanta[i] = target - a.quanta[i];
+        c.sort_states();
+        c.collect();
+        return c;
+    }
     // Tensor product of StateInfo a and b
     // If resulting state does not appear in cref, it will be removed
     static StateInfo tensor_product(const StateInfo &a, const StateInfo &b,
@@ -495,6 +506,29 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
             i++;
         }
         so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S2>>
+    backward_connection(const shared_ptr<StateInfo<S2>> &si,
+                        const shared_ptr<StateInfo<S1>> &bsi) {
+        shared_ptr<StateInfo<S2>> so = make_shared<StateInfo<S2>>();
+        map<S1, vector<S2>> mp;
+        int nb = 0, ii = 0;
+        for (int i = 0; i < si->n; i++) {
+            S2 q = si->quanta[i];
+            nb += q.twos() + 1;
+            for (int j = -q.twos(); j <= q.twos(); j += 2)
+                mp[S1(q.n(), j, q.pg())].push_back(q);
+        }
+        so->allocate(nb);
+        for (int ib = 0; ib < bsi->n; ib++) {
+            vector<S2> &v = mp.at(bsi->quanta[ib]);
+            so->n_states[ib] = ii;
+            memcpy(so->quanta + ii, v.data(), v.size() * sizeof(S2));
+            ii += (int)v.size();
+        }
+        so->reallocate(ii);
+        so->n_states_total = bsi->n;
         return so;
     }
 };

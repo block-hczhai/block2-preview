@@ -22,3 +22,6 @@
 
 template void bind_trans<SU2, SZ>(py::module &m, const string &aux_name);
 template void bind_trans<SZ, SU2>(py::module &m, const string &aux_name);
+template auto bind_trans_spin_specific<SU2, SZ>(py::module &m,
+                                                const string &aux_name)
+    -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));

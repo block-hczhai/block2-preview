@@ -283,7 +283,7 @@ The script is basically the same (except the exchange between C\ :sub:`2v` and D
 
 .. highlight:: text
 
-Some reference output for this example: ::
+Some reference outputs for this example: ::
 
     C2V ORB SYM =  VectorUInt8[ 2 0 3 2 1 2 0 0 2 0 1 3 2 0 1 3 3 1 3 1 3 1 0 2 0 2 ]
     --> Site =   24-  25 .. Mmps =    3 Ndav =   1 E =    -75.7284490538 Error = 1.62e-19 FLOPS = 3.87e+05 Tdav = 0.00 T = 0.01

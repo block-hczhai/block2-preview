@@ -62,7 +62,7 @@ else:
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear
+    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, trans_unfused_mps_to_sz, UnfusedMPS
     from block2.su2 import trans_state_info_to_sz as trans_si
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -333,10 +333,29 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] == 'K':
             cg = CG(200)
             cg.initialize()
-            mps.move_left(cg, prule)
+            mps.flip_fused_form(mps.center, cg, prule)
         mps.center = mps.n_sites - 2
         mps.save_data()
         forward = False
+        if MPI is not None:
+            MPI.barrier()
+        mps.load_mutable()
+        mps.info.load_mutable()
+        if MPI is not None:
+            MPI.barrier()
+    elif mps.center == 0 and mps.dot == 2 and nroots == 1:
+        if MPI is not None:
+            MPI.barrier()
+        if mps.canonical_form[mps.center] == 'S':
+            cg = CG(200)
+            cg.initialize()
+            mps.flip_fused_form(mps.center, cg, prule)
+        mps.save_data()
+        forward = True
+        if MPI is not None:
+            MPI.barrier()
+        mps.load_mutable()
+        mps.info.load_mutable()
         if MPI is not None:
             MPI.barrier()
 elif pre_run or not no_pre_run:
@@ -735,7 +754,8 @@ if not pre_run:
     if "statespecific" in dic and "restart_onepdm" not in dic \
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "restart_twopdm" not in dic \
-            and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic:
+            and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
+            and "restart_copy_mps" not in dic:
         assert isinstance(mps, MultiMPS)
         assert nroots != 1
 
@@ -856,6 +876,7 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "statespecific" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
+            and "restart_copy_mps" not in dic \
             and "delta_t" not in dic and "compression" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
@@ -1384,6 +1405,23 @@ if not pre_run:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_oh.npy", mat_oh)
+    
+    if "restart_copy_mps" in dic or "copy_mps" in dic:
+        
+        if "restart_copy_mps" in dic:
+            copy_tag = dic["restart_copy_mps"]
+        else:
+            copy_tag = dic["copy_mps"]
+        if "trans_mps_to_sz" in dic:
+            assert "nonspinadapted" not in dic
+            mps.info.load_mutable()
+            mps.load_mutable()
+            cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(mps), copy_tag, mpo.tf.opf.cg).finalize()
+        else:
+            cp_mps = mps.deep_copy(copy_tag)
+        cp_mps.info.save_data(scratch + '/mps_info.bin')
+        cp_mps.info.save_data(scratch + '/%s-mps_info.bin' % copy_tag)
+
 
     if mps_info is not None:
         mps_info.deallocate()

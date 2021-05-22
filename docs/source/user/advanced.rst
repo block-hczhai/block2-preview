@@ -173,3 +173,87 @@ The difference compared to the energy generated in the first step
 ``DMRG Energy =  -75.728467269121097`` is only 9.7E-6.
 One can increase the bond dimension in the evolution to make this closer to the value printed
 in the first step.
+
+MPS Transform
+-------------
+
+The MPS can be copied and saved using another tag.
+For SU2 (spin-adapted) MPS, it can also be transformed to SZ (non-spin-adapted) MPS and saved using another tag.
+
+Limitations: only total spin zero spin-adapted MPS can be transformed.
+
+First, we compute the energy for the spin-adapted ground state using the following input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags KET
+
+The following script will read the spin-adapted MPS and tranform it to a non-spin-adapted MPS: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags KET
+    restart_copy_mps ZKET
+    trans_mps_to_sz
+
+Here the keyword ``restart_copy_mps`` indicates that the MPS will be copied, associated with a value
+indicating the new tag for saving the copied MPS.
+If the keyword ``trans_mps_to_sz`` is present, the MPS will be transformed to non-spin-adapted before
+being saved.
+
+Finally, we calculate the energy expectation value using non-spin-adapted formalism
+and the transformed MPS (stored in the scratch folder), using the following input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags ZKET
+    restart_oh
+    nonspinadapted
+
+Some reference outputs for this example: ::
+
+    $ grep Energy dmrg-1.out
+    DMRG Energy =  -75.728467269121083
+    $ grep MPS dmrg-2.out
+    MPS =  KRRRRRRRRRRRRRRRRRRRRRRRRR 0 2
+    GS INIT MPS BOND DIMS =       1     3    10    35   120   263   326   500   500   500   500   500   500   500   500   500   500   500   498   500   407   219    94    32    10     3     1
+    $ grep 'MPS\|Energy' dmrg-3.out 
+    MPS =  KRRRRRRRRRRRRRRRRRRRRRRRRR 0 2
+    GS INIT MPS BOND DIMS =       1     4    16    64   246   578   712  1114  1097  1102  1110  1121  1126  1130  1116  1111  1111  1107  1074  1103   895   444   186    59    16     4     1
+    OH Energy =  -75.728467269120898
+
+We can see that the tranformation from SU2 to SZ is nearly exact, and the required bond dimension for the SZ MPS
+is roughly two times of the SU2 bond dimension.

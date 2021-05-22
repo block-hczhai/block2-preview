@@ -28,7 +28,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "restart_tran_oh", "restart_dir_per_sweep", "fp_cps_cutoff",
               "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type",
               "orbital_rotation", "delta_t", "target_t", "te_type",
-              "read_mps_tags", "compression", "random_mps_init"}
+              "read_mps_tags", "compression", "random_mps_init",
+              "copy_mps", "restart_copy_mps", "trans_mps_to_sz"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -36,7 +37,7 @@ REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
 RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
                 "restart_tran_oh", "restart_tran_oh", "statespecific",
-                "orbital_rotation"}
+                "restart_copy_mps", "orbital_rotation"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell",
               "cloning", "mutation", "elite", "scale", "method"}
