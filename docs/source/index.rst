@@ -54,6 +54,7 @@ Features
     * Block-sparse (outer) / elementwise-sparse (CSR, inner)
 * Fermionic MPS algebra (non-spin-adapted only)
 * Determinant overlap (non-spin-adapted only)
+* Determinant/CSF overlap sampling
 * Multi-level parallel DMRG
     * Parallelism over sites (2-site only)
     * Parallelism over sum of MPOs (non-spin-adapted only)
@@ -63,6 +64,10 @@ Features
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
+* MPS Transformation
+    * SU2 to SZ mapping
+    * Point group mapping
+    * Orbital basis rotation
 
 .. toctree::
    :maxdepth: 1

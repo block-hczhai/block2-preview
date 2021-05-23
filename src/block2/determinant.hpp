@@ -34,9 +34,7 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct DeterminantTRIE;
-
-// Prefix trie structure of determinants (non-spin-adapted)
+// Prefix trie structure
 // can be used as map<DET, double>
 // memory complexity:
 //    (n_dets << 4^n_sites) : (4 * n_sites + 1) * n_dets * sizeof(int)
@@ -44,27 +42,26 @@ template <typename, typename = void> struct DeterminantTRIE;
 // time complexity: (D = MPS bond dimension)
 //    (n_dets << 4^n_sites) : n_sites * n_dets * D * D
 //    (n_dets  ~ 4^n_sites) : (4 / 3) * n_dets * D * D
-template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
-    vector<array<int, 4>> data;
+template <typename D, uint8_t L = 4> struct TRIE {
+    vector<array<int, L>> data;
     vector<int> dets, invs;
     vector<double> vals;
     int n_sites;
     bool enable_look_up;
-    DeterminantTRIE(int n_sites, bool enable_look_up = false)
+    TRIE(int n_sites, bool enable_look_up = false)
         : n_sites(n_sites), enable_look_up(enable_look_up) {
         data.reserve(n_sites + 1);
-        data.push_back(array<int, 4>{0, 0, 0, 0});
+        data.push_back(array<int, L>());
     }
     // empty trie
     void clear() {
         data.clear(), dets.clear(), invs.clear(), vals.clear();
-        data.push_back(array<int, 4>{0, 0, 0, 0});
+        data.push_back(array<int, L>());
     }
     // deep copy
-    shared_ptr<DeterminantTRIE<S>> copy() {
-        shared_ptr<DeterminantTRIE<S>> dett =
-            make_shared<DeterminantTRIE<S>>(n_sites, enable_look_up);
-        dett->data = vector<array<int, 4>>(data.begin(), data.end());
+    shared_ptr<D> copy() {
+        shared_ptr<D> dett = make_shared<D>(n_sites, enable_look_up);
+        dett->data = vector<array<int, L>>(data.begin(), data.end());
         dett->dets = vector<int>(dets.begin(), dets.end());
         dett->invs = vector<int>(invs.begin(), invs.end());
         dett->vals = vector<double>(vals.begin(), vals.end());
@@ -73,7 +70,6 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
     // number of determinants
     size_t size() const noexcept { return dets.size(); }
     // add a determinant to trie
-    // det[i] = 0 (empty) 1 (alpha) 2 (beta) 3 (double)
     void push_back(const vector<uint8_t> &det) {
         assert((int)det.size() == n_sites);
         int cur = 0;
@@ -81,7 +77,7 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
             uint8_t j = det[i];
             if (data[cur][j] == 0) {
                 data[cur][j] = (int)data.size();
-                data.push_back(array<int, 4>{0, 0, 0, 0});
+                data.push_back(array<int, L>());
             }
             cur = data[cur][j];
         }
@@ -107,7 +103,9 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
                 return -1;
             cur = data[cur][j];
         }
-        return (int)(lower_bound(dets.begin(), dets.end(), cur) - dets.begin());
+        int idx =
+            (int)(lower_bound(dets.begin(), dets.end(), cur) - dets.begin());
+        return idx < (int)dets.size() && dets[idx] == cur ? idx : -1;
     }
     // get a determinant in trie
     vector<uint8_t> operator[](int idx) const {
@@ -123,12 +121,37 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
         }
         return r;
     }
+};
+
+template <typename, typename = void> struct DeterminantTRIE;
+
+// Prefix trie structure of determinants (non-spin-adapted)
+// det[i] = 0 (empty) 1 (alpha) 2 (beta) 3 (double)
+template <typename S>
+struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
+    using TRIE<DeterminantTRIE<S>>::data;
+    using TRIE<DeterminantTRIE<S>>::dets;
+    using TRIE<DeterminantTRIE<S>>::vals;
+    using TRIE<DeterminantTRIE<S>>::invs;
+    using TRIE<DeterminantTRIE<S>>::n_sites;
+    using TRIE<DeterminantTRIE<S>>::enable_look_up;
+    DeterminantTRIE(int n_sites, bool enable_look_up = false)
+        : TRIE<DeterminantTRIE<S>>(n_sites, enable_look_up) {}
     // set the value for each determinant to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S>> &mps, double cutoff = 0) {
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(double) * vals.size());
+        bool has_dets = dets.size() != 0;
         stack<tuple<int, int, int>> ptrs;
         vector<map<S, vector<double>>> partials;
+        vector<uint8_t> det(n_sites);
+        if (!has_dets) {
+            for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
+                if (data[0][j] == 0) {
+                    data[0][j] = (int)data.size();
+                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                }
+        }
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
                 ptrs.push(make_tuple(data[0][j], j, 0));
@@ -140,6 +163,7 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
             check_signal_()();
             auto &p = ptrs.top();
             int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+            det[d] = j;
             partials.resize(d + 1);
             partials.push_back(map<S, vector<double>>());
             map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
@@ -170,9 +194,131 @@ template <typename S> struct DeterminantTRIE<S, typename S::is_sz_t> {
             if (d == n_sites - 1) {
                 assert(cmp.size() == 1 && cmp.count(mps->info->target) != 0);
                 assert(cmp[mps->info->target].size() == 1);
-                vals[lower_bound(dets.begin(), dets.end(), cur) -
-                     dets.begin()] = cmp[mps->info->target][0];
+                if (!has_dets) {
+                    dets.push_back(cur);
+                    vals.push_back(cmp[mps->info->target][0]);
+                    if (enable_look_up) {
+                        invs.resize(data.size());
+                        for (int i = 0, curx = 0; i < n_sites; i++) {
+                            uint8_t jj = det[i];
+                            invs[data[curx][jj]] = curx;
+                            curx = data[curx][jj];
+                        }
+                    }
+                } else
+                    vals[lower_bound(dets.begin(), dets.end(), cur) -
+                         dets.begin()] = cmp[mps->info->target][0];
             } else {
+                if (!has_dets) {
+                    for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
+                        if (data[cur][jj] == 0) {
+                            data[cur][jj] = (int)data.size();
+                            data.push_back(array<int, 4>{0, 0, 0, 0});
+                        }
+                }
+                for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
+                    if (data[cur][jj] != 0)
+                        ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
+            }
+        }
+    }
+};
+
+// Prefix trie structure of Configuration State Functions (CSFs) (spin-adapted)
+// det[i] = 0 (empty) 1 (increase) 2 (decrease) 3 (double)
+template <typename S>
+struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
+    using TRIE<DeterminantTRIE<S>>::data;
+    using TRIE<DeterminantTRIE<S>>::dets;
+    using TRIE<DeterminantTRIE<S>>::vals;
+    using TRIE<DeterminantTRIE<S>>::invs;
+    using TRIE<DeterminantTRIE<S>>::n_sites;
+    using TRIE<DeterminantTRIE<S>>::enable_look_up;
+    DeterminantTRIE(int n_sites, bool enable_look_up = false)
+        : TRIE<DeterminantTRIE<S>>(n_sites, enable_look_up) {}
+    // set the value for each CSF to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S>> &mps, double cutoff = 0) {
+        vals.resize(dets.size());
+        memset(vals.data(), 0, sizeof(double) * vals.size());
+        bool has_dets = dets.size() != 0;
+        stack<tuple<int, int, int>> ptrs;
+        vector<map<S, vector<double>>> partials;
+        vector<uint8_t> det(n_sites);
+        if (!has_dets) {
+            for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
+                if (data[0][j] == 0) {
+                    data[0][j] = (int)data.size();
+                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                }
+        }
+        for (uint8_t j = 0; j < (int)data[0].size(); j++)
+            if (data[0][j] != 0)
+                ptrs.push(make_tuple(data[0][j], j, 0));
+        map<S, vector<double>> mp;
+        mp[mps->info->vacuum] = vector<double>{1.0};
+        partials.push_back(mp);
+        // depth-first traverse of trie
+        while (!ptrs.empty()) {
+            check_signal_()();
+            auto &p = ptrs.top();
+            int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+            int jd = j >= 2 ? j - 1 : j;
+            det[d] = j;
+            partials.resize(d + 1);
+            partials.push_back(map<S, vector<double>>());
+            map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
+            for (auto &m : mps->tensors[d]->data[jd]) {
+                S bra = m.first.first, ket = m.first.second;
+                if (jd == 1 && !((j == 1 && ket.twos() > bra.twos()) ||
+                                 (j == 2 && ket.twos() < bra.twos())))
+                    continue;
+                MatrixRef mat = m.second->ref();
+                if (pmp.count(bra) != 0) {
+                    if (cmp.count(ket) == 0)
+                        cmp[ket] = vector<double>(mat.n, 0);
+                    MatrixFunctions::multiply(
+                        MatrixRef(&pmp[bra][0], 1, mat.m), false, mat, false,
+                        MatrixRef(&cmp[ket][0], 1, mat.n), 1.0, 1.0);
+                }
+            }
+            ptrs.pop();
+            if (cmp.size() == 0)
+                continue;
+            if (cutoff != 0) {
+                double sqsum = 0;
+                for (auto &m : cmp) {
+                    double m_norm = MatrixFunctions::norm(
+                        MatrixRef(&m.second[0], (MKL_INT)m.second.size(), 1));
+                    sqsum += m_norm * m_norm;
+                }
+                if (sqrt(sqsum) < cutoff)
+                    continue;
+            }
+            if (d == n_sites - 1) {
+                assert(cmp.size() == 1 && cmp.count(mps->info->target) != 0);
+                assert(cmp[mps->info->target].size() == 1);
+                if (!has_dets) {
+                    dets.push_back(cur);
+                    vals.push_back(cmp[mps->info->target][0]);
+                    if (enable_look_up) {
+                        invs.resize(data.size());
+                        for (int i = 0, curx = 0; i < n_sites; i++) {
+                            uint8_t jj = det[i];
+                            invs[data[curx][jj]] = curx;
+                            curx = data[curx][jj];
+                        }
+                    }
+                } else
+                    vals[lower_bound(dets.begin(), dets.end(), cur) -
+                         dets.begin()] = cmp[mps->info->target][0];
+            } else {
+                if (!has_dets) {
+                    for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
+                        if (data[cur][jj] == 0) {
+                            data[cur][jj] = (int)data.size();
+                            data.push_back(array<int, 4>{0, 0, 0, 0});
+                        }
+                }
                 for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
                     if (data[cur][jj] != 0)
                         ptrs.push(make_tuple(data[cur][jj], jj, d + 1));

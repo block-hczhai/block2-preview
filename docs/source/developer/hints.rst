@@ -186,3 +186,16 @@ the information stored in the two MPSInfo can interfere with each other.
 **Reason:** ``SeqTypes.Tasked`` cannot be used together with CSR.
 
 **Solution:** Change ``Global.threading.seq_type = SeqTypes.Tasked`` to ``Global.threading.seq_type = SeqTypes.Nothing``.
+
+[2021-05-22]
+
+**Assertion:** ::
+
+    block2/sparse_matrix.hpp:552: void block2::SparseMatrixInfo<S, typename std::enable_if<std::integral_constant<bool, (sizeof (S) == sizeof (unsigned int))>::value>::type>::save_data(std::ostream&, bool) const [with S = block2::SU2Long; typename std::enable_if<std::integral_constant<bool, (sizeof (S) == sizeof (unsigned int))>::value>::type = void; std::ostream = std::basic_ostream<char>]: Assertion `n != -1' failed.
+
+**Conditions:** ``mps.save_mutable``.
+
+**Reason:** Some MPS tensors are deallocated (unloaded) after ``mps.flip_fused_form(...)`` or ``mps.move_left(...)``.
+
+**Solution:** Call ``mps.load_mutable()`` after using ``mps.flip_fused_form(...)`` or ``mps.move_left(...)``,
+so that ``mps.save_mutable()`` will be successful.

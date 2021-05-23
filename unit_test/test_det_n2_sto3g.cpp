@@ -8,11 +8,15 @@ class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
+
+    template <typename S>
+    void test_dmrg(const S target, HamiltonianQC<S> hamil, const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -23,14 +27,9 @@ class TestDETN2STO3G : public ::testing::Test {
     }
 };
 
-TEST_F(TestDETN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    PGTypes pg = PGTypes::D2H;
-    string filename = "data/N2.STO3G.FCIDUMP";
-    fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
-    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+template <typename S>
+void TestDETN2STO3G::test_dmrg(const S target, HamiltonianQC<S> hamil,
+                               const string &name) {
 
     vector<double> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
@@ -64,37 +63,31 @@ TEST_F(TestDETN2STO3G, TestSZ) {
         -0.131287878961, -0.131287877970, 0.957506526257,  -0.012693540764,
         0.001861231561,  -0.011546222107, 0.001861231727,  -0.011546222162};
 
-    SZ vacuum(0);
-    SZ target(fcidump->n_elec(), fcidump->twos(),
-              PointGroup::swap_pg(pg)(fcidump->isym()));
-    int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    int norb = hamil.n_sites;
 
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SZ>> mpo =
-        make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S>> mpo =
+        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true);
+    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
-    // cout << mpo->get_blocking_formulas() << endl;
-    // abort();
 
     ubond_t bond_dim = 200;
 
     // MPSInfo
-    shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis);
+    shared_ptr<MPSInfo<S>> mps_info =
+        make_shared<MPSInfo<S>>(norb, hamil.vacuum, target, hamil.basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
     Random::rand_seed(0);
-    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, 2);
+    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -105,8 +98,8 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<SZ>> me =
-        make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S>> me =
+        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -118,33 +111,79 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     // DMRG
     vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-8, 0.0};
-    shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->solve(10, true, 1E-13);
 
-    shared_ptr<DeterminantTRIE<SZ>> dtrie =
-        make_shared<DeterminantTRIE<SZ>>(mps->n_sites, true);
+    shared_ptr<DeterminantTRIE<S>> dtrie =
+        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
+
+    shared_ptr<DeterminantTRIE<S>> dtrie_ref =
+        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
 
     vector<uint8_t> ref = {0, 0, 0, 3, 3, 3, 3, 3, 3, 3};
     do {
-        dtrie->push_back(ref);
+        dtrie_ref->push_back(ref);
     } while (next_permutation(ref.begin(), ref.end()));
 
-    dtrie->evaluate(make_shared<UnfusedMPS<SZ>>(mps));
+    dtrie->evaluate(make_shared<UnfusedMPS<S>>(mps), 1E-7);
+    cout << dtrie->size() << endl;
 
-    for (int i = 0; i < (int)dtrie->size(); i++) {
-        for (auto x : (*dtrie)[i])
+    for (int i = 0; i < (int)dtrie_ref->size(); i++) {
+        vector<uint8_t> det = (*dtrie_ref)[i];
+        cout << name << " === ";
+        for (auto x : det)
             cout << (int)x;
-        cout << " = " << setw(22) << fixed << setprecision(12) << dtrie->vals[i]
+        int ii = dtrie->find(det);
+        double val = ii != -1 ? dtrie->vals[ii] : 0;
+        cout << " = " << setw(22) << fixed << setprecision(12) << val
              << " error = " << scientific << setprecision(3) << setw(10)
-             << (abs(dtrie->vals[i]) - abs(coeffs[i])) << endl;
+             << (abs(val) - abs(coeffs[i])) << endl;
 
-        EXPECT_LT(abs(abs(dtrie->vals[i]) - abs(coeffs[i])), 1E-7);
+        EXPECT_LT(abs(abs(val) - abs(coeffs[i])), 1E-7);
     }
 
     // deallocate persistent stack memory
     mps_info->deallocate();
     mpo->deallocate();
+}
+
+TEST_F(TestDETN2STO3G, TestSZ) {
+    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    PGTypes pg = PGTypes::D2H;
+    string filename = "data/N2.STO3G.FCIDUMP";
+    fcidump->read(filename);
+    vector<uint8_t> orbsym = fcidump->orb_sym();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_pg(pg));
+
+    SZ vacuum(0);
+    SZ target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_pg(pg)(fcidump->isym()));
+    HamiltonianQC<SZ> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
+
+    test_dmrg<SZ>(target, hamil, " SZ");
+
+    hamil.deallocate();
+    fcidump->deallocate();
+}
+
+TEST_F(TestDETN2STO3G, TestSU2) {
+    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    PGTypes pg = PGTypes::D2H;
+    string filename = "data/N2.STO3G.FCIDUMP";
+    fcidump->read(filename);
+    vector<uint8_t> orbsym = fcidump->orb_sym();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_pg(pg));
+
+    SU2 vacuum(0);
+    SU2 target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_pg(pg)(fcidump->isym()));
+    HamiltonianQC<SU2> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
+
+    test_dmrg<SU2>(target, hamil, "SU2");
+
     hamil.deallocate();
     fcidump->deallocate();
 }

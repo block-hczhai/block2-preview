@@ -119,6 +119,7 @@ extern template struct block2::DeterminantTRIE<block2::SZ>;
 extern template struct block2::DeterminantQC<block2::SZ>;
 extern template struct block2::DeterminantMPSInfo<block2::SZ>;
 
+extern template struct block2::DeterminantTRIE<block2::SU2>;
 extern template struct block2::DeterminantQC<block2::SU2>;
 extern template struct block2::DeterminantMPSInfo<block2::SU2>;
 

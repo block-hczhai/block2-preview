@@ -214,26 +214,6 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 template <typename S>
 auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
 
-    py::class_<DeterminantTRIE<S>, shared_ptr<DeterminantTRIE<S>>>(
-        m, "DeterminantTRIE")
-        .def(py::init<int>(), py::arg("n_sites"))
-        .def(py::init<int, bool>(), py::arg("n_sites"),
-             py::arg("enable_look_up"))
-        .def_readwrite("data", &DeterminantTRIE<S>::data)
-        .def_readwrite("dets", &DeterminantTRIE<S>::dets)
-        .def_readwrite("invs", &DeterminantTRIE<S>::invs)
-        .def_readwrite("vals", &DeterminantTRIE<S>::vals)
-        .def_readwrite("n_sites", &DeterminantTRIE<S>::n_sites)
-        .def_readwrite("enable_look_up", &DeterminantTRIE<S>::enable_look_up)
-        .def("clear", &DeterminantTRIE<S>::clear)
-        .def("copy", &DeterminantTRIE<S>::copy)
-        .def("__len__", &DeterminantTRIE<S>::size)
-        .def("append", &DeterminantTRIE<S>::push_back, py::arg("det"))
-        .def("find", &DeterminantTRIE<S>::find, py::arg("det"))
-        .def("__getitem__", &DeterminantTRIE<S>::operator[], py::arg("idx"))
-        .def("evaluate", &DeterminantTRIE<S>::evaluate, py::arg("mps"),
-             py::arg("cutoff") = 0.0);
-
     py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
         .def_property_readonly_static(
             "s_all", [](py::object) { return PDM2MPOQC<S>::s_all; })
@@ -969,26 +949,42 @@ template <typename S> void bind_mps(py::module &m) {
         .def_readwrite("center", &UnfusedMPS<S>::center)
         .def_readwrite("dot", &UnfusedMPS<S>::dot)
         .def_readwrite("canonical_form", &UnfusedMPS<S>::canonical_form)
-        .def_static("forward_left_fused",
-                    &UnfusedMPS<S>::forward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
-        .def_static("forward_right_fused",
-                    &UnfusedMPS<S>::forward_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
-        .def_static("forward_mps_tensor",
-                    &UnfusedMPS<S>::forward_mps_tensor, py::arg("i"),
-                    py::arg("mps"))
-        .def_static("backward_left_fused",
-                    &UnfusedMPS<S>::backward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+        .def_static("forward_left_fused", &UnfusedMPS<S>::forward_left_fused,
+                    py::arg("i"), py::arg("mps"), py::arg("wfn"))
+        .def_static("forward_right_fused", &UnfusedMPS<S>::forward_right_fused,
+                    py::arg("i"), py::arg("mps"), py::arg("wfn"))
+        .def_static("forward_mps_tensor", &UnfusedMPS<S>::forward_mps_tensor,
+                    py::arg("i"), py::arg("mps"))
+        .def_static("backward_left_fused", &UnfusedMPS<S>::backward_left_fused,
+                    py::arg("i"), py::arg("mps"), py::arg("spt"),
+                    py::arg("wfn"))
         .def_static("backward_right_fused",
                     &UnfusedMPS<S>::backward_right_fused, py::arg("i"),
                     py::arg("mps"), py::arg("spt"), py::arg("wfn"))
-        .def_static("backward_mps_tensor",
-                    &UnfusedMPS<S>::backward_mps_tensor, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"))
+        .def_static("backward_mps_tensor", &UnfusedMPS<S>::backward_mps_tensor,
+                    py::arg("i"), py::arg("mps"), py::arg("spt"))
         .def("initialize", &UnfusedMPS<S>::initialize)
         .def("finalize", &UnfusedMPS<S>::finalize);
+
+    py::class_<DeterminantTRIE<S>, shared_ptr<DeterminantTRIE<S>>>(
+        m, "DeterminantTRIE")
+        .def(py::init<int>(), py::arg("n_sites"))
+        .def(py::init<int, bool>(), py::arg("n_sites"),
+             py::arg("enable_look_up"))
+        .def_readwrite("data", &DeterminantTRIE<S>::data)
+        .def_readwrite("dets", &DeterminantTRIE<S>::dets)
+        .def_readwrite("invs", &DeterminantTRIE<S>::invs)
+        .def_readwrite("vals", &DeterminantTRIE<S>::vals)
+        .def_readwrite("n_sites", &DeterminantTRIE<S>::n_sites)
+        .def_readwrite("enable_look_up", &DeterminantTRIE<S>::enable_look_up)
+        .def("clear", &DeterminantTRIE<S>::clear)
+        .def("copy", &DeterminantTRIE<S>::copy)
+        .def("__len__", &DeterminantTRIE<S>::size)
+        .def("append", &DeterminantTRIE<S>::push_back, py::arg("det"))
+        .def("find", &DeterminantTRIE<S>::find, py::arg("det"))
+        .def("__getitem__", &DeterminantTRIE<S>::operator[], py::arg("idx"))
+        .def("evaluate", &DeterminantTRIE<S>::evaluate, py::arg("mps"),
+             py::arg("cutoff") = 0.0);
 }
 
 template <typename S> void bind_operator(py::module &m) {

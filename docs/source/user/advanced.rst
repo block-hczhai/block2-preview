@@ -257,3 +257,109 @@ Some reference outputs for this example: ::
 
 We can see that the tranformation from SU2 to SZ is nearly exact, and the required bond dimension for the SZ MPS
 is roughly two times of the SU2 bond dimension.
+
+CSF or Determinant Sampling
+---------------------------
+
+The overlap between the spin-adapted MPS and Configuration State Functions (CSFs),
+or between the non-spin-adapted MPS and determinants can be calculated.
+Since there are exponentially many CSFs or determinants (when the number of electrons
+is close to the number of orbitals), normally it only makes sense to sample
+CSFs or determinants with (absolute value of) the overlap larger than a threshold.
+The sampling is deterministic, meaning that all overlap above the given threshold will be printed.
+
+The keyword ``sample`` or ``restart_sample`` can be used to sample CSFs or determinants
+after DMRG or from an MPS loaded from disk. The value associated with the keyword
+``sample`` or ``restart_sample`` is the threshold for sampling.
+
+Setting the threshold to zero is allowed, but this may only be useful for some very small systems.
+
+The following is an example of the input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags KET
+    sample 0.05
+
+Some reference outputs for this example: ::
+
+    $ grep CSF dmrg-1.out
+    Number of CSF =         17 (cutoff =      0.05)
+    Sum of weights of sampled CSF =    0.909360149891891
+    CSF          0 20000000000202000002000000  =    0.828657540546610
+    CSF          1 20200000000002000002000000  =   -0.330323898091116
+    CSF          2 20+00000000+0200000-000-00  =   -0.140063445607095
+    CSF          3 20+00000000+0-0-0002000000  =   -0.140041987646036
+    ... ...
+    CSF         16 200000000002000+0-02000000  =    0.050020205617060
+
+So the restricted Hartree-Fock determinant/CSF has a very large coefficient (0.83).
+
+To verify this, we can also directly compress the ground-state MPS to bond dimension 1,
+to get the CSF with the largest coefficient. Note that the compression method may
+converge to some other CSFs if there are many determinants with similar coefficients.
+
+MPS Compression
+---------------
+
+MPS compression can be used to compress or fit a given MPS to a different
+(larger or smaller) bond dimension.
+
+The following is an example of the input file for the compression
+(which will load the MPS obtailed from the previous ground-state DMRG): ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule
+    0  250  0 0
+    2  125  0 0
+    4   62  0 0
+    6   31  0 0
+    8   15  0 0
+    10   7  0 0
+    12   3  0 0
+    14   1  0 0
+    end
+    maxiter 16
+
+    compression
+    overlap
+    read_mps_tags KET
+    mps_tags BRA
+
+    irrep_reorder
+
+Here the keyword ``compression`` indicates that this is a compression calculation.
+When the keyword ``overlap`` is given, the loaded MPS will be compressed,
+otherwise, the result of H|MPS> will be compressed.
+The tag of the input MPS is given by ``read_mps_tags``,
+and the tag of the output MPS is given by ``mps_tags``.
+
+Some reference outputs for this example: ::
+
+    $ grep 'Compression overlap' dmrg-2.out
+    Compression overlap =    0.828657540546619
+
+We can see that the value obtained from compression is very close to the sampled value.
+But when a lower bound of the overlap is known, the sampling method should be
+more reliable and efficient for obtaining the CSF with the largest weight.
+
+If the CSF or determinat pattern is required, one can do a quick sampling on the compressed
+MPS using the keyword ``restart_sample 0``.

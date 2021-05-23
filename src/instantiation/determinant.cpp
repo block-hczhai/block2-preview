@@ -24,5 +24,6 @@ template struct block2::DeterminantTRIE<block2::SZ>;
 template struct block2::DeterminantQC<block2::SZ>;
 template struct block2::DeterminantMPSInfo<block2::SZ>;
 
+template struct block2::DeterminantTRIE<block2::SU2>;
 template struct block2::DeterminantQC<block2::SU2>;
 template struct block2::DeterminantMPSInfo<block2::SU2>;

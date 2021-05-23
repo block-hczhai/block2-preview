@@ -48,7 +48,7 @@ if "nonspinadapted" in dic:
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear
+    from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
     from block2.sz import trans_state_info_to_su2 as trans_si
     from block2.su2 import MPSInfo as TrMPSInfo
     from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -62,8 +62,8 @@ else:
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, trans_unfused_mps_to_sz, UnfusedMPS
-    from block2.su2 import trans_state_info_to_sz as trans_si
+    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+    from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SU2
@@ -109,7 +109,8 @@ sweep_tol = float(dic.get("sweep_tol", 1e-6))
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
 elif dic.get("trunc_type", "physical").startswith("keep "):
-    trunc_type = TruncationTypes.KeepOne * int(dic["trunc_type"][len("keep "):].strip())
+    trunc_type = TruncationTypes.KeepOne * \
+        int(dic["trunc_type"][len("keep "):].strip())
 else:
     trunc_type = TruncationTypes.Reduced
 if dic.get("decomp_type", "density_matrix") == "density_matrix":
@@ -755,7 +756,7 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "restart_twopdm" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
-            and "restart_copy_mps" not in dic:
+            and "restart_copy_mps" not in dic and "restart_sample" not in dic:
         assert isinstance(mps, MultiMPS)
         assert nroots != 1
 
@@ -876,7 +877,7 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "statespecific" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
-            and "restart_copy_mps" not in dic \
+            and "restart_copy_mps" not in dic and "restart_sample" not in dic \
             and "delta_t" not in dic and "compression" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
@@ -952,15 +953,17 @@ if not pre_run:
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
-        cps = Linear(me, VectorUBond(bond_dims), VectorUBond([lmps.info.bond_dim]))
+        cps = Linear(me, VectorUBond(bond_dims),
+                     VectorUBond([lmps.info.bond_dim]))
         cps.iprint = max(min(outputlevel, 3), 0)
         cps.cutoff = float(dic.get("cutoff", 1E-14))
         cps.decomp_type = decomp_type
         cps.trunc_type = trunc_type
-        norm = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        _print("Compression overlap = %20.15f" % ovl)
 
         if MPI is None or MPI.rank == 0:
-            np.save(scratch + "/cps_norm.npy", norm)
+            np.save(scratch + "/cps_overlap.npy", ovl)
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
 
@@ -1075,29 +1078,39 @@ if not pre_run:
                     for isym in set(orb_sym):
                         mask = np.array(orb_sym) == isym
                         if "nat_km_reorder" in dic:
-                            kmidx = np.argsort(KuhnMunkres(1 - rot[mask, :][:, mask] ** 2).solve()[1])
-                            _print("init = ", np.sum(np.diag(rot[mask, :][:, mask]) ** 2))
+                            kmidx = np.argsort(KuhnMunkres(
+                                1 - rot[mask, :][:, mask] ** 2).solve()[1])
+                            _print("init = ", np.sum(
+                                np.diag(rot[mask, :][:, mask]) ** 2))
                             rot[:, mask] = rot[:, mask][:, kmidx]
                             nat_occs[mask] = nat_occs[mask][kmidx]
-                            _print("final = ", np.sum(np.diag(rot[mask, :][:, mask]) ** 2))
+                            _print("final = ", np.sum(
+                                np.diag(rot[mask, :][:, mask]) ** 2))
                         if "nat_positive_def" in dic:
                             for j in range(len(nat_occs[mask])):
-                                mrot = rot[mask, :][:j + 1, :][:, mask][:, :j + 1]
+                                mrot = rot[mask, :][:j + 1,
+                                                    :][:, mask][:, :j + 1]
                                 mrot_det = np.linalg.det(mrot)
-                                _print("ISYM = %d J = %d MDET = %15.10f" % (isym, j, mrot_det))
+                                _print("ISYM = %d J = %d MDET = %15.10f" %
+                                       (isym, j, mrot_det))
                                 if mrot_det < 0:
-                                    mask0 = np.arange(len(mask), dtype=int)[mask][j]
+                                    mask0 = np.arange(len(mask), dtype=int)[
+                                        mask][j]
                                     rot[:, mask0] = -rot[:, mask0]
                         else:
                             mrot = rot[mask, :][:, mask]
                             mrot_det = np.linalg.det(mrot)
-                            _print("ISYM = %d MDET = %15.10f" % (isym, mrot_det))
+                            _print("ISYM = %d MDET = %15.10f" %
+                                   (isym, mrot_det))
                             if mrot_det < 0:
-                                mask0 = np.arange(len(mask), dtype=int)[mask][0]
+                                mask0 = np.arange(len(mask), dtype=int)[
+                                    mask][0]
                                 rot[:, mask0] = -rot[:, mask0]
                     if "nat_km_reorder" in dic:
-                        _print("REORDERED NAT OCC = ", "".join(["%9.6f" % x for x in nat_occs]))
-                    assert np.linalg.norm(rot @ np.diag(nat_occs) @ rot.T - xpdm) < 1E-10
+                        _print("REORDERED NAT OCC = ", "".join(
+                            ["%9.6f" % x for x in nat_occs]))
+                    assert np.linalg.norm(rot @ np.diag(
+                        nat_occs) @ rot.T - xpdm) < 1E-10
                     np.save(scratch + "/nat_occs.npy", nat_occs)
                     rot_det = np.linalg.det(rot)
                     _print("DET = %15.10f" % rot_det)
@@ -1351,7 +1364,7 @@ if not pre_run:
             E_oh = do_oh(mps, mps)
             if MPI is None or MPI.rank == 0:
                 np.save(scratch + "/E_oh.npy", E_oh)
-                print("OH Energy = %20.15f" % E_oh)
+                _print("OH Energy = %20.15f" % E_oh)
                 mps_info.save_data(scratch + '/mps_info.bin')
                 mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
         else:
@@ -1405,9 +1418,9 @@ if not pre_run:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_oh.npy", mat_oh)
-    
+
     if "restart_copy_mps" in dic or "copy_mps" in dic:
-        
+
         if "restart_copy_mps" in dic:
             copy_tag = dic["restart_copy_mps"]
         else:
@@ -1416,12 +1429,40 @@ if not pre_run:
             assert "nonspinadapted" not in dic
             mps.info.load_mutable()
             mps.load_mutable()
-            cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(mps), copy_tag, mpo.tf.opf.cg).finalize()
+            cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(
+                mps), copy_tag, mpo.tf.opf.cg).finalize()
         else:
             cp_mps = mps.deep_copy(copy_tag)
         cp_mps.info.save_data(scratch + '/mps_info.bin')
         cp_mps.info.save_data(scratch + '/%s-mps_info.bin' % copy_tag)
 
+        mps = cp_mps
 
-    if mps_info is not None:
-        mps_info.deallocate()
+    if "restart_sample" in dic or "sample" in dic:
+
+        if "restart_copy_mps" in dic:
+            sample_cutoff = float(dic.get("restart_sample", 0))
+        else:
+            sample_cutoff = float(dic.get("sample", 0))
+
+        dtrie = DeterminantTRIE(n_sites, True)
+        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
+        if MPI is None or MPI.rank == 0:
+            dname = "CSF" if SX == SU2 else "DET"
+            _print("Number of %s = %10d (cutoff = %9.5g)" %
+                   (dname, len(dtrie), sample_cutoff))
+            ddstr = "0+-2" if SX == SU2 else "0ab2"
+            dvals = np.array(dtrie.vals)
+            gidx = np.argsort(np.abs(dvals))[::-1][:50]
+            _print("Sum of weights of sampled %s = %20.15f\n" % (dname, (dvals ** 2).sum()))
+            for ii, idx in enumerate(gidx):
+                det = ''.join([ddstr[x] for x in dtrie[idx]])
+                val = dvals[idx]
+                _print(dname, "%10d" % ii, det, " = %20.15f" % val)
+            if len(dvals) > 50:
+                _print(" ... and more ... ")
+            dets = np.zeros((len(dtrie), n_sites), dtype=np.uint8)
+            for i in range(len(dtrie)):
+                dets[i] = np.array(dtrie[idx])
+            np.save(scratch + "/sample-vals.npy", dvals)
+            np.save(scratch + "/sample-dets.npy", dets)
