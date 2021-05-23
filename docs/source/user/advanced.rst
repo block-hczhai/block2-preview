@@ -304,6 +304,10 @@ Some reference outputs for this example: ::
     ... ...
     CSF         16 200000000002000+0-02000000  =    0.050020205617060
 
+When there are more than 50 determinants, only the first 50 with largest weights
+will be printed. The complete list of determinants and coefficients are stored in
+``sample-dets.npy`` and ``sample-vals.npy`` in the scratch folder, respectively.
+
 So the restricted Hartree-Fock determinant/CSF has a very large coefficient (0.83).
 
 To verify this, we can also directly compress the ground-state MPS to bond dimension 1,
