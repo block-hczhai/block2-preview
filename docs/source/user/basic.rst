@@ -705,6 +705,10 @@ Sweep energy extrapolation can be plotted using the following python script: ::
     plt.subplots_adjust(left=0.16, bottom=0.1, right=0.95, top=0.95)
     plt.savefig("extra.png", dpi=600)
 
+Alternatively, the keyword ``extrapolation`` can be added to the previous script,
+so that the extrapolation energy will be printed and the figure named ``extrapolation.png``
+will be saved in the scartch folder.
+
 .. highlight:: bash
 
 The script will generate the following figure:

@@ -29,7 +29,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type",
               "orbital_rotation", "delta_t", "target_t", "te_type",
               "read_mps_tags", "compression", "random_mps_init", "trans_mps_to_sz",
-              "copy_mps", "restart_copy_mps", "sample", "restart_sample"}
+              "copy_mps", "restart_copy_mps", "sample", "restart_sample",
+              "extrapolation"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

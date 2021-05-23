@@ -930,11 +930,60 @@ if not pre_run:
         discarded_weights = np.hstack(discarded_weights)
 
         if MPI is None or MPI.rank == 0:
+            bdims = bond_dims[:len(discarded_weights)]
+            if len(bdims) < len(discarded_weights):
+                bdims = bdims + bdims[-1:] * (len(discarded_weights) - len(bdims))
             np.save(scratch + "/E_dmrg.npy", E_dmrg)
-            np.save(scratch + "/bond_dims.npy",
-                    bond_dims[:len(discarded_weights)])
+            np.save(scratch + "/bond_dims.npy", bdims)
             np.save(scratch + "/sweep_energies.npy", sweep_energies)
             np.save(scratch + "/discarded_weights.npy", discarded_weights)
+            if "extrapolation" in dic:
+                ext_eners = []
+                ext_dws = []
+                ext_bdims = []
+                if "twodot_to_onedot" not in dic:
+                    llsw = len(sweep_energies)
+                else:
+                    llsw = tto
+                for iext in range(llsw):
+                    if bdims[iext] not in ext_bdims:
+                        ext_bdims.append(bdims[iext])
+                        ext_dws.append(discarded_weights[iext])
+                        ext_eners.append(sweep_energies[iext, 0])
+                    else:
+                        ii = ext_bdims.index(bdims[iext])
+                        ext_dws[ii] = discarded_weights[iext]
+                        ext_eners[ii] = sweep_energies[iext, 0]
+                ext_eners = np.array(ext_eners)
+                ext_dws = np.array(ext_dws)
+                ext_bdims = np.array(ext_bdims)
+                _print('EXTRAP discarded weights = ', ext_dws)
+                _print('EXTRAP oh energies (au) = ', ext_eners)
+                _print('EXTRAP bond dimensions = ', ext_bdims)
+                import scipy.stats
+                reg = scipy.stats.linregress(ext_dws, ext_eners)
+                _print('EXTRAP Energy = %20.15f (+/-) %20.15f' % (reg.intercept,
+                    np.min(np.abs(reg.intercept - ext_eners)) / 5))
+                _print('EXTRAP R^2 = %20.15f' % (reg.rvalue ** 2))
+                emin, emax = min(ext_eners), max(ext_eners)
+                de = emax - emin
+                xmin, xmax = min(ext_dws), max(ext_dws)
+                ddw = xmax - xmin
+                import matplotlib.pyplot as plt
+                x_reg = np.array([0, xmax + ddw / 12])
+                plt.plot(x_reg, reg.intercept + reg.slope * x_reg, '--', linewidth=1, color='#5FA8AB')
+                plt.plot(ext_dws, ext_eners, 'o', color='#38686A', markerfacecolor='white', markersize=5)
+                plt.text(ddw / 12, emax, "$E(M=\\infty) = %.6f \pm %.6f \\mathrm{\\ Hartree}$" %
+                    (reg.intercept, abs(reg.intercept - emin) / 5), color='#38686A', fontsize=12)
+                plt.text(ddw / 12, emax - de / 12, "$R^2 = %.6f$" % (reg.rvalue ** 2),
+                    color='#38686A', fontsize=12)
+                plt.xlim((0, xmax + ddw / 12))
+                plt.ylim((emin - de / 12, emax + de / 12))
+                plt.xlabel("Largest Discarded Weight")
+                plt.ylabel("Sweep Energy (Hartree)")
+                plt.subplots_adjust(left=0.16, bottom=0.1, right=0.95, top=0.95)
+                plt.savefig(scratch + "/extrapolation.png", dpi=600)
+
         _print("DMRG Energy = %20.15f" % E_dmrg)
 
         if MPI is None or MPI.rank == 0:
