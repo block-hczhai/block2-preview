@@ -1505,16 +1505,22 @@ if not pre_run:
             sample_cutoff = float(dic.get("restart_sample", 0))
         else:
             sample_cutoff = float(dic.get("sample", 0))
+        
+        if "trans_mps_to_sz" in dic:
+            from block2.sz import DeterminantTRIE, UnfusedMPS
+            su2mps = False
+        else:
+            su2mps = SX == SU2
 
         tx = time.perf_counter()
         dtrie = DeterminantTRIE(n_sites, True)
         dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
         _print("dtrie finished", time.perf_counter() - tx)
         if MPI is None or MPI.rank == 0:
-            dname = "CSF" if SX == SU2 else "DET"
+            dname = "CSF" if su2mps else "DET"
             _print("Number of %s = %10d (cutoff = %9.5g)" %
                    (dname, len(dtrie), sample_cutoff))
-            ddstr = "0+-2" if SX == SU2 else "0ab2"
+            ddstr = "0+-2" if su2mps else "0ab2"
             dvals = np.array(dtrie.vals)
             gidx = np.argsort(np.abs(dvals))[::-1][:50]
             _print("Sum of weights of sampled %s = %20.15f\n" %
