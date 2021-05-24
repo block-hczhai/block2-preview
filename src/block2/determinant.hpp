@@ -171,6 +171,7 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
     using TRIE<DeterminantTRIE<S>>::invs;
     using TRIE<DeterminantTRIE<S>>::n_sites;
     using TRIE<DeterminantTRIE<S>>::enable_look_up;
+    using TRIE<DeterminantTRIE<S>>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S>>(n_sites, enable_look_up) {}
     // set the value for each determinant to the overlap between mps
@@ -178,9 +179,43 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(double) * vals.size());
         bool has_dets = dets.size() != 0;
-        stack<tuple<int, int, int>> ptrs;
-        vector<map<S, vector<double>>> partials;
-        vector<uint8_t> det(n_sites);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        vector<
+            tuple<int, int, int, shared_ptr<SparseMatrix<S>>, vector<uint8_t>>>
+            ptrs;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
+        pinfos[0].resize(1);
+        pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+        pinfos[0][0]->initialize(StateInfo<S>(mps->info->vacuum),
+                                 StateInfo<S>(mps->info->vacuum),
+                                 mps->info->vacuum, false);
+        for (int d = 0; d < n_sites; d++) {
+            pinfos[d + 1].resize(4);
+            for (int j = 0; j < pinfos[d + 1].size(); j++) {
+                map<S, MKL_INT> qkets;
+                for (auto &m : mps->tensors[d]->data[j]) {
+                    S bra = m.first.first, ket = m.first.second;
+                    if (!qkets.count(ket))
+                        qkets[ket] = m.second->shape[2];
+                }
+                StateInfo<S> ibra, iket;
+                ibra.allocate((int)qkets.size());
+                iket.allocate((int)qkets.size());
+                int k = 0;
+                for (auto &qm : qkets) {
+                    ibra.quanta[k] = iket.quanta[k] = qm.first;
+                    ibra.n_states[k] = 1;
+                    iket.n_states[k] = (ubond_t)qm.second;
+                    k++;
+                }
+                pinfos[d + 1][j] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                pinfos[d + 1][j]->initialize(ibra, iket, mps->info->vacuum,
+                                             false);
+            }
+        }
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
@@ -188,94 +223,99 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
                     data.push_back(array<int, 4>{0, 0, 0, 0});
                 }
         }
+        shared_ptr<SparseMatrix<S>> zmat =
+            make_shared<SparseMatrix<S>>(d_alloc);
+        zmat->allocate(pinfos[0][0]);
+        zmat->data[0] = 1.0;
+        vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
-                ptrs.push(make_tuple(data[0][j], j, 0));
-        map<S, vector<double>> mp;
-        mp[mps->info->vacuum] = vector<double>{1.0};
-        partials.push_back(mp);
+                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet));
+        vector<
+            tuple<int, int, int, shared_ptr<SparseMatrix<S>>, vector<uint8_t>>>
+            pptrs;
         int ntg = threading->activate_global();
+        int ngroup = ntg * 4;
+        vector<shared_ptr<SparseMatrix<S>>> ccmp(ngroup);
+#pragma omp parallel num_threads(ntg)
         // depth-first traverse of trie
         while (!ptrs.empty()) {
             check_signal_()();
-            auto &p = ptrs.top();
-            int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
-            det[d] = j;
-            partials.resize(d + 1);
-            partials.push_back(map<S, vector<double>>());
-            map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
-            vector<S> vcmp;
-            vcmp.reserve(mps->tensors[d]->data[j].size());
-            unordered_map<S, vector<size_t>> kcmp;
-            kcmp.reserve(vcmp.size());
-            for (size_t im = 0; im < mps->tensors[d]->data[j].size(); im++) {
-                auto &m = mps->tensors[d]->data[j][im];
-                S bra = m.first.first, ket = m.first.second;
-                if (pmp.count(bra)) {
-                    if (!cmp.count(ket)) {
-                        vcmp.push_back(ket);
-                        MatrixRef mat = m.second->ref();
-                        cmp[ket] = vector<double>(mat.n, 0);
-                    }
-                    kcmp[ket].push_back(im);
-                }
-            }
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
-            for (int i = 0; i < (int)vcmp.size(); i++) {
-                for (auto &im : kcmp.at(vcmp[i])) {
-                    auto &m = mps->tensors[d]->data[j][im];
+            int pstart = max(0, (int)ptrs.size() - ngroup);
+#pragma omp for schedule(static)
+            for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
+                shared_ptr<VectorAllocator<double>> pd_alloc =
+                    make_shared<VectorAllocator<double>>();
+                auto &p = ptrs[ip];
+                int j = get<1>(p), d = get<2>(p);
+                shared_ptr<SparseMatrix<S>> pmp = get<3>(p);
+                shared_ptr<SparseMatrix<S>> cmp =
+                    make_shared<SparseMatrix<S>>(pd_alloc);
+                cmp->allocate(pinfos[d + 1][j]);
+                for (auto &m : mps->tensors[d]->data[j]) {
                     S bra = m.first.first, ket = m.first.second;
-                    MatrixRef mat = m.second->ref();
-                    MatrixFunctions::multiply(
-                        MatrixRef(&pmp[bra][0], 1, mat.m), false, mat, false,
-                        MatrixRef(&cmp[ket][0], 1, mat.n), 1.0, 1.0);
+                    if (pmp->info->find_state(bra) == -1)
+                        continue;
+                    MatrixFunctions::multiply((*pmp)[bra], false,
+                                              m.second->ref(), false,
+                                              (*cmp)[ket], 1.0, 1.0);
                 }
+                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
+                    ccmp[ip - pstart] = nullptr;
+                else
+                    ccmp[ip - pstart] = cmp;
             }
-            ptrs.pop();
-            if (cmp.size() == 0)
-                continue;
-            if (cutoff != 0) {
-                double sqsum = 0;
-#pragma omp parallel for schedule(dynamic) num_threads(ntg) reduction(+ : sqsum)
-                for (int i = 0; i < (int)vcmp.size(); i++) {
-                    double m_norm = MatrixFunctions::norm(
-                        MatrixRef(&cmp.at(vcmp[i])[0],
-                                  (MKL_INT)cmp.at(vcmp[i]).size(), 1));
-                    sqsum += m_norm * m_norm;
-                }
-                if (sqrt(sqsum) < cutoff)
-                    continue;
-            }
-            if (d == n_sites - 1) {
-                assert(cmp.size() == 1 && cmp.count(mps->info->target) != 0);
-                assert(cmp[mps->info->target].size() == 1);
-                if (!has_dets) {
-                    dets.push_back(cur);
-                    vals.push_back(cmp[mps->info->target][0]);
-                    if (enable_look_up) {
-                        invs.resize(data.size());
-                        for (int i = 0, curx = 0; i < n_sites; i++) {
-                            uint8_t jj = det[i];
-                            invs[data[curx][jj]] = curx;
-                            curx = data[curx][jj];
+#pragma omp single
+            {
+                for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
+                    if (ccmp[ip - pstart] == nullptr)
+                        continue;
+                    auto &p = ptrs[ip];
+                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    vector<uint8_t> det = get<4>(p);
+                    det[d] = j;
+                    shared_ptr<SparseMatrix<S>> cmp = ccmp[ip - pstart];
+                    if (d == n_sites - 1) {
+                        assert(cmp->total_memory == 1 &&
+                               cmp->info->find_state(mps->info->target) == 0);
+                        if (!has_dets) {
+                            dets.push_back(cur);
+                            vals.push_back(cmp->data[0]);
+                            if (enable_look_up) {
+                                invs.resize(data.size());
+                                for (int i = 0, curx = 0; i < n_sites; i++) {
+                                    uint8_t jj = det[i];
+                                    invs[data[curx][jj]] = curx;
+                                    curx = data[curx][jj];
+                                }
+                            }
+                        } else
+                            vals[lower_bound(dets.begin(), dets.end(), cur) -
+                                 dets.begin()] = cmp->data[0];
+                    } else {
+                        if (!has_dets) {
+                            for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
+                                 jj++)
+                                if (data[cur][jj] == 0) {
+                                    data[cur][jj] = (int)data.size();
+                                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                                }
                         }
+                        for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
+                             jj++)
+                            if (data[cur][jj] != 0)
+                                pptrs.push_back(make_tuple(data[cur][jj], jj,
+                                                           d + 1, cmp, det));
                     }
-                } else
-                    vals[lower_bound(dets.begin(), dets.end(), cur) -
-                         dets.begin()] = cmp[mps->info->target][0];
-            } else {
-                if (!has_dets) {
-                    for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
-                        if (data[cur][jj] == 0) {
-                            data[cur][jj] = (int)data.size();
-                            data.push_back(array<int, 4>{0, 0, 0, 0});
-                        }
+                    ccmp[ip - pstart] = nullptr;
                 }
-                for (uint8_t jj = 0; jj < (uint8_t)data[cur].size(); jj++)
-                    if (data[cur][jj] != 0)
-                        ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
+                ptrs.resize(pstart);
+                ptrs.insert(ptrs.end(), pptrs.begin(), pptrs.end());
+                pptrs.clear();
             }
         }
+        pinfos.clear();
+        sort_dets();
         threading->activate_normal();
     }
 };
@@ -357,11 +397,11 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
         vector<
             tuple<int, int, int, shared_ptr<SparseMatrix<S>>, vector<uint8_t>>>
             pptrs;
-        // depth-first traverse of trie
         int ntg = threading->activate_global();
         int ngroup = ntg * 4;
         vector<shared_ptr<SparseMatrix<S>>> ccmp(ngroup);
 #pragma omp parallel num_threads(ntg)
+        // depth-first traverse of trie
         while (!ptrs.empty()) {
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
