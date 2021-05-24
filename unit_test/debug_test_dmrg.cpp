@@ -161,7 +161,7 @@ TEST_F(TestDMRG, Test) {
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
-        assert(occs.size() == norb);
+        assert(occs.size() == norb || occs.size() == norb * 4);
         // for (size_t i = 0; i < occs.size(); i++)
         //     cout << occs[i] << " ";
         mps_info->set_bond_dimension_using_occ(bond_dim, occs, 1);

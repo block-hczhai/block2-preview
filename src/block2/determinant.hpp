@@ -121,6 +121,28 @@ template <typename D, uint8_t L = 4> struct TRIE {
         }
         return r;
     }
+    vector<double> get_state_occupation() const {
+        int ntg = threading->activate_global();
+        vector<vector<double>> pop(ntg);
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            pop[tid].resize(n_sites * L);
+            vector<double> &ipop = pop[tid];
+#pragma omp for schedule(static)
+            for (int i = 0; i < dets.size(); i++) {
+                double vsq = vals[i] * vals[i];
+                vector<uint8_t> det = (*this)[i];
+                for (int j = 0; j < n_sites; j++)
+                    ipop[j * L + det[j]] += vsq;
+            }
+        }
+        vector<double> rpop(n_sites * L, 0);
+        for (int itg = 0; itg < ntg; itg++)
+            for (int k = 0; k < n_sites * L; k++)
+                rpop[k] += pop[itg][k];
+        return rpop;
+    }
 };
 
 template <typename, typename = void> struct DeterminantTRIE;
@@ -158,6 +180,7 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
         map<S, vector<double>> mp;
         mp[mps->info->vacuum] = vector<double>{1.0};
         partials.push_back(mp);
+        threading->activate_global_mkl();
         // depth-first traverse of trie
         while (!ptrs.empty()) {
             check_signal_()();
@@ -167,12 +190,27 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
             partials.resize(d + 1);
             partials.push_back(map<S, vector<double>>());
             map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
-            for (auto &m : mps->tensors[d]->data[j]) {
+            vector<S> vcmp;
+            vcmp.reserve(mps->tensors[d]->data[j].size());
+            unordered_map<S, vector<size_t>> kcmp;
+            kcmp.reserve(vcmp.size());
+            for (size_t im = 0; im < mps->tensors[d]->data[j].size(); im++) {
+                auto &m = mps->tensors[d]->data[j][im];
                 S bra = m.first.first, ket = m.first.second;
-                MatrixRef mat = m.second->ref();
-                if (pmp.count(bra) != 0) {
-                    if (cmp.count(ket) == 0)
+                if (pmp.count(bra)) {
+                    if (!cmp.count(ket)) {
+                        vcmp.push_back(ket);
+                        MatrixRef mat = m.second->ref();
                         cmp[ket] = vector<double>(mat.n, 0);
+                    }
+                    kcmp[ket].push_back(im);
+                }
+            }
+            for (int i = 0; i < (int)vcmp.size(); i++) {
+                for (auto &im : kcmp.at(vcmp[i])) {
+                    auto &m = mps->tensors[d]->data[j][im];
+                    S bra = m.first.first, ket = m.first.second;
+                    MatrixRef mat = m.second->ref();
                     MatrixFunctions::multiply(
                         MatrixRef(&pmp[bra][0], 1, mat.m), false, mat, false,
                         MatrixRef(&cmp[ket][0], 1, mat.n), 1.0, 1.0);
@@ -183,9 +221,10 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
                 continue;
             if (cutoff != 0) {
                 double sqsum = 0;
-                for (auto &m : cmp) {
+                for (int i = 0; i < (int)vcmp.size(); i++) {
                     double m_norm = MatrixFunctions::norm(
-                        MatrixRef(&m.second[0], (MKL_INT)m.second.size(), 1));
+                        MatrixRef(&cmp.at(vcmp[i])[0],
+                                  (MKL_INT)cmp.at(vcmp[i]).size(), 1));
                     sqsum += m_norm * m_norm;
                 }
                 if (sqrt(sqsum) < cutoff)
@@ -221,6 +260,7 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
                         ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
             }
         }
+        threading->activate_normal();
     }
 };
 
@@ -257,6 +297,7 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
         map<S, vector<double>> mp;
         mp[mps->info->vacuum] = vector<double>{1.0};
         partials.push_back(mp);
+        threading->activate_global_mkl();
         // depth-first traverse of trie
         while (!ptrs.empty()) {
             check_signal_()();
@@ -267,15 +308,30 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
             partials.resize(d + 1);
             partials.push_back(map<S, vector<double>>());
             map<S, vector<double>> &pmp = partials[d], &cmp = partials[d + 1];
-            for (auto &m : mps->tensors[d]->data[jd]) {
+            vector<S> vcmp;
+            vcmp.reserve(mps->tensors[d]->data[jd].size());
+            unordered_map<S, vector<size_t>> kcmp;
+            kcmp.reserve(vcmp.size());
+            for (size_t im = 0; im < mps->tensors[d]->data[jd].size(); im++) {
+                auto &m = mps->tensors[d]->data[jd][im];
                 S bra = m.first.first, ket = m.first.second;
                 if (jd == 1 && !((j == 1 && ket.twos() > bra.twos()) ||
                                  (j == 2 && ket.twos() < bra.twos())))
                     continue;
-                MatrixRef mat = m.second->ref();
-                if (pmp.count(bra) != 0) {
-                    if (cmp.count(ket) == 0)
+                if (pmp.count(bra)) {
+                    if (!cmp.count(ket)) {
+                        vcmp.push_back(ket);
+                        MatrixRef mat = m.second->ref();
                         cmp[ket] = vector<double>(mat.n, 0);
+                    }
+                    kcmp[ket].push_back(im);
+                }
+            }
+            for (int i = 0; i < (int)vcmp.size(); i++) {
+                for (auto &im : kcmp.at(vcmp[i])) {
+                    auto &m = mps->tensors[d]->data[jd][im];
+                    S bra = m.first.first, ket = m.first.second;
+                    MatrixRef mat = m.second->ref();
                     MatrixFunctions::multiply(
                         MatrixRef(&pmp[bra][0], 1, mat.m), false, mat, false,
                         MatrixRef(&cmp[ket][0], 1, mat.n), 1.0, 1.0);
@@ -286,9 +342,10 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
                 continue;
             if (cutoff != 0) {
                 double sqsum = 0;
-                for (auto &m : cmp) {
+                for (int i = 0; i < (int)vcmp.size(); i++) {
                     double m_norm = MatrixFunctions::norm(
-                        MatrixRef(&m.second[0], (MKL_INT)m.second.size(), 1));
+                        MatrixRef(&cmp.at(vcmp[i])[0],
+                                  (MKL_INT)cmp.at(vcmp[i]).size(), 1));
                     sqsum += m_norm * m_norm;
                 }
                 if (sqrt(sqsum) < cutoff)
@@ -324,6 +381,7 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
                         ptrs.push(make_tuple(data[cur][jj], jj, d + 1));
             }
         }
+        threading->activate_normal();
     }
 };
 

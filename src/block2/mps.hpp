@@ -308,51 +308,97 @@ template <typename S> struct MPSInfo {
         bond_dim = m;
         // site state probabilities
         vector<shared_ptr<StateProbability<S>>> site_probs(n_sites);
-        assert(occ.size() == n_sites || occ.size() == n_sites * 2);
+        vector<vector<vector<double>>> site_prefs(n_sites);
+        assert(occ.size() == n_sites || occ.size() == n_sites * 2 ||
+               occ.size() == n_sites * 4);
         for (int i = 0; i < n_sites; i++) {
-            double alpha_occ, beta_occ;
-            if (occ.size() == n_sites) {
-                alpha_occ = occ[i];
-                if (bias != 1.0) {
-                    if (alpha_occ > 1)
-                        alpha_occ = 1 + pow(alpha_occ - 1, bias);
-                    else if (alpha_occ < 1)
-                        alpha_occ = 1 - pow(1 - alpha_occ, bias);
-                }
-                alpha_occ /= 2;
-                beta_occ = alpha_occ;
-            } else {
-                alpha_occ = occ[2 * i] * 2, beta_occ = occ[2 * i + 1] * 2;
-                if (bias != 1.0) {
-                    if (alpha_occ > 1)
-                        alpha_occ = 1 + pow(alpha_occ - 1, bias);
-                    else if (alpha_occ < 1)
-                        alpha_occ = 1 - pow(1 - alpha_occ, bias);
-                    if (beta_occ > 1)
-                        beta_occ = 1 + pow(beta_occ - 1, bias);
-                    else if (beta_occ < 1)
-                        beta_occ = 1 - pow(1 - beta_occ, bias);
-                }
-                alpha_occ /= 2;
-                beta_occ /= 2;
-            }
-            assert(0 <= alpha_occ && alpha_occ <= 1);
-            assert(0 <= beta_occ && beta_occ <= 1);
             site_probs[i] = make_shared<StateProbability<S>>();
             site_probs[i]->allocate(basis[i]->n);
-            for (int j = 0; j < basis[i]->n; j++) {
-                site_probs[i]->quanta[j] = basis[i]->quanta[j];
-                if (basis[i]->quanta[j].n() == 0)
-                    site_probs[i]->probs[j] = (1 - alpha_occ) * (1 - beta_occ);
-                else if (basis[i]->quanta[j].n() == 2)
-                    site_probs[i]->probs[j] = alpha_occ * beta_occ;
-                else if (basis[i]->quanta[j].n() == 1 &&
-                         basis[i]->quanta[j].twos() == 1)
-                    site_probs[i]->probs[j] = alpha_occ * (1 - beta_occ);
-                else if (basis[i]->quanta[j].n() == 1 &&
-                         basis[i]->quanta[j].twos() == -1)
-                    site_probs[i]->probs[j] = beta_occ * (1 - alpha_occ);
-                else
+            if (occ.size() == n_sites || occ.size() == n_sites * 2) {
+                double alpha_occ, beta_occ;
+                if (occ.size() == n_sites) {
+                    alpha_occ = occ[i];
+                    if (bias != 1.0) {
+                        if (alpha_occ > 1)
+                            alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                        else if (alpha_occ < 1)
+                            alpha_occ = 1 - pow(1 - alpha_occ, bias);
+                    }
+                    alpha_occ /= 2;
+                    beta_occ = alpha_occ;
+                } else {
+                    alpha_occ = occ[2 * i] * 2, beta_occ = occ[2 * i + 1] * 2;
+                    if (bias != 1.0) {
+                        if (alpha_occ > 1)
+                            alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                        else if (alpha_occ < 1)
+                            alpha_occ = 1 - pow(1 - alpha_occ, bias);
+                        if (beta_occ > 1)
+                            beta_occ = 1 + pow(beta_occ - 1, bias);
+                        else if (beta_occ < 1)
+                            beta_occ = 1 - pow(1 - beta_occ, bias);
+                    }
+                    alpha_occ /= 2;
+                    beta_occ /= 2;
+                }
+                assert(0 <= alpha_occ && alpha_occ <= 1);
+                assert(0 <= beta_occ && beta_occ <= 1);
+                for (int j = 0; j < basis[i]->n; j++) {
+                    site_probs[i]->quanta[j] = basis[i]->quanta[j];
+                    if (basis[i]->quanta[j].n() == 0)
+                        site_probs[i]->probs[j] =
+                            (1 - alpha_occ) * (1 - beta_occ);
+                    else if (basis[i]->quanta[j].n() == 2)
+                        site_probs[i]->probs[j] = alpha_occ * beta_occ;
+                    else if (basis[i]->quanta[j].n() == 1 &&
+                             basis[i]->quanta[j].twos() == 1)
+                        site_probs[i]->probs[j] = alpha_occ * (1 - beta_occ);
+                    else if (basis[i]->quanta[j].n() == 1 &&
+                             basis[i]->quanta[j].twos() == -1)
+                        site_probs[i]->probs[j] = beta_occ * (1 - alpha_occ);
+                    else
+                        assert(false);
+                }
+            } else {
+                if (basis[i]->n == 4)
+                    for (int j = 0; j < basis[i]->n; j++) {
+                        site_probs[i]->quanta[j] = basis[i]->quanta[j];
+                        if (basis[i]->quanta[j].n() == 0)
+                            site_probs[i]->probs[j] = occ[4 * i + 0];
+                        else if (basis[i]->quanta[j].n() == 2)
+                            site_probs[i]->probs[j] = occ[4 * i + 3];
+                        else if (basis[i]->quanta[j].n() == 1 &&
+                                 basis[i]->quanta[j].twos() == 1)
+                            site_probs[i]->probs[j] = occ[4 * i + 1];
+                        else if (basis[i]->quanta[j].n() == 1 &&
+                                 basis[i]->quanta[j].twos() == -1)
+                            site_probs[i]->probs[j] = occ[4 * i + 2];
+                        else
+                            assert(false);
+                    }
+                else if (basis[i]->n == 3) {
+                    for (int j = 0; j < basis[i]->n; j++) {
+                        site_probs[i]->quanta[j] = basis[i]->quanta[j];
+                        if (basis[i]->quanta[j].n() == 0)
+                            site_probs[i]->probs[j] = occ[4 * i + 0];
+                        else if (basis[i]->quanta[j].n() == 2)
+                            site_probs[i]->probs[j] = occ[4 * i + 3];
+                        else if (basis[i]->quanta[j].n() == 1 &&
+                                 basis[i]->quanta[j].twos() == 1)
+                            site_probs[i]->probs[j] =
+                                occ[4 * i + 1] + occ[4 * i + 2];
+                        else
+                            assert(false);
+                    }
+                    site_prefs[i].resize(3);
+                    site_prefs[i][1] = vector<double>{1};
+                    const double st = occ[4 * i + 1] + occ[4 * i + 2];
+                    const double sl =
+                        abs(st) > TINY ? occ[4 * i + 2] / st : 0.5;
+                    const double sh =
+                        abs(st) > TINY ? occ[4 * i + 1] / st : 0.5;
+                    site_prefs[i][2] = vector<double>{sl, sh};
+                } else
                     assert(false);
             }
         }
@@ -363,12 +409,14 @@ template <typename S> struct MPSInfo {
         for (int i = 0; i < n_sites; i++)
             left_probs[i + 1] = make_shared<StateProbability<S>>(
                 StateProbability<S>::tensor_product_no_collect(
-                    *left_probs[i], *site_probs[i], *left_dims_fci[i + 1]));
+                    *left_probs[i], *site_probs[i], *left_dims_fci[i + 1],
+                    site_prefs[i]));
         right_probs[n_sites] = make_shared<StateProbability<S>>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_probs[i] = make_shared<StateProbability<S>>(
                 StateProbability<S>::tensor_product_no_collect(
-                    *site_probs[i], *right_probs[i + 1], *right_dims_fci[i]));
+                    *site_probs[i], *right_probs[i + 1], *right_dims_fci[i],
+                    site_prefs[i]));
         // conditional probabilities
         for (int i = 0; i <= n_sites; i++) {
             vector<double> lprobs(left_probs[i]->n), rprobs(right_probs[i]->n);

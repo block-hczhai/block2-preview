@@ -408,10 +408,9 @@ struct StateProbability<
         else
             return (int)(p - quanta);
     }
-    static StateProbability<S>
-    tensor_product_no_collect(const StateProbability<S> &a,
-                              const StateProbability<S> &b,
-                              const StateInfo<S> &cref) {
+    static StateProbability<S> tensor_product_no_collect(
+        const StateProbability<S> &a, const StateProbability<S> &b,
+        const StateInfo<S> &cref, const vector<vector<double>> &pref) {
         StateProbability<S> c;
         c.allocate(cref.n);
         memcpy(c.quanta, cref.quanta, c.n * sizeof(S));
@@ -419,11 +418,19 @@ struct StateProbability<
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {
                 S qc = a.quanta[i] + b.quanta[j];
-                for (int k = 0; k < qc.count(); k++) {
-                    int ic = c.find_state(qc[k]);
-                    if (ic != -1)
-                        c.probs[ic] += a.probs[i] * b.probs[j];
-                }
+                if (pref.size() == 0)
+                    for (int k = 0; k < qc.count(); k++) {
+                        int ic = c.find_state(qc[k]);
+                        if (ic != -1)
+                            c.probs[ic] += a.probs[i] * b.probs[j];
+                    }
+                else
+                    for (int k = 0; k < qc.count(); k++) {
+                        int ic = c.find_state(qc[k]);
+                        if (ic != -1)
+                            c.probs[ic] +=
+                                a.probs[i] * b.probs[j] * pref[qc.count()][k];
+                    }
             }
         return c;
     }

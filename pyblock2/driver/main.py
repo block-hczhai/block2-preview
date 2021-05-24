@@ -264,15 +264,23 @@ if dic.get("warmup", None) == "occ":
     if orb_idx is not None:
         occs = FCIDUMP.array_reorder(occs, VectorUInt16(orb_idx))
         _print("using reordered occ init")
-    assert len(occs) == n_sites or len(occs) == n_sites * 2
+    assert len(occs) == n_sites or len(occs) == n_sites * \
+        2 or len(occs) == n_sites * 4
     cbias = float(dic.get("cbias", 0.0))
     if cbias != 0.0:
         if len(occs) == n_sites:
             occs = VectorDouble(
                 [c - cbias if c >= 1 else c + cbias for c in occs])
-        else:
+        elif len(occs) == 2 * n_sites:
             occs = VectorDouble(
                 [c - cbias if c >= 0.5 else c + cbias for c in occs])
+        elif len(occs) == 4 * n_sites:
+            moccs = np.array(occs).reshape((n_sites, 4))
+            f = (1 - cbias) / moccs.sum(axis=1)[:, None]
+            moccs = moccs * f + cbias / 4
+            occs = VectorDouble(moccs.flatten())
+        else:
+            assert False
     bias = float(dic.get("bias", 1.0))
 else:
     occs = None
@@ -932,7 +940,8 @@ if not pre_run:
         if MPI is None or MPI.rank == 0:
             bdims = bond_dims[:len(discarded_weights)]
             if len(bdims) < len(discarded_weights):
-                bdims = bdims + bdims[-1:] * (len(discarded_weights) - len(bdims))
+                bdims = bdims + bdims[-1:] * \
+                    (len(discarded_weights) - len(bdims))
             np.save(scratch + "/E_dmrg.npy", E_dmrg)
             np.save(scratch + "/bond_dims.npy", bdims)
             np.save(scratch + "/sweep_energies.npy", sweep_energies)
@@ -963,7 +972,7 @@ if not pre_run:
                 import scipy.stats
                 reg = scipy.stats.linregress(ext_dws, ext_eners)
                 _print('EXTRAP Energy = %20.15f (+/-) %20.15f' % (reg.intercept,
-                    np.min(np.abs(reg.intercept - ext_eners)) / 5))
+                                                                  np.min(np.abs(reg.intercept - ext_eners)) / 5))
                 _print('EXTRAP R^2 = %20.15f' % (reg.rvalue ** 2))
                 emin, emax = min(ext_eners), max(ext_eners)
                 de = emax - emin
@@ -971,17 +980,20 @@ if not pre_run:
                 ddw = xmax - xmin
                 import matplotlib.pyplot as plt
                 x_reg = np.array([0, xmax + ddw / 12])
-                plt.plot(x_reg, reg.intercept + reg.slope * x_reg, '--', linewidth=1, color='#5FA8AB')
-                plt.plot(ext_dws, ext_eners, 'o', color='#38686A', markerfacecolor='white', markersize=5)
+                plt.plot(x_reg, reg.intercept + reg.slope * x_reg,
+                         '--', linewidth=1, color='#5FA8AB')
+                plt.plot(ext_dws, ext_eners, 'o', color='#38686A',
+                         markerfacecolor='white', markersize=5)
                 plt.text(ddw / 12, emax, "$E(M=\\infty) = %.6f \pm %.6f \\mathrm{\\ Hartree}$" %
-                    (reg.intercept, abs(reg.intercept - emin) / 5), color='#38686A', fontsize=12)
+                         (reg.intercept, abs(reg.intercept - emin) / 5), color='#38686A', fontsize=12)
                 plt.text(ddw / 12, emax - de / 12, "$R^2 = %.6f$" % (reg.rvalue ** 2),
-                    color='#38686A', fontsize=12)
+                         color='#38686A', fontsize=12)
                 plt.xlim((0, xmax + ddw / 12))
                 plt.ylim((emin - de / 12, emax + de / 12))
                 plt.xlabel("Largest Discarded Weight")
                 plt.ylabel("Sweep Energy (Hartree)")
-                plt.subplots_adjust(left=0.16, bottom=0.1, right=0.95, top=0.95)
+                plt.subplots_adjust(left=0.16, bottom=0.1,
+                                    right=0.95, top=0.95)
                 plt.savefig(scratch + "/extrapolation.png", dpi=600)
 
         _print("DMRG Energy = %20.15f" % E_dmrg)
@@ -1489,13 +1501,15 @@ if not pre_run:
 
     if "restart_sample" in dic or "sample" in dic:
 
-        if "restart_copy_mps" in dic:
+        if "restart_sample" in dic:
             sample_cutoff = float(dic.get("restart_sample", 0))
         else:
             sample_cutoff = float(dic.get("sample", 0))
 
+        tx = time.perf_counter()
         dtrie = DeterminantTRIE(n_sites, True)
         dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
+        _print("dtrie finished", time.perf_counter() - tx)
         if MPI is None or MPI.rank == 0:
             dname = "CSF" if SX == SU2 else "DET"
             _print("Number of %s = %10d (cutoff = %9.5g)" %
@@ -1503,7 +1517,8 @@ if not pre_run:
             ddstr = "0+-2" if SX == SU2 else "0ab2"
             dvals = np.array(dtrie.vals)
             gidx = np.argsort(np.abs(dvals))[::-1][:50]
-            _print("Sum of weights of sampled %s = %20.15f\n" % (dname, (dvals ** 2).sum()))
+            _print("Sum of weights of sampled %s = %20.15f\n" %
+                   (dname, (dvals ** 2).sum()))
             for ii, idx in enumerate(gidx):
                 det = ''.join([ddstr[x] for x in dtrie[idx]])
                 val = dvals[idx]
@@ -1515,3 +1530,10 @@ if not pre_run:
                 dets[i] = np.array(dtrie[idx])
             np.save(scratch + "/sample-vals.npy", dvals)
             np.save(scratch + "/sample-dets.npy", dets)
+            state_occ = np.array(
+                dtrie.get_state_occupation()).reshape(n_sites, 4)
+            # state_occ += ((1 - state_occ.sum(axis=1)) / 4)[:, None]
+            state_occ *= (1 / state_occ.sum(axis=1))[:, None]
+            _print("STATE OCC = ", "".join(
+                ["%8.5f" % x for x in state_occ.flatten()]))
+            np.save(scratch + "/sample-stocc.npy", state_occ)

@@ -1026,8 +1026,11 @@ struct FCIDUMP {
     static vector<T> reorder(const vector<T> &data,
                              const vector<uint16_t> &ord) {
         vector<T> rdata(data.size());
+        assert(data.size() % ord.size() == 0);
+        size_t nn = data.size() / ord.size();
         for (size_t i = 0; i < ord.size(); i++)
-            rdata[i] = data[ord[i]];
+            for (size_t k = 0; k < nn; k++)
+                rdata[i * nn + k] = data[ord[i] * nn + k];
         return rdata;
     }
     virtual void reorder(const vector<uint16_t> &ord) {

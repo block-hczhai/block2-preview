@@ -69,10 +69,11 @@ def parse(fname):
                 schedule_start = i
         elif "end" == line.strip():
             schedule_end = i
-        elif schedule_start != -1 and schedule_end == -1:
+        elif schedule_start != -1 and schedule_end == -1 \
+            and not line.strip().startswith('!') and not line.strip().startswith('#'):
             a, b, c, d = line.split()
             schedule.append([int(a), int(b), float(c), float(d)])
-        elif not line.strip().startswith('!'):
+        elif not line.strip().startswith('!') and not line.strip().startswith('#'):
             line_sp = line.split()
             if len(line_sp) != 0:
                 if line_sp[0] in dic:

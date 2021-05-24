@@ -248,6 +248,21 @@ struct Threading {
         return 1;
 #endif
     }
+    /** Set number of threads for a general task with parallelism inside MKL.
+     * Parallelism outside MKL will be deactivated.
+     * @return Number of threads for general tasks.
+     *   Returns 1 if MKL is not supported. */
+    int activate_global_mkl() const {
+#ifdef _OPENMP
+        omp_set_num_threads(1);
+#endif
+#ifdef _HAS_INTEL_MKL
+        mkl_set_num_threads(n_threads_global != 0 ? n_threads_global : 1);
+        return n_threads_global != 0 ? n_threads_global : 1;
+#else
+        return 1;
+#endif
+    }
     /** Set number of threads for a normal (parallelism over renormalized
      * operators) task.
      * @return Number of threads for parallelism over renormalized operators.

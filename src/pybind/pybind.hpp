@@ -983,6 +983,7 @@ template <typename S> void bind_mps(py::module &m) {
         .def("append", &DeterminantTRIE<S>::push_back, py::arg("det"))
         .def("find", &DeterminantTRIE<S>::find, py::arg("det"))
         .def("__getitem__", &DeterminantTRIE<S>::operator[], py::arg("idx"))
+        .def("get_state_occupation", &DeterminantTRIE<S>::get_state_occupation)
         .def("evaluate", &DeterminantTRIE<S>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0);
 }
