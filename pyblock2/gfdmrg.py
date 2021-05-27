@@ -687,6 +687,8 @@ class GFDMRG:
                 linear.noises[0] = noises[0]
                 linear.gf_omega = w
                 linear.solve(n_steps, mps.center == 0, conv_tol)
+                min_site = np.argmin(np.array(linear.sweep_targets)[:, 1])
+                _print("GF.IMAG MIN SITE = %4d" % min_site)
                 rgf, igf = linear.targets[-1]
                 gf_mat[ii, ii, iw] = rgf + 1j * igf
 
@@ -721,9 +723,11 @@ class GFDMRG:
                         if self.dctr:
                             tme.delayed_contraction = OpNamesSet.normal_ops()
                         linear.noises[0] = noises[-1]
+                        linear.bra_bond_dims[0] = linear.bra_bond_dims[-1]
+                        linear.ket_bond_dims[0] = linear.ket_bond_dims[-1]
                         linear.tme = tme
-                        linear.solve(1, mps.center != 0, 0)
-                        rgf, igf = linear.targets[-1]
+                        linear.solve(1, mps.center == 0, 0)
+                        rgf, igf = np.array(linear.sweep_targets)[min_site]
                         gf_mat[jj, ii, iw] = rgf + 1j * igf
                         gf_mat[ii, jj, iw] = rgf + 1j * igf
 

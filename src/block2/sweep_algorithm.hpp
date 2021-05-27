@@ -2782,7 +2782,7 @@ template <typename S> struct Linear {
                     min_element(
                         sweep_targets.begin(), sweep_targets.end(),
                         [](const vector<double> &x, const vector<double> &y) {
-                            return x[0] < y[0];
+                            return x.back() < y.back();
                         }) -
                     sweep_targets.begin();
                 if (midx == sweep_targets.size() - 1) {
@@ -2813,7 +2813,7 @@ template <typename S> struct Linear {
         size_t idx =
             min_element(sweep_targets.begin(), sweep_targets.end(),
                         [](const vector<double> &x, const vector<double> &y) {
-                            return x[0] < y[0];
+                            return x.back() < y.back();
                         }) -
             sweep_targets.begin();
         if (frame->restart_dir != "" &&
@@ -2875,8 +2875,8 @@ template <typename S> struct Linear {
             targets.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             if (targets.size() >= 2)
-                target_difference = targets[targets.size() - 1][0] -
-                                    targets[targets.size() - 2][0];
+                target_difference = targets[targets.size() - 1].back() -
+                                    targets[targets.size() - 2].back();
             converged = targets.size() >= 2 && tol > 0 &&
                         abs(target_difference) < tol &&
                         noises[iw] == noises.back() &&
@@ -2884,8 +2884,8 @@ template <typename S> struct Linear {
             for (int iconv = 1; iconv < conv_required_sweeps && converged;
                  iconv++)
                 converged = converged && (int)targets.size() >= 2 + iconv &&
-                            abs(targets[targets.size() - 1 - iconv][0] -
-                                targets[targets.size() - 2 - iconv][0]) < tol;
+                            abs(targets[targets.size() - 1 - iconv].back() -
+                                targets[targets.size() - 2 - iconv].back()) < tol;
             forward = !forward;
             double tswp = current.get_time();
             if (iprint >= 1) {
