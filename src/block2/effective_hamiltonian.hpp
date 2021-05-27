@@ -389,7 +389,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                     bool iprint = false, double conv_thrd = 5E-6,
                     int max_iter = 5000, int soft_max_iter = -1,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        int nmult = 0, numltx = 0;
+        int nmult = 0, nmultx = 0;
         frame->activate(0);
         Timer t;
         t.get_time();
@@ -432,7 +432,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         // solve imag part -> ibra
         double igf = MatrixFunctions::conjugate_gradient(
-                         op, aa, ibra, ktmp, numltx, 0.0, iprint,
+                         op, aa, ibra, ktmp, nmultx, 0.0, iprint,
                          para_rule == nullptr ? nullptr : para_rule->comm,
                          conv_thrd, max_iter, soft_max_iter) /
                      (-eta);
@@ -459,7 +459,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
     tuple<double, int, size_t, double>
-    inverse_multiply(double const_e, bool iprint = false,
+    inverse_multiply(double const_e, bool use_cg, bool iprint = false,
                      double conv_thrd = 5E-6, int max_iter = 5000,
                      int soft_max_iter = -1,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -470,17 +470,33 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         MatrixRef mket(ket->data, (MKL_INT)ket->total_memory, 1);
         MatrixRef mbra(bra->data, (MKL_INT)bra->total_memory, 1);
         tf->opf->seq->cumulative_nflop = 0;
+        DiagonalMatrix aa(nullptr, 0);
+        if (compute_diag && use_cg) {
+            aa = DiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
+            aa.allocate();
+            for (MKL_INT i = 0; i < aa.size(); i++)
+                aa.data[i] = diag->data[i] + const_e;
+        }
         precompute();
-        double r = (tf->opf->seq->mode == SeqTypes::Auto ||
-                    (tf->opf->seq->mode & SeqTypes::Tasked))
-                       ? MatrixFunctions::minres(
-                             *tf, mbra, mket, nmult, const_e, iprint,
+        const function<void(const MatrixRef &, const MatrixRef &)> &f =
+            [this](const MatrixRef &a, const MatrixRef &b) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b);
+                else
+                    return (*this)(a, b);
+            };
+        double r = use_cg
+                       ? MatrixFunctions::conjugate_gradient(
+                             f, aa, mbra, mket, nmult, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter)
                        : MatrixFunctions::minres(
-                             *this, mbra, mket, nmult, const_e, iprint,
+                             f, mbra, mket, nmult, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter);
+        if (compute_diag && use_cg)
+            aa.deallocate();
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)

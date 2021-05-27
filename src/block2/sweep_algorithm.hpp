@@ -1774,7 +1774,8 @@ template <typename S> struct DMRG {
 };
 
 enum struct EquationTypes : uint8_t {
-    Normal,
+    NormalMinRes,
+    NormalCG,
     PerturbativeCompression,
     GreensFunction,
     FitAddition
@@ -1811,7 +1812,7 @@ template <typename S> struct Linear {
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
-    EquationTypes eq_type = EquationTypes::Normal;
+    EquationTypes eq_type = EquationTypes::NormalMinRes;
     ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Normal;
     ExpectationTypes ex_type = ExpectationTypes::Real;
     bool forward;
@@ -2010,11 +2011,13 @@ template <typename S> struct Linear {
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
-            if (eq_type == EquationTypes::Normal) {
+            if (eq_type == EquationTypes::NormalMinRes ||
+                eq_type == EquationTypes::NormalCG) {
                 tuple<double, int, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e, eq_type == EquationTypes::NormalCG,
+                    iprint >= 3, minres_conv_thrd, minres_max_iter,
+                    minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi) += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
@@ -2464,11 +2467,13 @@ template <typename S> struct Linear {
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
-            if (eq_type == EquationTypes::Normal) {
+            if (eq_type == EquationTypes::NormalMinRes ||
+                eq_type == EquationTypes::NormalCG) {
                 tuple<double, int, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e, eq_type == EquationTypes::NormalCG,
+                    iprint >= 3, minres_conv_thrd, minres_max_iter,
+                    minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi) += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
@@ -2883,9 +2888,10 @@ template <typename S> struct Linear {
                         bra_bond_dims[iw] == bra_bond_dims.back();
             for (int iconv = 1; iconv < conv_required_sweeps && converged;
                  iconv++)
-                converged = converged && (int)targets.size() >= 2 + iconv &&
-                            abs(targets[targets.size() - 1 - iconv].back() -
-                                targets[targets.size() - 2 - iconv].back()) < tol;
+                converged =
+                    converged && (int)targets.size() >= 2 + iconv &&
+                    abs(targets[targets.size() - 1 - iconv].back() -
+                        targets[targets.size() - 2 - iconv].back()) < tol;
             forward = !forward;
             double tswp = current.get_time();
             if (iprint >= 1) {

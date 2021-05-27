@@ -2465,7 +2465,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Delayed", OperatorTensorTypes::Delayed);
 
     py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
-        .value("Normal", EquationTypes::Normal)
+        .value("NormalMinRes", EquationTypes::NormalMinRes)
+        .value("NormalCG", EquationTypes::NormalCG)
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction)
