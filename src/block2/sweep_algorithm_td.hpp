@@ -1934,10 +1934,14 @@ template <typename S> struct TimeEvolution {
             if (center == string::npos)
                 center = mket->canonical_form.find('T');
             assert(center != string::npos);
-            mket->load_wavefunction((int)center);
-            SparseMatrixGroup<S>::normalize_all(mket->wfns);
-            mket->save_wavefunction((int)center);
-            mket->unload_wavefunction((int)center);
+            if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                mket->load_wavefunction((int)center);
+                SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                mket->save_wavefunction((int)center);
+                mket->unload_wavefunction((int)center);
+            }
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
         } else {
             size_t center = me->ket->canonical_form.find('C');
             if (center == string::npos)
@@ -1945,10 +1949,14 @@ template <typename S> struct TimeEvolution {
             if (center == string::npos)
                 center = me->ket->canonical_form.find('S');
             assert(center != string::npos);
-            me->ket->load_tensor((int)center);
-            me->ket->tensors[center]->normalize();
-            me->ket->save_tensor((int)center);
-            me->ket->unload_tensor((int)center);
+            if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                me->ket->load_tensor((int)center);
+                me->ket->tensors[center]->normalize();
+                me->ket->save_tensor((int)center);
+                me->ket->unload_tensor((int)center);
+            }
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
         }
     }
     double solve(int n_sweeps, complex<double> beta, bool forward = true,
