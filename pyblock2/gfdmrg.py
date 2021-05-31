@@ -134,12 +134,9 @@ class GFDMRG:
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
         """
 
-        if mpi is not None:
-            memory = memory / mpi.size
-
         Random.rand_seed(0)
-        init_memory(isize=int(memory * 0.1),
-                    dsize=int(memory * 0.9), save_dir=scratch)
+        isize = min(int(memory * 0.1), 200000000)
+        init_memory(isize=isize, dsize=memory - isize, save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
         Global.threading.seq_type = SeqTypes.Tasked
@@ -475,7 +472,7 @@ class GFDMRG:
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
                         cps_bond_dims, cps_noises, cps_conv_tol, cps_n_steps, idxs,
                         eta, freqs, addition, cutoff=1E-14, diag_only=False,
-                        alpha=True, occs=None, bias=1.0, mo_coeff=None):
+                        n_off_diag_cg=0, alpha=True, occs=None, bias=1.0, mo_coeff=None):
         """Green's function."""
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -670,8 +667,9 @@ class GFDMRG:
             linear.noise_type = NoiseTypes.ReducedPerturbative
             linear.decomp_type = DecompositionTypes.SVD
             # TZ: Not raising error even if CG is not converged
-            linear.minres_soft_max_iter = 20000
-            linear.minres_max_iter = 21000
+            max_cg_iter = 20000
+            linear.minres_soft_max_iter = max_cg_iter
+            linear.minres_max_iter = max_cg_iter + 1000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -685,6 +683,7 @@ class GFDMRG:
 
                 linear.tme = None
                 linear.noises[0] = noises[0]
+                linear.minres_soft_max_iter = max_cg_iter
                 linear.gf_omega = w
                 linear.solve(n_steps, mps.center == 0, conv_tol)
                 min_site = np.argmin(np.array(linear.sweep_targets)[:, 1])
@@ -726,8 +725,13 @@ class GFDMRG:
                         linear.bra_bond_dims[0] = linear.bra_bond_dims[-1]
                         linear.ket_bond_dims[0] = linear.ket_bond_dims[-1]
                         linear.tme = tme
-                        linear.solve(1, mps.center == 0, 0)
-                        rgf, igf = np.array(linear.sweep_targets)[min_site]
+                        if n_off_diag_cg == 0:
+                            linear.solve(1, mps.center != 0, 0)
+                            rgf, igf = linear.targets[-1]
+                        else:
+                            linear.minres_soft_max_iter = n_off_diag_cg
+                            linear.solve(1, mps.center == 0, 0)
+                            rgf, igf = np.array(linear.sweep_targets)[min_site]
                         gf_mat[jj, ii, iw] = rgf + 1j * igf
                         gf_mat[ii, jj, iw] = rgf + 1j * igf
 
@@ -766,7 +770,8 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
                cps_bond_dims=[500], cps_noises=[0], cps_tol=1E-10, cps_n_steps=30,
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
                mo_basis=True, load_dir=None, save_dir=None, pdm_return=True, reorder_method=None,
-               lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14, mpi=None):
+               lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14,
+               n_off_diag_cg=0, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
 
@@ -827,6 +832,8 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         mo_basis: if False, will use Hamiltonian in AO basis
         pdm_return: if False, not return 1-pdm 
         reorder_method: None or 'fielder' or 'gaopt'
+        n_off_diag_cg: limit number of cg for off-diagonal GF matrix elements
+            if zero, no sweep is performed for off-diagonal GF matrix elements
 
     Returns:
         gfmat : np.ndarray of dims (len(mo_orbs), len(mo_orbs), len(freqs)) (complex)
@@ -984,7 +991,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
                                            idxs=mo_orbs if ao_orbs is None else ao_orbs,
                                            mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[0] if is_uhf else mo_coeff),
                                            eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
-                                           alpha=alpha)
+                                           alpha=alpha, n_off_diag_cg=n_off_diag_cg)
         gf[:, :, iw] = gf_tmp[:, :, 0]
 
         if is_uhf:
@@ -996,7 +1003,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
                                                     idxs=mo_orbs if ao_orbs is None else ao_orbs,
                                                     mo_coeff=None if ao_orbs is None or not mo_basis else (mo_coeff[1] if is_uhf else mo_coeff),
                                                     eta=delta[iw], freqs=np.array([freqs[iw]]), addition=addit, diag_only=diag_only,
-                                                    alpha=False)
+                                                    alpha=False, n_off_diag_cg=n_off_diag_cg)
             gf_beta[:, :, iw] = gf_beta_tmp[:, :, 0]
 
     if is_uhf:
@@ -1110,7 +1117,8 @@ if __name__ == "__main__":
                                 cps_bond_dims=[500], cps_noises=[0], cps_tol=1E-14, cps_n_steps=30,
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
-                                n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,mpi=True)
+                                n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,
+                                n_off_diag_cg=0,mpi=True)
         xgfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
         _print("MO to AO method = ", xgfmat)
 
