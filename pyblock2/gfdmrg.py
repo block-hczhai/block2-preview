@@ -136,7 +136,7 @@ class GFDMRG:
 
         Random.rand_seed(0)
         isize = min(int(memory * 0.1), 200000000)
-        init_memory(isize=isize, dsize=memory - isize, save_dir=scratch)
+        init_memory(isize=isize, dsize=int(memory - isize), save_dir=scratch)
         Global.threading = Threading(
             ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
         Global.threading.seq_type = SeqTypes.Tasked
@@ -687,6 +687,8 @@ class GFDMRG:
                 linear.gf_omega = w
                 linear.solve(n_steps, mps.center == 0, conv_tol)
                 min_site = np.argmin(np.array(linear.sweep_targets)[:, 1])
+                if mps.center == 0:
+                    min_site = mps.n_sites - 2 - min_site
                 _print("GF.IMAG MIN SITE = %4d" % min_site)
                 rgf, igf = linear.targets[-1]
                 gf_mat[ii, ii, iw] = rgf + 1j * igf
@@ -724,14 +726,19 @@ class GFDMRG:
                         linear.noises[0] = noises[-1]
                         linear.bra_bond_dims[0] = linear.bra_bond_dims[-1]
                         linear.ket_bond_dims[0] = linear.ket_bond_dims[-1]
+                        linear.target_bra_bond_dim = linear.bra_bond_dims[-1]
+                        linear.target_ket_bond_dim = linear.bra_bond_dims[-1]
                         linear.tme = tme
                         if n_off_diag_cg == 0:
                             linear.solve(1, mps.center != 0, 0)
                             rgf, igf = linear.targets[-1]
                         else:
-                            linear.minres_soft_max_iter = n_off_diag_cg
+                            linear.minres_soft_max_iter = n_off_diag_cg if n_off_diag_cg != -1 else max_cg_iter
                             linear.solve(1, mps.center == 0, 0)
-                            rgf, igf = np.array(linear.sweep_targets)[min_site]
+                            if mps.center == 0:
+                                rgf, igf = np.array(linear.sweep_targets)[::-1][min_site]
+                            else:
+                                rgf, igf = np.array(linear.sweep_targets)[min_site]
                         gf_mat[jj, ii, iw] = rgf + 1j * igf
                         gf_mat[ii, jj, iw] = rgf + 1j * igf
 
@@ -771,7 +778,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
                gf_bond_dims=[750], gf_noises=[1E-5, 0], gf_tol=1E-8, gf_n_steps=20, scratch='./tmp',
                mo_basis=True, load_dir=None, save_dir=None, pdm_return=True, reorder_method=None,
                lowdin=False, diag_only=False, alpha=True, occs=None, bias=1.0, cutoff=1E-14,
-               n_off_diag_cg=0, mpi=None):
+               n_off_diag_cg=-1, mpi=None):
     '''
     Calculate the DMRG GF matrix in the MO basis.
 
@@ -1118,7 +1125,7 @@ if __name__ == "__main__":
                                 gf_bond_dims=[500], gf_noises=[1E-7, 1E-8, 1E-10, 0], gf_tol=1E-8,
                                 gmres_tol=1E-20, lowdin=False, ignore_ecore=False, alpha=False, verbose=3,
                                 n_threads=n_threads, occs=None, bias=1.0, save_dir=save_dir, load_dir=load_dir,
-                                n_off_diag_cg=0,mpi=True)
+                                n_off_diag_cg=-1,mpi=True)
         xgfmat = np.einsum('ip,pqr,jq->ijr', mf.mo_coeff, gfmat, mf.mo_coeff)
         _print("MO to AO method = ", xgfmat)
 
