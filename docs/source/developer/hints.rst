@@ -188,6 +188,7 @@ the information stored in the two MPSInfo can interfere with each other.
 **Solution:** Change ``Global.threading.seq_type = SeqTypes.Tasked`` to ``Global.threading.seq_type = SeqTypes.Nothing``.
 
 [2021-05-22]
+^^^^^^^^^^^^
 
 **Assertion:** ::
 
@@ -199,3 +200,16 @@ the information stored in the two MPSInfo can interfere with each other.
 
 **Solution:** Call ``mps.load_mutable()`` after using ``mps.flip_fused_form(...)`` or ``mps.move_left(...)``,
 so that ``mps.save_mutable()`` will be successful.
+
+[2021-05-31]
+^^^^^^^^^^^^
+
+**Error:** ::
+
+    exceeding allowed memory
+
+**Conditions:** ``Linear`` with ``tme != nullptr``.
+
+**Reason:** By default, no bond dimension truncation is performed for MPS in ``Linear::tme``.
+
+**Solution:** Set ``target_bra_bond_dim`` and ``target_ket_bond_dim`` fields in ``Linear`` to a suitable bond dimension.
