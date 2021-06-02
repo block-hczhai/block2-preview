@@ -661,7 +661,7 @@ class GFDMRG:
                 rme.delayed_contraction = OpNamesSet.normal_ops()
 
             linear = Linear(lme, rme, VectorUBond(bond_dims),
-                            VectorUBond(bond_dims), VectorDouble(noises))
+                            VectorUBond(cps_bond_dims[-1:]), VectorDouble(noises))
             linear.gf_eta = eta
             linear.minres_conv_thrds = VectorDouble([gmres_tol] * n_steps)
             linear.noise_type = NoiseTypes.ReducedPerturbative
@@ -684,6 +684,8 @@ class GFDMRG:
                 linear.tme = None
                 linear.noises[0] = noises[0]
                 linear.minres_soft_max_iter = max_cg_iter
+                linear.noises = VectorDouble(noises)
+                linear.bra_bond_dims = VectorUBond(bond_dims)
                 linear.gf_omega = w
                 linear.solve(n_steps, mps.center == 0, conv_tol)
                 min_site = np.argmin(np.array(linear.sweep_targets)[:, 1])
@@ -723,11 +725,10 @@ class GFDMRG:
                         tme.init_environments(False)
                         if self.dctr:
                             tme.delayed_contraction = OpNamesSet.normal_ops()
-                        linear.noises[0] = noises[-1]
-                        linear.bra_bond_dims[0] = linear.bra_bond_dims[-1]
-                        linear.ket_bond_dims[0] = linear.ket_bond_dims[-1]
-                        linear.target_bra_bond_dim = linear.bra_bond_dims[-1]
-                        linear.target_ket_bond_dim = linear.bra_bond_dims[-1]
+                        linear.noises = VectorDouble(noises[-1:])
+                        linear.bra_bond_dims = VectorUBond(bond_dims[-1:])
+                        linear.target_bra_bond_dim = cps_bond_dims[-1]
+                        linear.target_ket_bond_dim = cps_bond_dims[-1]
                         linear.tme = tme
                         if n_off_diag_cg == 0:
                             linear.solve(1, mps.center != 0, 0)
