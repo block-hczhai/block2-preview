@@ -32,7 +32,7 @@ root directory should be in ``PYTHONPATH``. You can add the following line in yo
 
 Then you can run a DMRG calculation using the following command: ::
 
-    ${BLOCK2HOME}/pyblock2/main.py dmrg.conf > dmrg.out
+    ${BLOCK2HOME}/pyblock2/driver/main.py dmrg.conf > dmrg.out
 
 where ``dmrg.conf`` is the input file and ``dmrg.out`` is the output file.
 

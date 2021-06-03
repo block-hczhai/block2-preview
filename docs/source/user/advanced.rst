@@ -9,7 +9,7 @@ Advanced Usage
 Orbital Rotation
 ----------------
 
-In this calculation we illustrate how to compute the grond state MPS in the given set of orbitals,
+In this calculation we illustrate how to compute the ground state MPS in the given set of orbitals,
 find the (new) DMRG natural orbitals, transform integrals to new orbitals,
 transform the ground state MPS to new orbitals, and finally evaluate the energy of the transformed MPS in
 the new orbitals to verify the quality of the transformed MPS.
