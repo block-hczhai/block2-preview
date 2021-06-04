@@ -37,6 +37,7 @@ else:
             (D) python readwfn.py dmrg.conf -reduntant
             (E) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -su2
             (F) python readwfn.py -integral FCIDUMP -prefix ./scratch -dot 2 -sz
+            (G) python readwfn.py ... -sym c1
 
         Args:
             config: StackBlock input file
@@ -50,10 +51,12 @@ else:
 
             when no config file is given/available:
                 integral: path to integral file
-                prefix: path to StackBlock MPS
+                prefix: path to StackBlock MPS (does not include 'node0')
                 dot: 1 or 2 dot MPS
                 su2/sz: spin-adapted or non-spin-adapted
-        
+                sym: point group name (default is d2h)
+                    note that d2h also works for c1
+
         If StackBlock is run with reordered integrals, before running this script,
         a reordered FCIDUMP should be generated using
             python gaopt.py -ord RestartReorder.dat -wint FCIDUMP.NEW
@@ -64,6 +67,7 @@ scratch = './node0'
 integral = 'FCIDUMP'
 dot = 1
 su2 = True
+sym = "d2h"
 out_dir = "./out"
 expect = "expect" in arg_dic
 redunt = "reduntant" in arg_dic
@@ -81,6 +85,7 @@ if "config" in arg_dic:
     dot = 1 if "twodot_to_onedot" in dic or "onedot" in dic else 2
     su2 = "nonspinadapted" not in dic
     mps_tags = dic.get("mps_tags", "KET").split()
+    sym = dic.get("sym", "d2h")
 if "prefix" in arg_dic:
     scratch = arg_dic["prefix"] + "/node0"
 if "integral" in arg_dic:
@@ -97,6 +102,8 @@ if "sz" in arg_dic:
     su2 = False
 if "dot" in arg_dic:
     dot = int(arg_dic["dot"])
+if "sym" in arg_dic:
+    sym = arg_dic["sym"]
 
 from pyblock.qchem import DMRGDataPage, BlockHamiltonian
 from pyblock.algorithm import DMRG
@@ -110,7 +117,7 @@ from block.operator import Wavefunction
 
 page = DMRGDataPage(save_dir=scratch)
 
-opts = dict(fcidump=integral, pg='d2h',
+opts = dict(fcidump=integral, pg=sym,
             su2=su2, output_level=-1, memory=25000,
             omp_threads=1, mkl_threads=1, page=page)
 
@@ -179,6 +186,11 @@ else:
 if not os.path.isdir(out_dir):
     os.mkdir(out_dir)
 
+swap_pg = getattr(PointGroup, "swap_" + sym)
+npg = {'d2h': 8, 'c2h': 4, 'c2v': 4, 'd2': 4,
+       'ci': 2, 'c2': 2, 'cs': 2, 'c1': 1}[sym]
+inv_swap_pg = list(np.argsort([swap_pg(x + 1) for x in range(0, npg)]) + 1)
+
 memory = int(10 * 1E9)
 init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=out_dir)
 fcidump = FCIDUMP()
@@ -186,10 +198,9 @@ fcidump.read(integral)
 n_sites = fcidump.n_sites
 
 vaccum = SX(0)
-target = SX(fcidump.n_elec, fcidump.twos, PointGroup.swap_d2h(fcidump.isym))
+target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
 
-pgd2h = [1, 4, 6, 7, 8, 5, 3, 2]
-orb_sym = VectorUInt8(map(PointGroup.swap_d2h, fcidump.orb_sym))
+orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
 hamil = HamiltonianQC(vaccum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
 mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis)
@@ -207,7 +218,7 @@ for i in range(0, center + 1):
     st.n = n
     for j in range(n):
         st.quanta[j] = SX(xst.quanta[j].n, xst.quanta[j].s.irrep,
-                          PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
+                          swap_pg(xst.quanta[j].symm.irrep + 1))
         st.n_states[j] = xst.n_states[j]
         if not redunt and mps_info.left_dims_fci[i + 1].find_state(st.quanta[j]) == -1:
             st.n_states[j] = 0
@@ -227,7 +238,7 @@ for i in range(center + 1, n_sites):
     st.n = n
     for j in range(n):
         st.quanta[j] = SX(xst.quanta[j].n, xst.quanta[j].s.irrep,
-                          PointGroup.swap_d2h(xst.quanta[j].symm.irrep + 1))
+                          swap_pg(xst.quanta[j].symm.irrep + 1))
         st.n_states[j] = xst.n_states[j]
     st.sort_states()
     mps_info.right_dims[i] = st
@@ -256,7 +267,7 @@ def swap_order_left(idx):
             dx.append((l.quanta[ibba], m.quanta[ibbb], g, g + nx))
             g += nx
         dx.sort(key=lambda x: (
-            x[0].n, x[0].twos, pgd2h[x[0].pg], x[1].n, x[1].twos, pgd2h[x[1].pg]))
+            x[0].n, x[0].twos, inv_swap_pg[x[0].pg], x[1].n, x[1].twos, inv_swap_pg[x[1].pg]))
         pp = []
         for xx in dx:
             pp += list(range(xx[2], xx[3]))
@@ -281,7 +292,7 @@ def swap_order_right(idx):
             dx.append((m.quanta[ibba], r.quanta[ibbb], g, g + nx))
             g += nx
         dx.sort(key=lambda x: (
-            x[1].n, x[1].twos, pgd2h[x[1].pg], x[0].n, x[0].twos, pgd2h[x[0].pg]))
+            x[1].n, x[1].twos, inv_swap_pg[x[1].pg], x[0].n, x[0].twos, inv_swap_pg[x[0].pg]))
         pp = []
         for xx in dx:
             pp += list(range(xx[2], xx[3]))
@@ -309,7 +320,7 @@ for i in range(1, center):
         if rot[k].cols == 0:
             continue
         xq = st.quanta[k]
-        q = SX(xq.n, xq.s.irrep, PointGroup.swap_d2h(xq.symm.irrep + 1))
+        q = SX(xq.n, xq.s.irrep, swap_pg(xq.symm.irrep + 1))
         iq = mps.tensors[i].info.find_state(q)
         if not redunt and not (iq != -1 and iq < mps.tensors[i].info.n):
             continue
@@ -329,8 +340,8 @@ swr = swap_order_right(center + 1)
 for (il, ir), mat in wave.non_zero_blocks:
     xql = wll.quanta[il]
     xqr = wrr.quanta[ir]
-    ql = SX(xql.n, xql.s.irrep, PointGroup.swap_d2h(xql.symm.irrep + 1))
-    qr = SX(xqr.n, xqr.s.irrep, PointGroup.swap_d2h(xqr.symm.irrep + 1))
+    ql = SX(xql.n, xql.s.irrep, swap_pg(xql.symm.irrep + 1))
+    qr = SX(xqr.n, xqr.s.irrep, swap_pg(xqr.symm.irrep + 1))
     q = wfn.info.delta_quantum.combine(ql, -qr)
     iq = wfn.info.find_state(q)
     if not redunt and iq == -1:

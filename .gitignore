@@ -3,6 +3,8 @@ build_test/
 build_seq/
 docs/build/
 my_test/
+tmp/
+gs_mps/
 node0/
 nodex/
 MANIFEST
