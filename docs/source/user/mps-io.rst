@@ -74,10 +74,13 @@ and ``BOOSTROOT`` is set. Then ``StackBlock`` can be compiled in the following w
     cd build
     cmake ..
     make -j 10
+    rm CMakeCache.txt
     cmake .. -DBUILD_OH=ON
     make -j 10
+    rm CMakeCache.txt
     cmake .. -DBUILD_READROT=ON
     make -j 10
+    rm CMakeCache.txt
     cmake .. -DBUILD_GAOPT=ON
     make -j 10
 
