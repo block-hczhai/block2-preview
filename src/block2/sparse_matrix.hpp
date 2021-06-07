@@ -1035,6 +1035,11 @@ template <typename S> struct SparseMatrix {
             linfo->quanta[i] = qs[i];
             linfo->n_states_bra[i] = l[i]->shape[0];
             linfo->n_states_ket[i] = l[i]->shape[1];
+            // this is only necessary for compatibility with StackBlock
+            if (l[i]->data.size() == 1 && l[i]->data[0] < 0) {
+                MatrixFunctions::iscale(l[i]->ref(), -1);
+                MatrixFunctions::iscale(s[i]->ref(), -1);
+            }
         }
         linfo->sort_states();
         left = make_shared<SparseMatrix<S>>(d_alloc);
@@ -1087,6 +1092,11 @@ template <typename S> struct SparseMatrix {
             rinfo->quanta[i] = qs[i];
             rinfo->n_states_bra[i] = r[i]->shape[0];
             rinfo->n_states_ket[i] = r[i]->shape[1];
+            // this is only necessary for compatibility with StackBlock
+            if (r[i]->data.size() == 1 && r[i]->data[0] < 0) {
+                MatrixFunctions::iscale(r[i]->ref(), -1);
+                MatrixFunctions::iscale(s[i]->ref(), -1);
+            }
         }
         rinfo->sort_states();
         left = make_shared<SparseMatrix<S>>(d_alloc);

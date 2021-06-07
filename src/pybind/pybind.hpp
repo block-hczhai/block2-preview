@@ -590,6 +590,7 @@ template <typename S> void bind_sparse(py::module &m) {
              py::arg("mr"), py::arg("mr_cinfo"))
         .def("randomize", &SparseMatrix<S>::randomize, py::arg("a") = 0.0,
              py::arg("b") = 1.0)
+        .def("normalize", &SparseMatrix<S>::normalize)
         .def("contract", &SparseMatrix<S>::contract, py::arg("lmat"),
              py::arg("rmat"), py::arg("trace_right") = false)
         .def("swap_to_fused_left", &SparseMatrix<S>::swap_to_fused_left)

@@ -17,8 +17,6 @@ import sys
 import os
 import numpy as np
 
-DEBUG = True
-
 if len(sys.argv) > 1:
     arg_dic = {}
     for i in range(1, len(sys.argv)):
@@ -56,6 +54,10 @@ else:
                 su2/sz: spin-adapted or non-spin-adapted
                 sym: point group name (default is d2h)
                     note that d2h also works for c1
+
+            when the prefix is set in config file using relative path,
+                it will be considered as relative to the dir of dmrg.conf
+                but not relative to the current dir
 
         If StackBlock is run with reordered integrals, before running this script,
         a reordered FCIDUMP should be generated using
@@ -298,7 +300,6 @@ def swap_order_right(idx):
             pp += list(range(xx[2], xx[3]))
         dd[l.quanta[ik]] = np.argsort(pp)
     return dd
-
 
 if su2:
     mps.tensors[0].data = np.array([1.0, 1.0, 1.0])

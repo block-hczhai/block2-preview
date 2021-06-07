@@ -76,6 +76,7 @@ Features
    user/installation
    user/basic
    user/advanced
+   user/mps-io
    user/references
 
 .. toctree::

@@ -1,4 +1,6 @@
 
+.. _dev_orbital_rotation:
+
 MPS Orbital Rotation
 ====================
 
