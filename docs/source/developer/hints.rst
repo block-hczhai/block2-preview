@@ -93,8 +93,8 @@ the integral can even be distributed, such that synchronization will not be mean
 
 **Solution:** Synchronizing the input integrals ``h1e`` and ``g2e`` can solve this problem.
 
-[2021-05-12]
-^^^^^^^^^^^^
+[2021-05-12 | 2021-06-07]
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Error Message:** (note that this problem in ``main.py`` has been fixed in commit 4f87784) ::
 
@@ -117,9 +117,9 @@ or ::
         mps.load_mutable()
     ValueError: cannot create std::vector larger than max_size()
 
-**Conditions:** More than one MPI processors, python driver, happening with a very low probablity.
+**Conditions:** More than one MPI processors, python driver, happening with a very low probability.
 
-**Reason:** The problematic code is: ::
+**Reason A:** The problematic code is: ::
 
     mps.load_data()
     if mps.dot != dot and nroots == 1:
@@ -129,7 +129,17 @@ or ::
 And the non-root MPI proc can load data before or after the root proc saves the data. The wrong loaded data can cause the
 subsequent ``mps.load_mutable()`` to fail.
 
-**Solution:** Adding ``MPI.barrier()`` around ``mps.save_data()``.
+**Solution A:** Adding ``MPI.barrier()`` around ``mps.save_data()``.
+
+**Reason B:** The problematic code is: ::
+
+    mps.load_mutable()
+    mps.save_mutable()
+
+And the non-root MPI proc can load data before or after the root proc saves the data.
+This may cause simultaneously reading and writing into the same file (with a very low probability).
+
+**Solution B:** Adding ``MPI.barrier()`` between ``mps.load_mutable()`` and ``mps.save_mutable()``.
 
 Linear
 ------
@@ -213,3 +223,24 @@ so that ``mps.save_mutable()`` will be successful.
 **Reason:** By default, no bond dimension truncation is performed for MPS in ``Linear::tme``.
 
 **Solution:** Set ``target_bra_bond_dim`` and ``target_ket_bond_dim`` fields in ``Linear`` to a suitable bond dimension.
+
+[2021-06-07]
+
+**Assertion:** ::
+
+    block2/parallel_rule.hpp:215: void block2::ParallelRule<S>::distributed_apply(T, const std::vector<std::shared_ptr<block2::OpExpr<S> > >&, const std::vector<std::shared_ptr<block2::OpExpr<S> > >&, std::vector<std::shared_ptr<block2::SparseMatrix<S> > >&) const [with T = block2::ParallelTensorFunctions<S>::right_contract(const std::shared_ptr<block2::OperatorTensor<S> >&, const std::shared_ptr<block2::OperatorTensor<S> >&, std::shared_ptr<block2::OperatorTensor<S> >&, const std::shared_ptr<block2::Symbolic<S> >&, block2::OpNamesSet) const [with S = block2::SZLong]::<lambda(const std::vector<std::shared_ptr<block2::OpExpr<block2::SZLong> >, std::allocator<std::shared_ptr<block2::OpExpr<block2::SZLong> > > >&)>; S = block2::SZLong]: Assertion `expr->get_type() == OpTypes::ExprRef' failed.
+
+**Conditions:** ``ParallelMPO``.
+
+**Reason:** The problematic code is: ::
+
+    impo = IdentityMPOSCI(hamil)
+    impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
+
+On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO should first be simplified and then parallelized.
+
+**Solution:** Use ``ClassicParallelMPO`` (may have bad performance) or change the code to ::
+
+    impo = IdentityMPOSCI(hamil)
+    impo = SimplifiedMPO(impo, Rule())
+    impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
