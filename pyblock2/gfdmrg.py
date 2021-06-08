@@ -955,19 +955,15 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
 
     dmrg = GFDMRG(scratch=scratch, memory=memory,
                   verbose=verbose, omp_threads=n_threads, mpi=mpi)
-    re_idx = orbital_reorder(h1e, g2e, method=reorder_method)
-    if mpi is not None:
-        from mpi4py import MPI as MPIPY
-        comm = MPIPY.COMM_WORLD
-        re_idx = comm.bcast(re_idx, root=0)
-
-    _print('reorder method = %r reorder = %r' % (reorder_method, re_idx))
-
-    if mo_orbs is None and ao_orbs is None:
-        mo_orbs = range(n_mo)
-        mo_orbs = np.argsort(re_idx)[np.array(mo_orbs)]
 
     if load_dir is None:
+
+        re_idx = orbital_reorder(h1e, g2e, method=reorder_method)
+        if mpi is not None:
+            from mpi4py import MPI as MPIPY
+            comm = MPIPY.COMM_WORLD
+            re_idx = comm.bcast(re_idx, root=0)
+
         save_fd = save_dir + "/GS_FCIDUMP" if save_dir is not None else None
         dmrg.init_hamiltonian(pg, n_sites=n_mo, n_elec=na + nb, twos=na - nb, isym=1,
                               orb_sym=orb_sym, e_core=ecore, h1e=h1e, g2e=g2e, idx=re_idx,
@@ -977,12 +973,21 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         if save_dir is not None:
             _print('saving ground state ...')
             dmrg.save_gs_mps(save_dir)
+            if mpi.rank == 0:
+                np.save(save_dir + "/reorder.npy", re_idx)
     else:
         dmrg.init_hamiltonian_fcidump(pg, load_dir + "/GS_FCIDUMP")
+        re_idx = np.load(load_dir + "/reorder.npy")
         dmrg.idx = re_idx
         dmrg.ridx = np.argsort(re_idx)
         _print('loading ground state ...')
         dmrg.load_gs_mps(load_dir)
+
+    _print('reorder method = %r reorder = %r' % (reorder_method, re_idx))
+
+    if mo_orbs is None and ao_orbs is None:
+        mo_orbs = range(n_mo)
+        mo_orbs = np.argsort(re_idx)[np.array(mo_orbs)]
 
     pdm = dmrg.get_one_pdm()
     idxs = mo_orbs if ao_orbs is None else ao_orbs
