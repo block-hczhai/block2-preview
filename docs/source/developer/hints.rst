@@ -265,8 +265,28 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
     impo = IdentityMPOSCI(hamil)
     me = MovingEnvironment(impo, mps1, mps2)
 
-**Solution:** Use ``ParallelMPO`` (vide supra):
+**Solution:** Use ``ParallelMPO`` (vide supra): ::
 
     impo = IdentityMPOSCI(hamil)
     impo = SimplifiedMPO(impo, Rule())
     impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
+
+MRCI/SCI computations
+---------------------
+
+[2021-06-08]
+^^^^^^^^^^^^
+**Error:** ::
+
+    find_site_op_info cant find q:< N=? SZ=? PG=? >iSite=??
+
+**Conditions:** Issue with quantum number setup.
+
+**Reason:** This can happen if symmetry is used but the integrals don't obey symmetry.
+
+**Solution:** Add the following code. Attention: This will change the fcidump. Use with case and check ``symmetrize_error``  ::
+
+     symmetrize_error = fcidump.symmetrize(orb_sym)
+
+
+    
