@@ -175,7 +175,7 @@ the information stored in the two MPSInfo can interfere with each other.
 
 **Reason 2:** An MPS has been loaded in from disk with a wrong MPSInfo.
 
-**Solution 1:** Load in MPSInfo as well or make sure MPSInfo is correct.
+**Solution 2:** Load in MPSInfo as well or make sure MPSInfo is correct.
 
 [2021-05-14]
 ^^^^^^^^^^^^
