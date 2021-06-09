@@ -164,12 +164,18 @@ Linear
 
     block2/operator_functions.hpp:194: void block2::OperatorFunctions<S>::tensor_rotate(const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, const std::shared_ptr<block2::SparseMatrix<S> >&, bool, double) const [with S = block2::SU2Long]: Assertion `adq == cdq && a->info->n >= c->info->n' failed.
 
-**Conditions:** Different bra and ket.
+**Conditions 1:** Different bra and ket.
 
-**Reason:** The bra and ket has different MPSInfo, but the two MPSInfo has the same tag. When saving to/loading from disk,
+**Reason 1:** The bra and ket has different MPSInfo, but the two MPSInfo has the same tag. When saving to/loading from disk,
 the information stored in the two MPSInfo can interfere with each other.
 
-**Solution:** Use different tags for different MPSInfo.
+**Solution 1:** Use different tags for different MPSInfo.
+
+**Conditions 2:** MPSInfo in MPS differs from data in MPS.
+
+**Reason 2:** An MPS has been loaded in from disk with a wrong MPSInfo.
+
+**Solution 2:** Load in MPSInfo as well or make sure MPSInfo is correct.
 
 [2021-05-14]
 ^^^^^^^^^^^^
@@ -244,3 +250,43 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
     impo = IdentityMPOSCI(hamil)
     impo = SimplifiedMPO(impo, Rule())
     impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
+
+[2021-06-08]
+^^^^^^^^^^^^
+
+**Assertion:** ::
+
+     block2/sparse_matrix.hpp:1548:  void block2::SparseMatrix<S>::swap_to_fused_left(const std::shared_ptr<block2::SparseMatrix<S> >&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const block2::StateInfo<S>&, const std::shared_ptr<block2::CG<S> >&) [with S = block2::SZLong]: Assertion `mat->info->is_wavefunction' failed.
+
+**Conditions:** IdentityMPO used in MPI simulation without ``ParallelMPO``.
+
+**Reason:** The problematic code is: ::
+
+    impo = IdentityMPOSCI(hamil)
+    me = MovingEnvironment(impo, mps1, mps2)
+
+**Solution:** Use ``ParallelMPO`` (vide supra): ::
+
+    impo = IdentityMPOSCI(hamil)
+    impo = SimplifiedMPO(impo, Rule())
+    impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
+
+MRCI/SCI computations
+---------------------
+
+[2021-06-08]
+^^^^^^^^^^^^
+**Error:** ::
+
+    find_site_op_info cant find q:< N=? SZ=? PG=? >iSite=??
+
+**Conditions:** Issue with quantum number setup.
+
+**Reason:** This can happen if symmetry is used but the integrals don't obey symmetry.
+
+**Solution:** Add the following code. Attention: This will change the fcidump. Use with case and check ``symmetrize_error``  ::
+
+     symmetrize_error = fcidump.symmetrize(orb_sym)
+
+
+    
