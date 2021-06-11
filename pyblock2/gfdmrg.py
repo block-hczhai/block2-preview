@@ -252,8 +252,11 @@ class GFDMRG:
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
 
         if save_fcidump is not None:
-            self.fcidump.orb_sym = VectorUInt8(orb_sym)
-            self.fcidump.write(save_fcidump)
+            if self.mpi is None or self.mpi.rank == 0:
+                self.fcidump.orb_sym = VectorUInt8(orb_sym)
+                self.fcidump.write(save_fcidump)
+            if self.mpi is not None:
+                self.mpi.barrier()
         assert pg in ["d2h", "c1"]
 
     @staticmethod
@@ -451,22 +454,24 @@ class GFDMRG:
         import shutil
         import pickle
         import os
-        if self.mpi.rank == 0:
+        if self.mpi is None or self.mpi.rank == 0:
             pickle.dump(self.gs_energy, open(
                 self.scratch + '/GS_ENERGY', 'wb'))
             for k in os.listdir(self.scratch):
                 if '.KET.' in k or k == 'GS_MPS_INFO' or k == 'GS_ENERGY':
                     shutil.copy(self.scratch + "/" + k, save_dir + "/" + k)
-        self.mpi.barrier()
+        if self.mpi is not None:
+            self.mpi.barrier()
 
     def load_gs_mps(self, load_dir='./gs_mps'):
         import shutil
         import pickle
         import os
-        if self.mpi.rank == 0:
+        if self.mpi is None or self.mpi.rank == 0:
             for k in os.listdir(load_dir):
                 shutil.copy(load_dir + "/" + k, self.scratch + "/" + k)
-        self.mpi.barrier()
+        if self.mpi is not None:
+            self.mpi.barrier()
         self.gs_energy = pickle.load(open(self.scratch + '/GS_ENERGY', 'rb'))
 
     def greens_function(self, bond_dims, noises, gmres_tol, conv_tol, n_steps,
