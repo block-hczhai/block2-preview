@@ -115,6 +115,24 @@ The following enables debug flags ::
 
     cmake .. -DCMAKE_BUILD_TYPE=Debug
 
+Installation with ``anaconda``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When using ``anaconda``, please make sure that ``mpi4py`` is linked with the same ``mpi`` library as the one used for compiling ``block2``.
+We can create an ``anaconda`` virtual environment: ::
+
+    conda create -n block2 python=3.8 anaconda
+    conda activate block2
+
+Then make sure that a working ``mpi`` library is in the environment, using, for example: ::
+
+    module load openmpi/4.0.4
+    module load gcc/9.2.0
+
+Then we should install ``mpi4py`` using this ``mpi`` library via ``--no-binary`` option of ``pip``: ::
+
+    python -m pip install --no-binary :all: mpi4py
+
 Supported operating systems and compilers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

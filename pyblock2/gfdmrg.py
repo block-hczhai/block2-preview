@@ -455,7 +455,7 @@ class GFDMRG:
             pickle.dump(self.gs_energy, open(
                 self.scratch + '/GS_ENERGY', 'wb'))
             for k in os.listdir(self.scratch):
-                if '.KET.' in k or 'GS_' in k:
+                if '.KET.' in k or k == 'GS_MPS_INFO' or k == 'GS_ENERGY':
                     shutil.copy(self.scratch + "/" + k, save_dir + "/" + k)
         self.mpi.barrier()
 
