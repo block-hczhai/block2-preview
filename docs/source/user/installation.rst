@@ -118,8 +118,14 @@ The following enables debug flags ::
 Installation with ``anaconda``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+An incorrectly installed ``mpi4py`` may produce this error: ::
+
+    undefined symbol: ompi_mpi_logical8
+
+when you execute ``from mpi4py import MPI`` in a ``python`` interpreter.
+
 When using ``anaconda``, please make sure that ``mpi4py`` is linked with the same ``mpi`` library as the one used for compiling ``block2``.
-We can create an ``anaconda`` virtual environment: ::
+We can create an ``anaconda`` virtual environment (optional): ::
 
     conda create -n block2 python=3.8 anaconda
     conda activate block2
