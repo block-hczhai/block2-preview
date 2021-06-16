@@ -344,6 +344,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     tuple<double, int, size_t, double>
     eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
          const vector<shared_ptr<SparseMatrix<S>>> &ortho_bra =
              vector<shared_ptr<SparseMatrix<S>>>()) {
@@ -365,12 +366,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         vector<double> eners =
             (tf->opf->seq->mode == SeqTypes::Auto ||
              (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? MatrixFunctions::davidson(
-                      *tf, aa, bs, ndav, iprint,
+                ? MatrixFunctions::harmonic_davidson(
+                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter, 2, 50, ors)
-                : MatrixFunctions::davidson(
-                      *this, aa, bs, ndav, iprint,
+                : MatrixFunctions::harmonic_davidson(
+                      *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter, 2, 50, ors);
         post_precompute();
@@ -945,6 +946,7 @@ template <typename S> struct LinearEffectiveHamiltonian {
     tuple<double, int, size_t, double>
     eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(h_effs.size() != 0);
@@ -967,8 +969,8 @@ template <typename S> struct LinearEffectiveHamiltonian {
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
-        vector<double> eners = MatrixFunctions::davidson(
-            *this, aa, bs, ndav, iprint,
+        vector<double> eners = MatrixFunctions::harmonic_davidson(
+            *this, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
             max_iter, soft_max_iter);
         for (size_t ih = 0; ih < h_effs.size(); ih++)
@@ -1353,6 +1355,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     // energies, ndav, nflop, tdav
     tuple<vector<double>, int, size_t, double>
     eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(compute_diag);
@@ -1369,12 +1372,12 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         vector<double> eners =
             (tf->opf->seq->mode == SeqTypes::Auto ||
              (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? MatrixFunctions::davidson(
-                      *tf, aa, bs, ndav, iprint,
+                ? MatrixFunctions::harmonic_davidson(
+                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter)
-                : MatrixFunctions::davidson(
-                      *this, aa, bs, ndav, iprint,
+                : MatrixFunctions::harmonic_davidson(
+                      *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter);
         post_precompute();

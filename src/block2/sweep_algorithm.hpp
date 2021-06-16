@@ -80,6 +80,8 @@ template <typename S> struct DMRG {
     vector<double> davidson_conv_thrds;
     int davidson_max_iter = 5000;
     int davidson_soft_max_iter = -1;
+    double davidson_shift = 0.0;
+    DavidsonTypes davidson_type = DavidsonTypes::Normal;
     int conn_adjust_step = 2;
     bool forward;
     uint8_t iprint = 2;
@@ -474,7 +476,9 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, me->para_rule, ortho_bra);
+                          davidson_soft_max_iter, davidson_type,
+                          davidson_shift - me->mpo->const_e, me->para_rule,
+                          ortho_bra);
         teig += _t.get_time();
         if (state_specific)
             for (auto &wfn : ortho_bra)
@@ -690,7 +694,9 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, me->para_rule, ortho_bra);
+                          davidson_soft_max_iter, davidson_type,
+                          davidson_shift - me->mpo->const_e, me->para_rule,
+                          ortho_bra);
         teig += _t.get_time();
         if (state_specific)
             for (auto &wfn : ortho_bra)
@@ -951,6 +957,7 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_type, davidson_shift - me->mpo->const_e,
                           me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
@@ -1120,6 +1127,7 @@ template <typename S> struct DMRG {
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_type, davidson_shift - me->mpo->const_e,
                           me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();

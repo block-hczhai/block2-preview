@@ -12,7 +12,7 @@ class TestDMRG : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
         frame_()->use_main_stack = false;
         frame_()->minimal_disk_usage = true;
         frame_()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
@@ -255,7 +255,9 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
-    dmrg->solve(2, true);
+    dmrg->davidson_type = DavidsonTypes::HarmonicGreaterThan;
+    dmrg->davidson_shift = -2086.4;
+    dmrg->solve(10, true);
 
     shared_ptr<MPSInfo<SU2>> bra_info =
         make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);

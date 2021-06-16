@@ -117,6 +117,27 @@ extern void dgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
 #endif
 }
 
+enum struct DavidsonTypes : uint8_t {
+    Normal = 0,
+    GreaterThan = 1,
+    LessThan = 2,
+    CloseTo = 4,
+    Harmonic = 16,
+    HarmonicGreaterThan = 16 | 1,
+    HarmonicLessThan = 16 | 2,
+    HarmonicCloseTo = 16 | 4,
+    DavidsonPrecond = 32,
+    NoPrecond = 64
+};
+
+inline bool operator&(DavidsonTypes a, DavidsonTypes b) {
+    return ((uint8_t)a & (uint8_t)b) != 0;
+}
+
+inline DavidsonTypes operator|(DavidsonTypes a, DavidsonTypes b) {
+    return DavidsonTypes((uint8_t)a | (uint8_t)b);
+}
+
 // Dense matrix operations
 struct MatrixFunctions {
     // a = b
@@ -721,8 +742,8 @@ struct MatrixFunctions {
         d_alloc->deallocate(work, lwork);
     }
     // z = r / aa
-    static void precondition(const MatrixRef &z, const MatrixRef &r,
-                             const DiagonalMatrix &aa) {
+    static void cg_precondition(const MatrixRef &z, const MatrixRef &r,
+                                const DiagonalMatrix &aa) {
         copy(z, r);
         if (aa.size() != 0) {
             assert(aa.size() == r.size() && r.size() == z.size());
@@ -730,6 +751,17 @@ struct MatrixFunctions {
                 if (abs(aa.data[i]) > 1E-12)
                     z.data[i] /= aa.data[i];
         }
+    }
+    // ER, Davidson. "The iterative calculation of a few of the lowest
+    // eigenvalues and corresponding eigenvectors of large real-symmetric
+    // matrices." Journal of Computational Physics 17 (1975): 87-94.
+    // Section III. D
+    static void davidson_precondition(const MatrixRef &q, double ld,
+                                      const DiagonalMatrix &aa) {
+        assert(aa.size() == q.size());
+        for (MKL_INT i = 0; i < aa.n; i++)
+            if (abs(ld - aa.data[i]) > 1E-12)
+                q.data[i] /= ld - aa.data[i];
     }
     static void olsen_precondition(const MatrixRef &q, const MatrixRef &c,
                                    double ld, const DiagonalMatrix &aa) {
@@ -753,11 +785,12 @@ struct MatrixFunctions {
     template <typename MatMul, typename PComm>
     static vector<double>
     davidson(MatMul &op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
-             int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
-             double conv_thrd = 5E-6, int max_iter = 5000,
-             int soft_max_iter = -1, int deflation_min_size = 2,
-             int deflation_max_size = 50,
+             DavidsonTypes davidson_type, int &ndav, bool iprint = false,
+             const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+             int max_iter = 5000, int soft_max_iter = -1,
+             int deflation_min_size = 2, int deflation_max_size = 50,
              const vector<MatrixRef> &ors = vector<MatrixRef>()) {
+        assert(!(davidson_type & DavidsonTypes::Harmonic));
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         int k = (int)vs.size(), nor = (int)ors.size();
@@ -893,7 +926,10 @@ struct MatrixFunctions {
                          << fixed << setw(15) << setprecision(8) << ld.data[ck]
                          << scientific << setw(13) << setprecision(2) << qq
                          << endl;
-                olsen_precondition(q, bs[ck], ld.data[ck], aa);
+                if (davidson_type & DavidsonTypes::DavidsonPrecond)
+                    davidson_precondition(q, ld.data[ck], aa);
+                else if (!(davidson_type & DavidsonTypes::NoPrecond))
+                    olsen_precondition(q, bs[ck], ld.data[ck], aa);
                 eigvals.resize(ck + 1);
                 if (ck + 1 != 0)
                     memcpy(eigvals.data(), ld.data, (ck + 1) * sizeof(double));
@@ -941,6 +977,274 @@ struct MatrixFunctions {
         d_alloc->deallocate(pss.data, deflation_max_size * vs[0].size());
         d_alloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
         ndav = xiter;
+        return eigvals;
+    }
+    // Harmonic Davidson algorithm
+    // aa: diag elements of a (for precondition)
+    // bs: input/output vector
+    // shift: solve for eigenvalues near this value
+    // davidson_type: whether eigenvalues should be above/below/near shift
+    // ors: orthogonal states to be projected out
+    template <typename MatMul, typename PComm>
+    static vector<double> harmonic_davidson(
+        MatMul &op, const DiagonalMatrix &aa, vector<MatrixRef> &vs,
+        double shift, DavidsonTypes davidson_type, int &ndav,
+        bool iprint = false, const PComm &pcomm = nullptr,
+        double conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        int deflation_min_size = 2, int deflation_max_size = 50,
+        const vector<MatrixRef> &ors = vector<MatrixRef>()) {
+        if (!(davidson_type & DavidsonTypes::Harmonic))
+            return davidson(op, aa, vs, davidson_type, ndav, iprint, pcomm,
+                            conv_thrd, max_iter, soft_max_iter,
+                            deflation_min_size, deflation_max_size);
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        int k = (int)vs.size(), nor = (int)ors.size();
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        if (deflation_max_size < k + k / 2)
+            deflation_max_size = k + k / 2;
+        MatrixRef pbs(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()), 1);
+        MatrixRef pss(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()), 1);
+        pbs.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        pss.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        vector<MatrixRef> bs(deflation_max_size,
+                             MatrixRef(nullptr, vs[0].m, vs[0].n));
+        vector<MatrixRef> sigmas(deflation_max_size,
+                                 MatrixRef(nullptr, vs[0].m, vs[0].n));
+        vector<double> or_normsqs(nor);
+        for (int i = 0; i < nor; i++) {
+            for (int j = 0; j < i; j++)
+                if (or_normsqs[j] > 1E-14)
+                    iadd(ors[i], ors[j], -dot(ors[j], ors[i]) / or_normsqs[j]);
+            or_normsqs[i] = dot(ors[i], ors[i]);
+        }
+        for (int i = 0; i < deflation_max_size; i++) {
+            bs[i].data = pbs.data + bs[i].size() * i;
+            sigmas[i].data = pss.data + sigmas[i].size() * i;
+        }
+        for (int i = 0; i < k; i++)
+            copy(bs[i], vs[i]);
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < nor; j++)
+                if (or_normsqs[j] > 1E-14)
+                    iadd(bs[i], ors[j], -dot(ors[j], bs[i]) / or_normsqs[j]);
+            double normsq = dot(bs[i], bs[i]);
+            if (normsq < 1E-14) {
+                cout << "Cannot generate initial guess " << i
+                     << " for Davidson orthogonal to all given states!" << endl;
+                assert(false);
+            }
+            iscale(bs[i], 1.0 / sqrt(normsq));
+        }
+        int num_matmul = 0;
+        for (int i = 0; i < k; i++) {
+            sigmas[i].clear();
+            op(bs[i], sigmas[i]);
+            if (shift != 0.0)
+                iadd(sigmas[i], bs[i], -shift);
+            num_matmul++;
+        }
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < i; j++) {
+                iadd(bs[i], bs[j], -dot(sigmas[j], sigmas[i]));
+                iadd(sigmas[i], sigmas[j], -dot(sigmas[j], sigmas[i]));
+            }
+            iscale(bs[i], 1.0 / sqrt(dot(sigmas[i], sigmas[i])));
+            iscale(sigmas[i], 1.0 / sqrt(dot(sigmas[i], sigmas[i])));
+        }
+        vector<double> eigvals(k);
+        vector<int> eigval_idxs(deflation_max_size);
+        MatrixRef q(nullptr, bs[0].m, bs[0].n);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate();
+        int ck = 0, m = k, xiter = 0;
+        double qq;
+        if (iprint)
+            cout << endl;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                DiagonalMatrix ld(nullptr, m);
+                MatrixRef alpha(nullptr, m, m);
+                ld.allocate();
+                alpha.allocate();
+                vector<MatrixRef> tmp(m, MatrixRef(nullptr, bs[0].m, bs[0].n));
+                for (int i = 0; i < m; i++)
+                    tmp[i].allocate();
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++) {
+                        int i = ij / m, j = ij % m;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+                    for (int i = 0; i < m; i++)
+                        for (int j = 0; j < m; j++) {
+#endif
+                        if (j <= i)
+                            alpha(i, j) = dot(bs[i], sigmas[j]);
+                    }
+#pragma omp single
+                    eigs(alpha, ld);
+                    // note alpha row/column is diff from python
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], bs[j]);
+                        iscale(bs[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(bs[j], tmp[i], alpha(j, i));
+                                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], sigmas[j]);
+                        iscale(sigmas[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(sigmas[j], tmp[i], alpha(j, i));
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        ld(j, j) = dot(bs[j], sigmas[j]) / dot(bs[j], bs[j]);
+                }
+                threading->activate_normal();
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate();
+                alpha.deallocate();
+                if (davidson_type & DavidsonTypes::LessThan)
+                    for (int i = 0; i < m; i++)
+                        eigval_idxs[i] = i;
+                else
+                    for (int i = 0; i < m; i++)
+                        eigval_idxs[i] = m - 1 - i;
+                if (davidson_type & DavidsonTypes::CloseTo)
+                    sort(eigval_idxs.begin(), eigval_idxs.end(),
+                         [&ld](int i, int j) {
+                             return abs(ld(i, i)) < abs(ld(j, j));
+                         });
+                for (int i = 0; i < ck; i++) {
+                    int ii = eigval_idxs[i];
+                    copy(q, sigmas[ii]);
+                    iadd(q, bs[ii], -ld(ii, ii));
+                    if (dot(q, q) >= conv_thrd) {
+                        ck = i;
+                        break;
+                    }
+                }
+                int ick = eigval_idxs[ck];
+                copy(q, sigmas[ick]);
+                iadd(q, bs[ick], -ld(ick, ick));
+                for (int j = 0; j < nor; j++)
+                    if (or_normsqs[j] > 1E-14)
+                        iadd(q, ors[j], -dot(ors[j], q) / or_normsqs[j]);
+                qq = dot(q, q);
+                if (iprint)
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                         << fixed << setw(15) << setprecision(8)
+                         << ld.data[ick] + shift << scientific << setw(13)
+                         << setprecision(2) << qq << endl;
+                if (davidson_type & DavidsonTypes::DavidsonPrecond)
+                    davidson_precondition(q, ld.data[ick] + shift, aa);
+                else if (!(davidson_type & DavidsonTypes::NoPrecond))
+                    olsen_precondition(q, bs[ick], ld.data[ick] + shift, aa);
+                eigvals.resize(ck + 1);
+                if (ck + 1 != 0)
+                    for (int i = 0; i <= ck; i++)
+                        eigvals[i] = ld.data[eigval_idxs[i]] + shift;
+                ld.deallocate();
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
+            }
+            if (qq < conv_thrd) {
+                ck++;
+                if (ck == k)
+                    break;
+            } else {
+                bool do_deflation = false;
+                if (m >= deflation_max_size) {
+                    m = deflation_min_size;
+                    do_deflation = !(davidson_type & DavidsonTypes::LessThan);
+                }
+                copy(bs[m], q);
+                if (pcomm != nullptr)
+                    pcomm->broadcast(bs[m].data, bs[m].size(), pcomm->root);
+                sigmas[m].clear();
+                op(bs[m], sigmas[m]);
+                if (shift != 0.0)
+                    iadd(sigmas[m], bs[m], -shift);
+                num_matmul++;
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    if (do_deflation) {
+                        vector<MatrixRef> tmp(
+                            m, MatrixRef(nullptr, bs[0].m, bs[0].n));
+                        for (int i = 0; i < m; i++)
+                            tmp[i].allocate();
+                        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                        {
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], bs[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(bs[j], tmp[j]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], sigmas[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(sigmas[j], tmp[j]);
+                        }
+                        threading->activate_normal();
+                        for (int i = m - 1; i >= 0; i--)
+                            tmp[i].deallocate();
+                    }
+                    for (int i = 0; i < m + 1; i++) {
+                        for (int j = 0; j < i; j++) {
+                            iadd(bs[i], bs[j], -dot(sigmas[j], sigmas[i]));
+                            iadd(sigmas[i], sigmas[j],
+                                 -dot(sigmas[j], sigmas[i]));
+                        }
+                        iscale(bs[i], 1.0 / sqrt(dot(sigmas[i], sigmas[i])));
+                        iscale(sigmas[i],
+                               1.0 / sqrt(dot(sigmas[i], sigmas[i])));
+                    }
+                }
+                m++;
+            }
+            if (xiter == soft_max_iter)
+                break;
+        }
+        if (xiter == soft_max_iter)
+            eigvals.resize(k, 0);
+        if (xiter == max_iter) {
+            cout << "Error : only " << ck << " converged!" << endl;
+            assert(false);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            for (int i = 0; i < k; i++)
+                copy(vs[i], sigmas[eigval_idxs[i]]);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
+            pcomm->broadcast(vs[0].data, vs[0].size() * k, pcomm->root);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate();
+        d_alloc->deallocate(pss.data, deflation_max_size * vs[0].size());
+        d_alloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
+        ndav = num_matmul;
         return eigvals;
     }
     // Computes exp(t*H), the matrix exponential of a general matrix in
@@ -1325,7 +1629,7 @@ struct MatrixFunctions {
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iscale(r, -1);
             iadd(r, b, 1); // r = b - Ax
-            precondition(p, r, aa);
+            cg_precondition(p, r, aa);
             error = dot(p, r);
         }
         if (iprint)
@@ -1365,7 +1669,7 @@ struct MatrixFunctions {
                 double alpha = old_error / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
-                precondition(z, r, aa);
+                cg_precondition(z, r, aa);
                 error = dot(z, r);
                 func = dot(x, b);
                 if (iprint)

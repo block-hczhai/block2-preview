@@ -1612,6 +1612,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("davidson_max_iter", &DMRG<S>::davidson_max_iter)
         .def_readwrite("davidson_soft_max_iter",
                        &DMRG<S>::davidson_soft_max_iter)
+        .def_readwrite("davidson_shift", &DMRG<S>::davidson_shift)
+        .def_readwrite("davidson_type", &DMRG<S>::davidson_type)
         .def_readwrite("conn_adjust_step", &DMRG<S>::conn_adjust_step)
         .def_readwrite("energies", &DMRG<S>::energies)
         .def_readwrite("discarded_weights", &DMRG<S>::discarded_weights)
@@ -2415,6 +2417,20 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("FuseL", FuseTypes::FuseL)
         .value("FuseR", FuseTypes::FuseR)
         .value("FuseLR", FuseTypes::FuseLR);
+
+    py::enum_<DavidsonTypes>(m, "DavidsonTypes", py::arithmetic())
+        .value("GreaterThan", DavidsonTypes::GreaterThan)
+        .value("LessThan", DavidsonTypes::LessThan)
+        .value("CloseTo", DavidsonTypes::CloseTo)
+        .value("Harmonic", DavidsonTypes::Harmonic)
+        .value("HarmonicGreaterThan", DavidsonTypes::HarmonicGreaterThan)
+        .value("HarmonicLessThan", DavidsonTypes::HarmonicLessThan)
+        .value("HarmonicCloseTo", DavidsonTypes::HarmonicCloseTo)
+        .value("DavidsonPrecond", DavidsonTypes::DavidsonPrecond)
+        .value("NoPrecond", DavidsonTypes::NoPrecond)
+        .value("Normal", DavidsonTypes::Normal)
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 
     py::enum_<ExpectationAlgorithmTypes>(m, "ExpectationAlgorithmTypes",
                                          py::arithmetic())
