@@ -426,7 +426,7 @@ TEST_F(TestMatrix, TestDavidson) {
         }
         MatMul mop(a);
         vector<double> vw = MatrixFunctions::davidson(
-            mop, aa, bs, DavidsonTypes::Normal, ndav, false,
+            mop, aa, bs, 0, DavidsonTypes::Normal, ndav, false,
             (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, n * k * 2, -1,
             k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);

@@ -236,7 +236,8 @@ TEST_F(TestDMRG, Test) {
 
     // DMRG
     // vector<ubond_t> bdims = {50};
-    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500, 500,
+                             500, 500, 500, 500, 500, 500, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
     vector<double> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5,
                              1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6};
@@ -255,9 +256,9 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
-    dmrg->davidson_type = DavidsonTypes::HarmonicGreaterThan;
+    dmrg->davidson_type = DavidsonTypes::GreaterThan;
     dmrg->davidson_shift = -2086.4;
-    dmrg->solve(10, true);
+    dmrg->solve(20, true);
 
     shared_ptr<MPSInfo<SU2>> bra_info =
         make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
