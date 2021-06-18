@@ -162,3 +162,68 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
         a.deallocate();
     }
 }
+
+TEST_F(TestComplexMatrix, TestGCROT) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 300);
+        MKL_INT n = 1;
+        int nmult = 0, niter = 0;
+        double eta = 0.005;
+        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
+        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
+        ComplexMatrixRef a((complex<double> *)dalloc_()->allocate(m * m * 2), m,
+                           m);
+        ComplexMatrixRef af((complex<double> *)dalloc_()->allocate(m * m * 2),
+                            m, m);
+        ComplexMatrixRef b((complex<double> *)dalloc_()->allocate(n * m * 2), m,
+                           n);
+        ComplexMatrixRef x((complex<double> *)dalloc_()->allocate(n * m * 2), m,
+                           n);
+        ComplexMatrixRef xg((complex<double> *)dalloc_()->allocate(n * m * 2),
+                            m, n);
+        Random::fill_rand_double(ra.data, ra.size());
+        Random::fill_rand_double(rax.data, rax.size());
+        Random::fill_rand_double(rb.data, rb.size());
+        a.clear();
+        b.clear();
+        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        for (MKL_INT k = 0; k < n; k++)
+            a(k, k) += complex<double>(0, eta);
+        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
+        Random::fill_rand_double(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
+        Random::fill_rand_double(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                af(k, j) = a(j, k);
+        MatMul mop(a);
+        complex<double> func = ComplexMatrixFunctions::gcrotmk(
+            mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 20, -1,
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 1000);
+        ComplexMatrixFunctions::copy(xg, b);
+        ComplexMatrixFunctions::linear(af, xg.flip_dims());
+        ComplexMatrixFunctions::extract_complex(xg, rbg,
+                                                MatrixRef(nullptr, m, n));
+        ComplexMatrixFunctions::extract_complex(x, rb,
+                                                MatrixRef(nullptr, m, n));
+        ASSERT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
+                                                rbg);
+        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
+                                                rb);
+        ASSERT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        xg.deallocate();
+        x.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+        rbg.deallocate();
+        rb.deallocate();
+        rax.deallocate();
+        ra.deallocate();
+    }
+}

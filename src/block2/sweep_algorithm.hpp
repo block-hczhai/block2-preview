@@ -1786,6 +1786,7 @@ enum struct EquationTypes : uint8_t {
     NormalCG,
     PerturbativeCompression,
     GreensFunction,
+    GreensFunctionSquared,
     FitAddition
 };
 
@@ -1837,6 +1838,7 @@ template <typename S> struct Linear {
     // number of eigenvalues solved using harmonic Davidson
     // for deflated CG; 0 means normal CG
     int cg_n_harmonic_projection = 0;
+    pair<int, int> gcrotmk_size = make_pair(40, -1);
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
     // only useful when target contains some other
@@ -1969,7 +1971,8 @@ template <typename S> struct Linear {
             eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S>>();
             right_bra->allocate(me->bra->tensors[i]->info);
-            if (eq_type == EquationTypes::GreensFunction) {
+            if (eq_type == EquationTypes::GreensFunction ||
+                eq_type == EquationTypes::GreensFunctionSquared) {
                 real_bra = make_shared<SparseMatrix<S>>();
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
@@ -2039,13 +2042,20 @@ template <typename S> struct Linear {
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
-            } else if (eq_type == EquationTypes::GreensFunction) {
+            } else if (eq_type == EquationTypes::GreensFunction ||
+                       eq_type == EquationTypes::GreensFunctionSquared) {
                 tuple<pair<double, double>, pair<int, int>, size_t, double>
                     lpdi;
-                lpdi = l_eff->greens_function(
-                    lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                    cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                if (eq_type == EquationTypes::GreensFunctionSquared)
+                    lpdi = l_eff->greens_function_squared(
+                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
+                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                else
+                    lpdi = l_eff->greens_function(
+                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        gcrotmk_size, iprint >= 3, minres_conv_thrd,
+                        minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
                     vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
                 get<1>(pdi).first += get<1>(lpdi).first;
@@ -2394,7 +2404,8 @@ template <typename S> struct Linear {
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
             eq_type == EquationTypes::FitAddition) {
-            if (eq_type == EquationTypes::GreensFunction)
+            if (eq_type == EquationTypes::GreensFunction ||
+                eq_type == EquationTypes::GreensFunctionSquared)
                 real_bra->deallocate();
             right_bra->deallocate();
         }
@@ -2435,7 +2446,8 @@ template <typename S> struct Linear {
             eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S>>();
             right_bra->allocate(me->bra->tensors[i]->info);
-            if (eq_type == EquationTypes::GreensFunction) {
+            if (eq_type == EquationTypes::GreensFunction ||
+                eq_type == EquationTypes::GreensFunctionSquared) {
                 real_bra = make_shared<SparseMatrix<S>>();
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
@@ -2502,13 +2514,20 @@ template <typename S> struct Linear {
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
-            } else if (eq_type == EquationTypes::GreensFunction) {
+            } else if (eq_type == EquationTypes::GreensFunction ||
+                       eq_type == EquationTypes::GreensFunctionSquared) {
                 tuple<pair<double, double>, pair<int, int>, size_t, double>
                     lpdi;
-                lpdi = l_eff->greens_function(
-                    lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                    cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                if (eq_type == EquationTypes::GreensFunctionSquared)
+                    lpdi = l_eff->greens_function_squared(
+                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
+                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                else
+                    lpdi = l_eff->greens_function(
+                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        gcrotmk_size, iprint >= 3, minres_conv_thrd,
+                        minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
                     vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
                 get<1>(pdi).first += get<1>(lpdi).first;
@@ -2720,7 +2739,8 @@ template <typename S> struct Linear {
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
             eq_type == EquationTypes::FitAddition) {
-            if (eq_type == EquationTypes::GreensFunction)
+            if (eq_type == EquationTypes::GreensFunction ||
+                eq_type == EquationTypes::GreensFunctionSquared)
                 real_bra->deallocate();
             right_bra->deallocate();
         }

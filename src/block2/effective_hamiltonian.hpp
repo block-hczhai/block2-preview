@@ -381,16 +381,107 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
+    // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
+    // (real gf, imag gf), (nmult, niter), nflop, tmult
+    tuple<pair<double, double>, pair<int, int>, size_t, double>
+    greens_function(double const_e, double omega, double eta,
+                    const shared_ptr<SparseMatrix<S>> &real_bra,
+                    pair<int, int> gcrotmk_size, bool iprint = false,
+                    double conv_thrd = 5E-6, int max_iter = 5000,
+                    int soft_max_iter = -1,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int nmult = 0, nmultx = 0, niter = 0;
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        MatrixRef mket(ket->data, (MKL_INT)ket->total_memory, 1);
+        MatrixRef ibra(bra->data, (MKL_INT)bra->total_memory, 1);
+        MatrixRef rbra(real_bra->data, (MKL_INT)real_bra->total_memory, 1);
+        MatrixRef bre(nullptr, (MKL_INT)ket->total_memory, 1);
+        MatrixRef cre(nullptr, (MKL_INT)ket->total_memory, 1);
+        ComplexMatrixRef cbra(nullptr, (MKL_INT)bra->total_memory, 1);
+        ComplexMatrixRef cket(nullptr, (MKL_INT)bra->total_memory, 1);
+        bre.allocate();
+        cre.allocate();
+        cbra.allocate();
+        cket.allocate();
+        ComplexDiagonalMatrix aa(nullptr, 0);
+        if (compute_diag) {
+            aa = ComplexDiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
+            aa.allocate();
+            for (MKL_INT i = 0; i < aa.size(); i++)
+                aa.data[i] =
+                    complex<double>(diag->data[i] + const_e + omega, eta);
+        }
+        precompute();
+        const function<void(const MatrixRef &, const MatrixRef &)> &f =
+            [this](const MatrixRef &a, const MatrixRef &b) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b);
+                else
+                    return (*this)(a, b);
+            };
+        auto op = [omega, eta, const_e, &f, &bre, &cre,
+                   &nmult](const ComplexMatrixRef &b,
+                           const ComplexMatrixRef &c) -> void {
+            ComplexMatrixFunctions::extract_complex(
+                b, bre, MatrixRef(nullptr, bre.m, bre.n));
+            cre.clear();
+            f(bre, cre);
+            ComplexMatrixFunctions::fill_complex(
+                c, cre, MatrixRef(nullptr, cre.m, cre.n));
+            ComplexMatrixFunctions::extract_complex(
+                b, MatrixRef(nullptr, bre.m, bre.n), bre);
+            cre.clear();
+            f(bre, cre);
+            ComplexMatrixFunctions::fill_complex(
+                c, MatrixRef(nullptr, cre.m, cre.n), cre);
+            ComplexMatrixFunctions::iadd(c, b,
+                                         complex<double>(const_e + omega, eta));
+            nmult += 2;
+        };
+        tf->opf->seq->cumulative_nflop = 0;
+        rbra.clear();
+        f(ibra, rbra);
+        MatrixFunctions::iadd(rbra, ibra, const_e + omega);
+        MatrixFunctions::iscale(rbra, -1 / eta);
+        ComplexMatrixFunctions::fill_complex(cbra, rbra, ibra);
+        cket.clear();
+        ComplexMatrixFunctions::fill_complex(
+            cket, mket, MatrixRef(nullptr, mket.m, mket.n));
+        // solve bra
+        complex<double> gf = ComplexMatrixFunctions::gcrotmk(
+            op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
+            gcrotmk_size.second, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            max_iter, soft_max_iter);
+        gf = conj(gf);
+        ComplexMatrixFunctions::extract_complex(cbra, rbra, ibra);
+        if (compute_diag)
+            aa.deallocate();
+        cket.deallocate();
+        cbra.deallocate();
+        cre.deallocate();
+        bre.deallocate();
+        post_precompute();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(make_pair(real(gf), imag(gf)),
+                          make_pair(nmult, niter), (size_t)nflop, t.get_time());
+    }
     // [ibra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
     // [rbra] = -([H_eff] + omega) (1/eta) [bra]
     // (real gf, imag gf), (nmult, numltp), nflop, tmult
     tuple<pair<double, double>, pair<int, int>, size_t, double>
-    greens_function(double const_e, double omega, double eta,
-                    const shared_ptr<SparseMatrix<S>> &real_bra,
-                    int n_harmonic_projection = 0, bool iprint = false,
-                    double conv_thrd = 5E-6, int max_iter = 5000,
-                    int soft_max_iter = -1,
-                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    greens_function_squared(
+        double const_e, double omega, double eta,
+        const shared_ptr<SparseMatrix<S>> &real_bra,
+        int n_harmonic_projection = 0, bool iprint = false,
+        double conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int nmult = 0, nmultx = 0;
         frame->activate(0);
         Timer t;
@@ -446,9 +537,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             int kk = -n_harmonic_projection;
             igf =
                 MatrixFunctions::davidson_projected_deflated_conjugate_gradient(
-                    op, aa, ibra, ktmp, kk, ncg, ndav, 0.0,
-                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                    conv_thrd, conv_thrd, max_iter * kk, soft_max_iter * kk) /
+                    op, aa, ibra, ktmp, kk, ncg, ndav, 0.0, iprint,
+                    para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                    conv_thrd, max_iter * kk, soft_max_iter * kk) /
                 (-eta);
             nmult = ncg * 2;
             nmultp = ndav * 2;

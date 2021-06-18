@@ -53,9 +53,9 @@ extern void zaxpy(const MKL_INT *n, const complex<double> *sa,
                   complex<double> *sy, const MKL_INT *incy) noexcept;
 
 // vector dot product
-extern void zdotc(complex<double> *pres, const MKL_INT *n,
-                  const complex<double> *zx, const MKL_INT *incx,
-                  const complex<double> *zy, const MKL_INT *incy) noexcept;
+// extern void zdotc(complex<double> *pres, const MKL_INT *n,
+//                   const complex<double> *zx, const MKL_INT *incx,
+//                   const complex<double> *zy, const MKL_INT *incy) noexcept;
 
 // Euclidean norm of a vector
 extern double dznrm2(const MKL_INT *n, const complex<double> *x,
@@ -130,20 +130,41 @@ struct ComplexMatrixFunctions {
             MatrixFunctions::copy(im, MatrixRef((double *)a.data + 1, a.m, a.n),
                                   1, 2);
     }
+    // a = b
+    static void copy(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+                     const MKL_INT inca = 1, const MKL_INT incb = 1) {
+        assert(a.m == b.m && a.n == b.n);
+        const MKL_INT n = a.m * a.n;
+        zcopy(&n, b.data, &incb, a.data, &inca);
+    }
+    static void iscale(const ComplexMatrixRef &a, complex<double> scale,
+                       const MKL_INT inc = 1) {
+        MKL_INT n = a.m * a.n;
+        zscal(&n, &scale, a.data, &inc);
+    }
     // a = a + scale * op(b)
     static void iadd(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
-                     complex<double> scale) {
+                     complex<double> scale, complex<double> cfactor = 1.0) {
+        static const complex<double> x = 1.0;
         assert(a.m == b.m && a.n == b.n);
         MKL_INT n = a.m * a.n, inc = 1;
-        zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
+        if (cfactor == 1.0)
+            zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
+        else
+            zgemm("N", "N", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
+                  &cfactor, a.data, &inc);
     }
     // dot product (a ^ H, b)
-    static complex<double> compplex_dot(const ComplexMatrixRef &a,
-                                        const ComplexMatrixRef &b) {
+    static complex<double> complex_dot(const ComplexMatrixRef &a,
+                                       const ComplexMatrixRef &b) {
+        static const complex<double> x = 1.0, zz = 0.0;
         assert(a.m == b.m && a.n == b.n);
         MKL_INT n = a.m * a.n, inc = 1;
         complex<double> r;
-        zdotc(&r, &n, a.data, &inc, b.data, &inc);
+        // zdotc can sometimes return zero
+        // zdotc(&r, &n, a.data, &inc, b.data, &inc);
+        zgemm("C", "N", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
+              &inc);
         return r;
     }
     static double norm(const ComplexMatrixRef &a) {
@@ -184,23 +205,25 @@ struct ComplexMatrixFunctions {
     }
     // least squares problem a x = b
     // return the residual (norm, not squared)
+    // a.n is used as lda
     static double least_squares(const ComplexMatrixRef &a,
                                 const ComplexMatrixRef &b,
                                 const ComplexMatrixRef &x) {
+        assert(a.m == b.m && a.n >= x.m && b.n == 1 && x.n == 1);
         vector<complex<double>> work, atr, xtr;
-        MKL_INT lwork = 34 * min(a.m, a.n), info = -1, nrhs = 1,
-                mn = max(a.m, a.n), nr = a.m - a.n;
+        MKL_INT lwork = 34 * min(a.m, x.m), info = -1, nrhs = 1,
+                mn = max(a.m, x.m), nr = a.m - x.m;
         work.reserve(lwork);
         atr.reserve(a.size());
         xtr.reserve(mn);
         zcopy(&a.m, b.data, &nrhs, xtr.data(), &nrhs);
-        for (MKL_INT i = 0; i < a.n; i++)
+        for (MKL_INT i = 0; i < x.m; i++)
             zcopy(&a.m, a.data + i, &a.n, atr.data() + i * a.m, &nrhs);
-        zgels("N", &a.m, &a.n, &nrhs, atr.data(), &a.m, xtr.data(), &mn,
+        zgels("N", &a.m, &x.m, &nrhs, atr.data(), &a.m, xtr.data(), &mn,
               work.data(), &lwork, &info);
         assert(info == 0);
-        zcopy(&a.n, xtr.data(), &nrhs, x.data, &nrhs);
-        return nr > 0 ? dznrm2(&nr, xtr.data() + a.n, &nrhs) : 0;
+        zcopy(&x.m, xtr.data(), &nrhs, x.data, &nrhs);
+        return nr > 0 ? dznrm2(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
     // matrix logarithm using diagonalization
     static void logarithm(const ComplexMatrixRef &a) {
@@ -223,6 +246,14 @@ struct ComplexMatrixFunctions {
         d_alloc->deallocate((double *)ua.data, a.m * a.n * 2);
         d_alloc->deallocate((double *)wa.data, a.m * a.n * 2);
         d_alloc->deallocate((double *)w.data, a.m * 2);
+    }
+    // solve a^T x[i, :] = b[i, :] => output in b; a will be overwritten
+    static void linear(const ComplexMatrixRef &a, const ComplexMatrixRef &b) {
+        assert(a.m == a.n && a.m == b.n);
+        MKL_INT *work = (MKL_INT *)ialloc->allocate(a.n * _MINTSZ), info = -1;
+        zgesv(&a.m, &b.m, a.data, &a.n, work, b.data, &a.n, &info);
+        assert(info == 0);
+        ialloc->deallocate(work, a.n * _MINTSZ);
     }
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const ComplexMatrixRef &a, bool conja,
@@ -418,9 +449,9 @@ struct ComplexMatrixFunctions {
                 op(work + j1v - n, work + j1v);
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     for (MKL_INT i = 0; i <= j; i++) {
-                        zdotc(&hij, &n, work + iv + i * n, &inc, work + j1v,
-                              &inc);
-                        hij = -hij;
+                        hij = -complex_dot(
+                            ComplexMatrixRef(work + iv + i * n, n, 1),
+                            ComplexMatrixRef(work + j1v, n, 1));
                         zaxpy(&n, &hij, work + iv + i * n, &inc, work + j1v,
                               &inc);
                         work[ih + j * mh + i] = -hij;
@@ -642,6 +673,164 @@ struct ComplexMatrixFunctions {
             lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(complex<double>) * w.size());
         return (int)nmult;
+    }
+    // z = r / aa
+    static void cg_precondition(const ComplexMatrixRef &z,
+                                const ComplexMatrixRef &r,
+                                const ComplexDiagonalMatrix &aa) {
+        copy(z, r);
+        if (aa.size() != 0) {
+            assert(aa.size() == r.size() && r.size() == z.size());
+            for (MKL_INT i = 0; i < aa.n; i++)
+                if (abs(aa.data[i]) > 1E-12)
+                    z.data[i] /= aa.data[i];
+        }
+    }
+    // GCROT(m, k) method for solving x in linear equation H x = b
+    template <typename MatMul, typename PComm>
+    static complex<double>
+    gcrotmk(MatMul &op, const ComplexDiagonalMatrix &aa, ComplexMatrixRef x,
+            ComplexMatrixRef b, int &nmult, int &niter, int m = 20, int k = -1,
+            bool iprint = false, const PComm &pcomm = nullptr,
+            double conv_thrd = 5E-6, int max_iter = 5000,
+            int soft_max_iter = -1) {
+        ComplexMatrixRef r(nullptr, x.m, x.n), w(nullptr, x.m, x.n);
+        double ff[4];
+        double &beta = ff[0], &rr = ff[1];
+        complex<double> &func = (complex<double> &)ff[2];
+        r.allocate();
+        w.allocate();
+        r.clear();
+        op(x, r);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iscale(r, -1);
+            iadd(r, b, 1); // r = b - Ax
+            func = complex_dot(x, b);
+            beta = norm(r);
+        }
+        if (pcomm != nullptr)
+            pcomm->broadcast(&beta, 4, pcomm->root);
+        if (iprint)
+            cout << endl;
+        if (k == -1)
+            k = m;
+        int xiter = 0, jiter = 1, nn = k + m + 2;
+        vector<ComplexMatrixRef> cvs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
+        vector<ComplexMatrixRef> uzs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
+        vector<complex<double>> pcus;
+        pcus.reserve(x.size() * 2 * nn);
+        for (int i = 0; i < nn; i++) {
+            cvs[i].data = pcus.data() + cvs[i].size() * i;
+            uzs[i].data = pcus.data() + uzs[i].size() * (i + nn);
+        }
+        int ncs = 0, icu = 0;
+        ComplexMatrixRef bmat(nullptr, k, k + m);
+        ComplexMatrixRef hmat(nullptr, k + m + 1, k + m);
+        ComplexMatrixRef ys(nullptr, k + m, 1);
+        ComplexMatrixRef bys(nullptr, k, 1);
+        ComplexMatrixRef hys(nullptr, k + m + 1, 1);
+        bmat.allocate();
+        hmat.allocate();
+        ys.allocate();
+        bys.allocate();
+        hys.allocate();
+        while (jiter < max_iter &&
+               (soft_max_iter == -1 || jiter < soft_max_iter)) {
+            xiter++;
+            if (iprint)
+                cout << setw(6) << xiter << setw(6) << jiter << fixed
+                     << setw(15) << setprecision(8) << real(func) << "+"
+                     << setw(15) << setprecision(8) << imag(func) << "i"
+                     << scientific << setw(13) << setprecision(2) << beta * beta
+                     << endl;
+            if (beta * beta < conv_thrd)
+                break;
+            int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                iadd(cvs[ivz % nn], r, 1 / beta, 0.0);
+                hmat.clear();
+                hys.clear();
+                hys.data[0] = beta;
+            }
+            for (int j = 0; j < ml; j++) {
+                jiter++;
+                ComplexMatrixRef z(uzs[(ivz + j) % nn].data, x.m, x.n);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                    cg_precondition(z, cvs[(ivz + j) % nn], aa);
+                if (pcomm != nullptr)
+                    pcomm->broadcast(z.data, z.size(), pcomm->root);
+                w.clear();
+                op(z, w);
+                nz = j + 1;
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    for (int i = 0; i < ncs; i++) {
+                        bmat(i, j) = complex_dot(cvs[(icu + i) % nn], w);
+                        iadd(w, cvs[(icu + i) % nn], -bmat(i, j));
+                    }
+                    for (int i = 0; i < nz; i++) {
+                        hmat(i, j) = complex_dot(cvs[(ivz + i) % nn], w);
+                        iadd(w, cvs[(ivz + i) % nn], -hmat(i, j));
+                    }
+                    hmat(j + 1, j) = norm(w);
+                    iadd(cvs[(ivz + nz) % nn], w, 1.0 / hmat(j + 1, j), 0.0);
+                    rr = least_squares(
+                        ComplexMatrixRef(hmat.data, j + 2, hmat.n),
+                        ComplexMatrixRef(hys.data, j + 2, 1),
+                        ComplexMatrixRef(ys.data, j + 1, 1));
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(&rr, 1, pcomm->root);
+                if (rr * rr < conv_thrd)
+                    break;
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                multiply(ComplexMatrixRef(bmat.data, ncs, bmat.n), false,
+                         ComplexMatrixRef(ys.data, nz, 1), false,
+                         ComplexMatrixRef(bys.data, ncs, 1), 1.0, 0.0);
+                multiply(ComplexMatrixRef(hmat.data, nz + 1, hmat.n), false,
+                         ComplexMatrixRef(ys.data, nz, 1), false,
+                         ComplexMatrixRef(hys.data, nz + 1, 1), 1.0, 0.0);
+                for (int i = 0; i < nz; i++)
+                    iadd(uzs[(icu + ncs) % nn], uzs[(ivz + i) % nn], ys(i, 0),
+                         !!i);
+                for (int i = 0; i < ncs; i++)
+                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn],
+                         -bys(i, 0));
+                for (int i = 0; i < nz + 1; i++)
+                    iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
+                         !!i);
+                double alpha = norm(cvs[(icu + ncs) % nn]);
+                iscale(cvs[(icu + ncs) % nn], 1 / alpha);
+                iscale(uzs[(icu + ncs) % nn], 1 / alpha);
+                complex<double> gamma = complex_dot(cvs[(icu + ncs) % nn], r);
+                iadd(r, cvs[(icu + ncs) % nn], -gamma);
+                iadd(x, uzs[(icu + ncs) % nn], gamma);
+                func = complex_dot(x, b);
+                beta = norm(r);
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&beta, 4, pcomm->root);
+            if (ncs == k)
+                icu = (icu + 1) % nn;
+            else
+                ncs++;
+        }
+        if (jiter == max_iter && beta * beta >= conv_thrd) {
+            cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
+            assert(false);
+        }
+        nmult = jiter;
+        niter = xiter + 1;
+        hys.deallocate();
+        bys.deallocate();
+        ys.deallocate();
+        hmat.deallocate();
+        bmat.deallocate();
+        w.deallocate();
+        r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+        return func;
     }
 };
 

@@ -1816,6 +1816,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S>::cg_n_harmonic_projection)
+        .def_readwrite("gcrotmk_size", &Linear<S>::gcrotmk_size)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &Linear<S>::sweep_cumulative_nflop)
@@ -2490,6 +2491,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction)
+        .value("GreensFunctionSquared", EquationTypes::GreensFunctionSquared)
         .value("FitAddition", EquationTypes::FitAddition);
 
     py::enum_<TraceTypes>(m, "TraceTypes", py::arithmetic())
