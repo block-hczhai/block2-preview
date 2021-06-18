@@ -513,7 +513,7 @@ TEST_F(TestMatrix, TestInverse) {
         MatrixRef idt(dalloc_()->allocate(m * m), m, m);
         Random::fill_rand_double(a.data, a.size());
         MatrixFunctions::copy(af, a);
-        MatrixFunctions::inv(a);
+        MatrixFunctions::inverse(a);
         MatrixFunctions::multiply(a, false, af, false, idt, 1.0, 0.0);
         ASSERT_TRUE(
             MatrixFunctions::all_close(idt, IdentityMatrix(m), 1E-7, 0.0));

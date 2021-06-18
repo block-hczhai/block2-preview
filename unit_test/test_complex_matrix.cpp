@@ -138,3 +138,27 @@ TEST_F(TestComplexMatrix, TestInverse) {
         a.deallocate();
     }
 }
+
+TEST_F(TestComplexMatrix, TestLeastSquares) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 200);
+        MKL_INT n = Random::rand_int(1, m + 1);
+        ComplexMatrixRef a((complex<double> *)dalloc_()->allocate(m * n * 2), m,
+                           n);
+        ComplexMatrixRef b((complex<double> *)dalloc_()->allocate(m * 2), m, 1);
+        ComplexMatrixRef br((complex<double> *)dalloc_()->allocate(m * 2), m,
+                            1);
+        ComplexMatrixRef x((complex<double> *)dalloc_()->allocate(n * 2), n, 1);
+        Random::fill_rand_double((double *)a.data, a.size() * 2);
+        Random::fill_rand_double((double *)b.data, b.size() * 2);
+        double res = ComplexMatrixFunctions::least_squares(a, b, x);
+        ComplexMatrixFunctions::multiply(a, false, x, false, br, 1.0, 0.0);
+        ComplexMatrixFunctions::iadd(br, b, -1);
+        double cres = ComplexMatrixFunctions::norm(br);
+        ASSERT_LT(abs(res - cres), 1E-9);
+        x.deallocate();
+        br.deallocate();
+        b.deallocate();
+        a.deallocate();
+    }
+}

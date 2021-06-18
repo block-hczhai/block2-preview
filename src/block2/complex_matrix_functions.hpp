@@ -99,6 +99,12 @@ extern void zgesv(const MKL_INT *n, const MKL_INT *nrhs, complex<double> *a,
                   const MKL_INT *lda, MKL_INT *ipiv, complex<double> *b,
                   const MKL_INT *ldb, MKL_INT *info);
 
+// least squares problem a * x = b
+extern void zgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const MKL_INT *nrhs, complex<double> *a, const MKL_INT *lda,
+                  complex<double> *b, const MKL_INT *ldb, complex<double> *work,
+                  const MKL_INT *lwork, MKL_INT *info);
+
 #endif
 }
 
@@ -123,6 +129,22 @@ struct ComplexMatrixFunctions {
         if (im.data != nullptr)
             MatrixFunctions::copy(im, MatrixRef((double *)a.data + 1, a.m, a.n),
                                   1, 2);
+    }
+    // a = a + scale * op(b)
+    static void iadd(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+                     complex<double> scale) {
+        assert(a.m == b.m && a.n == b.n);
+        MKL_INT n = a.m * a.n, inc = 1;
+        zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
+    }
+    // dot product (a ^ H, b)
+    static complex<double> compplex_dot(const ComplexMatrixRef &a,
+                                        const ComplexMatrixRef &b) {
+        assert(a.m == b.m && a.n == b.n);
+        MKL_INT n = a.m * a.n, inc = 1;
+        complex<double> r;
+        zdotc(&r, &n, a.data, &inc, b.data, &inc);
+        return r;
     }
     static double norm(const ComplexMatrixRef &a) {
         MKL_INT n = a.m * a.n, inc = 1;
@@ -159,6 +181,26 @@ struct ComplexMatrixFunctions {
         assert(info == 0);
         zgetri(&a.n, a.data, &a.m, ipiv.data(), work.data(), &lwork, &info);
         assert(info == 0);
+    }
+    // least squares problem a x = b
+    // return the residual (norm, not squared)
+    static double least_squares(const ComplexMatrixRef &a,
+                                const ComplexMatrixRef &b,
+                                const ComplexMatrixRef &x) {
+        vector<complex<double>> work, atr, xtr;
+        MKL_INT lwork = 34 * min(a.m, a.n), info = -1, nrhs = 1,
+                mn = max(a.m, a.n), nr = a.m - a.n;
+        work.reserve(lwork);
+        atr.reserve(a.size());
+        xtr.reserve(mn);
+        zcopy(&a.m, b.data, &nrhs, xtr.data(), &nrhs);
+        for (MKL_INT i = 0; i < a.n; i++)
+            zcopy(&a.m, a.data + i, &a.n, atr.data() + i * a.m, &nrhs);
+        zgels("N", &a.m, &a.n, &nrhs, atr.data(), &a.m, xtr.data(), &mn,
+              work.data(), &lwork, &info);
+        assert(info == 0);
+        zcopy(&a.n, xtr.data(), &nrhs, x.data, &nrhs);
+        return nr > 0 ? dznrm2(&nr, xtr.data() + a.n, &nrhs) : 0;
     }
     // matrix logarithm using diagonalization
     static void logarithm(const ComplexMatrixRef &a) {

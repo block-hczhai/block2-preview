@@ -191,7 +191,7 @@ struct MatrixFunctions {
         return det;
     }
     // matrix inverse
-    static void inv(const MatrixRef &a) {
+    static void inverse(const MatrixRef &a) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         assert(a.m == a.n);
@@ -1928,7 +1928,7 @@ struct MatrixFunctions {
                         winv(i, j) = dot(aws[i], ws[j]);
                         winv(j, i) = winv(i, j);
                     }
-                inv(winv);
+                inverse(winv);
                 mu.clear();
                 for (int i = 0; i < nw; i++) {
                     for (int j = 0; j < nw; j++)
@@ -2242,7 +2242,7 @@ struct MatrixFunctions {
                         winv(i, j) = dot(aws[i], ws[j]);
                         winv(j, i) = winv(i, j);
                     }
-                inv(winv);
+                inverse(winv);
                 mu.clear();
                 for (int i = 0; i < nw; i++) {
                     for (int j = 0; j < nw; j++)
@@ -2421,7 +2421,7 @@ struct MatrixFunctions {
                         winv(i, j) = dot(aws[i], ws[j]);
                         winv(j, i) = winv(i, j);
                     }
-                inv(winv);
+                inverse(winv);
                 mu.clear();
                 for (int i = 0; i < nw; i++) {
                     for (int j = 0; j < nw; j++)
