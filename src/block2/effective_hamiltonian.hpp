@@ -383,12 +383,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [ibra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
     // [rbra] = -([H_eff] + omega) (1/eta) [bra]
-    // (real gf, imag gf), nmult, nflop, tmult
-    tuple<pair<double, double>, int, size_t, double>
+    // (real gf, imag gf), (nmult, numltp), nflop, tmult
+    tuple<pair<double, double>, pair<int, int>, size_t, double>
     greens_function(double const_e, double omega, double eta,
                     const shared_ptr<SparseMatrix<S>> &real_bra,
-                    bool iprint = false, double conv_thrd = 5E-6,
-                    int max_iter = 5000, int soft_max_iter = -1,
+                    int n_harmonic_projection = 0, bool iprint = false,
+                    double conv_thrd = 5E-6, int max_iter = 5000,
+                    int soft_max_iter = -1,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int nmult = 0, nmultx = 0;
         frame->activate(0);
@@ -432,11 +433,52 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         };
         tf->opf->seq->cumulative_nflop = 0;
         // solve imag part -> ibra
-        double igf = MatrixFunctions::conjugate_gradient(
-                         op, aa, ibra, ktmp, nmultx, 0.0, iprint,
-                         para_rule == nullptr ? nullptr : para_rule->comm,
-                         conv_thrd, max_iter, soft_max_iter) /
-                     (-eta);
+        double igf = 0;
+        int nmultp = 0;
+        if (n_harmonic_projection == 0)
+            igf = MatrixFunctions::conjugate_gradient(
+                      op, aa, ibra, ktmp, nmultx, 0.0, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter, soft_max_iter) /
+                  (-eta);
+        else if (n_harmonic_projection < 0) {
+            int ndav = 0, ncg = 0;
+            int kk = -n_harmonic_projection;
+            igf =
+                MatrixFunctions::davidson_projected_deflated_conjugate_gradient(
+                    op, aa, ibra, ktmp, kk, ncg, ndav, 0.0,
+                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                    conv_thrd, conv_thrd, max_iter * kk, soft_max_iter * kk) /
+                (-eta);
+            nmult = ncg * 2;
+            nmultp = ndav * 2;
+        } else {
+            vector<MatrixRef> bs = vector<MatrixRef>(
+                n_harmonic_projection,
+                MatrixRef(nullptr, (MKL_INT)ket->total_memory, 1));
+            for (int ih = 0; ih < n_harmonic_projection; ih++) {
+                bs[ih].allocate();
+                if (ih == 0)
+                    MatrixFunctions::copy(bs[ih], ibra);
+                else
+                    Random::fill_rand_double(bs[ih].data, bs[ih].size());
+            }
+            MatrixFunctions::harmonic_davidson(
+                op, aa, bs, 0.0,
+                DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond,
+                nmultx, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, 1E-4,
+                max_iter, soft_max_iter, 2, 50);
+            nmultp = nmult;
+            nmult = 0;
+            igf = MatrixFunctions::deflated_conjugate_gradient(
+                      op, aa, ibra, ktmp, nmultx, 0.0, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter, soft_max_iter, bs) /
+                  (-eta);
+            for (int ih = n_harmonic_projection - 1; ih >= 0; ih--)
+                bs[ih].deallocate();
+        }
         if (compute_diag)
             aa.deallocate();
         btmp.deallocate();
@@ -454,8 +496,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(make_pair(rgf, igf), nmult + 1, (size_t)nflop,
-                          t.get_time());
+        return make_tuple(make_pair(rgf, igf), make_pair(nmult + 1, nmultp),
+                          (size_t)nflop, t.get_time());
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult

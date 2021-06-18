@@ -101,6 +101,11 @@ extern void dorglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
 extern void dgetrf(const MKL_INT *m, const MKL_INT *n, double *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
 
+// matrix inverse
+extern void dgetri(const MKL_INT *m, double *a, const MKL_INT *lda,
+                   MKL_INT *ipiv, double *work, const MKL_INT *lwork,
+                   MKL_INT *info);
+
 // eigenvalue problem
 extern void dsyev(const char *jobz, const char *uplo, const MKL_INT *n,
                   double *a, const MKL_INT *lda, double *w, double *work,
@@ -184,6 +189,21 @@ struct MatrixFunctions {
         for (int i = 0; i < a.m; i++)
             det *= ipiv[i] != i + 1 ? -aa[i * a.m + i] : aa[i * a.m + i];
         return det;
+    }
+    // matrix inverse
+    static void inv(const MatrixRef &a) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n);
+        vector<MKL_INT> ipiv;
+        ipiv.reserve(a.m);
+        MKL_INT info = -1, lwork = 34 * a.m;
+        dgetrf(&a.m, &a.n, a.data, &a.m, ipiv.data(), &info);
+        assert(info == 0);
+        double *work = d_alloc->allocate(lwork);
+        dgetri(&a.m, a.data, &a.m, ipiv.data(), work, &lwork, &info);
+        assert(info == 0);
+        d_alloc->deallocate(work, lwork);
     }
     static double dot(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == b.m && a.n == b.n);
@@ -1670,6 +1690,857 @@ struct MatrixFunctions {
             lwork, symmetric, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return (int)nmult;
+    }
+    // Solve x in linear equation H x = b
+    // by applying deflated CG method
+    // where H is symmetric and positive-definite
+    // H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double harmonic_projected_deflated_conjugate_gradient(
+        MatMul &op, const DiagonalMatrix &aa, MatrixRef x, MatrixRef b,
+        int &nmult, int &ndav, double consta = 0.0, bool iprint = false,
+        const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+        double conv_thrd_p = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        int deflation_min_size = 2, int deflation_max_size = 50) {
+        int k = 5;
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (deflation_max_size > (int)x.size())
+            deflation_max_size = (int)x.size();
+        if (deflation_min_size > deflation_max_size)
+            deflation_min_size = deflation_max_size;
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        MatrixRef pbs(nullptr, (MKL_INT)(deflation_max_size * x.size()), 1);
+        MatrixRef pss(nullptr, (MKL_INT)(deflation_max_size * x.size()), 1);
+        pbs.data = d_alloc->allocate(deflation_max_size * x.size());
+        pss.data = d_alloc->allocate(deflation_max_size * x.size());
+        vector<MatrixRef> ws(deflation_max_size, MatrixRef(nullptr, x.m, x.n));
+        vector<MatrixRef> aws(deflation_max_size, MatrixRef(nullptr, x.m, x.n));
+        for (int i = 0; i < deflation_max_size; i++) {
+            ws[i].data = pbs.data + ws[i].size() * i;
+            aws[i].data = pss.data + aws[i].size() * i;
+        }
+        copy(ws[0], x);
+        int num_matmul = 0;
+        aws[0].clear();
+        op(ws[0], aws[0]);
+        if (consta != 0)
+            iadd(aws[0], ws[0], consta);
+        iscale(ws[0], 1.0 / sqrt(dot(aws[0], aws[0])));
+        iscale(aws[0], 1.0 / sqrt(dot(aws[0], aws[0])));
+        num_matmul++;
+        vector<int> eigval_idxs(deflation_max_size);
+        MatrixRef q(nullptr, x.m, x.n);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate();
+        int ck = 0, msig = 0, m = 1, xiter = 0;
+        double qq;
+        if (iprint)
+            cout << endl;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                DiagonalMatrix ld(nullptr, m);
+                MatrixRef alpha(nullptr, m, m);
+                ld.allocate();
+                alpha.allocate();
+                vector<MatrixRef> tmp(m, MatrixRef(nullptr, x.m, x.n));
+                for (int i = 0; i < m; i++)
+                    tmp[i].allocate();
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++) {
+                        int i = ij / m, j = ij % m;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+                    for (int i = 0; i < m; i++)
+                        for (int j = 0; j < m; j++) {
+#endif
+                        if (j <= i)
+                            alpha(i, j) = dot(ws[i], aws[j]);
+                    }
+#pragma omp single
+                    eigs(alpha, ld);
+                    // note alpha row/column is diff from python
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], ws[j]);
+                        iscale(ws[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(ws[j], tmp[i], alpha(j, i));
+                                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], aws[j]);
+                        iscale(aws[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(aws[j], tmp[i], alpha(j, i));
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        ld(j, j) = dot(ws[j], aws[j]) / dot(ws[j], ws[j]);
+                }
+                threading->activate_normal();
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate();
+                alpha.deallocate();
+                for (int i = 0; i < m; i++)
+                    eigval_idxs[i] = m - 1 - i;
+                for (int i = 0; i < ck; i++) {
+                    int ii = eigval_idxs[i];
+                    copy(q, aws[ii]);
+                    iadd(q, ws[ii], -ld(ii, ii));
+                    if (dot(q, q) >= conv_thrd_p) {
+                        ck = i;
+                        break;
+                    }
+                }
+                int ick = eigval_idxs[ck];
+                copy(q, aws[ick]);
+                iadd(q, ws[ick], -ld(ick, ick));
+                qq = dot(q, q);
+                if (iprint)
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                         << fixed << setw(15) << setprecision(8) << ld.data[ick]
+                         << scientific << setw(13) << setprecision(2) << qq
+                         << endl;
+                olsen_precondition(q, ws[ick], ld.data[ick], aa);
+                ld.deallocate();
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
+            }
+            if (m == deflation_max_size && ck >= k - 1 && qq < conv_thrd_p) {
+                ck = k;
+                break;
+            }
+            if (m == deflation_max_size &&
+                xiter + (deflation_max_size - deflation_min_size) >=
+                    soft_max_iter)
+                break;
+            if (qq < conv_thrd_p && ck < k - 1)
+                ck++;
+            else {
+                bool do_deflation = false;
+                if (m >= deflation_max_size) {
+                    m = msig = deflation_min_size;
+                    do_deflation = true;
+                }
+                copy(ws[m], q);
+                if (pcomm != nullptr)
+                    pcomm->broadcast(ws[m].data, ws[m].size(), pcomm->root);
+                aws[m].clear();
+                op(ws[m], aws[m]);
+                if (consta != 0)
+                    iadd(aws[m], ws[m], consta);
+                num_matmul++;
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    if (do_deflation) {
+                        vector<MatrixRef> tmp(m, MatrixRef(nullptr, x.m, x.n));
+                        for (int i = 0; i < m; i++)
+                            tmp[i].allocate();
+                        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                        {
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], ws[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(ws[j], tmp[j]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], aws[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(aws[j], tmp[j]);
+                        }
+                        threading->activate_normal();
+                        for (int i = m - 1; i >= 0; i--)
+                            tmp[i].deallocate();
+                    }
+                    for (int i = 0; i < m + 1; i++) {
+                        for (int j = 0; j < i; j++) {
+                            iadd(ws[i], ws[j], -dot(aws[j], aws[i]));
+                            iadd(aws[i], aws[j], -dot(aws[j], aws[i]));
+                        }
+                        iscale(ws[i], 1.0 / sqrt(dot(aws[i], aws[i])));
+                        iscale(aws[i], 1.0 / sqrt(dot(aws[i], aws[i])));
+                    }
+                }
+                m++;
+            }
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate();
+        assert(m == deflation_max_size);
+        ndav = num_matmul;
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        MatrixRef hp(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        double old_error = 0.0;
+        r.allocate();
+        p.allocate();
+        hp.allocate();
+        int nw = (int)ws.size();
+        for (int i = 0; i < nw; i++) {
+            for (int j = 0; j < i; j++) {
+                double ww = dot(ws[j], ws[i]);
+                iadd(ws[i], ws[j], -ww);
+                iadd(aws[i], aws[j], -ww);
+            }
+            double w_normsq = sqrt(dot(ws[i], ws[i]));
+            assert(w_normsq > 1E-14);
+            iscale(ws[i], 1.0 / w_normsq);
+            iscale(aws[i], 1.0 / w_normsq);
+        }
+        MatrixRef winv(nullptr, nw, nw);
+        MatrixRef mu(nullptr, nw, 1);
+        winv.allocate();
+        mu.allocate();
+        r.clear();
+        p.clear();
+        hp.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iscale(r, -1);
+            iadd(r, b, 1); // r = b - Ax
+            if (nw != 0) {
+                for (int i = 0; i < nw; i++)
+                    for (int j = 0; j <= i; j++) {
+                        winv(i, j) = dot(aws[i], ws[j]);
+                        winv(j, i) = winv(i, j);
+                    }
+                inv(winv);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(r, ws[j]) * winv(i, j);
+                    iadd(x, ws[i], mu.data[i]);
+                    iadd(r, aws[i], -mu.data[i]);
+                }
+            }
+            cg_precondition(p, r, aa);
+            if (nw != 0) {
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(hp, ws[j]) * winv(i, j);
+                    iadd(p, ws[i], -mu.data[i]);
+                    iadd(hp, aws[i], -mu.data[i]);
+                }
+            }
+            error = dot(p, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                func = dot(x, b);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            mu.deallocate();
+            winv.deallocate();
+            hp.deallocate();
+            p.deallocate();
+            r.deallocate();
+            nmult = 1;
+            d_alloc->deallocate(pss.data, deflation_max_size * x.size());
+            d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
+            return func;
+        }
+        old_error = error;
+        if (pcomm != nullptr)
+            pcomm->broadcast(p.data, p.size(), pcomm->root);
+        MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
+        z.allocate();
+        az.allocate();
+        xiter = 0;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (nw == 0) {
+                hp.clear();
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = old_error / dot(p, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                cg_precondition(z, r, aa);
+                error = dot(z, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&error, 2, pcomm->root);
+            if (error < conv_thrd)
+                break;
+            else {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    double beta = error / old_error;
+                    old_error = error;
+                    iscale(p, beta);
+                    iadd(p, z, 1.0);
+                    if (nw != 0) {
+                        az.clear();
+                        op(z, az);
+                        if (consta != 0)
+                            iadd(az, z, consta);
+                        iscale(hp, beta);
+                        iadd(hp, az, 1.0);
+                        mu.clear();
+                        for (int i = 0; i < nw; i++) {
+                            for (int j = 0; j < nw; j++)
+                                mu.data[i] += dot(az, ws[j]) * winv(i, j);
+                            iadd(p, ws[i], -mu.data[i]);
+                            iadd(hp, aws[i], -mu.data[i]);
+                        }
+                    }
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(p.data, p.size(), pcomm->root);
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (cg) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        az.deallocate();
+        z.deallocate();
+        mu.deallocate();
+        winv.deallocate();
+        hp.deallocate();
+        p.deallocate();
+        r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+        d_alloc->deallocate(pss.data, deflation_max_size * x.size());
+        d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
+        return func;
+    }
+    // Solve x in linear equation H x = b
+    // by applying deflated CG method
+    // where H is symmetric and positive-definite
+    // H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double davidson_projected_deflated_conjugate_gradient(
+        MatMul &op, const DiagonalMatrix &aa, MatrixRef x, MatrixRef b, int k,
+        int &nmult, int &ndav, double consta = 0.0, bool iprint = false,
+        const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+        double conv_thrd_p = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        int deflation_min_size = 2, int deflation_max_size = 50) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (deflation_max_size > (int)x.size())
+            deflation_max_size = (int)x.size();
+        if (deflation_min_size > deflation_max_size)
+            deflation_min_size = deflation_max_size;
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        MatrixRef pbs(nullptr, (MKL_INT)(deflation_max_size * x.size()), 1);
+        MatrixRef pss(nullptr, (MKL_INT)(deflation_max_size * x.size()), 1);
+        pbs.data = d_alloc->allocate(deflation_max_size * x.size());
+        pss.data = d_alloc->allocate(deflation_max_size * x.size());
+        vector<MatrixRef> ws(deflation_max_size, MatrixRef(nullptr, x.m, x.n));
+        vector<MatrixRef> aws(deflation_max_size, MatrixRef(nullptr, x.m, x.n));
+        for (int i = 0; i < deflation_max_size; i++) {
+            ws[i].data = pbs.data + ws[i].size() * i;
+            aws[i].data = pss.data + aws[i].size() * i;
+        }
+        copy(ws[0], x);
+        iscale(ws[0], 1.0 / sqrt(dot(ws[0], ws[0])));
+        MatrixRef q(nullptr, x.m, x.n);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate();
+        int ck = 0, msig = 0, m = 1, xiter = 0;
+        double qq;
+        if (iprint)
+            cout << endl;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm != nullptr && xiter != 1)
+                pcomm->broadcast(pbs.data + x.size() * msig,
+                                 x.size() * (m - msig), pcomm->root);
+            for (int i = msig; i < m; i++, msig++) {
+                aws[i].clear();
+                op(ws[i], aws[i]);
+                if (consta != 0)
+                    iadd(aws[i], ws[i], consta);
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                DiagonalMatrix ld(nullptr, m);
+                MatrixRef alpha(nullptr, m, m);
+                ld.allocate();
+                alpha.allocate();
+                vector<MatrixRef> tmp(m, MatrixRef(nullptr, x.m, x.n));
+                for (int i = 0; i < m; i++)
+                    tmp[i].allocate();
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++) {
+                        int i = ij / m, j = ij % m;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+                    for (int i = 0; i < m; i++)
+                        for (int j = 0; j < m; j++) {
+#endif
+                        if (j <= i)
+                            alpha(i, j) = dot(ws[i], aws[j]);
+                    }
+#pragma omp single
+                    eigs(alpha, ld);
+                    // note alpha row/column is diff from python
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], ws[j]);
+                        iscale(ws[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(ws[j], tmp[i], alpha(j, i));
+                                // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], aws[j]);
+                        iscale(aws[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < m; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(aws[j], tmp[i], alpha(j, i));
+                }
+                threading->activate_normal();
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate();
+                alpha.deallocate();
+                for (int i = 0; i < ck; i++) {
+                    copy(q, aws[i]);
+                    iadd(q, ws[i], -ld(i, i));
+                    if (dot(q, q) >= conv_thrd_p) {
+                        ck = i;
+                        break;
+                    }
+                }
+                copy(q, aws[ck]);
+                iadd(q, ws[ck], -ld(ck, ck));
+                qq = dot(q, q);
+                if (iprint)
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                         << fixed << setw(15) << setprecision(8) << ld.data[ck]
+                         << scientific << setw(13) << setprecision(2) << qq
+                         << endl;
+                olsen_precondition(q, ws[ck], ld.data[ck], aa);
+                ld.deallocate();
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
+            }
+            if (m == deflation_max_size && ck >= k - 1 && qq < conv_thrd_p) {
+                ck = k;
+                break;
+            }
+            if (m == deflation_max_size &&
+                xiter + (deflation_max_size - deflation_min_size) >=
+                    soft_max_iter)
+                break;
+            if (qq < conv_thrd_p && ck < k - 1)
+                ck++;
+            else {
+                if (m >= deflation_max_size)
+                    m = msig = deflation_min_size;
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    for (int j = 0; j < m; j++)
+                        iadd(q, ws[j], -dot(ws[j], q));
+                    iscale(q, 1.0 / sqrt(dot(q, q)));
+                    copy(ws[m], q);
+                }
+                m++;
+            }
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate();
+        assert(m == deflation_max_size);
+        ndav = xiter;
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        MatrixRef hp(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        double old_error = 0.0;
+        r.allocate();
+        p.allocate();
+        hp.allocate();
+        int nw = (int)ws.size();
+        for (int i = 0; i < nw; i++) {
+            for (int j = 0; j < i; j++) {
+                double ww = dot(ws[j], ws[i]);
+                iadd(ws[i], ws[j], -ww);
+                iadd(aws[i], aws[j], -ww);
+            }
+            double w_normsq = sqrt(dot(ws[i], ws[i]));
+            assert(w_normsq > 1E-14);
+            iscale(ws[i], 1.0 / w_normsq);
+            iscale(aws[i], 1.0 / w_normsq);
+        }
+        MatrixRef winv(nullptr, nw, nw);
+        MatrixRef mu(nullptr, nw, 1);
+        winv.allocate();
+        mu.allocate();
+        r.clear();
+        p.clear();
+        hp.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iscale(r, -1);
+            iadd(r, b, 1); // r = b - Ax
+            if (nw != 0) {
+                for (int i = 0; i < nw; i++)
+                    for (int j = 0; j <= i; j++) {
+                        winv(i, j) = dot(aws[i], ws[j]);
+                        winv(j, i) = winv(i, j);
+                    }
+                inv(winv);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(r, ws[j]) * winv(i, j);
+                    iadd(x, ws[i], mu.data[i]);
+                    iadd(r, aws[i], -mu.data[i]);
+                }
+            }
+            cg_precondition(p, r, aa);
+            if (nw != 0) {
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(hp, ws[j]) * winv(i, j);
+                    iadd(p, ws[i], -mu.data[i]);
+                    iadd(hp, aws[i], -mu.data[i]);
+                }
+            }
+            error = dot(p, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                func = dot(x, b);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            mu.deallocate();
+            winv.deallocate();
+            hp.deallocate();
+            p.deallocate();
+            r.deallocate();
+            nmult = 1;
+            d_alloc->deallocate(pss.data, deflation_max_size * x.size());
+            d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
+            return func;
+        }
+        old_error = error;
+        if (pcomm != nullptr)
+            pcomm->broadcast(p.data, p.size(), pcomm->root);
+        MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
+        z.allocate();
+        az.allocate();
+        xiter = 0;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (nw == 0) {
+                hp.clear();
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = old_error / dot(p, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                cg_precondition(z, r, aa);
+                error = dot(z, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&error, 2, pcomm->root);
+            if (error < conv_thrd)
+                break;
+            else {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    double beta = error / old_error;
+                    old_error = error;
+                    iscale(p, beta);
+                    iadd(p, z, 1.0);
+                    if (nw != 0) {
+                        az.clear();
+                        op(z, az);
+                        if (consta != 0)
+                            iadd(az, z, consta);
+                        iscale(hp, beta);
+                        iadd(hp, az, 1.0);
+                        mu.clear();
+                        for (int i = 0; i < nw; i++) {
+                            for (int j = 0; j < nw; j++)
+                                mu.data[i] += dot(az, ws[j]) * winv(i, j);
+                            iadd(p, ws[i], -mu.data[i]);
+                            iadd(hp, aws[i], -mu.data[i]);
+                        }
+                    }
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(p.data, p.size(), pcomm->root);
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (cg) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        az.deallocate();
+        z.deallocate();
+        mu.deallocate();
+        winv.deallocate();
+        hp.deallocate();
+        p.deallocate();
+        r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+        d_alloc->deallocate(pss.data, deflation_max_size * x.size());
+        d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
+        return func;
+    }
+    // Solve x in linear equation H x = b
+    // by applying deflated CG method
+    // where H is symmetric and positive-definite
+    // H x := op(x) + consta * x
+    template <typename MatMul, typename PComm>
+    static double deflated_conjugate_gradient(
+        MatMul &op, const DiagonalMatrix &aa, MatrixRef x, MatrixRef b,
+        int &nmult, double consta = 0.0, bool iprint = false,
+        const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+        int max_iter = 5000, int soft_max_iter = -1,
+        const vector<MatrixRef> &ws = vector<MatrixRef>()) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
+        MatrixRef hp(nullptr, x.m, x.n);
+        double ff[2];
+        double &error = ff[0], &func = ff[1];
+        double old_error = 0.0;
+        r.allocate();
+        p.allocate();
+        hp.allocate();
+        int nw = (int)ws.size();
+        vector<MatrixRef> aws(nw, MatrixRef(nullptr, x.m, x.n));
+        MatrixRef paws(nullptr, (MKL_INT)(nw * x.size()), 1);
+        paws.data = d_alloc->allocate(nw * x.size());
+        for (int i = 0; i < nw; i++) {
+            for (int j = 0; j < i; j++)
+                iadd(ws[i], ws[j], -dot(ws[j], ws[i]));
+            double w_normsq = sqrt(dot(ws[i], ws[i]));
+            assert(w_normsq > 1E-14);
+            iscale(ws[i], 1.0 / w_normsq);
+            aws[i].data = paws.data + ws[i].size() * i;
+            aws[i].clear();
+            op(ws[i], aws[i]);
+            if (consta != 0)
+                iadd(aws[i], ws[i], consta);
+        }
+        MatrixRef winv(nullptr, nw, nw);
+        MatrixRef mu(nullptr, nw, 1);
+        winv.allocate();
+        mu.allocate();
+        r.clear();
+        p.clear();
+        hp.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iscale(r, -1);
+            iadd(r, b, 1); // r = b - Ax
+            if (nw != 0) {
+                for (int i = 0; i < nw; i++)
+                    for (int j = 0; j <= i; j++) {
+                        winv(i, j) = dot(aws[i], ws[j]);
+                        winv(j, i) = winv(i, j);
+                    }
+                inv(winv);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(r, ws[j]) * winv(i, j);
+                    iadd(x, ws[i], mu.data[i]);
+                    iadd(r, aws[i], -mu.data[i]);
+                }
+            }
+            cg_precondition(p, r, aa);
+            if (nw != 0) {
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+                mu.clear();
+                for (int i = 0; i < nw; i++) {
+                    for (int j = 0; j < nw; j++)
+                        mu.data[i] += dot(hp, ws[j]) * winv(i, j);
+                    iadd(p, ws[i], -mu.data[i]);
+                    iadd(hp, aws[i], -mu.data[i]);
+                }
+            }
+            error = dot(p, r);
+        }
+        if (iprint)
+            cout << endl;
+        if (pcomm != nullptr)
+            pcomm->broadcast(&error, 1, pcomm->root);
+        if (error < conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                func = dot(x, b);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&func, 1, pcomm->root);
+            if (iprint)
+                cout << setw(6) << 0 << fixed << setw(15) << setprecision(8)
+                     << func << scientific << setw(13) << setprecision(2)
+                     << error << endl;
+            mu.deallocate();
+            winv.deallocate();
+            hp.deallocate();
+            p.deallocate();
+            r.deallocate();
+            nmult = 1;
+            d_alloc->deallocate(paws.data, nw * x.size());
+            return func;
+        }
+        old_error = error;
+        if (pcomm != nullptr)
+            pcomm->broadcast(p.data, p.size(), pcomm->root);
+        MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
+        z.allocate();
+        az.allocate();
+        int xiter = 0;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (nw == 0) {
+                hp.clear();
+                op(p, hp);
+                if (consta != 0)
+                    iadd(hp, p, consta);
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                double alpha = old_error / dot(p, hp);
+                iadd(x, p, alpha);
+                iadd(r, hp, -alpha);
+                cg_precondition(z, r, aa);
+                error = dot(z, r);
+                func = dot(x, b);
+                if (iprint)
+                    cout << setw(6) << xiter << fixed << setw(15)
+                         << setprecision(8) << func << scientific << setw(13)
+                         << setprecision(2) << error << endl;
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&error, 2, pcomm->root);
+            if (error < conv_thrd)
+                break;
+            else {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    double beta = error / old_error;
+                    old_error = error;
+                    iscale(p, beta);
+                    iadd(p, z, 1.0);
+                    if (nw != 0) {
+                        az.clear();
+                        op(z, az);
+                        if (consta != 0)
+                            iadd(az, z, consta);
+                        iscale(hp, beta);
+                        iadd(hp, az, 1.0);
+                        mu.clear();
+                        for (int i = 0; i < nw; i++) {
+                            for (int j = 0; j < nw; j++)
+                                mu.data[i] += dot(az, ws[j]) * winv(i, j);
+                            iadd(p, ws[i], -mu.data[i]);
+                            iadd(hp, aws[i], -mu.data[i]);
+                        }
+                    }
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(p.data, p.size(), pcomm->root);
+            }
+        }
+        if (xiter == max_iter && error >= conv_thrd) {
+            cout << "Error : linear solver (cg) not converged!" << endl;
+            assert(false);
+        }
+        nmult = xiter + 1;
+        az.deallocate();
+        z.deallocate();
+        mu.deallocate();
+        winv.deallocate();
+        hp.deallocate();
+        p.deallocate();
+        r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+        d_alloc->deallocate(paws.data, nw * x.size());
+        return func;
     }
     // Solve x in linear equation H x = b
     // by applying linear CG method

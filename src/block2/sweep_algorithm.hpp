@@ -1834,6 +1834,9 @@ template <typename S> struct Linear {
            tsplt = 0, tsvd = 0;
     Timer _t, _t2;
     bool precondition_cg = true;
+    // number of eigenvalues solved using harmonic Davidson
+    // for deflated CG; 0 means normal CG
+    int cg_n_harmonic_projection = 0;
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
     // only useful when target contains some other
@@ -1877,16 +1880,18 @@ template <typename S> struct Linear {
     struct Iteration {
         vector<double> targets;
         double error, tmult;
-        int nmult, mmps;
+        int nmult, nmultp, mmps;
         size_t nflop;
         Iteration(const vector<double> &targets, double error, int mmps,
-                  int nmult, size_t nflop = 0, double tmult = 1.0)
+                  int nmult, int nmultp, size_t nflop = 0, double tmult = 1.0)
             : targets(targets), error(error), mmps(mmps), nmult(nmult),
-              nflop(nflop), tmult(tmult) {}
+              nmultp(nmultp), nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
             os << "Mmps =" << setw(5) << r.mmps;
             os << " Nmult = " << setw(4) << r.nmult;
+            if (r.nmultp != 0)
+                os << "/" << setw(4) << r.nmultp;
             if (r.targets.size() == 1) {
                 os << (abs(r.targets[0]) > 1E-3 ? fixed : scientific);
                 os << (abs(r.targets[0]) > 1E-3 ? setprecision(10)
@@ -1975,7 +1980,12 @@ template <typename S> struct Linear {
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         forward, false, right_bra, me->ket->tensors[i]);
         teff += _t.get_time();
-        auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        tuple<double, pair<int, int>, size_t, double> pdi;
+        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        get<0>(pdi) = get<0>(mpdi);
+        get<1>(pdi).first = get<1>(mpdi);
+        get<2>(pdi) = get<2>(mpdi);
+        get<3>(pdi) = get<3>(mpdi);
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
@@ -1994,7 +2004,7 @@ template <typename S> struct Linear {
                 MatrixFunctions::iadd(mbra, sbra, 1);
                 tmult += _t.get_time();
                 targets[0] = MatrixFunctions::norm(mbra);
-                get<1>(pdi) += get<1>(tpdi);
+                get<1>(pdi).first += get<1>(tpdi);
                 get<2>(pdi) += get<2>(tpdi);
                 get<3>(pdi) += get<3>(tpdi);
                 t_eff->deallocate();
@@ -2027,17 +2037,19 @@ template <typename S> struct Linear {
                     iprint >= 3, minres_conv_thrd, minres_max_iter,
                     minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
-                get<1>(pdi) += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else if (eq_type == EquationTypes::GreensFunction) {
-                tuple<pair<double, double>, int, size_t, double> lpdi;
+                tuple<pair<double, double>, pair<int, int>, size_t, double>
+                    lpdi;
                 lpdi = l_eff->greens_function(
-                    lme->mpo->const_e, gf_omega, gf_eta, real_bra, iprint >= 3,
-                    minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
-                    me->para_rule);
+                    lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
                     vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
-                get<1>(pdi) += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi).first;
+                get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else
                 assert(false);
@@ -2060,7 +2072,7 @@ template <typename S> struct Linear {
             auto tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                       tme->para_rule);
             targets.clear();
-            get<1>(pdi)++;
+            get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
             targets.push_back(get<0>(tpdi)[0].second);
@@ -2073,7 +2085,7 @@ template <typename S> struct Linear {
             tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                  tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
-            get<1>(pdi)++;
+            get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
             tmult += _t.get_time();
@@ -2388,8 +2400,8 @@ template <typename S> struct Linear {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi), get<2>(pdi),
-                         get<3>(pdi));
+        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi).first,
+                         get<1>(pdi).second, get<2>(pdi), get<3>(pdi));
     }
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, double noise,
@@ -2432,7 +2444,12 @@ template <typename S> struct Linear {
         shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, forward, false, right_bra, me->ket->tensors[i]);
         teff += _t.get_time();
-        auto pdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        tuple<double, pair<int, int>, size_t, double> pdi;
+        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        get<0>(pdi) = get<0>(mpdi);
+        get<1>(pdi).first = get<1>(mpdi);
+        get<2>(pdi) = get<2>(mpdi);
+        get<3>(pdi) = get<3>(mpdi);
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
         h_eff->deallocate();
@@ -2451,7 +2468,7 @@ template <typename S> struct Linear {
                 MatrixFunctions::iadd(mbra, sbra, 1);
                 tmult += _t.get_time();
                 targets[0] = MatrixFunctions::norm(mbra);
-                get<1>(pdi) += get<1>(tpdi);
+                get<1>(pdi).first += get<1>(tpdi);
                 get<2>(pdi) += get<2>(tpdi);
                 get<3>(pdi) += get<3>(tpdi);
                 t_eff->deallocate();
@@ -2483,17 +2500,19 @@ template <typename S> struct Linear {
                     iprint >= 3, minres_conv_thrd, minres_max_iter,
                     minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
-                get<1>(pdi) += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi);
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else if (eq_type == EquationTypes::GreensFunction) {
-                tuple<pair<double, double>, int, size_t, double> lpdi;
+                tuple<pair<double, double>, pair<int, int>, size_t, double>
+                    lpdi;
                 lpdi = l_eff->greens_function(
-                    lme->mpo->const_e, gf_omega, gf_eta, real_bra, iprint >= 3,
-                    minres_conv_thrd, minres_max_iter, minres_soft_max_iter,
-                    me->para_rule);
+                    lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
                     vector<double>{get<0>(lpdi).first, get<0>(lpdi).second};
-                get<1>(pdi) += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi).first;
+                get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else
                 assert(false);
@@ -2515,7 +2534,7 @@ template <typename S> struct Linear {
             auto tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                       tme->para_rule);
             targets.clear();
-            get<1>(pdi)++;
+            get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
             targets.push_back(get<0>(tpdi)[0].second);
@@ -2528,7 +2547,7 @@ template <typename S> struct Linear {
             tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                  tme->para_rule);
             targets.insert(targets.begin(), get<0>(tpdi)[0].second);
-            get<1>(pdi)++;
+            get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
             tmult += _t.get_time();
@@ -2712,8 +2731,8 @@ template <typename S> struct Linear {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi), get<2>(pdi),
-                         get<3>(pdi));
+        return Iteration(targets, bra_error, bra_mmps, get<1>(pdi).first,
+                         get<1>(pdi).second, get<2>(pdi), get<3>(pdi));
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                                ubond_t ket_bond_dim, double noise,
@@ -2725,7 +2744,7 @@ template <typename S> struct Linear {
         if (tme != nullptr)
             tme->move_to(i);
         tmve += _t2.get_time();
-        Iteration it(vector<double>(), 0, 0, 0);
+        Iteration it(vector<double>(), 0, 0, 0, 0);
         if (rme->dot == 2)
             it = update_two_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
                                 minres_conv_thrd);

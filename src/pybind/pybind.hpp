@@ -1753,13 +1753,14 @@ template <typename S> void bind_algorithms(py::module &m) {
 
     py::class_<typename Linear<S>::Iteration,
                shared_ptr<typename Linear<S>::Iteration>>(m, "LinearIteration")
-        .def(py::init<const vector<double> &, double, int, int, size_t,
+        .def(py::init<const vector<double> &, double, int, int, int, size_t,
                       double>())
-        .def(py::init<const vector<double> &, double, int, int>())
+        .def(py::init<const vector<double> &, double, int, int, int>())
         .def_readwrite("mmps", &Linear<S>::Iteration::mmps)
         .def_readwrite("targets", &Linear<S>::Iteration::targets)
         .def_readwrite("error", &Linear<S>::Iteration::error)
         .def_readwrite("nmult", &Linear<S>::Iteration::nmult)
+        .def_readwrite("nmultp", &Linear<S>::Iteration::nmultp)
         .def_readwrite("tmult", &Linear<S>::Iteration::tmult)
         .def_readwrite("nflop", &Linear<S>::Iteration::nflop)
         .def("__repr__", [](typename Linear<S>::Iteration *self) {
@@ -1813,6 +1814,8 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("ex_type", &Linear<S>::ex_type)
         .def_readwrite("algo_type", &Linear<S>::algo_type)
         .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
+        .def_readwrite("cg_n_harmonic_projection",
+                       &Linear<S>::cg_n_harmonic_projection)
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &Linear<S>::sweep_cumulative_nflop)
