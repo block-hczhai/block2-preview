@@ -1847,9 +1847,14 @@ template <typename S> struct Linear {
     int target_ket_bond_dim = -1;
     // Green's function parameters
     double gf_omega = 0, gf_eta = 0;
+    // extra frequencies calculated only at the given site
     vector<double> gf_extra_omegas;
+    // calculated GF for extra frequencies
     vector<vector<double>> gf_extra_targets;
+    // which site to calculate extra frequencies
     int gf_extra_omegas_at_site = -1;
+    // if not zero, use this eta for extra frequencies
+    double gf_extra_eta = 0;
     // weights for real and imag parts
     vector<double> complex_weights = {0.5, 0.5};
     Linear(const shared_ptr<MovingEnvironment<S>> &lme,
@@ -1994,6 +1999,7 @@ template <typename S> struct Linear {
         get<3>(pdi) = get<3>(mpdi);
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
+        vector<double> extra_bras;
         h_eff->deallocate();
         if (eq_type == EquationTypes::FitAddition ||
             eq_type == EquationTypes::PerturbativeCompression) {
@@ -2057,19 +2063,34 @@ template <typename S> struct Linear {
                     tmp.allocate();
                     memcpy(tmp.data, l_eff->bra->data,
                            l_eff->bra->total_memory * sizeof(double));
+                    if (tme != nullptr)
+                        extra_bras.reserve(l_eff->bra->total_memory *
+                                           gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
                         if (eq_type == EquationTypes::GreensFunctionSquared)
                             lpdi = l_eff->greens_function_squared(
-                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
                                 real_bra, cg_n_harmonic_projection, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
                         else
                             lpdi = l_eff->greens_function(
-                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
+                        if (tme != nullptr) {
+                            memcpy(extra_bras.data() +
+                                       j * 2 * l_eff->bra->total_memory,
+                                   l_eff->bra->data,
+                                   l_eff->bra->total_memory * sizeof(double));
+                            memcpy(extra_bras.data() +
+                                       (j * 2 + 1) * l_eff->bra->total_memory,
+                                   real_bra->data,
+                                   real_bra->total_memory * sizeof(double));
+                        }
                         gf_extra_targets[j] = vector<double>{
                             get<0>(lpdi).first, get<0>(lpdi).second};
                         get<1>(pdi).first += get<1>(lpdi).first;
@@ -2133,6 +2154,39 @@ template <typename S> struct Linear {
             get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
+            if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
+                for (size_t j = 0; j < gf_extra_targets.size(); j++) {
+                    double *tbra_bak = t_eff->bra->data;
+                    double *tket_bak = t_eff->ket->data;
+                    if (tme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra->data = extra_bras.data() +
+                                           j * 2 * t_eff->bra->total_memory;
+                    if (tme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket->data = extra_bras.data() +
+                                           j * 2 * t_eff->ket->total_memory;
+                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                         tme->para_rule);
+                    gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
+                    get<1>(pdi).first++;
+                    get<2>(pdi) += get<1>(tpdi);
+                    get<3>(pdi) += get<2>(tpdi);
+                    if (tme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra->data =
+                            extra_bras.data() +
+                            (j * 2 + 1) * t_eff->bra->total_memory;
+                    if (tme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket->data =
+                            extra_bras.data() +
+                            (j * 2 + 1) * t_eff->ket->total_memory;
+                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                         tme->para_rule);
+                    gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                    get<1>(pdi).first++;
+                    get<2>(pdi) += get<1>(tpdi);
+                    get<3>(pdi) += get<2>(tpdi);
+                    t_eff->bra->data = tbra_bak;
+                    t_eff->ket->data = tket_bak;
+                }
             tmult += _t.get_time();
             t_eff->deallocate();
         }
@@ -2499,6 +2553,7 @@ template <typename S> struct Linear {
         get<3>(pdi) = get<3>(mpdi);
         tmult += _t.get_time();
         vector<double> targets = {get<0>(pdi)};
+        vector<double> extra_bras;
         h_eff->deallocate();
         if (eq_type == EquationTypes::FitAddition ||
             eq_type == EquationTypes::PerturbativeCompression) {
@@ -2561,19 +2616,34 @@ template <typename S> struct Linear {
                     tmp.allocate();
                     memcpy(tmp.data, l_eff->bra->data,
                            l_eff->bra->total_memory * sizeof(double));
+                    if (tme != nullptr)
+                        extra_bras.reserve(l_eff->bra->total_memory *
+                                           gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
                         if (eq_type == EquationTypes::GreensFunctionSquared)
                             lpdi = l_eff->greens_function_squared(
-                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
                                 real_bra, cg_n_harmonic_projection, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
                         else
                             lpdi = l_eff->greens_function(
-                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
+                        if (tme != nullptr) {
+                            memcpy(extra_bras.data() +
+                                       j * 2 * l_eff->bra->total_memory,
+                                   l_eff->bra->data,
+                                   l_eff->bra->total_memory * sizeof(double));
+                            memcpy(extra_bras.data() +
+                                       (j * 2 + 1) * l_eff->bra->total_memory,
+                                   real_bra->data,
+                                   real_bra->total_memory * sizeof(double));
+                        }
                         gf_extra_targets[j] = vector<double>{
                             get<0>(lpdi).first, get<0>(lpdi).second};
                         get<1>(pdi).first += get<1>(lpdi).first;
@@ -2636,6 +2706,39 @@ template <typename S> struct Linear {
             get<1>(pdi).first++;
             get<2>(pdi) += get<1>(tpdi);
             get<3>(pdi) += get<2>(tpdi);
+            if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
+                for (size_t j = 0; j < gf_extra_targets.size(); j++) {
+                    double *tbra_bak = t_eff->bra->data;
+                    double *tket_bak = t_eff->ket->data;
+                    if (tme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra->data = extra_bras.data() +
+                                           j * 2 * t_eff->bra->total_memory;
+                    if (tme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket->data = extra_bras.data() +
+                                           j * 2 * t_eff->ket->total_memory;
+                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                         tme->para_rule);
+                    gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
+                    get<1>(pdi).first++;
+                    get<2>(pdi) += get<1>(tpdi);
+                    get<3>(pdi) += get<2>(tpdi);
+                    if (tme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra->data =
+                            extra_bras.data() +
+                            (j * 2 + 1) * t_eff->bra->total_memory;
+                    if (tme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket->data =
+                            extra_bras.data() +
+                            (j * 2 + 1) * t_eff->ket->total_memory;
+                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                         tme->para_rule);
+                    gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                    get<1>(pdi).first++;
+                    get<2>(pdi) += get<1>(tpdi);
+                    get<3>(pdi) += get<2>(tpdi);
+                    t_eff->bra->data = tbra_bak;
+                    t_eff->ket->data = tket_bak;
+                }
             tmult += _t.get_time();
             t_eff->deallocate();
         }

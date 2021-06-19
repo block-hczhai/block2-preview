@@ -1833,6 +1833,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("gf_extra_targets", &Linear<S>::gf_extra_targets)
         .def_readwrite("gf_extra_omegas_at_site",
                        &Linear<S>::gf_extra_omegas_at_site)
+        .def_readwrite("gf_extra_eta", &Linear<S>::gf_extra_eta)
         .def_readwrite("right_weight", &Linear<S>::right_weight)
         .def_readwrite("complex_weights", &Linear<S>::complex_weights)
         .def("update_one_dot", &Linear<S>::update_one_dot)
