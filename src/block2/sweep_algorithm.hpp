@@ -1847,6 +1847,9 @@ template <typename S> struct Linear {
     int target_ket_bond_dim = -1;
     // Green's function parameters
     double gf_omega = 0, gf_eta = 0;
+    vector<double> gf_extra_omegas;
+    vector<vector<double>> gf_extra_targets;
+    int gf_extra_omegas_at_site = -1;
     // weights for real and imag parts
     vector<double> complex_weights = {0.5, 0.5};
     Linear(const shared_ptr<MovingEnvironment<S>> &lme,
@@ -2046,6 +2049,38 @@ template <typename S> struct Linear {
                        eq_type == EquationTypes::GreensFunctionSquared) {
                 tuple<pair<double, double>, pair<int, int>, size_t, double>
                     lpdi;
+                if (gf_extra_omegas_at_site == i &&
+                    gf_extra_omegas.size() != 0) {
+                    gf_extra_targets.resize(gf_extra_omegas.size());
+                    MatrixRef tmp(nullptr, (MKL_INT)l_eff->bra->total_memory,
+                                  1);
+                    tmp.allocate();
+                    memcpy(tmp.data, l_eff->bra->data,
+                           l_eff->bra->total_memory * sizeof(double));
+                    for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
+                        if (eq_type == EquationTypes::GreensFunctionSquared)
+                            lpdi = l_eff->greens_function_squared(
+                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                real_bra, cg_n_harmonic_projection, iprint >= 3,
+                                minres_conv_thrd, minres_max_iter,
+                                minres_soft_max_iter, me->para_rule);
+                        else
+                            lpdi = l_eff->greens_function(
+                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                real_bra, gcrotmk_size, iprint >= 3,
+                                minres_conv_thrd, minres_max_iter,
+                                minres_soft_max_iter, me->para_rule);
+                        gf_extra_targets[j] = vector<double>{
+                            get<0>(lpdi).first, get<0>(lpdi).second};
+                        get<1>(pdi).first += get<1>(lpdi).first;
+                        get<1>(pdi).second += get<1>(lpdi).second;
+                        get<2>(pdi) += get<2>(lpdi),
+                            get<3>(pdi) += get<3>(lpdi);
+                    }
+                    memcpy(l_eff->bra->data, tmp.data,
+                           l_eff->bra->total_memory * sizeof(double));
+                    tmp.deallocate();
+                }
                 if (eq_type == EquationTypes::GreensFunctionSquared)
                     lpdi = l_eff->greens_function_squared(
                         lme->mpo->const_e, gf_omega, gf_eta, real_bra,
@@ -2518,6 +2553,38 @@ template <typename S> struct Linear {
                        eq_type == EquationTypes::GreensFunctionSquared) {
                 tuple<pair<double, double>, pair<int, int>, size_t, double>
                     lpdi;
+                if (gf_extra_omegas_at_site == i &&
+                    gf_extra_omegas.size() != 0) {
+                    gf_extra_targets.resize(gf_extra_omegas.size());
+                    MatrixRef tmp(nullptr, (MKL_INT)l_eff->bra->total_memory,
+                                  1);
+                    tmp.allocate();
+                    memcpy(tmp.data, l_eff->bra->data,
+                           l_eff->bra->total_memory * sizeof(double));
+                    for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
+                        if (eq_type == EquationTypes::GreensFunctionSquared)
+                            lpdi = l_eff->greens_function_squared(
+                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                real_bra, cg_n_harmonic_projection, iprint >= 3,
+                                minres_conv_thrd, minres_max_iter,
+                                minres_soft_max_iter, me->para_rule);
+                        else
+                            lpdi = l_eff->greens_function(
+                                lme->mpo->const_e, gf_extra_omegas[j], gf_eta,
+                                real_bra, gcrotmk_size, iprint >= 3,
+                                minres_conv_thrd, minres_max_iter,
+                                minres_soft_max_iter, me->para_rule);
+                        gf_extra_targets[j] = vector<double>{
+                            get<0>(lpdi).first, get<0>(lpdi).second};
+                        get<1>(pdi).first += get<1>(lpdi).first;
+                        get<1>(pdi).second += get<1>(lpdi).second;
+                        get<2>(pdi) += get<2>(lpdi),
+                            get<3>(pdi) += get<3>(lpdi);
+                    }
+                    memcpy(l_eff->bra->data, tmp.data,
+                           l_eff->bra->total_memory * sizeof(double));
+                    tmp.deallocate();
+                }
                 if (eq_type == EquationTypes::GreensFunctionSquared)
                     lpdi = l_eff->greens_function_squared(
                         lme->mpo->const_e, gf_omega, gf_eta, real_bra,
