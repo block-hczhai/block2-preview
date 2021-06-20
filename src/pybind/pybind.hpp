@@ -41,6 +41,7 @@ PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<long long int, int>>);
@@ -1796,6 +1797,10 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("lme", &Linear<S>::lme)
         .def_readwrite("rme", &Linear<S>::rme)
         .def_readwrite("tme", &Linear<S>::tme)
+        .def_readwrite("ext_tmes", &Linear<S>::ext_tmes)
+        .def_readwrite("ext_mpss", &Linear<S>::ext_mpss)
+        .def_readwrite("ext_targets", &Linear<S>::ext_targets)
+        .def_readwrite("ext_target_at_site", &Linear<S>::ext_target_at_site)
         .def_readwrite("bra_bond_dims", &Linear<S>::bra_bond_dims)
         .def_readwrite("ket_bond_dims", &Linear<S>::ket_bond_dims)
         .def_readwrite("target_bra_bond_dim", &Linear<S>::target_bra_bond_dim)
@@ -1807,6 +1812,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("sweep_discarded_weights",
                        &Linear<S>::sweep_discarded_weights)
         .def_readwrite("forward", &Linear<S>::forward)
+        .def_readwrite("conv_type", &Linear<S>::conv_type)
         .def_readwrite("noise_type", &Linear<S>::noise_type)
         .def_readwrite("trunc_type", &Linear<S>::trunc_type)
         .def_readwrite("decomp_type", &Linear<S>::decomp_type)
@@ -1834,6 +1840,7 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("gf_extra_omegas_at_site",
                        &Linear<S>::gf_extra_omegas_at_site)
         .def_readwrite("gf_extra_eta", &Linear<S>::gf_extra_eta)
+        .def_readwrite("gf_extra_ext_targets", &Linear<S>::gf_extra_ext_targets)
         .def_readwrite("right_weight", &Linear<S>::right_weight)
         .def_readwrite("complex_weights", &Linear<S>::complex_weights)
         .def("update_one_dot", &Linear<S>::update_one_dot)
@@ -2209,6 +2216,8 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
     py::bind_vector<vector<vector<int>>>(m, "VectorVectorInt");
+    py::bind_vector<vector<vector<vector<double>>>>(m,
+                                                    "VectorVectorVectorDouble");
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
         .def_property_readonly(
             "ptr",
@@ -2498,6 +2507,13 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("GreensFunction", EquationTypes::GreensFunction)
         .value("GreensFunctionSquared", EquationTypes::GreensFunctionSquared)
         .value("FitAddition", EquationTypes::FitAddition);
+
+    py::enum_<ConvergenceTypes>(m, "ConvergenceTypes", py::arithmetic())
+        .value("LastMinimal", ConvergenceTypes::LastMinimal)
+        .value("LastMaximal", ConvergenceTypes::LastMaximal)
+        .value("FirstMinimal", ConvergenceTypes::FirstMinimal)
+        .value("FirstMaximal", ConvergenceTypes::FirstMaximal)
+        .value("MiddleSite", ConvergenceTypes::MiddleSite);
 
     py::enum_<TraceTypes>(m, "TraceTypes", py::arithmetic())
         .value("Nothing", TraceTypes::None)

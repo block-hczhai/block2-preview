@@ -1790,6 +1790,14 @@ enum struct EquationTypes : uint8_t {
     FitAddition
 };
 
+enum struct ConvergenceTypes : uint8_t {
+    LastMinimal,
+    LastMaximal,
+    FirstMinimal,
+    FirstMaximal,
+    MiddleSite
+};
+
 // Solve |x> in Linear Equation LHS|x> = RHS|r>
 // where |r> is a constant MPS
 // target quantity is calculated in tme
@@ -1808,6 +1816,11 @@ enum struct EquationTypes : uint8_t {
 template <typename S> struct Linear {
     // lme = LHS ME, rme = RHS ME, tme = Target ME
     shared_ptr<MovingEnvironment<S>> lme, rme, tme;
+    // ext mes for gf off-diagonals
+    vector<shared_ptr<MovingEnvironment<S>>> ext_tmes;
+    vector<shared_ptr<MPS<S>>> ext_mpss;
+    vector<vector<double>> ext_targets;
+    int ext_target_at_site = -1;
     vector<ubond_t> bra_bond_dims, ket_bond_dims;
     vector<double> noises;
     vector<vector<double>> targets;
@@ -1818,6 +1831,7 @@ template <typename S> struct Linear {
     int minres_max_iter = 5000;
     int minres_soft_max_iter = -1;
     int conv_required_sweeps = 3;
+    ConvergenceTypes conv_type = ConvergenceTypes::LastMinimal;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
@@ -1845,6 +1859,8 @@ template <typename S> struct Linear {
     // constant MPS not appeared in the equation
     int target_bra_bond_dim = -1;
     int target_ket_bond_dim = -1;
+    // weights for real and imag parts
+    vector<double> complex_weights = {0.5, 0.5};
     // Green's function parameters
     double gf_omega = 0, gf_eta = 0;
     // extra frequencies calculated only at the given site
@@ -1855,8 +1871,8 @@ template <typename S> struct Linear {
     int gf_extra_omegas_at_site = -1;
     // if not zero, use this eta for extra frequencies
     double gf_extra_eta = 0;
-    // weights for real and imag parts
-    vector<double> complex_weights = {0.5, 0.5};
+    // calculated GF for extra frequencies and ext_mpss
+    vector<vector<vector<double>>> gf_extra_ext_targets;
     Linear(const shared_ptr<MovingEnvironment<S>> &lme,
            const shared_ptr<MovingEnvironment<S>> &rme,
            const shared_ptr<MovingEnvironment<S>> &tme,
@@ -2063,7 +2079,7 @@ template <typename S> struct Linear {
                     tmp.allocate();
                     memcpy(tmp.data, l_eff->bra->data,
                            l_eff->bra->total_memory * sizeof(double));
-                    if (tme != nullptr)
+                    if (tme != nullptr || ext_tmes.size() != 0)
                         extra_bras.reserve(l_eff->bra->total_memory *
                                            gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
@@ -2081,7 +2097,7 @@ template <typename S> struct Linear {
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
-                        if (tme != nullptr) {
+                        if (tme != nullptr || ext_tmes.size() != 0) {
                             memcpy(extra_bras.data() +
                                        j * 2 * l_eff->bra->total_memory,
                                    l_eff->bra->data,
@@ -2189,6 +2205,129 @@ template <typename S> struct Linear {
                 }
             tmult += _t.get_time();
             t_eff->deallocate();
+        }
+        for (auto &mps : ext_mpss) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else
+                    assert(false);
+            }
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        if (ext_target_at_site == i && ext_tmes.size() != 0) {
+            ext_targets.resize(ext_tmes.size());
+            if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
+                gf_extra_ext_targets.resize(ext_tmes.size());
+            for (size_t k = 0; k < ext_tmes.size(); k++) {
+                shared_ptr<MovingEnvironment<S>> xme = ext_tmes[k];
+                shared_ptr<EffectiveHamiltonian<S>> t_eff = xme->eff_ham(
+                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
+                    false, xme->bra->tensors[i], xme->ket->tensors[i]);
+                auto tpdi = t_eff->expect(xme->mpo->const_e, algo_type, ex_type,
+                                          xme->para_rule);
+                ext_targets[k].resize(2);
+                ext_targets[k][1] = get<0>(tpdi)[0].second;
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
+                if (real_bra != nullptr) {
+                    if (xme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra = real_bra;
+                    if (xme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket = real_bra;
+                }
+                tpdi = t_eff->expect(xme->mpo->const_e, algo_type, ex_type,
+                                     xme->para_rule);
+                ext_targets[k][0] = get<0>(tpdi)[0].second;
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
+                if (gf_extra_omegas_at_site == i &&
+                    gf_extra_omegas.size() != 0) {
+                    gf_extra_ext_targets[k].resize(gf_extra_omegas.size());
+                    for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
+                        double *tbra_bak = t_eff->bra->data;
+                        double *tket_bak = t_eff->ket->data;
+                        if (xme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data = extra_bras.data() +
+                                               j * 2 * t_eff->bra->total_memory;
+                        if (xme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data = extra_bras.data() +
+                                               j * 2 * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                             ex_type, xme->para_rule);
+                        gf_extra_ext_targets[k][j].resize(2);
+                        gf_extra_ext_targets[k][j][1] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                        if (xme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->bra->total_memory;
+                        if (xme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                             ex_type, xme->para_rule);
+                        gf_extra_ext_targets[k][j][0] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                        t_eff->bra->data = tbra_bak;
+                        t_eff->ket->data = tket_bak;
+                    }
+                }
+                t_eff->deallocate();
+            }
+        }
+        for (auto &mps : ext_mpss) {
+            if ((me->para_rule == nullptr || me->para_rule->is_root()) &&
+                !skip_decomp) {
+                if (fuse_left != forward) {
+                    // change to fused form for splitting
+                    shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                    if (!fuse_left && forward)
+                        mps->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_left(
+                                i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                    else if (fuse_left && !forward)
+                        mps->tensors[i] =
+                            MovingEnvironment<S>::swap_wfn_to_fused_right(
+                                i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                    prev_wfn->info->deallocate();
+                    prev_wfn->deallocate();
+                }
+            }
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (skip_decomp)
+                mps->canonical_form[i] = forward ? 'S' : 'K';
+            else {
+                mps->canonical_form[i] = forward ? 'K' : 'S';
+                if (forward && i != me->n_sites - 1)
+                    mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+                else if (!forward && i != 0)
+                    mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+            }
         }
         if ((build_pdm || me->para_rule == nullptr ||
              me->para_rule->is_root()) &&
@@ -2616,7 +2755,7 @@ template <typename S> struct Linear {
                     tmp.allocate();
                     memcpy(tmp.data, l_eff->bra->data,
                            l_eff->bra->total_memory * sizeof(double));
-                    if (tme != nullptr)
+                    if (tme != nullptr || ext_tmes.size() != 0)
                         extra_bras.reserve(l_eff->bra->total_memory *
                                            gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
@@ -2634,7 +2773,7 @@ template <typename S> struct Linear {
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
-                        if (tme != nullptr) {
+                        if (tme != nullptr || ext_tmes.size() != 0) {
                             memcpy(extra_bras.data() +
                                        j * 2 * l_eff->bra->total_memory,
                                    l_eff->bra->data,
@@ -2741,6 +2880,103 @@ template <typename S> struct Linear {
                 }
             tmult += _t.get_time();
             t_eff->deallocate();
+        }
+        for (auto &mps : ext_mpss) {
+            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S>::contract_two_dot(i, mps);
+            else {
+                mps->load_tensor(i);
+                mps->tensors[i + 1] = nullptr;
+            }
+        }
+        if (ext_target_at_site == i && ext_tmes.size() != 0) {
+            ext_targets.resize(ext_tmes.size());
+            if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
+                gf_extra_ext_targets.resize(ext_tmes.size());
+            for (size_t k = 0; k < ext_tmes.size(); k++) {
+                shared_ptr<MovingEnvironment<S>> xme = ext_tmes[k];
+                shared_ptr<EffectiveHamiltonian<S>> t_eff =
+                    xme->eff_ham(FuseTypes::FuseLR, forward, false,
+                                 xme->bra->tensors[i], xme->ket->tensors[i]);
+                auto tpdi = t_eff->expect(xme->mpo->const_e, algo_type, ex_type,
+                                          xme->para_rule);
+                ext_targets[k].resize(2);
+                ext_targets[k][1] = get<0>(tpdi)[0].second;
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
+                if (real_bra != nullptr) {
+                    if (xme->bra->tensors[i] == me->bra->tensors[i])
+                        t_eff->bra = real_bra;
+                    if (xme->ket->tensors[i] == me->bra->tensors[i])
+                        t_eff->ket = real_bra;
+                }
+                tpdi = t_eff->expect(xme->mpo->const_e, algo_type, ex_type,
+                                     xme->para_rule);
+                ext_targets[k][0] = get<0>(tpdi)[0].second;
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
+                if (gf_extra_omegas_at_site == i &&
+                    gf_extra_omegas.size() != 0) {
+                    gf_extra_ext_targets[k].resize(gf_extra_omegas.size());
+                    for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
+                        double *tbra_bak = t_eff->bra->data;
+                        double *tket_bak = t_eff->ket->data;
+                        if (xme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data = extra_bras.data() +
+                                               j * 2 * t_eff->bra->total_memory;
+                        if (xme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data = extra_bras.data() +
+                                               j * 2 * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                             ex_type, xme->para_rule);
+                        gf_extra_ext_targets[k][j].resize(2);
+                        gf_extra_ext_targets[k][j][1] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                        if (xme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->bra->total_memory;
+                        if (xme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                             ex_type, xme->para_rule);
+                        gf_extra_ext_targets[k][j][0] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                        t_eff->bra->data = tbra_bak;
+                        t_eff->ket->data = tket_bak;
+                    }
+                }
+                tmult += _t.get_time();
+                t_eff->deallocate();
+            }
+        }
+        vector<shared_ptr<MPS<S>>> rev_ext_mpss(ext_mpss.rbegin(),
+                                                ext_mpss.rend());
+        for (auto &mps : rev_ext_mpss) {
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (forward) {
+                mps->canonical_form[i] = 'C';
+                mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+                mps->canonical_form[i + 1] = 'C';
+                if (mps->center == mps->n_sites - 1)
+                    mps->center = mps->n_sites - 2;
+            } else {
+                mps->canonical_form[i] = 'C';
+                mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+                mps->canonical_form[i] = 'C';
+            }
+            if (me->para_rule == nullptr || me->para_rule->is_root())
+                MovingEnvironment<S>::propagate_wfn(
+                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
         }
         if (build_pdm) {
             _t.get_time();
@@ -2933,6 +3169,8 @@ template <typename S> struct Linear {
             lme->move_to(i);
         if (tme != nullptr)
             tme->move_to(i);
+        for (auto &xme : ext_tmes)
+            xme->move_to(i);
         tmve += _t2.get_time();
         Iteration it(vector<double>(), 0, 0, 0, 0);
         if (rme->dot == 2)
@@ -2962,6 +3200,8 @@ template <typename S> struct Linear {
             lme->prepare();
         if (tme != nullptr)
             tme->prepare();
+        for (auto &xme : ext_tmes)
+            xme->prepare();
         sweep_targets.clear();
         sweep_discarded_weights.clear();
         sweep_cumulative_nflop = 0;
@@ -3000,13 +3240,50 @@ template <typename S> struct Linear {
             sweep_discarded_weights.push_back(r.error);
             if (frame->restart_dir_optimal_mps != "" ||
                 frame->restart_dir_optimal_mps_per_sweep != "") {
-                size_t midx =
-                    min_element(
-                        sweep_targets.begin(), sweep_targets.end(),
-                        [](const vector<double> &x, const vector<double> &y) {
-                            return x.back() < y.back();
-                        }) -
-                    sweep_targets.begin();
+                size_t midx = -1;
+                switch (conv_type) {
+                case ConvergenceTypes::MiddleSite:
+                    midx = sweep_targets.size() / 2;
+                    break;
+                case ConvergenceTypes::LastMinimal:
+                    midx =
+                        min_element(sweep_targets.begin(), sweep_targets.end(),
+                                    [](const vector<double> &x,
+                                       const vector<double> &y) {
+                                        return x.back() < y.back();
+                                    }) -
+                        sweep_targets.begin();
+                    break;
+                case ConvergenceTypes::LastMaximal:
+                    midx =
+                        min_element(sweep_targets.begin(), sweep_targets.end(),
+                                    [](const vector<double> &x,
+                                       const vector<double> &y) {
+                                        return x.back() > y.back();
+                                    }) -
+                        sweep_targets.begin();
+                    break;
+                case ConvergenceTypes::FirstMinimal:
+                    midx =
+                        min_element(sweep_targets.begin(), sweep_targets.end(),
+                                    [](const vector<double> &x,
+                                       const vector<double> &y) {
+                                        return x[0] < y[0];
+                                    }) -
+                        sweep_targets.begin();
+                    break;
+                case ConvergenceTypes::FirstMaximal:
+                    midx =
+                        min_element(sweep_targets.begin(), sweep_targets.end(),
+                                    [](const vector<double> &x,
+                                       const vector<double> &y) {
+                                        return x[0] > y[0];
+                                    }) -
+                        sweep_targets.begin();
+                    break;
+                default:
+                    assert(false);
+                }
                 if (midx == sweep_targets.size() - 1) {
                     if (rme->para_rule == nullptr ||
                         rme->para_rule->is_root()) {
@@ -3032,12 +3309,46 @@ template <typename S> struct Linear {
                 }
             }
         }
-        size_t idx =
-            min_element(sweep_targets.begin(), sweep_targets.end(),
-                        [](const vector<double> &x, const vector<double> &y) {
-                            return x.back() < y.back();
-                        }) -
-            sweep_targets.begin();
+        size_t idx = -1;
+        switch (conv_type) {
+        case ConvergenceTypes::MiddleSite:
+            idx = sweep_targets.size() / 2;
+            break;
+        case ConvergenceTypes::LastMinimal:
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<double> &x, const vector<double> &y) {
+                          return x.back() < y.back();
+                      }) -
+                  sweep_targets.begin();
+            break;
+        case ConvergenceTypes::LastMaximal:
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<double> &x, const vector<double> &y) {
+                          return x.back() > y.back();
+                      }) -
+                  sweep_targets.begin();
+            break;
+        case ConvergenceTypes::FirstMinimal:
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<double> &x, const vector<double> &y) {
+                          return x[0] < y[0];
+                      }) -
+                  sweep_targets.begin();
+            break;
+        case ConvergenceTypes::FirstMaximal:
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<double> &x, const vector<double> &y) {
+                          return x[0] > y[0];
+                      }) -
+                  sweep_targets.begin();
+            break;
+        default:
+            assert(false);
+        }
         if (frame->restart_dir != "" &&
             (rme->para_rule == nullptr || rme->para_rule->is_root())) {
             if (!Parsing::path_exists(frame->restart_dir))
