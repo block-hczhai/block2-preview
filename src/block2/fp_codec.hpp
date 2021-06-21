@@ -122,6 +122,8 @@ struct FPCodec {
     U prec_u;
     mutable size_t ndata = 0, ncpsd = 0;
     size_t chunk_size = 4096;
+    // number of chunks to be processed in the same batch
+    size_t n_parallel_chunks = 4096;
     FPCodec() : prec(0), prec_u(0) {}
     FPCodec(T prec) : prec(prec), prec_u((U &)prec & x) {}
     FPCodec(T prec, size_t chunk_size)
@@ -188,21 +190,32 @@ struct FPCodec {
         ofs.write((char *)&chunk_size, sizeof(chunk_size));
         ndata += len;
         size_t nchunk = (size_t)(len / chunk_size + !!(len % chunk_size));
-        T *pdata = new T[len + nchunk];
-        vector<size_t> cplens(nchunk);
+        size_t nbatch = (size_t)(nchunk / n_parallel_chunks +
+                                 !!(nchunk % n_parallel_chunks));
+        T *pdata = new T[(chunk_size + 1) * min(nchunk, n_parallel_chunks)];
+        vector<size_t> cplens(n_parallel_chunks);
         int ntg = threading->activate_global();
-#pragma omp parallel for schedule(static) num_threads(ntg)
-        for (size_t ic = 0; ic < nchunk; ic++) {
-            size_t offset = ic * chunk_size;
-            size_t cklen = min(chunk_size, len - offset);
-            cplens[ic] = encode(data + offset, cklen, pdata + offset + ic);
-        }
-        for (size_t ic = 0; ic < nchunk; ic++) {
-            size_t offset = ic * chunk_size;
-            size_t cplen = cplens[ic];
-            ofs.write((char *)&cplen, sizeof(cplen));
-            ofs.write((char *)(pdata + offset + ic), sizeof(T) * cplen);
-            ncpsd += cplen;
+#pragma omp parallel num_threads(ntg)
+        for (size_t ib = 0; ib < nbatch; ib++) {
+            size_t n_this_chunk =
+                min(nchunk - ib * n_parallel_chunks, n_parallel_chunks);
+#pragma omp for schedule(static)
+            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+                size_t offset = ic * chunk_size;
+                size_t batch_offset =
+                    (ic + ib * n_parallel_chunks) * chunk_size;
+                size_t cklen = min(chunk_size, len - batch_offset);
+                cplens[ic] =
+                    encode(data + batch_offset, cklen, pdata + offset + ic);
+            }
+#pragma omp single
+            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+                size_t offset = ic * chunk_size;
+                size_t cplen = cplens[ic];
+                ofs.write((char *)&cplen, sizeof(cplen));
+                ofs.write((char *)(pdata + offset + ic), sizeof(T) * cplen);
+                ncpsd += cplen;
+            }
         }
         delete[] pdata;
         threading->activate_normal();
@@ -215,22 +228,33 @@ struct FPCodec {
         assert(magic == "fpc");
         ifs.read((char *)&chunk_size, sizeof(chunk_size));
         size_t nchunk = (size_t)(len / chunk_size + !!(len % chunk_size));
-        T *pdata = new T[len + nchunk];
-        vector<size_t> cplens(nchunk);
-        for (size_t ic = 0; ic < nchunk; ic++) {
-            size_t &cplen = cplens[ic];
-            size_t offset = ic * chunk_size;
-            ifs.read((char *)&cplen, sizeof(cplen));
-            assert(cplen <= chunk_size + 1);
-            ifs.read((char *)(pdata + offset + ic), sizeof(T) * cplen);
-        }
+        size_t nbatch = (size_t)(nchunk / n_parallel_chunks +
+                                 !!(nchunk % n_parallel_chunks));
+        T *pdata = new T[(chunk_size + 1) * min(nchunk, n_parallel_chunks)];
+        vector<size_t> cplens(n_parallel_chunks);
         int ntg = threading->activate_global();
-#pragma omp parallel for schedule(static) num_threads(ntg)
-        for (size_t ic = 0; ic < nchunk; ic++) {
-            size_t offset = ic * chunk_size;
-            size_t cklen = min(chunk_size, len - offset);
-            size_t dclen = decode(pdata + offset + ic, cklen, data + offset);
-            assert(dclen == cplens[ic]);
+#pragma omp parallel num_threads(ntg)
+        for (size_t ib = 0; ib < nbatch; ib++) {
+            size_t n_this_chunk =
+                min(nchunk - ib * n_parallel_chunks, n_parallel_chunks);
+#pragma omp single
+            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+                size_t &cplen = cplens[ic];
+                size_t offset = ic * chunk_size;
+                ifs.read((char *)&cplen, sizeof(cplen));
+                assert(cplen <= chunk_size + 1);
+                ifs.read((char *)(pdata + offset + ic), sizeof(T) * cplen);
+            }
+#pragma omp for schedule(static)
+            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+                size_t offset = ic * chunk_size;
+                size_t batch_offset =
+                    (ic + ib * n_parallel_chunks) * chunk_size;
+                size_t cklen = min(chunk_size, len - batch_offset);
+                size_t dclen =
+                    decode(pdata + offset + ic, cklen, data + batch_offset);
+                assert(dclen == cplens[ic]);
+            }
         }
         delete[] pdata;
         threading->activate_normal();
