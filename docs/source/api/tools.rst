@@ -2,6 +2,37 @@
 Tools
 =====
 
+Floating-Point Number Compression
+---------------------------------
+
+For data like ``FCIDUMP`` integrals, the array elements do not need to be stored in its full binary form.
+Storage or memory can be saved by using flexible bit representation for numbers of different magnitudes.
+The :class:`FPCodec` class implements the lossless and lossy compression and decompression of floating-point
+number arrays. Lossless compression is possible when all numebrs are close in their order of magnitudes.
+
+.. doxygenstruct:: block2::FPtraits
+    :members:
+
+.. doxygenstruct:: block2::FPtraits< float >
+    :members:
+
+.. doxygenstruct:: block2::FPtraits< double >
+    :members:
+
+.. doxygenfunction:: block2::binary_repr
+
+.. doxygenstruct:: block2::BitsCodec
+    :members:
+
+.. doxygenstruct:: block2::FPCodec
+    :members:
+
+.. doxygenstruct:: block2::CompressedVector
+    :members:
+
+.. doxygenstruct:: block2::CompressedVectorMT
+    :members:
+
 Kuhn-Munkres Algorithm
 ----------------------
 
