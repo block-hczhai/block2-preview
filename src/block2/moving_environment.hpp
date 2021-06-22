@@ -199,7 +199,11 @@ template <typename S> struct MovingEnvironment {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
             frame->update_peak_used_memory();
-            mpo->tf->post_numerical_transform(envs[i]->left, mats[0], mats[1]);
+            // when using conventional mpo transform scheme, dot = 1/2 only
+            // compatible if we keep both N/C for dot = 1
+            if (dot == 2)
+                mpo->tf->post_numerical_transform(envs[i]->left, mats[0],
+                                                  mats[1]);
         }
         tmid += _t.get_time();
         if (i < mpo->left_operator_exprs.size())
@@ -297,7 +301,11 @@ template <typename S> struct MovingEnvironment {
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
             frame->update_peak_used_memory();
-            mpo->tf->post_numerical_transform(envs[i]->right, mats[0], mats[1]);
+            // when using conventional mpo transform scheme, dot = 1/2 only
+            // compatible if we keep both N/C for dot = 1
+            if (dot == 2)
+                mpo->tf->post_numerical_transform(envs[i]->right, mats[0],
+                                                  mats[1]);
         }
         tmid += _t.get_time();
         if (i + dot - 1 >= 0 && i + dot - 1 < mpo->right_operator_exprs.size())
