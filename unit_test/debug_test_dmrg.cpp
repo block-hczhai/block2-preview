@@ -256,8 +256,8 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
-    dmrg->davidson_type = DavidsonTypes::GreaterThan;
-    dmrg->davidson_shift = -2086.4;
+    // dmrg->davidson_type = DavidsonTypes::GreaterThan;
+    // dmrg->davidson_shift = -2086.4;
     dmrg->solve(20, true);
 
     shared_ptr<MPSInfo<SU2>> bra_info =

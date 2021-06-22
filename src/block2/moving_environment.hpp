@@ -195,9 +195,12 @@ template <typename S> struct MovingEnvironment {
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                              envs[i]->left);
         trot += _t.get_time();
-        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
+        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
+            frame->update_peak_used_memory();
+            mpo->tf->post_numerical_transform(envs[i]->left, mats[0], mats[1]);
+        }
         tmid += _t.get_time();
         if (i < mpo->left_operator_exprs.size())
             mpo->tf->intermediates(mpo->left_operator_names[i],
@@ -289,10 +292,13 @@ template <typename S> struct MovingEnvironment {
                               ket->tensors[i + dot], envs[i]->right);
         trot += _t.get_time();
         if (mpo->schemer != nullptr &&
-            i + dot == mpo->schemer->right_trans_site)
+            i + dot == mpo->schemer->right_trans_site) {
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
+            frame->update_peak_used_memory();
+            mpo->tf->post_numerical_transform(envs[i]->right, mats[0], mats[1]);
+        }
         tmid += _t.get_time();
         if (i + dot - 1 >= 0 && i + dot - 1 < mpo->right_operator_exprs.size())
             mpo->tf->intermediates(mpo->right_operator_names[i + dot - 1],

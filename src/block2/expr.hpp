@@ -209,9 +209,10 @@ struct SiteIndex {
     }
     // Flip first two site indices and associated spin indices
     SiteIndex flip() const noexcept {
-        return SiteIndex((uint64_t)(
-            (data & 0xFFULL) | ((uint64_t)s(0) << 57) | ((uint64_t)s(1) << 56) |
-            ((uint64_t)(*this)[0] << 20) | ((uint64_t)(*this)[1] << 8)));
+        return SiteIndex((uint64_t)((data & 0xFFULL) | ((uint64_t)s(0) << 57) |
+                                    ((uint64_t)s(1) << 56) |
+                                    ((uint64_t)(*this)[0] << 20) |
+                                    ((uint64_t)(*this)[1] << 8)));
     }
     size_t hash() const noexcept { return (size_t)data; }
     vector<uint16_t> to_array() const {
@@ -273,7 +274,7 @@ template <typename S> struct OpElement : OpExpr<S> {
             return name < other.name;
         else if (site_index != other.site_index)
             return site_index < other.site_index;
-        else if (factor != other.factor)
+        else if (::abs(factor - other.factor) >= 1E-12)
             return factor < other.factor;
         else
             return false;
@@ -748,6 +749,12 @@ inline bool operator==(const shared_ptr<OpExpr<S>> &a,
     default:
         return false;
     }
+}
+
+template <typename S>
+inline bool operator!=(const shared_ptr<OpExpr<S>> &a,
+                       const shared_ptr<OpExpr<S>> &b) {
+    return !(a == b);
 }
 
 template <typename S> struct op_expr_less {

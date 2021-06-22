@@ -1087,6 +1087,34 @@ template <typename S> struct TensorFunctions {
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
+    // delete unnecessary operators after numerical_transform
+    virtual void
+    post_numerical_transform(const shared_ptr<OperatorTensor<S>> &a,
+                             const shared_ptr<Symbolic<S>> &names,
+                             const shared_ptr<Symbolic<S>> &new_names) const {
+        set<shared_ptr<OpExpr<S>>, op_expr_less<S>> del_ops;
+        for (size_t j = 0; j < names->data.size(); j++)
+            del_ops.insert(names->data[j]);
+        for (size_t j = 0; j < new_names->data.size(); j++)
+            if (del_ops.count(new_names->data[j]))
+                del_ops.erase(new_names->data[j]);
+        vector<tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t>> mp;
+        mp.reserve(a->ops.size());
+        for (auto it = a->ops.cbegin(); it != a->ops.cend(); it++)
+            if (it->second->total_memory != 0)
+                mp.emplace_back(it->second->data, it->second,
+                                del_ops.count(it->first));
+        sort(
+            mp.begin(), mp.end(),
+            [](const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &a,
+               const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &b) {
+                return get<0>(a) < get<0>(b);
+            });
+        for (const auto &t : mp) {
+            assert(get<1>(t)->alloc == dalloc);
+            get<1>(t)->reallocate(get<2>(t) ? 0 : get<1>(t)->total_memory);
+        }
+    }
     // Substituing delayed left experssions
     // Return sum of three-operator tensor products
     virtual shared_ptr<Symbolic<S>>

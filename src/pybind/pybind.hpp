@@ -1082,6 +1082,8 @@ template <typename S> void bind_operator(py::module &m) {
         .def("right_rotate", &TensorFunctions<S>::right_rotate)
         .def("intermediates", &TensorFunctions<S>::intermediates)
         .def("numerical_transform", &TensorFunctions<S>::numerical_transform)
+        .def("post_numerical_transform",
+             &TensorFunctions<S>::post_numerical_transform)
         .def("substitute_delayed_exprs",
              &TensorFunctions<S>::substitute_delayed_exprs)
         .def("delayed_contract",

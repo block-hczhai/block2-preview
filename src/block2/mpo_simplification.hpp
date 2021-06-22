@@ -74,6 +74,9 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             x = x->copy();
         MPO<S>::left_operator_exprs.resize(MPO<S>::n_sites);
         MPO<S>::right_operator_exprs.resize(MPO<S>::n_sites);
+        // for comp operators created in the middle site,
+        // if all integrals related to the comp operators are zero,
+        // label this comp operator as zero
         if (MPO<S>::schemer != nullptr) {
             MPO<S>::schemer = mpo->schemer->copy();
             int i = MPO<S>::schemer->left_trans_site;
@@ -103,7 +106,12 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         MPO<S>::schemer->right_new_operator_exprs->data[j];
             }
         }
+        // construct blocking formulas by contration of op name (vector) and mpo
+        // matrix; if left/right trans, by contration of new (comp) op name
+        // (vector) and mpo matrix
+        // if contracted expr is zero, label the blocked operator as zero
         int ntg = threading->activate_global();
+        // left blocking
         for (int i = 0; i < MPO<S>::n_sites; i++) {
             if (i == 0) {
                 MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
@@ -148,6 +156,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             MPO<S>::left_operator_exprs[i]->data[j];
             }
         }
+        // right blocking
         for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {
             if (i == MPO<S>::n_sites - 1) {
                 MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
@@ -192,6 +201,9 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             MPO<S>::right_operator_exprs[i]->data[j];
             }
         }
+        // construct super blocking contraction formula
+        // first case is that the blocking formula is already given
+        // for example in the npdm code
         if (mpo->middle_operator_exprs.size() != 0) {
             MPO<S>::middle_operator_names = mpo->middle_operator_names;
             MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
@@ -248,8 +260,14 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             }
         } else {
             vector<uint8_t> px[2];
+            // figure out the mutual dependence of from right to left
+            // px[.][j] is 1 if left operator is useful in next blocking
             for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {
                 if (i != MPO<S>::n_sites - 1) {
+                    // if a left operator is not useful in next blocking
+                    // and not useful in super block
+                    // then it is labelled as not useful
+                    // when it is not useful, set it to zero
                     if (MPO<S>::schemer == nullptr ||
                         i != MPO<S>::schemer->left_trans_site) {
                         for (size_t j = 0;
@@ -355,6 +373,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                 MPO<S>::left_operator_names[i]->data[j] = zero;
                     }
                 }
+                // at the beginning, all px values are zero
+                // then, set the required op px = 1 based on mpo matrix
                 if (i != 0) {
                     if (MPO<S>::schemer == nullptr ||
                         i - 1 != MPO<S>::schemer->left_trans_site)
@@ -378,6 +398,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                     }
                 }
             }
+            // figure out the mutual dependence of from left to right
             for (int i = 0; i < MPO<S>::n_sites; i++) {
                 if (i != 0) {
                     if (MPO<S>::schemer == nullptr ||
