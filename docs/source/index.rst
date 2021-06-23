@@ -6,7 +6,7 @@
 .. only:: latex
 
    block2
-   ======
+   ######
 
 **block2** is an efficient and highly scalable implementation of the Density Matrix Renormalization Group (DMRG)
 for quantum chemistry, based on Matrix Product Operator (MPO) formalism.
@@ -18,14 +18,14 @@ where the low-level structure of the code has been completely rewritten.
 The block2 code is developed and maintained in Garnet Chan group at Caltech.
 
 Contributors
-------------
+""""""""""""
 
 * Huanchen Zhai `@hczhai <https://github.com/hczhai>`_: DMRG and parallelization
 * Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI
 * Zhi-Hao Cui `@zhcui <https://github.com/zhcui>`_: user interface
 
 Features
---------
+""""""""
 
 * State symmetry
     * U(1) particle number symmetry
