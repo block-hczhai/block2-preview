@@ -78,10 +78,10 @@ Features
 
 .. raw:: latex
 
-   \part{User Guide}
+   \chapter{User Guide}
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: User Guide
 
    user/installation
@@ -92,10 +92,10 @@ Features
 
 .. raw:: latex
 
-   \part{Developer Guide}
+   \chapter{Developer Guide}
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Developer Guide
 
    developer/dmrg
@@ -105,7 +105,7 @@ Features
 
 .. raw:: latex
 
-   \part{API Reference}
+   \chapter{API Reference}
 
 .. toctree::
    :maxdepth: 2
