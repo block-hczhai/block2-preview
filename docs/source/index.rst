@@ -8,7 +8,10 @@
    block2
    ======
 
-**block2** is an efficient and highly scalable implementation of the Density Matrix Renormalization Group (DMRG) for quantum chemistry, based on Matrix Product Operator (MPO) formalism. The code is highly optimized for production level calculation of realistic systems. It also provides plenty of options for tuning performance and new algorithm development.
+**block2** is an efficient and highly scalable implementation of the Density Matrix Renormalization Group (DMRG)
+for quantum chemistry, based on Matrix Product Operator (MPO) formalism.
+The code is highly optimized for production level calculation of realistic systems.
+It also provides plenty of options for tuning performance and new algorithm development.
 
 Contributors
 ------------
@@ -69,6 +72,11 @@ Features
     * Point group mapping
     * Orbital basis rotation
 
+.. only:: latex
+
+    User Guide
+    ----------
+
 .. toctree::
    :maxdepth: 1
    :caption: User Guide
@@ -79,6 +87,11 @@ Features
    user/mps-io
    user/references
 
+.. only:: latex
+
+    Developer Guide
+    ---------------
+
 .. toctree::
    :maxdepth: 1
    :caption: Developer Guide
@@ -87,6 +100,11 @@ Features
    developer/orbital-rotation
    developer/pg-mapping
    developer/hints
+
+.. only:: latex
+
+    API Reference
+    -------------
 
 .. toctree::
    :maxdepth: 2

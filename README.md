@@ -1,4 +1,6 @@
 
+[![Documentation Status](https://readthedocs.org/projects/block2/badge/?version=latest)](https://block2.readthedocs.io/en/latest/?badge=latest)
+
 block2
 ======
 
@@ -15,6 +17,8 @@ Main contributors:
 If you find this package useful for your scientific research, please cite this work as:
 
 Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+
+Documentation: https://block2.readthedocs.io/en/latest/
 
 Features
 --------
