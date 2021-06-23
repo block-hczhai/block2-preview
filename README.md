@@ -12,6 +12,10 @@ Main contributors:
 * Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI
 * Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
+If you find this package useful for your scientific research, please cite this work as:
+
+Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+
 Features
 --------
 
