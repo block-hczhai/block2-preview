@@ -70,6 +70,7 @@ def generate_doxygen_xml(app):
 
     try:
         subprocess.call(["doxygen --version"], shell=True)
+        retcode = subprocess.call(["mkdir ../build"], cwd=app.confdir, shell=True)
         retcode = subprocess.call(["doxygen ../Doxygen"], cwd=app.confdir, shell=True)
         if retcode < 0:
             sys.stderr.write("doxygen error code: {}\n".format(-retcode))
