@@ -72,7 +72,7 @@ template <typename S> struct OperatorTensor {
         if (lr == 1) {
             lmat = load_symbolic<S>(ifs);
             rmat = lmat;
-        } else {
+        } else if (lr != 4) {
             if (lr == 0 || lr == 2)
                 lmat = load_symbolic<S>(ifs);
             if (lr == 0 || lr == 3)
@@ -107,14 +107,14 @@ template <typename S> struct OperatorTensor {
     }
     void save_data(ostream &ofs, bool pointer_only = false) const {
         uint8_t lr = lmat == rmat
-                         ? 1
+                         ? (lmat == nullptr ? 4 : 1)
                          : (rmat == nullptr ? 2 : (lmat == nullptr ? 3 : 0));
         ofs.write((char *)&lr, sizeof(lr));
         if (lr == 1 || lr == 2)
             save_symbolic(lmat, ofs);
         else if (lr == 3)
             save_symbolic(rmat, ofs);
-        else {
+        else if (lr == 0) {
             save_symbolic(lmat, ofs);
             save_symbolic(rmat, ofs);
         }

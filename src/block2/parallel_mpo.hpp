@@ -131,12 +131,20 @@ template <typename S> struct ParallelMPO : MPO<S> {
     using MPO<S>::n_sites;
     shared_ptr<ParallelRule<S>> rule;
     shared_ptr<MPO<S>> prim_mpo;
+    ParallelMPO(int n_sites, const shared_ptr<ParallelRule<S>> &rule)
+        : MPO<S>(n_sites), rule(rule), prim_mpo(nullptr) {
+        rule->comm->para_type =
+            rule->comm->para_type | ParallelTypes::NewScheme;
+    }
     ParallelMPO(const shared_ptr<MPO<S>> &mpo,
                 const shared_ptr<ParallelRule<S>> &rule)
         : MPO<S>(mpo->n_sites), prim_mpo(mpo), rule(rule) {
         rule->comm->para_type =
             rule->comm->para_type | ParallelTypes::NewScheme;
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        // cannot parallelize archived mpo
+        // one should archive parallelized mpo instead
+        assert(mpo->archive_filename == "");
         MPO<S>::const_e = mpo->const_e;
         MPO<S>::tensors = mpo->tensors;
         MPO<S>::basis = mpo->basis;
@@ -209,7 +217,15 @@ template <typename S> struct ParallelMPO : MPO<S> {
     ParallelTypes get_parallel_type() const override {
         return rule->get_parallel_type();
     }
-    void deallocate() override { prim_mpo->deallocate(); }
+    void deallocate() override {
+        if (prim_mpo != nullptr)
+            prim_mpo->deallocate();
+    }
+    void load_data(istream &ifs, bool minimal = false) override {
+        MPO<S>::load_data(ifs, minimal);
+        MPO<S>::tf =
+            make_shared<ParallelTensorFunctions<S>>(MPO<S>::tf->opf, rule);
+    }
     shared_ptr<MPO<S>> scalar_multiply(double d) const override {
         shared_ptr<MPO<S>> rmpo = make_shared<ParallelMPO<S>>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);

@@ -690,13 +690,15 @@ template <typename S> struct MPSInfo {
         return info;
     }
     void copy_mutable(const string &dir) const {
-        if (frame->prefix_can_write)
+        if (frame->prefix_can_write) {
             for (int i = 0; i < n_sites + 1; i++) {
                 Parsing::copy_file(get_filename(true, i),
                                    get_filename(true, i, dir));
                 Parsing::copy_file(get_filename(false, i),
                                    get_filename(false, i, dir));
             }
+            save_data(dir + "/mps_info.bin");
+        }
     }
     void save_mutable() const {
         if (frame->prefix_can_write)

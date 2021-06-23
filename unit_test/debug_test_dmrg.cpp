@@ -148,6 +148,12 @@ TEST_F(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
+    mpo->reduce_data();
+    mpo->save_data("mpo.bin");
+
+    mpo = make_shared<MPO<SU2>>(0);
+    mpo->load_data("mpo.bin", true);
+
     ubond_t bond_dim = 200;
 
     // MPSInfo

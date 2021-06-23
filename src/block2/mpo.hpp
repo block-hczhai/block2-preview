@@ -62,7 +62,7 @@ template <typename S> struct MPOSchemer {
                 right_new_operator_exprs->copy());
         return r;
     }
-    void load_data(istream &ifs) {
+    void load_data(istream &ifs, bool minimal = false) {
         ifs.read((char *)&left_trans_site, sizeof(left_trans_site));
         ifs.read((char *)&right_trans_site, sizeof(right_trans_site));
         left_new_operator_names =
@@ -75,6 +75,14 @@ template <typename S> struct MPOSchemer {
         right_new_operator_exprs =
             dynamic_pointer_cast<SymbolicColumnVector<S>>(
                 load_symbolic<S>(ifs));
+        if (minimal)
+            unload_data();
+    }
+    void unload_data() {
+        left_new_operator_names = nullptr;
+        right_new_operator_names = nullptr;
+        left_new_operator_exprs = nullptr;
+        right_new_operator_exprs = nullptr;
     }
     void save_data(ostream &ofs) const {
         ofs.write((char *)&left_trans_site, sizeof(left_trans_site));
@@ -132,6 +140,10 @@ template <typename S> struct MPO {
     vector<shared_ptr<StateInfo<S>>> basis; // only for fused mpo
     // N = Normal, S = CSR
     string sparse_form;
+    // Marks for dynamically load data
+    vector<vector<size_t>> archive_marks;
+    size_t archive_schemer_mark;
+    string archive_filename = "";
     MPO(int n_sites)
         : n_sites(n_sites), sparse_form(n_sites, 'N'), const_e(0.0),
           op(nullptr), schemer(nullptr), tf(nullptr) {}
@@ -143,7 +155,7 @@ template <typename S> struct MPO {
     // in bytes; 0 = peak term, 1 = peak memory, 2 = total disk storage
     // only count lower bound of doubles
     virtual vector<size_t> estimate_storage(shared_ptr<MPSInfo<S>> info,
-                                            int dot) const {
+                                            int dot) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         size_t peak = 0, total = 0, psz = 0;
@@ -153,6 +165,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < n_sites; i++) {
             size_t sz = 0;
             map<S, size_t> mpsz;
+            load_left_operators(i);
             for (auto xop : left_operator_names[i]->data) {
                 shared_ptr<OpElement<S>> op =
                     dynamic_pointer_cast<OpElement<S>>(xop);
@@ -165,11 +178,13 @@ template <typename S> struct MPO {
                 }
                 sz += mpsz.at(op->q_label);
             }
+            unload_left_operators(i);
             left_total.push_back(left_total.back() + sz);
         }
         for (int i = n_sites - 1; i >= 0; i--) {
             size_t sz = 0;
             map<S, size_t> mpsz;
+            load_right_operators(i);
             for (auto xop : right_operator_names[i]->data) {
                 shared_ptr<OpElement<S>> op =
                     dynamic_pointer_cast<OpElement<S>>(xop);
@@ -182,6 +197,7 @@ template <typename S> struct MPO {
                 }
                 sz += mpsz.at(op->q_label);
             }
+            unload_right_operators(i);
             right_total.push_back(right_total.back() + sz);
         }
         for (int i = 0; i < n_sites; i++) {
@@ -217,6 +233,7 @@ template <typename S> struct MPO {
             }
             size_t sz = 0;
             map<S, size_t> mpszl, mpszr;
+            load_left_operators(iL);
             for (auto xop : left_operator_names[iL]->data) {
                 shared_ptr<OpElement<S>> op =
                     dynamic_pointer_cast<OpElement<S>>(xop);
@@ -229,6 +246,8 @@ template <typename S> struct MPO {
                 sz += mpszl.at(op->q_label);
                 psz = max(psz, mpszl.at(op->q_label));
             }
+            unload_left_operators(iL);
+            load_right_operators(iR);
             for (auto xop : right_operator_names[iR]->data) {
                 shared_ptr<OpElement<S>> op =
                     dynamic_pointer_cast<OpElement<S>>(xop);
@@ -241,6 +260,7 @@ template <typename S> struct MPO {
                 sz += mpszr.at(op->q_label);
                 psz = max(psz, mpszr.at(op->q_label));
             }
+            unload_right_operators(iR);
             peak = max(peak, sz);
         }
         total = left_total.back() + right_total.back();
@@ -248,13 +268,147 @@ template <typename S> struct MPO {
     }
     virtual void deallocate() {
         for (int16_t m = n_sites - 1; m >= 0; m--)
-            tensors[m]->deallocate();
+            if (tensors[m] != nullptr)
+                tensors[m]->deallocate();
     }
-    void load_data(istream &ifs) {
+    void load_tensor(int i) {
+        if (archive_filename == "")
+            return;
+        assert(i < n_sites);
+        ifstream ifs(archive_filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_tensor on '" + archive_filename +
+                                "' failed.");
+        ifs.clear();
+        ifs.seekg(archive_marks[i][0]);
+        tensors[i] = make_shared<OperatorTensor<S>>();
+        tensors[i]->load_data(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_tensor on '" + archive_filename +
+                                "' failed.");
+        ifs.close();
+    }
+    void unload_tensor(int i) {
+        assert(i < n_sites);
+        if (archive_filename != "")
+            tensors[i] = nullptr;
+    }
+    void load_schemer() {
+        if (archive_filename == "")
+            return;
+        ifstream ifs(archive_filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_schemer on '" + archive_filename +
+                                "' failed.");
+        ifs.clear();
+        ifs.seekg(archive_schemer_mark);
+        schemer->load_data(ifs, false);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_schemer on '" + archive_filename +
+                                "' failed.");
+        ifs.close();
+    }
+    void unload_schemer() {
+        if (archive_filename != "")
+            schemer->unload_data();
+    }
+    void load_left_operators(int i) {
+        if (archive_filename == "")
+            return;
+        assert(i < n_sites);
+        ifstream ifs(archive_filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_left_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.clear();
+        ifs.seekg(archive_marks[i][1]);
+        if (archive_marks[i][1] != 0)
+            left_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.clear();
+        ifs.seekg(archive_marks[i][4]);
+        if (archive_marks[i][4] != 0)
+            left_operator_exprs[i] = load_symbolic<S>(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_left_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.close();
+    }
+    void unload_left_operators(int i) {
+        if (archive_filename != "") {
+            assert(i < n_sites);
+            left_operator_names[i] = nullptr;
+            left_operator_exprs[i] = nullptr;
+        }
+    }
+    void load_right_operators(int i) {
+        if (archive_filename == "")
+            return;
+        assert(i < n_sites);
+        ifstream ifs(archive_filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_right_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.clear();
+        ifs.seekg(archive_marks[i][2]);
+        if (archive_marks[i][2] != 0)
+            right_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.clear();
+        ifs.seekg(archive_marks[i][5]);
+        if (archive_marks[i][5] != 0)
+            right_operator_exprs[i] = load_symbolic<S>(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_right_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.close();
+    }
+    void unload_right_operators(int i) {
+        if (archive_filename != "") {
+            assert(i < n_sites);
+            right_operator_names[i] = nullptr;
+            right_operator_exprs[i] = nullptr;
+        }
+    }
+    void load_middle_operators(int i) {
+        if (archive_filename == "")
+            return;
+        assert(i < n_sites);
+        ifstream ifs(archive_filename.c_str(), ios::binary);
+        if (!ifs.good())
+            throw runtime_error("MPO:load_middle_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.clear();
+        ifs.seekg(archive_marks[i][3]);
+        if (archive_marks[i][3] != 0)
+            middle_operator_names[i] = load_symbolic<S>(ifs);
+        ifs.clear();
+        ifs.seekg(archive_marks[i][6]);
+        if (archive_marks[i][6] != 0)
+            middle_operator_exprs[i] = load_symbolic<S>(ifs);
+        if (ifs.fail() || ifs.bad())
+            throw runtime_error("MPO:load_middle_operators on '" +
+                                archive_filename + "' failed.");
+        ifs.close();
+    }
+    void unload_middle_operators(int i) {
+        if (archive_filename != "") {
+            assert(i < n_sites);
+            middle_operator_names[i] = nullptr;
+            middle_operator_exprs[i] = nullptr;
+        }
+    }
+    virtual void load_data(istream &ifs, bool minimal = false) {
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&const_e, sizeof(const_e));
         sparse_form = string(n_sites, 'N');
         ifs.read((char *)&sparse_form[0], sizeof(char) * n_sites);
+        shared_ptr<CG<S>> cg = make_shared<CG<S>>(200);
+        cg->initialize();
+        if (sparse_form.find('S') == string::npos)
+            tf = make_shared<TensorFunctions<S>>(
+                make_shared<OperatorFunctions<S>>(cg));
+        else
+            tf = make_shared<TensorFunctions<S>>(
+                make_shared<CSROperatorFunctions<S>>(cg));
         bool has_op, has_schemer;
         ifs.read((char *)&has_op, sizeof(has_op));
         ifs.read((char *)&has_schemer, sizeof(has_schemer));
@@ -262,7 +416,9 @@ template <typename S> struct MPO {
             op = dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
         if (has_schemer) {
             schemer = make_shared<MPOSchemer<S>>(0, 0);
-            schemer->load_data(ifs);
+            if (minimal)
+                archive_schemer_mark = (size_t)ifs.tellg();
+            schemer->load_data(ifs, minimal);
         }
         int sz, sub_sz;
         ifs.read((char *)&sz, sizeof(sz));
@@ -280,11 +436,18 @@ template <typename S> struct MPO {
                 site_op_infos[i][j].second->load_data(ifs);
             }
         }
+        archive_marks.resize(n_sites + 1);
+        for (int i = 0; i <= n_sites; i++)
+            archive_marks[i].resize(7);
         ifs.read((char *)&sz, sizeof(sz));
         tensors.resize(sz);
         for (int i = 0; i < sz; i++) {
             tensors[i] = make_shared<OperatorTensor<S>>();
+            if (minimal)
+                archive_marks[i][0] = (size_t)ifs.tellg();
             tensors[i]->load_data(ifs);
+            if (minimal)
+                tensors[i] = nullptr;
         }
         ifs.read((char *)&sz, sizeof(sz));
         basis.resize(sz);
@@ -294,39 +457,72 @@ template <typename S> struct MPO {
         }
         ifs.read((char *)&sz, sizeof(sz));
         left_operator_names.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][1] = (size_t)ifs.tellg();
             left_operator_names[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                left_operator_names[i] = nullptr;
+        }
         ifs.read((char *)&sz, sizeof(sz));
         right_operator_names.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][2] = (size_t)ifs.tellg();
             right_operator_names[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                right_operator_names[i] = nullptr;
+        }
         ifs.read((char *)&sz, sizeof(sz));
         middle_operator_names.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][3] = (size_t)ifs.tellg();
             middle_operator_names[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                middle_operator_names[i] = nullptr;
+        }
         ifs.read((char *)&sz, sizeof(sz));
         left_operator_exprs.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][4] = (size_t)ifs.tellg();
             left_operator_exprs[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                left_operator_exprs[i] = nullptr;
+        }
         ifs.read((char *)&sz, sizeof(sz));
         right_operator_exprs.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][5] = (size_t)ifs.tellg();
             right_operator_exprs[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                right_operator_exprs[i] = nullptr;
+        }
         ifs.read((char *)&sz, sizeof(sz));
         middle_operator_exprs.resize(sz);
-        for (int i = 0; i < sz; i++)
+        for (int i = 0; i < sz; i++) {
+            if (minimal)
+                archive_marks[i][6] = (size_t)ifs.tellg();
             middle_operator_exprs[i] = load_symbolic<S>(ifs);
+            if (minimal)
+                middle_operator_exprs[i] = nullptr;
+        }
     }
-    void load_data(const string &filename) {
+    void load_data(const string &filename, bool minimal = false) {
+        if (minimal)
+            archive_filename = filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_data on '" + filename + "' failed.");
-        load_data(ifs);
+        load_data(ifs, minimal);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_data on '" + filename + "' failed.");
         ifs.close();
     }
-    void save_data(ostream &ofs) const {
+    virtual void save_data(ostream &ofs) const {
+        assert(archive_filename == "");
         ofs.write((char *)&n_sites, sizeof(n_sites));
         ofs.write((char *)&const_e, sizeof(const_e));
         ofs.write((char *)&sparse_form[0], sizeof(char) * n_sites);
@@ -390,6 +586,13 @@ template <typename S> struct MPO {
         if (!ofs.good())
             throw runtime_error("MPO:save_data on '" + filename + "' failed.");
         ofs.close();
+    }
+    // For simplified MPO, the tensor symbols can be deleted
+    // to save memory and storage
+    void reduce_data() const {
+        assert(left_operator_exprs.size() != 0);
+        for (int i = 1; i < n_sites - 1; i++)
+            tensors[i]->lmat = tensors[i]->rmat = 0;
     }
     shared_ptr<MPO<S>> deep_copy() const {
         stringstream ss;
@@ -511,8 +714,10 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                     mat->allocate(p.second->info);
                     mat->factor = p.second->factor;
                     if (p.second->info->n == p.second->total_memory) {
-                        MatrixRef mmat(mat->data, (MKL_INT)mat->total_memory, 1),
-                            pmat(p.second->data, (MKL_INT)p.second->total_memory, 1);
+                        MatrixRef mmat(mat->data, (MKL_INT)mat->total_memory,
+                                       1),
+                            pmat(p.second->data,
+                                 (MKL_INT)p.second->total_memory, 1);
                         MatrixFunctions::copy(mmat, pmat);
                     } else {
                         for (int i = 0; i < mat->info->n; i++) {

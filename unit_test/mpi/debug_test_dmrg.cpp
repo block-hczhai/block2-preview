@@ -127,6 +127,12 @@ TEST_F(TestDMRG, Test) {
     mpo = make_shared<ParallelMPO<SU2>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
+    mpo->reduce_data();
+    mpo->save_data("mpo.bin." + Parsing::to_string(para_rule->comm->rank));
+
+    mpo = make_shared<ParallelMPO<SU2>>(0, para_rule);
+    mpo->load_data("mpo.bin." + Parsing::to_string(para_rule->comm->rank), true);
+
     // if(para_comm->rank == 1)
     // cerr << mpo->get_blocking_formulas() << endl;
     // abort();

@@ -1997,6 +1997,7 @@ template <typename S> void bind_parallel(py::module &m) {
         m, "ParallelMPO")
         .def_readwrite("prim_mpo", &ParallelMPO<S>::prim_mpo)
         .def_readwrite("rule", &ParallelMPO<S>::rule)
+        .def(py::init<int, const shared_ptr<ParallelRule<S>> &>())
         .def(py::init<const shared_ptr<MPO<S>> &,
                       const shared_ptr<ParallelRule<S>> &>());
 }
@@ -2036,8 +2037,13 @@ template <typename S> void bind_mpo(py::module &m) {
         .def_readwrite("tf", &MPO<S>::tf)
         .def_readwrite("site_op_infos", &MPO<S>::site_op_infos)
         .def_readwrite("schemer", &MPO<S>::schemer)
+        .def_readwrite("archive_marks", &MPO<S>::archive_marks)
+        .def_readwrite("archive_schemer_mark", &MPO<S>::archive_schemer_mark)
+        .def_readwrite("archive_filename", &MPO<S>::archive_filename)
+        .def("reduce_data", &MPO<S>::reduce_data)
         .def("load_data",
-             (void (MPO<S>::*)(const string &)) & MPO<S>::load_data)
+             (void (MPO<S>::*)(const string &, bool)) & MPO<S>::load_data,
+             py::arg("filename"), py::arg("minimal") = false)
         .def("save_data",
              (void (MPO<S>::*)(const string &) const) & MPO<S>::save_data)
         .def("get_blocking_formulas", &MPO<S>::get_blocking_formulas)

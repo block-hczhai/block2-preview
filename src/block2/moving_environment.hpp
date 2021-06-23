@@ -130,20 +130,23 @@ template <typename S> struct MovingEnvironment {
     // Contract and renormalize left block by one site
     // new site = i - 1
     void left_contract_rotate(int i) {
+        mpo->load_left_operators(i - 1);
+        mpo->load_tensor(i - 1);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
             mpo->left_operator_names[i - 1]};
-        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site)
+        if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
+            mpo->load_schemer();
             mats.push_back(mpo->schemer->left_new_operator_names);
+        }
         vector<S> sl = Partition<S>::get_uniq_labels(mats);
         shared_ptr<Symbolic<S>> exprs =
             envs[i - 1]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[i - 1]
-                       : envs[i - 1]->left->lmat *
-                             envs[i - 1]->middle.front()->lmat);
+                       : envs[i - 1]->left->lmat * mpo->tensors[i - 1]->lmat);
         vector<vector<pair<uint8_t, S>>> subsl =
             Partition<S>::get_uniq_sub_labels(
                 exprs, mpo->left_operator_names[i - 1], sl);
@@ -171,11 +174,12 @@ template <typename S> struct MovingEnvironment {
         }
         // cached_opt might be partially delayed,
         // so further contraction is still needed
-        mpo->tf->left_contract(envs[i - 1]->left, envs[i - 1]->middle.front(),
-                               new_left,
+        mpo->tf->left_contract(envs[i - 1]->left, mpo->tensors[i - 1], new_left,
                                mpo->left_operator_exprs.size() != 0
                                    ? mpo->left_operator_exprs[i - 1]
                                    : nullptr);
+        mpo->unload_tensor(i - 1);
+        mpo->unload_left_operators(i - 1);
         tctr += _t.get_time();
         bra->load_tensor(i - 1);
         if (bra != ket)
@@ -198,6 +202,7 @@ template <typename S> struct MovingEnvironment {
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
+            mpo->unload_schemer();
             frame->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
@@ -206,10 +211,13 @@ template <typename S> struct MovingEnvironment {
                                                   mats[1]);
         }
         tmid += _t.get_time();
-        if (i < mpo->left_operator_exprs.size())
+        if (i < mpo->left_operator_exprs.size()) {
+            mpo->load_left_operators(i);
             mpo->tf->intermediates(mpo->left_operator_names[i],
                                    mpo->left_operator_exprs[i], envs[i]->left,
                                    true);
+            mpo->unload_left_operators(i);
+        }
         tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
@@ -227,20 +235,24 @@ template <typename S> struct MovingEnvironment {
     // Contract and renormalize right block by one site
     // new site = i + dot
     void right_contract_rotate(int i) {
+        mpo->load_right_operators(i + dot);
+        mpo->load_tensor(i + dot);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
             mpo->right_operator_names[i + dot]};
         if (mpo->schemer != nullptr &&
-            i + dot == mpo->schemer->right_trans_site)
+            i + dot == mpo->schemer->right_trans_site) {
+            mpo->load_schemer();
             mats.push_back(mpo->schemer->right_new_operator_names);
+        }
         vector<S> sl = Partition<S>::get_uniq_labels(mats);
         shared_ptr<Symbolic<S>> exprs =
             envs[i + 1]->right == nullptr
                 ? nullptr
                 : (mpo->right_operator_exprs.size() != 0
                        ? mpo->right_operator_exprs[i + dot]
-                       : envs[i + 1]->middle.back()->rmat *
+                       : mpo->tensors[i + dot]->rmat *
                              envs[i + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> subsl =
             Partition<S>::get_uniq_sub_labels(
@@ -270,11 +282,13 @@ template <typename S> struct MovingEnvironment {
         }
         // cached_opt might be partially delayed,
         // so further contraction is still needed
-        mpo->tf->right_contract(envs[i + 1]->right, envs[i + 1]->middle.back(),
+        mpo->tf->right_contract(envs[i + 1]->right, mpo->tensors[i + dot],
                                 new_right,
                                 mpo->right_operator_exprs.size() != 0
                                     ? mpo->right_operator_exprs[i + dot]
                                     : nullptr);
+        mpo->unload_tensor(i + dot);
+        mpo->unload_right_operators(i + dot);
         tctr += _t.get_time();
         bra->load_tensor(i + dot);
         if (bra != ket)
@@ -300,6 +314,7 @@ template <typename S> struct MovingEnvironment {
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
+            mpo->unload_schemer();
             frame->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
@@ -308,10 +323,14 @@ template <typename S> struct MovingEnvironment {
                                                   mats[1]);
         }
         tmid += _t.get_time();
-        if (i + dot - 1 >= 0 && i + dot - 1 < mpo->right_operator_exprs.size())
+        if (i + dot - 1 >= 0 &&
+            i + dot - 1 < mpo->right_operator_exprs.size()) {
+            mpo->load_right_operators(i + dot - 1);
             mpo->tf->intermediates(mpo->right_operator_names[i + dot - 1],
                                    mpo->right_operator_exprs[i + dot - 1],
                                    envs[i]->right, false);
+            mpo->unload_right_operators(i + dot - 1);
+        }
         tint += _t.get_time();
         frame->activate(0);
         if (bra != ket)
@@ -1188,18 +1207,23 @@ template <typename S> struct MovingEnvironment {
     void left_contract(
         int iL, vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         shared_ptr<OperatorTensor<S>> &new_left, bool delayed) {
+        mpo->load_left_operators(iL);
+        mpo->load_tensor(iL);
         // left contract infos
         vector<shared_ptr<Symbolic<S>>> lmats = {mpo->left_operator_names[iL]};
         if (mpo->schemer != nullptr && iL == mpo->schemer->left_trans_site &&
-            mpo->schemer->right_trans_site - mpo->schemer->left_trans_site <= 1)
+            mpo->schemer->right_trans_site - mpo->schemer->left_trans_site <=
+                1) {
+            mpo->load_schemer();
             lmats.push_back(mpo->schemer->left_new_operator_names);
+        }
         vector<S> lsl = Partition<S>::get_uniq_labels(lmats);
         shared_ptr<Symbolic<S>> lexprs =
             envs[iL]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[iL]
-                       : envs[iL]->left->lmat * envs[iL]->middle.front()->lmat);
+                       : envs[iL]->left->lmat * mpo->tensors[iL]->lmat);
         vector<vector<pair<uint8_t, S>>> lsubsl =
             Partition<S>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl);
@@ -1219,31 +1243,39 @@ template <typename S> struct MovingEnvironment {
         } else {
             new_left = Partition<S>::build_left(lmats, left_op_infos,
                                                 mpo->sparse_form[iL] == 'S');
-            mpo->tf->left_contract(
-                envs[iL]->left, envs[iL]->middle.front(), new_left,
-                mpo->left_operator_exprs.size() != 0
-                    ? mpo->left_operator_exprs[iL]
-                    : nullptr,
-                delayed ? delayed_contraction : OpNamesSet());
+            mpo->tf->left_contract(envs[iL]->left, mpo->tensors[iL], new_left,
+                                   mpo->left_operator_exprs.size() != 0
+                                       ? mpo->left_operator_exprs[iL]
+                                       : nullptr,
+                                   delayed ? delayed_contraction
+                                           : OpNamesSet());
             // for conventional scheme this will not be the case
             if (mpo->schemer != nullptr &&
                 iL == mpo->schemer->left_trans_site &&
                 mpo->schemer->right_trans_site -
                         mpo->schemer->left_trans_site <=
-                    1)
+                    1) {
                 mpo->tf->numerical_transform(
                     new_left, lmats[1], mpo->schemer->left_new_operator_exprs);
+                mpo->unload_schemer();
+            }
         }
+        mpo->unload_tensor(iL);
+        mpo->unload_left_operators(iL);
     }
     void delayed_left_contract(int iL,
                                shared_ptr<OperatorTensor<S>> &new_left) {
         if (envs[iL]->left != nullptr)
             frame->load_data(1, get_left_partition_filename(iL));
         frame->activate(0);
+        mpo->load_left_operators(iL);
+        mpo->load_tensor(iL);
         mpo->tf->delayed_left_contract(
-            envs[iL]->left, envs[iL]->middle.front(), new_left,
+            envs[iL]->left, mpo->tensors[iL], new_left,
             mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
                                                  : nullptr);
+        mpo->unload_tensor(iL);
+        mpo->unload_left_operators(iL);
     }
     // Contract right block for constructing effective Hamiltonian
     // site iR is the new site
@@ -1251,6 +1283,8 @@ template <typename S> struct MovingEnvironment {
         int iR,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
         shared_ptr<OperatorTensor<S>> &new_right, bool delayed) {
+        mpo->load_right_operators(iR);
+        mpo->load_tensor(iR);
         // right contract infos
         vector<shared_ptr<Symbolic<S>>> rmats = {mpo->right_operator_names[iR]};
         vector<S> rsl = Partition<S>::get_uniq_labels(rmats);
@@ -1259,7 +1293,7 @@ template <typename S> struct MovingEnvironment {
                 ? nullptr
                 : (mpo->right_operator_exprs.size() != 0
                        ? mpo->right_operator_exprs[iR]
-                       : envs[iR - dot + 1]->middle.back()->rmat *
+                       : mpo->tensors[iR]->rmat *
                              envs[iR - dot + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> rsubsl =
             Partition<S>::get_uniq_sub_labels(
@@ -1282,25 +1316,29 @@ template <typename S> struct MovingEnvironment {
             new_right = Partition<S>::build_right(rmats, right_op_infos,
                                                   mpo->sparse_form[iR] == 'S');
             mpo->tf->right_contract(
-                envs[iR - dot + 1]->right, envs[iR - dot + 1]->middle.back(),
-                new_right,
+                envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
                 mpo->right_operator_exprs.size() != 0
                     ? mpo->right_operator_exprs[iR]
                     : nullptr,
                 delayed ? delayed_contraction : OpNamesSet());
         }
+        mpo->unload_tensor(iR);
+        mpo->unload_right_operators(iR);
     }
     void delayed_right_contract(int iR,
                                 shared_ptr<OperatorTensor<S>> &new_right) {
         if (envs[iR - dot + 1]->right != nullptr)
             frame->load_data(1, get_right_partition_filename(iR - dot + 1));
         frame->activate(0);
+        mpo->load_right_operators(iR);
+        mpo->load_tensor(iR);
         mpo->tf->delayed_right_contract(envs[iR - dot + 1]->right,
-                                        envs[iR - dot + 1]->middle.back(),
-                                        new_right,
+                                        mpo->tensors[iR], new_right,
                                         mpo->right_operator_exprs.size() != 0
                                             ? mpo->right_operator_exprs[iR]
                                             : nullptr);
+        mpo->unload_tensor(iR);
+        mpo->unload_right_operators(iR);
     }
     // Copy left-most left block for constructing effective Hamiltonian
     // block to the left of site iL is copied
@@ -1440,6 +1478,7 @@ template <typename S> struct MovingEnvironment {
                      iR != n_sites - 1)
                 delayed_right_contract(iR, new_right);
         }
+        mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
@@ -1455,6 +1494,7 @@ template <typename S> struct MovingEnvironment {
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(
                       mpo->middle_operator_names[iM])
                 : hop_mat;
+        mpo->unload_middle_operators(iM);
         shared_ptr<EffectiveHamiltonian<S>> efh =
             make_shared<EffectiveHamiltonian<S>>(left_op_infos, right_op_infos,
                                                  op, bra_wfn, ket_wfn, mpo->op,
@@ -1559,6 +1599,7 @@ template <typename S> struct MovingEnvironment {
                      iR != n_sites - 1)
                 delayed_right_contract(iR, new_right);
         }
+        mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S>> op =
             mpo->middle_operator_exprs.size() != 0
@@ -1574,6 +1615,7 @@ template <typename S> struct MovingEnvironment {
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(
                       mpo->middle_operator_names[iM])
                 : hop_mat;
+        mpo->unload_middle_operators(iM);
         shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> efh =
             make_shared<EffectiveHamiltonian<S, MultiMPS<S>>>(
                 left_op_infos, right_op_infos, op, mbra->wfns, mket->wfns,

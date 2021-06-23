@@ -23,20 +23,26 @@ DEBUG = True
 
 if len(sys.argv) > 1:
     fin = sys.argv[1]
-    if len(sys.argv) > 2 and sys.argv[2] == "pre":
+    if len(sys.argv) > 2 and sys.argv[2] in ["pre", "para-pre"]:
         pre_run = True
+        para_pre_run = sys.argv[2] == "para-pre"
     else:
-        pre_run = False
-    if len(sys.argv) > 2 and sys.argv[2] == "run":
+        pre_run = para_pre_run = False
+    if len(sys.argv) > 2 and sys.argv[2] in ["run", "para-run"]:
         no_pre_run = True
+        para_no_pre_run = sys.argv[2] == "para-run"
     else:
-        no_pre_run = False
+        no_pre_run = para_no_pre_run = False
 else:
     raise ValueError("""
         Usage: either:
             (A) python main.py dmrg.conf
-            (B) Step 1: python main.py dmrg.conf pre
+            (B) reduced memory mode (save/load serial mpo):
+                Step 1: python main.py dmrg.conf pre
                 Step 2: python main.py dmrg.conf run
+            (C) extra reduced memory mode (save/load parallel mpo):
+                Step 1: python main.py dmrg.conf para-pre
+                Step 2: python main.py dmrg.conf para-run
     """)
 
 dic = parse(fin)
@@ -233,6 +239,20 @@ else:
     orb_sym = None
     fcidump = None
 
+if no_pre_run:
+    impo = MPO(0)
+    impo.load_data(scratch + '/mpo-ident.bin', minimal=True)
+    n_sites = impo.n_sites
+    nelec = [int(x) for x in dic["nelec"].split()]
+    spin = [int(x) for x in dic.get("spin", "0").split()]
+    isym = [int(x) for x in dic.get("irrep", "1").split()]
+    targets = []
+    swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
+    for inelec in nelec:
+        for ispin in spin:
+            for iisym in isym:
+                targets.append(SX(inelec, ispin, swap_pg(iisym)))
+
 # parallelization over sites
 # use keyword: conn_centers auto 5      (5 is number of procs)
 #          or  conn_centers 10 20 30 40 (list of connection site indices)
@@ -291,6 +311,21 @@ mps_tags = dic.get("mps_tags", "KET").split()
 read_tags = dic.get("read_mps_tags", "KET").split()
 soc = "soc" in dic
 overlap = "overlap" in dic
+
+
+def fmt_size(i, suffix='B'):
+    if i < 1000:
+        return "%d %s" % (i, suffix)
+    else:
+        a = 1024
+        for pf in "KMGTPEZY":
+            p = 2
+            for k in [10, 100, 1000]:
+                if i < k * a:
+                    return "%%.%df %%s%%s" % p % (i / a, pf, suffix)
+                p -= 1
+            a *= 1024
+    return "??? " + suffix
 
 # prepare mps
 if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic):
@@ -459,6 +494,13 @@ has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
 anti_herm = "orbital_rotation" in dic
 one_body_only = "orbital_rotation" in dic
 
+try:
+    import psutil
+    mem = psutil.Process(os.getpid()).memory_info().rss
+    _print("pre-mpo memory usage = ", fmt_size(mem))
+except ImportError:
+    pass
+
 # prepare mpo
 if pre_run or not no_pre_run:
     # mpo for dmrg
@@ -515,46 +557,109 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         impo.save_data(scratch + '/mpo-ident.bin')
+    
+    if para_pre_run:
+        if MPI is not None:
+            if one_body_only:
+                mpo = ParallelMPO(mpo, prule_one_body)
+            else:
+                mpo = ParallelMPO(mpo, prule)
+            pmpo = ParallelMPO(pmpo, prule_pdm1)
+            if has_2pdm:
+                p2mpo = ParallelMPO(p2mpo, prule_pdm2)
+            nmpo = ParallelMPO(nmpo, prule_pdm1)
+            impo = ParallelMPO(impo, prule_ident)
+
+        _print("para mpo finished", time.perf_counter() - tx)
+        try:
+            import psutil
+            mem = psutil.Process(os.getpid()).memory_info().rss
+            _print("memory usage = ", fmt_size(mem))
+        except ImportError:
+            pass
+
+        mrank = MPI.rank if MPI is not None else 0
+        mpo.reduce_data()
+        mpo.save_data(scratch + '/mpo.bin.%d' % mrank)
+        pmpo.reduce_data()
+        pmpo.save_data(scratch + '/mpo-1pdm.bin.%d' % mrank)
+        if has_2pdm:
+            p2mpo.reduce_data()
+            p2mpo.save_data(scratch + '/mpo-2pdm.bin.%d' % mrank)
+        nmpo.reduce_data()
+        nmpo.save_data(scratch + '/mpo-1npc.bin.%d' % mrank)
+        impo.reduce_data()
+        impo.save_data(scratch + '/mpo-ident.bin.%d' % mrank)
 
 else:
-    mpo = MPO(0)
-    mpo.load_data(scratch + '/mpo.bin')
-    cg = CG(200)
-    cg.initialize()
-    mpo.tf = TensorFunctions(OperatorFunctions(cg))
 
-    _print('GS MPO BOND DIMS = ', ''.join(
-        ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+    if not para_no_pre_run:
 
-    pmpo = MPO(0)
-    pmpo.load_data(scratch + '/mpo-1pdm.bin')
-    pmpo.tf = TensorFunctions(OperatorFunctions(cg))
+        mpo = MPO(0)
+        mpo.load_data(scratch + '/mpo.bin')
 
-    _print('1PDM MPO BOND DIMS = ', ''.join(
-        ["%6d" % (x.m * x.n) for x in pmpo.left_operator_names]))
+        _print('GS MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
 
-    if has_2pdm:
-        p2mpo = MPO(0)
-        p2mpo.load_data(scratch + '/mpo-2pdm.bin')
-        p2mpo.tf = TensorFunctions(OperatorFunctions(cg))
+        pmpo = MPO(0)
+        pmpo.load_data(scratch + '/mpo-1pdm.bin')
 
-        _print('2PDM MPO BOND DIMS = ', ''.join(
-            ["%6d" % (x.m * x.n) for x in p2mpo.left_operator_names]))
+        _print('1PDM MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in pmpo.left_operator_names]))
 
-    nmpo = MPO(0)
-    nmpo.load_data(scratch + '/mpo-1npc.bin')
-    nmpo.tf = TensorFunctions(OperatorFunctions(cg))
+        if has_2pdm:
+            p2mpo = MPO(0)
+            p2mpo.load_data(scratch + '/mpo-2pdm.bin')
 
-    _print('1NPC MPO BOND DIMS = ', ''.join(
-        ["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
+            _print('2PDM MPO BOND DIMS = ', ''.join(
+                ["%6d" % (x.m * x.n) for x in p2mpo.left_operator_names]))
 
-    impo = MPO(0)
-    impo.load_data(scratch + '/mpo-ident.bin')
-    impo.tf = TensorFunctions(OperatorFunctions(cg))
+        nmpo = MPO(0)
+        nmpo.load_data(scratch + '/mpo-1npc.bin')
 
-    _print('IDENT MPO BOND DIMS = ', ''.join(
-        ["%6d" % (x.m * x.n) for x in impo.left_operator_names]))
+        _print('1NPC MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
 
+        impo = MPO(0)
+        impo.load_data(scratch + '/mpo-ident.bin')
+
+        _print('IDENT MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in impo.left_operator_names]))
+    
+    else:
+
+        if MPI is not None:
+            if one_body_only:
+                mpo = ParallelMPO(0, prule_one_body)
+            else:
+                mpo = ParallelMPO(0, prule)
+            pmpo = ParallelMPO(0, prule_pdm1)
+            if has_2pdm:
+                p2mpo = ParallelMPO(0, prule_pdm2)
+            nmpo = ParallelMPO(0, prule_pdm1)
+            impo = ParallelMPO(0, prule_ident)
+        else:
+            mpo = MPO(0)
+            pmpo = MPO(0)
+            if has_2pdm:
+                p2mpo = MPO(0)
+            nmpo = MPO(0)
+            impo = MPO(0)
+        
+        mrank = MPI.rank if MPI is not None else 0
+        mpo.load_data(scratch + '/mpo.bin.%d' % mrank, minimal=True)
+        pmpo.load_data(scratch + '/mpo-1pdm.bin.%d' % mrank, minimal=True)
+        if has_2pdm:
+            p2mpo.load_data(scratch + '/mpo-2pdm.bin.%d' % mrank, minimal=True)
+        nmpo.load_data(scratch + '/mpo-1npc.bin.%d' % mrank, minimal=True)
+        impo.load_data(scratch + '/mpo-ident.bin.%d' % mrank, minimal=True)
+
+try:
+    import psutil
+    mem = psutil.Process(os.getpid()).memory_info().rss
+    _print("memory usage = ", fmt_size(mem))
+except ImportError:
+    pass
 
 def split_mps(iroot, mps, mps_info):
     mps.load_data()  # this will avoid memory sharing
@@ -739,18 +844,21 @@ def get_state_specific_mps(iroot, mps_info):
 
 
 if not pre_run:
-    if MPI is not None:
-        if one_body_only:
-            mpo = ParallelMPO(mpo, prule_one_body)
-        else:
-            mpo = ParallelMPO(mpo, prule)
-        pmpo = ParallelMPO(pmpo, prule_pdm1)
-        if has_2pdm:
-            p2mpo = ParallelMPO(p2mpo, prule_pdm2)
-        nmpo = ParallelMPO(nmpo, prule_pdm1)
-        impo = ParallelMPO(impo, prule_ident)
 
-    _print("para mpo finished", time.perf_counter() - tx)
+    if not para_no_pre_run:
+
+        if MPI is not None:
+            if one_body_only:
+                mpo = ParallelMPO(mpo, prule_one_body)
+            else:
+                mpo = ParallelMPO(mpo, prule)
+            pmpo = ParallelMPO(pmpo, prule_pdm1)
+            if has_2pdm:
+                p2mpo = ParallelMPO(p2mpo, prule_pdm2)
+            nmpo = ParallelMPO(nmpo, prule_pdm1)
+            impo = ParallelMPO(impo, prule_ident)
+
+        _print("para mpo finished", time.perf_counter() - tx)
 
     if mps is not None:
         mps.save_mutable()
