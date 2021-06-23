@@ -79,7 +79,7 @@ Features
 .. only:: latex
 
     User Guide
-    ==========
+    """"""""""
 
 .. toctree::
    :maxdepth: 1
@@ -94,7 +94,7 @@ Features
 .. only:: latex
 
     Developer Guide
-    ===============
+    """""""""""""""
 
 .. toctree::
    :maxdepth: 1
@@ -108,7 +108,7 @@ Features
 .. only:: latex
 
     API Reference
-    =============
+    """""""""""""
 
 .. toctree::
    :maxdepth: 2
