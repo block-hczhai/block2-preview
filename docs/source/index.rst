@@ -13,6 +13,10 @@ for quantum chemistry, based on Matrix Product Operator (MPO) formalism.
 The code is highly optimized for production level calculation of realistic systems.
 It also provides plenty of options for tuning performance and new algorithm development.
 
+The block2 code is developed as an improved version of `StackBlock <https://sanshar.github.io/Block/>`_,
+where the low-level structure of the code has been completely rewritten.
+The block2 code is developed and maintained in Garnet Chan group at Caltech.
+
 Contributors
 ------------
 
@@ -75,7 +79,7 @@ Features
 .. only:: latex
 
     User Guide
-    ----------
+    ==========
 
 .. toctree::
    :maxdepth: 1
@@ -90,7 +94,7 @@ Features
 .. only:: latex
 
     Developer Guide
-    ---------------
+    ===============
 
 .. toctree::
    :maxdepth: 1
@@ -104,7 +108,7 @@ Features
 .. only:: latex
 
     API Reference
-    -------------
+    =============
 
 .. toctree::
    :maxdepth: 2
