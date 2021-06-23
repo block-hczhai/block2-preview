@@ -76,10 +76,9 @@ Features
     * Point group mapping
     * Orbital basis rotation
 
-.. only:: latex
+.. raw:: latex
 
-    User Guide
-    """"""""""
+   \part{User Guide}
 
 .. toctree::
    :maxdepth: 1
@@ -91,10 +90,9 @@ Features
    user/mps-io
    user/references
 
-.. only:: latex
+.. raw:: latex
 
-    Developer Guide
-    """""""""""""""
+   \part{Developer Guide}
 
 .. toctree::
    :maxdepth: 1
@@ -105,10 +103,9 @@ Features
    developer/pg-mapping
    developer/hints
 
-.. only:: latex
+.. raw:: latex
 
-    API Reference
-    """""""""""""
+   \part{API Reference}
 
 .. toctree::
    :maxdepth: 2
