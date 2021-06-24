@@ -101,6 +101,7 @@ Features
    developer/dmrg
    developer/orbital-rotation
    developer/pg-mapping
+   developer/mpo-reloading
    developer/hints
 
 .. raw:: latex

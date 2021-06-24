@@ -2944,6 +2944,10 @@ template <typename S = void> void bind_io(py::module &m) {
                                                         data.size(), a, b);
                     });
 
+    py::class_<Parsing, shared_ptr<Parsing>>(m, "Parsing")
+        .def_static("to_size_string", &Parsing::to_size_string,
+                    py::arg("i") = (size_t)0U, py::arg("suffix") = "B");
+
     py::class_<ParallelProperty, shared_ptr<ParallelProperty>>(
         m, "ParallelProperty")
         .def_readwrite("owner", &ParallelProperty::owner)
