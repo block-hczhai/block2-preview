@@ -198,6 +198,7 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                              envs[i]->left);
+        new_left->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
@@ -223,7 +224,6 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->unload_tensor(i - 1);
         bra->unload_tensor(i - 1);
-        new_left->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         frame->save_data(1, get_left_partition_filename(i));
         if (save_partition_info) {
@@ -308,6 +308,7 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
                               ket->tensors[i + dot], envs[i]->right);
+        new_right->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr &&
             i + dot == mpo->schemer->right_trans_site) {
@@ -336,7 +337,6 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->unload_tensor(i + dot);
         bra->unload_tensor(i + dot);
-        new_right->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
         if (save_partition_info) {
