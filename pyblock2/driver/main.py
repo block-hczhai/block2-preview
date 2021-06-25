@@ -111,6 +111,7 @@ n_threads = int(dic.get("num_thrds", 28))
 mkl_threads = int(dic.get("mkl_thrds", 1))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
+cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
@@ -790,7 +791,7 @@ def get_mps_from_tags(iroot):
         cf = str(smps.canonical_form)
         ime = MovingEnvironment(impo, smps, smps, "IEX")
         ime.delayed_contraction = OpNamesSet.normal_ops()
-        ime.cached_contraction = True
+        ime.cached_contraction = cached_contraction
         ime.init_environments(False)
         expect = Expect(ime, smps.info.bond_dim, smps.info.bond_dim)
         expect.iprint = max(min(outputlevel, 3), 0)
@@ -906,7 +907,7 @@ if not pre_run:
                 ime = MovingEnvironment(
                     impo, ext_mpss[iroot], ext_mpss[iroot], "IEX")
                 ime.delayed_contraction = OpNamesSet.normal_ops()
-                ime.cached_contraction = True
+                ime.cached_contraction = cached_contraction
                 ime.init_environments(False)
                 expect = Expect(
                     ime, ext_mpss[iroot].info.bond_dim, ext_mpss[iroot].info.bond_dim)
@@ -918,7 +919,7 @@ if not pre_run:
             me = MovingEnvironment(
                 mpo, ext_mpss[iroot], ext_mpss[iroot], "DMRG")
             me.delayed_contraction = OpNamesSet.normal_ops()
-            me.cached_contraction = True
+            me.cached_contraction = cached_contraction
             me.save_partition_info = True
             me.init_environments(outputlevel >= 2)
 
@@ -999,7 +1000,7 @@ if not pre_run:
             and "delta_t" not in dic and "compression" not in dic:
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1120,7 +1121,7 @@ if not pre_run:
             mps_info = mps.info
         me = MovingEnvironment(impo if overlap else mpo, mps, lmps, "CPS")
         me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1147,7 +1148,7 @@ if not pre_run:
         _print("Time Evolution NSTEPS = %d" % n_steps)
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1188,7 +1189,7 @@ if not pre_run:
         # currently delayed_contraction is not compatible to
         # ExpectationAlgorithmTypes.Fast
         # me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1401,7 +1402,7 @@ if not pre_run:
     if "restart_correlation" in dic or "correlation" in dic:
         me = MovingEnvironment(nmpo, mps, mps, "1NPC")
         # me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1434,7 +1435,7 @@ if not pre_run:
 
     def do_twopdm(bmps, kmps):
         me = MovingEnvironment(p2mpo, bmps, kmps, "2PDM")
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1513,7 +1514,7 @@ if not pre_run:
     def do_oh(bmps, kmps):
         me = MovingEnvironment(impo if overlap else mpo, bmps, kmps, "OH")
         me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
