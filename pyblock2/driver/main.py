@@ -1643,7 +1643,7 @@ if not pre_run:
                 _print(" ... and more ... ")
             dets = np.zeros((len(dtrie), n_sites), dtype=np.uint8)
             for i in range(len(dtrie)):
-                dets[i] = np.array(dtrie[idx])
+                dets[i] = np.array(dtrie[i])
             np.save(scratch + "/sample-vals.npy", dvals)
             np.save(scratch + "/sample-dets.npy", dets)
             state_occ = np.array(
