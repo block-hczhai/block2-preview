@@ -1099,21 +1099,37 @@ template <typename S> struct TensorFunctions {
             if (del_ops.count(new_names->data[j]))
                 del_ops.erase(new_names->data[j]);
         vector<tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t>> mp;
+        vector<tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t>> mp_ext;
         mp.reserve(a->ops.size());
+        mp_ext.reserve(a->ops.size());
         for (auto it = a->ops.cbegin(); it != a->ops.cend(); it++)
-            if (it->second->total_memory != 0)
-                mp.emplace_back(it->second->data, it->second,
-                                del_ops.count(it->first));
+            if (it->second->total_memory != 0) {
+                if (it->second->alloc == dalloc)
+                    mp.emplace_back(it->second->data, it->second,
+                                    del_ops.count(it->first));
+                else
+                    mp_ext.emplace_back(it->second->data, it->second,
+                                        del_ops.count(it->first));
+            }
         sort(
             mp.begin(), mp.end(),
             [](const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &a,
                const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &b) {
                 return get<0>(a) < get<0>(b);
             });
-        for (const auto &t : mp) {
-            assert(get<1>(t)->alloc == dalloc);
+        sort(
+            mp_ext.begin(), mp_ext.end(),
+            [](const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &a,
+               const tuple<double *, shared_ptr<SparseMatrix<S>>, uint8_t> &b) {
+                return get<0>(a) > get<0>(b);
+            });
+        for (const auto &t : mp)
             get<1>(t)->reallocate(get<2>(t) ? 0 : get<1>(t)->total_memory);
-        }
+        for (const auto &t : mp_ext)
+            if (get<2>(t))
+                get<1>(t)->deallocate();
+            else
+                get<1>(t)->reallocate(dalloc);
     }
     // Substituing delayed left experssions
     // Return sum of three-operator tensor products

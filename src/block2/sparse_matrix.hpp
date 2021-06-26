@@ -972,6 +972,14 @@ template <typename S> struct SparseMatrix {
         total_memory = length;
         data = length == 0 ? nullptr : ptr;
     }
+    void reallocate(shared_ptr<Allocator<double>> new_alloc) {
+        assert(new_alloc != nullptr && new_alloc != alloc);
+        double *ptr = new_alloc->allocate(total_memory);
+        memcpy(ptr, data, total_memory * sizeof(double));
+        alloc->deallocate(data, total_memory);
+        alloc = new_alloc;
+        data = total_memory == 0 ? nullptr : ptr;
+    }
     MatrixRef operator[](S q) const { return (*this)[info->find_state(q)]; }
     MatrixRef operator[](int idx) const {
         assert(idx != -1);

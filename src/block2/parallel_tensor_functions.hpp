@@ -477,11 +477,15 @@ template <typename S> struct ParallelTensorFunctions : TensorFunctions<S> {
         }
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<double>> d_alloc_local =
+            make_shared<VectorAllocator<double>>();
         for (int ip = 0; ip < rule->comm->size; ip++) {
             for (size_t k = 0; k < trs[ip].size(); k++) {
                 assert(trs[ip][k].first->data == nullptr);
                 if (ip != rule->comm->rank)
                     trs[ip][k].first->alloc = d_alloc;
+                else
+                    trs[ip][k].first->alloc = d_alloc_local;
                 trs[ip][k].first->allocate(trs[ip][k].first->info);
             }
             parallel_for(

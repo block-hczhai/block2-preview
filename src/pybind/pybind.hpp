@@ -540,7 +540,9 @@ template <typename S> void bind_sparse(py::module &m) {
                  self->allocate(info);
              })
         .def("deallocate", &SparseMatrix<S>::deallocate)
-        .def("reallocate", &SparseMatrix<S>::reallocate, py::arg("length"))
+        .def("reallocate",
+             (void (SparseMatrix<S>::*)(size_t)) & SparseMatrix<S>::reallocate,
+             py::arg("length"))
         .def("trace", &SparseMatrix<S>::trace)
         .def("norm", &SparseMatrix<S>::norm)
         .def("__getitem__",
