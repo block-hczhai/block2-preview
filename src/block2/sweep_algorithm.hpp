@@ -273,6 +273,8 @@ template <typename S> struct DMRG {
             }
             mps->save_tensor(i);
             mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
             if (skip_decomp)
                 mps->canonical_form[i] = forward ? 'S' : 'K';
             else {
@@ -533,6 +535,8 @@ template <typename S> struct DMRG {
         for (auto &mps : rev_ext_mpss) {
             mps->save_tensor(i);
             mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
             if (forward) {
                 mps->canonical_form[i] = 'C';
                 mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
@@ -2319,6 +2323,8 @@ template <typename S> struct Linear {
             }
             mps->save_tensor(i);
             mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
             if (skip_decomp)
                 mps->canonical_form[i] = forward ? 'S' : 'K';
             else {
@@ -2963,6 +2969,8 @@ template <typename S> struct Linear {
         for (auto &mps : rev_ext_mpss) {
             mps->save_tensor(i);
             mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
             if (forward) {
                 mps->canonical_form[i] = 'C';
                 mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
