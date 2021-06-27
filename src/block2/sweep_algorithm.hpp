@@ -2235,6 +2235,8 @@ template <typename S> struct Linear {
                 prev_wfn->deallocate();
             }
         }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (ext_target_at_site == i && ext_tmes.size() != 0) {
             ext_targets.resize(ext_tmes.size());
             if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
@@ -2895,6 +2897,8 @@ template <typename S> struct Linear {
                 mps->tensors[i + 1] = nullptr;
             }
         }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         if (ext_target_at_site == i && ext_tmes.size() != 0) {
             ext_targets.resize(ext_tmes.size());
             if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
