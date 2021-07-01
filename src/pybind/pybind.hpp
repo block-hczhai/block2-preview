@@ -38,6 +38,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
+PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
@@ -2222,6 +2223,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
+    py::bind_vector<vector<complex<double>>>(m, "VectorComplexDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
