@@ -30,7 +30,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "orbital_rotation", "delta_t", "target_t", "te_type",
               "read_mps_tags", "compression", "random_mps_init", "trans_mps_to_sz",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample",
-              "extrapolation", "cached_contraction"}
+              "extrapolation", "cached_contraction", "singlet_embedding"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

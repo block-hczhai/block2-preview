@@ -869,6 +869,28 @@ template <typename S> struct MovingEnvironment {
             if (i != n_sites - 1 && dot == 2)
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
+        // singlet embedding
+        if (bra->info->vacuum != bra->info->left_dims_fci[0]->quanta[0] ||
+            ket->info->vacuum != ket->info->left_dims_fci[0]->quanta[0]) {
+            envs[0]->left = make_shared<OperatorTensor<S>>();
+            shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+                make_shared<VectorAllocator<uint32_t>>();
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            shared_ptr<SparseMatrixInfo<S>> xinfo =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            S dq = (bra->info->left_dims_fci[0]->quanta[0] -
+                    ket->info->left_dims_fci[0]->quanta[0])[0];
+            assert(dq == S(0));
+            xinfo->initialize(*bra->info->left_dims_fci[0],
+                              *ket->info->left_dims_fci[0], dq, false, false);
+            shared_ptr<SparseMatrix<S>> xmat =
+                make_shared<SparseMatrix<S>>(d_alloc);
+            xmat->allocate(xinfo);
+            xmat->data[0] = 1.0;
+            envs[0]->left->ops[make_shared<OpExpr<S>>()] = xmat;
+            envs[0]->left_op_infos.push_back(make_pair(dq, xinfo));
+        }
         if (ket->get_type() & MPSTypes::MultiCenter) {
             shared_ptr<ParallelMPS<S>> para_mps =
                 dynamic_pointer_cast<ParallelMPS<S>>(ket);
@@ -1227,7 +1249,7 @@ template <typename S> struct MovingEnvironment {
         vector<vector<pair<uint8_t, S>>> lsubsl =
             Partition<S>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl);
-        if (envs[iL]->left != nullptr)
+        if (envs[iL]->left != nullptr && iL != 0)
             frame->load_data(1, get_left_partition_filename(iL));
         Partition<S>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
@@ -1265,7 +1287,7 @@ template <typename S> struct MovingEnvironment {
     }
     void delayed_left_contract(int iL,
                                shared_ptr<OperatorTensor<S>> &new_left) {
-        if (envs[iL]->left != nullptr)
+        if (envs[iL]->left != nullptr && iL != 0)
             frame->load_data(1, get_left_partition_filename(iL));
         frame->activate(0);
         mpo->load_left_operators(iL);

@@ -112,6 +112,7 @@ mkl_threads = int(dic.get("mkl_thrds", 1))
 bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
 cached_contraction = int(dic.get("cached_contraction", 1)) == 1
+singlet_embedding = "singlet_embedding" in dic
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
@@ -225,6 +226,16 @@ if pre_run or not no_pre_run:
             for iisym in isym:
                 targets.append(SX(inelec, ispin, swap_pg(iisym)))
     targets = VectorSL(targets)
+    if len(targets) == 0:
+        targets = VectorSL([target])
+    if singlet_embedding and SX == SU2:
+        for it, targ in enumerate(targets):
+            if targ.twos != 0:
+                targets[it] = SX(targ.n + targ.twos, 0, targ.pg)
+        assert len(spin) == 1
+        singlet_embedding_spin = spin[0]
+    if len(targets) == 1:
+        target = targets[0]
     n_sites = fcidump.n_sites
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
@@ -239,6 +250,10 @@ else:
         orb_idx = np.load(scratch + '/orbital_reorder.npy')
     orb_sym = None
     fcidump = None
+    spin = [int(x) for x in dic.get("spin", "0").split()]
+    if singlet_embedding and SX == SU2:
+        assert len(spin) == 1
+        singlet_embedding_spin = spin[0]
 
 if no_pre_run:
     impo = MPO(0)
@@ -253,6 +268,13 @@ if no_pre_run:
         for ispin in spin:
             for iisym in isym:
                 targets.append(SX(inelec, ispin, swap_pg(iisym)))
+    assert len(targets) != 0
+    if singlet_embedding and SX == SU2:
+        for it, targ in enumerate(targets):
+            if targ.twos != 0:
+                targets[it] = SX(targ.n + targ.twos, 0, targ.pg)
+    if len(targets) == 1:
+        target = targets[0]
 
 # parallelization over sites
 # use keyword: conn_centers auto 5      (5 is number of procs)
@@ -424,8 +446,16 @@ elif pre_run or not no_pre_run:
         else:
             _print('TARGETS = ', list(targets))
             mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
-        if "full_fci_space" in dic:
-            mps_info.set_bond_dimension_full_fci()
+        if singlet_embedding and SX == SU2:
+            left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
+            right_vacuum = vacuum
+            if "full_fci_space" in dic:
+                mps_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+            else:
+                mps_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
+        else:
+            if "full_fci_space" in dic:
+                mps_info.set_bond_dimension_full_fci()
         mps_info.tag = mps_tags[0]
         if occs is None:
             mps_info.set_bond_dimension(bond_dims[0])
@@ -671,8 +701,16 @@ def split_mps(iroot, mps, mps_info):
     if len(mps_info.targets) != 1:
         smps_info = MultiMPSInfo(mps_info.n_sites, mps_info.vacuum,
                                  mps_info.targets, mps_info.basis)
-        if "full_fci_space" in dic:
-            smps_info.set_bond_dimension_full_fci()
+        if singlet_embedding and SX == SU2:
+            left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
+            right_vacuum = vacuum
+            if "full_fci_space" in dic:
+                smps_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+            else:
+                smps_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
+        else:
+            if "full_fci_space" in dic:
+                smps_info.set_bond_dimension_full_fci()
         smps_info.tag = mps_info.tag + "-%d" % iroot
         smps_info.bond_dim = mps_info.bond_dim
         for i in range(0, smps_info.n_sites + 1):
@@ -693,8 +731,16 @@ def split_mps(iroot, mps, mps_info):
     else:
         smps_info = MPSInfo(mps_info.n_sites, mps_info.vacuum,
                             mps_info.targets[0], mps_info.basis)
-        if "full_fci_space" in dic:
-            smps_info.set_bond_dimension_full_fci()
+        if singlet_embedding and SX == SU2:
+            left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
+            right_vacuum = vacuum
+            if "full_fci_space" in dic:
+                smps_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+            else:
+                smps_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
+        else:
+            if "full_fci_space" in dic:
+                smps_info.set_bond_dimension_full_fci()
         smps_info.tag = mps_info.tag + "-%d" % iroot
         smps_info.bond_dim = mps_info.bond_dim
         for i in range(0, smps_info.n_sites + 1):

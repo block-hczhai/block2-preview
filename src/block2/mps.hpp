@@ -195,20 +195,26 @@ template <typename S> struct MPSInfo {
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
-    virtual void set_bond_dimension_full_fci() {
-        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
+    // normal case is left_vacuum == right_vacuum == vacuum
+    // only for singlet embedding left_vacuum is not vacuum
+    virtual void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
+                                             S right_vacuum = S(S::invalid)) {
+        left_dims_fci[0] = make_shared<StateInfo<S>>(
+            left_vacuum == S(S::invalid) ? vacuum : left_vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *left_dims_fci[i], *basis[i], target));
-        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
+        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
+            right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *basis[i], *right_dims_fci[i + 1], target));
     }
-    virtual void set_bond_dimension_fci() {
-        set_bond_dimension_full_fci();
+    virtual void set_bond_dimension_fci(S left_vacuum = S(S::invalid),
+                                        S right_vacuum = S(S::invalid)) {
+        set_bond_dimension_full_fci(left_vacuum, right_vacuum);
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
             StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
@@ -405,13 +411,15 @@ template <typename S> struct MPSInfo {
         // left and right block probabilities
         vector<shared_ptr<StateProbability<S>>> left_probs(n_sites + 1);
         vector<shared_ptr<StateProbability<S>>> right_probs(n_sites + 1);
-        left_probs[0] = make_shared<StateProbability<S>>(vacuum);
+        left_probs[0] =
+            make_shared<StateProbability<S>>(left_dims_fci[0]->quanta[0]);
         for (int i = 0; i < n_sites; i++)
             left_probs[i + 1] = make_shared<StateProbability<S>>(
                 StateProbability<S>::tensor_product_no_collect(
                     *left_probs[i], *site_probs[i], *left_dims_fci[i + 1],
                     site_prefs[i]));
-        right_probs[n_sites] = make_shared<StateProbability<S>>(vacuum);
+        right_probs[n_sites] = make_shared<StateProbability<S>>(
+            right_dims_fci[n_sites]->quanta[0]);
         for (int i = n_sites - 1; i >= 0; i--)
             right_probs[i] = make_shared<StateProbability<S>>(
                 StateProbability<S>::tensor_product_no_collect(
@@ -459,7 +467,7 @@ template <typename S> struct MPSInfo {
                 make_shared<StateInfo<S>>(right_dims_fci[i]->deep_copy());
         }
         // left and right block dims
-        left_dims[0] = make_shared<StateInfo<S>>(vacuum);
+        left_dims[0] = make_shared<StateInfo<S>>(left_dims_fci[0]->deep_copy());
         for (int i = 1; i <= n_sites; i++) {
             left_dims[i]->allocate(left_probs[i]->n);
             memcpy(left_dims[i]->quanta, left_probs[i]->quanta,
@@ -487,7 +495,8 @@ template <typename S> struct MPSInfo {
                 tmp.deallocate();
             }
         }
-        right_dims[n_sites] = make_shared<StateInfo<S>>(vacuum);
+        right_dims[n_sites] =
+            make_shared<StateInfo<S>>(right_dims_fci[n_sites]->deep_copy());
         for (int i = n_sites - 1; i >= 0; i--) {
             right_dims[i]->allocate(right_probs[i]->n);
             memcpy(right_dims[i]->quanta, right_probs[i]->quanta,
@@ -520,7 +529,7 @@ template <typename S> struct MPSInfo {
     // each FCI quantum number has at least one state kept
     virtual void set_bond_dimension(ubond_t m) {
         bond_dim = m;
-        left_dims[0] = make_shared<StateInfo<S>>(vacuum);
+        left_dims[0] = make_shared<StateInfo<S>>(left_dims_fci[0]->deep_copy());
         for (int i = 0; i < n_sites; i++)
             left_dims[i + 1] =
                 make_shared<StateInfo<S>>(left_dims_fci[i + 1]->deep_copy());
@@ -539,7 +548,8 @@ template <typename S> struct MPSInfo {
                 }
                 left_dims[i + 1]->n_states_total = new_total;
             }
-        right_dims[n_sites] = make_shared<StateInfo<S>>(vacuum);
+        right_dims[n_sites] =
+            make_shared<StateInfo<S>>(right_dims_fci[n_sites]->deep_copy());
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims[i] =
                 make_shared<StateInfo<S>>(right_dims_fci[i]->deep_copy());
@@ -927,7 +937,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         if (init_fci)
             set_bond_dimension_fci();
     }
-    void set_bond_dimension_full_fci() override {
+    void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
+                                     S right_vacuum = S(S::invalid)) override {
         assert(casci_mask.size() == n_sites);
         StateInfo<S> empty = StateInfo<S>(vacuum);
         S frozen_state;
@@ -938,7 +949,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 break;
             }
         StateInfo<S> frozen = StateInfo<S>(frozen_state);
-        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
+        left_dims_fci[0] = make_shared<StateInfo<S>>(
+            left_vacuum == S(S::invalid) ? vacuum : left_vacuum);
         for (int i = 0; i < n_sites; i++)
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
@@ -960,7 +972,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
                 assert(false);
                 break;
             }
-        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
+        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
+            right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             switch (casci_mask[i]) {
             case ActiveTypes::Active:
@@ -1029,10 +1042,11 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         for (int i = n_sites; i >= 0; i--)
             right_dims[i]->collect();
     }
-    void set_bond_dimension_full_fci() override {
+    void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
+                                     S right_vacuum = S(S::invalid)) override {
         // Same as in the base class: Create left/right fci dims w/o
         // restrictions
-        MPSInfo<S>::set_bond_dimension_full_fci();
+        MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
         // Now, restrict right_dims_fci
         for (int i = n_sites - n_ext; i < n_sites; ++i) {
             auto &state_info = right_dims_fci[i];

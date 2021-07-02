@@ -682,6 +682,8 @@ template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
         return dynamic_pointer_cast<OpElement<S>>(x)->hash();
     else if (x->get_type() == OpTypes::Prod)
         return dynamic_pointer_cast<OpProduct<S>>(x)->hash();
+    else if (x->get_type() == OpTypes::Zero)
+        return 0;
     else
         assert(false);
     return 0;

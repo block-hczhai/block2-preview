@@ -852,6 +852,18 @@ template <typename S> struct TensorFunctions {
             &rop,
         shared_ptr<SparseMatrix<S>> &mat) const {
         switch (expr->get_type()) {
+        case OpTypes::Elem: {
+            shared_ptr<OpElement<S>> op =
+                dynamic_pointer_cast<OpElement<S>>(expr);
+            assert((rop.count(op) != 0) ^ (lop.count(op) != 0));
+            shared_ptr<SparseMatrix<S>> lmat =
+                lop.count(op) != 0 ? lop.at(op)
+                                   : lop.at(make_shared<OpExpr<S>>());
+            shared_ptr<SparseMatrix<S>> rmat =
+                rop.count(op) != 0 ? rop.at(op)
+                                   : rop.at(make_shared<OpExpr<S>>());
+            opf->tensor_product(0, lmat, rmat, mat, op->factor);
+        } break;
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S>> op =
                 dynamic_pointer_cast<OpProduct<S>>(expr);

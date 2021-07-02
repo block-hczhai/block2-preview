@@ -96,21 +96,25 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
         r.resize(distance(r.begin(), unique(r.begin(), r.end())));
         return r;
     }
-    void set_bond_dimension_full_fci() override {
+    void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
+                                     S right_vacuum = S(S::invalid)) override {
         S max_target = *max_element(targets.begin(), targets.end());
-        left_dims_fci[0] = make_shared<StateInfo<S>>(vacuum);
+        left_dims_fci[0] = make_shared<StateInfo<S>>(
+            left_vacuum == S(S::invalid) ? vacuum : left_vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *left_dims_fci[i], *basis[i], max_target));
-        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(vacuum);
+        right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
+            right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *basis[i], *right_dims_fci[i + 1], max_target));
     }
-    void set_bond_dimension_fci() override {
-        set_bond_dimension_full_fci();
+    void set_bond_dimension_fci(S left_vacuum = S(S::invalid),
+                                S right_vacuum = S(S::invalid)) override {
+        set_bond_dimension_full_fci(left_vacuum, right_vacuum);
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<S>::multi_target_filter(*left_dims_fci[i],
                                               *right_dims_fci[i], targets);

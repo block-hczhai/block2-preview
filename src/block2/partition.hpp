@@ -241,6 +241,14 @@ template <typename S> struct Partition {
             switch (opx->get_type()) {
             case OpTypes::Zero:
                 break;
+            case OpTypes::Elem: {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(opx);
+                assert(l == op->q_label);
+                S p = l.combine(S(0), -l);
+                assert(p != S(S::invalid));
+                subsl[idx].push_back(make_pair(0, p));
+            } break;
             case OpTypes::Prod: {
                 shared_ptr<OpProduct<S>> op =
                     dynamic_pointer_cast<OpProduct<S>>(opx);

@@ -70,6 +70,9 @@ integral = 'FCIDUMP'
 dot = 1
 su2 = True
 sym = "d2h"
+nelec = None
+spin = None
+hf_occ = None
 out_dir = "./out"
 expect = "expect" in arg_dic
 redunt = "reduntant" in arg_dic
@@ -88,6 +91,12 @@ if "config" in arg_dic:
     su2 = "nonspinadapted" not in dic
     mps_tags = dic.get("mps_tags", "KET").split()
     sym = dic.get("sym", "d2h")
+    if "spin" in dic:
+        spin = int(dic["spin"])
+    if "nelec" in dic:
+        nelec = int(dic["nelec"])
+    if "hf_occ" in dic:
+        hf_occ = dic["hf_occ"]
 if "prefix" in arg_dic:
     scratch = arg_dic["prefix"] + "/node0"
 if "integral" in arg_dic:
@@ -122,6 +131,13 @@ page = DMRGDataPage(save_dir=scratch)
 opts = dict(fcidump=integral, pg=sym,
             su2=su2, output_level=-1, memory=25000,
             omp_threads=1, mkl_threads=1, page=page)
+
+if spin is not None:
+    opts['spin'] = spin
+if nelec is not None:
+    opts['nelec'] = nelec
+if hf_occ is not None:
+    opts['hf_occ'] = hf_occ
 
 hamil_cxt = BlockHamiltonian.get(**opts)
 hamil = hamil_cxt.__enter__()
@@ -199,18 +215,24 @@ fcidump = FCIDUMP()
 fcidump.read(integral)
 n_sites = fcidump.n_sites
 
-vaccum = SX(0)
-target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
+twos = fcidump.twos if spin is None else spin
+nelec = fcidump.n_elec if nelec is None else nelec
+vacuum = SX(0)
+# singlet embedding
+left_vacuum = vacuum if twos == 0 else SX(twos, twos, 0)
+target = SX(nelec + twos, 0, swap_pg(fcidump.isym))
 
 orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
-hamil = HamiltonianQC(vaccum, n_sites, orb_sym, fcidump)
+hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
 hamil.opf.seq.mode = SeqTypes.Simple
-mps_info = MPSInfo(n_sites, vaccum, target, hamil.basis)
+mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
 mps_info.tag = mps_tags[0]
 if redunt:
-    mps_info.set_bond_dimension_full_fci()
+    mps_info.set_bond_dimension_full_fci(left_vacuum, vacuum)
+else:
+    mps_info.set_bond_dimension_fci(left_vacuum, vacuum)
 
-mps_info.left_dims[0] = StateInfo(vaccum)
+mps_info.left_dims[0] = StateInfo(left_vacuum)
 mps_info.save_left_dims(0)
 for i in range(0, center + 1):
     st = StateInfo()
@@ -230,7 +252,7 @@ for i in range(0, center + 1):
     mps_info.left_dims[i + 1] = st
     mps_info.save_left_dims(i + 1)
 
-mps_info.right_dims[n_sites] = StateInfo(vaccum)
+mps_info.right_dims[n_sites] = StateInfo(vacuum)
 mps_info.save_right_dims(n_sites)
 for i in range(center + 1, n_sites):
     st = StateInfo()
@@ -301,8 +323,19 @@ def swap_order_right(idx):
         dd[l.quanta[ik]] = np.argsort(pp)
     return dd
 
+
 if su2:
-    mps.tensors[0].data = np.array([1.0, 1.0, 1.0])
+    if twos == 0:
+        mps.tensors[0].data = np.array([1.0, 1.0, 1.0])
+    else:
+        # singlet embedding
+        assert mps.tensors[0].info.n == len(mps.tensors[0].data)
+        mat = np.zeros_like(np.array(mps.tensors[0].data))
+        for ix in range(mps.tensors[0].info.n):
+            q = mps.tensors[0].info.quanta[ix]
+            mat[ix] = -1 if (twos % 2 and q.twos == twos +
+                             1) or (not twos % 2 and q.twos == twos - 1) else 1
+        mps.tensors[0].data = mat
     mps.tensors[n_sites - 1].data = np.array([1.0, 1.0, 1.0])
 else:
     mps.tensors[0].data = np.array([1.0, 1.0, 1.0, 1.0])
