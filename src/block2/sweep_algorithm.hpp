@@ -1788,6 +1788,7 @@ template <typename S> struct DMRG {
 enum struct EquationTypes : uint8_t {
     NormalMinRes,
     NormalCG,
+    NormalGCROT,
     PerturbativeCompression,
     GreensFunction,
     GreensFunctionSquared,
@@ -2062,14 +2063,21 @@ template <typename S> struct Linear {
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
             if (eq_type == EquationTypes::NormalMinRes ||
-                eq_type == EquationTypes::NormalCG) {
-                tuple<double, int, size_t, double> lpdi;
+                eq_type == EquationTypes::NormalCG ||
+                eq_type == EquationTypes::NormalGCROT) {
+                tuple<double, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e, eq_type == EquationTypes::NormalCG,
-                    iprint >= 3, minres_conv_thrd, minres_max_iter,
-                    minres_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e,
+                    eq_type == EquationTypes::NormalCG
+                        ? LinearSolverTypes::CG
+                        : (eq_type == EquationTypes::NormalMinRes
+                               ? LinearSolverTypes::MinRes
+                               : LinearSolverTypes::GCROT),
+                    gcrotmk_size, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
-                get<1>(pdi).first += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi).first;
+                get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else if (eq_type == EquationTypes::GreensFunction ||
                        eq_type == EquationTypes::GreensFunctionSquared) {
@@ -2742,14 +2750,21 @@ template <typename S> struct Linear {
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
             if (eq_type == EquationTypes::NormalMinRes ||
-                eq_type == EquationTypes::NormalCG) {
-                tuple<double, int, size_t, double> lpdi;
+                eq_type == EquationTypes::NormalCG ||
+                eq_type == EquationTypes::NormalGCROT) {
+                tuple<double, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e, eq_type == EquationTypes::NormalCG,
-                    iprint >= 3, minres_conv_thrd, minres_max_iter,
-                    minres_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e,
+                    eq_type == EquationTypes::NormalCG
+                        ? LinearSolverTypes::CG
+                        : (eq_type == EquationTypes::NormalMinRes
+                               ? LinearSolverTypes::MinRes
+                               : LinearSolverTypes::GCROT),
+                    gcrotmk_size, iprint >= 3, minres_conv_thrd,
+                    minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
-                get<1>(pdi).first += get<1>(lpdi);
+                get<1>(pdi).first += get<1>(lpdi).first;
+                get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
             } else if (eq_type == EquationTypes::GreensFunction ||
                        eq_type == EquationTypes::GreensFunctionSquared) {

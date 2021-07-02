@@ -50,6 +50,8 @@ enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
+enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT };
+
 template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
 
 // Effective Hamiltonian
@@ -592,12 +594,13 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
-    tuple<double, int, size_t, double>
-    inverse_multiply(double const_e, bool use_cg, bool iprint = false,
+    tuple<double, pair<int, int>, size_t, double>
+    inverse_multiply(double const_e, LinearSolverTypes solver_type,
+                     pair<int, int> gcrotmk_size, bool iprint = false,
                      double conv_thrd = 5E-6, int max_iter = 5000,
                      int soft_max_iter = -1,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        int nmult = 0;
+        int nmult = 0, niter = 0;
         frame->activate(0);
         Timer t;
         t.get_time();
@@ -605,7 +608,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         MatrixRef mbra(bra->data, (MKL_INT)bra->total_memory, 1);
         tf->opf->seq->cumulative_nflop = 0;
         DiagonalMatrix aa(nullptr, 0);
-        if (compute_diag && use_cg) {
+        if (compute_diag && solver_type != LinearSolverTypes::MinRes) {
             aa = DiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++)
@@ -620,23 +623,32 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 else
                     return (*this)(a, b);
             };
-        double r = use_cg
-                       ? MatrixFunctions::conjugate_gradient(
-                             f, aa, mbra, mket, nmult, const_e, iprint,
-                             para_rule == nullptr ? nullptr : para_rule->comm,
-                             conv_thrd, max_iter, soft_max_iter)
-                       : MatrixFunctions::minres(
+        double r =
+            solver_type == LinearSolverTypes::CG
+                ? MatrixFunctions::conjugate_gradient(
+                      f, aa, mbra, mket, nmult, const_e, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, max_iter, soft_max_iter)
+                : (solver_type == LinearSolverTypes::MinRes
+                       ? MatrixFunctions::minres(
                              f, mbra, mket, nmult, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
-                             conv_thrd, max_iter, soft_max_iter);
-        if (compute_diag && use_cg)
+                             conv_thrd, max_iter, soft_max_iter)
+                       : MatrixFunctions::gcrotmk(
+                             f, aa, mbra, mket, nmult, niter,
+                             gcrotmk_size.first, gcrotmk_size.second, const_e,
+                             iprint,
+                             para_rule == nullptr ? nullptr : para_rule->comm,
+                             conv_thrd, max_iter, soft_max_iter));
+        if (compute_diag && solver_type != LinearSolverTypes::MinRes)
             aa.deallocate();
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(r, nmult, (size_t)nflop, t.get_time());
+        return make_tuple(r, make_pair(nmult, niter), (size_t)nflop,
+                          t.get_time());
     }
     shared_ptr<OpExpr<S>>
     add_const_term(double const_e,

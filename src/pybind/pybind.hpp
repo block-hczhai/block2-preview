@@ -2514,6 +2514,7 @@ template <typename S = void> void bind_types(py::module &m) {
     py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
         .value("NormalMinRes", EquationTypes::NormalMinRes)
         .value("NormalCG", EquationTypes::NormalCG)
+        .value("NormalGCROT", EquationTypes::NormalGCROT)
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction)

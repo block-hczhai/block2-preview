@@ -119,6 +119,12 @@ extern void dgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
                    const MKL_INT *ldvt, double *work, const MKL_INT *lwork,
                    MKL_INT *info);
 
+// least squares problem a * x = b
+extern void dgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const MKL_INT *nrhs, double *a, const MKL_INT *lda, double *b,
+                  const MKL_INT *ldb, double *work, const MKL_INT *lwork,
+                  MKL_INT *info);
+
 #endif
 }
 
@@ -159,13 +165,19 @@ struct MatrixFunctions {
     }
     // a = a + scale * op(b)
     static void iadd(const MatrixRef &a, const MatrixRef &b, double scale,
-                     bool conj = false) {
+                     bool conj = false, double cfactor = 1.0) {
+        static const double x = 1.0;
         if (!conj) {
             assert(a.m == b.m && a.n == b.n);
             MKL_INT n = a.m * a.n, inc = 1;
-            daxpy(&n, &scale, b.data, &inc, a.data, &inc);
+            if (cfactor == 1.0)
+                daxpy(&n, &scale, b.data, &inc, a.data, &inc);
+            else
+                dgemm("N", "N", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
+                      &cfactor, a.data, &inc);
         } else {
             assert(a.m == b.n && a.n == b.m);
+            assert(cfactor == 1.0);
             for (MKL_INT i = 0, inc = 1; i < a.m; i++)
                 daxpy(&a.n, &scale, b.data + i, &a.m, a.data + i * a.n, &inc);
         }
@@ -227,6 +239,27 @@ struct MatrixFunctions {
         dgesv(&a.m, &b.m, a.data, &a.n, work, b.data, &a.n, &info);
         assert(info == 0);
         ialloc->deallocate(work, a.n * _MINTSZ);
+    }
+    // least squares problem a x = b
+    // return the residual (norm, not squared)
+    // a.n is used as lda
+    static double least_squares(const MatrixRef &a, const MatrixRef &b,
+                                const MatrixRef &x) {
+        assert(a.m == b.m && a.n >= x.m && b.n == 1 && x.n == 1);
+        vector<double> work, atr, xtr;
+        MKL_INT lwork = 34 * min(a.m, x.m), info = -1, nrhs = 1,
+                mn = max(a.m, x.m), nr = a.m - x.m;
+        work.reserve(lwork);
+        atr.reserve(a.size());
+        xtr.reserve(mn);
+        dcopy(&a.m, b.data, &nrhs, xtr.data(), &nrhs);
+        for (MKL_INT i = 0; i < x.m; i++)
+            dcopy(&a.m, a.data + i, &a.n, atr.data() + i * a.m, &nrhs);
+        dgels("N", &a.m, &x.m, &nrhs, atr.data(), &a.m, xtr.data(), &mn,
+              work.data(), &lwork, &info);
+        assert(info == 0);
+        dcopy(&x.m, xtr.data(), &nrhs, x.data, &nrhs);
+        return nr > 0 ? dnrm2(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
@@ -1893,7 +1926,7 @@ struct MatrixFunctions {
         MatrixRef hp(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
-        double old_error = 0.0;
+        double beta = 0.0, old_beta = 0.0;
         r.allocate();
         p.allocate();
         hp.allocate();
@@ -1950,7 +1983,8 @@ struct MatrixFunctions {
                     iadd(hp, aws[i], -mu.data[i]);
                 }
             }
-            error = dot(p, r);
+            beta = dot(p, r);
+            error = dot(r, r);
         }
         if (iprint)
             cout << endl;
@@ -1975,7 +2009,7 @@ struct MatrixFunctions {
             d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
             return func;
         }
-        old_error = error;
+        old_beta = beta;
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
         MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
@@ -1992,11 +2026,12 @@ struct MatrixFunctions {
                     iadd(hp, p, consta);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                double alpha = old_error / dot(p, hp);
+                double alpha = old_beta / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
                 cg_precondition(z, r, aa);
-                error = dot(z, r);
+                error = dot(r, r);
+                beta = dot(z, r);
                 func = dot(x, b);
                 if (iprint)
                     cout << setw(6) << xiter << fixed << setw(15)
@@ -2009,16 +2044,16 @@ struct MatrixFunctions {
                 break;
             else {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    double beta = error / old_error;
-                    old_error = error;
-                    iscale(p, beta);
+                    double gamma = beta / old_beta;
+                    old_beta = beta;
+                    iscale(p, gamma);
                     iadd(p, z, 1.0);
                     if (nw != 0) {
                         az.clear();
                         op(z, az);
                         if (consta != 0)
                             iadd(az, z, consta);
-                        iscale(hp, beta);
+                        iscale(hp, gamma);
                         iadd(hp, az, 1.0);
                         mu.clear();
                         for (int i = 0; i < nw; i++) {
@@ -2207,7 +2242,7 @@ struct MatrixFunctions {
         MatrixRef hp(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
-        double old_error = 0.0;
+        double beta = 0.0, old_beta = 0.0;
         r.allocate();
         p.allocate();
         hp.allocate();
@@ -2264,7 +2299,8 @@ struct MatrixFunctions {
                     iadd(hp, aws[i], -mu.data[i]);
                 }
             }
-            error = dot(p, r);
+            beta = dot(p, r);
+            error = dot(r, r);
         }
         if (iprint)
             cout << endl;
@@ -2289,7 +2325,7 @@ struct MatrixFunctions {
             d_alloc->deallocate(pbs.data, deflation_max_size * x.size());
             return func;
         }
-        old_error = error;
+        old_beta = beta;
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
         MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
@@ -2306,11 +2342,12 @@ struct MatrixFunctions {
                     iadd(hp, p, consta);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                double alpha = old_error / dot(p, hp);
+                double alpha = old_beta / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
                 cg_precondition(z, r, aa);
-                error = dot(z, r);
+                error = dot(r, r);
+                beta = dot(z, r);
                 func = dot(x, b);
                 if (iprint)
                     cout << setw(6) << xiter << fixed << setw(15)
@@ -2323,16 +2360,16 @@ struct MatrixFunctions {
                 break;
             else {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    double beta = error / old_error;
-                    old_error = error;
-                    iscale(p, beta);
+                    double gamma = beta / old_beta;
+                    old_beta = beta;
+                    iscale(p, gamma);
                     iadd(p, z, 1.0);
                     if (nw != 0) {
                         az.clear();
                         op(z, az);
                         if (consta != 0)
                             iadd(az, z, consta);
-                        iscale(hp, beta);
+                        iscale(hp, gamma);
                         iadd(hp, az, 1.0);
                         mu.clear();
                         for (int i = 0; i < nw; i++) {
@@ -2382,7 +2419,7 @@ struct MatrixFunctions {
         MatrixRef hp(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
-        double old_error = 0.0;
+        double beta = 0.0, old_beta = 0.0;
         r.allocate();
         p.allocate();
         hp.allocate();
@@ -2443,7 +2480,8 @@ struct MatrixFunctions {
                     iadd(hp, aws[i], -mu.data[i]);
                 }
             }
-            error = dot(p, r);
+            beta = dot(p, r);
+            error = dot(r, r);
         }
         if (iprint)
             cout << endl;
@@ -2467,7 +2505,7 @@ struct MatrixFunctions {
             d_alloc->deallocate(paws.data, nw * x.size());
             return func;
         }
-        old_error = error;
+        old_beta = beta;
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
         MatrixRef z(nullptr, x.m, x.n), az(nullptr, x.m, x.n);
@@ -2484,11 +2522,12 @@ struct MatrixFunctions {
                     iadd(hp, p, consta);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                double alpha = old_error / dot(p, hp);
+                double alpha = old_beta / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
                 cg_precondition(z, r, aa);
-                error = dot(z, r);
+                error = dot(r, r);
+                beta = dot(z, r);
                 func = dot(x, b);
                 if (iprint)
                     cout << setw(6) << xiter << fixed << setw(15)
@@ -2501,16 +2540,16 @@ struct MatrixFunctions {
                 break;
             else {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    double beta = error / old_error;
-                    old_error = error;
-                    iscale(p, beta);
+                    double gamma = beta / old_beta;
+                    old_beta = beta;
+                    iscale(p, gamma);
                     iadd(p, z, 1.0);
                     if (nw != 0) {
                         az.clear();
                         op(z, az);
                         if (consta != 0)
                             iadd(az, z, consta);
-                        iscale(hp, beta);
+                        iscale(hp, gamma);
                         iadd(hp, az, 1.0);
                         mu.clear();
                         for (int i = 0; i < nw; i++) {
@@ -2556,7 +2595,7 @@ struct MatrixFunctions {
         MatrixRef p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
         double ff[2];
         double &error = ff[0], &func = ff[1];
-        double old_error = 0.0;
+        double beta = 0.0, old_beta = 0.0;
         r.allocate();
         p.allocate();
         r.clear();
@@ -2568,7 +2607,8 @@ struct MatrixFunctions {
             iscale(r, -1);
             iadd(r, b, 1); // r = b - Ax
             cg_precondition(p, r, aa);
-            error = dot(p, r);
+            beta = dot(p, r);
+            error = dot(r, r);
         }
         if (iprint)
             cout << endl;
@@ -2588,7 +2628,7 @@ struct MatrixFunctions {
             nmult = 1;
             return func;
         }
-        old_error = error;
+        old_beta = beta;
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
         MatrixRef hp(nullptr, x.m, x.n), z(nullptr, x.m, x.n);
@@ -2604,11 +2644,12 @@ struct MatrixFunctions {
                 iadd(hp, p, consta);
 
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                double alpha = old_error / dot(p, hp);
+                double alpha = old_beta / dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
                 cg_precondition(z, r, aa);
-                error = dot(z, r);
+                error = dot(r, r);
+                beta = dot(z, r);
                 func = dot(x, b);
                 if (iprint)
                     cout << setw(6) << xiter << fixed << setw(15)
@@ -2621,10 +2662,10 @@ struct MatrixFunctions {
                 break;
             else {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    double beta = error / old_error;
-                    old_error = error;
-                    iadd(p, z, 1 / beta);
-                    iscale(p, beta);
+                    double gamma = beta / old_beta;
+                    old_beta = beta;
+                    iadd(p, z, 1 / gamma);
+                    iscale(p, gamma);
                 }
                 if (pcomm != nullptr)
                     pcomm->broadcast(p.data, p.size(), pcomm->root);
@@ -2747,6 +2788,153 @@ struct MatrixFunctions {
         hr.deallocate();
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             p.deallocate();
+        r.deallocate();
+        if (pcomm != nullptr)
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+        return func;
+    }
+    // GCROT(m, k) method for solving x in linear equation H x = b
+    template <typename MatMul, typename PComm>
+    static double gcrotmk(MatMul &op, const DiagonalMatrix &aa, MatrixRef x,
+                          MatrixRef b, int &nmult, int &niter, int m = 20,
+                          int k = -1, double consta = 0.0, bool iprint = false,
+                          const PComm &pcomm = nullptr, double conv_thrd = 5E-6,
+                          int max_iter = 5000, int soft_max_iter = -1) {
+        MatrixRef r(nullptr, x.m, x.n), w(nullptr, x.m, x.n);
+        double ff[4];
+        double &beta = ff[0], &rr = ff[1];
+        double &func = ff[2];
+        r.allocate();
+        w.allocate();
+        r.clear();
+        op(x, r);
+        if (consta != 0)
+            iadd(r, x, consta);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            iscale(r, -1);
+            iadd(r, b, 1); // r = b - Ax
+            func = dot(x, b);
+            beta = norm(r);
+        }
+        if (pcomm != nullptr)
+            pcomm->broadcast(&beta, 4, pcomm->root);
+        if (iprint)
+            cout << endl;
+        if (k == -1)
+            k = m;
+        int xiter = 0, jiter = 1, nn = k + m + 2;
+        vector<MatrixRef> cvs(nn, MatrixRef(nullptr, x.m, x.n));
+        vector<MatrixRef> uzs(nn, MatrixRef(nullptr, x.m, x.n));
+        vector<double> pcus;
+        pcus.reserve(x.size() * 2 * nn);
+        for (int i = 0; i < nn; i++) {
+            cvs[i].data = pcus.data() + cvs[i].size() * i;
+            uzs[i].data = pcus.data() + uzs[i].size() * (i + nn);
+        }
+        int ncs = 0, icu = 0;
+        MatrixRef bmat(nullptr, k, k + m);
+        MatrixRef hmat(nullptr, k + m + 1, k + m);
+        MatrixRef ys(nullptr, k + m, 1);
+        MatrixRef bys(nullptr, k, 1);
+        MatrixRef hys(nullptr, k + m + 1, 1);
+        bmat.allocate();
+        hmat.allocate();
+        ys.allocate();
+        bys.allocate();
+        hys.allocate();
+        while (jiter < max_iter &&
+               (soft_max_iter == -1 || jiter < soft_max_iter)) {
+            xiter++;
+            if (iprint)
+                cout << setw(6) << xiter << setw(6) << jiter << fixed
+                     << setw(15) << setprecision(8) << func << scientific
+                     << setw(13) << setprecision(2) << beta * beta << endl;
+            if (beta * beta < conv_thrd)
+                break;
+            int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                iadd(cvs[ivz % nn], r, 1 / beta, 0.0);
+                hmat.clear();
+                hys.clear();
+                hys.data[0] = beta;
+            }
+            for (int j = 0; j < ml; j++) {
+                jiter++;
+                MatrixRef z(uzs[(ivz + j) % nn].data, x.m, x.n);
+                if (pcomm == nullptr || pcomm->root == pcomm->rank)
+                    cg_precondition(z, cvs[(ivz + j) % nn], aa);
+                if (pcomm != nullptr)
+                    pcomm->broadcast(z.data, z.size(), pcomm->root);
+                w.clear();
+                op(z, w);
+                if (consta != 0)
+                    iadd(w, z, consta);
+                nz = j + 1;
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    for (int i = 0; i < ncs; i++) {
+                        bmat(i, j) = dot(cvs[(icu + i) % nn], w);
+                        iadd(w, cvs[(icu + i) % nn], -bmat(i, j));
+                    }
+                    for (int i = 0; i < nz; i++) {
+                        hmat(i, j) = dot(cvs[(ivz + i) % nn], w);
+                        iadd(w, cvs[(ivz + i) % nn], -hmat(i, j));
+                    }
+                    hmat(j + 1, j) = norm(w);
+                    iadd(cvs[(ivz + nz) % nn], w, 1.0 / hmat(j + 1, j), false,
+                         0.0);
+                    rr = least_squares(MatrixRef(hmat.data, j + 2, hmat.n),
+                                       MatrixRef(hys.data, j + 2, 1),
+                                       MatrixRef(ys.data, j + 1, 1));
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(&rr, 1, pcomm->root);
+                if (rr * rr < conv_thrd)
+                    break;
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                multiply(MatrixRef(bmat.data, ncs, bmat.n), false,
+                         MatrixRef(ys.data, nz, 1), false,
+                         MatrixRef(bys.data, ncs, 1), 1.0, 0.0);
+                multiply(MatrixRef(hmat.data, nz + 1, hmat.n), false,
+                         MatrixRef(ys.data, nz, 1), false,
+                         MatrixRef(hys.data, nz + 1, 1), 1.0, 0.0);
+                for (int i = 0; i < nz; i++)
+                    iadd(uzs[(icu + ncs) % nn], uzs[(ivz + i) % nn], ys(i, 0),
+                         false, !!i);
+                for (int i = 0; i < ncs; i++)
+                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn], false,
+                         -bys(i, 0));
+                for (int i = 0; i < nz + 1; i++)
+                    iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
+                         false, !!i);
+                double alpha = norm(cvs[(icu + ncs) % nn]);
+                iscale(cvs[(icu + ncs) % nn], 1 / alpha);
+                iscale(uzs[(icu + ncs) % nn], 1 / alpha);
+                double gamma = dot(cvs[(icu + ncs) % nn], r);
+                iadd(r, cvs[(icu + ncs) % nn], -gamma);
+                iadd(x, uzs[(icu + ncs) % nn], gamma);
+                func = dot(x, b);
+                beta = norm(r);
+            }
+            if (pcomm != nullptr)
+                pcomm->broadcast(&beta, 4, pcomm->root);
+            if (ncs == k)
+                icu = (icu + 1) % nn;
+            else
+                ncs++;
+        }
+        if (jiter == max_iter && beta * beta >= conv_thrd) {
+            cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
+            assert(false);
+        }
+        nmult = jiter;
+        niter = xiter + 1;
+        hys.deallocate();
+        bys.deallocate();
+        ys.deallocate();
+        hmat.deallocate();
+        bmat.deallocate();
+        w.deallocate();
         r.deallocate();
         if (pcomm != nullptr)
             pcomm->broadcast(x.data, x.size(), pcomm->root);
