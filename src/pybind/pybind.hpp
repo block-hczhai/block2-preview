@@ -787,14 +787,13 @@ template <typename S> void bind_mps(py::module &m) {
              &MPSInfo<S>::set_bond_dimension_using_hf, py::arg("m"),
              py::arg("occ"), py::arg("n_local") = 0)
         .def("set_bond_dimension_full_fci",
-             &MPSInfo<S>::set_bond_dimension_full_fci)
-        .def("set_bond_dimension_full_fci",
              &MPSInfo<S>::set_bond_dimension_full_fci,
              py::arg("left_vacuum") = S(S::invalid),
              py::arg("right_vacuum") = S(S::invalid))
         .def("set_bond_dimension_fci", &MPSInfo<S>::set_bond_dimension_fci,
              py::arg("left_vacuum") = S(S::invalid),
              py::arg("right_vacuum") = S(S::invalid))
+        .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
         .def("swap_wfn_to_fused_left", &MPSInfo<S>::swap_wfn_to_fused_left)
         .def("swap_wfn_to_fused_right", &MPSInfo<S>::swap_wfn_to_fused_right)
         .def("get_filename", &MPSInfo<S>::get_filename, py::arg("left"),

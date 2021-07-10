@@ -520,6 +520,7 @@ struct SparseMatrixInfo<
         if (pointer_only) {
             size_t psz;
             ifs.read((char *)&psz, sizeof(psz));
+            assert(alloc == ialloc || alloc == nullptr);
             ptr = ialloc->data + psz;
         } else {
             ptr = alloc->allocate((n << 1) + _DBL_MEM_SIZE(n));
@@ -552,7 +553,10 @@ struct SparseMatrixInfo<
         assert(n != -1);
         ofs.write((char *)&n, sizeof(n));
         if (pointer_only) {
-            assert(alloc == ialloc);
+            // for 1-site case with middle site transition
+            // one can skip the post-middle-transition then
+            // there can be some terms not allocated in stack memory
+            // assert(alloc == ialloc);
             size_t psz = (uint32_t *)quanta - ialloc->data;
             ofs.write((char *)&psz, sizeof(psz));
         } else
@@ -868,6 +872,7 @@ template <typename S> struct SparseMatrix {
         if (pointer_only && total_memory != 0) {
             size_t psz;
             ifs.read((char *)&psz, sizeof(psz));
+            assert(alloc == dalloc || alloc == nullptr);
             data = dalloc->data + psz;
         } else {
             data = alloc->allocate(total_memory);
@@ -897,7 +902,10 @@ template <typename S> struct SparseMatrix {
         ofs.write((char *)&factor, sizeof(factor));
         ofs.write((char *)&total_memory, sizeof(total_memory));
         if (pointer_only && total_memory != 0) {
-            assert(alloc == dalloc);
+            // for 1-site case with middle site transition
+            // one can skip the post-middle-transition then
+            // there can be some terms not allocated in stack memory
+            // assert(alloc == dalloc);
             size_t psz = data - dalloc->data;
             ofs.write((char *)&psz, sizeof(psz));
         } else
