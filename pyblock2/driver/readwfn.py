@@ -12,7 +12,11 @@ Author:
     Apr 15, 2021
 """
 
-from parser import parse
+try:
+    from pyblock2.driver.parser import parse
+except ImportError:
+    from parser import parse
+
 import sys
 import os
 import numpy as np

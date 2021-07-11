@@ -6,6 +6,16 @@ Installation
 
 .. highlight:: bash
 
+Using ``pip``
+-------------
+
+One can install ``block2`` using ::
+
+    pip install block2
+
+Manual Installation
+-------------------
+
 Dependence: ``pybind11``, ``python3``, and ``mkl`` (or ``blas + lapack``).
 
 For distributed parallel calculation, ``mpi`` library is required.

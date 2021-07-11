@@ -96,24 +96,24 @@ the integral can even be distributed, such that synchronization will not be mean
 [2021-05-12 | 2021-06-07]
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Error Message:** (note that this problem in ``main.py`` has been fixed in commit 4f87784) ::
+**Error Message:** (note that this problem in ``block2.py`` has been fixed in commit 4f87784) ::
 
     Traceback (most recent call last):
-    File "block2/pyblock2/driver/main.py", line 302, in <module>
+    File "block2/pyblock2/driver/block2.py", line 302, in <module>
         mps.load_data()
     RuntimeError: MPS::load_data on '/central/scratch/.../F.MPS.KET.-1' failed.
 
 or ::
 
     Traceback (most recent call last):
-    File "block2/pyblock2/driver/main.py", line 313, in <module>
+    File "block2/pyblock2/driver/block2.py", line 313, in <module>
         mps.load_mutable()
     RuntimeError: SparseMatrix:load_data on '/central/scratch/.../F.MPS.KET.14' failed.
 
 or ::
 
     Traceback (most recent call last):
-    File "block2/pyblock2/driver/main.py", line 313, in <module>
+    File "block2/pyblock2/driver/block2.py", line 313, in <module>
         mps.load_mutable()
     ValueError: cannot create std::vector larger than max_size()
 

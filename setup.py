@@ -94,6 +94,6 @@ setup(name='block2',
           "psutil",
           "pybind11"
       ],
-      scripts=["pyblock2/driver/main.py", "pyblock2/driver/gaopt.py",
+      scripts=["pyblock2/driver/block2.py", "pyblock2/driver/gaopt.py",
                "pyblock2/driver/readwfn.py", "pyblock2/driver/writewfn.py"]
       )

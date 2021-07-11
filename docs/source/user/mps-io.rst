@@ -215,7 +215,7 @@ We will first perform a DMRG ground-state calculation using the following input 
 Note that the only difference between ``dmrg.conf`` and ``dmrg2.conf`` is the ``prefix``.
 The following command can be used to run ``block2`` with this input file: ::
 
-    ${BLOCK2HOME}/pyblock2/driver/main.py dmrg2.conf > dmrg2.out
+    ${BLOCK2HOME}/pyblock2/driver/block2.py dmrg2.conf > dmrg2.out
 
 The energy for the MPS that will be translated is the energy at the last site of the last sweep: ::
 

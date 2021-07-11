@@ -22,6 +22,16 @@ If you find this package useful for your scientific research, please cite the wo
 
 Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
+One can install ``block2`` using: ::
+
+    pip install block2
+
+To run a DMRG calculation, please using the following command: ::
+
+    block2.py dmrg.conf > dmrg.out
+
+where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
+
 Documentation: https://block2.readthedocs.io/en/latest/
 
 Features
@@ -126,8 +136,8 @@ References
 
 * Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.;Chan, G. K.-L. The ab-initio density  matrix renormalization group in practice. *The Journal of Chemical Physics* 2015, **142**, 034102.
 
-Installation
-------------
+Manual Installation
+-------------------
 
 Dependence: `pybind11`, `python3`, and `mkl` (or `blas + lapack`).
 
@@ -275,7 +285,7 @@ Test State-Interaction (SI)-DMRG (need `pyscf` module):
 
 ### StackBlock Compatibility
 
-A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/main.py`.
+A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/block2.py`.
 This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
 The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
 See `docs/driver.md` for detailed documentations for this interface.

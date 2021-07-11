@@ -9,7 +9,10 @@ from block2 import FCIDUMP, OrbitalOrdering, VectorDouble, VectorUInt16, Random
 import numpy as np
 import sys
 
-from parser import parse_gaopt, read_integral
+try:
+    from pyblock2.driver.parser import parse_gaopt, read_integral
+except ImportError:
+    from parser import parse_gaopt, read_integral
 
 DEBUG = True
 

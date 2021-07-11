@@ -39,13 +39,13 @@ if len(sys.argv) > 1:
 else:
     raise ValueError("""
         Usage: either:
-            (A) python main.py dmrg.conf
+            (A) python block2.py dmrg.conf
             (B) reduced memory mode (save/load serial mpo):
-                Step 1: python main.py dmrg.conf pre
-                Step 2: python main.py dmrg.conf run
+                Step 1: python block2.py dmrg.conf pre
+                Step 2: python block2.py dmrg.conf run
             (C) extra reduced memory mode (save/load parallel mpo):
-                Step 1: python main.py dmrg.conf para-pre
-                Step 2: python main.py dmrg.conf para-run
+                Step 1: python block2.py dmrg.conf para-pre
+                Step 2: python block2.py dmrg.conf para-run
     """)
 
 dic = parse(fin)
