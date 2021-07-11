@@ -199,7 +199,7 @@ ENDIF()
 
 IF (${USE_MKL_ANY})
     SET(CMAKE_FIND_LIBRARY_SUFFIXES_BKP ${CMAKE_FIND_LIBRARY_SUFFIXES})
-    SET(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES_BKP};.so.1")
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES_BKP};.so.1;.1.dylib")
     FIND_PATH(MKL_INCLUDE_DIR NAMES mkl.h HINTS $ENV{MKLROOT}/include /usr/local/include ${PYTHON_INCLUDE_PATH})
     IF (${USE_MKL})
         FIND_LIBRARY(MKL_LIB_LP NAMES mkl_intel_lp64
@@ -210,30 +210,22 @@ IF (${USE_MKL_ANY})
             PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         SET(MKL_FLAG "-D_HAS_INTEL_MKL=${MKL_OMP_VALUE}" "-DMKL_ILP64")
     ENDIF()
-    IF (NOT(APPLE))
-        FIND_LIBRARY(MKL_LIB_CORE NAMES mkl_core
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
-        FIND_LIBRARY(MKL_LIB_GT NAMES ${MKL_OMP_LIB_NAME}
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
-        # AVX and AVX512 are required to avoid setting LD_PRELOAD for python
-        FIND_LIBRARY(MKL_LIB_AVX NAMES mkl_avx2
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
-        FIND_LIBRARY(MKL_LIB_AVX512 NAMES mkl_avx512
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
-        IF (NOT MKL_LIB_AVX)
-            SET(MKL_LIB_AVX "")
-        ENDIF()
-        IF (NOT MKL_LIB_AVX512)
-            SET(MKL_LIB_AVX512 "")
-        ENDIF()
-        SET(MKL_LIBS ${NO_AS_NEEDED} ${PTHREADS} ${OMP_LIB_NAME} ${MKL_LIB_LP} ${MKL_LIB_CORE} ${MKL_LIB_GT} ${MKL_LIB_AVX} ${MKL_LIB_AVX512})
-    ELSE()
-        IF (${USE_MKL})
-            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib -Wl,-rpath,${PYTHON_LIB_PATH} ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core)
-        ELSE()
-            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib -Wl,-rpath,${PYTHON_LIB_PATH} ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core)
-        ENDIF()
+    FIND_LIBRARY(MKL_LIB_CORE NAMES mkl_core
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
+    FIND_LIBRARY(MKL_LIB_GT NAMES ${MKL_OMP_LIB_NAME}
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
+    # AVX and AVX512 are required to avoid setting LD_PRELOAD for python
+    FIND_LIBRARY(MKL_LIB_AVX NAMES mkl_avx2
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
+    FIND_LIBRARY(MKL_LIB_AVX512 NAMES mkl_avx512
+        PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
+    IF (NOT MKL_LIB_AVX)
+        SET(MKL_LIB_AVX "")
     ENDIF()
+    IF (NOT MKL_LIB_AVX512)
+        SET(MKL_LIB_AVX512 "")
+    ENDIF()
+    SET(MKL_LIBS ${NO_AS_NEEDED} ${PTHREADS} ${OMP_LIB_NAME} ${MKL_LIB_LP} ${MKL_LIB_CORE} ${MKL_LIB_GT} ${MKL_LIB_AVX} ${MKL_LIB_AVX512})
     SET(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_BKP})
     MESSAGE(STATUS "MKL_INCLUDE_DIR = ${MKL_INCLUDE_DIR}")
     MESSAGE(STATUS "MKL_LIBS = ${MKL_LIBS}")

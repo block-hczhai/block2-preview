@@ -17,7 +17,10 @@ import time
 import os
 import sys
 
-from parser import parse, orbital_reorder, read_integral, format_schedule
+try:
+    from pyblock2.driver.parser import parse, orbital_reorder, read_integral, format_schedule
+except ImportError:
+    from parser import parse, orbital_reorder, read_integral, format_schedule
 
 DEBUG = True
 
@@ -91,12 +94,6 @@ try:
 except ImportError:
     MPI = None
     _print = print
-
-
-def _print(*args, **kwargs):
-    if MPI.rank == 0 and outputlevel > -1:
-        kwargs["flush"] = True
-        print(*args, **kwargs)
 
 
 tx = time.perf_counter()
