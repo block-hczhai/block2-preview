@@ -22,11 +22,11 @@ If you find this package useful for your scientific research, please cite the wo
 
 Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
-One can install ``block2`` using: ::
+One can install ``block2`` using:
 
     pip install block2
 
-To run a DMRG calculation, please using the following command: ::
+To run a DMRG calculation, please using the following command:
 
     block2.py dmrg.conf > dmrg.out
 
