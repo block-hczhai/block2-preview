@@ -17,3 +17,6 @@ __pycache__/
 .ipynb_checkpoints/
 .coverage
 .vs/
+
+*.egg-info
+dist/

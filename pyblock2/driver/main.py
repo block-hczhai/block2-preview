@@ -49,7 +49,7 @@ dic = parse(fin)
 if "nonspinadapted" in dic:
     from block2 import VectorSZ as VectorSL
     from block2.sz import MultiMPS, MultiMPSInfo
-    from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
+    from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -63,7 +63,7 @@ if "nonspinadapted" in dic:
 else:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo
-    from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC, MPICommunicator
+    from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -75,11 +75,22 @@ else:
     SX = SU2
     TrSX = SZ
 
-# MPI
-MPI = MPICommunicator()
-from mpi4py import MPI as PYMPI
-comm = PYMPI.COMM_WORLD
-outputlevel = 2
+try:
+    if "nonspinadapted" in dic:
+        from block2.sz import MPICommunicator
+    else:
+        from block2.su2 import MPICommunicator
+    MPI = MPICommunicator()
+    from mpi4py import MPI as PYMPI
+    comm = PYMPI.COMM_WORLD
+
+    def _print(*args, **kwargs):
+        if MPI.rank == 0 and outputlevel > -1:
+            kwargs["flush"] = True
+            print(*args, **kwargs)
+except ImportError:
+    MPI = None
+    _print = print
 
 
 def _print(*args, **kwargs):
@@ -1643,6 +1654,8 @@ if not pre_run:
             copy_tag = dic["restart_copy_mps"]
         else:
             copy_tag = dic["copy_mps"]
+        if copy_tag == '':
+            raise ValueError("A tag name must be given for the keyword copy_mps/restart_copy_mps!")
         if "trans_mps_to_sz" in dic:
             assert "nonspinadapted" not in dic
             mps.info.load_mutable()
@@ -1651,8 +1664,29 @@ if not pre_run:
                 mps), copy_tag, mpo.tf.opf.cg).finalize()
         else:
             cp_mps = mps.deep_copy(copy_tag)
-        cp_mps.info.save_data(scratch + '/mps_info.bin')
-        cp_mps.info.save_data(scratch + '/%s-mps_info.bin' % copy_tag)
+
+        if "trans_mps_to_singlet_embedding" in dic:
+            assert "nonspinadapted" not in dic
+            cp_mps = mps.deep_copy(copy_tag)
+            if cp_mps.canonical_form[0] == 'C' and cp_mps.canonical_form[1] == 'R':
+                cp_mps.canonical_form = 'K' + cp_mps.canonical_form[1:]
+                cp_mps.center = 0
+            elif cp_mps.canonical_form[-1] == 'C' and cp_mps.canonical_form[-2] == 'L':
+                cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'S'
+                cp_mps.center = cp_mps.n_sites - 1
+            elif cp_mps.center == cp_mps.n_sites - 2 and cp_mps.canonical_form[-2] == 'L':
+                cp_mps.center = cp_mps.n_sites - 1
+            cg = CG(200)
+            cg.initialize()
+            while cp_mps.center > 0:
+                cp_mps.move_left(cg, prule)
+            cp_mps.to_singlet_embedding_wfn(cg, prule)
+            if MPI is None or MPI.rank == 0:
+                cp_mps.save_data()
+
+        if MPI is None or MPI.rank == 0:
+            cp_mps.info.save_data(scratch + '/mps_info.bin')
+            cp_mps.info.save_data(scratch + '/%s-mps_info.bin' % copy_tag)
 
         mps = cp_mps
 

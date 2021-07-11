@@ -2902,8 +2902,8 @@ struct MatrixFunctions {
                     iadd(uzs[(icu + ncs) % nn], uzs[(ivz + i) % nn], ys(i, 0),
                          false, !!i);
                 for (int i = 0; i < ncs; i++)
-                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn], false,
-                         -bys(i, 0));
+                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn], -bys(i, 0),
+                         false);
                 for (int i = 0; i < nz + 1; i++)
                     iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
                          false, !!i);

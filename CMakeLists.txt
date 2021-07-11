@@ -19,6 +19,13 @@ ENDIF()
 
 FIND_PACKAGE(PythonLibs ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
 
+EXECUTE_PROCESS(COMMAND ${PYTHON_EXECUTABLE} -c "import distutils.sysconfig; \
+        print(distutils.sysconfig.get_config_var('LIBDIR'))"
+        OUTPUT_VARIABLE PYTHON_LIB_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+EXECUTE_PROCESS(COMMAND ${PYTHON_EXECUTABLE} -c "import distutils.sysconfig; \
+        print(distutils.sysconfig.get_config_var('INCLUDEDIR'))"
+        OUTPUT_VARIABLE PYTHON_INCLUDE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+
 IF (NOT PYTHONLIBS_FOUND)
     EXECUTE_PROCESS(COMMAND ${PYTHON_EXECUTABLE} -c "import distutils.sysconfig; \
         import os; print(os.path.join(distutils.sysconfig.get_config_var('LIBDIR'), \
@@ -140,12 +147,16 @@ ELSEIF ("${OMP_LIB}" STREQUAL "TBB")
     SET(MKL_OMP_LIB_NAME mkl_tbb_thread)
     SET(MKL_OMP_VALUE 3)
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
-    FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64)
+    FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64 ${PYTHON_LIB_PATH})
+    SET(MKL_OMP_LIB_NAME mkl_intel_thread)
+    SET(MKL_OMP_VALUE 2)
+ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64 ${PYTHON_LIB_PATH})
     SET(MKL_OMP_LIB_NAME mkl_intel_thread)
     SET(MKL_OMP_VALUE 2)
 ELSE()
     SET(OMP_LIB GNU)
-    FIND_LIBRARY(OMP_LIB_NAME NAMES gomp PATHS /usr/local/lib /usr/lib64)
+    FIND_LIBRARY(OMP_LIB_NAME NAMES gomp PATHS /usr/local/lib /usr/lib64 ${PYTHON_LIB_PATH})
     IF (NOT OMP_LIB_NAME)
         EXECUTE_PROCESS(
             COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
@@ -187,26 +198,28 @@ IF (${TBB})
 ENDIF()
 
 IF (${USE_MKL_ANY})
-    FIND_PATH(MKL_INCLUDE_DIR NAMES mkl.h HINTS $ENV{MKLROOT}/include /usr/local/include)
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES_BKP ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES_BKP};.so.1")
+    FIND_PATH(MKL_INCLUDE_DIR NAMES mkl.h HINTS $ENV{MKLROOT}/include /usr/local/include ${PYTHON_INCLUDE_PATH})
     IF (${USE_MKL})
         FIND_LIBRARY(MKL_LIB_LP NAMES mkl_intel_lp64
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         SET(MKL_FLAG "-D_HAS_INTEL_MKL=${MKL_OMP_VALUE}")
     ELSE()
         FIND_LIBRARY(MKL_LIB_LP NAMES mkl_intel_ilp64
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         SET(MKL_FLAG "-D_HAS_INTEL_MKL=${MKL_OMP_VALUE}" "-DMKL_ILP64")
     ENDIF()
     IF (NOT(APPLE))
         FIND_LIBRARY(MKL_LIB_CORE NAMES mkl_core
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         FIND_LIBRARY(MKL_LIB_GT NAMES ${MKL_OMP_LIB_NAME}
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         # AVX and AVX512 are required to avoid setting LD_PRELOAD for python
         FIND_LIBRARY(MKL_LIB_AVX NAMES mkl_avx2
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         FIND_LIBRARY(MKL_LIB_AVX512 NAMES mkl_avx512
-            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib NO_DEFAULT_PATH)
+            PATHS $ENV{MKLROOT}/lib $ENV{MKLROOT}/lib/intel64 /usr/local/lib ${PYTHON_LIB_PATH} NO_DEFAULT_PATH)
         IF (NOT MKL_LIB_AVX)
             SET(MKL_LIB_AVX "")
         ENDIF()
@@ -216,11 +229,12 @@ IF (${USE_MKL_ANY})
         SET(MKL_LIBS ${NO_AS_NEEDED} ${PTHREADS} ${OMP_LIB_NAME} ${MKL_LIB_LP} ${MKL_LIB_CORE} ${MKL_LIB_GT} ${MKL_LIB_AVX} ${MKL_LIB_AVX512})
     ELSE()
         IF (${USE_MKL})
-            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core)
+            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib -Wl,-rpath,${PYTHON_LIB_PATH} ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core)
         ELSE()
-            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core)
+            SET(MKL_LIBS ${NO_AS_NEEDED} -Wl,-rpath,$ENV{MKLROOT}/lib -Wl,-rpath,${PYTHON_LIB_PATH} ${PTHREADS} ${OMP_LIB_NAME} -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core)
         ENDIF()
     ENDIF()
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_BKP})
     MESSAGE(STATUS "MKL_INCLUDE_DIR = ${MKL_INCLUDE_DIR}")
     MESSAGE(STATUS "MKL_LIBS = ${MKL_LIBS}")
 ELSE()

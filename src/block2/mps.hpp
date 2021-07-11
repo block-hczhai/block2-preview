@@ -1339,6 +1339,59 @@ template <typename S> struct MPS {
         if (para_rule != nullptr)
             para_rule->comm->barrier();
     }
+    void to_singlet_embedding_wfn(
+        const shared_ptr<CG<S>> &cg,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(center == 0);
+        char orig_canonical_form = canonical_form[center];
+        if (canonical_form[center] == 'K')
+            flip_fused_form(center, cg, para_rule);
+        assert(canonical_form[center] == 'S');
+        load_tensor(center);
+        S dq = tensors[center]->info->delta_quantum;
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
+        if (para_rule == nullptr || para_rule->is_root()) {
+            assert(tensors[center]->info->n == 1 &&
+                   tensors[center]->info->quanta[0].get_bra(dq) ==
+                       info->vacuum);
+            assert(tensors[center]->info->is_wavefunction);
+            shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+                make_shared<VectorAllocator<uint32_t>>();
+            shared_ptr<VectorAllocator<double>> d_alloc =
+                make_shared<VectorAllocator<double>>();
+            shared_ptr<SparseMatrixInfo<S>> wfn_info =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            shared_ptr<SparseMatrix<S>> wfn =
+                make_shared<SparseMatrix<S>>(d_alloc);
+            S dqse(dq.n() + dq.twos(), 0, dq.pg());
+            S lq(dq.twos(), dq.twos(), 0);
+            StateInfo<S> lsi(lq), rsi(dq);
+            rsi.n_states[0] = tensors[center]->info->n_states_ket[0];
+            wfn_info->initialize(lsi, rsi, dqse, false, true);
+            wfn->allocate(wfn_info);
+            rsi.deallocate();
+            lsi.deallocate();
+            assert(wfn->total_memory == tensors[center]->total_memory);
+            memcpy(wfn->data, tensors[center]->data,
+                   sizeof(double) * wfn->total_memory);
+            unload_tensor(center);
+            tensors[center] = wfn;
+            save_tensor(center);
+            info->set_bond_dimension_fci(lq);
+            info->load_left_dims(center);
+            info->left_dims[center]->quanta[0] = lq;
+            info->save_left_dims(center);
+        } else {
+            S lq(dq.twos(), dq.twos(), 0);
+            info->set_bond_dimension_fci(lq);
+        }
+        unload_tensor(center);
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
+        if (canonical_form[center] != orig_canonical_form)
+            flip_fused_form(center, cg, para_rule);
+    }
     // CC -> KR or K -> S or LS -> KR or LK -> KR
     void move_left(const shared_ptr<CG<S>> &cg,
                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {

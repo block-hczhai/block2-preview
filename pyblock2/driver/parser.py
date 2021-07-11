@@ -29,6 +29,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "full_fci_space", "trans_mps_info", "trunc_type", "decomp_type",
               "orbital_rotation", "delta_t", "target_t", "te_type",
               "read_mps_tags", "compression", "random_mps_init", "trans_mps_to_sz",
+              "trans_mps_to_singlet_embedding", "trans_mps_from_singlet_embedding",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample",
               "extrapolation", "cached_contraction", "singlet_embedding"}
 
