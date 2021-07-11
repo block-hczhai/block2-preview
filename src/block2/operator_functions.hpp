@@ -26,6 +26,7 @@
 #include "sparse_matrix.hpp"
 #include <cassert>
 #include <memory>
+#include <array>
 
 using namespace std;
 
@@ -371,13 +372,11 @@ template <typename S> struct OperatorFunctions {
         int ixa = cinfo->idx[ik];
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         vector<pair<array<int, 4>, double>> abcv(ixb - ixa);
-        array<int, 4> xabcv;
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
                 iv = (int)cinfo->stride[il];
             double factor = cinfo->factor[il];
-            xabcv = array<int, 4>{ia, ib, ic, iv};
-            abcv[il - ixa] = make_pair(xabcv, factor);
+            abcv[il - ixa] = make_pair(array<int, 4>{ia, ib, ic, iv}, factor);
         }
         simple_sort(abcv, [](const pair<array<int, 4>, double> &x) {
             return x.first[1];
