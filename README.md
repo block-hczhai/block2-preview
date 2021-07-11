@@ -26,7 +26,7 @@ One can install ``block2`` using:
 
     pip install block2
 
-To run a DMRG calculation, please using the following command:
+To run a DMRG calculation, please use the following command:
 
     block2.py dmrg.conf > dmrg.out
 
