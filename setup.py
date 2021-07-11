@@ -73,7 +73,7 @@ class CMakeBuild(build_ext):
 
 
 setup(name='block2',
-      version='0.1.5',
+      version='0.1.6',
       packages=find_packages(),
       ext_modules=[CMakeExt('block2')],
       cmdclass={'build_ext': CMakeBuild},

@@ -485,7 +485,11 @@ elif pre_run or not no_pre_run:
         mps = MPS(n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
-    mps.tensors[mps.center].normalize()
+    if nroots == 1:
+        mps.tensors[mps.center].normalize()
+    else:
+        for xwfn in mps.wfns:
+            xwfn.normalize()
     forward = mps.center == 0
 else:
     mps_info = MPSInfo(0) if nroots == 1 and len(
