@@ -550,8 +550,12 @@ if pre_run or not no_pre_run:
     _print("build mpo", time.perf_counter() - tx)
     mpo = MPOQC(hamil, QCTypes.Conventional)
     _print("simpl mpo", time.perf_counter() - tx)
-    mpo = SimplifiedMPO(mpo, AntiHermitianRuleQC(RuleQC()) if anti_herm else RuleQC(),
-                        True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+    xrule = RuleQC()
+    if has_tran:
+        xrule = NoTransposeRule(xrule)
+    if anti_herm:
+        xrule = AntiHermitianRuleQC(xrule)
+    mpo = SimplifiedMPO(mpo, xrule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
 
     _print('GS MPO BOND DIMS = ', ''.join(
