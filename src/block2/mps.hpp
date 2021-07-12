@@ -1378,12 +1378,17 @@ template <typename S> struct MPS {
             unload_tensor(center);
             tensors[center] = wfn;
             save_tensor(center);
+            assert(info->target == dq);
+            info->target = dqse;
             info->set_bond_dimension_fci(lq);
             info->load_left_dims(center);
             info->left_dims[center]->quanta[0] = lq;
             info->save_left_dims(center);
         } else {
+            S dqse(dq.n() + dq.twos(), 0, dq.pg());
             S lq(dq.twos(), dq.twos(), 0);
+            assert(info->target == dq);
+            info->target = dqse;
             info->set_bond_dimension_fci(lq);
         }
         unload_tensor(center);

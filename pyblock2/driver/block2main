@@ -1692,9 +1692,6 @@ if not pre_run:
             while cp_mps.center > 0:
                 cp_mps.move_left(cg, prule)
             cp_mps.to_singlet_embedding_wfn(cg, prule)
-            print(cp_mps.info.left_dims_fci[1], copy_tag)
-            cp_mps.info.load_mutable()
-            print(cp_mps.info.left_dims[1], copy_tag)
             if MPI is None or MPI.rank == 0:
                 cp_mps.save_data()
 
