@@ -3,7 +3,7 @@
 # Test for the block2 driver using input file format
 # dmrg.conf/gaopt.conf from StackBlock 1.5
 
-DMRG=../../pyblock2/driver/block2.py
+DMRG=../../pyblock2/driver/block2main
 GAOPT=../../pyblock2/driver/gaopt.py
 
 echo TEST DMRG ...

@@ -28,7 +28,7 @@ One can install ``block2`` using:
 
 To run a DMRG calculation, please use the following command:
 
-    block2.py dmrg.conf > dmrg.out
+    block2main dmrg.conf > dmrg.out
 
 where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
 
@@ -285,7 +285,7 @@ Test State-Interaction (SI)-DMRG (need `pyscf` module):
 
 ### StackBlock Compatibility
 
-A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/block2.py`.
+A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/block2main`.
 This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
 The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
 See `docs/driver.md` for detailed documentations for this interface.

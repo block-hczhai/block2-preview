@@ -26,15 +26,15 @@ if len(sys.argv) > 1:
 else:
     raise ValueError("""
         Usage:
-            (A) python gaopt.py -integral FCIDUMP
-            (B) python gaopt.py -config gaopt.conf -integral FCIDUMP
-            (C) python gaopt.py -config gaopt.conf -integral ints.h5
-            (D) python gaopt.py -s -config gaopt.conf -integral kmat (read kmat)
-            (E) python gaopt.py ... -w kmat (write kmat)
-            (F) python gaopt.py ... -wint FCIDUMP.NEW (write reordered FCIDUMP)
-            (G) python gaopt.py -ord RestartReorder.dat -wint FCIDUMP.NEW
+            (A) python gaopt -integral FCIDUMP
+            (B) python gaopt -config gaopt.conf -integral FCIDUMP
+            (C) python gaopt -config gaopt.conf -integral ints.h5
+            (D) python gaopt -s -config gaopt.conf -integral kmat (read kmat)
+            (E) python gaopt ... -w kmat (write kmat)
+            (F) python gaopt ... -wint FCIDUMP.NEW (write reordered FCIDUMP)
+            (G) python gaopt -ord RestartReorder.dat -wint FCIDUMP.NEW
                 (read from StackBlock reorder file, write reordered FCIDUMP)
-            (H) python gaopt.py -fiedler -wint FCIDUMP.NEW
+            (H) python gaopt -fiedler -wint FCIDUMP.NEW
                 (write fiedler reordered FCIDUMP)
     """)
 

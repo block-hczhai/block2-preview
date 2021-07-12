@@ -39,13 +39,13 @@ if len(sys.argv) > 1:
 else:
     raise ValueError("""
         Usage: either:
-            (A) python block2.py dmrg.conf
+            (A) python block2main dmrg.conf
             (B) reduced memory mode (save/load serial mpo):
-                Step 1: python block2.py dmrg.conf pre
-                Step 2: python block2.py dmrg.conf run
+                Step 1: python block2main dmrg.conf pre
+                Step 2: python block2main dmrg.conf run
             (C) extra reduced memory mode (save/load parallel mpo):
-                Step 1: python block2.py dmrg.conf para-pre
-                Step 2: python block2.py dmrg.conf para-run
+                Step 1: python block2main dmrg.conf para-pre
+                Step 2: python block2main dmrg.conf para-run
     """)
 
 dic = parse(fin)
@@ -368,7 +368,10 @@ elif "fullrestart" in dic:
     _print("full restart")
     mps_info = MPSInfo(0) if nroots == 1 and len(
         targets) == 1 else MultiMPSInfo(0)
-    mps_info.load_data(scratch + "/mps_info.bin")
+    if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
+        mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
+    else:
+        mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = mps_tags[0]
     mps_info.load_mutable()
     max_bdim = max([x.n_states_total for x in mps_info.left_dims])
@@ -494,7 +497,10 @@ elif pre_run or not no_pre_run:
 else:
     mps_info = MPSInfo(0) if nroots == 1 and len(
         targets) == 1 else MultiMPSInfo(0)
-    mps_info.load_data(scratch + "/mps_info.bin")
+    if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
+        mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
+    else:
+        mps_info.load_data(scratch + "/mps_info.bin")
     mps_info.tag = mps_tags[0]
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
@@ -1686,6 +1692,9 @@ if not pre_run:
             while cp_mps.center > 0:
                 cp_mps.move_left(cg, prule)
             cp_mps.to_singlet_embedding_wfn(cg, prule)
+            print(cp_mps.info.left_dims_fci[1], copy_tag)
+            cp_mps.info.load_mutable()
+            print(cp_mps.info.left_dims[1], copy_tag)
             if MPI is None or MPI.rank == 0:
                 cp_mps.save_data()
 
