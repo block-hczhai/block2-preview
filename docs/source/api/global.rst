@@ -6,6 +6,9 @@ In **block2**, we try to minimize the use of global variables.
 Two global variables have been used for controlling global settings such as stack memory,
 scartch folder and threading schemes.
 
+Note that in ``block2`` the distributed parallelization scheme is handled
+locally.
+
 .. doxygendefine:: frame
 
 .. doxygendefine:: threading

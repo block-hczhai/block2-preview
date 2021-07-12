@@ -18,6 +18,9 @@
  *
  */
 
+/** Global definition for global stack memory, scratch space, restarting
+ * folder, and IO strategies. */
+
 #pragma once
 
 #include "fp_codec.hpp"
@@ -44,6 +47,10 @@ using namespace std;
 
 namespace block2 {
 
+/**
+ * Print calling stack when an error happens.
+ * Not working for non-unix systems.
+ */
 inline void print_trace() {
 #ifdef __unix__
     void *array[32];
@@ -56,23 +63,57 @@ inline void print_trace() {
     abort();
 }
 
-// Abstract memory allocator
+/** Abstract memory allocator.
+ * @tparam T The type of the element in the array. */
 template <typename T> struct Allocator {
+    /** Default constructor. */
     Allocator() {}
+    /** Default destructor. */
     virtual ~Allocator() = default;
+    /** Allocate a length n array.
+     * @param n Number of elements in the array.
+     * @return The allocated pointer.
+     */
     virtual T *allocate(size_t n) { return nullptr; }
+    /** Deallocate a length n array.
+     * @param ptr The pointer to be deallocated.
+     * @param n Number of elements in the array.
+     */
     virtual void deallocate(void *ptr, size_t n) {}
+    /** Adjust the size an allocated pointer. No data copying will happen.
+     * @param ptr The allocated pointer.
+     * @param n Number of elements in original allocation.
+     * @param new_n Number of elements in the new allocation.
+     * @return The new pointer.
+     */
     virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
+    /** Return a copy of the allocator.
+     * @return ptr The copy of this allocator.
+     */
     virtual shared_ptr<Allocator<T>> copy() const { return nullptr; }
 };
 
-// Stack memory allocator
+/** Stack memory allocator.
+ * @tparam T The type of the element in the array. */
 template <typename T> struct StackAllocator : Allocator<T> {
-    size_t size, used, shift;
-    T *data;
+    size_t size, //!< Total size of the stack (in number of elements).
+        used,    //!< Occupied size of the stack (in number of elements).
+        shift; //!< Temporary shift introduced due to deallocation in the middle
+               //!< of the stack.
+    T *data;   //!< Pointer to the first elemenet in the stack.
+    /** Constructor.
+     * @param ptr Pointer to the first elemenet in the stack. The stack should
+     * be pre-allocated.
+     * @param max_size Total size of the stack (in number of elements).
+     */
     StackAllocator(T *ptr, size_t max_size)
         : size(max_size), used(0), shift(0), data(ptr) {}
+    /** Default constructor. */
     StackAllocator() : size(0), used(0), shift(0), data(0) {}
+    /** Allocate a length n array.
+     * @param n Number of elements in the array.
+     * @return The allocated pointer.
+     */
     T *allocate(size_t n) override {
         assert(shift == 0);
         if (used + n >= size) {
@@ -84,6 +125,11 @@ template <typename T> struct StackAllocator : Allocator<T> {
         } else
             return data + (used += n) - n;
     }
+    /** Deallocate a length n array.
+     * Must be invoked in the reverse order of allocation.
+     * @param ptr The pointer to be deallocated.
+     * @param n Number of elements in the array.
+     */
     void deallocate(void *ptr, size_t n) override {
         if (n == 0)
             return;
@@ -93,8 +139,13 @@ template <typename T> struct StackAllocator : Allocator<T> {
         } else
             used -= n;
     }
-    // Change the allocated size in middle of stack memory
-    // and introduce a shift for moving memory after it
+    /** Change the allocated size in middle of stack memory
+     * and introduce a shift for moving memory after it.
+     * @param ptr The allocated pointer.
+     * @param n Number of elements in original allocation.
+     * @param new_n Number of elements in the new allocation.
+     * @return The new pointer.
+     */
     T *reallocate(T *ptr, size_t n, size_t new_n) override {
         ptr += shift;
         shift += new_n - n;
@@ -103,6 +154,11 @@ template <typename T> struct StackAllocator : Allocator<T> {
             shift = 0;
         return (T *)ptr;
     }
+    /** Print the status of the allocator.
+     * @param os The output stream.
+     * @param c The object to be printed.
+     * @return The output stream.
+     */
     friend ostream &operator<<(ostream &os, const StackAllocator &c) {
         os << "SIZE=" << c.size << " PTR=" << c.data << " USED=" << c.used
            << " SHIFT=" << (long)c.shift << endl;
@@ -110,22 +166,32 @@ template <typename T> struct StackAllocator : Allocator<T> {
     }
 };
 
-// Vector memory allocator (with automatic deallocation)
+/** Vector memory allocator.
+ * @tparam T The type of the element in the array. */
 template <typename T> struct VectorAllocator : Allocator<T> {
 #ifdef _HAS_TBB
     vector<vector<T, tbb::scalable_allocator<T>>,
            tbb::scalable_allocator<vector<T, tbb::scalable_allocator<T>>>>
-        data;
+        data; //!< The data blocks allocated using TBB for better threading
+              //!< performance.
 #else
-    vector<vector<T>> data;
+    vector<vector<T>> data; //!< The allocated data blocks.
 #endif
+    /** Default constructor. */
     VectorAllocator() {}
+    /** Allocate a length n array.
+     * @param n Number of elements in the array.
+     * @return The allocated pointer.
+     */
     T *allocate(size_t n) override {
         data.emplace_back(n);
         return data.back().data();
     }
-    // explicit deallocation is not required for vector allocator
-    // can be in arbitrary order
+    /** Deallocate a length n array. Note that explicit deallocation is not
+     * required for vector allocator. Can be invoked in arbitrary order.
+     * @param ptr The pointer to be deallocated.
+     * @param n Number of elements in the array.
+     */
     void deallocate(void *ptr, size_t n) override {
         for (int i = (int)data.size() - 1; i >= 0; i--)
             if (data[i].data() == ptr) {
@@ -136,7 +202,12 @@ template <typename T> struct VectorAllocator : Allocator<T> {
         cout << "deallocation of unallocated address" << endl;
         abort();
     }
-    // Change the allocated size for one allocated block
+    /** Change the allocated size for one allocated block.
+     * @param ptr The allocated pointer.
+     * @param n Number of elements in original allocation.
+     * @param new_n Number of elements in the new allocation.
+     * @return The new pointer.
+     */
     T *reallocate(T *ptr, size_t n, size_t new_n) override {
         for (int i = (int)data.size() - 1; i >= 0; i--)
             if (data[i].data() == ptr) {
@@ -150,11 +221,18 @@ template <typename T> struct VectorAllocator : Allocator<T> {
         cout << "reallocation of unallocated address" << endl;
         abort();
     }
-    // When deep-copying objects using VectorAllocator, the other object
-    // should have an independent allocator, since VectorAllocator is not global
+    /** Return a copy of the allocator. When deep-copying objects using
+     * VectorAllocator, the other object should have an independent allocator,
+     * since VectorAllocator is not global.
+     * @return ptr The copy of this allocator. */
     shared_ptr<Allocator<T>> copy() const override {
         return make_shared<VectorAllocator<T>>();
     }
+    /** Print the status of the allocator.
+     * @param os The output stream.
+     * @param c The object to be printed.
+     * @return The output stream.
+     */
     friend ostream &operator<<(ostream &os, const VectorAllocator &c) {
         os << "N-ALLOCATED=" << c.data.size << " USED="
            << accumulate(
@@ -165,48 +243,58 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     }
 };
 
-// Integer stack memory pointer
+/** Implementation of the ``ialloc`` global variable. */
 inline shared_ptr<StackAllocator<uint32_t>> &ialloc_() {
     static shared_ptr<StackAllocator<uint32_t>> ialloc;
     return ialloc;
 }
 
-// Double stack memory pointer
+/** Implementation of the ``dalloc`` global variable. */
 inline shared_ptr<StackAllocator<double>> &dalloc_() {
     static shared_ptr<StackAllocator<double>> dalloc;
     return dalloc;
 }
 
+/** Global variable for the integer stack memory allocator. */
 #define ialloc (ialloc_())
+
+/** Global variable for the double stack memory allocator. */
 #define dalloc (dalloc_())
 
-// DataFrame includes several (n_frames = 2) frames
-// Each frame includes one integer stack memory
-// and one double stack memory
-// Using frames alternatively to avoid data copying
+/** DataFrame includes several (n_frames = 2) frames.
+ * Each frame includes one integer stack memory and one double stack memory.
+ * The two frames are used alternatively to avoid data copying. */
 struct DataFrame {
-    // save_dir: scartch folder for renormalized operators
-    // mps_dir: scartch folder for MPS (default is the same as save_dir)
-    // restart_dir: if not empty, save MPS to this dir after each sweep
-    // restart_dir_per_sweep: if not empty, save MPS to this dir with sweep
-    //   index as suffix, so that MPS from all sweeps will be kept in individual
-    //   dir
-    // restart_dir_optimal_mps: if not empty, save MPS to this dir whenever
-    //     an optimal solution is reached in one sweep
-    //     For DMRG, this is the MPS with the lowest energy
-    //   Note that if the best solution from the current sweep is worse than
-    //     the best solution from the previous sweep (for example in a reverse
-    //     schedule), the best solution from the current sweep is saved
-    // restart_dir_optimal_mps_per_sweep:
-    //   if not empty, save the optimal MPS from each sweep to this dir
-    //     with sweep index as suffix
-    string save_dir, mps_dir;
-    string restart_dir = "", restart_dir_per_sweep = "";
-    string restart_dir_optimal_mps = "";
-    string restart_dir_optimal_mps_per_sweep = "";
-    string prefix = "F", prefix_distri = "F0";
-    bool prefix_can_write = true;
-    bool partition_can_write = true;
+    string save_dir, //!< Scartch folder for renormalized operators.
+        mps_dir; //!< Scartch folder for MPS (default is the same as save_dir).
+    string restart_dir =
+               "", //!< If not empty, save MPS to this dir after each sweep.
+        restart_dir_per_sweep =
+            ""; //!< if not empty, save MPS to this dir with sweep index as
+                //!< suffix, so that MPS from all sweeps will be kept in
+                //!< individual dirs.
+    string restart_dir_optimal_mps =
+        ""; //!< If not empty, save MPS to this dir
+            //!< whenever an optimal solution is reached in one sweep. For DMRG,
+            //!< this is the MPS with the lowest energy. Note that if the best
+            //!< solution from the current sweep is worse than the best solution
+            //!< from the previous sweep (for example in a reverse schedule),
+            //!< the best solution from the current sweep is saved.
+    string restart_dir_optimal_mps_per_sweep =
+        ""; //!< If not empty, save the optimal MPS from each sweep to this dir
+            //!< with sweep index as suffix.
+    string prefix = "F", //!< Filename prefix for common scratch files (such as
+                         //!< MPS tensors).
+        prefix_distri =
+            "F0"; //!< Filename prefix for distributed scratch files (such as
+                  //!< renormalized operators). When distributed parallelization
+                  //!< is used, different procs will have different values for
+                  //!< this data.
+    bool prefix_can_write =
+        true; //!< Whether this proc should be able to write common scratch
+              //!< files (such as MPS tensors).
+    bool partition_can_write = true; //!< Whether this proc should be able to
+                                     //!< write renormalized operators.
     size_t isize, dsize;
     int n_frames, i_frame;
     mutable double tread = 0, twrite = 0, tasync = 0; // io time cost
@@ -460,7 +548,8 @@ inline shared_ptr<DataFrame> &frame_() {
     return frame;
 }
 
-/** Global variable for accessing global stack memory and file I/O in scratch space. */
+/** Global variable for accessing global stack memory and file I/O in scratch
+ * space. */
 #define frame (frame_())
 
 // Function pointer for signal checking
