@@ -894,6 +894,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
         .def("canonicalize", &MPS<S>::canonicalize)
         .def("random_canonicalize", &MPS<S>::random_canonicalize)
+        .def("from_singlet_embedding_wfn", &MPS<S>::from_singlet_embedding_wfn,
+             py::arg("cg"), py::arg("para_rule") = nullptr)
         .def("to_singlet_embedding_wfn", &MPS<S>::to_singlet_embedding_wfn,
              py::arg("cg"), py::arg("para_rule") = nullptr)
         .def("move_left", &MPS<S>::move_left, py::arg("cg"),
