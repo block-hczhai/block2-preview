@@ -358,6 +358,7 @@ def fmt_size(i, suffix='B'):
             a *= 1024
     return "??? " + suffix
 
+
 # prepare mps
 if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic):
     nroots = len(mps_tags)
@@ -561,7 +562,8 @@ if pre_run or not no_pre_run:
         xrule = NoTransposeRule(xrule)
     if anti_herm:
         xrule = AntiHermitianRuleQC(xrule)
-    mpo = SimplifiedMPO(mpo, xrule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+    mpo = SimplifiedMPO(mpo, xrule, True, True,
+                        OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
 
     _print('GS MPO BOND DIMS = ', ''.join(
@@ -610,7 +612,7 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         impo.save_data(scratch + '/mpo-ident.bin')
-    
+
     if para_pre_run:
         if MPI is not None:
             if one_body_only:
@@ -678,7 +680,7 @@ else:
 
         _print('IDENT MPO BOND DIMS = ', ''.join(
             ["%6d" % (x.m * x.n) for x in impo.left_operator_names]))
-    
+
     else:
 
         if MPI is not None:
@@ -698,7 +700,7 @@ else:
                 p2mpo = MPO(0)
             nmpo = MPO(0)
             impo = MPO(0)
-        
+
         mrank = MPI.rank if MPI is not None else 0
         mpo.load_data(scratch + '/mpo.bin.%d' % mrank, minimal=True)
         pmpo.load_data(scratch + '/mpo-1pdm.bin.%d' % mrank, minimal=True)
@@ -714,6 +716,7 @@ try:
 except ImportError:
     pass
 
+
 def split_mps(iroot, mps, mps_info):
     mps.load_data()  # this will avoid memory sharing
     mps_info.load_mutable()
@@ -727,7 +730,8 @@ def split_mps(iroot, mps, mps_info):
             left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
             right_vacuum = vacuum
             if "full_fci_space" in dic:
-                smps_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+                smps_info.set_bond_dimension_full_fci(
+                    left_vacuum, right_vacuum)
             else:
                 smps_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
         else:
@@ -757,7 +761,8 @@ def split_mps(iroot, mps, mps_info):
             left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
             right_vacuum = vacuum
             if "full_fci_space" in dic:
-                smps_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+                smps_info.set_bond_dimension_full_fci(
+                    left_vacuum, right_vacuum)
             else:
                 smps_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
         else:
@@ -1666,13 +1671,49 @@ if not pre_run:
         else:
             copy_tag = dic["copy_mps"]
         if copy_tag == '':
-            raise ValueError("A tag name must be given for the keyword copy_mps/restart_copy_mps!")
+            raise ValueError(
+                "A tag name must be given for the keyword copy_mps/restart_copy_mps!")
         if "trans_mps_to_sz" in dic:
             assert "nonspinadapted" not in dic
             mps.info.load_mutable()
             mps.load_mutable()
             cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(
                 mps), copy_tag, mpo.tf.opf.cg).finalize()
+            dot_bk, center_bk = cp_mps.dot, cp_mps.center
+            if MPI is not None:
+                MPI.barrier()
+            last_flipped = None
+            if dot == 2:
+                if cp_mps.center == 0 and cp_mps.canonical_form[cp_mps.center + 1] == 'R':
+                    cp_mps.dot = 1
+                elif cp_mps.center == cp_mps.n_sites - 2 and cp_mps.canonical_form[cp_mps.center] == 'L':
+                    cp_mps.center = cp_mps.n_sites - 1
+                    cp_mps.dot = 1
+                    if cp_mps.canonical_form[cp_mps.center] in ['C', 'S']:
+                        last_flipped = cp_mps.canonical_form[cp_mps.center]
+                        from block2.sz import MPICommunicator as MPICommunicatorX
+                        from block2.sz import CG as CGX, ParallelRuleQC as ParallelRuleQCX
+                        prulex = ParallelRuleQCX(MPICommunicatorX())
+                        cgx = CGX(200)
+                        cgx.initialize()
+                        cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'S'
+                        cp_mps.flip_fused_form(cp_mps.center, cgx, prulex)
+            cp_mps.info.load_mutable()
+            cp_mps.load_mutable()
+            cp_mps.canonicalize()
+            cp_mps.dot, cp_mps.center = dot_bk, center_bk
+            if MPI is not None:
+                MPI.barrier()
+            if MPI is None or MPI.rank == 0:
+                cp_mps.info.save_mutable()
+                cp_mps.save_mutable()
+                cp_mps.save_data()
+            if MPI is not None:
+                MPI.barrier()
+            if last_flipped is not None:
+                cp_mps.flip_fused_form(cp_mps.n_sites - 1, cgx, prulex)
+                cp_mps.canonical_form = cp_mps.canonical_form[:
+                                                              - 1] + last_flipped
         else:
             cp_mps = mps.deep_copy(copy_tag)
 
@@ -1710,7 +1751,7 @@ if not pre_run:
             sample_cutoff = float(dic.get("restart_sample", 0))
         else:
             sample_cutoff = float(dic.get("sample", 0))
-        
+
         if "trans_mps_to_sz" in dic:
             from block2.sz import DeterminantTRIE, UnfusedMPS
             su2mps = False
