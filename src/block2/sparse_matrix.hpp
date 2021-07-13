@@ -42,7 +42,7 @@ namespace block2 {
 
 template <typename, typename = void> struct SparseMatrixInfo;
 
-// Symmetry label information for block-sparse matrix
+// Quantum label information for block-sparse matrix
 template <typename S>
 struct SparseMatrixInfo<
     S, typename enable_if<integral_constant<

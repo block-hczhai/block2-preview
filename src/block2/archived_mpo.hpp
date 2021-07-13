@@ -18,6 +18,8 @@
  *
  */
 
+/** Store tensors in MPO to save memory cost. */
+
 #pragma once
 
 #include "archived_tensor_functions.hpp"
@@ -28,8 +30,19 @@ using namespace std;
 
 namespace block2 {
 
+/** An MPO with site operator stored in disk.
+ * Note that this allows only loading one site operator at a time, which can
+ * greatly save memory. But the IO overhead can be extremely high. The better
+ * solution should be using ``archive_filename`` in ``MPO``, which loads all
+ * data in a site tensor at a time.
+ * @tparam S Quantum label type.
+ */
 template <typename S> struct ArchivedMPO : MPO<S> {
     using MPO<S>::n_sites;
+    /** Constructor.
+     * @param mpo The original MPO.
+     * @param tag The tag for constructing a unique filename for this MPO.
+     */
     ArchivedMPO(const shared_ptr<MPO<S>> &mpo, const string &tag = "MPO")
         : MPO<S>(*mpo) {
         shared_ptr<ArchivedTensorFunctions<S>> artf =
@@ -41,6 +54,9 @@ template <typename S> struct ArchivedMPO : MPO<S> {
         for (int16_t m = n_sites - 1; m >= 0; m--)
             artf->archive_tensor(MPO<S>::tensors[m]);
     }
+    /** Deallocate operator data in this MPO.
+     * Since all MPO tensor data is stored in disk, this method does nothing.
+     */
     void deallocate() override {}
 };
 

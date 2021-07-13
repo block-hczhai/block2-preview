@@ -295,23 +295,66 @@ struct DataFrame {
               //!< files (such as MPS tensors).
     bool partition_can_write = true; //!< Whether this proc should be able to
                                      //!< write renormalized operators.
-    size_t isize, dsize;
-    int n_frames, i_frame;
-    mutable double tread = 0, twrite = 0, tasync = 0; // io time cost
-    mutable double fpread = 0, fpwrite = 0;           // fp data io time cost
-    mutable Timer _t, _t2;
-    vector<shared_ptr<StackAllocator<uint32_t>>> iallocs;
-    vector<shared_ptr<StackAllocator<double>>> dallocs;
-    mutable vector<size_t> peak_used_memory;
-    mutable vector<string> present_filenames;
+    size_t isize,             //!< Max number of elements in all integer stacks.
+        dsize;                //!< Max number of elements in all double stacks.
+    int n_frames,             //!< Total number of data frames.
+        i_frame;              //!< The index of Current activated data frame.
+    mutable double tread = 0, //!< IO Time cost for reading scratch files.
+        twrite = 0,           //!< IO Time cost for writing scratch files.
+        tasync = 0;           //!< IO Time cost for async writing scratch files.
+    mutable double fpread = 0, //!< IO Time cost for reading scratch files with
+                               //!< floating-point decompression.
+        fpwrite = 0;           //!< IO Time cost for writing scratch files with
+                               //!< floating-point compression.
+    mutable Timer _t,          //!< Temporary timer.
+        _t2;                   //!< Auxiliary temporary timer.
+    vector<shared_ptr<StackAllocator<uint32_t>>>
+        iallocs; //!< Integer stacks allocators.
+    vector<shared_ptr<StackAllocator<double>>>
+        dallocs; //!< Double stacks allocators.
+    mutable vector<size_t>
+        peak_used_memory; //!< Peak used memory by stacks (in Bytes). Even
+                          //!< indices are for double stacks. Odd indices are
+                          //!< for interger stacks.
+    mutable vector<string>
+        present_filenames; //!< The filename for the current stack memory
+                           //!< content for each data frame. Used for tracking
+                           //!< loading and saving buffering to avoid loading
+                           //!< the same data into memory.
     mutable vector<pair<string, shared_ptr<stringstream>>> load_buffers;
+    //!< Buffers for loading. Skpping reading a file with certain filename, if
+    //!< the contents of the file with that filename is in the loading buffer.
     mutable vector<pair<string, shared_ptr<stringstream>>> save_buffers;
+    //!< Buffers for Async saving.
     mutable vector<shared_future<void>> save_futures;
-    bool load_buffering = false, save_buffering = false;
-    bool use_main_stack = true;
-    bool minimal_disk_usage = false;
-    shared_ptr<FPCodec<double>> fp_codec = nullptr;
+    //!< Async saving files.
+    bool load_buffering = false, //!< Whether load buffering should be used. If
+                                 //!< true, memory usage will increase.
+        save_buffering =
+            false; //!< Whether async saving and saving buffering should be
+                   //!< used. If true, memory usage will increase.
+    bool use_main_stack =
+        true; //!< Whether main stack should be used for storing blocked
+              //!< operators in enlarged blocks. If false, these blocked
+              //!< operators will be stored in dynamically allocated memory.
+    bool minimal_disk_usage =
+        false; //!< Whether temporary renormalized operator files should be
+               //!< deleted as soon as possible. If true, will save roughly half
+               //!< of required storage for renormalized operators.
+    shared_ptr<FPCodec<double>> fp_codec =
+        nullptr; //!< Floating-point compression codec. If nullptr,
+                 //!< floating-point compression will not be used.
     // isize and dsize are in Bytes
+    /** Constructor.
+     * @param isize Max size (in bytes) of all integer stacks.
+     * @param dsize Max size (in bytes) of all double stacks.
+     * @param save_dir Scartch folder for renormalized operators.
+     * @param dmain_ratio The fraction of stack space occupied by the main
+     * double stacks.
+     * @param imain_ratio The fraction of stack space occupied by the main
+     * integer stacks.
+     * @param n_frames Number of data frames.
+     */
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double dmain_ratio = 0.7,
               double imain_ratio = 0.7, int n_frames = 2)
@@ -345,22 +388,38 @@ struct DataFrame {
         if (!Parsing::path_exists(mps_dir))
             Parsing::mkdir(mps_dir);
     }
+    /** Destructor. */
     ~DataFrame() { deallocate(); }
+    /** Activate one data frame.
+     * @param i The index of the data frame to be activated.
+     */
     void activate(int i) {
         ialloc_() = iallocs[i_frame = i];
         dalloc_() = dallocs[i_frame];
     }
+    /** Reset one data frame, marking all stack memory as unused.
+     * @param i The index of the data frame to be reset.
+     */
     void reset(int i) {
         iallocs[i]->used = 0;
         dallocs[i]->used = 0;
         present_filenames[i] = "";
     }
+    /** Reset saving and loading buffers for one data frame.
+     * Contents in the loading buffer will be deleted.
+     * Unsaved contents in the saving buffer will be saved in disk.
+     * @param i The index of the data frame.
+     */
     void reset_buffer(int i) {
         load_buffers[i] = make_pair("", nullptr);
         if (save_buffering && save_futures[i].valid())
             save_futures[i].wait();
         save_buffers[i] = make_pair("", nullptr);
     }
+    /** Rename one scratch file.
+     * @param old_filename original filename.
+     * @param new_filename new filename.
+     */
     void rename_data(const string &old_filename,
                      const string &new_filename) const {
         if (!Parsing::rename_file(old_filename, new_filename))
@@ -369,6 +428,10 @@ struct DataFrame {
         for (auto &fn : present_filenames)
             fn = "";
     }
+    /** Load one data frame from input stream.
+     * @param i The index of the data frame.
+     * @param ifs The input stream.
+     */
     void load_data_from(int i, istream &ifs) const {
         ifs.read((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
         ifs.read((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
@@ -381,7 +444,10 @@ struct DataFrame {
                      sizeof(double) * dallocs[i]->used);
         fpread += _t2.get_time();
     }
-    // Load one data frame from disk
+    /** Load one data frame from disk.
+     * @param i The index of the data frame.
+     * @param filename The filename for the data frame.
+     */
     void load_data(int i, const string &filename) const {
         _t.get_time();
         if (present_filenames[i] == filename) {
@@ -425,6 +491,10 @@ struct DataFrame {
         update_peak_used_memory();
         present_filenames[i] = filename;
     }
+    /** Save one data frame into output stream.
+     * @param i The index of the data frame.
+     * @param ofs The output stream.
+     */
     void save_data_to(int i, ostream &ofs) const {
         ofs.write((char *)&iallocs[i]->used, sizeof(iallocs[i]->used));
         ofs.write((char *)&dallocs[i]->used, sizeof(dallocs[i]->used));
@@ -438,6 +508,11 @@ struct DataFrame {
                       sizeof(double) * dallocs[i]->used);
         fpwrite += _t2.get_time();
     }
+    /** Save the data in buffer stream into disk.
+     * @param filename The filename for saving data.
+     * @param ss The buffer stream.
+     * @param tasync Pointer to the time recorder for async saving.
+     */
     static void buffer_save_data(const string &filename,
                                  const shared_ptr<stringstream> &ss,
                                  double *tasync) {
@@ -458,7 +533,10 @@ struct DataFrame {
         ofs.close();
         *tasync += tx.get_time();
     }
-    // Save one data frame to disk
+    /** Save one data frame to disk.
+     * @param i The index of the data frame.
+     * @param filename The filename for the data frame.
+     */
     void save_data(int i, const string &filename) const {
         if (!partition_can_write) {
             update_peak_used_memory();
@@ -494,6 +572,9 @@ struct DataFrame {
         update_peak_used_memory();
         present_filenames[i] = filename;
     }
+    /** Deallocate the memory allocated for all stacks.
+     * Note that this method is automatically invoked at deconstruction.
+     */
     void deallocate() {
         delete[] iallocs[0]->data;
         delete[] dallocs[0]->data;
@@ -504,12 +585,16 @@ struct DataFrame {
                 if (ft.valid())
                     ft.wait();
     }
+    /** Return the current used memory in all stacks.
+     * @return The current used memory in Bytes.
+     */
     size_t memory_used() const {
         size_t r = 0;
         for (int i = 0; i < n_frames; i++)
             r += dallocs[i]->used * 8 + iallocs[i]->used * 4;
         return r;
     }
+    /** Update prak used memory statistics. */
     void update_peak_used_memory() const {
         for (int i = 0; i < n_frames; i++) {
             peak_used_memory[i + 0 * n_frames] =
@@ -518,10 +603,16 @@ struct DataFrame {
                 max(peak_used_memory[i + 1 * n_frames], iallocs[i]->used * 4);
         }
     }
+    /** Reset prak used memory statistics to zero. */
     void reset_peak_used_memory() const {
         memset(peak_used_memory.data(), 0,
                sizeof(size_t) * peak_used_memory.size());
     }
+    /** Print the status of the data frame.
+     * @param os The output stream.
+     * @param df The object to be printed.
+     * @return The output stream.
+     */
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << " UseMainStack = " << df.use_main_stack
            << " MinDiskUsage = " << df.minimal_disk_usage
@@ -543,6 +634,7 @@ struct DataFrame {
     }
 };
 
+/** Implementation of the ``frame`` global variable. */
 inline shared_ptr<DataFrame> &frame_() {
     static shared_ptr<DataFrame> frame;
     return frame;
@@ -552,7 +644,7 @@ inline shared_ptr<DataFrame> &frame_() {
  * space. */
 #define frame (frame_())
 
-// Function pointer for signal checking
+/** Function pointer for signal checking. */
 inline void (*&check_signal_())() {
     static void (*check_signal)() = []() {};
     return check_signal;

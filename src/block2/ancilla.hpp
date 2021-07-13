@@ -18,6 +18,8 @@
  *
  */
 
+/** Enumerator for ancilla sites (for finite-temperature calculations). */
+
 #pragma once
 
 #include <cstdint>
@@ -26,7 +28,10 @@ using namespace std;
 
 namespace block2 {
 
-// Indicating whether a MPS/MPO includes ancilla
-enum struct AncillaTypes : uint8_t { None, Ancilla };
+/** Indicating whether a MPS/MPO includes ancilla sites. */
+enum struct AncillaTypes : uint8_t {
+    None,   //!< No ancilla sites.
+    Ancilla //!< With ancilla sites.
+};
 
 } // namespace block2

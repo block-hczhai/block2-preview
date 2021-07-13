@@ -18,6 +18,8 @@
  *
  */
 
+/** Block-sparse tensor with internal data stored in disk file. */
+
 #pragma once
 
 #include "csr_sparse_matrix.hpp"
@@ -27,8 +29,10 @@ using namespace std;
 
 namespace block2 {
 
-// Block-sparse Matrix associated with disk storage
-// Representing sparse operator
+/** Block-sparse Matrix associated with disk storage, representing sparse
+ * operator.
+ * @tparam S Quantum label type.
+ */
 template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
     using SparseMatrix<S>::alloc;
     using SparseMatrix<S>::info;
@@ -36,20 +40,41 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
     using SparseMatrix<S>::factor;
     using SparseMatrix<S>::total_memory;
     using SparseMatrix<S>::allocate;
-    string filename;
-    int64_t offset = 0;
-    SparseMatrixTypes sparse_type;
+    string filename;    //!< The name of the associated disk file.
+    int64_t offset = 0; //!< Byte offset in the file.
+    SparseMatrixTypes
+        sparse_type; //!< Type of the archived sparse matrix. Note that this is
+                     //!< not the type of this sparse matrix.
+    /** Constructor.
+     * @param filename The name of the associated disk file.
+     * @param offset Byte offset in the file (where to read/write the content).
+     * @param alloc Memory allocator.
+     */
     ArchivedSparseMatrix(const string &filename, int64_t offset,
                          const shared_ptr<Allocator<double>> &alloc = nullptr)
         : SparseMatrix<S>(alloc), filename(filename), offset(offset) {}
+    /** Get the type of this sparse matrix.
+     * @return Type of this sparse matrix.
+     */
     SparseMatrixTypes get_type() const override {
         return SparseMatrixTypes::Archived;
     }
+    /** Allocate memory for the sparse matrix non-zero elements.
+     * This method is not allowed here. Will cause assertion failure.
+     * @param info The quantum label information for the sparse matrix.
+     * @param ptr If not zero, the given pointer is used as the data pointer (no
+     * allocation will happen).
+     */
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
                   double *ptr = 0) override {
         assert(false);
     }
+    /** Release the allocated memory. This method does nothing here, since no
+     * memory is used by this object. */
     void deallocate() override {}
+    /** Load the sparse matrix data from disk.
+     * @return A normal or CSR sparse matrix (with data in memory).
+     */
     shared_ptr<SparseMatrix<S>> load_archive() {
         if (alloc == nullptr)
             alloc = dalloc;
@@ -89,6 +114,9 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
         } else
             throw runtime_error("Unknown SparseType");
     }
+    /** Write the sparse matrix data to disk.
+     * @param mat A normal or CSR sparse matrix (with data in memory).
+     */
     void save_archive(const shared_ptr<SparseMatrix<S>> &mat) {
         sparse_type = mat->get_type();
         alloc = mat->alloc;

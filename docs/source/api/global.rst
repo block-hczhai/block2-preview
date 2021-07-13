@@ -24,3 +24,36 @@ Threading
     :members:
 
 .. doxygenfunction:: block2::threading_
+
+Allocators
+----------
+
+.. doxygenstruct:: block2::Allocator
+    :members:
+
+.. doxygenstruct:: block2::StackAllocator
+    :members:
+
+.. doxygenstruct:: block2::VectorAllocator
+    :members:
+
+.. doxygenfunction:: block2::ialloc_
+
+.. doxygenfunction:: block2::dalloc_
+
+.. doxygendefine:: ialloc
+
+.. doxygendefine:: dalloc
+
+Data Frame
+----------
+
+.. doxygenstruct:: block2::DataFrame
+    :members:
+
+.. doxygenfunction:: block2::frame_
+
+Miscellanies
+------------
+
+.. doxygenfunction:: block2::print_trace
