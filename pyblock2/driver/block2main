@@ -1714,6 +1714,10 @@ if not pre_run:
                 cp_mps.flip_fused_form(cp_mps.n_sites - 1, cgx, prulex)
                 cp_mps.canonical_form = cp_mps.canonical_form[:
                                                               - 1] + last_flipped
+                if MPI is None or MPI.rank == 0:
+                    cp_mps.save_data()
+                if MPI is not None:
+                    MPI.barrier()
         else:
             cp_mps = mps.deep_copy(copy_tag)
 
