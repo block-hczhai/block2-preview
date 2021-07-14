@@ -519,11 +519,15 @@ else:
         mps = MPS(mps_info.n_sites, 0, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
-    mps.tensors[mps.center].normalize()
+    if nroots == 1:
+        mps.tensors[mps.center].normalize()
+    else:
+        for xwfn in mps.wfns:
+            xwfn.normalize()
     forward = mps.center == 0
 
 if mps is not None:
-    _print("MPS = ", mps.canonical_form, mps.center, mps.dot)
+    _print("MPS = ", mps.canonical_form, mps.center, mps.dot, mps.info.target)
     _print("GS INIT MPS BOND DIMS = ", ''.join(
         ["%6d" % x.n_states_total for x in mps_info.left_dims]))
 
@@ -1678,7 +1682,11 @@ if not pre_run:
             mps.info.load_mutable()
             mps.load_mutable()
             cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(
-                mps), copy_tag, mpo.tf.opf.cg).finalize()
+                mps), copy_tag, mpo.tf.opf.cg)
+            if "resolve_twosz" in dic:
+                res_twosz = int(dic["resolve_twosz"])
+                cp_mps.resolve_singlet_embedding(res_twosz)
+            cp_mps = cp_mps.finalize()
             dot_bk, center_bk = cp_mps.dot, cp_mps.center
             if MPI is not None:
                 MPI.barrier()
@@ -1700,7 +1708,9 @@ if not pre_run:
                         cp_mps.flip_fused_form(cp_mps.center, cgx, prulex)
             cp_mps.info.load_mutable()
             cp_mps.load_mutable()
-            cp_mps.canonicalize()
+            cp_mps.dynamic_canonicalize()
+            if "normalize_mps" in dic:
+                cp_mps.tensors[cp_mps.center].normalize()
             cp_mps.dot, cp_mps.center = dot_bk, center_bk
             if MPI is not None:
                 MPI.barrier()
@@ -1764,6 +1774,8 @@ if not pre_run:
 
         tx = time.perf_counter()
         dtrie = DeterminantTRIE(n_sites, True)
+        mps.info.load_mutable()
+        mps.load_mutable()
         dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
         _print("dtrie finished", time.perf_counter() - tx)
         if MPI is None or MPI.rank == 0:

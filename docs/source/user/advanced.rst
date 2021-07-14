@@ -180,7 +180,10 @@ MPS Transform
 The MPS can be copied and saved using another tag.
 For SU2 (spin-adapted) MPS, it can also be transformed to SZ (non-spin-adapted) MPS and saved using another tag.
 
-Limitations: only total spin zero spin-adapted MPS can be transformed.
+Limitations:
+
+* Total spin zero spin-adapted MPS can be transformed directly.
+* For non-zero total spin, the spin-adapted MPS must be in singlet embedding format. See next section.
 
 First, we compute the energy for the spin-adapted ground state using the following input file: ::
 
@@ -255,8 +258,185 @@ Some reference outputs for this example: ::
     GS INIT MPS BOND DIMS =       1     4    16    64   246   578   712  1114  1097  1102  1110  1121  1126  1130  1116  1111  1111  1107  1074  1103   895   444   186    59    16     4     1
     OH Energy =  -75.728467269120898
 
-We can see that the tranformation from SU2 to SZ is nearly exact, and the required bond dimension for the SZ MPS
+We can see that the transformation from SU2 to SZ is nearly exact, and the required bond dimension for the SZ MPS
 is roughly two times of the SU2 bond dimension.
+
+Singlet Embedding
+-----------------
+
+For spin-adapted calculation with total spin not equal to zero, there can be some convergence problem
+even if in one-site algorithm. One way to solve this problem is to use singlet embedding.
+In ``StackBlock`` singlet embedding is used by default.
+In ``block2``, by default singlet embedding is not used. If one adds the keyword ``singlet_embedding`` to the input file,
+the singlet embedding scheme will be used. For most total spin not equal to zero calculation,
+singlet embedding may be more stable. One cannot calculate transition density matrix between states with different total spins
+using singlet embedding. To do that one can translate the MPS between singlet embedding format and non-singlet-embedding format.
+
+When total spin is equal to zero, the keyword ``singlet_embedding`` will not have any effect.
+If restarting a calculation, normally, the keyword ``singlet_embedding`` is not required since the format of the MPS
+can be automatically recognized.
+
+For translating SU2 MPS to SZ MPS with total spin not equal to zero, the SU2 MPS must be in singlet embedding format.
+
+First, we compute the energy for the spin-adapted with non-zero total spin using the following input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags KET
+
+The above input file indicates that singlet embedding is not used. The output is: ::
+
+    $ grep 'MPS = ' dmrg-1.out
+    MPS =  CCRRRRRRRRRRRRRRRRRRRRRRRR 0 2 < N=8 S=1 PG=0 >
+    $ grep Energy dmrg-1.out
+    DMRG Energy =  -75.423916647509742
+
+Here the printed target quantum number of the MPS indicates that it is a triplet.
+
+We can add the keyword ``singlet_embedding`` to do a singlet embedding calculation: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags SEKET
+    singlet_embedding
+
+When singlet embedding is used, the output is: ::
+
+    $ grep 'MPS = ' dmrg-2.out
+    MPS =  CCRRRRRRRRRRRRRRRRRRRRRRRR 0 2 < N=10 S=0 PG=0 >
+    $ grep Energy dmrg-2.out
+    DMRG Energy =  -75.423879916245895
+
+Here the printed target quantum number of the MPS indicates that it is a singlet (including some ghost particles).
+
+One can use the keywords ``trans_mps_to_singlet_embedding`` and ``trans_mps_from_singlet_embedding``
+combined with ``restart_copy_mps`` or ``copy_mps`` to translate between singlet embedding and normal formats.
+
+The following script transforms the MPS from singlet embedding to normal format: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags SEKET
+    restart_copy_mps TKET
+    trans_mps_from_singlet_embedding
+
+We can verify that the transformed non-singlet-embedding MPS has the same energy as the singlet embedding MPS: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags TKET
+    restart_oh
+
+With the outputs: ::
+
+    $ grep 'MPS = ' dmrg-4.out
+    MPS =  KRRRRRRRRRRRRRRRRRRRRRRRRR 0 2 < N=8 S=1 PG=0 >
+    $ grep Energy dmrg-4.out
+    OH Energy =  -75.423879916245824
+
+The following script will read the spin-adapted singlet embedding MPS and tranform it to a non-spin-adapted MPS: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags SEKET
+    restart_copy_mps ZKETM2
+    trans_mps_to_sz
+    resolve_twosz -2
+    normalize_mps
+
+Here the keyword ``resolve_twosz`` indicates that the transformed SZ MPS will have projected spin ``2 * SZ = 2``.
+For this case since ``2 * S = 2``, the possible values for ``resolve_twosz`` are ``-2, 0, 2``.
+If the keyword ``resolve_twosz`` is not given, an MPS with ensemble of all possible projected spins will be produced
+(which is often not very useful).
+Getting one component of the SU2 MPS means that the SZ MPS will not have the same norm as the SU2 MPS.
+If the keyword ``normalize_mps`` is added, the transformed SZ MPS will be normalized. The keyword ``normalize_mps``
+can only have effect when ``trans_mps_to_sz`` is present.
+
+Finally, we calculate the energy expectation value using non-spin-adapted formalism
+and the transformed MPS (stored in the scratch folder), using the following input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin -2
+    irrep 1
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    irrep_reorder
+    mps_tags ZKETM2
+    restart_oh
+    nonspinadapted
+
+Some reference outputs for this example: ::
+
+    $ grep MPS dmrg-6.out
+    MPS =  KRRRRRRRRRRRRRRRRRRRRRRRRR 0 2 < N=8 SZ=-1 PG=0 >
+    GS INIT MPS BOND DIMS =       1    12    48   192   601  1145  1398  1474  1476  1468  1466  1441  1356  1316  1255  1240  1217  1206  1198  1176   904   422   183    59    16     4     1
+    $ grep Energy dmrg-6.out
+    OH Energy =  -75.423879916245909
+
+We can see that the transformation from SU2 to SZ is nearly exact. The other two components of the SU2 MPS
+will also have the same energy as this one.
 
 CSF or Determinant Sampling
 ---------------------------
@@ -273,6 +453,9 @@ after DMRG or from an MPS loaded from disk. The value associated with the keywor
 ``sample`` or ``restart_sample`` is the threshold for sampling.
 
 Setting the threshold to zero is allowed, but this may only be useful for some very small systems.
+
+Limitations: For non-zero total spin CSF sampling,
+the spin-adapted MPS must be in singlet embedding format. See the previous section.
 
 The following is an example of the input file: ::
 

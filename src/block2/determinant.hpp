@@ -189,8 +189,8 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
-        pinfos[0][0]->initialize(StateInfo<S>(mps->info->vacuum),
-                                 StateInfo<S>(mps->info->vacuum),
+        pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
+                                 *mps->info->left_dims_fci[0],
                                  mps->info->vacuum, false);
         for (int d = 0; d < n_sites; d++) {
             pinfos[d + 1].resize(4);
@@ -226,7 +226,8 @@ struct DeterminantTRIE<S, typename S::is_sz_t> : TRIE<DeterminantTRIE<S>> {
         shared_ptr<SparseMatrix<S>> zmat =
             make_shared<SparseMatrix<S>>(d_alloc);
         zmat->allocate(pinfos[0][0]);
-        zmat->data[0] = 1.0;
+        for (size_t j = 0; j < zmat->total_memory; j++)
+            zmat->data[j] = 1.0;
         vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
@@ -348,8 +349,8 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
-        pinfos[0][0]->initialize(StateInfo<S>(mps->info->vacuum),
-                                 StateInfo<S>(mps->info->vacuum),
+        pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
+                                 *mps->info->left_dims_fci[0],
                                  mps->info->vacuum, false);
         for (int d = 0; d < n_sites; d++) {
             pinfos[d + 1].resize(4);
@@ -389,7 +390,8 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
         shared_ptr<SparseMatrix<S>> zmat =
             make_shared<SparseMatrix<S>>(d_alloc);
         zmat->allocate(pinfos[0][0]);
-        zmat->data[0] = 1.0;
+        for (size_t j = 0; j < zmat->total_memory; j++)
+            zmat->data[j] = 1.0;
         vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)

@@ -456,6 +456,7 @@ struct TransStateInfo {
 // Translation between SU2 and SZ StateInfo
 template <typename S1, typename S2>
 struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
+    // from sz to su2 is not exact
     static shared_ptr<StateInfo<S2>>
     forward(const shared_ptr<StateInfo<S1>> &si) {
         vector<pair<S2, ubond_t>> vso;

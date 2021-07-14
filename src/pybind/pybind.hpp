@@ -588,8 +588,14 @@ template <typename S> void bind_sparse(py::module &m) {
              py::arg("lmat"))
         .def("left_multiply", &SparseMatrix<S>::left_multiply, py::arg("lmat"),
              py::arg("l"), py::arg("m"), py::arg("r"), py::arg("lm"),
-             py::arg("lm_cinfo"))
+             py::arg("lm_cinfo"), py::arg("nlm"))
         .def("right_multiply", &SparseMatrix<S>::right_multiply,
+             py::arg("rmat"), py::arg("l"), py::arg("m"), py::arg("r"),
+             py::arg("mr"), py::arg("mr_cinfo"), py::arg("nmr"))
+        .def("left_multiply_inplace", &SparseMatrix<S>::left_multiply_inplace,
+             py::arg("lmat"), py::arg("l"), py::arg("m"), py::arg("r"),
+             py::arg("lm"), py::arg("lm_cinfo"))
+        .def("right_multiply_inplace", &SparseMatrix<S>::right_multiply_inplace,
              py::arg("rmat"), py::arg("l"), py::arg("m"), py::arg("r"),
              py::arg("mr"), py::arg("mr_cinfo"))
         .def("randomize", &SparseMatrix<S>::randomize, py::arg("a") = 0.0,
@@ -893,6 +899,7 @@ template <typename S> void bind_mps(py::module &m) {
              py::arg("init_left") = true, py::arg("init_right") = true)
         .def("fill_thermal_limit", &MPS<S>::fill_thermal_limit)
         .def("canonicalize", &MPS<S>::canonicalize)
+        .def("dynamic_canonicalize", &MPS<S>::dynamic_canonicalize)
         .def("random_canonicalize", &MPS<S>::random_canonicalize)
         .def("from_singlet_embedding_wfn", &MPS<S>::from_singlet_embedding_wfn,
              py::arg("cg"), py::arg("para_rule") = nullptr)
@@ -977,7 +984,9 @@ template <typename S> void bind_mps(py::module &m) {
         .def_static("backward_mps_tensor", &UnfusedMPS<S>::backward_mps_tensor,
                     py::arg("i"), py::arg("mps"), py::arg("spt"))
         .def("initialize", &UnfusedMPS<S>::initialize)
-        .def("finalize", &UnfusedMPS<S>::finalize);
+        .def("finalize", &UnfusedMPS<S>::finalize)
+        .def("resolve_singlet_embedding",
+             &UnfusedMPS<S>::resolve_singlet_embedding);
 
     py::class_<DeterminantTRIE<S>, shared_ptr<DeterminantTRIE<S>>>(
         m, "DeterminantTRIE")

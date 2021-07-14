@@ -788,6 +788,29 @@ struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
             basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i]);
         shared_ptr<MPSInfo<SY>> so =
             make_shared<MPSInfo<SY>>(n_sites, vacuum, target, basis);
+        // handle the singlet embedding case
+        so->left_dims_fci[0] =
+            TransStateInfo<SX, SY>::forward(si->left_dims_fci[0]);
+        for (int i = 0; i < n_sites; i++)
+            so->left_dims_fci[i + 1] =
+                make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
+                    *so->left_dims_fci[i], *basis[i], target));
+        so->right_dims_fci[n_sites] =
+            TransStateInfo<SX, SY>::forward(si->right_dims_fci[n_sites]);
+        for (int i = n_sites - 1; i >= 0; i--)
+            so->right_dims_fci[i] =
+                make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
+                    *basis[i], *so->right_dims_fci[i + 1], target));
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<SY>::filter(*so->left_dims_fci[i], *so->right_dims_fci[i],
+                                  target);
+            StateInfo<SY>::filter(*so->right_dims_fci[i], *so->left_dims_fci[i],
+                                  target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims_fci[i]->collect();
         for (int i = 0; i <= n_sites; i++)
             so->left_dims[i] =
                 TransStateInfo<SX, SY>::forward(si->left_dims[i]);
@@ -1339,7 +1362,8 @@ template <typename S> struct MPS {
         if (para_rule != nullptr)
             para_rule->comm->barrier();
     }
-    void from_singlet_embedding_wfn(const shared_ptr<CG<S>> &cg,
+    void from_singlet_embedding_wfn(
+        const shared_ptr<CG<S>> &cg,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(center == 0);
         char orig_canonical_form = canonical_form[center];
@@ -1630,6 +1654,95 @@ template <typename S> struct MPS {
         } else
             assert(false);
     }
+    // can reduce bond dims
+    void dynamic_canonicalize() {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        for (int i = 0; i < center; i++) {
+            assert(tensors[i] != nullptr);
+            shared_ptr<SparseMatrix<S>> left, right;
+            tensors[i]->left_split(left, right, 0);
+            tensors[i] = left;
+            shared_ptr<StateInfo<S>> nl = left->info->extract_state_info(true);
+            StateInfo<S> l = *info->left_dims[i + 1], m = *info->basis[i + 1];
+            StateInfo<S> lm = StateInfo<S>::tensor_product(
+                             l, m, *info->left_dims_fci[i + 2]),
+                         r;
+            StateInfo<S> nlm = StateInfo<S>::tensor_product(
+                             *nl, m, *info->left_dims_fci[i + 2]);
+            StateInfo<S> lmc = StateInfo<S>::get_connection_info(l, m, lm);
+            if (i + 1 == center && dot == 1)
+                r = *info->right_dims[center + dot];
+            else if (i + 1 == center && dot == 2)
+                r = StateInfo<S>::tensor_product(
+                    *info->basis[center + 1], *info->right_dims[center + dot],
+                    *info->right_dims_fci[center + 1]);
+            else
+                r = *info->left_dims[i + 2];
+            assert(tensors[i + 1] != nullptr);
+            tensors[i + 1] =
+                tensors[i + 1]->left_multiply(right, l, m, r, lm, lmc, nlm);
+            if (i + 1 == center && dot == 2)
+                r.deallocate();
+            lmc.deallocate();
+            nlm.deallocate();
+            lm.deallocate();
+            info->left_dims[i + 1] = nl;
+            info->save_left_dims(i + 1);
+            right->info->deallocate();
+            right->deallocate();
+        }
+        for (int i = n_sites - 1; i >= center + dot; i--) {
+            assert(tensors[i] != nullptr);
+            shared_ptr<SparseMatrix<S>> left, right;
+            tensors[i]->right_split(left, right, 0);
+            tensors[i] = right;
+            shared_ptr<StateInfo<S>> nr = right->info->extract_state_info(false);
+            if (dot == 1 && i - 1 == center) {
+                shared_ptr<SparseMatrix<S>> wfn =
+                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrixInfo<S>> winfo =
+                    make_shared<SparseMatrixInfo<S>>(i_alloc);
+                winfo->initialize_contract(tensors[i - 1]->info, left->info);
+                wfn->allocate(winfo);
+                wfn->contract(tensors[i - 1], left);
+                assert(tensors[i - 1] != nullptr);
+                tensors[i - 1] = wfn;
+            } else {
+                StateInfo<S> m = *info->basis[i - 1], r = *info->right_dims[i];
+                StateInfo<S> mr = StateInfo<S>::tensor_product(
+                    m, r, *info->right_dims_fci[i - 1]);
+                StateInfo<S> nmr = StateInfo<S>::tensor_product(
+                    m, *nr, *info->right_dims_fci[i - 1]);
+                StateInfo<S> mrc = StateInfo<S>::get_connection_info(m, r, mr);
+                StateInfo<S> l;
+                if (i - 1 == center + 1 && dot == 2) {
+                    l = StateInfo<S>::tensor_product(
+                        *info->left_dims[center], *info->basis[center],
+                        *info->left_dims_fci[center + 1]);
+                    assert(tensors[i - 2] != nullptr);
+                    tensors[i - 2] =
+                        tensors[i - 2]->right_multiply(left, l, m, r, mr, mrc, nmr);
+                } else {
+                    l = *info->right_dims[i - 1];
+                    assert(tensors[i - 1] != nullptr);
+                    tensors[i - 1] =
+                        tensors[i - 1]->right_multiply(left, l, m, r, mr, mrc, nmr);
+                }
+                if (i - 1 == center + 1 && dot == 2)
+                    l.deallocate();
+                mrc.deallocate();
+                nmr.deallocate();
+                mr.deallocate();
+            }
+            info->right_dims[i] = nr;
+            info->save_right_dims(i);
+            left->info->deallocate();
+            left->deallocate();
+        }
+    }
     void canonicalize() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -1659,7 +1772,7 @@ template <typename S> struct MPS {
             else
                 r = *info->left_dims[i + 2];
             assert(tensors[i + 1] != nullptr);
-            tensors[i + 1]->left_multiply(tmat, l, m, r, lm, lmc);
+            tensors[i + 1]->left_multiply_inplace(tmat, l, m, r, lm, lmc);
             if (i + 1 == center && dot == 2)
                 r.deallocate();
             lmc.deallocate();
@@ -1696,11 +1809,13 @@ template <typename S> struct MPS {
                         *info->left_dims[center], *info->basis[center],
                         *info->left_dims_fci[center + 1]);
                     assert(tensors[i - 2] != nullptr);
-                    tensors[i - 2]->right_multiply(tmat, l, m, r, mr, mrc);
+                    tensors[i - 2]->right_multiply_inplace(tmat, l, m, r, mr,
+                                                           mrc);
                 } else {
                     l = *info->right_dims[i - 1];
                     assert(tensors[i - 1] != nullptr);
-                    tensors[i - 1]->right_multiply(tmat, l, m, r, mr, mrc);
+                    tensors[i - 1]->right_multiply_inplace(tmat, l, m, r, mr,
+                                                           mrc);
                 }
                 if (i - 1 == center + 1 && dot == 2)
                     l.deallocate();

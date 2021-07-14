@@ -749,13 +749,25 @@ struct SparseMatrixInfo<
     // Extract row or column StateInfo from SparseMatrixInfo
     shared_ptr<StateInfo<S>> extract_state_info(bool right) {
         shared_ptr<StateInfo<S>> info = make_shared<StateInfo<S>>();
-        assert(delta_quantum.data == 0);
-        info->allocate(n);
-        memcpy(info->quanta, quanta, n * sizeof(S));
-        memcpy(info->n_states, right ? n_states_ket : n_states_bra,
-               n * sizeof(ubond_t));
+        if (delta_quantum.data == 0 && !is_wavefunction) {
+            info->allocate(n);
+            memcpy(info->quanta, quanta, n * sizeof(S));
+            memcpy(info->n_states, right ? n_states_ket : n_states_bra,
+                   n * sizeof(ubond_t));
+        } else {
+            map<S, ubond_t> qs;
+            for (int i = 0; i < n; i++)
+                qs[right ? (is_wavefunction ? -quanta[i].get_ket()
+                                            : quanta[i].get_ket())
+                         : quanta[i].get_bra(delta_quantum)] =
+                    right ? n_states_ket[i] : n_states_bra[i];
+            info->allocate((int)qs.size());
+            int i = 0;
+            for (auto &mq : qs)
+                info->quanta[i] = mq.first, info->n_states[i++] = mq.second;
+        }
         info->n_states_total =
-            accumulate(info->n_states, info->n_states + n, 0);
+            accumulate(info->n_states, info->n_states + info->n, 0);
         return info;
     }
     int find_state(S q, int start = 0) const {
@@ -1122,7 +1134,9 @@ template <typename S> struct SparseMatrix {
         for (int i = 0; i < winfo->n; i++) {
             MatrixRef mm = (*left)[info->quanta[i]];
             MatrixFunctions::copy(mm, l[i]->ref());
-            int k = rinfo->find_state(-info->quanta[i].get_ket());
+            int k = rinfo->find_state(info->is_wavefunction
+                                          ? -info->quanta[i].get_ket()
+                                          : info->quanta[i].get_ket());
             assert(s[k]->shape[0] == l[i]->shape[1]);
             for (int j = 0; j < l[i]->shape[1]; j++)
                 MatrixFunctions::iscale(MatrixRef(&mm(0, j), mm.m, 1),
@@ -1441,10 +1455,127 @@ template <typename S> struct SparseMatrix {
         }
         dalloc->deallocate(dt, tmp[nl]);
     }
-    void left_multiply(const shared_ptr<SparseMatrix<S>> &lmat,
-                       const StateInfo<S> &l, const StateInfo<S> &m,
-                       const StateInfo<S> &r, const StateInfo<S> &old_fused,
-                       const StateInfo<S> &old_fused_cinfo) const {
+    shared_ptr<SparseMatrix<S>>
+    left_multiply(const shared_ptr<SparseMatrix<S>> &lmat,
+                  const StateInfo<S> &l, const StateInfo<S> &m,
+                  const StateInfo<S> &r, const StateInfo<S> &old_fused,
+                  const StateInfo<S> &old_fused_cinfo,
+                  const StateInfo<S> &new_fused) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        shared_ptr<SparseMatrixInfo<S>> xinfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<StateInfo<S>> rsi = info->extract_state_info(true);
+        xinfo->initialize(new_fused, *rsi, info->delta_quantum,
+                          info->is_fermion, info->is_wavefunction);
+        shared_ptr<SparseMatrix<S>> xmat =
+            make_shared<SparseMatrix<S>>(d_alloc);
+        xmat->allocate(xinfo);
+        assert(xinfo->n <= info->n);
+        for (int i = 0; i < info->n; i++) {
+            S bra = info->quanta[i].get_bra(info->delta_quantum);
+            S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
+                                          : info->quanta[i].get_ket();
+            int ix = xinfo->find_state(info->quanta[i]);
+            if (ix == -1)
+                continue;
+            int ib = old_fused.find_state(bra);
+            int ik = r.find_state(ket);
+            int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
+                                             : old_fused_cinfo.n_states[ib + 1];
+            MKL_INT p = info->n_states_total[i], xp = xinfo->n_states_total[i];
+            for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
+                uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
+                         ibbb = old_fused_cinfo.quanta[bb].data & 0xFFFFU;
+                int il = lmat->info->find_state(l.quanta[ibba]);
+                MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
+                if (il != -1) {
+                    assert(lmat->info->n_states_ket[il] == l.n_states[ibba]);
+                    MatrixFunctions::multiply(
+                        (*lmat)[il], false,
+                        MatrixRef(data + p, l.n_states[ibba], lp), false,
+                        MatrixRef(xmat->data + xp, lmat->info->n_states_bra[il],
+                                  lp),
+                        lmat->factor, 0.0);
+                    xp += lmat->info->n_states_bra[il] * lp;
+                }
+                p += l.n_states[ibba] * lp;
+            }
+            // here possible error because dot == 2, dynamic canonicalize
+            // assumes there is a two-site tensor
+            // then the inferred bond_dims can be wrong
+            assert(p == (i != info->n - 1 ? info->n_states_total[i + 1]
+                                          : total_memory));
+            assert(xp == (ix != xinfo->n - 1 ? xmat->info->n_states_total[ix + 1]
+                                             : xmat->total_memory));
+        }
+        return xmat;
+    }
+    shared_ptr<SparseMatrix<S>>
+    right_multiply(const shared_ptr<SparseMatrix<S>> &rmat,
+                   const StateInfo<S> &l, const StateInfo<S> &m,
+                   const StateInfo<S> &r, const StateInfo<S> &old_fused,
+                   const StateInfo<S> &old_fused_cinfo,
+                   const StateInfo<S> &new_fused) const {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        shared_ptr<SparseMatrixInfo<S>> xinfo =
+            make_shared<SparseMatrixInfo<S>>(i_alloc);
+        shared_ptr<StateInfo<S>> lsi = info->extract_state_info(false);
+        xinfo->initialize(*lsi, new_fused, info->delta_quantum,
+                          info->is_fermion, info->is_wavefunction);
+        shared_ptr<SparseMatrix<S>> xmat =
+            make_shared<SparseMatrix<S>>(d_alloc);
+        xmat->allocate(xinfo);
+        assert(xinfo->n <= info->n);
+        for (int i = 0; i < info->n; i++) {
+            S bra = info->quanta[i].get_bra(info->delta_quantum);
+            S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
+                                          : info->quanta[i].get_ket();
+            int ix = xinfo->find_state(info->quanta[i]);
+            if (ix == -1)
+                continue;
+            int ib = l.find_state(bra);
+            int ik = old_fused.find_state(ket);
+            int ikn = new_fused.find_state(ket);
+            int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
+                                             : old_fused_cinfo.n_states[ik + 1];
+            MKL_INT p = info->n_states_total[i], xp = xinfo->n_states_total[ix];
+            for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
+                uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
+                         ikkb = old_fused_cinfo.quanta[kk].data & 0xFFFFU;
+                int ir = rmat->info->find_state(r.quanta[ikkb]);
+                MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
+                if (ir != -1) {
+                    MKL_INT lpx = (MKL_INT)m.n_states[ikka] *
+                                  rmat->info->n_states_ket[ir];
+                    assert(rmat->info->n_states_bra[ir] == r.n_states[ikkb]);
+                    for (ubond_t j = 0; j < l.n_states[ib]; j++)
+                        MatrixFunctions::multiply(
+                            MatrixRef(data + p + j * old_fused.n_states[ik],
+                                      m.n_states[ikka], r.n_states[ikkb]),
+                            false, (*rmat)[ir], false,
+                            MatrixRef(
+                                xmat->data + xp + j * new_fused.n_states[ikn],
+                                m.n_states[ikka], rmat->info->n_states_ket[ir]),
+                            rmat->factor, 0.0);
+                    xp += lpx;
+                }
+                p += lp;
+            }
+        }
+        return xmat;
+    }
+    // lmat must be square-block diagonal 
+    void left_multiply_inplace(const shared_ptr<SparseMatrix<S>> &lmat,
+                               const StateInfo<S> &l, const StateInfo<S> &m,
+                               const StateInfo<S> &r,
+                               const StateInfo<S> &old_fused,
+                               const StateInfo<S> &old_fused_cinfo) const {
         for (int i = 0; i < info->n; i++) {
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
@@ -1478,10 +1609,12 @@ template <typename S> struct SparseMatrix {
                                           : total_memory));
         }
     }
-    void right_multiply(const shared_ptr<SparseMatrix<S>> &rmat,
-                        const StateInfo<S> &l, const StateInfo<S> &m,
-                        const StateInfo<S> &r, const StateInfo<S> &old_fused,
-                        const StateInfo<S> &old_fused_cinfo) const {
+    // rmat must be square-block diagonal 
+    void right_multiply_inplace(const shared_ptr<SparseMatrix<S>> &rmat,
+                                const StateInfo<S> &l, const StateInfo<S> &m,
+                                const StateInfo<S> &r,
+                                const StateInfo<S> &old_fused,
+                                const StateInfo<S> &old_fused_cinfo) const {
         for (int i = 0; i < info->n; i++) {
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
