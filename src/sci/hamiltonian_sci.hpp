@@ -2,7 +2,7 @@
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
  * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
- * Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,11 +21,11 @@
 
 #pragma once
 
-#include "../block2/delayed_sparse_matrix.hpp"
-#include "../block2/expr.hpp"
-#include "../block2/operator_functions.hpp"
-#include "../block2/sparse_matrix.hpp"
-#include "../block2/symbolic.hpp"
+#include "../core/delayed_sparse_matrix.hpp"
+#include "../core/expr.hpp"
+#include "../core/operator_functions.hpp"
+#include "../core/sparse_matrix.hpp"
+#include "../core/symbolic.hpp"
 #include <algorithm>
 #include <cassert>
 #include <map>

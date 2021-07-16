@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,11 @@
  *
  */
 
-#include "pybind/pybind.hpp"
+#include "pybind/pybind_core.hpp"
+
+#ifdef _USE_DMRG
+#include "pybind/pybind_dmrg.hpp"
+#endif
 
 #ifdef _USE_SCI
 #include "sci/pybind.hpp"
@@ -44,15 +48,23 @@ PYBIND11_MODULE(block2, m) {
     bind_symmetry<>(m);
 
     py::module m_su2 = m.def_submodule("su2", "Spin-adapted.");
-    bind_class<SU2>(m_su2, "SU2");
-
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
-    bind_class<SZ>(m_sz, "SZ");
+    bind_core<SU2>(m_su2, "SU2");
+    bind_core<SZ>(m_sz, "SZ");
+    bind_trans_state_info<SU2, SZ>(m_su2, "sz");
+    bind_trans_state_info<SZ, SU2>(m_sz, "su2");
+    bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
 
-    bind_trans<SU2, SZ>(m_su2, "sz");
-    bind_trans<SZ, SU2>(m_sz, "su2");
+#ifdef _USE_DMRG
+    bind_dmrg_types<>(m);
+    bind_dmrg_io<>(m);
 
-    bind_trans_spin_specific<SU2, SZ>(m_su2, "sz");
+    bind_dmrg<SU2>(m_su2, "SU2");
+    bind_dmrg<SZ>(m_sz, "SZ");
+    bind_trans_mps<SU2, SZ>(m_su2, "sz");
+    bind_trans_mps<SZ, SU2>(m_sz, "su2");
+    bind_trans_mps_spin_specific<SU2, SZ>(m_su2, "sz");
+#endif
 
 #ifdef _USE_SCI
     bind_sci_wrapper<SZ>(m_sz);
@@ -63,4 +75,5 @@ PYBIND11_MODULE(block2, m) {
     bind_mpo_sci<SZ>(m_sz);
     bind_types_sci<>(m);
 #endif
+
 }

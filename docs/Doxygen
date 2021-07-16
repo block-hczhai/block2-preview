@@ -1,5 +1,5 @@
 PROJECT_NAME           = block2
-INPUT                  = ../../src/block2/
+INPUT                  = ../../src/core/ ../../src/dmrg/
 RECURSIVE              = YES
 
 GENERATE_HTML          = NO

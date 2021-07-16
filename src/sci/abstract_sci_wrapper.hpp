@@ -20,10 +20,10 @@
 
 #include <limits>
 #include <unordered_map>
-#include "../block2/integral.hpp"
-#include "../block2/sparse_matrix.hpp"
-#include "../block2/csr_sparse_matrix.hpp"
-#include "../block2/symmetry.hpp"
+#include "../core/integral.hpp"
+#include "../core/sparse_matrix.hpp"
+#include "../core/csr_sparse_matrix.hpp"
+#include "../core/symmetry.hpp"
 
 /** Interface to the SCI code for a big site.
  *

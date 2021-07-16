@@ -2,7 +2,7 @@
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
  * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
- * Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,13 +21,13 @@
 
 #pragma once
 
-#include "../block2/mpo.hpp"
-#include "../block2/operator_tensor.hpp"
-#include "../block2/qc_mpo.hpp"
-#include "../block2/delayed_tensor_functions.hpp"
+#include "../dmrg/mpo.hpp"
+#include "../core/operator_tensor.hpp"
+#include "../dmrg/qc_mpo.hpp"
+#include "../core/delayed_tensor_functions.hpp"
 #include "qc_hamiltonian_sci.hpp"
-#include "../block2/symbolic.hpp"
-#include "../block2/tensor_functions.hpp"
+#include "../core/symbolic.hpp"
+#include "../core/tensor_functions.hpp"
 #include <cassert>
 #include <memory>
 #include <vector>

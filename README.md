@@ -171,7 +171,7 @@ saved by avoiding unnecessary template instantiation, as follows:
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DEXP_TMPL=NONE
     make -j 1
 
-This may take 5 minutes, need 7 to 10 GB memory.
+This may take 11 minutes, requiring 14 GB memory.
 
 ### MPI version
 

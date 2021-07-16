@@ -2,7 +2,7 @@
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
  * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
- * Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "../block2/sweep_algorithm.hpp"
+#include "../dmrg/sweep_algorithm.hpp"
 #include <limits>
 
 using namespace std;
