@@ -224,7 +224,8 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     /** Return a copy of the allocator. When deep-copying objects using
      * VectorAllocator, the other object should have an independent allocator,
      * since VectorAllocator is not global.
-     * @return ptr The copy of this allocator. */
+     * @return The copy of this allocator.
+     */
     shared_ptr<Allocator<T>> copy() const override {
         return make_shared<VectorAllocator<T>>();
     }
@@ -645,7 +646,7 @@ inline shared_ptr<DataFrame> &frame_() {
 #define frame (frame_())
 
 /** Function pointer for signal checking. */
-inline void (*&check_signal_())() {
+inline auto check_signal_() -> void (*&)() {
     static void (*check_signal)() = []() {};
     return check_signal;
 }

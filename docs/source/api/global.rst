@@ -56,4 +56,6 @@ Data Frame
 Miscellanies
 ------------
 
+.. doxygenfunction:: block2::check_signal_
+
 .. doxygenfunction:: block2::print_trace
