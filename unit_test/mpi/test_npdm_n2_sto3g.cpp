@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -108,7 +109,7 @@ TEST_F(TestNPDM, TestSU2) {
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<SU2>> para_comm =
@@ -304,7 +305,7 @@ TEST_F(TestNPDM, TestSU2) {
 
         // MPSInfo
         shared_ptr<MPSInfo<SU2>> mps_info =
-            make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
+            make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil->basis);
         mps_info->set_bond_dimension(bond_dim);
 
         // MPS
@@ -572,7 +573,7 @@ TEST_F(TestNPDM, TestSU2) {
     nmpo->deallocate();
     pmpo->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -587,7 +588,7 @@ TEST_F(TestNPDM, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
 #ifdef _HAS_INTEL_MKL
     mkl_set_num_threads(1);
@@ -1002,7 +1003,7 @@ TEST_F(TestNPDM, TestSZ) {
 
         // MPSInfo
         shared_ptr<MPSInfo<SZ>> mps_info =
-            make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
+            make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil->basis);
         mps_info->set_bond_dimension(bond_dim);
 
         // MPS
@@ -1275,6 +1276,6 @@ TEST_F(TestNPDM, TestSZ) {
     p2mpo->deallocate();
     pmpo->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

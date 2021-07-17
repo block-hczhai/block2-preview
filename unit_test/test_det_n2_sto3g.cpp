@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -10,7 +11,7 @@ class TestDETN2STO3G : public ::testing::Test {
     size_t dsize = 1L << 34;
 
     template <typename S>
-    void test_dmrg(const S target, HamiltonianQC<S> hamil, const string &name);
+    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -28,7 +29,7 @@ class TestDETN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestDETN2STO3G::test_dmrg(const S target, HamiltonianQC<S> hamil,
+void TestDETN2STO3G::test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
                                const string &name) {
 
     vector<double> coeffs = {
@@ -63,7 +64,7 @@ void TestDETN2STO3G::test_dmrg(const S target, HamiltonianQC<S> hamil,
         -0.131287878961, -0.131287877970, 0.957506526257,  -0.012693540764,
         0.001861231561,  -0.011546222107, 0.001861231727,  -0.011546222162};
 
-    int norb = hamil.n_sites;
+    int norb = hamil->n_sites;
 
     Timer t;
     t.get_time();
@@ -82,7 +83,7 @@ void TestDETN2STO3G::test_dmrg(const S target, HamiltonianQC<S> hamil,
 
     // MPSInfo
     shared_ptr<MPSInfo<S>> mps_info =
-        make_shared<MPSInfo<S>>(norb, hamil.vacuum, target, hamil.basis);
+        make_shared<MPSInfo<S>>(norb, hamil->vacuum, target, hamil->basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
@@ -160,11 +161,11 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
-    HamiltonianQC<SZ> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, " SZ");
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -180,10 +181,10 @@ TEST_F(TestDETN2STO3G, TestSU2) {
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
-    HamiltonianQC<SU2> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2");
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

@@ -1,6 +1,6 @@
 
-#include "block2.hpp"
-#include "gtest/gtest.h"
+#include "block2_core.hpp"
+#include <gtest/gtest.h>
 
 using namespace block2;
 
@@ -52,7 +52,7 @@ TEST_F(TestComplexMatrix, TestExponential) {
         }
         double canorm = ComplexMatrixFunctions::norm(ca);
         double anorm = MatrixFunctions::norm(a);
-        ASSERT_LT(abs(canorm - anorm), 1E-10);
+        EXPECT_LT(abs(canorm - anorm), 1E-10);
         MatMul mop(ca);
         int nmult = ComplexMatrixFunctions::expo_apply_complex_op(
             mop, t, anorm, w, consta, false,
@@ -65,7 +65,7 @@ TEST_F(TestComplexMatrix, TestExponential) {
         for (MKL_INT i = 0; i < n; i++)
             v(i, 0) = exp(t * (ww(i, i) + consta)) * u(i, 0);
         ComplexMatrixFunctions::multiply(ca, true, v, false, u, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(u, w, 1E-6, 0.0));
+        EXPECT_TRUE(MatrixFunctions::all_close(u, w, 1E-6, 0.0));
         ww.deallocate();
         w.deallocate();
         u.deallocate();
@@ -98,7 +98,7 @@ TEST_F(TestComplexMatrix, TestEig) {
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 ag(k, j) /= w(k, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 0.0));
+        EXPECT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 0.0));
         // a[i, j] u[k, j] = w[k, k] u[k, i]
         // a[i, j] = uinv[j, k] w[k, k] u[k, i] = uinv[j, k] a[i, jp] u[k, jp]
         for (MKL_INT k = 0; k < m; k++)
@@ -106,7 +106,7 @@ TEST_F(TestComplexMatrix, TestEig) {
                 ag(k, j) = a(k, j) * w(k, k);
         ComplexMatrixFunctions::inverse(a);
         ComplexMatrixFunctions::multiply(ag, true, a, true, aq, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(ap, aq, 1E-9, 0.0));
+        EXPECT_TRUE(MatrixFunctions::all_close(ap, aq, 1E-9, 0.0));
         w.deallocate();
         ag.deallocate();
         aq.deallocate();
@@ -132,7 +132,7 @@ TEST_F(TestComplexMatrix, TestInverse) {
         ComplexMatrixFunctions::multiply(a, false, ap, false, ag, 1.0, 0.0);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
-                ASSERT_LT(abs(ag(j, k) - (k == j ? 1.0 : 0.0)), 1E-9);
+                EXPECT_LT(abs(ag(j, k) - (k == j ? 1.0 : 0.0)), 1E-9);
         ag.deallocate();
         ap.deallocate();
         a.deallocate();
@@ -155,7 +155,7 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
         ComplexMatrixFunctions::multiply(a, false, x, false, br, 1.0, 0.0);
         ComplexMatrixFunctions::iadd(br, b, -1);
         double cres = ComplexMatrixFunctions::norm(br);
-        ASSERT_LT(abs(res - cres), 1E-9);
+        EXPECT_LT(abs(res - cres), 1E-9);
         x.deallocate();
         br.deallocate();
         b.deallocate();
@@ -164,7 +164,7 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
 }
 
 TEST_F(TestComplexMatrix, TestGCROT) {
-    for (int i = 0; i < n_tests; i++) {
+    for (int i = 0; i < n_tests * 10; i++) {
         MKL_INT m = Random::rand_int(1, 300);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
@@ -203,19 +203,19 @@ TEST_F(TestComplexMatrix, TestGCROT) {
         MatMul mop(a);
         complex<double> func = ComplexMatrixFunctions::gcrotmk(
             mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 20, -1,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 1000);
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 10000);
         ComplexMatrixFunctions::copy(xg, b);
         ComplexMatrixFunctions::linear(af, xg.flip_dims());
         ComplexMatrixFunctions::extract_complex(xg, rbg,
                                                 MatrixRef(nullptr, m, n));
         ComplexMatrixFunctions::extract_complex(x, rb,
                                                 MatrixRef(nullptr, m, n));
-        ASSERT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
         ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
                                                 rbg);
         ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
                                                 rb);
-        ASSERT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
         xg.deallocate();
         x.deallocate();
         b.deallocate();

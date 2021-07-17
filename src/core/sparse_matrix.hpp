@@ -1508,8 +1508,9 @@ template <typename S> struct SparseMatrix {
             // then the inferred bond_dims can be wrong
             assert(p == (i != info->n - 1 ? info->n_states_total[i + 1]
                                           : total_memory));
-            assert(xp == (ix != xinfo->n - 1 ? xmat->info->n_states_total[ix + 1]
-                                             : xmat->total_memory));
+            assert(xp == (ix != xinfo->n - 1
+                              ? xmat->info->n_states_total[ix + 1]
+                              : xmat->total_memory));
         }
         return xmat;
     }
@@ -1570,7 +1571,7 @@ template <typename S> struct SparseMatrix {
         }
         return xmat;
     }
-    // lmat must be square-block diagonal 
+    // lmat must be square-block diagonal
     void left_multiply_inplace(const shared_ptr<SparseMatrix<S>> &lmat,
                                const StateInfo<S> &l, const StateInfo<S> &m,
                                const StateInfo<S> &r,
@@ -1609,7 +1610,7 @@ template <typename S> struct SparseMatrix {
                                           : total_memory));
         }
     }
-    // rmat must be square-block diagonal 
+    // rmat must be square-block diagonal
     void right_multiply_inplace(const shared_ptr<SparseMatrix<S>> &rmat,
                                 const StateInfo<S> &l, const StateInfo<S> &m,
                                 const StateInfo<S> &r,

@@ -1,6 +1,6 @@
 
-#include "block2.hpp"
-#include "gtest/gtest.h"
+#include "block2_core.hpp"
+#include <gtest/gtest.h>
 
 using namespace block2;
 

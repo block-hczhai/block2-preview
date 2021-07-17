@@ -1,5 +1,5 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
 #include "gtest/gtest.h"
 
 using namespace block2;

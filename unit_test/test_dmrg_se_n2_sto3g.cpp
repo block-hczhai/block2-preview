@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -12,7 +13,7 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   const HamiltonianQC<S> &hamil, const string &name,
+                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
@@ -36,7 +37,7 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
 template <typename S>
 void TestDMRGSingletEmbedding::test_dmrg(const vector<vector<S>> &targets,
                                 const vector<vector<double>> &energies,
-                                const HamiltonianQC<S> &hamil,
+                                const shared_ptr<HamiltonianQC<S>> &hamil,
                                 const string &name, DecompositionTypes dt,
                                 NoiseTypes nt) {
     Timer t;
@@ -69,14 +70,14 @@ void TestDMRGSingletEmbedding::test_dmrg(const vector<vector<S>> &targets,
             S right_vacuum = S(0, 0, 0);
 
             shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-                hamil.n_sites, hamil.vacuum, se_target, hamil.basis);
+                hamil->n_sites, hamil->vacuum, se_target, hamil->basis);
             mps_info->set_bond_dimension_fci(left_vacuum, right_vacuum);
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
             Random::rand_seed(0);
 
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, 2);
+            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -145,7 +146,7 @@ TEST_F(TestDMRGSingletEmbedding, TestSU2) {
     energies[7] = {-107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2",
                    DecompositionTypes::DensityMatrix,
@@ -174,6 +175,6 @@ TEST_F(TestDMRGSingletEmbedding, TestSU2) {
                    DecompositionTypes::SVD,
                    NoiseTypes::ReducedPerturbativeLowMem);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

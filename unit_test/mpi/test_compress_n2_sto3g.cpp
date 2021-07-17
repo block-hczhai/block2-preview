@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -40,7 +41,7 @@ class TestLinearN2STO3G : public ::testing::Test {
     size_t dsize = 1L << 34;
 
     template <typename S>
-    void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    int dot);
     void SetUp() override {
         Random::rand_seed(0);
@@ -60,7 +61,7 @@ class TestLinearN2STO3G : public ::testing::Test {
 bool TestLinearN2STO3G::_mpi = MPITest::okay();
 
 template <typename S>
-void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
+void TestLinearN2STO3G::test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
                                     const string &name, int dot) {
 
     double energy_std = -107.654122447525;
@@ -74,6 +75,8 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
 #endif
     shared_ptr<ParallelRule<S>> para_rule =
         make_shared<ParallelRuleQC<S>>(para_comm);
+    shared_ptr<ParallelRule<S>> ident_rule =
+        make_shared<ParallelRuleIdentity<S>>(para_comm);
 
     Timer t;
     t.get_time();
@@ -116,7 +119,7 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     cout << "Identity MPO start" << endl;
     shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
     impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
-    impo = make_shared<ParallelMPO<S>>(impo, para_rule);
+    impo = make_shared<ParallelMPO<S>>(impo, ident_rule);
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200, bra_bond_dim = 100;
@@ -126,14 +129,14 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     t.get_time();
 
     shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target, hamil.basis);
+        hamil->n_sites, hamil->vacuum, target, hamil->basis);
     mps_info->set_bond_dimension(bond_dim);
     mps_info->tag = "KET";
 
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, dot);
+    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -171,12 +174,12 @@ void TestLinearN2STO3G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     EXPECT_LT(abs(energy - energy_std), 1E-7);
 
     shared_ptr<MPSInfo<S>> imps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target, hamil.basis);
+        hamil->n_sites, hamil->vacuum, target, hamil->basis);
     imps_info->set_bond_dimension(bra_bond_dim);
     imps_info->tag = "BRA";
 
     shared_ptr<MPS<S>> imps =
-        make_shared<MPS<S>>(hamil.n_sites, mps->center, dot);
+        make_shared<MPS<S>>(hamil->n_sites, mps->center, dot);
     imps->initialize(imps_info);
     imps->random_canonicalize();
 
@@ -256,12 +259,12 @@ TEST_F(TestLinearN2STO3G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
     test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -281,11 +284,11 @@ TEST_F(TestLinearN2STO3G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
     test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

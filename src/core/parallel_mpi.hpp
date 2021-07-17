@@ -314,6 +314,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
+    void allreduce_logical_or(char *data, size_t len) override {
+        _t.get_time();
+        int ierr =
+            MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_CHAR, MPI_LOR, comm);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
     void allreduce_xor(char *data, size_t len) override {
         _t.get_time();
         int ierr =

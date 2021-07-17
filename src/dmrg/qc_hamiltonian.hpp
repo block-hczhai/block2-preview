@@ -56,6 +56,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     shared_ptr<FCIDUMP> fcidump;
     // Chemical potenital parameter in Hamiltonian
     double mu = 0;
+    HamiltonianQC()
+        : Hamiltonian<S>(S(), 0, vector<uint8_t>()), fcidump(nullptr) {}
     HamiltonianQC(S vacuum, int n_sites, const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
         : Hamiltonian<S>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
@@ -66,18 +68,21 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
         op_prims.resize(6);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
-        for (uint16_t m = 0; m < n_sites; m++) {
-            basis[m] = make_shared<StateInfo<S>>();
-            basis[m]->allocate(4);
-            basis[m]->quanta[0] = vacuum;
-            basis[m]->quanta[1] = S(1, 1, orb_sym[m]);
-            basis[m]->quanta[2] = S(1, -1, orb_sym[m]);
-            basis[m]->quanta[3] = S(2, 0, 0);
-            basis[m]->n_states[0] = basis[m]->n_states[1] =
-                basis[m]->n_states[2] = basis[m]->n_states[3] = 1;
-            basis[m]->sort_states();
-        }
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = get_site_basis(m);
         init_site_ops();
+    }
+    virtual void set_mu(double mu) { this->mu = mu; }
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        b->allocate(4);
+        b->quanta[0] = vacuum;
+        b->quanta[1] = S(1, 1, orb_sym[m]);
+        b->quanta[2] = S(1, -1, orb_sym[m]);
+        b->quanta[3] = S(2, 0, 0);
+        b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] = 1;
+        b->sort_states();
+        return b;
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -597,17 +602,20 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
         op_prims.resize(2);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
-        for (uint16_t m = 0; m < n_sites; m++) {
-            basis[m] = make_shared<StateInfo<S>>();
-            basis[m]->allocate(3);
-            basis[m]->quanta[0] = vacuum;
-            basis[m]->quanta[1] = S(1, 1, orb_sym[m]);
-            basis[m]->quanta[2] = S(2, 0, 0);
-            basis[m]->n_states[0] = basis[m]->n_states[1] =
-                basis[m]->n_states[2] = 1;
-            basis[m]->sort_states();
-        }
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = get_site_basis(m);
         init_site_ops();
+    }
+    virtual void set_mu(double mu) { this->mu = mu; }
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        b->allocate(3);
+        b->quanta[0] = vacuum;
+        b->quanta[1] = S(1, 1, orb_sym[m]);
+        b->quanta[2] = S(2, 0, 0);
+        b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
+        b->sort_states();
+        return b;
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =

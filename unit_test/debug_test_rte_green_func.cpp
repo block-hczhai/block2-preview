@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -10,7 +11,7 @@ class TestGreenFunctionH10STO6G : public ::testing::Test {
     size_t dsize = 1L << 32;
 
     template <typename S>
-    void test_dmrg(S target, const HamiltonianQC<S> &hamil, const string &name,
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    int dot);
     void SetUp() override {
         Random::rand_seed(0);
@@ -31,7 +32,7 @@ class TestGreenFunctionH10STO6G : public ::testing::Test {
 
 template <typename S>
 void TestGreenFunctionH10STO6G::test_dmrg(S target,
-                                          const HamiltonianQC<S> &hamil,
+                                          const shared_ptr<HamiltonianQC<S>> &hamil,
                                           const string &name, int dot) {
 
     double igf_std = -0.2286598562666365;
@@ -56,15 +57,15 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
     uint16_t isite = 4;
     if (su2) {
         c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {}),
-                                         S(1, 1, hamil.orb_sym[isite]));
+                                         S(1, 1, hamil->orb_sym[isite]));
         d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({isite}, {}),
-                                         S(-1, 1, hamil.orb_sym[isite]));
+                                         S(-1, 1, hamil->orb_sym[isite]));
         igf_std *= -sqrt(2);
     } else {
         c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {0}),
-                                         S(1, 1, hamil.orb_sym[isite]));
+                                         S(1, 1, hamil->orb_sym[isite]));
         d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({isite}, {0}),
-                                         S(-1, -1, hamil.orb_sym[isite]));
+                                         S(-1, -1, hamil->orb_sym[isite]));
     }
     shared_ptr<MPO<S>> cmpo = make_shared<SiteMPO<S>>(hamil, c_op);
     shared_ptr<MPO<S>> dmpo = make_shared<SiteMPO<S>>(hamil, d_op);
@@ -104,14 +105,14 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
     t.get_time();
 
     shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target, hamil.basis);
+        hamil->n_sites, hamil->vacuum, target, hamil->basis);
     mps_info->set_bond_dimension(ket_bond_dim);
     mps_info->tag = "KET";
 
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, dot);
+    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -142,12 +143,12 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
 
     // D APPLY MPS
     shared_ptr<MPSInfo<S>> dmps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target + d_op->q_label, hamil.basis);
+        hamil->n_sites, hamil->vacuum, target + d_op->q_label, hamil->basis);
     dmps_info->set_bond_dimension(bra_bond_dim);
     dmps_info->tag = "DBRA";
 
     shared_ptr<MPS<S>> dmps =
-        make_shared<MPS<S>>(hamil.n_sites, mps->center, dot);
+        make_shared<MPS<S>>(hamil->n_sites, mps->center, dot);
     dmps->initialize(dmps_info);
     dmps->random_canonicalize();
 
@@ -245,12 +246,12 @@ TEST_F(TestGreenFunctionH10STO6G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
     test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -270,11 +271,11 @@ TEST_F(TestGreenFunctionH10STO6G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
     test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

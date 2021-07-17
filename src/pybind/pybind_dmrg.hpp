@@ -20,9 +20,6 @@
 
 #pragma once
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
@@ -49,7 +46,7 @@ template <typename S>
 auto bind_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 
     py::class_<PDM2MPOQC<S>, shared_ptr<PDM2MPOQC<S>>, MPO<S>>(m, "PDM2MPOQC")
-        .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>(), py::arg("hamil"))
         .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<double>)
         .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<complex<double>>)
         .def("get_matrix_spatial",
@@ -66,9 +63,9 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
             "s_all", [](py::object) { return PDM2MPOQC<S>::s_all; })
         .def_property_readonly_static(
             "s_minimal", [](py::object) { return PDM2MPOQC<S>::s_minimal; })
-        .def(py::init<const Hamiltonian<S> &>(), py::arg("hamil"))
-        .def(py::init<const Hamiltonian<S> &, uint16_t>(), py::arg("hamil"),
-             py::arg("mask"))
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>(), py::arg("hamil"))
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint16_t>(),
+             py::arg("hamil"), py::arg("mask"))
         .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<double>)
         .def("get_matrix", &PDM2MPOQC<S>::template get_matrix<complex<double>>)
         .def("get_matrix_spatial",
@@ -78,7 +75,8 @@ auto bind_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
 
     py::class_<SumMPOQC<S>, shared_ptr<SumMPOQC<S>>, MPO<S>>(m, "SumMPOQC")
         .def_readwrite("ts", &SumMPOQC<S>::ts)
-        .def(py::init<const HamiltonianQC<S> &, const vector<uint16_t> &>(),
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &,
+                      const vector<uint16_t> &>(),
              py::arg("hamil"), py::arg("pts"));
 }
 
@@ -718,7 +716,6 @@ template <typename S> void bind_partition(py::module &m) {
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S>>>>(
         m, "VectorMovingEnvironment");
-
 }
 
 template <typename S> void bind_qc_hamiltonian(py::module &m) {
@@ -727,7 +724,9 @@ template <typename S> void bind_qc_hamiltonian(py::module &m) {
         .def(py::init<S, int, const vector<uint8_t> &,
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
-        .def_readwrite("mu", &HamiltonianQC<S>::mu)
+        .def_property(
+            "mu", [](HamiltonianQC<S> *self) { return self->mu; },
+            [](HamiltonianQC<S> *self, double mu) { self->set_mu(mu); })
         .def_readwrite("op_prims", &HamiltonianQC<S>::op_prims)
         .def("v", &HamiltonianQC<S>::v)
         .def("t", &HamiltonianQC<S>::t)
@@ -1278,27 +1277,34 @@ template <typename S> void bind_mpo(py::module &m) {
                       const vector<shared_ptr<StateInfo<S>>> &, S, S,
                       const shared_ptr<OperatorFunctions<S>> &,
                       const vector<uint8_t> &, const vector<uint8_t> &>())
-        .def(py::init<const Hamiltonian<S> &>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, int, int>());
 
     py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
-        .def(py::init<const Hamiltonian<S> &,
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
                       const shared_ptr<OpElement<S>> &>())
-        .def(py::init<const Hamiltonian<S> &, const shared_ptr<OpElement<S>> &,
-                      int>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
+                      const shared_ptr<OpElement<S>> &, int>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
+                      const shared_ptr<OpElement<S>> &, int, int, int>());
 
     py::class_<LocalMPO<S>, shared_ptr<LocalMPO<S>>, MPO<S>>(m, "LocalMPO")
-        .def(py::init<const Hamiltonian<S> &,
-                      const vector<shared_ptr<OpElement<S>>> &>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
+                      const vector<shared_ptr<OpElement<S>>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
+                      const vector<shared_ptr<OpElement<S>>> &, int, int>());
 
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)
-        .def(py::init<const HamiltonianQC<S> &>())
-        .def(py::init<const HamiltonianQC<S> &, QCTypes>())
-        .def(py::init<const HamiltonianQC<S> &, QCTypes, int>());
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &>())
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes>())
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes, int>())
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes, int, int,
+                      int>());
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
-        .def(py::init<const Hamiltonian<S> &>())
-        .def(py::init<const Hamiltonian<S> &, uint8_t>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &, uint8_t>())
         .def("get_matrix", &PDM1MPOQC<S>::template get_matrix<double>)
         .def("get_matrix", &PDM1MPOQC<S>::template get_matrix<complex<double>>)
         .def("get_matrix_spatial",
@@ -1307,7 +1313,7 @@ template <typename S> void bind_mpo(py::module &m) {
              &PDM1MPOQC<S>::template get_matrix_spatial<complex<double>>);
 
     py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
-        .def(py::init<const Hamiltonian<S> &>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>());
 
     py::class_<AncillaMPO<S>, shared_ptr<AncillaMPO<S>>, MPO<S>>(m,
                                                                  "AncillaMPO")
@@ -1474,7 +1480,6 @@ template <typename S = void> void bind_dmrg_io(py::module &m) {
                     py::arg("kmat"), py::arg("n_generations") = 10000,
                     py::arg("n_configs") = 54, py::arg("n_elite") = 5,
                     py::arg("clone_rate") = 0.1, py::arg("mutate_rate") = 0.1);
-
 }
 
 #ifdef _EXPLICIT_TEMPLATE

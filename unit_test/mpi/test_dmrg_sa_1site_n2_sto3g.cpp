@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -41,11 +42,12 @@ class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
 
     template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<double> &energies,
-                   const HamiltonianQC<S> &hamil, const string &name,
+                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
         threading_()->seq_type = SeqTypes::Simple;
@@ -63,7 +65,7 @@ bool TestOneSiteDMRGN2STO3GSA::_mpi = MPITest::okay();
 template <typename S>
 void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
                                   const vector<double> &energies,
-                                  const HamiltonianQC<S> &hamil,
+                                  const shared_ptr<HamiltonianQC<S>> &hamil,
                                   const string &name, ubond_t bond_dim,
                                   uint16_t nroots) {
 
@@ -101,14 +103,14 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     t.get_time();
 
     shared_ptr<MultiMPSInfo<S>> mps_info = make_shared<MultiMPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, targets, hamil.basis);
+        hamil->n_sites, hamil->vacuum, targets, hamil->basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
     Random::rand_seed(0);
 
     shared_ptr<MultiMPS<S>> mps =
-        make_shared<MultiMPS<S>>(hamil.n_sites, 0, 1, nroots);
+        make_shared<MultiMPS<S>>(hamil->n_sites, 0, 1, nroots);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -188,11 +190,11 @@ TEST_F(TestOneSiteDMRGN2STO3GSA, TestSU2) {
     };
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2", 200, 10);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -235,10 +237,10 @@ TEST_F(TestOneSiteDMRGN2STO3GSA, TestSZ) {
     };
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ", 400, 16);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

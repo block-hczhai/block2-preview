@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -42,11 +43,12 @@ class TestSumMPON2STO3G : public ::testing::Test {
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   const HamiltonianQC<S> &hamil, const string &name,
+                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
         threading_()->seq_type = SeqTypes::Simple;
@@ -64,7 +66,7 @@ bool TestSumMPON2STO3G::_mpi = MPITest::okay();
 template <typename S>
 void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                   const vector<vector<double>> &energies,
-                                  const HamiltonianQC<S> &hamil,
+                                  const shared_ptr<HamiltonianQC<S>> &hamil,
                                   const string &name, DecompositionTypes dt,
                                   NoiseTypes nt) {
 
@@ -79,8 +81,8 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
         make_shared<ParallelRuleSumMPO<S>>(para_comm);
 
     vector<uint16_t> ts;
-    para_rule->n_sites = hamil.n_sites;
-    for (int i = 0; i < hamil.n_sites; i++)
+    para_rule->n_sites = hamil->n_sites;
+    for (int i = 0; i < hamil->n_sites; i++)
         if (para_rule->index_available(i))
             ts.push_back(i);
 
@@ -115,13 +117,13 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             S target = targets[i][j];
 
             shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-                hamil.n_sites, hamil.vacuum, target, hamil.basis);
+                hamil->n_sites, hamil->vacuum, target, hamil->basis);
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
             Random::rand_seed(0);
 
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, 2);
+            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -215,7 +217,7 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
                    -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ",
                   DecompositionTypes::DensityMatrix, NoiseTypes::DensityMatrix);
@@ -231,6 +233,6 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
     test_dmrg<SZ>(targets, energies, hamil, "SZ PERT SVD",
                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

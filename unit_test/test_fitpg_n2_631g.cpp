@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -11,7 +12,8 @@ class TestFITPGN2631G : public ::testing::Test {
 
     template <typename S>
     void test_dmrg(int n_ext, int ci_order, const S target, double energy,
-                   HamiltonianQC<S> hamil, HamiltonianQC<S> hamil_red,
+                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const shared_ptr<HamiltonianQC<S>> &hamil_red,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
@@ -31,9 +33,11 @@ class TestFITPGN2631G : public ::testing::Test {
 
 template <typename S>
 void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
-                                double energy, HamiltonianQC<S> hamil,
-                                HamiltonianQC<S> hamil_red, const string &name,
-                                DecompositionTypes dt, NoiseTypes nt) {
+                                double energy,
+                                const shared_ptr<HamiltonianQC<S>> &hamil,
+                                const shared_ptr<HamiltonianQC<S>> &hamil_red,
+                                const string &name, DecompositionTypes dt,
+                                NoiseTypes nt) {
 
     bool dcl = false;
     int dot = 2;
@@ -44,17 +48,17 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPO construction (MRCISD-DMRG)
     cout << "MPO start" << endl;
     shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional, hamil.n_sites / 3);
+        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional, hamil->n_sites / 3);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
     shared_ptr<MPSInfo<S>> fusing_mps_info =
         n_ext != 0
-            ? make_shared<MRCIMPSInfo<S>>(hamil.n_sites, n_ext, ci_order,
-                                          hamil.vacuum, target, hamil.basis)
-            : make_shared<MPSInfo<S>>(hamil.n_sites, hamil.vacuum, target,
-                                      hamil.basis);
-    mpo->basis = hamil.basis;
+            ? make_shared<MRCIMPSInfo<S>>(hamil->n_sites, n_ext, ci_order,
+                                          hamil->vacuum, target, hamil->basis)
+            : make_shared<MPSInfo<S>>(hamil->n_sites, hamil->vacuum, target,
+                                      hamil->basis);
+    mpo->basis = hamil->basis;
     for (int i = 0; i < n_ext; i++)
         mpo = make_shared<FusedMPO<S>>(
             mpo, mpo->basis, mpo->n_sites - 2, mpo->n_sites - 1,
@@ -77,7 +81,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
         }
         mpo->sparse_form[idx] = 'S';
         mpo->tf = make_shared<TensorFunctions<S>>(
-            make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
     }
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
@@ -93,8 +97,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     t.get_time();
 
-    shared_ptr<MPSInfo<S>> mps_info =
-        make_shared<MPSInfo<S>>(mpo->n_sites, hamil.vacuum, target, mpo->basis);
+    shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
+        mpo->n_sites, hamil->vacuum, target, mpo->basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
@@ -131,18 +135,18 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPO RED construction (MRCISD-DMRG)
     cout << "MPO RED start" << endl;
     shared_ptr<MPO<S>> mpo_red = make_shared<MPOQC<S>>(
-        hamil_red, QCTypes::Conventional, hamil_red.n_sites / 3);
+        hamil_red, QCTypes::Conventional, hamil_red->n_sites / 3);
     cout << "MPO RED end .. T = " << t.get_time() << endl;
 
     cout << "MPO RED fusing start" << endl;
     shared_ptr<MPSInfo<S>> fusing_mps_info_red =
         n_ext != 0
-            ? make_shared<MRCIMPSInfo<S>>(hamil_red.n_sites, n_ext, ci_order,
-                                          hamil_red.vacuum, target,
-                                          hamil_red.basis)
-            : make_shared<MPSInfo<S>>(hamil_red.n_sites, hamil_red.vacuum,
-                                      target, hamil_red.basis);
-    mpo_red->basis = hamil_red.basis;
+            ? make_shared<MRCIMPSInfo<S>>(hamil_red->n_sites, n_ext, ci_order,
+                                          hamil_red->vacuum, target,
+                                          hamil_red->basis)
+            : make_shared<MPSInfo<S>>(hamil_red->n_sites, hamil_red->vacuum,
+                                      target, hamil_red->basis);
+    mpo_red->basis = hamil_red->basis;
     for (int i = 0; i < n_ext; i++)
         mpo_red = make_shared<FusedMPO<S>>(
             mpo_red, mpo_red->basis, mpo_red->n_sites - 2, mpo_red->n_sites - 1,
@@ -164,7 +168,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
         }
         mpo_red->sparse_form[idx] = 'S';
         mpo_red->tf = make_shared<TensorFunctions<S>>(
-            make_shared<CSROperatorFunctions<S>>(hamil_red.opf->cg));
+            make_shared<CSROperatorFunctions<S>>(hamil_red->opf->cg));
     }
     cout << "MPO RED sparsification end .. T = " << t.get_time() << endl;
 
@@ -175,7 +179,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "MPO RED simplification end .. T = " << t.get_time() << endl;
 
     shared_ptr<MPSInfo<S>> mps_info_red = make_shared<MPSInfo<S>>(
-        mpo_red->n_sites, hamil_red.vacuum, target, mpo_red->basis);
+        mpo_red->n_sites, hamil_red->vacuum, target, mpo_red->basis);
     mps_info_red->tag = "KETR";
     mps_info_red->set_bond_dimension(bond_dim);
 
@@ -196,8 +200,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // Identity MPO
     cout << "Identity MPO start" << endl;
     shared_ptr<MPO<S>> impo_red = make_shared<IdentityMPO<S>>(
-        mpo_red->basis, mpo->basis, hamil.vacuum, hamil.vacuum, hamil.opf,
-        hamil_red.orb_sym, hamil.orb_sym);
+        mpo_red->basis, mpo->basis, hamil->vacuum, hamil->vacuum, hamil->opf,
+        hamil_red->orb_sym, hamil->orb_sym);
     // Attention: use trivial Rule or NoTransposeRule(RuleQC)
     impo_red = make_shared<SimplifiedMPO<S>>(impo_red, make_shared<Rule<S>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
@@ -258,14 +262,15 @@ TEST_F(TestFITPGN2631G, TestSU2) {
     SU2 target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    HamiltonianQC<SU2> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
-    HamiltonianQC<SU2> hamil_red(vacuum, fcidump->n_sites(), orbsym_red,
-                                 fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
+        vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil_red = make_shared<HamiltonianQC<SU2>>(
+        vacuum, fcidump->n_sites(), orbsym_red, fcidump);
 
     test_dmrg<SU2>(0, 2, target, energy, hamil, hamil_red, "SU2",
                    DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -285,13 +290,14 @@ TEST_F(TestFITPGN2631G, TestSZ) {
     SZ target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    HamiltonianQC<SZ> hamil(vacuum, fcidump->n_sites(), orbsym, fcidump);
-    HamiltonianQC<SZ> hamil_red(vacuum, fcidump->n_sites(), orbsym_red,
-                                fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
+        vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil_red = make_shared<HamiltonianQC<SZ>>(
+        vacuum, fcidump->n_sites(), orbsym_red, fcidump);
 
     test_dmrg<SZ>(0, 2, target, energy, hamil, hamil_red, "SZ",
                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

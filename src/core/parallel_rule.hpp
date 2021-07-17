@@ -83,6 +83,7 @@ template <typename S> struct ParallelCommunicator {
         assert(size == 1);
     }
     virtual void allreduce_sum(vector<S> &vs) { assert(size == 1); }
+    virtual void allreduce_logical_or(char *data, size_t len) { assert(size == 1); }
     virtual void allreduce_xor(char *data, size_t len) { assert(size == 1); }
     virtual void allreduce_min(double *data, size_t len) { assert(size == 1); }
     virtual void allreduce_min(vector<vector<double>> &vs) {

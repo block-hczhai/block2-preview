@@ -22,10 +22,10 @@
 
 #include "../core/expr.hpp"
 #include "../core/hamiltonian.hpp"
-#include "mpo.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/symbolic.hpp"
 #include "../core/tensor_functions.hpp"
+#include "mpo.hpp"
 #include <cassert>
 #include <memory>
 
@@ -40,18 +40,22 @@ template <typename, typename = void> struct NPC1MPOQC;
 // NN[4] = ad_{pa} a_{pb} x ad_{qb} a_{qa}
 // NN[5] = ad_{pb} a_{pa} x ad_{qa} a_{qb}
 template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    NPC1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil)
+        : MPO<S>(hamil->n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+            OpNames::Zero, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
-        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(4));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(4));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(6)));
 #else
         shared_ptr<OpExpr<S>> b_op[n_sites][4];
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][6];
@@ -70,24 +74,24 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
                     nn_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::NN, sidx, hamil.vacuum);
+                        OpNames::NN, sidx, hamil->vacuum);
                     pdm1_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::PDM1, sidx, hamil.vacuum);
+                        OpNames::PDM1, sidx, hamil->vacuum);
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)s, (uint8_t)0, (uint8_t)1});
                     nn_op[i][j][4 + s] = make_shared<OpElement<S>>(
-                        OpNames::NN, sidx, hamil.vacuum);
+                        OpNames::NN, sidx, hamil->vacuum);
                     pdm1_op[i][j][4 + s] = make_shared<OpElement<S>>(
-                        OpNames::PDM1, sidx, hamil.vacuum);
+                        OpNames::PDM1, sidx, hamil->vacuum);
                 }
             }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
         MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        MPO<S>::site_op_infos = hamil.site_op_infos;
+        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+        MPO<S>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 10 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 11;
@@ -228,7 +232,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 (*prmat)[{0, 0}] = i_op;
             }
             opt->lmat = plmat, opt->rmat = prmat;
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
         }
     }
@@ -242,18 +246,22 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
 //   e_pqpq = -NN[1] + 2 * delta_pq Epq
 // where Epq = 1pdm spatial
 template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
-    NPC1MPOQC(const Hamiltonian<S> &hamil) : MPO<S>(hamil.n_sites) {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil)
+        : MPO<S>(hamil->n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+            OpNames::Zero, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
-        vector<vector<shared_ptr<OpExpr<S>>>> b_op(n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(
+            n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> nn_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> pdm1_op(
+            n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
+                         n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
 #else
         shared_ptr<OpExpr<S>> b_op[n_sites][2];
         shared_ptr<OpExpr<S>> nn_op[n_sites][n_sites][2];
@@ -267,15 +275,15 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     nn_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::NN, SiteIndex(i, j, s), hamil.vacuum);
+                        OpNames::NN, SiteIndex(i, j, s), hamil->vacuum);
                     pdm1_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::PDM1, SiteIndex(i, j, s), hamil.vacuum);
+                        OpNames::PDM1, SiteIndex(i, j, s), hamil->vacuum);
                 }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
         MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        MPO<S>::site_op_infos = hamil.site_op_infos;
+        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+        MPO<S>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 4 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 5;
@@ -393,7 +401,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 (*prmat)[{0, 0}] = i_op;
             }
             opt->lmat = plmat, opt->rmat = prmat;
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
         }
     }

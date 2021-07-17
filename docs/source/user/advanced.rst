@@ -550,3 +550,7 @@ more reliable and efficient for obtaining the CSF with the largest weight.
 
 If the CSF or determinat pattern is required, one can do a quick sampling on the compressed
 MPS using the keyword ``restart_sample 0``.
+
+If the given MPS has a very small bond dimension, or the target (output) MPS has a very large bond dimension
+(namely, "decompression"), one should use the keyword ``random_mps_init`` to allow a better random
+initial guess for the target MPS. Otherwise, the generated output MPS may be inaccurate.

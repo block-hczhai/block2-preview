@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -103,14 +104,14 @@ TEST_F(TestDMRG, Test) {
               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     Timer t;
     t.get_time();
 
     vector<uint16_t> ts;
-    para_rule->n_sites = hamil.n_sites;
-    for (int i = 0; i < hamil.n_sites; i++)
+    para_rule->n_sites = hamil->n_sites;
+    for (int i = 0; i < hamil->n_sites; i++)
         if (para_rule->index_available(i))
             ts.push_back(i);
 
@@ -153,11 +154,11 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     // shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-    //     norb, vacuum, target, hamil.basis);
+    //     norb, vacuum, target, hamil->basis);
 
     // CCSD init
     shared_ptr<MPSInfo<SZ>> mps_info =
-        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
+        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil->basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -170,16 +171,16 @@ TEST_F(TestDMRG, Test) {
 
     // Local init
     // shared_ptr<DynamicMPSInfo<SZ>> mps_info =
-    //     make_shared<DynamicMPSInfo<SZ>>(norb, vacuum, target, hamil.basis,
-    //                                      hamil.orb_sym, ioccs);
+    //     make_shared<DynamicMPSInfo<SZ>>(norb, vacuum, target, hamil->basis,
+    //                                      hamil->orb_sym, ioccs);
     // mps_info->n_local = 4;
     // mps_info->set_bond_dimension(bond_dim);
 
     // Determinant init
     // shared_ptr<DeterminantMPSInfo<SZ>> mps_info =
     //     make_shared<DeterminantMPSInfo<SZ>>(norb, vacuum, target,
-    //     hamil.basis,
-    //                                      hamil.orb_sym, ioccs, fcidump);
+    //     hamil->basis,
+    //                                      hamil->orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
 
     cout << "left dims = ";
@@ -238,12 +239,12 @@ TEST_F(TestDMRG, Test) {
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
-    dmrg->me->fuse_center = hamil.n_sites / 2;
+    dmrg->me->fuse_center = hamil->n_sites / 2;
     dmrg->solve(10, true, 1E-12);
 
     // deallocate persistent stack memory
     mps_info->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

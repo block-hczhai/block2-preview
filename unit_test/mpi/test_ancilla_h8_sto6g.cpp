@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -43,7 +44,7 @@ class TestAncillaH8STO6G : public ::testing::Test {
     void test_imag_te(int n_sites, int n_physical_sites, S target,
                       const vector<double> &energies_fted,
                       const vector<double> &energies_m500,
-                      const HamiltonianQC<S> &hamil, const string &name);
+                      const shared_ptr<HamiltonianQC<S>> &hamil, const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -66,7 +67,7 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
                                       S target,
                                       const vector<double> &energies_fted,
                                       const vector<double> &energies_m500,
-                                      const HamiltonianQC<S> &hamil,
+                                      const shared_ptr<HamiltonianQC<S>> &hamil,
                                       const string &name) {
 
 #ifdef _HAS_MPI
@@ -111,8 +112,8 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     Random::rand_seed(0);
 
     shared_ptr<AncillaMPSInfo<S>> mps_info_thermal =
-        make_shared<AncillaMPSInfo<S>>(n_physical_sites, hamil.vacuum, target,
-                                       hamil.basis);
+        make_shared<AncillaMPSInfo<S>>(n_physical_sites, hamil->vacuum, target,
+                                       hamil->basis);
     mps_info_thermal->set_thermal_limit();
     mps_info_thermal->tag = "KET";
 
@@ -205,14 +206,14 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    HamiltonianQC<SU2> hamil(vacuum, n_physical_sites, orbsym, fcidump);
-    hamil.mu = -1.0;
-    hamil.fcidump->const_e = 0.0;
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, n_physical_sites, orbsym, fcidump);
+    hamil->mu = -1.0;
+    hamil->fcidump->const_e = 0.0;
 
     test_imag_te<SU2>(n_sites, n_physical_sites, target, energies_fted,
                       energies_m500, hamil, "SU2");
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -242,13 +243,13 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    HamiltonianQC<SZ> hamil(vacuum, n_physical_sites, orbsym, fcidump);
-    hamil.mu = -1.0;
-    hamil.fcidump->const_e = 0.0;
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, n_physical_sites, orbsym, fcidump);
+    hamil->mu = -1.0;
+    hamil->fcidump->const_e = 0.0;
 
     test_imag_te<SZ>(n_sites, n_physical_sites, target, energies_fted,
                      energies_m500, hamil, "SZ");
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

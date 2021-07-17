@@ -20,25 +20,6 @@
 
 #pragma once
 
-#include "block2_core.hpp"
-
-#ifdef _USE_DMRG
-#include "block2_dmrg.hpp"
-#endif
-
-#ifdef _USE_MRCI
-#include "block2_mrci.hpp"
-#endif
-
-#ifdef _USE_SCI
-#include "sci/abstract_sci_wrapper.hpp"
-#include "sci/hamiltonian_sci.hpp"
-#include "sci/qc_hamiltonian_sci.hpp"
-#include "sci/qc_mpo_sci.hpp"
-#include "sci/sweep_algorithm_sci.hpp"
-#endif
-
-#undef ialloc
-#undef dalloc
-#undef frame
-#undef threading
+#include "mrci/qc_big_site.hpp"
+#include "mrci/qc_hamiltonian_big_site.hpp"
+#include "mrci/sweep_algorithm_big_site.hpp"

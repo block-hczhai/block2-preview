@@ -2,6 +2,7 @@
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
  * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +50,9 @@ enum struct DelayedOpNames : uint32_t {
     CCD = 256,
     CDD = 512,
     TR = 1024,
-    TS = 2048
+    TS = 2048,
+    LeftBig = 4096,
+    RightBig = 8192
 };
 
 inline DelayedOpNames operator|(DelayedOpNames a, DelayedOpNames b) {
@@ -78,7 +81,9 @@ template <typename S> struct Hamiltonian {
     Hamiltonian(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
-        n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;
+        n_syms = orb_sym.size() == 0
+                     ? 0
+                     : *max_element(orb_sym.begin(), orb_sym.end()) + 1;
     }
     virtual ~Hamiltonian() = default;
     // Fill the map with sparse matrix representation of site operators
@@ -94,10 +99,13 @@ template <typename S> struct Hamiltonian {
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
         const {
         vector<shared_ptr<Symbolic<S>>> pmats = mats;
+        // hrl: ops is empty initially. It will be filled here. First by
+        // specifying the keys, then by declaring the value
         if (pmats.size() == 2 && pmats[0] == pmats[1])
             pmats.resize(1);
         if (pmats.size() >= 1)
             ops.reserve(pmats[0]->data.size());
+        // hrl: specifying key
         for (auto pmat : pmats)
             for (auto &x : pmat->data) {
                 switch (x->get_type()) {
@@ -118,8 +126,10 @@ template <typename S> struct Hamiltonian {
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
         ops[i_op] = nullptr;
+        // hrl: specifying value
         get_site_ops(m, ops);
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        // hrl: now check whether some keys are eq. to zero etc.; simplification
         size_t kk;
         for (auto pmat : pmats)
             for (auto &x : pmat->data) {
@@ -138,6 +148,8 @@ template <typename S> struct Hamiltonian {
                     for (size_t i = 0;
                          i < dynamic_pointer_cast<OpSum<S>>(x)->strings.size();
                          i++) {
+                        // hrl why abs_value? => to remove "phase" for getting
+                        // key in ops
                         xx = abs_value((shared_ptr<OpExpr<S>>)
                                            dynamic_pointer_cast<OpSum<S>>(x)
                                                ->strings[i]

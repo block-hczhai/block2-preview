@@ -815,7 +815,7 @@ struct ComplexMatrixFunctions {
             else
                 ncs++;
         }
-        if (jiter == max_iter && beta * beta >= conv_thrd) {
+        if (jiter >= max_iter && beta * beta >= conv_thrd) {
             cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
             assert(false);
         }

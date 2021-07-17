@@ -21,12 +21,12 @@
 #pragma once
 
 #include "../core/delayed_tensor_functions.hpp"
-#include "mpo.hpp"
 #include "../core/operator_tensor.hpp"
-#include "qc_hamiltonian.hpp"
-#include "qc_mpo.hpp"
 #include "../core/symbolic.hpp"
 #include "../core/tensor_functions.hpp"
+#include "mpo.hpp"
+#include "qc_hamiltonian.hpp"
+#include "qc_mpo.hpp"
 #include <algorithm>
 #include <cassert>
 #include <memory>
@@ -42,27 +42,38 @@ template <typename, typename = void> struct SumMPOQC;
 template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
     using MPO<S>::n_sites;
     vector<uint16_t> ts;
-    SumMPOQC(const HamiltonianQC<S> &hamil, const vector<uint16_t> &pts)
-        : MPO<S>(hamil.n_sites), ts(pts) {
+    SumMPOQC(const shared_ptr<HamiltonianQC<S>> &hamil,
+             const vector<uint16_t> &pts)
+        : MPO<S>(hamil->n_sites), ts(pts) {
         assert(ts.size() > 0);
         sort(ts.begin(), ts.end());
         shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
-        vector<vector<shared_ptr<OpExpr<S>>>> c_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
-            d_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<shared_ptr<OpExpr<S>>>> tr_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
-            ts_op(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(2));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
-        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(hamil.n_sites,
-            vector<vector<shared_ptr<OpExpr<S>>>>(hamil.n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<shared_ptr<OpExpr<S>>>> c_op(
+            hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            d_op(hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<shared_ptr<OpExpr<S>>>> tr_op(
+            hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
+            ts_op(hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(2));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> a_op(
+            hamil->n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> b_op(
+            hamil->n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> p_op(
+            hamil->n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
+        vector<vector<vector<shared_ptr<OpExpr<S>>>>> q_op(
+            hamil->n_sites,
+            vector<vector<shared_ptr<OpExpr<S>>>>(
+                hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(4)));
 #else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> tr_op[n_sites][2], ts_op[n_sites][2];
@@ -72,28 +83,28 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> q_op[n_sites][n_sites][4];
 #endif
         MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
-        MPO<S>::const_e = hamil.e();
-        if (hamil.delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
+        MPO<S>::const_e = hamil->e();
+        if (hamil->delayed == DelayedOpNames::None)
+            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil.opf);
-        MPO<S>::site_op_infos = hamil.site_op_infos;
+            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
+        MPO<S>::site_op_infos = hamil->site_op_infos;
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 2; s++) {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil.orb_sym[m]));
+                                              S(1, sz[s], hamil->orb_sym[m]));
                 d_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil.orb_sym[m]));
+                                              S(-1, -sz[s], hamil->orb_sym[m]));
                 tr_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::TR, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil.orb_sym[m]));
+                                              S(-1, -sz[s], hamil->orb_sym[m]));
                 ts_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::TS, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil.orb_sym[m]));
+                                              S(1, sz[s], hamil->orb_sym[m]));
             }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++) {
@@ -102,18 +113,20 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, sidx,
-                        S(2, sz_plus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                        S(2, sz_plus[s],
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
-                        S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                        S(0, sz_minus[s],
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                     p_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
-                          hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
-                          hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                 }
             }
         int p, lt = (int)ts.size();
@@ -229,7 +242,7 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                             p += n_sites - m;
                 assert(p == mat.m);
             }
-            if (m != 0 && m != hamil.n_sites - 1) {
+            if (m != 0 && m != hamil->n_sites - 1) {
                 mat[{1, 1}] = i_op;
                 p = 2;
                 // pointers
@@ -306,12 +319,12 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++)
                                     mat[{pd[s] + l, p}] +=
-                                        (0.5 * hamil.v(s, sp, m, l, k, m)) *
+                                        (0.5 * hamil->v(s, sp, m, l, k, m)) *
                                         b_op[m][m][s | (sp << 1)];
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++)
                                     mat[{pd[sp] + l, p}] +=
-                                        (-0.5 * hamil.v(s, sp, m, m, k, l)) *
+                                        (-0.5 * hamil->v(s, sp, m, m, k, l)) *
                                         b_op[m][m][s | (s << 1)];
                         }
                         for (uint8_t s = 0; s < 2; s++)
@@ -325,9 +338,9 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++)
                                         mat[{pb[s | (sp << 1)] + pii * m + l,
-                                             p}] =
-                                            (0.5 * hamil.v(s, sp, i, m, k, l)) *
-                                            d_op[m][s];
+                                             p}] = (0.5 * hamil->v(s, sp, i, m,
+                                                                   k, l)) *
+                                                   d_op[m][s];
                                     pii++;
                                 }
                         }
@@ -337,8 +350,8 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++)
                                         mat[{pb[s | (s << 1)] + pii * m + l,
-                                             p}] += (-0.5 * hamil.v(s, sp, i, l,
-                                                                    k, m)) *
+                                             p}] += (-0.5 * hamil->v(s, sp, i,
+                                                                     l, k, m)) *
                                                     d_op[m][sp];
                                     pii++;
                                 }
@@ -358,19 +371,19 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++) {
                                     mat[{pd[s] + l, p}] +=
-                                        (0.5 * hamil.v(sp, s, m, j, m, l)) *
+                                        (0.5 * hamil->v(sp, s, m, j, m, l)) *
                                         a_op[m][m][sp | (s << 1)];
                                     mat[{pd[s] + l, p}] +=
-                                        (-0.5 * hamil.v(s, sp, m, l, m, j)) *
+                                        (-0.5 * hamil->v(s, sp, m, l, m, j)) *
                                         a_op[m][m][s | (sp << 1)];
                                 }
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++) {
                                     mat[{pc[s] + l, p}] +=
-                                        (-0.5 * hamil.v(sp, s, m, j, l, m)) *
+                                        (-0.5 * hamil->v(sp, s, m, j, l, m)) *
                                         b_op[m][m][sp | (s << 1)];
                                     mat[{pc[sp] + l, p}] +=
-                                        (0.5 * hamil.v(s, sp, m, m, l, j)) *
+                                        (0.5 * hamil->v(s, sp, m, m, l, j)) *
                                         b_op[m][m][s | (s << 1)];
                                 }
                         }
@@ -385,13 +398,13 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++) {
                                         mat[{pb[sp | (s << 1)] + pii * m + l,
-                                             p}] = (-0.5 * hamil.v(sp, s, i, j,
-                                                                   m, l)) *
+                                             p}] = (-0.5 * hamil->v(sp, s, i, j,
+                                                                    m, l)) *
                                                    c_op[m][s];
                                         mat[{pb[s | (s << 1)] + pii * m + l,
-                                             p}] +=
-                                            (0.5 * hamil.v(s, sp, i, l, m, j)) *
-                                            c_op[m][sp];
+                                             p}] += (0.5 * hamil->v(s, sp, i, l,
+                                                                    m, j)) *
+                                                    c_op[m][sp];
                                     }
                                     pii++;
                                 }
@@ -402,12 +415,12 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++) {
                                         mat[{pa[sp | (s << 1)] + pii * m + l,
-                                             p}] =
-                                            (0.5 * hamil.v(sp, s, i, j, l, m)) *
-                                            d_op[m][s];
+                                             p}] = (0.5 * hamil->v(sp, s, i, j,
+                                                                   l, m)) *
+                                                   d_op[m][s];
                                         mat[{pa[s | (sp << 1)] + pii * m + l,
-                                             p}] += (-0.5 * hamil.v(s, sp, i, m,
-                                                                    l, j)) *
+                                             p}] += (-0.5 * hamil->v(s, sp, i,
+                                                                     m, l, j)) *
                                                     d_op[m][s];
                                     }
                                     pii++;
@@ -473,13 +486,13 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                          p + pii * (n_sites - m - 1) + k - m -
                                              1}] +=
                                         (-0.5 *
-                                         hamil.v(s & 1, s >> 1, i, j, k, m)) *
+                                         hamil->v(s & 1, s >> 1, i, j, k, m)) *
                                         d_op[m][s >> 1];
                                     mat[{pd[s >> 1] + j,
                                          p + pii * (n_sites - m - 1) + k - m -
                                              1}] +=
                                         (0.5 *
-                                         hamil.v(s & 1, s >> 1, i, m, k, j)) *
+                                         hamil->v(s & 1, s >> 1, i, m, k, j)) *
                                         d_op[m][s & 1];
                                 }
                             }
@@ -506,27 +519,27 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                                             mat[{pc[spp] + k,
                                                  p + pii * (n_sites - m - 1) +
                                                      j - m - 1}] +=
-                                                (0.5 * hamil.v(s & 1, spp, i, j,
-                                                               k, m)) *
+                                                (0.5 * hamil->v(s & 1, spp, i,
+                                                                j, k, m)) *
                                                 d_op[m][spp];
                                             mat[{pd[spp] + k,
                                                  p + pii * (n_sites - m - 1) +
                                                      j - m - 1}] +=
-                                                (-0.5 * hamil.v(s & 1, spp, i,
-                                                                j, m, k)) *
+                                                (-0.5 * hamil->v(s & 1, spp, i,
+                                                                 j, m, k)) *
                                                 c_op[m][spp];
                                         }
                                     mat[{pc[s >> 1] + k,
                                          p + pii * (n_sites - m - 1) + j - m -
                                              1}] +=
                                         (-0.5 *
-                                         hamil.v(s & 1, s >> 1, i, m, k, j)) *
+                                         hamil->v(s & 1, s >> 1, i, m, k, j)) *
                                         d_op[m][s & 1];
                                     mat[{pd[s & 1] + k,
                                          p + pii * (n_sites - m - 1) + j - m -
                                              1}] +=
                                         (0.5 *
-                                         hamil.v(s & 1, s >> 1, i, k, m, j)) *
+                                         hamil->v(s & 1, s >> 1, i, k, m, j)) *
                                         c_op[m][s >> 1];
                                 }
                             }
@@ -542,13 +555,13 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
             opt->lmat = opt->rmat = pmat;
             // left operator names
             shared_ptr<SymbolicRowVector<S>> plop;
-            if (m == hamil.n_sites - 1)
+            if (m == hamil->n_sites - 1)
                 plop = make_shared<SymbolicRowVector<S>>(1);
             else
                 plop = make_shared<SymbolicRowVector<S>>(rshape);
             SymbolicRowVector<S> &lop = *plop;
             lop[0] = h_op;
-            if (m != hamil.n_sites - 1) {
+            if (m != hamil->n_sites - 1) {
                 lop[1] = i_op;
                 p = 2;
                 for (uint8_t s = 0; s < 2; s++) {
@@ -650,7 +663,7 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                 assert(p == lshape);
             }
             this->right_operator_names.push_back(prop);
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
         }
     }

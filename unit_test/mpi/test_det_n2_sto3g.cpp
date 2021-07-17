@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -109,7 +110,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     Timer t;
     t.get_time();
@@ -135,7 +136,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<MPSInfo<SZ>>(
-        norb, vacuum, target, hamil.basis);
+        norb, vacuum, target, hamil->basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
@@ -166,7 +167,7 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     vector<double> noises = {1E-8, 0.0};
     shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
     dmrg->iprint = 2;
-    dmrg->solve(10, true, 1E-10);
+    dmrg->solve(20, true, 1E-14);
 
     shared_ptr<DeterminantTRIE<SZ>> dtrie =
         make_shared<DeterminantTRIE<SZ>>(mps->n_sites, true);
@@ -191,6 +192,6 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     // deallocate persistent stack memory
     mps_info->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

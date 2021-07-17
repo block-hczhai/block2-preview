@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -49,7 +50,7 @@ TEST_F(TestDMRG, Test) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     // abort();
 
@@ -72,7 +73,7 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info =
-        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil.basis);
+        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil->basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -180,6 +181,6 @@ TEST_F(TestDMRG, Test) {
     // deallocate persistent stack memory
     mps_info->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

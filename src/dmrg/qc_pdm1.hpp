@@ -22,10 +22,10 @@
 
 #include "../core/expr.hpp"
 #include "../core/hamiltonian.hpp"
-#include "mpo.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/symbolic.hpp"
 #include "../core/tensor_functions.hpp"
+#include "mpo.hpp"
 #include <cassert>
 #include <memory>
 
@@ -37,13 +37,13 @@ template <typename, typename = void> struct PDM1MPOQC;
 
 // "MPO" for one particle density matrix (non-spin-adapted)
 template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    PDM1MPOQC(const Hamiltonian<S> &hamil, uint8_t ds = 0)
-        : MPO<S>(hamil.n_sites) {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil, uint8_t ds = 0)
+        : MPO<S>(hamil->n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
-        shared_ptr<OpElement<S>> zero_op =
-            make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+            OpNames::Zero, SiteIndex(), hamil->vacuum);
         assert(ds == 0);
 #ifdef _MSC_VER
         vector<vector<shared_ptr<OpExpr<S>>>> c_op(
@@ -67,10 +67,10 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             for (uint8_t s = 0; s < 2; s++) {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil.orb_sym[m]));
+                                              S(1, sz[s], hamil->orb_sym[m]));
                 d_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil.orb_sym[m]));
+                                              S(-1, -sz[s], hamil->orb_sym[m]));
             }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
@@ -79,16 +79,18 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
-                        S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                        S(0, sz_minus[s],
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                     pdm1_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::PDM1, sidx,
-                        S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                        S(0, sz_minus[s],
+                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                 }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
         MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        MPO<S>::site_op_infos = hamil.site_op_infos;
+        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+        MPO<S>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             // left operator names
             //   1 : identity
@@ -257,7 +259,7 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
             }
             assert(p == rlshape);
             opt->lmat = plmat, opt->rmat = prmat;
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
         }
     }
@@ -304,11 +306,11 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
 //     dm[i, j]    =      sqrt(2) < a^{\dagger[1/2]}_i \otimes_[1] a^{[1/2]}_j >
 //                 = (-1) sqrt(2) < a^{[1/2]}_j \otimes_[1] a^{\dagger[1/2]}_i >
 template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
-    PDM1MPOQC(const Hamiltonian<S> &hamil, uint8_t ds = 0)
-        : MPO<S>(hamil.n_sites) {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil, uint8_t ds = 0)
+        : MPO<S>(hamil->n_sites) {
         const auto n_sites = MPO<S>::n_sites;
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
         shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
             OpNames::Zero, SiteIndex(), S(0, ds * 2, 0));
         assert(ds == 0 || ds == 1);
@@ -325,24 +327,24 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
 #endif
         for (uint16_t m = 0; m < n_sites; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
-                                                S(1, 1, hamil.orb_sym[m]));
+                                                S(1, 1, hamil->orb_sym[m]));
             d_op[m] = make_shared<OpElement<S>>(OpNames::D, SiteIndex(m),
-                                                S(-1, 1, hamil.orb_sym[m]));
+                                                S(-1, 1, hamil->orb_sym[m]));
         }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++) {
                 b_op[i][j] = make_shared<OpElement<S>>(
                     OpNames::B, SiteIndex(i, j, ds),
-                    S(0, ds * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    S(0, ds * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
                 pdm1_op[i][j] = make_shared<OpElement<S>>(
                     OpNames::PDM1, SiteIndex(i, j),
-                    S(0, ds * 2, hamil.orb_sym[i] ^ hamil.orb_sym[j]));
+                    S(0, ds * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
             }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
         MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        MPO<S>::site_op_infos = hamil.site_op_infos;
+        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+        MPO<S>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             // left operator names
             //   1 : identity
@@ -489,7 +491,7 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 (*prmat)[{p++, 0}] = b_op[m][m];
             assert(p == rlshape);
             opt->lmat = plmat, opt->rmat = prmat;
-            hamil.filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
+            hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
         }
     }

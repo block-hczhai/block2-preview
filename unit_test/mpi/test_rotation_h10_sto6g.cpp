@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -40,14 +41,15 @@ class TestRotationH10STO6G : public ::testing::Test {
     size_t dsize = 1L << 32;
 
     template <typename S>
-    void test_dmrg(S target, const HamiltonianQC<S> &hamil,
-                   const HamiltonianQC<S> &hamil_rot,
-                   const HamiltonianQC<S> &hamil_c1, const string &name,
-                   int dot, TETypes te_type, double tol);
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const shared_ptr<HamiltonianQC<S>> &hamil_rot,
+                   const shared_ptr<HamiltonianQC<S>> &hamil_c1,
+                   const string &name, int dot, TETypes te_type, double tol);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->minimal_disk_usage = true;
+        frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             1);
@@ -63,11 +65,11 @@ class TestRotationH10STO6G : public ::testing::Test {
 
 bool TestRotationH10STO6G::_mpi = MPITest::okay();
 template <typename S>
-void TestRotationH10STO6G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
-                                     const HamiltonianQC<S> &hamil_rot,
-                                     const HamiltonianQC<S> &hamil_c1,
-                                     const string &name, int dot,
-                                     TETypes te_type, double tol) {
+void TestRotationH10STO6G::test_dmrg(
+    S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+    const shared_ptr<HamiltonianQC<S>> &hamil_rot,
+    const shared_ptr<HamiltonianQC<S>> &hamil_c1, const string &name, int dot,
+    TETypes te_type, double tol) {
 
     double energy_std = -5.424385375684663;
 
@@ -106,14 +108,14 @@ void TestRotationH10STO6G::test_dmrg(S target, const HamiltonianQC<S> &hamil,
     t.get_time();
 
     shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-        hamil.n_sites, hamil.vacuum, target, hamil.basis);
+        hamil->n_sites, hamil->vacuum, target, hamil->basis);
     mps_info->set_bond_dimension(ket_bond_dim);
     mps_info->tag = "KET";
 
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, dot);
+    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -236,15 +238,18 @@ TEST_F(TestRotationH10STO6G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     shared_ptr<FCIDUMP> fcidump_rot = make_shared<FCIDUMP>();
     fcidump_rot->read(filename_rot);
-    HamiltonianQC<SU2> hamil_rot(vacuum, norb, orbsym, fcidump_rot);
+    shared_ptr<HamiltonianQC<SU2>> hamil_rot =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump_rot);
 
     shared_ptr<FCIDUMP> fcidump_c1 = make_shared<FCIDUMP>();
     fcidump_c1->read(filename_c1);
-    HamiltonianQC<SU2> hamil_c1(vacuum, norb, orbsym, fcidump_c1);
+    shared_ptr<HamiltonianQC<SU2>> hamil_c1 =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump_c1);
 
     test_dmrg<SU2>(target, hamil, hamil_rot, hamil_c1, "SU2/2-site/TS", 2,
                    TETypes::TangentSpace, 1E-7);
@@ -253,8 +258,8 @@ TEST_F(TestRotationH10STO6G, TestSU2) {
     // test_dmrg<SU2>(target, hamil, hamil_rot, hamil_c1, "SU2/1-site", 1,
     //                TETypes::TangentSpace);
 
-    hamil_rot.deallocate();
-    hamil.deallocate();
+    hamil_rot->deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -274,15 +279,18 @@ TEST_F(TestRotationH10STO6G, TestSZ) {
               PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     shared_ptr<FCIDUMP> fcidump_rot = make_shared<FCIDUMP>();
     fcidump_rot->read(filename_rot);
-    HamiltonianQC<SZ> hamil_rot(vacuum, norb, orbsym, fcidump_rot);
+    shared_ptr<HamiltonianQC<SZ>> hamil_rot =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump_rot);
 
     shared_ptr<FCIDUMP> fcidump_c1 = make_shared<FCIDUMP>();
     fcidump_c1->read(filename_c1);
-    HamiltonianQC<SZ> hamil_c1(vacuum, norb, orbsym, fcidump_c1);
+    shared_ptr<HamiltonianQC<SZ>> hamil_c1 =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump_c1);
 
     test_dmrg<SZ>(target, hamil, hamil_rot, hamil_c1, "SZ/2-site/TS", 2,
                   TETypes::TangentSpace, 1E-5);
@@ -291,7 +299,7 @@ TEST_F(TestRotationH10STO6G, TestSZ) {
     // test_dmrg<SZ>(target, hamil, hamil_rot, hamil_c1, "SZ/1-site", 1,
     //               TETypes::TangentSpace);
 
-    hamil_rot.deallocate();
-    hamil.deallocate();
+    hamil_rot->deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

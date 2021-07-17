@@ -129,7 +129,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Contract and renormalize left block by one site
     // new site = i - 1
-    void left_contract_rotate(int i) {
+    void left_contract_rotate(int i, bool preserve_data = false) {
         mpo->load_left_operators(i - 1);
         mpo->load_tensor(i - 1);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
@@ -198,7 +198,8 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
                              envs[i]->left);
-        new_left->deallocate();
+        if (!frame->use_main_stack)
+            new_left->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
@@ -207,7 +208,8 @@ template <typename S> struct MovingEnvironment {
             frame->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
-            if (dot == 2)
+            // also in tdvp (1-dot after 2-dot) we need to keep data
+            if (dot == 2 && !preserve_data)
                 mpo->tf->post_numerical_transform(envs[i]->left, mats[0],
                                                   mats[1]);
         }
@@ -224,6 +226,8 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->unload_tensor(i - 1);
         bra->unload_tensor(i - 1);
+        if (frame->use_main_stack)
+            new_left->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         frame->save_data(1, get_left_partition_filename(i));
         if (save_partition_info) {
@@ -234,7 +238,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Contract and renormalize right block by one site
     // new site = i + dot
-    void right_contract_rotate(int i) {
+    void right_contract_rotate(int i, bool preserve_data = false) {
         mpo->load_right_operators(i + dot);
         mpo->load_tensor(i + dot);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
@@ -308,7 +312,8 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
                               ket->tensors[i + dot], envs[i]->right);
-        new_right->deallocate();
+        if (!frame->use_main_stack)
+            new_right->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr &&
             i + dot == mpo->schemer->right_trans_site) {
@@ -319,7 +324,8 @@ template <typename S> struct MovingEnvironment {
             frame->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
-            if (dot == 2)
+            // also in tdvp (1-dot after 2-dot) we need to keep data
+            if (dot == 2 && !preserve_data)
                 mpo->tf->post_numerical_transform(envs[i]->right, mats[0],
                                                   mats[1]);
         }
@@ -337,6 +343,8 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->unload_tensor(i + dot);
         bra->unload_tensor(i + dot);
+        if (frame->use_main_stack)
+            new_right->deallocate();
         Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
         if (save_partition_info) {
@@ -1050,7 +1058,7 @@ template <typename S> struct MovingEnvironment {
                   cached_info.second == center))
                 frame->load_data(1, get_left_partition_filename(center));
             // this will create left partition ++center (new_data_name)
-            left_contract_rotate(++center);
+            left_contract_rotate(++center, preserve_data);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
             if (frame->minimal_disk_usage && !preserve_data &&
@@ -1065,7 +1073,7 @@ template <typename S> struct MovingEnvironment {
                   cached_info.second == center + dot - 1))
                 frame->load_data(1, get_right_partition_filename(center));
             // this will create right partition --center (new_data_name)
-            right_contract_rotate(--center);
+            right_contract_rotate(--center, preserve_data);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
             if (frame->minimal_disk_usage && !preserve_data &&

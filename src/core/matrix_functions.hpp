@@ -1090,7 +1090,8 @@ struct MatrixFunctions {
                 copy(vs[i], bs[eigval_idxs[i]]);
         if (pcomm != nullptr) {
             pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
-            pcomm->broadcast(vs[0].data, vs[0].size() * k, pcomm->root);
+            for (int j = 0; j < k; j++)
+                pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
         }
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.deallocate();
@@ -1116,7 +1117,7 @@ struct MatrixFunctions {
         if (!(davidson_type & DavidsonTypes::Harmonic))
             return davidson(op, aa, vs, shift, davidson_type, ndav, iprint,
                             pcomm, conv_thrd, max_iter, soft_max_iter,
-                            deflation_min_size, deflation_max_size);
+                            deflation_min_size, deflation_max_size, ors);
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         int k = (int)vs.size(), nor = (int)ors.size();
@@ -1358,7 +1359,8 @@ struct MatrixFunctions {
                 copy(vs[i], sigmas[eigval_idxs[i]]);
         if (pcomm != nullptr) {
             pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
-            pcomm->broadcast(vs[0].data, vs[0].size() * k, pcomm->root);
+            for (int j = 0; j < k; j++)
+                pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
         }
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.deallocate();
@@ -2923,7 +2925,7 @@ struct MatrixFunctions {
             else
                 ncs++;
         }
-        if (jiter == max_iter && beta * beta >= conv_thrd) {
+        if (jiter >= max_iter && beta * beta >= conv_thrd) {
             cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
             assert(false);
         }

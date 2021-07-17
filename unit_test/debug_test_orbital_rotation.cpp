@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -130,7 +131,8 @@ TEST_F(TestDMRG, Test) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     t.get_time();
     // MPO construction
@@ -153,11 +155,11 @@ TEST_F(TestDMRG, Test) {
 
     // MPSInfo
     // shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    //     norb, vacuum, target, hamil.basis);
+    //     norb, vacuum, target, hamil->basis);
 
     // CCSD init
     shared_ptr<MPSInfo<SU2>> mps_info =
-        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil.basis);
+        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil->basis);
     // mps_info->set_bond_dimension_full_fci();
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
@@ -171,16 +173,16 @@ TEST_F(TestDMRG, Test) {
 
     // Local init
     // shared_ptr<DynamicMPSInfo<SU2>> mps_info =
-    //     make_shared<DynamicMPSInfo<SU2>>(norb, vacuum, target, hamil.basis,
-    //                                      hamil.orb_sym, ioccs);
+    //     make_shared<DynamicMPSInfo<SU2>>(norb, vacuum, target, hamil->basis,
+    //                                      hamil->orb_sym, ioccs);
     // mps_info->n_local = 4;
     // mps_info->set_bond_dimension(bond_dim);
 
     // Determinant init
     // shared_ptr<DeterminantMPSInfo<SU2>> mps_info =
     //     make_shared<DeterminantMPSInfo<SU2>>(norb, vacuum, target,
-    //     hamil.basis,
-    //                                      hamil.orb_sym, ioccs, fcidump);
+    //     hamil->basis,
+    //                                      hamil->orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
 
     cout << "left dims = ";
@@ -326,7 +328,8 @@ TEST_F(TestDMRG, Test) {
     fcidump_rot->initialize_h1e(norb, fcidump->n_elec(), fcidump->twos(),
                                 fcidump->isym(), 0.0, kappa.data(),
                                 kappa.size());
-    HamiltonianQC<SU2> hamil_rot(vacuum, norb, orbsym, fcidump_rot);
+    shared_ptr<HamiltonianQC<SU2>> hamil_rot =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump_rot);
 
     // MPO construction
     shared_ptr<MPO<SU2>> mpo_rot =
@@ -357,7 +360,8 @@ TEST_F(TestDMRG, Test) {
              << te->normsqs.back() << endl;
     }
 
-    HamiltonianQC<SU2> hamil2(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil2 =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     shared_ptr<MPO<SU2>> mpo2 =
         make_shared<MPOQC<SU2>>(hamil2, QCTypes::Conventional);
@@ -405,6 +409,6 @@ TEST_F(TestDMRG, Test) {
     // deallocate persistent stack memory
     mps_info->deallocate();
     mpo->deallocate();
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

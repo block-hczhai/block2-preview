@@ -27,7 +27,7 @@ transform(orbsym.begin(), orbsym.end(), orbsym.begin(), PointGroup::swap_pg(pg))
 SU2 vacuum(0);
 SU2 target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_pg(pg)(fcidump->isym()));
 int norb = fcidump->n_sites();
-HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
 // MPO/MPS
 ubond_t bond_dim = 500;
@@ -35,7 +35,7 @@ shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional)
 mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true, true,
     OpNamesSet({OpNames::R, OpNames::RD}));
 shared_ptr<MPSInfo<SU2>> mps_info = make_shared<MPSInfo<SU2>>(
-    norb, vacuum, target, hamil.basis);
+    norb, vacuum, target, hamil->basis);
 mps_info->set_bond_dimension(bond_dim);
 shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
 mps->initialize(mps_info);
@@ -60,5 +60,5 @@ dmrg->solve(10, true);
 
 mps_info->deallocate();
 mpo->deallocate();
-hamil.deallocate();
+hamil->deallocate();
 fcidump->deallocate();

@@ -1,5 +1,6 @@
 
-#include "block2.hpp"
+#include "block2_core.hpp"
+#include "block2_dmrg.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -12,13 +13,14 @@ class TestDelayedN2STO3G : public ::testing::Test {
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   HamiltonianQC<S> hamil, const string &name,
+                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
                    DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 1, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 1,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -31,13 +33,14 @@ class TestDelayedN2STO3G : public ::testing::Test {
 
 template <typename S>
 void TestDelayedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
-                                    const vector<vector<double>> &energies,
-                                    HamiltonianQC<S> hamil, const string &name,
-                                    DecompositionTypes dt, NoiseTypes nt) {
+                                   const vector<vector<double>> &energies,
+                                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                                   const string &name, DecompositionTypes dt,
+                                   NoiseTypes nt) {
 
-    hamil.delayed = DelayedOpNames::H | DelayedOpNames::Normal |
-                    DelayedOpNames::P | DelayedOpNames::PD | DelayedOpNames::R |
-                    DelayedOpNames::RD | DelayedOpNames::Q;
+    hamil->delayed = DelayedOpNames::H | DelayedOpNames::Normal |
+                     DelayedOpNames::P | DelayedOpNames::PD |
+                     DelayedOpNames::R | DelayedOpNames::RD | DelayedOpNames::Q;
 
     Timer t;
     t.get_time();
@@ -64,13 +67,13 @@ void TestDelayedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
             S target = targets[i][j];
 
             shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-                hamil.n_sites, hamil.vacuum, target, hamil.basis);
+                hamil->n_sites, hamil->vacuum, target, hamil->basis);
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
             Random::rand_seed(0);
 
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil.n_sites, 0, 2);
+            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -136,7 +139,8 @@ TEST_F(TestDelayedN2STO3G, TestSU2) {
     energies[7] = {-107.116397543375, -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SU2> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2",
                    DecompositionTypes::DensityMatrix,
@@ -150,7 +154,7 @@ TEST_F(TestDelayedN2STO3G, TestSU2) {
     test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
                    NoiseTypes::Wavefunction);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }
 
@@ -191,7 +195,8 @@ TEST_F(TestDelayedN2STO3G, TestSZ) {
                    -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    HamiltonianQC<SZ> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ",
                   DecompositionTypes::DensityMatrix, NoiseTypes::DensityMatrix);
@@ -204,6 +209,6 @@ TEST_F(TestDelayedN2STO3G, TestSZ) {
     test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
                   NoiseTypes::Wavefunction);
 
-    hamil.deallocate();
+    hamil->deallocate();
     fcidump->deallocate();
 }

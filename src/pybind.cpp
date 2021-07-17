@@ -24,6 +24,10 @@
 #include "pybind/pybind_dmrg.hpp"
 #endif
 
+#ifdef _USE_MRCI
+#include "pybind/pybind_mrci.hpp"
+#endif
+
 #ifdef _USE_SCI
 #include "sci/pybind.hpp"
 #ifdef _SCI_WRAPPER2
@@ -58,12 +62,17 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_DMRG
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
-
     bind_dmrg<SU2>(m_su2, "SU2");
     bind_dmrg<SZ>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
     bind_trans_mps<SZ, SU2>(m_sz, "su2");
     bind_trans_mps_spin_specific<SU2, SZ>(m_su2, "sz");
+#endif
+
+#ifdef _USE_MRCI
+    bind_big_site_qc<SZ>(m_sz);
+    bind_hamiltonian_big_site<SZ>(m_sz);
+    bind_dmrg_big_site<SZ>(m_sz);
 #endif
 
 #ifdef _USE_SCI

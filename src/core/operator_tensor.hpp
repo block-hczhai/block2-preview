@@ -100,6 +100,8 @@ template <typename S> struct OperatorTensor {
             else
                 assert(false);
             mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            if (pointer_only)
+                mat->alloc = dalloc, mat->info->alloc = ialloc;
             mat->info->load_data(ifs, pointer_only);
             mat->load_data(ifs, pointer_only);
             ops[expr] = mat;
