@@ -543,6 +543,51 @@ The following input file computes the 2-particle transition density matrix for t
 Note that in the above input file, keywords such as ``nelec``, ``spin``, ``irrep``, and ``nroots`` will be unimportant.
 The keyword ``mps_tags`` lists the tags for the MPSs that should be loaded. [#note1]_
 
+Diagonal 2-Particle Density Matrix
+----------------------------------
+
+Since the full two-particle density matrix calculation can be expensive for some systems,
+it is possible to calculate only the diagonal parts, which is much cheaper, using the keywords
+``restart_diag_twopdm`` or ``diag_twopdm``. [#note1]_
+The time cost for diagonal 2pdm is roughly 2 times of the cost of 1pdm.
+
+Limitations: Currently this only works for spin-adapted calculations. For the non-spin-adapted calculation,
+one can use the full 2pdm approach.
+
+Note that ``diag_twopdm`` implies ``onepdm`` and ``correlation``. The diagonal 2pdm is defined as:
+
+.. math::
+    e_{pqqp} \equiv&\ \sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{q\tau}^\dagger a_{q\tau} a_{p\sigma} \rangle
+        = -\sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{q\tau}^\dagger a_{p\sigma} a_{q\tau} \rangle
+        = \sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{p\sigma} a_{q\tau}^\dagger a_{q\tau} \rangle
+            - \delta_{pq} \sum_{\sigma} \langle a_{p\sigma}^\dagger a_{q\sigma} \rangle \\
+        =&\ \sum_{\sigma\tau} \langle n_{p\sigma} n_{q\tau} \rangle
+            - \delta_{pq} \sum_{\sigma} \langle a_{p\sigma}^\dagger a_{q\sigma} \rangle \\
+    e_{pqpq} \equiv&\ \sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{q\tau}^\dagger a_{p\tau} a_{q\sigma} \rangle
+        = -\sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{p\tau} a_{q\tau}^\dagger a_{q\sigma} \rangle
+            + \delta_{pq} \sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{q\sigma} \rangle \\
+        =&\ -\sum_{\sigma\tau} \langle a_{p\sigma}^\dagger a_{p\tau} a_{q\tau}^\dagger a_{q\sigma} \rangle
+            + 2\delta_{pq} \sum_{\sigma} \langle a_{p\sigma}^\dagger a_{q\sigma} \rangle
+
+The computed diagonal 2pdm will be stored as ``e_pqqp.npy`` and ``e_pqpq.npy`` in scratch folder.
+
+If one also computed the full 2pdm using the keyword ``twopdm`` or ``restart_twopdm``,
+we can verify that its diagonal part matches the ``e_pqqp.npy`` and ``e_pqpq.npy`` obtained here: ::
+
+    >>> import numpy as np
+    >>> _2pdm = np.load('./nodex/2pdm.npy')
+    >>> print(_2pdm.shape)
+    (3, 26, 26, 26, 26)
+    >>> _e_pqqp = np.load('./nodex/e_pqqp.npy')
+    >>> _e_pqpq = np.load('./nodex/e_pqpq.npy')
+    >>> _2pdm_spat = _2pdm[0] + 2 * _2pdm[1] + _2pdm[2]
+    >>> _2pdm_spat_pqqp = np.einsum('pqqp->pq', _2pdm_spat)
+    >>> _2pdm_spat_pqpq = np.einsum('pqpq->pq', _2pdm_spat)
+    >>> print(np.linalg.norm(_e_pqqp - _2pdm_spat_pqqp))
+    3.28666776770176e-14
+    >>> print(np.linalg.norm(_e_pqpq - _2pdm_spat_pqpq))
+    1.6947732597975102e-14
+
 Custom Sweep Schedule
 ---------------------
 

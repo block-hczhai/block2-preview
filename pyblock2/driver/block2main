@@ -121,6 +121,8 @@ bond_dims, dav_thrds, noises = dic["schedule"]
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
 cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 singlet_embedding = "singlet_embedding" in dic
+siv = dic.get("symmetrize_ints", 1E-10)
+symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
@@ -247,9 +249,13 @@ if pre_run or not no_pre_run:
     n_sites = fcidump.n_sites
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
-    if "symmetrize_ints" in dic:
-        sym_error = fcidump.symmetrize(orb_sym)
-        _print("integral sym error = %12.4g" % sym_error)
+    sym_error = fcidump.symmetrize(orb_sym)
+    _print("integral sym error = %12.4g" % sym_error)
+    if sym_error > symmetrize_ints_tol:
+        raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
+                            "please check point group symmetry and FCIDUMP or set" +
+                            " a higher tolerance for the keyword '%s'") % (
+            symmetrize_ints_tol, "symmetrize_ints"))
     hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
 else:
     if "nofiedler" in dic or "noreorder" in dic:
@@ -1417,10 +1423,14 @@ if not pre_run:
                         # (old, new)
                         fcidump.rotate(VectorDouble(rot.flatten()))
                         _print("finished.")
-                        if "symmetrize_ints" in dic:
-                            rot_sym_error = fcidump.symmetrize(orb_sym)
-                            _print("rotated integral sym error = %12.4g" %
-                                   rot_sym_error)
+                        rot_sym_error = fcidump.symmetrize(orb_sym)
+                        _print("rotated integral sym error = %12.4g" %
+                                rot_sym_error)
+                        if rot_sym_error > symmetrize_ints_tol:
+                            raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
+                                                "please check point group symmetry and FCIDUMP or set" +
+                                                " a higher tolerance for the keyword '%s'") % (
+                                symmetrize_ints_tol, "symmetrize_ints"))
                         _print("writing natural orbital integrals ...")
                         fcidump.write(nat_fname)
                         _print("finished.")
@@ -1477,6 +1487,7 @@ if not pre_run:
 
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
+        assert nroots == 1
         me = MovingEnvironment(nmpo, mps, mps, "1NPC")
         # me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
@@ -1503,12 +1514,32 @@ if not pre_run:
                     dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
             else:
                 dmr = expect.get_1npc_spatial(0, me.n_sites)
-                dm = np.array(dmr).copy()
+                dm_pure = np.array(dmr).copy()
                 dmr.deallocate()
+                dmr = expect.get_1npc_spatial(1, me.n_sites)
+                dm_mix = np.array(dmr).copy()
+                dmr.deallocate()
+                dm = np.concatenate(
+                    [dm_pure[None, :, :], dm_mix[None, :, :]], axis=0)
+                if orb_idx is not None:
+                    rev_idx = np.argsort(orb_idx)
+                    dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
 
             np.save(scratch + "/1npc.npy", dm)
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
+
+    # diag twopdm
+    if "restart_diag_twopdm" in dic or "diag_twopdm" in dic:
+        if MPI is None or MPI.rank == 0:
+            assert nroots == 1
+            assert "nonspinadapted" not in dic
+            dm_npc = np.load(scratch + "/1npc.npy")
+            dm_pdm = np.load(scratch + "/1pdm.npy").sum(axis=0)
+            dm_e_pqqp = dm_npc[0] - np.diag(np.diag(dm_pdm))
+            dm_e_pqpq = -dm_npc[1] + 2 * np.diag(np.diag(dm_pdm))
+            np.save(scratch + "/e_pqqp.npy", dm_e_pqqp)
+            np.save(scratch + "/e_pqpq.npy", dm_e_pqpq)
 
     def do_twopdm(bmps, kmps):
         me = MovingEnvironment(p2mpo, bmps, kmps, "2PDM")

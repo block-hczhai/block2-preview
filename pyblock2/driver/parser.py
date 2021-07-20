@@ -19,6 +19,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "num_thrds", "mkl_thrds", "mem", "oh", "nonspinadapted",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
               "twopdm", "restart_twopdm", "startM", "maxM", "symmetrize_ints",
+              "diag_twopdm", "restart_diag_twopdm",
               "occ", "bias", "cbias", "correlation", "restart_correlation",
               "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
@@ -108,7 +109,7 @@ def parse(fname):
     crs = list(set(dic.keys()) & REORDER_KEYS)
     if len(crs) > 1:
         raise ValueError(
-            "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crx[1]))
+            "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crs[1]))
 
     # restart check
     if "restart_oh" in dic:
@@ -116,6 +117,12 @@ def parse(fname):
         dic.pop("onepdm", None)
         dic.pop("twopdm", None)
         dic.pop("correlation", None)
+    if "diag_twopdm" in dic:
+        dic["onepdm"] = ""
+        dic["correlation"] = ""
+    if "restart_diag_twopdm" in dic:
+        dic["restart_onepdm"] = ""
+        dic["restart_correlation"] = ""
     if len(set(dic.keys()) & RESTART_KEYS) != 0:
         dic["fullrestart"] = ""
 
