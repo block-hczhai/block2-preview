@@ -70,9 +70,14 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_MRCI
-    bind_big_site_qc<SZ>(m_sz);
+    bind_big_site<SU2>(m_su2);
+    bind_hamiltonian_big_site<SU2>(m_su2);
+    bind_dmrg_big_site<SU2>(m_su2);
+    bind_big_site<SZ>(m_sz);
     bind_hamiltonian_big_site<SZ>(m_sz);
     bind_dmrg_big_site<SZ>(m_sz);
+
+    bind_sci_big_site_fock<SZ>(m_sz);
 #endif
 
 #ifdef _USE_SCI

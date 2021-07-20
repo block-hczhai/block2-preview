@@ -591,6 +591,8 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     shared_ptr<FCIDUMP> fcidump;
     // Chemical potenital parameter in Hamiltonian
     double mu = 0;
+    HamiltonianQC()
+        : Hamiltonian<S>(S(), 0, vector<uint8_t>()), fcidump(nullptr) {}
     HamiltonianQC(S vacuum, int n_sites, const vector<uint8_t> &orb_sym,
                   const shared_ptr<FCIDUMP> &fcidump)
         : Hamiltonian<S>(vacuum, n_sites, orb_sym), fcidump(fcidump) {

@@ -711,6 +711,7 @@ template <typename S> void bind_operator(py::module &m) {
         .def_readwrite("cg", &OperatorFunctions<S>::cg)
         .def_readwrite("seq", &OperatorFunctions<S>::seq)
         .def(py::init<const shared_ptr<CG<S>> &>())
+        .def("get_type", &OperatorFunctions<S>::get_type)
         .def("iadd", &OperatorFunctions<S>::iadd, py::arg("a"), py::arg("b"),
              py::arg("scale") = 1.0, py::arg("conj") = false)
         .def("tensor_rotate", &OperatorFunctions<S>::tensor_rotate,
@@ -840,6 +841,8 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("basis", &Hamiltonian<S>::basis)
         .def_readwrite("site_op_infos", &Hamiltonian<S>::site_op_infos)
         .def_readwrite("delayed", &Hamiltonian<S>::delayed)
+        .def("get_n_orbs_left", &Hamiltonian<S>::get_n_orbs_left)
+        .def("get_n_orbs_right", &Hamiltonian<S>::get_n_orbs_right)
         .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
         .def("filter_site_ops", &Hamiltonian<S>::filter_site_ops)
         .def("find_site_op_info", &Hamiltonian<S>::find_site_op_info)

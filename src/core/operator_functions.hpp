@@ -72,6 +72,9 @@ template <typename S> struct OperatorFunctions {
         seq = make_shared<BatchGEMMSeq>(0, threading->seq_type);
     }
     virtual ~OperatorFunctions() = default;
+    virtual SparseMatrixTypes get_type() const {
+        return SparseMatrixTypes::Normal;
+    }
     virtual shared_ptr<OperatorFunctions<S>> copy() const {
         shared_ptr<OperatorFunctions<S>> opf =
             make_shared<OperatorFunctions<S>>(this->cg);

@@ -49,8 +49,9 @@ template <typename S> struct DMRGBigSite : DMRG<S> {
         const NoiseTypes nt = noise_type;
         const DecompositionTypes dt = decomp_type;
         if (last_site_1site && (i == 0 || i == me->n_sites - 1) && me->dot == 1)
-            throw std::runtime_error("DMRGSCI: last_site_1site should only be "
-                                     "used in two site algorithm.");
+            throw std::runtime_error(
+                "DMRGBigSite: last_site_1site should only be "
+                "used in two site algorithm.");
         const auto last_site_1_and_forward =
             last_site_1site && forward && i == me->n_sites - 2;
         const auto last_site_1_and_backward =
@@ -602,6 +603,292 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
             }
         }
         return pdi;
+    }
+};
+
+// hrl: DMRG-CI-AQCC and related methods
+template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
+    using DMRGBigSite<S>::iprint;
+    using DMRGBigSite<S>::me;
+    using DMRGBigSite<S>::davidson_soft_max_iter;
+    using DMRGBigSite<S>::davidson_max_iter;
+    using DMRGBigSite<S>::noise_type;
+    using DMRGBigSite<S>::decomp_type;
+    using DMRGBigSite<S>::energies;
+    using DMRGBigSite<S>::sweep_energies;
+    using DMRGBigSite<S>::last_site_svd;
+    using DMRGBigSite<S>::last_site_1site;
+    using DMRGBigSite<S>::_t;
+    using DMRGBigSite<S>::teff;
+    using DMRGBigSite<S>::teig;
+    using DMRGBigSite<S>::tprt;
+
+    double g_factor = 1.0;   // G in +Q formula
+    double ref_energy = 1.0; // typically CAS-SCF/Reference energy of CAS
+    double delta_e =
+        0.0; // energy - ref_energy => will be modified during the sweep
+    std::vector<S> mod_qns; // Quantum numbers to be modified
+    int max_aqcc_iter = 5;  // Max iter spent on last site. Convergence depends
+                            // on davidson conv. Note that this does not need to
+                            // be fully converged as we do sweeps anyways.
+    DMRGBigSiteAQCCOLD(const shared_ptr<MovingEnvironment<S>> &me,
+                       const vector<ubond_t> &bond_dims,
+                       const vector<double> &noises, double g_factor,
+                       double ref_energy, const std::vector<S> &mod_qns)
+        : DMRGBigSite<S>(me, bond_dims, noises),
+          // vv weird compile error -> cannot find member types -.-
+          //     last_site_svd{true}, last_site_1site{true},
+          g_factor{g_factor}, ref_energy{ref_energy}, mod_qns{mod_qns} {
+        last_site_svd = true;
+        last_site_1site = me->dot == 2;
+        modify_mpo_mats(true, 0.0); // Save diagonals
+    }
+
+    tuple<double, int, size_t, double>
+    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
+                             const int i_site, const double davidson_conv_thrd,
+                             const double noise,
+                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
+        tuple<double, int, size_t, double> pdi{0., 0, 0,
+                                               0.}; // energy, ndav, nflop, tdav
+        _t.get_time();
+        const auto doAQCC =
+            i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
+        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+            fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
+            // vv diag will be computed in aqcc loop
+            not doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info,
+            wfn_info; // used if doAQCC
+        wfn_info = h_eff->cmat->info->cinfo;
+        teff += _t.get_time();
+        if (doAQCC) {
+            // AQCC
+            if (sweep_energies.size() > 0) {
+                // vv taken from DRMG::sweep
+                size_t idx =
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<double> &x, const vector<double> &y) {
+                            return x[0] < y[0];
+                        }) -
+                    sweep_energies.begin();
+                delta_e = sweep_energies[idx].at(0) - ref_energy;
+            }
+            double last_delta_e = delta_e;
+            if (iprint >= 2) {
+                cout << endl;
+            }
+            for (int itAQCC = 0; itAQCC < max_aqcc_iter; ++itAQCC) {
+                //
+                // Shift non-reference ops
+                //
+                const auto shift = (1. - g_factor) * delta_e;
+                if (h_eff->op->ropt->ops[me->mpo->op]->get_type() !=
+                    SparseMatrixTypes::CSR)
+                    throw std::runtime_error(
+                        "MRCIAQCC: No CSRSparseMatrix is used?");
+                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(
+                    h_eff->op->ropt->ops[me->mpo->op]);
+                modify_H_mats(Hop, false, shift);
+                //
+                // Compute diagonal
+                //
+                if (itAQCC == 0) {
+                    h_eff->diag = make_shared<SparseMatrix<S>>();
+                    h_eff->diag->allocate(h_eff->ket->info);
+                    diag_info = make_shared<
+                        typename SparseMatrixInfo<S>::ConnectionInfo>();
+                    S cdq = h_eff->ket->info->delta_quantum;
+                    vector<S> msl =
+                        Partition<S>::get_uniq_labels({h_eff->hop_mat});
+                    vector<vector<pair<uint8_t, S>>> msubsl =
+                        Partition<S>::get_uniq_sub_labels(h_eff->op->mat,
+                                                          h_eff->hop_mat, msl);
+                    diag_info->initialize_diag(
+                        cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
+                        h_eff->right_op_infos, h_eff->diag->info,
+                        h_eff->tf->opf->cg);
+                    h_eff->diag->info->cinfo = diag_info;
+                    h_eff->tf->tensor_product_diagonal(
+                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->ropt, h_eff->diag, h_eff->opdq);
+                    if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
+                        h_eff->tf->opf->seq->auto_perform();
+                    h_eff->compute_diag = true;
+                } else {
+                    h_eff->diag->clear();
+                    h_eff->diag->info->cinfo = diag_info;
+                    h_eff->tf->tensor_product_diagonal(
+                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->ropt, h_eff->diag, h_eff->opdq);
+                }
+                //
+                // EIG and conv check
+                //
+                h_eff->cmat->info->cinfo = wfn_info;
+                // TODO The best would be to do the adaption of the diagonal
+                // directly in eigs
+                const auto pdi2 =
+                    h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                                davidson_max_iter, davidson_soft_max_iter,
+                                DavidsonTypes::Normal, 0.0, me->para_rule);
+                const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
+                const auto ndav = std::get<1>(pdi2);
+                std::get<0>(pdi) = std::get<0>(pdi2);
+                std::get<1>(pdi) += std::get<1>(pdi2); // ndav
+                std::get<2>(pdi) += std::get<2>(pdi2); // nflop
+                std::get<3>(pdi) += std::get<3>(pdi2); // tdav
+                delta_e = energy - ref_energy;
+                // convergence can be loosely defined here
+                const auto converged =
+                    abs(delta_e - last_delta_e) / abs(delta_e) <
+                    1.1 * max(davidson_conv_thrd, noise);
+                if (iprint >= 2) {
+                    cout << "\tAQCC: " << setw(2) << itAQCC << " E=" << fixed
+                         << setw(17) << setprecision(10) << energy
+                         << " Delta=" << fixed << setw(17) << setprecision(10)
+                         << delta_e << " nDav=" << setw(3) << ndav
+                         << " conv=" << (converged ? "T" : "F");
+                    if (itAQCC == 0) {
+                        cout << "; init Delta=" << fixed << setw(17)
+                             << setprecision(10) << last_delta_e << endl;
+                    } else {
+                        cout << endl;
+                    }
+                }
+                last_delta_e = delta_e;
+                if (converged) {
+                    break;
+                }
+            }
+            // ATTENTION: Adjust MPO mats. The new code update
+            // 6d0291a8edb7dab07caedd83c73806d8f56da2f3
+            //      should not require this anymore as h_eff contains references
+            //      to the MPO. Nevertheless, just do it here again in case the
+            //      code will be changed again (e.g., for dense matrices, where
+            //      there are still copies in h_eff)
+            const auto shift = (1. - g_factor) * delta_e;
+            modify_mpo_mats(false, shift);
+            // vv restore printing
+            if (iprint >= 2) {
+                if (last_site_1site) {
+                    cout << (forward ? " -->" : " <--") << " Site = " << setw(4)
+                         << i_site << " LAST .. ";
+                } else {
+                    cout << (forward ? " -->" : " <--") << " Site = " << setw(4)
+                         << i_site << " .. ";
+                }
+                cout.flush();
+            }
+        } else {
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_max_iter, davidson_soft_max_iter,
+                              DavidsonTypes::Normal, 0.0, me->para_rule);
+        }
+        teig += _t.get_time();
+        if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
+            pket = h_eff->perturbative_noise(
+                forward, i_site, i_site,
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, me->ket->info,
+                noise_type, me->para_rule);
+        }
+        if (doAQCC) {
+            diag_info->deallocate();
+        }
+        tprt += _t.get_time();
+        h_eff->deallocate();
+        return pdi;
+    }
+
+  private:
+    std::vector<pair<S, vector<double>>>
+        mpo_diag_elements; // Save diagonal elements of all operators for
+                           // adjusting shift
+    // save == true: fill mpo_diag_elements (ONLY in ctor); diag_shift will not
+    // be used then
+    void modify_mpo_mats(const bool save, const double diag_shift) {
+        if (save) {
+            assert(mpo_diag_elements.size() ==
+                   0); // should only be called in C'tor
+        }
+        auto &ops = me->mpo->tensors.at(me->mpo->n_sites - 1)->ops;
+        for (auto &p : ops) {
+            OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+            if (op.name == OpNames::H) {
+                if (p.second->get_type() != SparseMatrixTypes::CSR)
+                    throw std::runtime_error(
+                        "MRCIAQCC: No CSRSparseMatrix is used?");
+                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
+                modify_H_mats(Hop, save, diag_shift);
+                break;
+            }
+        }
+    }
+    void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S>> &Hop,
+                       const bool save, const double diag_shift) {
+        if (save) {
+            for (const auto &qn : mod_qns) {
+                const auto idx = Hop->info->find_state(qn);
+                if (idx < 0)
+                    continue;
+                mpo_diag_elements.push_back(make_pair(qn, vector<double>()));
+            }
+        }
+        for (auto &pqn : mpo_diag_elements) {
+            const auto idx = Hop->info->find_state(pqn.first);
+            if (idx < 0) {
+                // Not all QNs make sense for H!
+                continue;
+            }
+            CSRMatrixRef mat = (*Hop)[idx];
+            assert(mat.m == mat.n);
+            if (!save)
+                assert(mat.m == (MKL_INT)pqn.second.size());
+            if (mat.nnz == mat.size()) {
+                auto dmat = mat.dense_ref();
+                for (MKL_INT iRow = 0; iRow < mat.m; iRow++) {
+                    if (save) {
+                        pqn.second.emplace_back(dmat(iRow, iRow));
+                    } else {
+                        auto origVal = pqn.second[iRow];
+                        dmat(iRow, iRow) = origVal + diag_shift;
+                        assert(abs(mat.dense_ref()(iRow, iRow) - origVal -
+                                   diag_shift) < 1e-13);
+                    }
+                }
+            } else {
+                int nCounts = 0;
+                for (MKL_INT iRow = 0; iRow < mat.m;
+                     ++iRow) { // see mat.trace()
+                    MKL_INT rows_end =
+                        iRow == mat.m - 1 ? mat.nnz : mat.rows[iRow + 1];
+                    int ic = lower_bound(mat.cols + mat.rows[iRow],
+                                         mat.cols + rows_end, iRow) -
+                             mat.cols;
+                    if (ic != rows_end && mat.cols[ic] == iRow) {
+                        if (save) {
+                            pqn.second.emplace_back(mat.data[ic]);
+                        } else {
+                            auto origVal = pqn.second[iRow];
+                            mat.data[ic] = origVal + diag_shift;
+                        }
+                        ++nCounts;
+                    } else if (save)
+                        pqn.second.emplace_back(0);
+                }
+                if (nCounts != mat.m and save) { // Do this only once in Ctor!
+                    // This is the diagonal so I assume for now that this rarely
+                    // appears.
+                    cerr << "DMRGBigSiteAQCCOLD: ATTENTION! for qn" << pqn.first
+                         << " only " << nCounts << " of " << mat.m
+                         << "diagonals are shifted. Change code!" << endl;
+                }
+            }
+        }
+        if (save) {
+            mpo_diag_elements.shrink_to_fit();
+        }
     }
 };
 

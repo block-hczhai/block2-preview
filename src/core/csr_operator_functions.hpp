@@ -36,6 +36,9 @@ template <typename S> struct CSROperatorFunctions : OperatorFunctions<S> {
     using OperatorFunctions<S>::seq;
     CSROperatorFunctions(const shared_ptr<CG<S>> &cg)
         : OperatorFunctions<S>(cg) {}
+    SparseMatrixTypes get_type() const override {
+        return SparseMatrixTypes::CSR;
+    }
     shared_ptr<OperatorFunctions<S>> copy() const override {
         shared_ptr<OperatorFunctions<S>> opf =
             make_shared<CSROperatorFunctions<S>>(this->cg);

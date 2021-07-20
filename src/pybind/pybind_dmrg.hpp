@@ -721,6 +721,7 @@ template <typename S> void bind_partition(py::module &m) {
 template <typename S> void bind_qc_hamiltonian(py::module &m) {
     py::class_<HamiltonianQC<S>, shared_ptr<HamiltonianQC<S>>, Hamiltonian<S>>(
         m, "HamiltonianQC")
+        .def(py::init<>())
         .def(py::init<S, int, const vector<uint8_t> &,
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
@@ -1277,30 +1278,23 @@ template <typename S> void bind_mpo(py::module &m) {
                       const vector<shared_ptr<StateInfo<S>>> &, S, S,
                       const shared_ptr<OperatorFunctions<S>> &,
                       const vector<uint8_t> &, const vector<uint8_t> &>())
-        .def(py::init<const shared_ptr<Hamiltonian<S>> &>())
-        .def(py::init<const shared_ptr<Hamiltonian<S>> &, int, int>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>());
 
     py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
         .def(py::init<const shared_ptr<Hamiltonian<S>> &,
                       const shared_ptr<OpElement<S>> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S>> &,
-                      const shared_ptr<OpElement<S>> &, int>())
-        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
-                      const shared_ptr<OpElement<S>> &, int, int, int>());
+                      const shared_ptr<OpElement<S>> &, int>());
 
     py::class_<LocalMPO<S>, shared_ptr<LocalMPO<S>>, MPO<S>>(m, "LocalMPO")
         .def(py::init<const shared_ptr<Hamiltonian<S>> &,
-                      const vector<shared_ptr<OpElement<S>>> &>())
-        .def(py::init<const shared_ptr<Hamiltonian<S>> &,
-                      const vector<shared_ptr<OpElement<S>>> &, int, int>());
+                      const vector<shared_ptr<OpElement<S>>> &>());
 
     py::class_<MPOQC<S>, shared_ptr<MPOQC<S>>, MPO<S>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S>::mode)
         .def(py::init<const shared_ptr<HamiltonianQC<S>> &>())
         .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes>())
-        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes, int>())
-        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes, int, int,
-                      int>());
+        .def(py::init<const shared_ptr<HamiltonianQC<S>> &, QCTypes, int>());
 
     py::class_<PDM1MPOQC<S>, shared_ptr<PDM1MPOQC<S>>, MPO<S>>(m, "PDM1MPOQC")
         .def(py::init<const shared_ptr<Hamiltonian<S>> &>())

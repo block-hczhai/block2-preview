@@ -20,6 +20,9 @@
 
 #pragma once
 
-#include "mrci/qc_big_site.hpp"
+#include "mrci/big_site.hpp"
 #include "mrci/qc_hamiltonian_big_site.hpp"
+#include "mrci/sci_fcidump.hpp"
+#include "mrci/sci_fock_big_site.hpp"
+#include "mrci/sci_fock_determinant.hpp"
 #include "mrci/sweep_algorithm_big_site.hpp"

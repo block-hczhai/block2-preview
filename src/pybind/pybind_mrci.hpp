@@ -2,6 +2,7 @@
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
  * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
+ * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,29 +32,99 @@
 namespace py = pybind11;
 using namespace block2;
 
-template <typename S> void bind_big_site_qc(py::module &m) {
+template <typename S> void bind_big_site(py::module &m) {
 
-    py::class_<BigSiteQC<S>, shared_ptr<BigSiteQC<S>>>(m, "BigSiteQC")
-        .def(py::init<>())
-        .def_readonly("qs", &BigSiteQC<S>::qs)
-        .def_readonly("offsets", &BigSiteQC<S>::offsets)
-        .def_readonly("n_orbs_other", &BigSiteQC<S>::n_orbs_other)
-        .def_readonly("n_orbs_this", &BigSiteQC<S>::n_orbs_this)
-        .def_readonly("n_orbs", &BigSiteQC<S>::n_orbs)
-        .def_readonly("is_right", &BigSiteQC<S>::is_right)
-        .def_readonly("n_alpha", &BigSiteQC<S>::n_alpha)
-        .def_readonly("n_beta", &BigSiteQC<S>::n_beta)
-        .def_readonly("n_elec", &BigSiteQC<S>::n_elec)
-        .def_readonly("n_det", &BigSiteQC<S>::n_det)
-        .def_readwrite("sparsity_thresh", &BigSiteQC<S>::sparsity_thresh,
+    py::class_<BigSite<S>, shared_ptr<BigSite<S>>>(m, "BigSite")
+        .def(py::init<int>())
+        .def_readwrite("n_orbs", &BigSite<S>::n_orbs)
+        .def_readwrite("basis", &BigSite<S>::basis)
+        .def_readwrite("op_infos", &BigSite<S>::op_infos)
+        .def("get_site_ops", &BigSite<S>::get_site_ops);
+
+    py::class_<SimplifiedBigSite<S>, shared_ptr<SimplifiedBigSite<S>>,
+               BigSite<S>>(m, "SimplifiedBigSite")
+        .def(py::init<const shared_ptr<BigSite<S>> &,
+                      const shared_ptr<Rule<S>> &>())
+        .def_readwrite("big_site", &SimplifiedBigSite<S>::big_site)
+        .def_readwrite("rule", &SimplifiedBigSite<S>::rule);
+
+    py::class_<ParallelBigSite<S>, shared_ptr<ParallelBigSite<S>>, BigSite<S>>(
+        m, "ParallelBigSite")
+        .def(py::init<const shared_ptr<BigSite<S>> &,
+                      const shared_ptr<ParallelRule<S>> &>())
+        .def_readwrite("big_site", &ParallelBigSite<S>::big_site)
+        .def_readwrite("rule", &ParallelBigSite<S>::rule);
+}
+
+template <typename S> void bind_sci_big_site_fock(py::module &m) {
+
+    py::class_<SCIFockBigSite<S>, shared_ptr<SCIFockBigSite<S>>, BigSite<S>>(
+        m, "SCIFockBigSite")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+                      const std::vector<uint8_t> &, int, int, int, bool>(),
+             py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
+             py::arg("fcidump"), py::arg("orbsym"), py::arg("nMaxAlphaEl"),
+             py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
+             py::arg("verbose") = true,
+             "Initialization via generated CI space based on nMax*")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+                      const std::vector<uint8_t> &, const vector<vector<int>> &,
+                      bool>(),
+             py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
+             py::arg("fcidump"), py::arg("orbsym"), py::arg("occs"),
+             py::arg("verbose") = true,
+             "Initialization via externally given determinants in `occs`")
+        .def_readwrite("excludeQNs", &SCIFockBigSite<S>::excludeQNs)
+        .def_readonly("quantumNumbers", &SCIFockBigSite<S>::quantumNumbers)
+        .def_readonly("nOrbOther", &SCIFockBigSite<S>::nOrbOther)
+        .def_readonly("nOrbThis", &SCIFockBigSite<S>::nOrbThis)
+        .def_readonly("nOrb", &SCIFockBigSite<S>::nOrb)
+        .def_readonly("isRight", &SCIFockBigSite<S>::isRight)
+        .def_readonly("nMaxAlphaEl", &SCIFockBigSite<S>::nMaxAlphaEl)
+        .def_readonly("nMaxBetaEl", &SCIFockBigSite<S>::nMaxBetaEl)
+        .def_readonly("nMaxEl", &SCIFockBigSite<S>::nMaxEl)
+        .def_readonly("nDet", &SCIFockBigSite<S>::nDet)
+        .def_readwrite("sparsityThresh", &SCIFockBigSite<S>::sparsityThresh,
                        "After > #zeros/#tot the sparse matrix is activated")
-        .def_readwrite("sparsity_start", &BigSiteQC<S>::sparsity_start,
+        .def_readwrite("sparsityStart", &SCIFockBigSite<S>::sparsityStart,
                        "After which matrix size (nCol * nRow) should sparse "
                        "matrices be activated")
-        .def_readwrite("eps", &BigSiteQC<S>::eps,
+        .def_readwrite("eps", &SCIFockBigSite<S>::eps,
                        "Sparsity value threshold. Everything below eps will be "
-                       "set to 0.0");
-};
+                       "set to 0.0")
+        .def("setOmpThreads", &SCIFockBigSite<S>::setOmpThreads)
+        // vv setter
+        .def_property("qnIdxBra", nullptr,
+                      (void (SCIFockBigSite<S>::*)(const std::vector<int> &)) &
+                          SCIFockBigSite<S>::setQnIdxBra)
+        .def_property("qnIdxKet", nullptr,
+                      (void (SCIFockBigSite<S>::*)(const std::vector<int> &)) &
+                          SCIFockBigSite<S>::setQnIdxKet)
+        .def("setQnIdxBra",
+             (void (SCIFockBigSite<S>::*)(const std::vector<int> &,
+                                          const std::vector<char> &)) &
+                 SCIFockBigSite<S>::setQnIdxBra)
+        .def("setQnIdxKet",
+             (void (SCIFockBigSite<S>::*)(const std::vector<int> &,
+                                          const std::vector<char> &)) &
+                 SCIFockBigSite<S>::setQnIdxKet)
+        .def_readwrite("qnIdxBraH", &SCIFockBigSite<S>::qnIdxBraH)
+        .def_readwrite("qnIdxKetH", &SCIFockBigSite<S>::qnIdxKetH)
+        .def_readwrite("qnIdxBraQ", &SCIFockBigSite<S>::qnIdxBraQ)
+        .def_readwrite("qnIdxKetQ", &SCIFockBigSite<S>::qnIdxKetQ)
+        .def_readwrite("qnIdxBraI", &SCIFockBigSite<S>::qnIdxBraI)
+        .def_readwrite("qnIdxKetI", &SCIFockBigSite<S>::qnIdxKetI)
+        .def_readwrite("qnIdxBraA", &SCIFockBigSite<S>::qnIdxBraA)
+        .def_readwrite("qnIdxKetA", &SCIFockBigSite<S>::qnIdxKetA)
+        .def_readwrite("qnIdxBraB", &SCIFockBigSite<S>::qnIdxBraB)
+        .def_readwrite("qnIdxKetB", &SCIFockBigSite<S>::qnIdxKetB)
+        .def_readwrite("qnIdxBraP", &SCIFockBigSite<S>::qnIdxBraP)
+        .def_readwrite("qnIdxKetP", &SCIFockBigSite<S>::qnIdxKetP)
+        .def_readwrite("qnIdxBraR", &SCIFockBigSite<S>::qnIdxBraR)
+        .def_readwrite("qnIdxKetR", &SCIFockBigSite<S>::qnIdxKetR)
+        .def_readwrite("qnIdxBraC", &SCIFockBigSite<S>::qnIdxBraC)
+        .def_readwrite("qnIdxKetC", &SCIFockBigSite<S>::qnIdxKetC);
+}
 
 template <typename S> void bind_hamiltonian_big_site(py::module &m) {
 
@@ -61,18 +132,17 @@ template <typename S> void bind_hamiltonian_big_site(py::module &m) {
                HamiltonianQC<S>>(m, "HamiltonianQCBigSite")
         .def(py::init<S, int, const vector<uint8_t> &,
                       const shared_ptr<FCIDUMP> &,
-                      const shared_ptr<BigSiteQC<S>> &,
-                      const shared_ptr<BigSiteQC<S>> &>(),
+                      const shared_ptr<BigSite<S>> &,
+                      const shared_ptr<BigSite<S>> &>(),
              py::arg("vacuum"), py::arg("n_orbs_total"), py::arg("orb_sym"),
              py::arg("fcidump"), py::arg("big_left") = nullptr,
              py::arg("big_right") = nullptr)
+        .def_readwrite("big_left", &HamiltonianQCBigSite<S>::big_left)
+        .def_readwrite("big_right", &HamiltonianQCBigSite<S>::big_right)
         .def_readonly("n_orbs_left", &HamiltonianQCBigSite<S>::n_orbs_left)
         .def_readonly("n_orbs_right", &HamiltonianQCBigSite<S>::n_orbs_right)
         .def_readonly("n_orbs_cas", &HamiltonianQCBigSite<S>::n_orbs_cas)
-        .def_readonly("full_hamil", &HamiltonianQCBigSite<S>::full_hamil)
-        .def_readwrite("rule", &HamiltonianQCBigSite<S>::rule)
-        .def_readwrite("parallel_rule",
-                       &HamiltonianQCBigSite<S>::parallel_rule);
+        .def_readonly("full_hamil", &HamiltonianQCBigSite<S>::full_hamil);
 }
 
 template <typename S> void bind_dmrg_big_site(py::module &m) {
@@ -111,6 +181,16 @@ template <typename S> void bind_dmrg_big_site(py::module &m) {
         .def_readwrite("last_site_svd", &LinearBigSite<S>::last_site_svd)
         .def_readwrite("last_site_1site", &LinearBigSite<S>::last_site_1site)
         .def("blocking", &LinearBigSite<S>::blocking);
+
+    py::class_<DMRGBigSiteAQCCOLD<S>, shared_ptr<DMRGBigSiteAQCCOLD<S>>,
+               DMRGBigSite<S>>(m, "DMRGBigSiteAQCCOLD")
+        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<ubond_t> &, const vector<double> &, double,
+                      double, const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter", &DMRGBigSiteAQCCOLD<S>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGBigSiteAQCCOLD<S>::g_factor)
+        .def_readwrite("delta_e", &DMRGBigSiteAQCCOLD<S>::delta_e)
+        .def_readwrite("ref_energy", &DMRGBigSiteAQCCOLD<S>::ref_energy);
 
     py::class_<DMRGBigSiteAQCC<S>, shared_ptr<DMRGBigSiteAQCC<S>>,
                DMRGBigSite<S>>(m, "DMRGBigSiteAQCC")

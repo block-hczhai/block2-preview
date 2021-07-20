@@ -367,16 +367,18 @@ template <typename S> struct IdentityMPO : MPO<S> {
         } else
             MPO<S>::tf = make_shared<TensorFunctions<S>>(opf);
     }
-    IdentityMPO(const shared_ptr<Hamiltonian<S>> &hamil,
-                int n_orbs_big_left = 1, int n_orbs_big_right = 1)
+    IdentityMPO(const shared_ptr<Hamiltonian<S>> &hamil)
         : MPO<S>(hamil->n_sites) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
-        if (n_orbs_big_left > 1)
-            MPO<S>::sparse_form[0] = 'S';
-        if (n_orbs_big_right > 1)
-            MPO<S>::sparse_form[n_sites - 1] = 'S';
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S>::sparse_form[n_sites - 1] = 'S';
+        }
         MPO<S>::op = i_op;
         MPO<S>::const_e = 0.0;
         if (hamil->delayed == DelayedOpNames::None)
@@ -419,18 +421,22 @@ template <typename S> struct SiteMPO : MPO<S> {
     using MPO<S>::site_op_infos;
     // build site operator op at site k
     SiteMPO(const shared_ptr<Hamiltonian<S>> &hamil,
-            const shared_ptr<OpElement<S>> &op, int k = -1,
-            int n_orbs_big_left = 1, int n_orbs_big_right = 1)
+            const shared_ptr<OpElement<S>> &op, int k = -1)
         : MPO<S>(hamil->n_sites) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        uint16_t n_sites = hamil->n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        uint16_t n_sites = hamil->n_sites;
-        if (n_orbs_big_left > 1)
-            MPO<S>::sparse_form[0] = 'S';
-        if (n_orbs_big_right > 1)
-            MPO<S>::sparse_form[n_sites - 1] = 'S';
         MPO<S>::op = op;
         MPO<S>::const_e = 0.0;
         if (hamil->delayed == DelayedOpNames::None)
@@ -477,20 +483,24 @@ template <typename S> struct LocalMPO : MPO<S> {
     using MPO<S>::n_sites;
     using MPO<S>::site_op_infos;
     LocalMPO(const shared_ptr<Hamiltonian<S>> &hamil,
-             const vector<shared_ptr<OpElement<S>>> &ops,
-             int n_orbs_big_left = 1, int n_orbs_big_right = 1)
+             const vector<shared_ptr<OpElement<S>>> &ops)
         : MPO<S>(hamil->n_sites) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
         shared_ptr<OpElement<S>> h_op = make_shared<OpElement<S>>(
             ops[0]->name, SiteIndex(), ops[0]->q_label);
+        uint16_t n_sites = hamil->n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        uint16_t n_sites = hamil->n_sites;
-        if (n_orbs_big_left > 1)
-            MPO<S>::sparse_form[0] = 'S';
-        if (n_orbs_big_right > 1)
-            MPO<S>::sparse_form[n_sites - 1] = 'S';
         MPO<S>::op = h_op;
         assert((uint16_t)ops.size() == n_sites);
         for (auto op : ops)
@@ -573,22 +583,26 @@ template <typename, typename = void> struct MPOQC;
 // Quantum chemistry MPO (non-spin-adapted)
 template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
     QCTypes mode;
-    bool symmetrized_p;
+    const bool symmetrized_p = true;
     MPOQC(const shared_ptr<HamiltonianQC<S>> &hamil, QCTypes mode = QCTypes::NC,
-          int trans_center = -1, bool symmetrized_p = true,
-          int n_orbs_big_left = 1, int n_orbs_big_right = 1)
+          int trans_center = -1, bool symmetrized_p = true)
         : MPO<S>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        uint16_t n_sites = hamil->n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        uint16_t n_sites = hamil->n_sites;
-        if (n_orbs_big_left > 1)
-            MPO<S>::sparse_form[0] = 'S';
-        if (n_orbs_big_right > 1)
-            MPO<S>::sparse_form[n_sites - 1] = 'S';
 #ifdef _MSC_VER
         vector<vector<shared_ptr<OpExpr<S>>>> c_op(
             n_orbs, vector<shared_ptr<OpExpr<S>>>(2)),
@@ -1708,20 +1722,24 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
 template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
     QCTypes mode;
     MPOQC(const shared_ptr<HamiltonianQC<S>> &hamil, QCTypes mode = QCTypes::NC,
-          int trans_center = -1, int n_orbs_big_left = 1,
-          int n_orbs_big_right = 1)
+          int trans_center = -1)
         : MPO<S>(hamil->n_sites), mode(mode) {
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
         shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        uint16_t n_sites = hamil->n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        uint16_t n_sites = hamil->n_sites;
-        if (n_orbs_big_left > 1)
-            MPO<S>::sparse_form[0] = 'S';
-        if (n_orbs_big_right > 1)
-            MPO<S>::sparse_form[n_sites - 1] = 'S';
 #ifdef _MSC_VER
         vector<shared_ptr<OpExpr<S>>> c_op(n_orbs), d_op(n_orbs);
         vector<shared_ptr<OpExpr<S>>> mc_op(n_orbs), md_op(n_orbs);
