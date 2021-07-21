@@ -909,7 +909,6 @@ template <typename S> void bind_rule(py::module &m) {
         m, "NoTransposeRule")
         .def_readwrite("prim_rule", &NoTransposeRule<S>::prim_rule)
         .def(py::init<const shared_ptr<Rule<S>> &>());
-
 }
 
 template <typename S> void bind_core(py::module &m, const string &name) {
@@ -922,7 +921,6 @@ template <typename S> void bind_core(py::module &m, const string &name) {
     bind_hamiltonian<S>(m);
     bind_parallel<S>(m);
     bind_rule<S>(m);
-
 }
 
 template <typename S, typename T>
@@ -1851,6 +1849,7 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("reorder",
              (void (FCIDUMP::*)(const vector<uint16_t> &)) & FCIDUMP::reorder)
         .def("rotate", &FCIDUMP::rotate)
+        .def("deep_copy", &FCIDUMP::deep_copy)
         .def_static("array_reorder", &FCIDUMP::reorder<double>)
         .def_static("array_reorder", &FCIDUMP::reorder<uint8_t>)
         .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,
@@ -2015,6 +2014,23 @@ template <typename S = void> void bind_matrix(py::module &m) {
                 iftb.close();
                 ifta.close();
             }
+        });
+
+    py::class_<DyallFCIDUMP, shared_ptr<DyallFCIDUMP>, FCIDUMP>(m,
+                                                                "DyallFCIDUMP")
+        .def(py::init<const shared_ptr<FCIDUMP> &, uint16_t, uint16_t>())
+        .def_readwrite("fcidump", &DyallFCIDUMP::fcidump)
+        .def_readwrite("n_inactive", &DyallFCIDUMP::n_inactive)
+        .def_readwrite("n_virtual", &DyallFCIDUMP::n_virtual)
+        .def_readwrite("n_active", &DyallFCIDUMP::n_active)
+        .def("initialize_su2",
+             [](DyallFCIDUMP *self, const py::array_t<double> &f) {
+                 self->initialize_su2(f.data(), f.size());
+             })
+        .def("initialize_sz", [](DyallFCIDUMP *self,
+                                 const py::array_t<double> &fa,
+                                 const py::array_t<double> &fb) {
+            self->initialize_sz(fa.data(), fa.size(), fb.data(), fb.size());
         });
 
     py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")
@@ -2197,10 +2213,13 @@ extern template void bind_hamiltonian<SU2>(py::module &m);
 extern template void bind_parallel<SU2>(py::module &m);
 extern template void bind_rule<SU2>(py::module &m);
 
-extern template void bind_trans_state_info<SU2, SZ>(py::module &m, const string &aux_name);
-extern template void bind_trans_state_info<SZ, SU2>(py::module &m, const string &aux_name);
-extern template auto bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
-                                                       const string &aux_name)
+extern template void bind_trans_state_info<SU2, SZ>(py::module &m,
+                                                    const string &aux_name);
+extern template void bind_trans_state_info<SZ, SU2>(py::module &m,
+                                                    const string &aux_name);
+extern template auto
+bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
+                                             const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
 #endif

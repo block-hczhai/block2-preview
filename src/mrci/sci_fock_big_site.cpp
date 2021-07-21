@@ -400,13 +400,14 @@ SCIFockBigSite<S, typename S::is_sz_t>::SCIFockBigSite(
     int nOrb, int nOrbThis, bool isRight,
     const std::shared_ptr<block2::FCIDUMP> &fcidump,
     const std::vector<uint8_t> &orbsym, int nMaxAlphaEl, int nMaxBetaEl,
-    int nMaxEl, const vector<vector<int>> &occs, bool verbose)
+    int nMaxEl, const vector<vector<int>> &poccs, bool verbose)
     : BigSite<S>(nOrbThis), nOrbOther{nOrb - nOrbThis}, nOrbThis{nOrbThis},
       nOrb{nOrb}, isRight{isRight}, nMaxAlphaEl{nMaxAlphaEl},
       nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}, verbose{verbose},
       ints2(fcidump, nOrbOther, nOrbThis, isRight),
       ints1(fcidump, nOrbOther, nOrbThis, isRight) {
-    if (nMaxEl == -1 and occs.size() == 0) {
+    vector<vector<int>> occs = poccs;
+    if (nMaxEl == -999 and occs.size() == 0) {
         return; // dummy
     }
     if (verbose)
@@ -488,6 +489,10 @@ SCIFockBigSite<S, typename S::is_sz_t>::SCIFockBigSite(
         // "|", ii - sStart);
         fStr = "# %3d %3d  ->   %3d  %3d |  %4d ";
     }
+    // left thawed space
+    if (occs.size() == 0 && nMaxEl < 0)
+        occs = ras_space(isRight, nOrbThis, abs(nMaxBetaEl), abs(nMaxBetaEl),
+                         abs(nMaxEl));
     // CI space
     if (occs.size() == 0) {
         // Prelim build up of quantum numbers: Make them sorted (*without* pg

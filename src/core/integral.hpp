@@ -1095,6 +1095,24 @@ struct FCIDUMP {
         data = rdata->data();
         ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
     }
+    virtual shared_ptr<FCIDUMP> deep_copy() const {
+        shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>(*this);
+        fcidump->vdata = make_shared<vector<double>>(*vdata);
+        fcidump->data = fcidump->vdata->data();
+        vector<TInt> rts(ts);
+        vector<V1Int> rvgs(vgs);
+        vector<V4Int> rvabs(vabs);
+        vector<V8Int> rvs(vs);
+        for (size_t i = 0; i < ts.size(); i++)
+            fcidump->ts[i].data = ts[i].data - data + fcidump->data;
+        for (size_t i = 0; i < vgs.size(); i++)
+            fcidump->vgs[i].data = vgs[i].data - data + fcidump->data;
+        for (size_t i = 0; i < vabs.size(); i++)
+            fcidump->vabs[i].data = vabs[i].data - data + fcidump->data;
+        for (size_t i = 0; i < vs.size(); i++)
+            fcidump->vs[i].data = vs[i].data - data + fcidump->data;
+        return fcidump;
+    }
     // One-electron integral element (SU(2))
     virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
     // One-electron integral element (SZ)

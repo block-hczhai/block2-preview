@@ -126,7 +126,7 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
                    const std::vector<uint8_t> &orbsym,
                    const vector<vector<int>> &occs, bool verbose = true)
         : SCIFockBigSite{nOrb, nOrbExt, isRight, fcidump, orbsym,
-                         -1,   -1,      -1,      occs,    verbose} {}
+                         -999, -999,    -999,    occs,    verbose} {}
     /** Initialization either via occs or nMax*.
      * See specialized C'tors.
      */
@@ -155,17 +155,13 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
     /** Fill H */
     void fillOp_H(BLSparseMatrix &mat) const;
     /** Fill a' */
-    void fillOp_C(const S &deltaQN, BLSparseMatrix &mat,
-                  int iOrb) const;
+    void fillOp_C(const S &deltaQN, BLSparseMatrix &mat, int iOrb) const;
     /** Fill a */
-    void fillOp_D(const S &deltaQN, BLSparseMatrix &mat,
-                  int iOrb) const;
+    void fillOp_D(const S &deltaQN, BLSparseMatrix &mat, int iOrb) const;
     /** Fill R */
-    void fillOp_R(const S &deltaQN,
-                  std::vector<entryTuple1> &entries) const;
+    void fillOp_R(const S &deltaQN, std::vector<entryTuple1> &entries) const;
     /** Fill R' */
-    void fillOp_RD(const S &deltaQN,
-                   std::vector<entryTuple1> &entries) const;
+    void fillOp_RD(const S &deltaQN, std::vector<entryTuple1> &entries) const;
     /** Fill A = i j */
     void fillOp_A(const S &deltaQN, BLSparseMatrix &mat, int iOrb,
                   int jOrb) const;
@@ -176,14 +172,11 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
     void fillOp_B(const S &deltaQN, BLSparseMatrix &mat, int iOrb,
                   int jOrb) const;
     /** Fill P op */
-    void fillOp_P(const S &deltaQN,
-                  std::vector<entryTuple2> &entries) const;
+    void fillOp_P(const S &deltaQN, std::vector<entryTuple2> &entries) const;
     /** Fill P' op */
-    void fillOp_PD(const S &deltaQN,
-                   std::vector<entryTuple2> &entries) const;
+    void fillOp_PD(const S &deltaQN, std::vector<entryTuple2> &entries) const;
     /** Fill Q op */
-    void fillOp_Q(const S &deltaQN,
-                  std::vector<entryTuple2> &entries) const;
+    void fillOp_Q(const S &deltaQN, std::vector<entryTuple2> &entries) const;
 
     int ompThreads = 1;
     int setOmpThreads(int nThreads = 0) {
@@ -213,6 +206,75 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
 
     void setQnIdxBra(const std::vector<int> &inp) { setQnIdxBra(inp, {'X'}); }
     void setQnIdxKet(const std::vector<int> &inp) { setQnIdxKet(inp, {'X'}); }
+    // construct occs vector for left or right ci space from excitations
+    // nalpha, nbeta, nelec are max number of electrons
+    static vector<vector<int>> ras_space(bool is_right, int norb, int nalpha,
+                                         int nbeta, int nelec) {
+        map<pair<int, pair<int, int>>, vector<vector<int>>> mp;
+        vector<int> ref(is_right ? 0 : norb * 2);
+        if (!is_right)
+            for (int i = 0; i < norb * 2; i++)
+                ref[i] = i;
+        mp[make_pair(0, make_pair(0, 0))].push_back(ref);
+        for (int i = 1; i <= nelec; i++) {
+            for (int ia = 0; ia <= nalpha; ia++) {
+                int ib = i - ia;
+                if (ib < 0 || ib > nbeta)
+                    continue;
+                vector<vector<int>> r;
+                if (mp.find(make_pair(i - 1, make_pair(ia - 1, ib))) !=
+                    mp.end()) {
+                    vector<vector<int>> &mref =
+                        mp.at(make_pair(i - 1, make_pair(ia - 1, ib)));
+                    for (auto &mm : mref) {
+                        for (int j = 0; j < norb; j++) {
+                            int pm =
+                                (int)(lower_bound(mm.begin(), mm.end(), j * 2) -
+                                      mm.begin());
+                            if (is_right &&
+                                (pm == (int)mm.size() || mm[pm] != j * 2)) {
+                                r.push_back(mm);
+                                r.back().insert(r.back().begin() + pm, j * 2);
+                            } else if (!is_right && !(pm == (int)mm.size() ||
+                                                      mm[pm] != j * 2)) {
+                                r.push_back(mm);
+                                r.back().erase(r.back().begin() + pm);
+                            }
+                        }
+                    }
+                }
+                if (mp.find(make_pair(i - 1, make_pair(ia, ib - 1))) !=
+                    mp.end()) {
+                    vector<vector<int>> &mref =
+                        mp.at(make_pair(i - 1, make_pair(ia, ib - 1)));
+                    for (auto &mm : mref) {
+                        for (int j = 0; j < norb; j++) {
+                            int pm = (int)(lower_bound(mm.begin(), mm.end(),
+                                                       j * 2 + 1) -
+                                           mm.begin());
+                            if (is_right &&
+                                (pm == (int)mm.size() || mm[pm] != j * 2 + 1)) {
+                                r.push_back(mm);
+                                r.back().insert(r.back().begin() + pm,
+                                                j * 2 + 1);
+                            } else if (!is_right && !(pm == (int)mm.size() ||
+                                                      mm[pm] != j * 2 + 1)) {
+                                r.push_back(mm);
+                                r.back().erase(r.back().begin() + pm);
+                            }
+                        }
+                    }
+                }
+                sort(r.begin(), r.end());
+                r.resize(distance(r.begin(), unique(r.begin(), r.end())));
+                mp[make_pair(i, make_pair(ia, ib))] = r;
+            }
+        }
+        vector<vector<int>> rr;
+        for (auto &mm : mp)
+            rr.insert(rr.end(), mm.second.begin(), mm.second.end());
+        return rr;
+    }
 
   protected:
     SCIFCIDUMPTwoInt ints2;

@@ -39,6 +39,7 @@
 #include "core/hubbard.hpp"
 #include "core/integral.hpp"
 #include "core/integral_compressed.hpp"
+#include "core/integral_dyall.hpp"
 #include "core/matching.hpp"
 #include "core/matrix.hpp"
 #include "core/matrix_functions.hpp"

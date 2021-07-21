@@ -75,6 +75,7 @@ template <typename S> void bind_sci_big_site_fock(py::module &m) {
              py::arg("verbose") = true,
              "Initialization via externally given determinants in `occs`")
         .def_readwrite("excludeQNs", &SCIFockBigSite<S>::excludeQNs)
+        .def_static("ras_space", &SCIFockBigSite<S>::ras_space)
         .def_readonly("quantumNumbers", &SCIFockBigSite<S>::quantumNumbers)
         .def_readonly("nOrbOther", &SCIFockBigSite<S>::nOrbOther)
         .def_readonly("nOrbThis", &SCIFockBigSite<S>::nOrbThis)

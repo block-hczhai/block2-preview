@@ -934,6 +934,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::shallow_copy_to;
     using MPSInfo<S>::set_bond_dimension_fci;
     vector<ActiveTypes> casci_mask;
+    // only works for normal sites
     static vector<ActiveTypes> active_space(int n_sites, S target,
                                             int n_active_sites,
                                             int n_active_electrons) {
@@ -944,6 +945,19 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         for (size_t i = 0; i < n_frozen; i++)
             casci_mask[i] = ActiveTypes::Frozen;
         for (size_t i = n_frozen; i < n_frozen + n_active_sites; i++)
+            casci_mask[i] = ActiveTypes::Active;
+        return casci_mask;
+    }
+    // works for normal and big sites
+    static vector<ActiveTypes> active_space(int n_sites, int n_inactive_sites,
+                                            int n_active_sites,
+                                            int n_virtual_sites) {
+        vector<ActiveTypes> casci_mask(n_sites, ActiveTypes::Empty);
+        assert(n_sites == n_inactive_sites + n_active_sites + n_virtual_sites);
+        for (size_t i = 0; i < n_inactive_sites; i++)
+            casci_mask[i] = ActiveTypes::Frozen;
+        for (size_t i = n_inactive_sites; i < n_inactive_sites + n_active_sites;
+             i++)
             casci_mask[i] = ActiveTypes::Active;
         return casci_mask;
     }
@@ -965,64 +979,41 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         if (init_fci)
             set_bond_dimension_fci();
     }
+    CASCIMPSInfo(int n_sites, S vacuum, S target,
+                 const vector<shared_ptr<StateInfo<S>>> &basis,
+                 int n_inactive_sites, int n_active_sites, int n_virtual_sites,
+                 bool init_fci = true)
+        : casci_mask(active_space(n_sites, n_inactive_sites, n_active_sites,
+                                  n_virtual_sites)),
+          MPSInfo<S>(n_sites, vacuum, target, basis, false) {
+        if (init_fci)
+            set_bond_dimension_fci();
+    }
     void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
                                      S right_vacuum = S(S::invalid)) override {
         assert(casci_mask.size() == n_sites);
-        StateInfo<S> empty = StateInfo<S>(vacuum);
-        S frozen_state;
-        // currently only works with symmetrized basis
-        for (int i = 0; i < basis[0]->n; i++)
-            if (basis[0]->quanta[i].n() == 2) {
-                frozen_state = basis[0]->quanta[i];
-                break;
-            }
-        StateInfo<S> frozen = StateInfo<S>(frozen_state);
+        vector<shared_ptr<StateInfo<S>>> adj_basis(basis);
+        for (int i = 0; i < n_sites; i++) {
+            if (casci_mask[i] == ActiveTypes::Frozen) {
+                adj_basis[i] = make_shared<StateInfo<S>>(vacuum);
+                for (int j = 0; j < basis[i]->n; j++)
+                    if (basis[i]->quanta[j].n() > adj_basis[i]->quanta[0].n())
+                        adj_basis[i]->quanta[0] = basis[i]->quanta[j];
+            } else if (casci_mask[i] == ActiveTypes::Empty)
+                adj_basis[i] = make_shared<StateInfo<S>>(vacuum);
+        }
         left_dims_fci[0] = make_shared<StateInfo<S>>(
             left_vacuum == S(S::invalid) ? vacuum : left_vacuum);
         for (int i = 0; i < n_sites; i++)
-            switch (casci_mask[i]) {
-            case ActiveTypes::Active:
-                left_dims_fci[i + 1] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *left_dims_fci[i], *basis[i], target));
-                break;
-            case ActiveTypes::Frozen:
-                left_dims_fci[i + 1] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *left_dims_fci[i], frozen, target));
-                break;
-            case ActiveTypes::Empty:
-                left_dims_fci[i + 1] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *left_dims_fci[i], empty, target));
-                break;
-            default:
-                assert(false);
-                break;
-            }
+            left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *left_dims_fci[i], *adj_basis[i], target));
         right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
             right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
-            switch (casci_mask[i]) {
-            case ActiveTypes::Active:
-                right_dims_fci[i] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *basis[i], *right_dims_fci[i + 1], target));
-                break;
-            case ActiveTypes::Frozen:
-                right_dims_fci[i] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        frozen, *right_dims_fci[i + 1], target));
-                break;
-            case ActiveTypes::Empty:
-                right_dims_fci[i] =
-                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        empty, *right_dims_fci[i + 1], target));
-                break;
-            default:
-                assert(false);
-                break;
-            }
+            right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *adj_basis[i], *right_dims_fci[i + 1], target));
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<CASCIMPSInfo<S>>(*this);
@@ -1676,7 +1667,7 @@ template <typename S> struct MPS {
                              l, m, *info->left_dims_fci[i + 2]),
                          r;
             StateInfo<S> nlm = StateInfo<S>::tensor_product(
-                             *nl, m, *info->left_dims_fci[i + 2]);
+                *nl, m, *info->left_dims_fci[i + 2]);
             StateInfo<S> lmc = StateInfo<S>::get_connection_info(l, m, lm);
             if (i + 1 == center && dot == 1)
                 r = *info->right_dims[center + dot];
@@ -1704,7 +1695,8 @@ template <typename S> struct MPS {
             shared_ptr<SparseMatrix<S>> left, right;
             tensors[i]->right_split(left, right, 0);
             tensors[i] = right;
-            shared_ptr<StateInfo<S>> nr = right->info->extract_state_info(false);
+            shared_ptr<StateInfo<S>> nr =
+                right->info->extract_state_info(false);
             if (dot == 1 && i - 1 == center) {
                 shared_ptr<SparseMatrix<S>> wfn =
                     make_shared<SparseMatrix<S>>(d_alloc);
@@ -1728,13 +1720,13 @@ template <typename S> struct MPS {
                         *info->left_dims[center], *info->basis[center],
                         *info->left_dims_fci[center + 1]);
                     assert(tensors[i - 2] != nullptr);
-                    tensors[i - 2] =
-                        tensors[i - 2]->right_multiply(left, l, m, r, mr, mrc, nmr);
+                    tensors[i - 2] = tensors[i - 2]->right_multiply(
+                        left, l, m, r, mr, mrc, nmr);
                 } else {
                     l = *info->right_dims[i - 1];
                     assert(tensors[i - 1] != nullptr);
-                    tensors[i - 1] =
-                        tensors[i - 1]->right_multiply(left, l, m, r, mr, mrc, nmr);
+                    tensors[i - 1] = tensors[i - 1]->right_multiply(
+                        left, l, m, r, mr, mrc, nmr);
                 }
                 if (i - 1 == center + 1 && dot == 2)
                     l.deallocate();

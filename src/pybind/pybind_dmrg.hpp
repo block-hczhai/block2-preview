@@ -179,6 +179,14 @@ template <typename S> void bind_mps(py::module &m) {
             return make_shared<CASCIMPSInfo<S>>(n_sites, vacuum, target, basis,
                                                 n_active_sites,
                                                 n_active_electrons);
+        }))
+        .def(py::init([](int n_sites, S vacuum, S target,
+                         const vector<shared_ptr<StateInfo<S>>> &basis,
+                         int n_inactive_sites, int n_active_sites,
+                         int n_virtual_sites) {
+            return make_shared<CASCIMPSInfo<S>>(
+                n_sites, vacuum, target, basis, n_inactive_sites,
+                n_active_sites, n_virtual_sites);
         }));
 
     py::class_<MRCIMPSInfo<S>, shared_ptr<MRCIMPSInfo<S>>, MPSInfo<S>>(
