@@ -159,7 +159,8 @@ template <typename S> void run(const map<string, string> &params) {
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
-    HamiltonianQC<S> hamil(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<S>> hamil = make_shared<HamiltonianQC<S>>
+            (vacuum, norb, orbsym, fcidump);
 
     hamil->opf->seq->mode = SeqTypes::Simple;
 
