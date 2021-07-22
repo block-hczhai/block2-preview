@@ -59,6 +59,7 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
     int n_orbs_right; //!> Number of spatial orbitals for the right big site
     int n_orbs_cas;   //!> Number of spatial orbitals in CAS (handled by normal
                       //! MPS)
+    int n_orbs;
     shared_ptr<Rule<S>> rule = nullptr;
     shared_ptr<ParallelRule<S>> parallel_rule = nullptr;
     shared_ptr<HamiltonianQC<S>> full_hamil;
@@ -68,6 +69,7 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
                          const shared_ptr<BigSite<S>> &big_left = nullptr,
                          const shared_ptr<BigSite<S>> &big_right = nullptr)
         : HamiltonianQC<S>(), big_left(big_left), big_right(big_right),
+          n_orbs(n_orbs_total),
           n_orbs_left(big_left == nullptr ? 0 : big_left->n_orbs),
           n_orbs_right(big_right == nullptr ? 0 : big_right->n_orbs),
           n_orbs_cas(n_orbs_total - n_orbs_left - n_orbs_right) {

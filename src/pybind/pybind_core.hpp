@@ -2027,11 +2027,20 @@ template <typename S = void> void bind_matrix(py::module &m) {
              [](DyallFCIDUMP *self, const py::array_t<double> &f) {
                  self->initialize_su2(f.data(), f.size());
              })
-        .def("initialize_sz", [](DyallFCIDUMP *self,
-                                 const py::array_t<double> &fa,
-                                 const py::array_t<double> &fb) {
-            self->initialize_sz(fa.data(), fa.size(), fb.data(), fb.size());
-        });
+        .def("initialize_sz",
+             [](DyallFCIDUMP *self, const py::array_t<double> &fa,
+                const py::array_t<double> &fb) {
+                 self->initialize_sz(fa.data(), fa.size(), fb.data(),
+                                     fb.size());
+             })
+        .def("initialize_from_1pdm_su2",
+             [](DyallFCIDUMP *self, const MatrixRef &dm) {
+                 self->initialize_from_1pdm_su2(dm);
+             })
+        .def("initialize_from_1pdm_sz",
+             [](DyallFCIDUMP *self, const MatrixRef &dm) {
+                 self->initialize_from_1pdm_sz(dm);
+             });
 
     py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")
         .def_readwrite("batch", &BatchGEMMSeq::batch)

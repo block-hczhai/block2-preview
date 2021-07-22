@@ -52,6 +52,16 @@ struct DyallFCIDUMP : FCIDUMP {
         initialize_heff();
         initialize_const();
     }
+    void initialize_from_1pdm_su2(MatrixRef pdm1) {
+        initialize_fock_su2(pdm1);
+        initialize_heff();
+        initialize_const();
+    }
+    void initialize_from_1pdm_sz(MatrixRef pdm1) {
+        initialize_fock_sz(pdm1);
+        initialize_heff();
+        initialize_const();
+    }
     void read(const string &filename) override {
         shared_ptr<FCIDUMP> fd = make_shared<FCIDUMP>();
         fd->read(filename);
@@ -60,6 +70,47 @@ struct DyallFCIDUMP : FCIDUMP {
         fd = nullptr;
         initialize_heff();
         initialize_const();
+    }
+    void initialize_fock_su2(MatrixRef pdm1) {
+        fock.push_back(TInt(fcidump->n_sites(), true));
+        assert(pdm1.size() == fock[0].size());
+        vdata_fock = make_shared<vector<double>>(fock[0].size());
+        fock[0].data = vdata_fock->data();
+        for (uint16_t p = 0; p < fcidump->n_sites(); p++)
+            for (uint16_t q = 0; q < fcidump->n_sites(); q++) {
+                double v = fcidump->t(p, q);
+                for (uint16_t r = 0; r < fcidump->n_sites(); r++)
+                    for (uint16_t s = 0; s < fcidump->n_sites(); s++)
+                        v += pdm1(r, s) * (fcidump->v(p, q, r, s) -
+                                           0.5 * fcidump->v(p, r, s, q));
+                fock[0](p, q) = v;
+            }
+        fock_uhf = false;
+    }
+    void initialize_fock_sz(MatrixRef pdm1) {
+        fock.push_back(TInt(fcidump->n_sites(), true));
+        fock.push_back(fock[0]);
+        assert(pdm1.size() == fock[0].size() * 4);
+        vdata_fock =
+            make_shared<vector<double>>(fock[0].size() + fock[1].size());
+        fock[0].data = vdata_fock->data();
+        fock[1].data = vdata_fock->data() + fock[0].size();
+        for (uint8_t x = 0; x < 2; x++)
+            for (uint16_t p = 0; p < fcidump->n_sites(); p++)
+                for (uint16_t q = 0; q < fcidump->n_sites(); q++) {
+                    double v = 0.5 * fcidump->t(x, p, q);
+                    for (uint8_t y = 0; y < 2; y++)
+                        for (uint16_t r = 0; r < fcidump->n_sites(); r++)
+                            for (uint16_t s = 0; s < fcidump->n_sites(); s++) {
+                                v += pdm1(r * 2 + y, s * 2 + y) *
+                                     fcidump->v(x, y, p, q, r, s);
+                                if (x == y)
+                                    v -= pdm1(r * 2 + y, s * 2 + y) *
+                                         fcidump->v(x, y, p, r, s, q);
+                            }
+                    fock[x](p, q) = v;
+                }
+        fock_uhf = true;
     }
     void initialize_fock_su2(const double *f, size_t lf) {
         fock.push_back(TInt(fcidump->n_sites(), false));

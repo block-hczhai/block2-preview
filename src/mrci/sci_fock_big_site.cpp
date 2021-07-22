@@ -1476,7 +1476,6 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_AB_impl(const S &deltaQN,
                                                             BLSparseMatrix &mat,
                                                             int iOrb,
                                                             int jOrb) const {
-    assert(not isRight and "Should not happen for right big site and NC MPO!");
     checkOMP();
     const auto iOrbL = iOrb - (isRight ? nOrbOther * 2 : 0);
     const auto jOrbL = jOrb - (isRight ? nOrbOther * 2 : 0);

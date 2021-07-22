@@ -29,22 +29,26 @@ class TestDMRG : public ::testing::Test {
 };
 
 TEST_F(TestDMRG, Test) {
-    string filename =
-        "data/N2.CAS.PVDZ.FCIDUMP";
-    string fock_filename =
-        "data/N2.CAS.PVDZ.FOCK";
+    // string filename = "data/N2.CAS.PVDZ.T3.FCIDUMP";
+    // string filename = "data/N2.CAS.PVDZ.T2.FCIDUMP";
+    // string filename = "data/N2.CAS.PVDZ.T1.FCIDUMP";
+    string filename = "data/N2.CAS.PVDZ.T0.FCIDUMP";
 
     Timer t;
     t.get_time();
     Random::rand_seed(0);
 
-    uint16_t n_thawed = 3, n_external = 15; // --108.939479334269393 | -109.132774263389905
+    // [T3] -108.939479334269393 | -109.132774263389905
+    // uint16_t n_thawed = 3, n_external = 15;
+    // [T2] -108.996699933457450 | -109.138615305899393
+    // uint16_t n_thawed = 2, n_external = 16;
+    // [T1] -109.006414147634061 | -109.139948066590108
+    // uint16_t n_thawed = 1, n_external = 17;
+    // [T0] -108.996662308260198 | -109.138741359593240
+    uint16_t n_thawed = 0, n_external = 18;
 
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     fcidump->read(filename);
-    shared_ptr<FCIDUMP> fd_dyall =
-        make_shared<DyallFCIDUMP>(fcidump, n_thawed, n_external);
-    fd_dyall->read(fock_filename);
 
     vector<uint8_t> orbsym = fcidump->orb_sym();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -52,66 +56,62 @@ TEST_F(TestDMRG, Test) {
 
     double err = fcidump->symmetrize(orbsym);
     cout << "symm err = " << err << endl;
-    double errd = fd_dyall->symmetrize(orbsym);
-    cout << "symm err = " << errd << endl;
 
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
     int n_orbs = fcidump->n_sites();
 
-    // BIG LEFT
+    // Full Hamiltonian
     shared_ptr<BigSite<SZ>> big_left = make_shared<SCIFockBigSite<SZ>>(
-        n_orbs, n_thawed, false, fd_dyall, orbsym, -2, -2, -2, true);
+        n_orbs, n_thawed, false, fcidump, orbsym, -2, -2, -2, true);
     big_left =
         make_shared<SimplifiedBigSite<SZ>>(big_left, make_shared<RuleQC<SZ>>());
-
-    // BIG RIGHT
     shared_ptr<BigSite<SZ>> big_right = make_shared<SCIFockBigSite<SZ>>(
-        n_orbs, n_external, true, fd_dyall, orbsym, 2, 2, 2, true);
+        n_orbs, n_external, true, fcidump, orbsym, 2, 2, 2, true);
     big_right = make_shared<SimplifiedBigSite<SZ>>(big_right,
                                                    make_shared<RuleQC<SZ>>());
-    shared_ptr<HamiltonianQCBigSite<SZ>> hm_dyall =
-        make_shared<HamiltonianQCBigSite<SZ>>(vacuum, n_orbs, orbsym, fd_dyall,
-                                              big_left, big_right);
+    shared_ptr<HamiltonianQCBigSite<SZ>> hamil =
+        make_shared<HamiltonianQCBigSite<SZ>>(
+            vacuum, n_orbs, orbsym, fcidump, n_thawed == 0 ? nullptr : big_left,
+            big_right);
 
     // MPO construction
     cout << "MPO start" << endl;
-    cout << "ORB  LEFT = " << hm_dyall->n_orbs_left << endl;
-    cout << "ORB RIGHT = " << hm_dyall->n_orbs_right << endl;
+    cout << "ORB  LEFT = " << hamil->n_orbs_left << endl;
+    cout << "ORB RIGHT = " << hamil->n_orbs_right << endl;
     t.get_time();
     int ntg = threading_()->n_threads_global;
     threading_()->n_threads_global = 1;
-    shared_ptr<MPO<SZ>> mpo_dyall =
-        make_shared<MPOQC<SZ>>(hm_dyall, QCTypes::NC);
+    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(hamil, QCTypes::NC);
     threading_()->n_threads_global = ntg;
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo_dyall = make_shared<SimplifiedMPO<SZ>>(
-        mpo_dyall, make_shared<RuleQC<SZ>>(), true, true,
-        OpNamesSet({OpNames::R, OpNames::RD}));
+    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true,
+                                         true,
+                                         OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 500;
 
     // MPSInfo
     shared_ptr<MPSInfo<SZ>> mps_info = make_shared<CASCIMPSInfo<SZ>>(
-        hm_dyall->n_sites, vacuum, target, hm_dyall->basis, (int)!!n_thawed,
-        hm_dyall->n_orbs_cas, (int)!!n_external);
+        hamil->n_sites, vacuum, target, hamil->basis, (int)!!n_thawed,
+        hamil->n_orbs_cas, (int)!!n_external);
     mps_info->set_bond_dimension(bond_dim);
     cout << "left dims = ";
-    for (int i = 0; i <= hm_dyall->n_sites; i++)
+    for (int i = 0; i <= hamil->n_sites; i++)
         cout << mps_info->left_dims[i]->n_states_total << " ";
     cout << endl;
     cout << "right dims = ";
-    for (int i = 0; i <= hm_dyall->n_sites; i++)
+    for (int i = 0; i <= hamil->n_sites; i++)
         cout << mps_info->right_dims[i]->n_states_total << " ";
     cout << endl;
 
     // MPS
-    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(hm_dyall->n_sites, 0, 2);
+    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(hamil->n_sites, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
     mps->save_mutable();
@@ -121,7 +121,7 @@ TEST_F(TestDMRG, Test) {
 
     // ME
     shared_ptr<MovingEnvironment<SZ>> me =
-        make_shared<MovingEnvironment<SZ>>(mpo_dyall, mps, mps, "DMRG");
+        make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(true);
@@ -152,19 +152,79 @@ TEST_F(TestDMRG, Test) {
 
     if (mps->center == mps->n_sites - 1 && mps->dot == 2)
         mps->center = mps->n_sites - 2;
+    cout << mps->canonical_form << endl;
 
-    // Full hamiltonian
-    big_left = make_shared<SCIFockBigSite<SZ>>(n_orbs, n_thawed, false, fcidump,
-                                               orbsym, -2, -2, -2, true);
-    big_left = make_shared<SimplifiedBigSite<SZ>>(
-        big_left, make_shared<NoTransposeRule<SZ>>(make_shared<RuleQC<SZ>>()));
-    big_right = make_shared<SCIFockBigSite<SZ>>(n_orbs, n_external, true,
-                                                fcidump, orbsym, 2, 2, 2, true);
-    big_right = make_shared<SimplifiedBigSite<SZ>>(
-        big_right, make_shared<NoTransposeRule<SZ>>(make_shared<RuleQC<SZ>>()));
-    shared_ptr<HamiltonianQCBigSite<SZ>> hamil =
-        make_shared<HamiltonianQCBigSite<SZ>>(vacuum, n_orbs, orbsym, fcidump,
-                                              big_left, big_right);
+    // 1PDM MPO construction
+    cout << "1PDM MPO start" << endl;
+    shared_ptr<MPO<SZ>> pmpo = make_shared<PDM1MPOQC<SZ>>(hamil);
+    cout << "1PDM MPO end .. T = " << t.get_time() << endl;
+
+    // 1PDM MPO simplification
+    cout << "1PDM MPO simplification start" << endl;
+    pmpo = make_shared<SimplifiedMPO<SZ>>(
+        pmpo, make_shared<RuleQC<SZ>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
+    cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
+
+    // 1PDM ME
+    shared_ptr<MovingEnvironment<SZ>> pme =
+        make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
+    t.get_time();
+    pme->init_environments(true);
+ 
+    // 1PDM
+    shared_ptr<Expect<SZ>> expect =
+        make_shared<Expect<SZ>>(pme, bond_dim, bond_dim);
+    expect->solve(true, mps->center == 0);
+
+    MatrixRef dm = expect->get_1pdm_spatial(hamil->n_orbs);
+    shared_ptr<DyallFCIDUMP> fd_dyall =
+        make_shared<DyallFCIDUMP>(fcidump, n_thawed, n_external);
+    fd_dyall->initialize_from_1pdm_su2(dm);
+    dm.deallocate();
+
+    double errd = fd_dyall->symmetrize(orbsym);
+    cout << "symm err = " << errd << endl;
+
+    // No Trans Full hamiltonian
+    if (n_thawed != 0)
+        hamil->big_left = make_shared<SimplifiedBigSite<SZ>>(
+            dynamic_pointer_cast<SimplifiedBigSite<SZ>>(hamil->big_left)
+                ->big_site,
+            make_shared<NoTransposeRule<SZ>>(make_shared<RuleQC<SZ>>()));
+    hamil->big_right = make_shared<SimplifiedBigSite<SZ>>(
+        dynamic_pointer_cast<SimplifiedBigSite<SZ>>(hamil->big_right)->big_site,
+        make_shared<NoTransposeRule<SZ>>(make_shared<RuleQC<SZ>>()));
+
+    // Dyall hamiltonian
+    big_left = make_shared<SCIFockBigSite<SZ>>(
+        n_orbs, n_thawed, false, fd_dyall, orbsym, -2, -2, -2, true);
+    big_left =
+        make_shared<SimplifiedBigSite<SZ>>(big_left, make_shared<RuleQC<SZ>>());
+    big_right = make_shared<SCIFockBigSite<SZ>>(
+        n_orbs, n_external, true, fd_dyall, orbsym, 2, 2, 2, true);
+    big_right = make_shared<SimplifiedBigSite<SZ>>(big_right,
+                                                   make_shared<RuleQC<SZ>>());
+    shared_ptr<HamiltonianQCBigSite<SZ>> hm_dyall =
+        make_shared<HamiltonianQCBigSite<SZ>>(
+            vacuum, n_orbs, orbsym, fd_dyall,
+            n_thawed == 0 ? nullptr : big_left, big_right);
+
+    // Left MPO construction
+    cout << "LMPO start" << endl;
+    t.get_time();
+    threading_()->n_threads_global = 1;
+    shared_ptr<MPO<SZ>> mpo_dyall =
+        make_shared<MPOQC<SZ>>(hm_dyall, QCTypes::NC);
+    threading_()->n_threads_global = ntg;
+    cout << "LMPO end .. T = " << t.get_time() << endl;
+
+    // Left MPO simplification
+    cout << "LMPO simplification start" << endl;
+    mpo_dyall = make_shared<SimplifiedMPO<SZ>>(
+        mpo_dyall, make_shared<RuleQC<SZ>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
+    cout << "LMPO simplification end .. T = " << t.get_time() << endl;
 
     // Right MPO construction
     cout << "RMPO start" << endl;

@@ -140,10 +140,11 @@ template <typename S> void bind_hamiltonian_big_site(py::module &m) {
              py::arg("big_right") = nullptr)
         .def_readwrite("big_left", &HamiltonianQCBigSite<S>::big_left)
         .def_readwrite("big_right", &HamiltonianQCBigSite<S>::big_right)
-        .def_readonly("n_orbs_left", &HamiltonianQCBigSite<S>::n_orbs_left)
-        .def_readonly("n_orbs_right", &HamiltonianQCBigSite<S>::n_orbs_right)
-        .def_readonly("n_orbs_cas", &HamiltonianQCBigSite<S>::n_orbs_cas)
-        .def_readonly("full_hamil", &HamiltonianQCBigSite<S>::full_hamil);
+        .def_readwrite("n_orbs", &HamiltonianQCBigSite<S>::n_orbs)
+        .def_readwrite("n_orbs_left", &HamiltonianQCBigSite<S>::n_orbs_left)
+        .def_readwrite("n_orbs_right", &HamiltonianQCBigSite<S>::n_orbs_right)
+        .def_readwrite("n_orbs_cas", &HamiltonianQCBigSite<S>::n_orbs_cas)
+        .def_readwrite("full_hamil", &HamiltonianQCBigSite<S>::full_hamil);
 }
 
 template <typename S> void bind_dmrg_big_site(py::module &m) {
