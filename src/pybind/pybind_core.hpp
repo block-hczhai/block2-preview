@@ -1602,6 +1602,13 @@ template <typename S = void> void bind_io(py::module &m) {
 template <typename S = void> void bind_matrix(py::module &m) {
     py::class_<MatrixRef, shared_ptr<MatrixRef>>(m, "Matrix",
                                                  py::buffer_protocol())
+        .def(py::init([](py::array_t<double> mat) {
+                 assert(mat.ndim() == 2);
+                 assert(mat.strides()[1] == sizeof(double));
+                 return MatrixRef(mat.mutable_data(), mat.shape()[0],
+                                  mat.shape()[1]);
+             }),
+             py::keep_alive<0, 1>())
         .def_buffer([](MatrixRef *self) -> py::buffer_info {
             return py::buffer_info(
                 self->data, sizeof(double),
@@ -1622,6 +1629,13 @@ template <typename S = void> void bind_matrix(py::module &m) {
 
     py::class_<ComplexMatrixRef, shared_ptr<ComplexMatrixRef>>(
         m, "ComplexMatrix", py::buffer_protocol())
+        .def(py::init([](py::array_t<complex<double>> mat) {
+                 assert(mat.ndim() == 2);
+                 assert(mat.strides()[1] == sizeof(complex<double>));
+                 return ComplexMatrixRef(mat.mutable_data(), mat.shape()[0],
+                                         mat.shape()[1]);
+             }),
+             py::keep_alive<0, 1>())
         .def_buffer([](ComplexMatrixRef *self) -> py::buffer_info {
             return py::buffer_info(
                 self->data, sizeof(complex<double>),
@@ -2034,12 +2048,18 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                      fb.size());
              })
         .def("initialize_from_1pdm_su2",
-             [](DyallFCIDUMP *self, const MatrixRef &dm) {
-                 self->initialize_from_1pdm_su2(dm);
+             [](DyallFCIDUMP *self, py::array_t<double> &dm) {
+                 assert(dm.ndim() == 2);
+                 assert(dm.strides()[1] == sizeof(double));
+                 MatrixRef mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
+                 self->initialize_from_1pdm_su2(mr);
              })
         .def("initialize_from_1pdm_sz",
-             [](DyallFCIDUMP *self, const MatrixRef &dm) {
-                 self->initialize_from_1pdm_sz(dm);
+             [](DyallFCIDUMP *self, py::array_t<double> &dm) {
+                 assert(dm.ndim() == 2);
+                 assert(dm.strides()[1] == sizeof(double));
+                 MatrixRef mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
+                 self->initialize_from_1pdm_sz(mr);
              });
 
     py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")

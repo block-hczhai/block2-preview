@@ -32,10 +32,17 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "read_mps_tags", "compression", "random_mps_init", "trans_mps_to_sz",
               "trans_mps_to_singlet_embedding", "trans_mps_from_singlet_embedding",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
-              "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps"}
+              "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
+              "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
+              "nevpt2sd", "big_site_fock"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
+
+DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2",
+                "nevpt2s", "nevpt2sd"}
+
+NEVPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd"}
 
 RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
@@ -110,6 +117,11 @@ def parse(fname):
     if len(crs) > 1:
         raise ValueError(
             "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crs[1]))
+    crs = list(set(dic.keys()) & DYN_CORR_KEYS)
+    if len(crs) > 1:
+        raise ValueError(
+            "Dynamic correlation keys %s and %s cannot appear simultaneously."
+                % (crs[0], crs[1]))
 
     # restart check
     if "restart_oh" in dic:
@@ -125,6 +137,8 @@ def parse(fname):
         dic["restart_correlation"] = ""
     if len(set(dic.keys()) & RESTART_KEYS) != 0:
         dic["fullrestart"] = ""
+    if len(set(dic.keys()) & NEVPT_KEYS) != 0:
+        dic["onepdm"] = ""
 
     return dic
 
@@ -143,7 +157,7 @@ def parse_gaopt(fname):
         lines = fin.readlines()
     dic = {}
     for line in lines:
-        if not line.strip().startswith('!'):
+        if not line.strip().startswith('!') and not line.strip().startswith('#'):
             line_sp = line.split()
             if len(line_sp) != 0:
                 if line_sp[0] in dic:

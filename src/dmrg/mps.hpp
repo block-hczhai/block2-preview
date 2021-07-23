@@ -1041,15 +1041,22 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     using MPSInfo<S>::shallow_copy_to;
     using MPSInfo<S>::set_bond_dimension_fci;
     using MPSInfo<S>::set_bond_dimension_full_fci;
-    int n_ext;    //!> Number of external orbitals: CI space
+    int n_inactive; //!> Number of inactive orbitals: CI space
+    int n_external; //!> Number of external orbitals: CI space
     int ci_order; //!> Up to how many electrons are allowed in ext. orbitals: 2
                   //! gives MR-CISD
-    MRCIMPSInfo(int n_sites, int n_ext, int ci_order, S vacuum, S target,
+    MRCIMPSInfo(int n_sites, int n_external, int ci_order, S vacuum, S target,
                 const vector<shared_ptr<StateInfo<S>>> &basis,
                 bool init_fci = true)
-        : MPSInfo<S>{n_sites, vacuum, target, basis, false}, n_ext{n_ext},
-          ci_order{ci_order} {
-        assert(n_ext < n_sites);
+        : MRCIMPSInfo(n_sites, 0, n_external, ci_order, vacuum, target, basis,
+                      init_fci) {}
+    MRCIMPSInfo(int n_sites, int n_inactive, int n_external, int ci_order,
+                S vacuum, S target,
+                const vector<shared_ptr<StateInfo<S>>> &basis,
+                bool init_fci = true)
+        : MPSInfo<S>(n_sites, vacuum, target, basis, false),
+          n_inactive(n_inactive), n_external(n_external), ci_order(ci_order) {
+        assert(n_external + n_inactive < n_sites);
         if (init_fci)
             set_bond_dimension_fci();
     }
@@ -1066,14 +1073,23 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         // Same as in the base class: Create left/right fci dims w/o
         // restrictions
         MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
-        // Now, restrict right_dims_fci
-        for (int i = n_sites - n_ext; i < n_sites; ++i) {
-            auto &state_info = right_dims_fci[i];
-            for (int q = 0; q < state_info->n; ++q) {
-                if (state_info->quanta[q].n() > ci_order) {
+        // Restrict left_dims_fci
+        for (int i = 0; i < n_inactive; ++i) {
+            auto &state_info = left_dims_fci[i];
+            int max_n = 0;
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() > max_n)
+                    max_n = state_info->quanta[q].n();
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() < max_n - ci_order)
                     state_info->n_states[q] = 0;
-                }
-            }
+        }
+        // Restrict right_dims_fci
+        for (int i = n_sites - n_external; i < n_sites; ++i) {
+            auto &state_info = right_dims_fci[i];
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() > ci_order)
+                    state_info->n_states[q] = 0;
         }
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {

@@ -11,7 +11,7 @@ from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, 
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
-from block2 import MatrixFunctions, KuhnMunkres
+from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP
 import numpy as np
 import time
 import os
@@ -52,7 +52,7 @@ dic = parse(fin)
 if "nonspinadapted" in dic:
     from block2 import VectorSZ as VectorSL
     from block2.sz import MultiMPS, MultiMPSInfo
-    from block2.sz import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC
+    from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -66,7 +66,7 @@ if "nonspinadapted" in dic:
 else:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo
-    from block2.su2 import HamiltonianQC, MPS, MPSInfo, ParallelRuleQC
+    from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -77,6 +77,17 @@ else:
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SU2
     TrSX = SZ
+
+try:
+    if "nonspinadapted" in dic:
+        from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+        from block2.sz import DMRGBigSite, LinearBigSite
+        from block2.sz import SCIFockBigSite
+    else:
+        from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+        from block2.su2 import DMRGBigSite, LinearBigSite
+except ImportError:
+    pass
 
 try:
     if "nonspinadapted" in dic:
@@ -123,6 +134,23 @@ cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 singlet_embedding = "singlet_embedding" in dic
 siv = dic.get("symmetrize_ints", 1E-10)
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
+dynamic_corr_method = None
+for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
+                "casci", "nevpt2", "nevpt2s", "nevpt2sd"]:
+    if dyn_key in dic:
+        dynamic_corr_method = [dyn_key, [int(x) for x in dic[dyn_key].split()]]
+        if dynamic_corr_method[0] == 'mrci':
+            dynamic_corr_method[0] = 'mrcisd'
+        elif dynamic_corr_method[0] == 'nevpt2':
+            dynamic_corr_method[0] = 'nevpt2sd'
+        break
+big_site_method = None
+if "big_site_fock" in dic:
+    big_site_method = "fock"
+if dynamic_corr_method is None or dynamic_corr_method[0] == "dmrgfci":
+    qc_type = QCTypes.Conventional
+else:
+    qc_type = QCTypes.NC
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical
@@ -139,6 +167,22 @@ if dic.get("te_type", "rk4") == "rk4":
     te_type = TETypes.RK4
 else:
     te_type = TETypes.TangentSpace
+
+has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
+    or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
+    or "restart_tran_oh" in dic or "tran_oh" in dic or "compression" in dic
+has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
+    or "restart_twopdm" in dic or "twopdm" in dic
+has_1npc = "restart_correlation" in dic or "correlation" in dic \
+    or "restart_diag_twopdm" in dic or "diag_twopdm" in dic
+anti_herm = "orbital_rotation" in dic
+one_body_only = "orbital_rotation" in dic
+
+simpl_rule = RuleQC()
+if has_tran:
+    simpl_rule = NoTransposeRule(simpl_rule)
+if anti_herm:
+    simpl_rule = AntiHermitianRuleQC(simpl_rule)
 
 if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(scratch):
@@ -157,7 +201,7 @@ init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 Global.threading = Threading(
     ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
     n_threads * mkl_threads, n_threads, mkl_threads)
-Global.threading.seq_type = SeqTypes.Tasked
+Global.threading.seq_type = SeqTypes.Tasked if big_site_method is None else SeqTypes.Nothing
 Global.frame.fp_codec = DoubleFPCodec(fp_cps_cutoff, 1024)
 Global.frame.load_buffering = False
 Global.frame.save_buffering = False
@@ -206,6 +250,7 @@ if pre_run or not no_pre_run:
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
+        np.save(scratch + '/orbital_reorder.npy', np.arange(0, fcidump.n_sites, dtype=int))
     else:
         if "gaopt" in dic:
             orb_idx = orbital_reorder(fcidump, method='gaopt ' + dic["gaopt"])
@@ -246,7 +291,8 @@ if pre_run or not no_pre_run:
         singlet_embedding_spin = spin[0]
     if len(targets) == 1:
         target = targets[0]
-    n_sites = fcidump.n_sites
+    n_orbs = fcidump.n_sites
+    n_sites = n_orbs
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
     sym_error = fcidump.symmetrize(orb_sym)
@@ -256,12 +302,65 @@ if pre_run or not no_pre_run:
                             "please check point group symmetry and FCIDUMP or set" +
                             " a higher tolerance for the keyword '%s'") % (
             symmetrize_ints_tol, "symmetrize_ints"))
-    hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+    if dynamic_corr_method is not None:
+        if len(dynamic_corr_method[1]) == 2:
+            assert len(nelec) == 1
+            n_cas, n_elec_cas = dynamic_corr_method[1]
+            assert (nelec[0] - n_elec_cas) % 2 == 0
+            n_inactive = (nelec[0] - n_elec_cas) // 2
+            n_external = n_orbs - n_inactive - n_cas
+        else:
+            n_inactive, n_cas, n_external = dynamic_corr_method[1]
+            assert n_orbs == n_inactive + n_cas + n_external
+        _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
+            % (n_inactive, n_cas, n_external))
+    if big_site_method is None:
+        hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+    else:
+        if big_site_method == "fock":
+            assert dynamic_corr_method is not None
+            assert "nonspinadapted" in dic
+            if dynamic_corr_method[0] in ['mrcisdt']:
+                xl = -3, -3, -3
+                xr = 3, 3, 3
+            elif dynamic_corr_method[0] in ['mrcisd', 'nevpt2sd']:
+                xl = -2, -2, -2
+                xr = 2, 2, 2
+            elif dynamic_corr_method[0] in ['mrcis', 'nevpt2s']:
+                xl = -1, -1, -1
+                xr = 1, 1, 1
+            elif dynamic_corr_method[0] in ['casci']:
+                xl = 0, 0, 0
+                xr = 0, 0, 0
+            else:
+                assert len(nelec) == 1 and len(spin) == 1
+                assert (nelec[0] + spin[0]) % 2 == 0
+                n_alpha = (nelec[0] + spin[0]) // 2
+                n_beta = (nelec[0] - spin[0]) // 2
+                xl = -n_alpha, -n_beta, -nelec[0]
+                xr = n_alpha, n_beta, nelec[0]
+            big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, VectorUInt8(orb_sym), *xl, True)
+            big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, VectorUInt8(orb_sym), *xr, True)
+        else:
+            raise NotImplementedError
+        big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
+        big_right = SimplifiedBigSite(big_right_orig, simpl_rule)
+        if MPI is not None:
+            if one_body_only:
+                big_left = ParallelBigSite(big_left, prule_one_body)
+                big_right = ParallelBigSite(big_right, prule_one_body)
+            else:
+                big_left = ParallelBigSite(big_left, prule)
+                big_right = ParallelBigSite(big_right, prule)
+        hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fcidump,
+            None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+    n_sites = hamil.n_sites
+
 else:
+    orb_idx = np.load(scratch + '/orbital_reorder.npy')
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
-    else:
-        orb_idx = np.load(scratch + '/orbital_reorder.npy')
+    n_orbs = len(orb_idx)
     orb_sym = None
     fcidump = None
     spin = [int(x) for x in dic.get("spin", "0").split()]
@@ -460,8 +559,25 @@ elif pre_run or not no_pre_run:
         mps_info = trans_mi(tr_mps_info, target)
     else:
         if nroots == 1 and len(targets) == 1:
-            mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+            if dynamic_corr_method is not None:
+                if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd"]:
+                    if big_site_method is not None:
+                        mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
+                            1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
+                    else:
+                        mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
+                elif dynamic_corr_method[0] in ["mrcis", "mrcisd", "mrcisdt"]:
+                    if big_site_method is not None:
+                        mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+                    else:
+                        ci_order = len(dynamic_corr_method[0]) - 4
+                        mps_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+                else:
+                    mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+            else:
+                mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
         else:
+            assert dynamic_corr_method is None
             _print('TARGETS = ', list(targets))
             mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
         if singlet_embedding and SX == SU2:
@@ -546,14 +662,6 @@ if conn_centers is not None and "fullrestart" in dic:
         mps.canonical_form = mps.canonical_form[:-1] + 'S'
         mps.center = mps.n_sites - 1
 
-has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
-    or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
-    or "restart_tran_oh" in dic or "tran_oh" in dic or "compression" in dic
-has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
-    or "restart_twopdm" in dic or "twopdm" in dic
-anti_herm = "orbital_rotation" in dic
-one_body_only = "orbital_rotation" in dic
-
 try:
     import psutil
     mem = psutil.Process(os.getpid()).memory_info().rss
@@ -563,17 +671,14 @@ except ImportError:
 
 # prepare mpo
 if pre_run or not no_pre_run:
+    ntg = Global.threading.n_threads_global
+    if big_site_method == "fock":
+        Global.threading.n_threads_global = 1
     # mpo for dmrg
     _print("build mpo", time.perf_counter() - tx)
-    mpo = MPOQC(hamil, QCTypes.Conventional)
+    mpo = MPOQC(hamil, qc_type)
     _print("simpl mpo", time.perf_counter() - tx)
-    xrule = RuleQC()
-    if has_tran:
-        xrule = NoTransposeRule(xrule)
-    if anti_herm:
-        xrule = AntiHermitianRuleQC(xrule)
-    mpo = SimplifiedMPO(mpo, xrule, True, True,
-                        OpNamesSet((OpNames.R, OpNames.RD)))
+    mpo = SimplifiedMPO(mpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
 
     _print('GS MPO BOND DIMS = ', ''.join(
@@ -604,14 +709,15 @@ if pre_run or not no_pre_run:
         if MPI is None or MPI.rank == 0:
             p2mpo.save_data(scratch + '/mpo-2pdm.bin')
 
-    # mpo for particle number correlation
-    _print("build 1npc mpo", time.perf_counter() - tx)
-    nmpo = NPC1MPOQC(hamil)
-    nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True,
-                         OpNamesSet((OpNames.R, OpNames.RD)))
+    if has_1npc:
+        # mpo for particle number correlation
+        _print("build 1npc mpo", time.perf_counter() - tx)
+        nmpo = NPC1MPOQC(hamil)
+        nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True,
+                            OpNamesSet((OpNames.R, OpNames.RD)))
 
-    if MPI is None or MPI.rank == 0:
-        nmpo.save_data(scratch + '/mpo-1npc.bin')
+        if MPI is None or MPI.rank == 0:
+            nmpo.save_data(scratch + '/mpo-1npc.bin')
 
     # mpo for identity operator
     _print("build identity mpo", time.perf_counter() - tx)
@@ -622,6 +728,8 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         impo.save_data(scratch + '/mpo-ident.bin')
+    
+    Global.threading.n_threads_global = ntg
 
     if para_pre_run:
         if MPI is not None:
@@ -632,7 +740,8 @@ if pre_run or not no_pre_run:
             pmpo = ParallelMPO(pmpo, prule_pdm1)
             if has_2pdm:
                 p2mpo = ParallelMPO(p2mpo, prule_pdm2)
-            nmpo = ParallelMPO(nmpo, prule_pdm1)
+            if has_1npc:
+                nmpo = ParallelMPO(nmpo, prule_pdm1)
             impo = ParallelMPO(impo, prule_ident)
 
         _print("para mpo finished", time.perf_counter() - tx)
@@ -651,8 +760,9 @@ if pre_run or not no_pre_run:
         if has_2pdm:
             p2mpo.reduce_data()
             p2mpo.save_data(scratch + '/mpo-2pdm.bin.%d' % mrank)
-        nmpo.reduce_data()
-        nmpo.save_data(scratch + '/mpo-1npc.bin.%d' % mrank)
+        if has_1npc:
+            nmpo.reduce_data()
+            nmpo.save_data(scratch + '/mpo-1npc.bin.%d' % mrank)
         impo.reduce_data()
         impo.save_data(scratch + '/mpo-ident.bin.%d' % mrank)
 
@@ -679,11 +789,12 @@ else:
             _print('2PDM MPO BOND DIMS = ', ''.join(
                 ["%6d" % (x.m * x.n) for x in p2mpo.left_operator_names]))
 
-        nmpo = MPO(0)
-        nmpo.load_data(scratch + '/mpo-1npc.bin')
+        if has_1npc:
+            nmpo = MPO(0)
+            nmpo.load_data(scratch + '/mpo-1npc.bin')
 
-        _print('1NPC MPO BOND DIMS = ', ''.join(
-            ["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
+            _print('1NPC MPO BOND DIMS = ', ''.join(
+                ["%6d" % (x.m * x.n) for x in nmpo.left_operator_names]))
 
         impo = MPO(0)
         impo.load_data(scratch + '/mpo-ident.bin')
@@ -701,14 +812,16 @@ else:
             pmpo = ParallelMPO(0, prule_pdm1)
             if has_2pdm:
                 p2mpo = ParallelMPO(0, prule_pdm2)
-            nmpo = ParallelMPO(0, prule_pdm1)
+            if has_1npc:
+                nmpo = ParallelMPO(0, prule_pdm1)
             impo = ParallelMPO(0, prule_ident)
         else:
             mpo = MPO(0)
             pmpo = MPO(0)
             if has_2pdm:
                 p2mpo = MPO(0)
-            nmpo = MPO(0)
+            if has_1npc:
+                nmpo = MPO(0)
             impo = MPO(0)
 
         mrank = MPI.rank if MPI is not None else 0
@@ -716,7 +829,8 @@ else:
         pmpo.load_data(scratch + '/mpo-1pdm.bin.%d' % mrank, minimal=True)
         if has_2pdm:
             p2mpo.load_data(scratch + '/mpo-2pdm.bin.%d' % mrank, minimal=True)
-        nmpo.load_data(scratch + '/mpo-1npc.bin.%d' % mrank, minimal=True)
+        if has_1npc:
+            nmpo.load_data(scratch + '/mpo-1npc.bin.%d' % mrank, minimal=True)
         impo.load_data(scratch + '/mpo-ident.bin.%d' % mrank, minimal=True)
 
 try:
@@ -939,7 +1053,8 @@ if not pre_run:
             pmpo = ParallelMPO(pmpo, prule_pdm1)
             if has_2pdm:
                 p2mpo = ParallelMPO(p2mpo, prule_pdm2)
-            nmpo = ParallelMPO(nmpo, prule_pdm1)
+            if has_1npc:
+                nmpo = ParallelMPO(nmpo, prule_pdm1)
             impo = ParallelMPO(impo, prule_ident)
 
         _print("para mpo finished", time.perf_counter() - tx)
@@ -1092,7 +1207,13 @@ if not pre_run:
 
         _print("env init finished", time.perf_counter() - tx)
 
-        dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+        if big_site_method is not None:
+            dmrg = DMRGBigSite(me, VectorUBond(bond_dims), VectorDouble(noises))
+            dmrg.last_site_svd = True
+            dmrg.last_site_1site = dot == 2
+            dmrg.decomp_last_site = False
+        else:
+            dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
         dmrg.iprint = max(min(outputlevel, 3), 0)
         if "lowmem_noise" in dic:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
@@ -1113,10 +1234,12 @@ if not pre_run:
             # save the twodot part energies and discarded weights
             sweep_energies.append(np.array(dmrg.energies))
             discarded_weights.append(np.array(dmrg.discarded_weights))
-            dmrg.me.dot = 1
+            if big_site_method is not None:
+                dmrg.last_site_1site = False
             dmrg.bond_dims = VectorUBond(bond_dims[tto:])
             dmrg.noises = VectorDouble(noises[tto:])
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
+            dmrg.me.dot = 1
             E_dmrg = dmrg.solve(len(bond_dims) - tto,
                                 mps.center == 0, sweep_tol)
             mps.dot = 1
@@ -1190,7 +1313,15 @@ if not pre_run:
                                     right=0.95, top=0.95)
                 plt.savefig(scratch + "/extrapolation.png", dpi=600)
 
-        _print("DMRG Energy = %20.15f" % E_dmrg)
+        if dynamic_corr_method is not None:
+            if dynamic_corr_method[0] in ['casci', 'nevpt2s', 'nevpt2sd']:
+                _print("DMRG-CASCI Energy = %20.15f" % E_dmrg)
+            elif dynamic_corr_method[0] in ['dmrgfci']:
+                _print("DMRG-FCI Energy = %20.15f" % E_dmrg)
+            elif dynamic_corr_method[0] in ['mrcis', 'mrcisd', 'mrcisdt']:
+                _print("DMRG-%s Energy = %20.15f" % (dynamic_corr_method[0].upper(), E_dmrg))
+        else:
+            _print("DMRG Energy = %20.15f" % E_dmrg)
 
         if MPI is None or MPI.rank == 0:
             mps_info.save_data(scratch + '/mps_info.bin')
@@ -1283,10 +1414,10 @@ if not pre_run:
         expect.solve(True, kmps.center == 0)
 
         if MPI is None or MPI.rank == 0:
-            dmr = expect.get_1pdm(me.n_sites)
+            dmr = expect.get_1pdm(n_orbs)
             dm = np.array(dmr).copy()
             dmr.deallocate()
-            dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
+            dm = dm.reshape((n_orbs, 2, n_orbs, 2))
             dm = np.transpose(dm, (0, 2, 1, 3))
             dm = np.concatenate(
                 [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
@@ -1502,10 +1633,10 @@ if not pre_run:
 
         if MPI is None or MPI.rank == 0:
             if SX == SZ:
-                dmr = expect.get_1npc(0, me.n_sites)
+                dmr = expect.get_1npc(0, n_orbs)
                 dm = np.array(dmr).copy()
                 dmr.deallocate()
-                dm = dm.reshape((me.n_sites, 2, me.n_sites, 2))
+                dm = dm.reshape((n_orbs, 2, n_orbs, 2))
                 dm = np.transpose(dm, (0, 2, 1, 3))
                 dm = np.concatenate(
                     [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
@@ -1513,10 +1644,10 @@ if not pre_run:
                     rev_idx = np.argsort(orb_idx)
                     dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
             else:
-                dmr = expect.get_1npc_spatial(0, me.n_sites)
+                dmr = expect.get_1npc_spatial(0, n_orbs)
                 dm_pure = np.array(dmr).copy()
                 dmr.deallocate()
-                dmr = expect.get_1npc_spatial(1, me.n_sites)
+                dmr = expect.get_1npc_spatial(1, n_orbs)
                 dm_mix = np.array(dmr).copy()
                 dmr.deallocate()
                 dm = np.concatenate(
@@ -1554,10 +1685,10 @@ if not pre_run:
         expect.solve(True, kmps.center == 0)
 
         if MPI is None or MPI.rank == 0:
-            dmr = expect.get_2pdm(me.n_sites)
+            dmr = expect.get_2pdm(n_orbs)
             dm = np.array(dmr, copy=True)
-            dm = dm.reshape((me.n_sites, 2, me.n_sites, 2,
-                             me.n_sites, 2, me.n_sites, 2))
+            dm = dm.reshape((n_orbs, 2, n_orbs, 2,
+                             n_orbs, 2, n_orbs, 2))
             dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
             dm = np.concatenate([dm[None, :, :, :, :, 0, 0, 0, 0], dm[None, :, :, :, :, 0, 1, 1, 0],
                                  dm[None, :, :, :, :, 1, 1, 1, 1]], axis=0)
@@ -1698,7 +1829,224 @@ if not pre_run:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_oh.npy", mat_oh)
+    
+    # NEVPT2
+    if dynamic_corr_method is not None and dynamic_corr_method[0] in ["nevpt2s", "nevpt2sd"]:
 
+        if fcidump is None:
+            raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'necpt2'!")
+        if MPI is not None:
+            MPI.barrier()
+        fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)
+        dm = np.load(scratch + "/1pdm.npy")
+        if fcidump.uhf:
+            dmx = np.zeros((dm.shape[0] * 2, dm.shape[1] * 2))
+            dmx[0::2, 0::2] = dm[0]
+            dmx[1::2, 1::2] = dm[1]
+            fd_dyall.initialize_from_1pdm_sz(dmx)
+        else:
+            fd_dyall.initialize_from_1pdm_su2(dm[0] + dm[1])
+        e_casci = float(np.load(scratch + "/E_dmrg.npy"))
+
+        sym_error = fd_dyall.symmetrize(orb_sym)
+        _print("integral sym error = %12.4g" % sym_error)
+        if sym_error > symmetrize_ints_tol:
+            raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
+                                "please check point group symmetry and FCIDUMP or set" +
+                                " a higher tolerance for the keyword '%s'") % (
+                symmetrize_ints_tol, "symmetrize_ints"))
+
+        if big_site_method is not None:
+            big_left = SimplifiedBigSite(big_left_orig, NoTransposeRule(simpl_rule))
+            big_right = SimplifiedBigSite(big_right_orig, NoTransposeRule(simpl_rule))
+            if MPI is not None:
+                if one_body_only:
+                    big_left = ParallelBigSite(big_left, prule_one_body)
+                    big_right = ParallelBigSite(big_right, prule_one_body)
+                else:
+                    big_left = ParallelBigSite(big_left, prule)
+                    big_right = ParallelBigSite(big_right, prule)
+            hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fcidump,
+                None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+        if big_site_method is None:
+            hm_dyall = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fd_dyall)
+        else:
+            if big_site_method == "fock":
+                assert dynamic_corr_method is not None
+                assert "nonspinadapted" in dic
+                if dynamic_corr_method[0] in ['nevpt2sd']:
+                    xl = -2, -2, -2
+                    xr = 2, 2, 2
+                elif dynamic_corr_method[0] in ['nevpt2s']:
+                    xl = -1, -1, -1
+                    xr = 1, 1, 1
+                else:
+                    assert False
+                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_dyall, VectorUInt8(orb_sym), *xl, True)
+                big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_dyall, VectorUInt8(orb_sym), *xr, True)
+            else:
+                raise NotImplementedError
+            big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
+            big_right = SimplifiedBigSite(big_right_orig, simpl_rule)
+            if MPI is not None:
+                if one_body_only:
+                    big_left = ParallelBigSite(big_left, prule_one_body)
+                    big_right = ParallelBigSite(big_right, prule_one_body)
+                else:
+                    big_left = ParallelBigSite(big_left, prule)
+                    big_right = ParallelBigSite(big_right, prule)
+            hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fd_dyall,
+                None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+        
+        if big_site_method == "fock":
+            Global.threading.n_threads_global = 1
+
+        # left mpo
+        _print("build left mpo", time.perf_counter() - tx)
+        lmpo = MPOQC(hm_dyall, qc_type)
+        _print("simpl left mpo", time.perf_counter() - tx)
+        lmpo = SimplifiedMPO(lmpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        _print("simpl left mpo finished", time.perf_counter() - tx)
+        lmpo.const_e -= e_casci
+        lmpo = lmpo * -1
+
+        _print('LEFT MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in lmpo.left_operator_names]))
+
+        if MPI is None or MPI.rank == 0:
+            lmpo.save_data(scratch + '/lmpo.bin')
+        
+        # right mpo
+        _print("build right mpo", time.perf_counter() - tx)
+        rmpo = MPOQC(hamil, qc_type)
+        _print("simpl right mpo", time.perf_counter() - tx)
+        rmpo = SimplifiedMPO(rmpo, NoTransposeRule(simpl_rule),
+            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        _print("simpl right mpo finished", time.perf_counter() - tx)
+        rmpo.const_e -= e_casci
+
+        _print('RIGHT MPO BOND DIMS = ', ''.join(
+            ["%6d" % (x.m * x.n) for x in rmpo.left_operator_names]))
+
+        if MPI is None or MPI.rank == 0:
+            rmpo.save_data(scratch + '/rmpo.bin')
+        
+        Global.threading.n_threads_global = ntg
+
+        if not para_no_pre_run:
+
+            if MPI is not None:
+                if one_body_only:
+                    lmpo = ParallelMPO(lmpo, prule_one_body)
+                    rmpo = ParallelMPO(rmpo, prule_one_body)
+                else:
+                    lmpo = ParallelMPO(lmpo, prule)
+                    rmpo = ParallelMPO(rmpo, prule)
+
+            _print("para left/right mpo finished", time.perf_counter() - tx)
+        
+        mps.dot = dot
+        if mps.center == mps.n_sites - 1 and mps.dot == 2:
+            mps.center = mps.n_sites - 2
+
+        # bra mps
+        if big_site_method is not None:
+            bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+        else:
+            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']
+            ci_order = len(dynamic_corr_method[0]) - 6
+            bra_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+
+        if singlet_embedding and SX == SU2:
+            left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
+            right_vacuum = vacuum
+            if "full_fci_space" in dic:
+                bra_info.set_bond_dimension_full_fci(left_vacuum, right_vacuum)
+            else:
+                bra_info.set_bond_dimension_fci(left_vacuum, right_vacuum)
+        else:
+            if "full_fci_space" in dic:
+                bra_info.set_bond_dimension_full_fci()
+        bra_info.tag = 'BRA'
+
+        while bra_info.tag == mps_info.tag:
+            bra_info.tag += 'X'
+        bra_info.set_bond_dimension(bond_dims[0])
+        if MPI is None or MPI.rank == 0:
+            bra_info.save_data(scratch + '/nevpt2_mps_info.bin')
+            bra_info.save_data(scratch + '/%s-mps_info.bin' % bra_info.tag)
+        bra = MPS(n_sites, mps.center, dot)
+        bra.initialize(bra_info)
+        bra.random_canonicalize()
+        bra.tensors[bra.center].normalize()
+        bra.save_mutable()
+        bra.deallocate()
+        bra_info.save_mutable()
+        bra_info.deallocate_mutable()
+
+        if MPI is not None:
+            MPI.barrier()
+        if bra.center == 0 and bra.dot == 2:
+            bra.move_left(hamil.opf.cg, prule)
+        elif bra.center == bra.n_sites - 2 and bra.dot == 2:
+            bra.move_right(hamil.opf.cg, prule)
+        bra.center = mps.center
+        if MPI is not None:
+            MPI.barrier()
+
+        _print("BRA MPS = ", bra.canonical_form, bra.center, bra.dot, bra.info.target)
+        _print("BRA INIT MPS BOND DIMS = ", ''.join(
+            ["%6d" % x.n_states_total for x in bra_info.left_dims]))
+        
+        tx = time.perf_counter()
+
+        lme = MovingEnvironment(lmpo, bra, bra, "LME")
+        lme.init_environments(outputlevel >= 2)
+        lme.delayed_contraction = OpNamesSet.normal_ops()
+        lme.cached_contraction = False
+        rme = MovingEnvironment(rmpo, bra, mps, "RME")
+        rme.init_environments(outputlevel >= 2)
+
+        _print("env init finished", time.perf_counter() - tx)
+        
+        right_bdims = VectorUBond([mps_info.bond_dim + 400])
+        if big_site_method is not None:
+            linear = LinearBigSite(lme, rme, None, VectorUBond(bond_dims), right_bdims, VectorDouble(noises))
+            linear.last_site_svd = True
+            linear.last_site_1site = dot == 2
+            linear.decomp_last_site = False
+        else:
+            linear = Linear(lme, rme, None, VectorUBond(bond_dims), right_bdims, VectorDouble(noises))
+        linear.iprint = max(min(outputlevel, 3), 0)
+        if "lowmem_noise" in dic:
+            linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+        else:
+            linear.noise_type = NoiseTypes.ReducedPerturbativeCollected
+        linear.cutoff = float(dic.get("cutoff", 1E-14))
+        linear.decomp_type = decomp_type
+        linear.trunc_type = trunc_type
+        linear.minres_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
+
+        e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        nevpt_sweep_energies = np.array(linear.targets)
+        nevpt_discarded_weights = np.array(linear.discarded_weights)
+
+        if MPI is None or MPI.rank == 0:
+            bdims = bond_dims[:len(nevpt_discarded_weights)]
+            if len(bdims) < len(nevpt_discarded_weights):
+                bdims = bdims + bdims[-1:] * \
+                    (len(nevpt_discarded_weights) - len(bdims))
+            np.save(scratch + "/E_nevpt2.npy", e_casci + e_corr)
+            np.save(scratch + "/nevpt2_e_corr.npy", e_corr)
+            np.save(scratch + "/nevpt2_bond_dims.npy", bdims)
+            np.save(scratch + "/nevpt2_sweep_energies.npy", nevpt_sweep_energies)
+            np.save(scratch + "/nevpt2_discarded_weights.npy", nevpt_discarded_weights)
+        
+        _print("DMRG-CASCI  Energy     = %20.15f" % e_casci)
+        _print("DMRG-NEVPT2 Correction = %20.15f" % e_corr)
+        _print("DMRG-NEVPT2 Energy     = %20.15f" % (e_corr + e_casci))
+
+    # MPS copy/transform
     if "restart_copy_mps" in dic or "copy_mps" in dic:
 
         if "restart_copy_mps" in dic:
@@ -1790,6 +2138,7 @@ if not pre_run:
 
         mps = cp_mps
 
+    # CSF/DET coefficients
     if "restart_sample" in dic or "sample" in dic:
 
         if "restart_sample" in dic:
