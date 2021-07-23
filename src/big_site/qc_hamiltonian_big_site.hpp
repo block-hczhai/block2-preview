@@ -36,13 +36,13 @@
 #include <utility>
 #include <vector>
 
-/** MRCI Hamiltonian. */
+/** Big-site Hamiltonian. */
 
 using namespace std;
 
 namespace block2 {
 
-/** HamiltonianQC with left and/or right ig sites. */
+/** HamiltonianQC with left and/or right big sites. */
 template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
     using HamiltonianQC<S>::n_syms;
     using HamiltonianQC<S>::n_sites;

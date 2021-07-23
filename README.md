@@ -15,7 +15,7 @@ The block2 code is developed and maintained in Garnet Chan group at Caltech.
 Main contributors:
 
 * Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
-* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI
+* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI and big site
 * Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
 If you find this package useful for your scientific research, please cite the work as:

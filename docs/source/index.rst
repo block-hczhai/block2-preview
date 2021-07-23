@@ -21,7 +21,7 @@ Contributors
 """"""""""""
 
 * Huanchen Zhai `@hczhai <https://github.com/hczhai>`_: DMRG and parallelization
-* Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI
+* Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI and big site
 * Zhi-Hao Cui `@zhcui <https://github.com/zhcui>`_: user interface
 
 Features
