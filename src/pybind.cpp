@@ -24,8 +24,8 @@
 #include "pybind/pybind_dmrg.hpp"
 #endif
 
-#ifdef _USE_MRCI
-#include "pybind/pybind_mrci.hpp"
+#ifdef _USE_BIG_SITE
+#include "pybind/pybind_big_site.hpp"
 #endif
 
 #ifdef _USE_SCI
@@ -69,7 +69,7 @@ PYBIND11_MODULE(block2, m) {
     bind_trans_mps_spin_specific<SU2, SZ>(m_su2, "sz");
 #endif
 
-#ifdef _USE_MRCI
+#ifdef _USE_BIG_SITE
     bind_big_site<SU2>(m_su2);
     bind_hamiltonian_big_site<SU2>(m_su2);
     bind_dmrg_big_site<SU2>(m_su2);

@@ -27,7 +27,7 @@
 
 #include "../block2_core.hpp"
 #include "../block2_dmrg.hpp"
-#include "../block2_mrci.hpp"
+#include "../block2_big_site.hpp"
 
 namespace py = pybind11;
 using namespace block2;

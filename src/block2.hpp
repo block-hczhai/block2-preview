@@ -26,8 +26,8 @@
 #include "block2_dmrg.hpp"
 #endif
 
-#ifdef _USE_MRCI
-#include "block2_mrci.hpp"
+#ifdef _USE_BIG_SITE
+#include "block2_big_site.hpp"
 #endif
 
 #ifdef _USE_SCI

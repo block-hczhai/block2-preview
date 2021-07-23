@@ -687,7 +687,7 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
                 if (h_eff->op->ropt->ops[me->mpo->op]->get_type() !=
                     SparseMatrixTypes::CSR)
                     throw std::runtime_error(
-                        "MRCIAQCC: No CSRSparseMatrix is used?");
+                        "DMRGBigSiteAQCCOLD: No CSRSparseMatrix is used?");
                 auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(
                     h_eff->op->ropt->ops[me->mpo->op]);
                 modify_H_mats(Hop, false, shift);
@@ -818,7 +818,7 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
             if (op.name == OpNames::H) {
                 if (p.second->get_type() != SparseMatrixTypes::CSR)
                     throw std::runtime_error(
-                        "MRCIAQCC: No CSRSparseMatrix is used?");
+                        "DMRGBigSiteAQCCOLD: No CSRSparseMatrix is used?");
                 auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
                 modify_H_mats(Hop, save, diag_shift);
                 break;
