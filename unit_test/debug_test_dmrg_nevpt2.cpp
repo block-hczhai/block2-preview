@@ -15,6 +15,7 @@ class TestDMRG : public ::testing::Test {
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
             16, 1);
@@ -126,6 +127,7 @@ TEST_F(TestDMRG, Test) {
     cout << "INIT start" << endl;
     me->init_environments(true);
     me->delayed_contraction = OpNamesSet::normal_ops();
+    me->cached_contraction = true;
     cout << "INIT end .. T = " << t.get_time() << endl;
 
     // DMRG
