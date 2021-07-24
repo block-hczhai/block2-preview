@@ -1834,7 +1834,7 @@ if not pre_run:
     if dynamic_corr_method is not None and dynamic_corr_method[0] in ["nevpt2s", "nevpt2sd"]:
 
         if fcidump is None:
-            raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'necpt2'!")
+            raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'nevpt2'!")
         if MPI is not None:
             MPI.barrier()
         fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "matrix.hpp"
 #include "integral.hpp"
 
 using namespace std;
