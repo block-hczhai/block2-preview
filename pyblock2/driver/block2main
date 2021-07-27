@@ -467,7 +467,8 @@ def fmt_size(i, suffix='B'):
 
 
 # prepare mps
-if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic):
+if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic) \
+   or "stopt_sampling" in dic:
     nroots = len(mps_tags)
     mps = None
     mps_info = None
@@ -2111,6 +2112,7 @@ if not pre_run:
 
 
         #    print(lmps.canonical_form)
+
 #TODO: generalize the use of tags
 #            if "restart_copy_mps" in dic:
 #                copy_tag = dic["restart_copy_mps"]
@@ -2118,93 +2120,93 @@ if not pre_run:
 #                copy_tag = dic["copy_mps"]           
 #            else:
 
-        if "stopt_dmrg" in dic or "stopt_compression" in dic:
-
-            _print(str(mps.canonical_form))
-            if "stopt_dmrg" in dic:
-                mps_info = MPSInfo(0)
-                if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
-                    mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
-                else:
-                    mps_info.load_data(scratch + "/mps_info.bin")
-                mps_info.tag = mps_tags[0]
-                mps_info.load_mutable()
-                max_bdim = max([x.n_states_total for x in mps_info.left_dims])
-                if mps_info.bond_dim < max_bdim:
-                    mps_info.bond_dim = max_bdim
-                max_bdim = max([x.n_states_total for x in mps_info.right_dims])
-                if mps_info.bond_dim < max_bdim:
-                    mps_info.bond_dim = max_bdim
-                mps = MPS(mps_info)
-                mps.load_data()
-                if mps.dot != dot and nroots == 1:
-                    if MPI is not None:
-                        MPI.barrier()
-                    mps.dot = dot
-                    mps.save_data()
-                    if MPI is not None:
-                        MPI.barrier()
-                mps.load_mutable()
-                forward = mps.center == 0
-                if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
-                    mps.center += 1
-                    forward = True
-                elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
-                    mps.center -= 1
-                    forward = False
-                elif mps.center == mps.n_sites - 1 and mps.dot == 2 and nroots == 1:
-                    if MPI is not None:
-                        MPI.barrier()
-                    if mps.canonical_form[mps.center] == 'K':
-                        cg = CG(200)
-                        cg.initialize()
-                        mps.flip_fused_form(mps.center, cg, prule)
-                    mps.center = mps.n_sites - 2
-                    mps.save_data()
-                    forward = False
-                    if MPI is not None:
-                        MPI.barrier()
-                    mps.load_mutable()
-                    mps.info.load_mutable()
-                    if MPI is not None:
-                        MPI.barrier()
-                elif mps.center == 0 and mps.dot == 2 and nroots == 1:
-                    if MPI is not None:
-                        MPI.barrier()
-                    if mps.canonical_form[mps.center] == 'S':
-                        cg = CG(200)
-                        cg.initialize()
-                        mps.flip_fused_form(mps.center, cg, prule)
-                    mps.save_data()
-                    forward = True
-                    if MPI is not None:
-                        MPI.barrier()
-                    mps.load_mutable()
-                    mps.info.load_mutable()
-                    if MPI is not None:
-                        MPI.barrier()
-            if "stopt_dmrg" in dic:
+        if "stopt_dmrg" in dic:
+            if "copy_mps" not in dic: 
                 copy_tag = 'ZKET' 
-            elif "stopt_compression" in dic:
+
+            mps_info = MPSInfo(0)
+            if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
+                mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
+            else:
+                mps_info.load_data(scratch + "/mps_info.bin")
+            mps_info.tag = mps_tags[0]
+            mps_info.load_mutable()
+            max_bdim = max([x.n_states_total for x in mps_info.left_dims])
+            if mps_info.bond_dim < max_bdim:
+                mps_info.bond_dim = max_bdim
+            max_bdim = max([x.n_states_total for x in mps_info.right_dims])
+            if mps_info.bond_dim < max_bdim:
+                mps_info.bond_dim = max_bdim
+            mps = MPS(mps_info)
+            mps.load_data()
+            if mps.dot != dot and nroots == 1:
+                if MPI is not None:
+                    MPI.barrier()
+                mps.dot = dot
+                mps.save_data()
+                if MPI is not None:
+                    MPI.barrier()
+            mps.load_mutable()
+            forward = mps.center == 0
+            if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
+                mps.center += 1
+                forward = True
+            elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
+                mps.center -= 1
+                forward = False
+            elif mps.center == mps.n_sites - 1 and mps.dot == 2 and nroots == 1:
+                if MPI is not None:
+                    MPI.barrier()
+                if mps.canonical_form[mps.center] == 'K':
+                    cg = CG(200)
+                    cg.initialize()
+                    mps.flip_fused_form(mps.center, cg, prule)
+                mps.center = mps.n_sites - 2
+                mps.save_data()
+                forward = False
+                if MPI is not None:
+                    MPI.barrier()
+                mps.load_mutable()
+                mps.info.load_mutable()
+                if MPI is not None:
+                    MPI.barrier()
+            elif mps.center == 0 and mps.dot == 2 and nroots == 1:
+                if MPI is not None:
+                    MPI.barrier()
+                if mps.canonical_form[mps.center] == 'S':
+                    cg = CG(200)
+                    cg.initialize()
+                    mps.flip_fused_form(mps.center, cg, prule)
+                mps.save_data()
+                forward = True
+                if MPI is not None:
+                    MPI.barrier()
+                mps.load_mutable()
+                mps.info.load_mutable()
+                if MPI is not None:
+                    MPI.barrier()
+        elif "stopt_compression" in dic:
+            if "copy_mps" not in dic: 
                 copy_tag = 'ZBRA' 
 
-        if mps.center != 0:
-            _print('change canonical form ...')
-            cf = str(mps.canonical_form)
-            ime = MovingEnvironment(impo, mps, mps, "IEX")
-            ime.delayed_contraction = OpNamesSet.normal_ops()
-            ime.cached_contraction = cached_contraction
-            ime.init_environments(False)
-            expect = Expect(ime, mps.info.bond_dim, mps.info.bond_dim)
-            expect.iprint = max(min(outputlevel, 3), 0)
-            expect.solve(True, mps.center == 0)
-            if MPI is not None:
-                MPI.barrier()
-            mps.save_data()
-            if MPI is not None:
-                MPI.barrier()
-            _print(cf + ' -> ' + mps.canonical_form)
-            assert(mps.center == 0)
+        if ("stopt_dmrg" in dic or "stopt_compression" in dic) \
+           and mps.center != 0:
+                _print('change canonical form ...')
+                cf = str(mps.canonical_form)
+                ime = MovingEnvironment(impo, mps, mps, "IEX")
+                ime.delayed_contraction = OpNamesSet.normal_ops()
+                ime.cached_contraction = cached_contraction
+                ime.init_environments(False)
+                expect = Expect(ime, mps.info.bond_dim, mps.info.bond_dim)
+                expect.iprint = max(min(outputlevel, 3), 0)
+                expect.solve(True, mps.center == 0)
+                if MPI is not None:
+                    MPI.barrier()
+                mps.save_data()
+                if MPI is not None:
+                    MPI.barrier()
+                _print(cf + ' -> ' + mps.canonical_form)
+                assert(mps.center == 0)
 
         if copy_tag == '':
             raise ValueError(
@@ -2291,17 +2293,21 @@ if not pre_run:
 
         mps = cp_mps
 
-    # stoptDMRG sampling
-    # : sampling DET is only supported 
-    #nsample=1000
+    # stoptDMRG sampling (sampling CSF is not supported yet) 
     if "stopt_sampling" in dic:
         nsample = int(dic.get("stopt_sampling", 0))
         from stopt import spDMRG
-        spdmrg = spDMRG(scratch=scratch, fcidump=fcidump) 
-        #spdmrg = spDMRG(scratch=scratch) 
-        #spdmrg.init_hamiltonian_fcidump('c1', 'H0')
+        spdmrg = spDMRG(scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=0) 
+        e_corr, std_corr = spdmrg.kernel(nsample)
 
-        spdmrg.kernel(nsample)
+        if MPI is None or MPI.rank == 0:
+            np.save(scratch + "/E_stopt.npy", spdmrg.Edmrg + e_corr)
+            np.save(scratch + "/stopt_e_corr.npy", e_corr)
+            np.save(scratch + "/stopt_std_corr.npy", std_corr)
+        
+        _print("      DMRG Energy     = %20.15f" % spdmrg.Edmrg)
+        _print("stopt-DMRG Correction = %20.15f (%20.15f)" % (e_corr, std_corr))
+        _print("stopt-DMRG Energy     = %20.15f (%20.15f)" % (spdmrg.Edmrg+e_corr, std_corr))
 
     # CSF/DET coefficients
     if "restart_sample" in dic or "sample" in dic:

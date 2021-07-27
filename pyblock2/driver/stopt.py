@@ -62,7 +62,7 @@ class spDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, scratch='./nodex', verbose=0, fcidump=None):
+    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -75,23 +75,25 @@ class spDMRG:
 
         self.Edmrg = float(np.load(self.scratch + '/E_dmrg.npy'))
 
+        if len(mps_tags) == 1 and mps_tags[0] == "KET":
+            mps_tags=['ZKET', 'ZBRA']
+        else:
+            assert len(mps_tags) == 2
+
         mps1_info = MPSInfo(0)
-        mps1_info.load_data(self.scratch + '/ZKET-mps_info.bin')
+        mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
         mps1.load_data()
-        print(mps1.canonical_form)
         self.mps_psi0 = UnfusedMPS(mps1)
 
         mps2_info = MPSInfo(0)
-        mps2_info.load_data(self.scratch + '/ZBRA-mps_info.bin')
+        mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
         mps2.load_data()
-        print(mps2.canonical_form)
         self.mps_qvpsi0 = UnfusedMPS(mps2)
 
         self.norm_qvpsi0  = float(np.load(self.scratch + '/cps_overlap.npy'))
         self.norm_qvpsi0  = self.norm_qvpsi0*self.norm_qvpsi0
-        print(self.norm_qvpsi0)
 
         self.spDMRG = stoptDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
         self.n_sites = self.spDMRG.n_sites
@@ -104,9 +106,7 @@ class spDMRG:
             one_pdm = np.load(scratch + "/1pdm.npy")
 
             E_0 = self.spDMRG.E0(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
-            print('E_0',E_0)
             self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
-            print('core E',self.fcidump.const_e)
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file.
@@ -136,10 +136,11 @@ class spDMRG:
     def kernel(self, max_samp):
 # 1] Importance Sampling of Determinant
 # 1-1] C term
-        _print("1] IMPORTANT SAMPLING")
-        _print("1-1] C term")
-        _print("     sampling D_p with P_p = |<Phi_0|D_p>|^2")
-        _print("     & computing <1/(E_d-E_0)>")
+        if self.verbose > 0:
+            _print("1] IMPORTANT SAMPLING")
+            _print("1-1] C term")
+            _print("     sampling D_p with P_p = |<Phi_0|D_p>|^2")
+            _print("     & computing <1/(E_d-E_0)>")
         #TODO: canonicalinze mps_psi0 as CRR...R
         Cterm = []
         H00   = 0.0
@@ -172,6 +173,8 @@ class spDMRG:
             print('reduced ', H00 / msize)
             avg_Cterm = H00 / msize 
             std_Cterm = np.sqrt(( H00_2 / msize - avg_Cterm*avg_Cterm)/float(max_samp))
+
+        if mrank == 0 and self.verbose > 0: 
             _print(" C term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
             _print("")
 
@@ -182,7 +185,10 @@ class spDMRG:
         Aterm = []
         Bterm = []
         max_samp_per_rank = max_samp // msize
+        print_samp = max_samp // 10 
         for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
+            if num_samp % print_samp ==0:
+                _print( '%d processor: sampling %d %% done'%(mrank, (num_samp//print_samp+1)*10) )
             # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
             self.spDMRG.sampling_ab()
             # calculate dE_p = < D_p | H_d | D_p > - E0
@@ -218,6 +224,7 @@ class spDMRG:
             std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
                        * ( 2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
 
+        if mrank == 0 and self.verbose > 0: 
             _print("")
             _print("         ===============")
             _print("         === SUMMARY ===")
@@ -231,6 +238,8 @@ class spDMRG:
             _print("     MP2 Energy = %15.10f (%15.10f)"%(Emp2, std_Emp2))
             _print(" --------------------------------")
             _print(" sp-DMRG Energy = %15.10f (%15.10f)"%(self.Edmrg+Emp2, std_Emp2))
+
+        return [Emp2, std_Emp2]
 
     def __del__(self):
         if self.hamil is not None:
