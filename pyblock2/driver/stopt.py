@@ -1,6 +1,6 @@
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
-#  Copyright (C) 2020 Huanchen Zhai <hczhai@caltech.edu>
+#  Copyright (C) 2021 Seunghoon Lee <seunghoonlee89@gmail.com>
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ else:
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, UnfusedMPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
-    from block2.sz import stoptDMRG
+    from block2.sz import StocasticPDMRG
 
 # MPI
 from mpi4py import MPI as MPI
@@ -54,10 +54,10 @@ def _print(*args, **kwargs):
     if mrank == 0:
         print(*args, **kwargs)
 
-class spDMRGError(Exception):
+class SPDMRGError(Exception):
     pass
 
-class spDMRG:
+class SPDMRG:
     """
     stochastic perturbative DMRG for molecules.
     """
@@ -84,19 +84,21 @@ class spDMRG:
         mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
         mps1.load_data()
+        self.change_mps_center(mps1, 0)
         self.mps_psi0 = UnfusedMPS(mps1)
 
         mps2_info = MPSInfo(0)
         mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
         mps2.load_data()
+        self.change_mps_center(mps2, 0)
         self.mps_qvpsi0 = UnfusedMPS(mps2)
 
         self.norm_qvpsi0  = float(np.load(self.scratch + '/cps_overlap.npy'))
         self.norm_qvpsi0  = self.norm_qvpsi0*self.norm_qvpsi0
 
-        self.spDMRG = stoptDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
-        self.n_sites = self.spDMRG.n_sites
+        self.SPDMRG = StocasticPDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
+        self.n_sites = self.SPDMRG.n_sites
         if fcidump is not None:
             self.fcidump = fcidump
             E_dmrg = float(np.load(scratch + '/E_dmrg.npy'))
@@ -105,8 +107,26 @@ class spDMRG:
             dm_e_pqpq = np.load(scratch + '/e_pqpq.npy')
             one_pdm = np.load(scratch + "/1pdm.npy")
 
-            E_0 = self.spDMRG.E0(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
+            E_0 = self.SPDMRG.E0(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
             self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
+
+    def change_mps_center(self, ket, center):
+        if self.mpi is not None:
+            self.mpi.barrier()
+        cf = ket.canonical_form
+        if center == 0:
+            if ket.center == ket.n_sites - 2:
+                ket.center += 1
+            ket.canonical_form = ket.canonical_form[:-1] + 'S'
+            while ket.center != 0:
+                ket.move_left(mpo.tf.opf.cg, self.prule)
+        else:
+            ket.canonical_form = 'K' + ket.canonical_form[1:]
+            while ket.center != ket.n_sites - 1:
+                ket.move_right(mpo.tf.opf.cg, self.prule)
+            ket.center -= 1
+        if self.verbose >= 2:
+            _print('CF = %s --> %s' % (cf, ket.canonical_form))
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file.
@@ -136,7 +156,7 @@ class spDMRG:
     def kernel(self, max_samp):
 # 1] Importance Sampling of Determinant
 # 1-1] C term
-        if self.verbose > 0:
+        if self.verbose >= 4:
             _print("1] IMPORTANT SAMPLING")
             _print("1-1] C term")
             _print("     sampling D_p with P_p = |<Phi_0|D_p>|^2")
@@ -153,15 +173,15 @@ class spDMRG:
         max_samp_per_rank = max_samp // msize
         for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
             # sample | D_p > with P_p = |< Psi_0 | D_p >|^2
-            self.spDMRG.sampling_c()
+            self.SPDMRG.sampling_c()
             # calculate dE_p = < D_p | H_d | D_p > - E0
-            dE_p = self.fcidump.det_energy(self.spDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            #print(self.spDMRG.det_string)
+            dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
+            #print(self.SPDMRG.det_string)
             #print(dE_p, self.fcidump.const_e)
             # sampling 1/(E_p-E_0)
             H00   += 1.0 / (dE_p*float(max_samp))
             H00_2 += 1.0 / (dE_p*dE_p*float(max_samp))
-            self.spDMRG.clear()
+            self.SPDMRG.clear()
 
         print(mrank, H00)
         if msize != 0:
@@ -174,7 +194,7 @@ class spDMRG:
             avg_Cterm = H00 / msize 
             std_Cterm = np.sqrt(( H00_2 / msize - avg_Cterm*avg_Cterm)/float(max_samp))
 
-        if mrank == 0 and self.verbose > 0: 
+        if mrank == 0 and self.verbose >= 4: 
             _print(" C term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
             _print("")
 
@@ -190,21 +210,21 @@ class spDMRG:
             if num_samp % print_samp ==0:
                 _print( '%d processor: sampling %d %% done'%(mrank, (num_samp//print_samp+1)*10) )
             # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
-            self.spDMRG.sampling_ab()
+            self.SPDMRG.sampling_ab()
             # calculate dE_p = < D_p | H_d | D_p > - E0
-            dE_p = self.fcidump.det_energy(self.spDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            #print(self.spDMRG.det_string)
+            dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
+            #print(self.SPDMRG.det_string)
             #print(dE_p, self.fcidump.const_e)
             # sampling 1/(E_p-E_0)
             H11   += self.norm_qvpsi0 / (dE_p*float(max_samp))
             H11_2 += self.norm_qvpsi0*self.norm_qvpsi0 / (dE_p*dE_p*float(max_samp))
 
-            Sqv_p  = self.spDMRG.overlap_c() 
-            S_p    = self.spDMRG.overlap_ab()
+            Sqv_p  = self.SPDMRG.overlap_c() 
+            S_p    = self.SPDMRG.overlap_ab()
             tmp    = self.norm_qvpsi0*S_p / (Sqv_p*dE_p)
             H10   += tmp / float(max_samp)
             H10_2 += tmp*tmp / float(max_samp)
-            self.spDMRG.clear()
+            self.SPDMRG.clear()
 
         print(mrank, H11, H10)
         if msize != 0:
@@ -224,7 +244,7 @@ class spDMRG:
             std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
                        * ( 2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
 
-        if mrank == 0 and self.verbose > 0: 
+        if mrank == 0 and self.verbose >= 4: 
             _print("")
             _print("         ===============")
             _print("         === SUMMARY ===")
@@ -272,7 +292,7 @@ if __name__ == "__main__":
     elif pg == 'c1':
         fcidump_sym = ["A"]
     else:
-        raise spDMRGError("Point group %d not supported yet!" % pg)
+        raise SPDMRGError("Point group %d not supported yet!" % pg)
 
     Random.rand_seed(0)
     Global.threading = Threading(
@@ -283,9 +303,9 @@ if __name__ == "__main__":
                 dsize=int(memory * 0.9), save_dir=scratch)
 
     # init: load MPS for |Psi0> and QV|Psi0> as 3-legs sparse tensors
-    spdmrg = spDMRG(scratch=scratch, verbose=verbose)
-    spdmrg.init_hamiltonian_fcidump(pg, FCIDUMP)
+    SPDMRG = SPDMRG(scratch=scratch, verbose=verbose)
+    SPDMRG.init_hamiltonian_fcidump(pg, FCIDUMP)
     nsample=1
-    spdmrg.kernel(nsample)
+    SPDMRG.kernel(nsample)
 
-    del spdmrg  # IMPORTANT!!! --> to release stack memory
+    del SPDMRG  # IMPORTANT!!! --> to release stack memory
