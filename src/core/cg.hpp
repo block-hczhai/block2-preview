@@ -43,8 +43,8 @@ template <typename S> struct CG<S, typename S::is_sz_t> {
                           int tjg, int tjh, int tji) const noexcept {
         return 1.0L;
     }
-    long double racah(int ta, int tb, int tc, int td, int te, int tf) const
-        noexcept {
+    long double racah(int ta, int tb, int tc, int td, int te,
+                      int tf) const noexcept {
         return 1.0L;
     }
     long double transpose_cg(int td, int tl, int tr) const noexcept {

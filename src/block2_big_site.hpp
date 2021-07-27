@@ -21,6 +21,7 @@
 #pragma once
 
 #include "big_site/big_site.hpp"
+#include "big_site/csf_big_site.hpp"
 #include "big_site/qc_hamiltonian_big_site.hpp"
 #include "big_site/sci_fcidump.hpp"
 #include "big_site/sci_fock_big_site.hpp"

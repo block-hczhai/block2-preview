@@ -1081,7 +1081,8 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
                 if (state_info->quanta[q].n() > max_n)
                     max_n = state_info->quanta[q].n();
             for (int q = 0; q < state_info->n; ++q)
-                if (state_info->quanta[q].n() < max_n - ci_order)
+                if (state_info->quanta[q].n() < max_n - ci_order ||
+                    state_info->quanta[q].twos() > ci_order)
                     state_info->n_states[q] = 0;
         }
         // Restrict right_dims_fci

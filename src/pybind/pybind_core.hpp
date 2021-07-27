@@ -1370,11 +1370,19 @@ template <typename S = void> void bind_io(py::module &m) {
 
     py::class_<Prime, shared_ptr<Prime>>(m, "Prime")
         .def(py::init<>())
-        .def("factors", [](Prime *self, Prime::LL n) {
-            vector<pair<Prime::LL, int>> factors;
-            self->factors(n, factors);
-            return factors;
-        });
+        .def_readwrite("primes", &Prime::primes)
+        .def("factors",
+             [](Prime *self, Prime::LL n) {
+                 vector<pair<Prime::LL, int>> factors;
+                 self->factors(n, factors);
+                 return factors;
+             })
+        .def_static("miller_rabin", &Prime::miller_rabin)
+        .def("is_prime", &Prime::is_prime);
+
+    py::class_<Combinatorics, shared_ptr<Combinatorics>>(m, "Combinatorics")
+        .def(py::init<int>())
+        .def("combination", &Combinatorics::combination);
 
     py::class_<FFT, shared_ptr<FFT>>(m, "FFT")
         .def(py::init<>())

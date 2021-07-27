@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "../core/archived_tensor_functions.hpp"
 #include "../core/parallel_rule.hpp"
 #include "../core/tensor_functions.hpp"
 #include "determinant.hpp"

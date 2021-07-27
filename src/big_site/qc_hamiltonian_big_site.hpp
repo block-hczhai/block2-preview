@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "../core/csr_operator_functions.hpp"
 #include "../core/expr.hpp"
 #include "../core/integral.hpp"
 #include "../core/parallel_rule.hpp"
