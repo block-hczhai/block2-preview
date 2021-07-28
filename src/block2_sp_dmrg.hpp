@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2021 Seunghoon Lee <seunghoonlee89@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,29 +20,5 @@
 
 #pragma once
 
-#include "block2_core.hpp"
+#include "sp_dmrg/stochastic_pdmrg.hpp"
 
-#ifdef _USE_DMRG
-#include "block2_dmrg.hpp"
-#endif
-
-#ifdef _USE_BIG_SITE
-#include "block2_big_site.hpp"
-#endif
-
-#ifdef _USE_SP_DMRG
-#include "block2_sp_dmrg.hpp"
-#endif
-
-#ifdef _USE_SCI
-#include "sci/abstract_sci_wrapper.hpp"
-#include "sci/hamiltonian_sci.hpp"
-#include "sci/qc_hamiltonian_sci.hpp"
-#include "sci/qc_mpo_sci.hpp"
-#include "sci/sweep_algorithm_sci.hpp"
-#endif
-
-#undef ialloc
-#undef dalloc
-#undef frame
-#undef threading

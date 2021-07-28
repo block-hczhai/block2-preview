@@ -34,7 +34,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
-              "nevpt2sd", "big_site_fock"}
+              "nevpt2sd", "big_site_fock", "stopt_dmrg", "stopt_compression", "stopt_sampling"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -122,6 +122,26 @@ def parse(fname):
         raise ValueError(
             "Dynamic correlation keys %s and %s cannot appear simultaneously."
                 % (crs[0], crs[1]))
+
+    # stopt extra keywords
+    if "stopt_dmrg" in dic:
+        dic["onepdm"] = ""
+        dic["diag_twopdm"] = ""
+        if "copy_mps" not in dic:
+            dic["copy_mps"] = "ZKET"
+        if "nonspinadapted" not in dic:
+            dic["trans_mps_to_sz"] = ""
+    if "stopt_compression" in dic:
+        dic["compression"] = ""
+        if "mps_tags" not in dic:
+            dic["mps_tags"] = "BRA"
+        if "copy_mps" not in dic:
+            dic["copy_mps"] = "ZBRA"
+        if "nonspinadapted" not in dic:
+            dic["trans_mps_to_sz"] = ""
+    if "stopt_sampling" in dic:
+        if "mps_tags" not in dic:
+            dic["mps_tags"] = "ZKET ZBRA"
 
     # restart check
     if "restart_oh" in dic:

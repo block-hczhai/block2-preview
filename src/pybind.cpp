@@ -28,6 +28,10 @@
 #include "pybind/pybind_big_site.hpp"
 #endif
 
+#ifdef _USE_SP_DMRG
+#include "pybind/pybind_sp_dmrg.hpp"
+#endif
+
 #ifdef _USE_SCI
 #include "sci/pybind.hpp"
 #ifdef _SCI_WRAPPER2
@@ -78,6 +82,10 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg_big_site<SZ>(m_sz);
 
     bind_sci_big_site_fock<SZ>(m_sz);
+#endif
+
+#ifdef _USE_SP_DMRG
+    bind_sp_dmrg<SZ>(m_sz);
 #endif
 
 #ifdef _USE_SCI
