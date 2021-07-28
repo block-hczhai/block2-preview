@@ -35,14 +35,14 @@ import numpy as np
 SpinLabel = SZ
 
 if SpinLabel == SU2:
-    from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
     from block2.su2 import MPSInfo, MPS, UnfusedMPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
 else:
-    from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
+    from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
     from block2.sz import MPSInfo, MPS, UnfusedMPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
-    from block2.sz import StocasticPDMRG
+    from block2.sz import StochasticPDMRG
 
 # MPI
 from mpi4py import MPI as MPI
@@ -83,21 +83,29 @@ class SPDMRG:
         mps1_info = MPSInfo(0)
         mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
+        comm.barrier()
+        print (mrank)
+        if mrank == 0:
+            self.change_mps_center(mps1, 0)
+        comm.barrier()
         mps1.load_data()
-        self.change_mps_center(mps1, 0)
         self.mps_psi0 = UnfusedMPS(mps1)
 
         mps2_info = MPSInfo(0)
         mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
+        comm.barrier()
+        print (mrank)
+        if mrank == 0:
+            self.change_mps_center(mps2, 0)
+        comm.barrier()
         mps2.load_data()
-        self.change_mps_center(mps2, 0)
         self.mps_qvpsi0 = UnfusedMPS(mps2)
 
         self.norm_qvpsi0  = float(np.load(self.scratch + '/cps_overlap.npy'))
         self.norm_qvpsi0  = self.norm_qvpsi0*self.norm_qvpsi0
 
-        self.SPDMRG = StocasticPDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
+        self.SPDMRG = StochasticPDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
         self.n_sites = self.SPDMRG.n_sites
         if fcidump is not None:
             self.fcidump = fcidump
@@ -111,22 +119,27 @@ class SPDMRG:
             self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
 
     def change_mps_center(self, ket, center):
-        if self.mpi is not None:
-            self.mpi.barrier()
+        ket.load_data()
         cf = ket.canonical_form
+        print(cf)
+        cg = CG(200)
+        cg.initialize()
+        if ket.center == center:
+            return
         if center == 0:
             if ket.center == ket.n_sites - 2:
                 ket.center += 1
             ket.canonical_form = ket.canonical_form[:-1] + 'S'
             while ket.center != 0:
-                ket.move_left(mpo.tf.opf.cg, self.prule)
+                ket.move_left(cg, None)
         else:
             ket.canonical_form = 'K' + ket.canonical_form[1:]
             while ket.center != ket.n_sites - 1:
-                ket.move_right(mpo.tf.opf.cg, self.prule)
+                ket.move_right(cg, None)
             ket.center -= 1
         if self.verbose >= 2:
             _print('CF = %s --> %s' % (cf, ket.canonical_form))
+        ket.save_data()
 
     def init_hamiltonian_fcidump(self, pg, filename):
         """Read integrals from FCIDUMP file.

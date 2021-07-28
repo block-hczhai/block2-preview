@@ -129,14 +129,16 @@ def parse(fname):
         dic["diag_twopdm"] = ""
         if "copy_mps" not in dic:
             dic["copy_mps"] = "ZKET"
-        dic["trans_mps_to_sz"] = ""
+        if "nonspinadapted" not in dic:
+            dic["trans_mps_to_sz"] = ""
     if "stopt_compression" in dic:
         dic["compression"] = ""
         if "mps_tags" not in dic:
             dic["mps_tags"] = "BRA"
         if "copy_mps" not in dic:
             dic["copy_mps"] = "ZBRA"
-        dic["trans_mps_to_sz"] = ""
+        if "nonspinadapted" not in dic:
+            dic["trans_mps_to_sz"] = ""
     if "stopt_sampling" in dic:
         if "mps_tags" not in dic:
             dic["mps_tags"] = "ZKET ZBRA"

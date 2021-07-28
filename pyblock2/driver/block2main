@@ -1363,48 +1363,6 @@ if not pre_run:
         if "stopt_compression" in dic:
             mpo.const_e += E_dmrg
 
-    # stoptDMRG Compression
-    if "stopt_compression" in dic:
-        if fcidump is None:
-            raise ValueError(
-                "Need FCIDUMP construction (namely, not a pre run) for 'stopt_compression'!")
-
-        lmps, lmps_info, _ = get_mps_from_tags(-1)
-        if "random_mps_init" not in dic:
-            mps = lmps.deep_copy(mps_tags[0])
-            mps_info = mps.info
-
-        #lsh dbg
-        _print("KET MPS = ", lmps.canonical_form, lmps.center, lmps.dot, lmps.info.target, lmps.info.tag)
-        _print("BRA MPS = ", mps.canonical_form, mps.center, mps.dot, mps.info.target, mps.info.tag)
-        _print("KET INIT MPS BOND DIMS = ", ''.join(
-            ["%6d" % x.n_states_total for x in lmps_info.left_dims]))
-        _print("BRA INIT MPS BOND DIMS = ", ''.join(
-            ["%6d" % x.n_states_total for x in mps_info.left_dims]))
-
-        # mpo of QV
-        E_dmrg = np.load(scratch + "/E_dmrg.npy")
-        mpo.const_e = - E_dmrg + fcidump.const_e
-        me = MovingEnvironment(mpo, mps, lmps, "CPS")
-        me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = cached_contraction
-        me.save_partition_info = True
-        me.init_environments(outputlevel >= 2)
-
-        cps = Linear(me, VectorUBond(bond_dims),
-                     VectorUBond([lmps.info.bond_dim]))
-        cps.iprint = max(min(outputlevel, 3), 0)
-        cps.cutoff = float(dic.get("cutoff", 1E-14))
-        cps.decomp_type = decomp_type
-        cps.trunc_type = trunc_type
-        ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
-        _print("Compression overlap = %20.15f" % ovl)
-
-        if MPI is None or MPI.rank == 0:
-            np.save(scratch + "/cps_overlap.npy", ovl)
-            mps_info.save_data(scratch + '/mps_info.bin')
-            mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
-
     # Time Evolution (no complex number)
     if "delta_t" in dic:
         dt = float(dic["delta_t"])
@@ -2211,7 +2169,7 @@ if not pre_run:
             from stopt import SPDMRG
 
         nsample = int(dic.get("stopt_sampling", 10000))
-        sp_dmrg = SPDMRG(scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=1 if outputlevel >= 4 else 0) 
+        sp_dmrg = SPDMRG(scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose= outputlevel) 
         e_corr, std_corr = sp_dmrg.kernel(nsample)
 
         if MPI is None or MPI.rank == 0:
@@ -2220,8 +2178,8 @@ if not pre_run:
             np.save(scratch + "/stopt_std_corr.npy", std_corr)
         
         _print("           DMRG Energy     = %20.15f" % sp_dmrg.Edmrg)
-        _print("stocastic PDMRG Correction = %20.15f (%20.15f)" % (e_corr, std_corr))
-        _print("stocastic PDMRG Energy     = %20.15f (%20.15f)" % (sp_dmrg.Edmrg+e_corr, std_corr))
+        _print("stochastic PDMRG Correction = %20.15f (%20.15f)" % (e_corr, std_corr))
+        _print("stochastic PDMRG Energy     = %20.15f (%20.15f)" % (sp_dmrg.Edmrg+e_corr, std_corr))
 
     # CSF/DET coefficients
     if "restart_sample" in dic or "sample" in dic:
