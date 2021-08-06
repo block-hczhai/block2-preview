@@ -47,10 +47,14 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<long long int, int>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<long long int, long long int>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Tensor>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<CSRMatrixRef>>);
 // SZ
+PYBIND11_MAKE_OPAQUE(vector<SZ>);
+PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SZ>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ>>>);
@@ -74,6 +78,9 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ>>,
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
 // SU2
+PYBIND11_MAKE_OPAQUE(vector<SU2>);
+PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SU2>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpExpr<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2>>>);
@@ -340,6 +347,8 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
     bind_array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
         m, "ArrayVectorPLMatInfo");
     py::bind_vector<vector<shared_ptr<StateInfo<S>>>>(m, "VectorStateInfo");
+    py::bind_vector<vector<pair<uint8_t, S>>>(m, "VectorPUInt8S");
+    py::bind_vector<vector<vector<pair<uint8_t, S>>>>(m, "VectorVectorPUInt8S");
     py::bind_vector<vector<pair<S, double>>>(m, "VectorPSDouble");
     py::bind_vector<vector<vector<pair<S, double>>>>(m, "VectorVectorPSDouble");
     py::bind_vector<vector<vector<vector<pair<S, double>>>>>(
@@ -401,6 +410,8 @@ template <typename S> void bind_sparse(py::module &m) {
                 return self->n[4];
             })
         .def_readwrite("nc", &SparseMatrixInfo<S>::ConnectionInfo::nc)
+        .def("initialize_tp",
+             &SparseMatrixInfo<S>::ConnectionInfo::initialize_tp)
         .def("deallocate", &SparseMatrixInfo<S>::ConnectionInfo::deallocate)
         .def("__repr__",
              [](typename SparseMatrixInfo<S>::ConnectionInfo *self) {
@@ -412,6 +423,7 @@ template <typename S> void bind_sparse(py::module &m) {
     py::class_<SparseMatrixInfo<S>, shared_ptr<SparseMatrixInfo<S>>>(
         m, "SparseMatrixInfo")
         .def(py::init<>())
+        .def(py::init<const shared_ptr<Allocator<uint32_t>> &>())
         .def_readwrite("delta_quantum", &SparseMatrixInfo<S>::delta_quantum)
         .def_readwrite("is_fermion", &SparseMatrixInfo<S>::is_fermion)
         .def_readwrite("is_wavefunction", &SparseMatrixInfo<S>::is_wavefunction)
@@ -461,6 +473,7 @@ template <typename S> void bind_sparse(py::module &m) {
 
     py::class_<SparseMatrix<S>, shared_ptr<SparseMatrix<S>>>(m, "SparseMatrix")
         .def(py::init<>())
+        .def(py::init<const shared_ptr<Allocator<double>> &>())
         .def_readwrite("info", &SparseMatrix<S>::info)
         .def_readwrite("factor", &SparseMatrix<S>::factor)
         .def_readwrite("total_memory", &SparseMatrix<S>::total_memory)
@@ -945,6 +958,8 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<long long int>>(m, "VectorLLInt");
     py::bind_vector<vector<pair<int, int>>>(m, "VectorPIntInt");
     py::bind_vector<vector<pair<long long int, int>>>(m, "VectorPLLIntInt");
+    py::bind_vector<vector<pair<long long int, long long int>>>(
+        m, "VectorPLLIntLLInt");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
@@ -1710,7 +1725,12 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("sparsity", &CSRMatrixRef::sparsity)
         .def("deep_copy", &CSRMatrixRef::deep_copy)
         .def("from_dense", &CSRMatrixRef::from_dense)
-        .def("to_dense", &CSRMatrixRef::to_dense)
+        .def("to_dense",
+             [](CSRMatrixRef *self, py::array_t<double> v) {
+                 assert(v.size() == self->size());
+                 MatrixRef mat(v.mutable_data(), self->m, self->n);
+                 self->to_dense(mat);
+             })
         .def("diag", &CSRMatrixRef::diag)
         .def("trace", &CSRMatrixRef::trace)
         .def("allocate", &CSRMatrixRef::allocate)
@@ -2173,6 +2193,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<>())
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SZ *self) { return SZ::invalid; })
         .def_readwrite("data", &SZ::data)
         .def_property("n", &SZ::n, &SZ::set_n)
         .def_property("twos", &SZ::twos, &SZ::set_twos)
@@ -2200,6 +2222,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SU2 *self) { return SU2::invalid; })
         .def_readwrite("data", &SU2::data)
         .def_property("n", &SU2::n, &SU2::set_n)
         .def_property("twos", &SU2::twos, &SU2::set_twos)

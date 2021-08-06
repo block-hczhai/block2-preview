@@ -25,9 +25,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
 
+#include "../block2_big_site.hpp"
 #include "../block2_core.hpp"
 #include "../block2_dmrg.hpp"
-#include "../block2_big_site.hpp"
 
 namespace py = pybind11;
 using namespace block2;
@@ -125,6 +125,43 @@ template <typename S> void bind_sci_big_site_fock(py::module &m) {
         .def_readwrite("qnIdxKetR", &SCIFockBigSite<S>::qnIdxKetR)
         .def_readwrite("qnIdxBraC", &SCIFockBigSite<S>::qnIdxBraC)
         .def_readwrite("qnIdxKetC", &SCIFockBigSite<S>::qnIdxKetC);
+}
+
+template <typename S> void bind_csf_big_site(py::module &m) {
+
+    py::class_<CSFSpace<S>, shared_ptr<CSFSpace<S>>>(m, "CSFSpace")
+        .def(py::init<int, int, bool, const std::vector<uint8_t> &>())
+        .def("get_config", &CSFSpace<S>::get_config)
+        .def("index_config", &CSFSpace<S>::index_config)
+        .def("to_string", &CSFSpace<S>::to_string)
+        .def("cfg_apply_ops", &CSFSpace<S>::cfg_apply_ops)
+        .def("csf_apply_ops", &CSFSpace<S>::csf_apply_ops)
+        .def("__getitem__", &CSFSpace<S>::operator[], py::arg("idx"))
+        .def_readwrite("qs", &CSFSpace<S>::qs)
+        .def_readwrite("qs_idxs", &CSFSpace<S>::qs_idxs)
+        .def_readwrite("n_unpaired", &CSFSpace<S>::n_unpaired)
+        .def_readwrite("n_unpaired_shapes", &CSFSpace<S>::n_unpaired_shapes)
+        .def_readwrite("csfs", &CSFSpace<S>::csfs)
+        .def_readwrite("csf_idxs", &CSFSpace<S>::csf_idxs)
+        .def_readwrite("csf_sub_idxs", &CSFSpace<S>::csf_sub_idxs)
+        .def_readwrite("csf_offsets", &CSFSpace<S>::csf_offsets)
+        .def_readwrite("combinatorics", &CSFSpace<S>::combinatorics)
+        .def_readwrite("basis", &CSFSpace<S>::basis)
+        .def_readwrite("cg", &CSFSpace<S>::cg)
+        .def_readwrite("n_orbs", &CSFSpace<S>::n_orbs)
+        .def_readwrite("n_max_elec", &CSFSpace<S>::n_max_elec)
+        .def_readwrite("n_max_unpaired", &CSFSpace<S>::n_max_unpaired)
+        .def_readwrite("is_right", &CSFSpace<S>::is_right);
+
+    py::class_<CSFBigSite<S>, shared_ptr<CSFBigSite<S>>, BigSite<S>>(
+        m, "CSFBigSite")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+                      const std::vector<uint8_t> &>())
+        .def_static("fill_csr_matrix", &CSFBigSite<S>::fill_csr_matrix)
+        .def("build_site_op", &CSFBigSite<S>::build_site_op)
+        .def_readwrite("fcidump", &CSFBigSite<S>::fcidump)
+        .def_readwrite("csf_space", &CSFBigSite<S>::csf_space)
+        .def_readwrite("is_right", &CSFBigSite<S>::is_right);
 }
 
 template <typename S> void bind_hamiltonian_big_site(py::module &m) {

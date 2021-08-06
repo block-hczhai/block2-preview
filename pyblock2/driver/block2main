@@ -51,7 +51,7 @@ else:
 dic = parse(fin)
 if "nonspinadapted" in dic:
     from block2 import VectorSZ as VectorSL
-    from block2.sz import MultiMPS, MultiMPSInfo
+    from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
     from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -65,7 +65,7 @@ if "nonspinadapted" in dic:
     TrSX = SU2
 else:
     from block2 import VectorSU2 as VectorSL
-    from block2.su2 import MultiMPS, MultiMPSInfo
+    from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -147,6 +147,8 @@ for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
 big_site_method = None
 if "big_site_fock" in dic:
     big_site_method = "fock"
+elif "big_site_folding" in dic:
+    big_site_method = "folding"
 if dynamic_corr_method is None or dynamic_corr_method[0] == "dmrgfci":
     qc_type = QCTypes.Conventional
 else:
@@ -316,6 +318,48 @@ if pre_run or not no_pre_run:
             % (n_inactive, n_cas, n_external))
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+    elif big_site_method == "folding":
+        hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+        mpo_fold = MPOQC(hamil, qc_type)
+        assert dynamic_corr_method is not None
+        if dynamic_corr_method[0] in ["casci"]:
+            mps_info_fold = CASCIMPSInfo(n_orbs, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
+        elif dynamic_corr_method[0] in ["mrcis", "mrcisd", "mrcisdt"]:
+            ci_order = len(dynamic_corr_method[0]) - 4
+            mps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+        elif dynamic_corr_method[0] in ["nevpt2sd", "nevpt2s"]:
+            ci_order = len(dynamic_corr_method[0]) - 6
+            mps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+        for i in range(n_external - 1):
+            _print("fold right %d / %d" % (i, n_external))
+            mpo_fold = FusedMPO(mpo_fold, hamil.basis, mpo_fold.n_sites - 2, mpo_fold.n_sites - 1, mps_info_fold.right_dims_fci[mpo_fold.n_sites - 2])
+            hamil.basis = mpo_fold.basis
+            hamil.n_sites = mpo_fold.n_sites
+        for i in range(n_inactive - 1):
+            _print("fold left %d / %d" % (i, n_inactive))
+            mpo_fold = FusedMPO(mpo_fold, hamil.basis, 0, 1, mps_info_fold.left_dims_fci[i + 2])
+            hamil.basis = mpo_fold.basis
+            hamil.n_sites = mpo_fold.n_sites
+        for k, op in mpo_fold.tensors[0].ops.items():
+            smat = CSRSparseMatrix()
+            if op.sparsity() > 0.75:
+                smat.from_dense(op)
+                op.deallocate()
+            else:
+                smat.wrap_dense(op)
+            mpo_fold.tensors[0].ops[k] = smat
+        mpo_fold.sparse_form = 'S' + mpo_fold.sparse_form[1:]
+        mpo_fold.tf = TensorFunctions(CSROperatorFunctions(hamil.opf.cg))
+        for k, op in mpo_fold.tensors[-1].ops.items():
+            smat = CSRSparseMatrix()
+            if op.sparsity() > 0.75:
+                smat.from_dense(op)
+                op.deallocate()
+            else:
+                smat.wrap_dense(op)
+            mpo_fold.tensors[-1].ops[k] = smat
+        mpo_fold.sparse_form = mpo_fold.sparse_form[:-1] + 'S'
+        mpo_fold.tf = TensorFunctions(CSROperatorFunctions(hamil.opf.cg))
     else:
         if big_site_method == "fock":
             assert dynamic_corr_method is not None
@@ -358,9 +402,9 @@ if pre_run or not no_pre_run:
 
 else:
     orb_idx = np.load(scratch + '/orbital_reorder.npy')
+    n_orbs = len(orb_idx)
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
-    n_orbs = len(orb_idx)
     orb_sym = None
     fcidump = None
     spin = [int(x) for x in dic.get("spin", "0").split()]
@@ -676,7 +720,10 @@ if pre_run or not no_pre_run:
         Global.threading.n_threads_global = 1
     # mpo for dmrg
     _print("build mpo", time.perf_counter() - tx)
-    mpo = MPOQC(hamil, qc_type)
+    if big_site_method == "folding":
+        mpo = mpo_fold
+    else:
+        mpo = MPOQC(hamil, qc_type)
     _print("simpl mpo", time.perf_counter() - tx)
     mpo = SimplifiedMPO(mpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
@@ -1436,7 +1483,8 @@ if not pre_run:
             if MPI is None or MPI.rank == 0:
                 _print("DMRG OCC = ", "".join(
                     ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
-                np.save(scratch + "/1pdm.npy", dm)
+                if big_site_method != "folding":
+                    np.save(scratch + "/1pdm.npy", dm)
                 mps_info.save_data(scratch + '/mps_info.bin')
                 mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
 
@@ -1856,7 +1904,9 @@ if not pre_run:
                                 " a higher tolerance for the keyword '%s'") % (
                 symmetrize_ints_tol, "symmetrize_ints"))
 
-        if big_site_method is not None:
+        if big_site_method == "folding":
+            pass
+        elif big_site_method is not None:
             big_left = SimplifiedBigSite(big_left_orig, NoTransposeRule(simpl_rule))
             big_right = SimplifiedBigSite(big_right_orig, NoTransposeRule(simpl_rule))
             if MPI is not None:
@@ -1870,6 +1920,41 @@ if not pre_run:
                 None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
         if big_site_method is None:
             hm_dyall = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fd_dyall)
+        elif big_site_method == "folding":
+            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']
+            hm_dyall = HamiltonianQC(vacuum, n_orbs, VectorUInt8(orb_sym), fd_dyall)
+            lmpo_fold = MPOQC(hm_dyall, qc_type)
+            ci_order = len(dynamic_corr_method[0]) - 6
+            lmps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
+            for i in range(n_external - 1):
+                _print("fold right %d / %d" % (i, n_external))
+                lmpo_fold = FusedMPO(lmpo_fold, hm_dyall.basis, lmpo_fold.n_sites - 2,
+                    lmpo_fold.n_sites - 1, lmps_info_fold.right_dims_fci[lmpo_fold.n_sites - 2])
+                hm_dyall.basis = lmpo_fold.basis
+                hm_dyall.n_sites = lmpo_fold.n_sites
+            for i in range(n_inactive - 1):
+                _print("fold left %d / %d" % (i, n_inactive))
+                lmpo_fold = FusedMPO(lmpo_fold, hm_dyall.basis, 0, 1, lmps_info_fold.left_dims_fci[i + 2])
+                hm_dyall.basis = lmpo_fold.basis
+                hm_dyall.n_sites = lmpo_fold.n_sites
+            for k, op in lmpo_fold.tensors[0].ops.items():
+                smat = CSRSparseMatrix()
+                if op.sparsity() > 0.75:
+                    smat.from_dense(op)
+                    op.deallocate()
+                else:
+                    smat.wrap_dense(op)
+                lmpo_fold.tensors[0].ops[k] = smat
+            for k, op in lmpo_fold.tensors[-1].ops.items():
+                smat = CSRSparseMatrix()
+                if op.sparsity() > 0.75:
+                    smat.from_dense(op)
+                    op.deallocate()
+                else:
+                    smat.wrap_dense(op)
+                lmpo_fold.tensors[-1].ops[k] = smat
+            lmpo_fold.sparse_form = 'S' + lmpo_fold.sparse_form[1:-1] + 'S'
+            lmpo_fold.tf = TensorFunctions(CSROperatorFunctions(hm_dyall.opf.cg))
         else:
             if big_site_method == "fock":
                 assert dynamic_corr_method is not None
@@ -1903,7 +1988,10 @@ if not pre_run:
 
         # left mpo
         _print("build left mpo", time.perf_counter() - tx)
-        lmpo = MPOQC(hm_dyall, qc_type)
+        if big_site_method == "folding":
+            lmpo = lmpo_fold
+        else:
+            lmpo = MPOQC(hm_dyall, qc_type)
         _print("simpl left mpo", time.perf_counter() - tx)
         lmpo = SimplifiedMPO(lmpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         _print("simpl left mpo finished", time.perf_counter() - tx)
@@ -1918,7 +2006,10 @@ if not pre_run:
         
         # right mpo
         _print("build right mpo", time.perf_counter() - tx)
-        rmpo = MPOQC(hamil, qc_type)
+        if big_site_method == "folding":
+            rmpo = mpo_fold
+        else:
+            rmpo = MPOQC(hamil, qc_type)
         _print("simpl right mpo", time.perf_counter() - tx)
         rmpo = SimplifiedMPO(rmpo, NoTransposeRule(simpl_rule),
             True, True, OpNamesSet((OpNames.R, OpNames.RD)))

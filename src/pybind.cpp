@@ -78,6 +78,8 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg_big_site<SZ>(m_sz);
 
     bind_sci_big_site_fock<SZ>(m_sz);
+
+    bind_csf_big_site<SU2>(m_su2);
 #endif
 
 #ifdef _USE_SCI

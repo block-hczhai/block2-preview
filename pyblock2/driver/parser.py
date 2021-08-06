@@ -34,7 +34,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
-              "nevpt2sd", "big_site_fock"}
+              "nevpt2sd", "big_site_fock", "big_site_folding"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
