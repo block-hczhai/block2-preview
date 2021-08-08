@@ -79,7 +79,7 @@ TEST_F(TestDMRG, Test) {
     bool su2 = !fcidump->uhf;
 
     shared_ptr<BigSite<SU2>> big_right = make_shared<CSFBigSite<SU2>>(
-        3, 3, true, fcidump, vector<uint8_t>(orbsym.end() - 3, orbsym.end()));
+        3, 10, false, fcidump, vector<uint8_t>(orbsym.begin(), orbsym.begin() + 3));
 
     shared_ptr<HamiltonianQC<SU2>> hamil =
         make_shared<HamiltonianQCBigSite<SU2>>(vacuum, norb, orbsym, fcidump,

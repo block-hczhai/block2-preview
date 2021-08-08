@@ -28,7 +28,7 @@ class TestCSFSpace : public ::testing::Test {
 
 TEST_F(TestCSFSpace, TestCSFSpace) {
     shared_ptr<CSFSpace<SU2>> csf_space =
-        make_shared<CSFSpace<SU2>>(3, 10, true);
+        make_shared<CSFSpace<SU2>>(3, 10, false);
     vector<pair<pair<MKL_INT, MKL_INT>, double>> mat;
     for (int i = 0; i < csf_space->csf_offsets.back(); i++)
         cout << i << " " << (*csf_space)[i] << endl;
@@ -56,25 +56,23 @@ TEST_F(TestCSFSpace, TestCSFSpace) {
     const uint8_t cdd1_ops = c_ops + (d_ops << 2) + (d2_ops << 4);
     const uint8_t ddc0_ops = d_ops + (d2_ops << 2) + (c_ops << 4);
     const uint8_t ddc1_ops = d_ops + (d_ops << 2) + (c2_ops << 4);
-    const uint8_t ddc2_ops = d2_ops + (d_ops << 2) + (c_ops << 4);
     const uint8_t cdc0_ops = c_ops + (d2_ops << 2) + (c_ops << 4);
     const uint8_t cdc1_ops = c_ops + (d_ops << 2) + (c2_ops << 4);
     const uint8_t dcc0_ops = d_ops + (c2_ops << 2) + (c_ops << 4);
     const uint8_t dcc1_ops = d_ops + (c_ops << 2) + (c2_ops << 4);
     const uint8_t ccd0_ops = c_ops + (c2_ops << 2) + (d_ops << 4);
     const uint8_t ccd1_ops = c_ops + (c_ops << 2) + (d2_ops << 4);
-    const uint8_t ccd2_ops = c2_ops + (c_ops << 2) + (d_ops << 4);
     mat.clear();
     for (int i = 0; i < csf_space->n_unpaired_idxs.back(); i++)
-        csf_space->cfg_apply_ops(i, ddc1_ops, {1, 2, 2}, mat, -0.5);
+        csf_space->cfg_apply_ops(i, ddc0_ops, {1, 2, 2}, mat, -0.5);
     EXPECT_LT(abs(norm(mat) - 2.6220221204253793), 1E-12);
     mat.clear();
     for (int i = 0; i < csf_space->n_unpaired_idxs.back(); i++)
-        csf_space->cfg_apply_ops(i, cdd1_ops, {1, 2, 2}, mat, -0.5);
+        csf_space->cfg_apply_ops(i, cdd0_ops, {1, 2, 2}, mat, -0.5);
     EXPECT_LT(abs(norm(mat) - 2.2360679774997902), 1E-12);
     mat.clear();
     for (int i = 0; i < csf_space->n_unpaired_idxs.back(); i++)
-        csf_space->cfg_apply_ops(i, ddc2_ops, {1, 2, 2}, mat, -0.5 * sqrt(3));
+        csf_space->cfg_apply_ops(i, ddc1_ops, {1, 2, 2}, mat, -0.5 * sqrt(3));
     EXPECT_LT(abs(norm(mat) - 2.6220221204253793), 1E-12);
 
     // test 4-op

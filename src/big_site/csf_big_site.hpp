@@ -572,47 +572,97 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
         vector<int8_t> site_spin_chg(n_orbs, 0);
         vector<int8_t> site_op_count(n_orbs, 0);
         vector<uint8_t> site_spin_pattern(n_orbs, 0);
-        for (int i = 0; i < op_len && factor != 0; i++) {
-            int l = (int)orb_idxs[i];
-            const uint8_t x = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
-            site_spin_chg[l] += ((ops >> (i << 1)) & 2) ? 1 : -1;
-            if (site_op_count[l] == 0)
-                site_spin_pattern[l] = (x == 1 || x == 2);
-            if ((ops >> (i << 1)) & 1) {
-                // C
-                if (x == 3)
-                    factor = 0;
-                else if (x == 2 || x == 1)
-                    bra[l >> 2] |= (3 << ((l & 3) << 1)), factor *= -sqrt(2);
-                else
-                    bra[l >> 2] |= (2 << ((l & 3) << 1)), factor *= 1.0;
-            } else {
-                // D
-                if (x == 0)
-                    factor = 0;
-                else if (x == 2 || x == 1)
-                    bra[l >> 2] ^= (x << ((l & 3) << 1)), factor *= sqrt(2);
-                else
-                    bra[l >> 2] ^= (1 << ((l & 3) << 1)), factor *= 1.0;
+        if (is_right)
+            for (int i = 0; i < op_len && factor != 0; i++) {
+                int l = (int)orb_idxs[i];
+                site_spin_chg[l] += ((ops >> (i << 1)) & 2) ? 1 : -1;
+                const uint8_t x = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
+                if (site_op_count[l] == 0)
+                    site_spin_pattern[l] = (x == 1 || x == 2);
+                if ((ops >> (i << 1)) & 1) {
+                    // C
+                    if (x == 3)
+                        factor = 0;
+                    else if (x == 2 || x == 1)
+                        bra[l >> 2] |= (3 << ((l & 3) << 1)),
+                            factor *= -sqrt(2);
+                    else
+                        bra[l >> 2] |= (2 << ((l & 3) << 1)), factor *= 1.0;
+                } else {
+                    // D
+                    if (x == 0)
+                        factor = 0;
+                    else if (x == 2 || x == 1)
+                        bra[l >> 2] ^= (x << ((l & 3) << 1)), factor *= sqrt(2);
+                    else
+                        bra[l >> 2] ^= (1 << ((l & 3) << 1)), factor *= 1.0;
+                }
+                const uint8_t xb = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
+                site_spin_pattern[l] |= (xb == 1 || xb == 2)
+                                        << (++site_op_count[l]);
             }
-            const uint8_t xb = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
-            site_spin_pattern[l] |= (xb == 1 || xb == 2)
-                                    << (++site_op_count[l]);
-        }
+        else
+            for (int i = op_len - 1; i >= 0 && factor != 0; i--) {
+                int l = (int)orb_idxs[i];
+                site_spin_chg[l] += ((ops >> (i << 1)) & 2) ? 1 : -1;
+                const uint8_t x = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
+                if (site_op_count[l] == 0)
+                    site_spin_pattern[l] = (x == 1 || x == 2);
+                if ((ops >> (i << 1)) & 1) {
+                    // C
+                    if (x == 3)
+                        factor = 0;
+                    else if (x == 2 || x == 1)
+                        bra[l >> 2] |= (3 << ((l & 3) << 1)),
+                            factor *= -sqrt(2);
+                    else
+                        bra[l >> 2] |= (2 << ((l & 3) << 1)), factor *= 1.0;
+                } else {
+                    // D
+                    if (x == 0)
+                        factor = 0;
+                    else if (x == 2 || x == 1)
+                        bra[l >> 2] ^= (x << ((l & 3) << 1)), factor *= sqrt(2);
+                    else
+                        bra[l >> 2] ^= (1 << ((l & 3) << 1)), factor *= 1.0;
+                }
+                const uint8_t xb = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
+                site_spin_pattern[l] =
+                    (site_spin_pattern[l] << 1) | (xb == 1 || xb == 2);
+                site_op_count[l]++;
+            }
         if (factor == 0)
             return;
-        // L = 3 -++ pattern [(xx)1x]
-        if (op_len == 3 && site_spin_chg[orb_idxs[0]] == -1) {
-            if (orb_idxs[1] != orb_idxs[2])
-                factor_site = 0;
-            site_spin_chg[orb_idxs[0]] = 1;
-            // S = 2 operator, but spin minus coupling
-            site_spin_chg[orb_idxs[1]] = -2;
-        }
-        if (op_len == 4) {
+        if (op_len == 3) {
+            const int la = (int)orb_idxs[0], lb = (int)orb_idxs[1],
+                      lc = (int)orb_idxs[2];
+            int8_t x = (la == lb) | ((lb == lc) << 1);
+            const uint8_t ppm = 2 | (2 << 2);
+            const uint8_t mpp = (2 << 2) | (2 << 4);
+            switch (x) {
+            case 1 | 2:
+                // (xx)0x +-+(++-) | (xx)1x ++-(-++) (not normal)
+                factor_site *=
+                    site_factor(site_op_count[la], site_spin_pattern[la],
+                                (ops & 8) ? mpp : ppm, 1, 1 << 2);
+                break;
+            case 2:
+                // (xx)0x +-+(++-) | (xx)1x ++-(-++)
+                factor_site *=
+                    site_factor(site_op_count[lb], site_spin_pattern[lb], ops);
+                site_spin_chg[lb] = (ops & 8) ? -2 : 0;
+                break;
+            case 1:
+            default:
+                // x(xx)0 +-+ | x(xx)1 ++- (normal)
+                factor_site *=
+                    site_factor(site_op_count[la], site_spin_pattern[la], ops);
+                break;
+            }
+        } else if (op_len == 4) {
             const int la = (int)orb_idxs[0], lb = (int)orb_idxs[1],
                       lc = (int)orb_idxs[2], ld = (int)orb_idxs[3];
-            int8_t x = (la == lb) | (lb == lc) << 1 | (lc == ld) << 2;
+            int8_t x = (la == lb) | ((lb == lc) << 1) | ((lc == ld) << 2);
             const uint8_t ppmm = 2 | (2 << 2);
             const uint8_t mppm = (2 << 2) | (2 << 4);
             const uint8_t mpmp = (2 << 2) | (2 << 6);
@@ -809,6 +859,21 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                                  int n_unpaired_ket, int twos_ket, uint8_t ops,
                                  uint8_t op_types, const vector<int> &op_idxs,
                                  double scale, LL &n_bra, LL &n_ket) {
+        return is_right ? csf_apply_ops_impl<true>(n_unpaired_bra, twos_bra,
+                                                   n_unpaired_ket, twos_ket,
+                                                   ops, op_types, op_idxs,
+                                                   scale, n_bra, n_ket)
+                        : csf_apply_ops_impl<false>(n_unpaired_bra, twos_bra,
+                                                    n_unpaired_ket, twos_ket,
+                                                    ops, op_types, op_idxs,
+                                                    scale, n_bra, n_ket);
+    }
+    template <bool vt>
+    vector<double> csf_apply_ops_impl(int n_unpaired_bra, int twos_bra,
+                                      int n_unpaired_ket, int twos_ket,
+                                      uint8_t ops, uint8_t op_types,
+                                      const vector<int> &op_idxs, double scale,
+                                      LL &n_bra, LL &n_ket) {
         vector<double> r;
         if (n_unpaired_ket < 0 || n_unpaired_ket > n_max_unpaired ||
             n_unpaired_bra < 0 || n_unpaired_bra > n_max_unpaired)
@@ -848,8 +913,15 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                         dc = db + (lops & 2) - 1;
                         assert(dc >= 0);
                         rr *= sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
-                        rr *= cg->wigner_9j(0, bk, ck, ab, db, dc, ab, bb, cb);
-                        rr *= ((0 & 1) & (db & 1)) ? -1 : 1;
+                        if (vt) {
+                            rr *= cg->wigner_9j(0, bk, ck, ab, db, dc, ab, bb,
+                                                cb);
+                            rr *= ((0 & 1) & (db & 1)) ? -1 : 1;
+                        } else {
+                            rr *= cg->wigner_9j(bk, 0, ck, db, ab, dc, bb, ab,
+                                                cb);
+                            rr *= ((bk & 1) & (ab & 1)) ? -1 : 1;
+                        }
                         lops >>= 2, lopt >>= 2;
                         jbra++, kop++;
                     } else if ((lopt & 3) == 1 && kop < (int)op_idxs.size() &&
@@ -859,8 +931,15 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                         dc = db + (lops & 2) - 1;
                         assert(dc >= 0);
                         rr *= sqrt((ck + 1) * (dc + 1) * (0 + 1) * (bb + 1));
-                        rr *= cg->wigner_9j(ak, bk, ck, ak, db, dc, 0, bb, cb);
-                        rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        if (vt) {
+                            rr *= cg->wigner_9j(ak, bk, ck, ak, db, dc, 0, bb,
+                                                cb);
+                            rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        } else {
+                            rr *= cg->wigner_9j(bk, ak, ck, db, ak, dc, bb, 0,
+                                                cb);
+                            rr *= ((bk & 1) & (ak & 1)) ? -1 : 1;
+                        }
                         lops >>= 2, lopt >>= 2;
                         jket++, kop++;
                     } else if ((lopt & 3) == 3 &&
@@ -873,8 +952,15 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                         dc = db + (lops & 2) - 1 + ((lops >> 2) & 2) - 1;
                         assert(dc >= 0);
                         rr *= sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
-                        rr *= cg->wigner_9j(ak, bk, ck, 2, db, dc, ab, bb, cb);
-                        rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        if (vt) {
+                            rr *= cg->wigner_9j(ak, bk, ck, 2, db, dc, ab, bb,
+                                                cb);
+                            rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        } else {
+                            rr *= cg->wigner_9j(bk, ak, ck, db, 2, dc, bb, ab,
+                                                cb);
+                            rr *= ((bk & 1) & (2 & 1)) ? -1 : 1;
+                        }
                         lops >>= 4, lopt >>= 2;
                         jbra++, jket++, kop += 2;
                     } else {
@@ -883,8 +969,15 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                         cb = bb + (xbra << 1) - 1, ck = bk + (xket << 1) - 1,
                         dc = db;
                         rr *= sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
-                        rr *= cg->wigner_9j(ak, bk, ck, da, db, dc, ab, bb, cb);
-                        rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        if (vt) {
+                            rr *= cg->wigner_9j(ak, bk, ck, da, db, dc, ab, bb,
+                                                cb);
+                            rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
+                        } else {
+                            rr *= cg->wigner_9j(bk, ak, ck, db, da, dc, bb, ab,
+                                                cb);
+                            rr *= ((bk & 1) & (da & 1)) ? -1 : 1;
+                        }
                         jbra++, jket++;
                     }
                     bb = cb, bk = ck, db = dc;
@@ -1161,14 +1254,12 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
         const uint8_t cdd1_ops = c_ops + (d_ops << 2) + (d2_ops << 4); // 4
         const uint8_t ddc0_ops = d_ops + (d2_ops << 2) + (c_ops << 4); // 5
         const uint8_t ddc1_ops = d_ops + (d_ops << 2) + (c2_ops << 4); // 6
-        const uint8_t ddc2_ops = d2_ops + (d_ops << 2) + (c_ops << 4); // 7
         const uint8_t dcc0_ops = d_ops + (c2_ops << 2) + (c_ops << 4); // 1
         const uint8_t dcc1_ops = d_ops + (c_ops << 2) + (c2_ops << 4); // 2
         const uint8_t ccd0_ops = c_ops + (c2_ops << 2) + (d_ops << 4); // 3
         const uint8_t ccd1_ops = c_ops + (c_ops << 2) + (d2_ops << 4); // 4
         const uint8_t cdc0_ops = c_ops + (d2_ops << 2) + (c_ops << 4); // 5
         const uint8_t cdc1_ops = c_ops + (d_ops << 2) + (c2_ops << 4); // 6
-        const uint8_t cdc2_ops = c2_ops + (d_ops << 2) + (c_ops << 4); // 7
         const uint8_t dcxx_ops = b0_ops << 4, cdxx_ops = bd0_ops << 4; // 0 1
         const uint8_t ddcc0_ops =
             d_ops + (d2_ops << 2) + (c_ops << 4) + (c2_ops << 6); // 2
@@ -1210,6 +1301,14 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             d_ops + (c2_ops << 2) + (c2_ops << 4) + (d_ops << 6); // 20
         const uint8_t dccd3_ops =
             d2_ops + (c_ops << 2) + (c_ops << 4) + (d2_ops << 6); // 21
+        const uint8_t ccdd2_ops =
+            c_ops + (c2_ops << 2) + (d2_ops << 4) + (d_ops << 6); // 6
+        const uint8_t ccdd3_ops =
+            c2_ops + (c_ops << 2) + (d_ops << 4) + (d2_ops << 6); // 7
+        const uint8_t dcdc2_ops =
+            d_ops + (c2_ops << 2) + (d2_ops << 4) + (c_ops << 6); // 16
+        const uint8_t dcdc3_ops =
+            d2_ops + (c_ops << 2) + (d_ops << 4) + (c2_ops << 6); // 17
         unordered_map<
             S, vector<pair<array<uint16_t, 2>, shared_ptr<CSRSparseMatrix<S>>>>>
             p_mats[2], pd_mats[2], q_mats[2];
@@ -1247,10 +1346,19 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                 j = is_right ? fcidump->n_sites() - 1 - op.site_index[1]
                              : op.site_index[1];
                 s = op.site_index.ss();
-                if (j <= i)
-                    build_site_op(s ? a1_ops : a0_ops, {j, i}, mat);
-                else
-                    build_site_op(s ? a1_ops : a0_ops, {i, j}, mat, s ? -1 : 1);
+                if (is_right) {
+                    if (j <= i)
+                        build_site_op(s ? a1_ops : a0_ops, {j, i}, mat);
+                    else
+                        build_site_op(s ? a1_ops : a0_ops, {i, j}, mat,
+                                      s ? -1 : 1);
+                } else {
+                    if (i <= j)
+                        build_site_op(s ? a1_ops : a0_ops, {i, j}, mat);
+                    else
+                        build_site_op(s ? a1_ops : a0_ops, {j, i}, mat,
+                                      s ? -1 : 1);
+                }
                 break;
             case OpNames::AD:
                 i = is_right ? fcidump->n_sites() - 1 - op.site_index[0]
@@ -1259,11 +1367,19 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                              : op.site_index[1];
                 s = op.site_index.ss();
                 // note that ad is defined as ad[i, j] = C[j] * C[i]
-                if (i <= j)
-                    build_site_op(s ? ad1_ops : ad0_ops, {i, j}, mat);
-                else
-                    build_site_op(s ? ad1_ops : ad0_ops, {j, i}, mat,
-                                  s ? -1 : 1);
+                if (is_right) {
+                    if (i <= j)
+                        build_site_op(s ? ad1_ops : ad0_ops, {i, j}, mat);
+                    else
+                        build_site_op(s ? ad1_ops : ad0_ops, {j, i}, mat,
+                                      s ? -1 : 1);
+                } else {
+                    if (j <= i)
+                        build_site_op(s ? ad1_ops : ad0_ops, {j, i}, mat);
+                    else
+                        build_site_op(s ? ad1_ops : ad0_ops, {i, j}, mat,
+                                      s ? -1 : 1);
+                }
                 break;
             case OpNames::B:
                 i = is_right ? fcidump->n_sites() - 1 - op.site_index[0]
@@ -1271,11 +1387,19 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                 j = is_right ? fcidump->n_sites() - 1 - op.site_index[1]
                              : op.site_index[1];
                 s = op.site_index.ss();
-                if (j <= i)
-                    build_site_op(s ? b1_ops : b0_ops, {j, i}, mat);
-                else
-                    build_site_op(s ? bd1_ops : bd0_ops, {i, j}, mat,
-                                  s ? -1 : 1);
+                if (is_right) {
+                    if (j <= i)
+                        build_site_op(s ? b1_ops : b0_ops, {j, i}, mat);
+                    else
+                        build_site_op(s ? bd1_ops : bd0_ops, {i, j}, mat,
+                                      s ? -1 : 1);
+                } else {
+                    if (i <= j)
+                        build_site_op(s ? bd1_ops : bd0_ops, {i, j}, mat);
+                    else
+                        build_site_op(s ? b1_ops : b0_ops, {j, i}, mat,
+                                      s ? -1 : 1);
+                }
                 break;
             case OpNames::BD:
                 i = is_right ? fcidump->n_sites() - 1 - op.site_index[0]
@@ -1283,10 +1407,19 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                 j = is_right ? fcidump->n_sites() - 1 - op.site_index[1]
                              : op.site_index[1];
                 s = op.site_index.ss();
-                if (j <= i)
-                    build_site_op(s ? bd1_ops : bd0_ops, {j, i}, mat);
-                else
-                    build_site_op(s ? b1_ops : b0_ops, {i, j}, mat, s ? -1 : 1);
+                if (is_right) {
+                    if (j <= i)
+                        build_site_op(s ? bd1_ops : bd0_ops, {j, i}, mat);
+                    else
+                        build_site_op(s ? b1_ops : b0_ops, {i, j}, mat,
+                                      s ? -1 : 1);
+                } else {
+                    if (i <= j)
+                        build_site_op(s ? b1_ops : b0_ops, {i, j}, mat);
+                    else
+                        build_site_op(s ? bd1_ops : bd0_ops, {j, i}, mat,
+                                      s ? -1 : 1);
+                }
                 break;
             case OpNames::P:
                 i = op.site_index[0];
@@ -1333,10 +1466,10 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                    const array<uint16_t, 2> &ctr_idxs) -> double {
             const uint16_t i = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+                                   : ctr_idxs[1];
             const uint16_t j = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
+                                   : ctr_idxs[0];
             return i == j ? this->fcidump->v(op_idxs[0], i, op_idxs[1], j)
                           : this->fcidump->v(op_idxs[0], i, op_idxs[1], j) +
                                 this->fcidump->v(op_idxs[0], j, op_idxs[1], i);
@@ -1347,10 +1480,10 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                    const array<uint16_t, 2> &ctr_idxs) -> double {
             const uint16_t i = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+                                   : ctr_idxs[1];
             const uint16_t j = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
+                                   : ctr_idxs[0];
             return i == j ? this->fcidump->v(op_idxs[0], i, op_idxs[1], j)
                           : this->fcidump->v(op_idxs[0], j, op_idxs[1], i) -
                                 this->fcidump->v(op_idxs[0], i, op_idxs[1], j);
@@ -1361,10 +1494,10 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                    const array<uint16_t, 2> &ctr_idxs) -> double {
             const uint16_t i = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+                                   : ctr_idxs[1];
             const uint16_t j = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
+                                   : ctr_idxs[0];
             return i == j ? (iop ? 0
                                  : 2 * this->fcidump->v(op_idxs[0], op_idxs[1],
                                                         j, i) -
@@ -1385,10 +1518,10 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                    const array<uint16_t, 2> &ctr_idxs) -> double {
             const uint16_t i = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+                                   : ctr_idxs[1];
             const uint16_t j = this->is_right
                                    ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
+                                   : ctr_idxs[0];
             return i == j
                        ? (iop ? 0
                               : this->fcidump->v(op_idxs[0], i, j, op_idxs[1]))
@@ -1396,175 +1529,283 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                               : this->fcidump->v(op_idxs[0], i, j, op_idxs[1]));
         };
         const function<double(uint8_t, const array<uint16_t, 1> &,
-                              const array<uint16_t, 3> &)> &r_ops =
+                              const array<uint16_t, 3> &)> &rr_ops =
             [this](uint8_t iop, const array<uint16_t, 1> &op_idxs,
                    const array<uint16_t, 3> &ctr_idxs) -> double {
-            const uint16_t l = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+            const uint16_t l = this->fcidump->n_sites() - 1 - ctr_idxs[0];
             if (iop == 0)
                 return sqrt(2) / 4 * this->fcidump->t(op_idxs[0], l);
-            const uint16_t k = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
-            const uint16_t j = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[2]
-                                   : ctr_idxs[2];
+            const uint16_t k = this->fcidump->n_sites() - 1 - ctr_idxs[1];
+            const uint16_t j = this->fcidump->n_sites() - 1 - ctr_idxs[2];
             const uint8_t x =
                 (uint8_t)(iop | ((j == k) << 3) | ((k == l) << 4));
             switch (x) {
-            // sum_jkl v0jkl Dj [Ck Dl]_0 (j != k && j != l)
-            // sum_jkl v0jkl [Ck Dl]_0 Dj (j != k && j != l) -> case 6 **
-            // (sqrt(3)/2) sum_jkl v0jkl Dl [Ck Dj]_1 - (1/2) sum_jkl v0jkl Dl
-            // [Ck Dj]_0 (k != l)
-            // (-sqrt(3)/2) sum_jkl v0jkl [Ck Dj]_1 Dl - (1/2) sum_jkl v0jkl [Ck
-            // Dj]_0 D_l (k != l && j != l) -> case 6/7 **
-            case 1 | (1 << 3) | (1 << 4): // j == k == l | l == k == j
-            case 1 | (1 << 3):            // j == k > l | l == k > j
+            case 1 | (1 << 3) | (1 << 4):
+            case 1 | (1 << 3):
                 return 0;
-            case 1 | (1 << 4): // j > k == l | l > k == j
-            case 1:            // j > k > l | l > k > j
+            case 1 | (1 << 4): // [04] j > k = l | [06] l > j = k
                 return this->fcidump->v(op_idxs[0], j, k, l) -
                        0.5 * this->fcidump->v(op_idxs[0], l, k, j);
-            case 2 | (1 << 3) | (1 << 4): // l == k == j
-            case 2 | (1 << 3):            // l == k > j
+            case 1: // [07] j > k > l | [12] l > k > j
+                return this->fcidump->v(op_idxs[0], j, k, l) -
+                       0.5 * this->fcidump->v(op_idxs[0], l, k, j);
+            case 2 | (1 << 3) | (1 << 4):
+            case 2 | (1 << 3):
                 return 0;
-            case 2 | (1 << 4): // l > k == j
-            case 2:            // l > k > j
+            case 2 | (1 << 4): // [06] l > j = k
                 return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, k, j);
-            // sum_jkl v0jkl Dj [Dl Ck]_0 (j != k && j != l && k != l)
-            // (-sqrt(3)/2) sum_jkl v0jkl Dl [Dj Ck]_1 - (1/2) sum_jkl v0jkl Dl
-            // [Dj Ck]_0 (k != l && j != k)
-            case 3 | (1 << 3) | (1 << 4): // j == l == k | l == j == k
-            case 3 | (1 << 4):            // j > l == k | l > j == k
+            case 2: // [12] l > k > j
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, k, j);
+            case 3 | (1 << 3) | (1 << 4):
                 return 0;
-            case 3 | (1 << 3): // j == l > k | l == j > k
+            case 3 | (1 << 3): // [02] j = l > k
+                return -0.5 * this->fcidump->v(op_idxs[0], k, l, j);
+            case 3 | (1 << 4):
                 return 0;
-            case 3: // j > l > k | l > j > k
+            case 3: // [08] j > l > k | [11] l > j > k
                 return this->fcidump->v(op_idxs[0], j, l, k) -
                        0.5 * this->fcidump->v(op_idxs[0], k, l, j);
-            case 4 | (1 << 3) | (1 << 4): // l == j == k
-            case 4 | (1 << 4):            // l > j == k
+            case 4 | (1 << 3) | (1 << 4):
                 return 0;
-            case 4 | (1 << 3): // l == j > k **
-                return -0.5 * this->fcidump->v(op_idxs[0], k, l, j);
-            case 4: // l > j > k
+            case 4 | (1 << 3): // [02] j = l > k
                 return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
-            // (sqrt(3)/2) sum_jkl v0jkl Ck [Dl Dj]_1 - (1/2) sum_jkl v0jkl Ck
-            // [Dl Dj]_0
-            // (-sqrt(3)/2) sum_jkl v0jkl [Dl Dj]_1 Ck - (1/2) sum_jkl v0jkl [Dl
-            // Dj]_0 Ck (k != l && k != j) -> case 4 **
-            // (-sqrt(3)/2) sum_jkl v0jkl Ck [Dj Dl]_1 - (1/2) sum_jkl v0jkl Ck
-            // [Dj Dl]_0 (j != l)
-            case 5 | (1 << 3) | (1 << 4): // k == l == j
-            case 5 | (1 << 4):            // k > l == j
+            case 4 | (1 << 4):
+                return 0;
+            case 4: // [11] l > j > k
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
+            case 5 | (1 << 3) | (1 << 4): // [00] k = l = j
+                return this->fcidump->v(op_idxs[0], l, j, k);
+            case 5 | (1 << 3): // [03] k = l > j | [01] j = k > l
+                return this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 5 | (1 << 4): // [05] k > j = l
                 return -0.5 * this->fcidump->v(op_idxs[0], l, j, k);
-            case 5 | (1 << 3): // k == l > j | k == j > l **
+            case 5: // [10] k > l > j | [09] k > j > l
+                return -0.5 * this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 6 | (1 << 3) | (1 << 4):
                 return 0;
-            case 5: // k > l > j | k > j > l
-                return -0.5 * (this->fcidump->v(op_idxs[0], l, j, k) +
-                               this->fcidump->v(op_idxs[0], k, j, l));
-            case 6 | (1 << 3) | (1 << 4): // k == l == j
-            case 6 | (1 << 4):            // k > l == j
-                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k);
-            case 6 | (1 << 3): // k == l > j | k == j > l **
-                return (this->fcidump->v(op_idxs[0], l, j, k) -
-                        0.5 * this->fcidump->v(op_idxs[0], k, j, l));
-            case 6: // k > l > j | k > j > l
-                return 0.5 * sqrt(3) *
-                       (this->fcidump->v(op_idxs[0], l, j, k) -
-                        this->fcidump->v(op_idxs[0], k, j, l));
-            case 7 | (1 << 3) | (1 << 4): // k == l == j
-            case 7 | (1 << 4):            // k > l == j
-                return 0;
-            case 7 | (1 << 3): // k == l > j | k == j > l **
+            case 6 | (1 << 3): // [01] j = k > l
                 return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
-            case 7: // k > l > j | k > j > l
-                return 0;
+            case 6 | (1 << 4): // [05] k > j = l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k);
+            case 6: // [10] k > l > j | [09] k > j > l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
             default:
                 assert(false);
                 return 0;
             }
         };
         const function<double(uint8_t, const array<uint16_t, 1> &,
-                              const array<uint16_t, 3> &)> &rd_ops =
+                              const array<uint16_t, 3> &)> &lr_ops =
             [this](uint8_t iop, const array<uint16_t, 1> &op_idxs,
                    const array<uint16_t, 3> &ctr_idxs) -> double {
-            const uint16_t l = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[0]
-                                   : ctr_idxs[0];
+            const uint16_t j = ctr_idxs[0];
             if (iop == 0)
-                return sqrt(2) / 4 * this->fcidump->t(op_idxs[0], l);
-            const uint16_t k = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[1]
-                                   : ctr_idxs[1];
-            const uint16_t j = this->is_right
-                                   ? this->fcidump->n_sites() - 1 - ctr_idxs[2]
-                                   : ctr_idxs[2];
+                return sqrt(2) / 4 * this->fcidump->t(op_idxs[0], j);
+            const uint16_t k = ctr_idxs[1];
+            const uint16_t l = ctr_idxs[2];
             const uint8_t x =
                 (uint8_t)(iop | ((j == k) << 3) | ((k == l) << 4));
             switch (x) {
-            case 1 | (1 << 3) | (1 << 4): // j == l == k
-                return this->fcidump->v(op_idxs[0], j, l, k);
+            case 1 | (1 << 3) | (1 << 4):
             case 1 | (1 << 3):
                 return 0;
-            case 1 | (1 << 4): // j > l == k | l > j == k
-            case 1:            // j > l > k | l > j > k
+            case 1 | (1 << 4): // [04] j > k = l | [06] l > j = k
+                return this->fcidump->v(op_idxs[0], j, k, l) -
+                       0.5 * this->fcidump->v(op_idxs[0], l, k, j);
+            case 1: // [12] l > k > j | [07] j > k > l
+                return this->fcidump->v(op_idxs[0], l, k, j) -
+                       0.5 * this->fcidump->v(op_idxs[0], j, k, l);
+            case 2 | (1 << 3) | (1 << 4):
+            case 2 | (1 << 3):
+                return 0;
+            case 2 | (1 << 4): // [06] l > j = k
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, k, j);
+            case 2: // [07] j > k > l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, k, l);
+            case 3 | (1 << 3) | (1 << 4): // [00] k = l = j
+                return -0.5 * this->fcidump->v(op_idxs[0], l, j, k);
+            case 3 | (1 << 3): // [03] k = l < j | [01] j = k > l
+                return this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 3 | (1 << 4): // [05] k > j = l
+                return -0.5 * this->fcidump->v(op_idxs[0], l, j, k);
+            case 3: // [10] k > l > j | [09] k > j > l
+                return this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 4 | (1 << 3) | (1 << 4): // [00] k = l = j
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k);
+            case 4 | (1 << 3): // [01] j = k > l
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
+            case 4 | (1 << 4): // [05] k > j = l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k);
+            case 4: // [09] k > j > l
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
+            case 5 | (1 << 3) | (1 << 4):
+                return 0;
+            case 5 | (1 << 3): // [02] j = l > k
+                return -0.5 * this->fcidump->v(op_idxs[0], k, l, j);
+            case 5 | (1 << 4):
+                return 0;
+            case 5: // [11] l > j > k | [08] j > l > k
+                return -0.5 * this->fcidump->v(op_idxs[0], k, l, j) -
+                       0.5 * this->fcidump->v(op_idxs[0], j, l, k);
+            case 6 | (1 << 3) | (1 << 4):
+                return 0;
+            case 6 | (1 << 3): // [02] j = l > k
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
+            case 6 | (1 << 4):
+                return 0;
+            case 6: // [11] l > j > k | [08] j > l > k
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, l, k);
+            default:
+                assert(false);
+                return 0;
+            }
+        };
+        const function<double(uint8_t, const array<uint16_t, 1> &,
+                              const array<uint16_t, 3> &)> &rrd_ops =
+            [this](uint8_t iop, const array<uint16_t, 1> &op_idxs,
+                   const array<uint16_t, 3> &ctr_idxs) -> double {
+            const uint16_t l = this->fcidump->n_sites() - 1 - ctr_idxs[0];
+            if (iop == 0)
+                return sqrt(2) / 4 * this->fcidump->t(op_idxs[0], l);
+            const uint16_t k = this->fcidump->n_sites() - 1 - ctr_idxs[1];
+            const uint16_t j = this->fcidump->n_sites() - 1 - ctr_idxs[2];
+            const uint8_t x =
+                (uint8_t)(iop | ((j == k) << 3) | ((k == l) << 4));
+            switch (x) {
+            case 1 | (1 << 3) | (1 << 4): // [00] j = k = l
+                return -0.5 * this->fcidump->v(op_idxs[0], j, l, k);
+            case 1 | (1 << 3): // [02] j = l > k
+                return -0.5 * this->fcidump->v(op_idxs[0], j, l, k);
+            case 1 | (1 << 4): // [04] j > k = l | [06] l > j = k
                 return this->fcidump->v(op_idxs[0], j, l, k) -
                        0.5 * this->fcidump->v(op_idxs[0], k, l, j);
-            case 2 | (1 << 3) | (1 << 4):
-                return 0;
-            case 2 | (1 << 3): // j == l > k **
-                return -0.5 * this->fcidump->v(op_idxs[0], j, l, k);
-            case 2 | (1 << 4): // l > j == k
-            case 2:            // l > j > k
+            case 1: // [08] j > l > k | [11] l > j > k
+                return this->fcidump->v(op_idxs[0], j, l, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, l, j);
+            case 2 | (1 << 3) | (1 << 4): // [00] j = k = l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, l, k);
+            case 2 | (1 << 3): // [02] j = l > k
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, l, k);
+            case 2 | (1 << 4): // [06] l > j = k
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
+            case 2: // [11] l > j > k
                 return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
             case 3 | (1 << 3) | (1 << 4):
             case 3 | (1 << 3):
                 return 0;
-            case 3 | (1 << 4): // k > j == l
+            case 3 | (1 << 4): // [05] k > j = l
                 return -0.5 * this->fcidump->v(op_idxs[0], k, j, l);
-            case 3: // k > j > l | k > l > j
+            case 3: // [09] k > j > l | [10] k > l > j
                 return -0.5 * this->fcidump->v(op_idxs[0], k, j, l) -
                        0.5 * this->fcidump->v(op_idxs[0], l, j, k);
             case 4 | (1 << 3) | (1 << 4):
             case 4 | (1 << 3):
                 return 0;
-            case 4 | (1 << 4): // k > j == l
+            case 4 | (1 << 4): // [05] k > j = l
                 return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
-            case 4: // k > j > l | k > l > j
+            case 4: // [09] k > j > l | [10] k > l > j
                 return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l) +
                        0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, j, k);
             case 5 | (1 << 3) | (1 << 4):
-            case 5 | (1 << 3):
+                return 0;
+            case 5 | (1 << 3): // [03] k = l > j | [01] j = k > l
+                return this->fcidump->v(op_idxs[0], l, k, j) -
+                       0.5 * this->fcidump->v(op_idxs[0], j, k, l);
             case 5 | (1 << 4):
                 return 0;
-            case 5: // j > k > l | l > k > j
+            case 5: // [07] j > k > l | [12] l > k > j
                 return this->fcidump->v(op_idxs[0], j, k, l) -
                        0.5 * this->fcidump->v(op_idxs[0], l, k, j);
             case 6 | (1 << 3) | (1 << 4):
                 return 0;
-            case 6 | (1 << 3): // j == k > l | k == l > j **
-                return this->fcidump->v(op_idxs[0], l, k, j) -
-                       0.5 * this->fcidump->v(op_idxs[0], j, k, l);
+            case 6 | (1 << 3): // [01] j = k > l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, k, l);
             case 6 | (1 << 4):
                 return 0;
-            case 6: // l > k > j
+            case 6: // [12] l > k > j
                 return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], l, k, j);
-            case 7 | (1 << 3) | (1 << 4):
+            default:
+                assert(false);
                 return 0;
-            case 7 | (1 << 3): // j == k > l **
+            }
+        };
+        const function<double(uint8_t, const array<uint16_t, 1> &,
+                              const array<uint16_t, 3> &)> &lrd_ops =
+            [this](uint8_t iop, const array<uint16_t, 1> &op_idxs,
+                   const array<uint16_t, 3> &ctr_idxs) -> double {
+            const uint16_t j = ctr_idxs[0];
+            if (iop == 0)
+                return sqrt(2) / 4 * this->fcidump->t(op_idxs[0], j);
+            const uint16_t k = ctr_idxs[1];
+            const uint16_t l = ctr_idxs[2];
+            const uint8_t x =
+                (uint8_t)(iop | ((j == k) << 3) | ((k == l) << 4));
+            switch (x) {
+            case 1 | (1 << 3) | (1 << 4):
+            case 1 | (1 << 3):
+                return 0;
+            case 1 | (1 << 4): // [05] k > j = l
+                return -0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 1: // [10] k > l > j | [09] k > j > l
+                return this->fcidump->v(op_idxs[0], l, j, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, j, l);
+            case 2 | (1 << 3) | (1 << 4):
+            case 2 | (1 << 3):
+                return 0;
+            case 2 | (1 << 4): // [05] k > j = l
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
+            case 2: // [09] k > j > l
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, j, l);
+            case 3 | (1 << 3) | (1 << 4): // [00] j = k = l
+                return this->fcidump->v(op_idxs[0], j, l, k);
+            case 3 | (1 << 3): // [02] j = l > k
+                return -0.5 * this->fcidump->v(op_idxs[0], j, l, k);
+            case 3 | (1 << 4): // [04] j > k = l | [06] l > j = k
+                return this->fcidump->v(op_idxs[0], j, l, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, l, j);
+            case 3: // [08] j > l > k | [11] l > j > k
+                return -0.5 * this->fcidump->v(op_idxs[0], j, l, k) -
+                       0.5 * this->fcidump->v(op_idxs[0], k, l, j);
+            case 4 | (1 << 3) | (1 << 4):
+                return 0;
+            case 4 | (1 << 3): // [02] j = l > k
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, l, k);
+            case 4 | (1 << 4): // [06] l > j = k
+                return -0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
+            case 4: // [08] j > l > k | [11] l > j > k
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, l, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], k, l, j);
+            case 5 | (1 << 3) | (1 << 4):
+                return 0;
+            case 5 | (1 << 3): // [03] k = l > j | [01] j = k > l
+                return this->fcidump->v(op_idxs[0], l, k, j) -
+                       0.5 * this->fcidump->v(op_idxs[0], j, k, l);
+            case 5 | (1 << 4):
+                return 0;
+            case 5: // [12] l > k > j | [07] j > k > l
+                return this->fcidump->v(op_idxs[0], l, k, j) -
+                       0.5 * this->fcidump->v(op_idxs[0], j, k, l);
+            case 6 | (1 << 3) | (1 << 4):
+                return 0;
+            case 6 | (1 << 3): // [01] j = k > l
                 return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, k, l);
-            case 7 | (1 << 4):
-            case 7:
+            case 6 | (1 << 4):
                 return 0;
+            case 6: // [07] j > k > l
+                return 0.5 * sqrt(3) * this->fcidump->v(op_idxs[0], j, k, l);
             default:
                 assert(false);
                 return 0;
             }
         };
         const function<double(uint8_t, const array<uint16_t, 0> &,
-                              const array<uint16_t, 4> &)> &h_ops =
+                              const array<uint16_t, 4> &)> &rh_ops =
             [this](uint8_t iop, const array<uint16_t, 0> &op_idxs,
                    const array<uint16_t, 4> &ctr_idxs) -> double {
             const uint16_t l = this->is_right
@@ -1938,6 +2179,374 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                 return 0;
             }
         };
+        const function<double(uint8_t, const array<uint16_t, 0> &,
+                              const array<uint16_t, 4> &)> &lh_ops =
+            [this](uint8_t iop, const array<uint16_t, 0> &op_idxs,
+                   const array<uint16_t, 4> &ctr_idxs) -> double {
+            const uint16_t i = ctr_idxs[0];
+            const uint16_t j = ctr_idxs[1];
+            if (iop < 2)
+                return iop ? (i == j ? 0 : sqrt(2) * this->fcidump->t(i, j))
+                           : sqrt(2) * this->fcidump->t(j, i);
+            const uint16_t k = ctr_idxs[2];
+            const uint16_t l = ctr_idxs[3];
+            const uint8_t x = (uint8_t)(iop | ((i == j) << 5) |
+                                        ((j == k) << 6) | ((k == l) << 7));
+            switch (x) {
+            case 2 | (1 << 5) | (1 << 6) | (1 << 7):
+                return 0;
+            case 2 | (1 << 5) | (1 << 6):
+                return 0;
+            case 2 | (1 << 6) |
+                (1 << 7): // [08] i > k = l = j | [06] k > i = j = l
+                return this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(j, l, i, k);
+            case 2 | (1 << 5) | (1 << 7): // [10] i = k > j = l
+                return -0.5 * this->fcidump->v(i, l, j, k);
+            case 2 | (1 << 5): // [34] i = k > l > j | [22] i = k > j > l
+                return -0.5 * this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(i, k, j, l);
+            case 2 | (1 << 6):
+                return 0;
+            case 2 | (1 << 7): // [16] i > k > j = l | [28] k > i > j = l
+                return -0.5 * this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(j, l, i, k);
+            case 2: // [54] i > k > l > j | [64] k > i > l > j | [53] i > k > j
+                    // > l | [63] k > i > j > l
+                return -0.5 * this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(j, l, i, k) -
+                       0.5 * this->fcidump->v(i, k, j, l) -
+                       0.5 * this->fcidump->v(j, k, i, l);
+            case 3 | (1 << 5) | (1 << 6) | (1 << 7):
+                return 0;
+            case 3 | (1 << 5) | (1 << 6):
+                return 0;
+            case 3 | (1 << 6) | (1 << 7): // [06] k > i = j = l
+                return -0.5 * sqrt(3) * this->fcidump->v(j, l, i, k);
+            case 3 | (1 << 5) | (1 << 7): // [10] i = k > j = l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, j, k);
+            case 3 | (1 << 5): // [34] i = k > l > j | [22] i = k > j > l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, j, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(i, k, j, l);
+            case 3 | (1 << 6):
+                return 0;
+            case 3 | (1 << 7): // [16] i > k > j = l | [28] k > i > j = l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, j, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(j, l, i, k);
+            case 3: // [54] i > k > l > j | [64] k > i > l > j | [53] i > k > j
+                    // > l | [63] k > i > j > l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, j, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(j, l, i, k) -
+                       0.5 * sqrt(3) * this->fcidump->v(i, k, j, l) +
+                       0.5 * sqrt(3) * this->fcidump->v(j, k, i, l);
+            case 4 | (1 << 5) | (1 << 6) | (1 << 7): // [00] i = k = l = j
+                return this->fcidump->v(i, l, j, k);
+            case 4 | (1 << 5) |
+                (1 << 6): // [03] i = k = l > j | [01] i = j = k > l
+                return this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(i, k, j, l);
+            case 4 | (1 << 6) | (1 << 7):
+                return 0;
+            case 4 | (1 << 5) | (1 << 7):
+            case 4 | (1 << 5):
+                return 0;
+            case 4 | (1 << 6): // [41] i > k = l > j | [39] i > j = k > l | [46]
+                               // k > i = l > j | [45] k > i = j > l
+                return this->fcidump->v(i, l, j, k) -
+                       0.5 * this->fcidump->v(i, k, j, l) -
+                       0.5 * this->fcidump->v(j, l, i, k) +
+                       this->fcidump->v(j, k, i, l);
+            case 4 | (1 << 7):
+            case 4:
+                return 0;
+            case 5 | (1 << 5) | (1 << 6) | (1 << 7):
+                return 0;
+            case 5 | (1 << 5) | (1 << 6): // [01] i = j = k > l
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, j, l);
+            case 5 | (1 << 6) | (1 << 7):
+                return 0;
+            case 5 | (1 << 5) | (1 << 7):
+            case 5 | (1 << 5):
+                return 0;
+            case 5 | (1 << 6): // [39] i > j = k > l | [46] k > i = l > j
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, j, l) -
+                       0.5 * sqrt(3) * this->fcidump->v(j, l, i, k);
+            case 5 | (1 << 7):
+            case 5:
+                return 0;
+            case 6 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 6 | (1 << 5) | (1 << 6):
+            case 6 | (1 << 6) | (1 << 7):
+                return 0;
+            case 6 | (1 << 5) | (1 << 7): // [13] j = l > i = k
+                return -0.5 * this->fcidump->v(k, j, l, i);
+            case 6 | (1 << 5): // [25] j = l > i > k | [37] j = l > k > i
+                return -0.5 * this->fcidump->v(k, j, l, i) -
+                       0.5 * this->fcidump->v(l, j, k, i);
+            case 6 | (1 << 6):
+                return 0;
+            case 6 | (1 << 7): // [31] l > j > i = k | [19] j > l > i = k
+                return -0.5 * this->fcidump->v(k, j, l, i) -
+                       0.5 * this->fcidump->v(k, i, l, j);
+            case 6: // [71] l > j > i > k | [72] l > j > k > i | [61] j > l > i
+                    // > k | [62] j > l > k > i
+                return -0.5 * this->fcidump->v(k, j, l, i) -
+                       0.5 * this->fcidump->v(l, j, k, i) -
+                       0.5 * this->fcidump->v(k, i, l, j) -
+                       0.5 * this->fcidump->v(l, i, k, j);
+            case 7 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 7 | (1 << 5) | (1 << 6):
+            case 7 | (1 << 6) | (1 << 7):
+                return 0;
+            case 7 | (1 << 5) | (1 << 7): // [13] j = l > i = k
+                return 0.5 * sqrt(3) * this->fcidump->v(k, j, l, i);
+            case 7 | (1 << 5): // [25] j = l > i > k | [37] j = l > k > i
+                return 0.5 * sqrt(3) * this->fcidump->v(k, j, l, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(l, j, k, i);
+            case 7 | (1 << 6):
+                return 0;
+            case 7 | (1 << 7): // [31] l > j > i = k | [19] j > l > i = k
+                return 0.5 * sqrt(3) * this->fcidump->v(k, j, l, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(k, i, l, j);
+            case 7: // // [71] l > j > i > k | [72] l > j > k > i | [61] j > l >
+                    // i > k | [62] j > l > k > i
+                return 0.5 * sqrt(3) * this->fcidump->v(k, j, l, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(l, j, k, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(k, i, l, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(l, i, k, j);
+            case 8 | (1 << 5) | (1 << 6) | (1 << 7):
+                return 0;
+            case 8 | (1 << 5) |
+                (1 << 6): // [04] j = k = l > i | [02] i = j = l > k
+                return this->fcidump->v(l, k, i, j) -
+                       0.5 * this->fcidump->v(i, k, l, j);
+            case 8 | (1 << 6) | (1 << 7):
+            case 8 | (1 << 5) | (1 << 7):
+                return 0;
+            case 8 | (1 << 5): // [23] i = l > j > k | [36] j = k > l > i | [33]
+                               // i = j > l > k | [38] k = l > j > i
+                return -0.5 * this->fcidump->v(i, k, l, j) -
+                       0.5 * this->fcidump->v(l, j, i, k) +
+                       this->fcidump->v(i, j, l, k) +
+                       this->fcidump->v(l, k, i, j);
+            case 8 | (1 << 6):
+            case 8 | (1 << 7):
+                return 0;
+            case 8: // [55] i > l > j > k | [66] k > j > l > i | [52] i > j > l
+                    // > k | [68] k > l > j > i
+                return -0.5 * this->fcidump->v(i, k, l, j) -
+                       0.5 * this->fcidump->v(l, j, i, k) +
+                       this->fcidump->v(i, j, l, k) +
+                       this->fcidump->v(l, k, i, j);
+            case 9 | (1 << 5) | (1 << 6) | (1 << 7):
+                return 0;
+            case 9 | (1 << 5) | (1 << 6): // [02] i = j = l > k
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, l, j);
+            case 9 | (1 << 6) | (1 << 7):
+            case 9 | (1 << 5) | (1 << 7):
+                return 0;
+            case 9 | (1 << 5): // [23] i = l > j > k | [36] j = k > l > i
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, l, j) -
+                       0.5 * sqrt(3) * this->fcidump->v(l, j, i, k);
+            case 9 | (1 << 6):
+            case 9 | (1 << 7):
+                return 0;
+            case 9: // [55] i > l > j > k | [66] k > j > l > i
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, l, j) -
+                       0.5 * sqrt(3) * this->fcidump->v(l, j, i, k);
+            case 10 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 10 | (1 << 5) | (1 << 6):
+            case 10 | (1 << 6) | (1 << 7):
+            case 10 | (1 << 5) | (1 << 7):
+            case 10 | (1 << 5):
+                return 0;
+            case 10 | (1 << 6): // [40] i > j = l > k | [47] k > j = l > i
+                return -0.5 * this->fcidump->v(i, k, l, j) -
+                       0.5 * this->fcidump->v(l, k, i, j);
+            case 10 | (1 << 7):
+            case 10:
+                return 0;
+            case 11 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 11 | (1 << 5) | (1 << 6):
+            case 11 | (1 << 6) | (1 << 7):
+            case 11 | (1 << 5) | (1 << 7):
+            case 11 | (1 << 5):
+                return 0;
+            case 11 | (1 << 6): // [40] i > j = l > k | [47] k > j = l > i
+                return -0.5 * sqrt(3) * this->fcidump->v(i, k, l, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(l, k, i, j);
+            case 11 | (1 << 7):
+            case 11:
+                return 0;
+            case 12 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 12 | (1 << 5) | (1 << 6):
+            case 12 | (1 << 6) | (1 << 7):
+            case 12 | (1 << 5) | (1 << 7):
+            case 12 | (1 << 5):
+            case 12 | (1 << 6):
+            case 12 | (1 << 7):
+                return 0;
+            case 12: // [69] l > i > j > k | [60] j > k > l > i | [58] j > i > l
+                     // > k | [74] l > k > j > i
+                return -0.5 * this->fcidump->v(j, k, l, i) -
+                       0.5 * this->fcidump->v(l, i, j, k) +
+                       this->fcidump->v(j, i, l, k) +
+                       this->fcidump->v(l, k, j, i);
+            case 13 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 13 | (1 << 5) | (1 << 6):
+            case 13 | (1 << 6) | (1 << 7):
+            case 13 | (1 << 5) | (1 << 7):
+            case 13 | (1 << 5):
+            case 13 | (1 << 6):
+            case 13 | (1 << 7):
+                return 0;
+            case 13: // [69] l > i > j > k | [60] j > k > l > i
+                return 0.5 * sqrt(3) * this->fcidump->v(j, k, l, i) +
+                       0.5 * sqrt(3) * this->fcidump->v(l, i, j, k);
+            case 14 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 14 | (1 << 5) | (1 << 6):
+            case 14 | (1 << 6) | (1 << 7):
+            case 14 | (1 << 5) | (1 << 7):
+            case 14 | (1 << 5):
+                return 0;
+            case 14 | (1 << 6): // [50] l > j = k > i | [44] j > k = l > i |
+                                // [43] j > i = l > k | [48] l > i = j > k
+                return -0.5 * this->fcidump->v(l, k, j, i) +
+                       this->fcidump->v(l, i, j, k) -
+                       0.5 * this->fcidump->v(j, i, l, k) +
+                       this->fcidump->v(j, k, l, i);
+            case 14 | (1 << 7):
+            case 14:
+                return 0;
+            case 15 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 15 | (1 << 5) | (1 << 6):
+            case 15 | (1 << 6) | (1 << 7):
+            case 15 | (1 << 5) | (1 << 7):
+            case 15 | (1 << 5):
+                return 0;
+            case 15 | (1 << 6): // [50] l > j = k > i | [43] j > i = l > k
+                return 0.5 * sqrt(3) * this->fcidump->v(l, k, j, i) +
+                       0.5 * sqrt(3) * this->fcidump->v(j, i, l, k);
+            case 15 | (1 << 7):
+            case 15:
+                return 0;
+            case 16 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 16 | (1 << 5) | (1 << 6):
+            case 16 | (1 << 6) | (1 << 7):
+                return 0;
+            case 16 | (1 << 5) |
+                (1 << 7): // [11] i = l > j = k | [12] j = k > i = l | [09] i =
+                          // j > k = l | [14] k = l > i = j
+                return -0.5 * this->fcidump->v(i, l, k, j) -
+                       0.5 * this->fcidump->v(k, j, i, l) +
+                       this->fcidump->v(i, j, k, l) +
+                       this->fcidump->v(k, l, i, j);
+            case 16 | (1 << 5): // [35] i = l > k > j | [24] j = k > i > l |
+                                // [21] i = j > k > l | [26] k = l > i > j
+                return -0.5 * this->fcidump->v(i, l, k, j) -
+                       0.5 * this->fcidump->v(k, j, i, l) +
+                       this->fcidump->v(i, j, k, l) +
+                       this->fcidump->v(k, l, i, j);
+            case 16 | (1 << 6):
+                return 0;
+            case 16 | (1 << 7): // [17] i > l > j = k | [30] k > j > i = l |
+                                // [15] i > j > k = l | [20] k > l > i = j
+                return -0.5 * this->fcidump->v(i, l, k, j) -
+                       0.5 * this->fcidump->v(k, j, i, l) +
+                       this->fcidump->v(i, j, k, l) +
+                       this->fcidump->v(k, l, i, j);
+            case 16: // [56] i > l > k > j | [65] k > j > i > l | [51] i > j > k
+                     // > l | [67] k > l > i > j
+                return -0.5 * this->fcidump->v(i, l, k, j) -
+                       0.5 * this->fcidump->v(k, j, i, l) +
+                       this->fcidump->v(i, j, k, l) +
+                       this->fcidump->v(k, l, i, j);
+            case 17 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 17 | (1 << 5) | (1 << 6):
+            case 17 | (1 << 6) | (1 << 7):
+                return 0;
+            case 17 | (1 << 5) |
+                (1 << 7): // [11] i = l > j = k | [12] j = k > i = l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, k, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(k, j, i, l);
+            case 17 | (1 << 5): // [35] i = l > k > j | [24] j = k > i > l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, k, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(k, j, i, l);
+            case 17 | (1 << 6):
+                return 0;
+            case 17 | (1 << 7): // [17] i > l > j = k | [30] k > j > i = l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, k, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(k, j, i, l);
+            case 17: // [56] i > l > k > j | [65] k > j > i > l
+                return 0.5 * sqrt(3) * this->fcidump->v(i, l, k, j) +
+                       0.5 * sqrt(3) * this->fcidump->v(k, j, i, l);
+            case 18 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 18 | (1 << 5) | (1 << 6):
+            case 18 | (1 << 6) | (1 << 7):
+            case 18 | (1 << 5) | (1 << 7):
+            case 18 | (1 << 5):
+            case 18 | (1 << 6):
+                return 0;
+            case 18 | (1 << 7): // [29] l > i > j = k | [18] j > k > i = l |
+                                // [27] j > i > k = l | [32] l > k > i = j
+                return -0.5 * this->fcidump->v(j, l, k, i) -
+                       0.5 * this->fcidump->v(k, i, j, l) +
+                       this->fcidump->v(j, i, k, l) +
+                       this->fcidump->v(k, l, j, i);
+            case 18: // [70] l > i > k > j | [59] j > k > i > l | [57] j > i > k
+                     // > l | [73] l > k > i > j
+                return -0.5 * this->fcidump->v(j, l, k, i) -
+                       0.5 * this->fcidump->v(k, i, j, l) +
+                       this->fcidump->v(j, i, k, l) +
+                       this->fcidump->v(k, l, j, i);
+            case 19 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 19 | (1 << 5) | (1 << 6):
+            case 19 | (1 << 6) | (1 << 7):
+            case 19 | (1 << 5) | (1 << 7):
+            case 19 | (1 << 5):
+            case 19 | (1 << 6):
+                return 0;
+            case 19 | (1 << 7): // [29] l > i > j = k | [18] j > k > i = l
+                return -0.5 * sqrt(3) * this->fcidump->v(j, l, k, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(k, i, j, l);
+            case 19: // [70] l > i > k > j | [59] j > k > i > l
+                return -0.5 * sqrt(3) * this->fcidump->v(j, l, k, i) -
+                       0.5 * sqrt(3) * this->fcidump->v(k, i, j, l);
+            case 20 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 20 | (1 << 5) | (1 << 6):
+                return 0;
+            case 20 | (1 << 6) |
+                (1 << 7): // [05] l > i = j = k | [07] j > i = k = l
+                return -0.5 * this->fcidump->v(j, l, k, i) +
+                       this->fcidump->v(j, i, k, l);
+            case 20 | (1 << 5) | (1 << 7):
+            case 20 | (1 << 5):
+                return 0;
+            case 20 | (1 << 6): // [42] j > i = k > l | [49] l > i = k > j
+                return -0.5 * this->fcidump->v(j, i, k, l) -
+                       0.5 * this->fcidump->v(j, l, k, i);
+            case 20 | (1 << 7):
+            case 20:
+                return 0;
+            case 21 | (1 << 5) | (1 << 6) | (1 << 7):
+            case 21 | (1 << 5) | (1 << 6):
+                return 0;
+            case 21 | (1 << 6) | (1 << 7): // [05] l > i = j = k
+                return -0.5 * sqrt(3) * this->fcidump->v(j, l, k, i);
+            case 21 | (1 << 5) | (1 << 7):
+            case 21 | (1 << 5):
+                return 0;
+            case 21 | (1 << 6): // [42] j > i = k > l | [49] l > i = k > j
+                return 0.5 * sqrt(3) * this->fcidump->v(j, i, k, l) -
+                       0.5 * sqrt(3) * this->fcidump->v(j, l, k, i);
+            case 21 | (1 << 7):
+            case 21:
+                return 0;
+            default:
+                assert(false);
+                return 0;
+            }
+        };
         for (uint8_t s = 0; s < 2; s++)
             for (auto &mats : p_mats[s])
                 build_complementary_site_ops<decltype(p0_ops), 2, 2>(
@@ -1950,24 +2559,39 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
         for (uint8_t s = 0; s < 2; s++)
             for (auto &mats : q_mats[s])
                 build_complementary_site_ops<decltype(q0_ops), 2, 2>(
-                    {s ? b1_ops : b0_ops, s ? bd1_ops : bd0_ops},
+                    is_right ? vector<uint8_t>{s ? b1_ops : b0_ops,
+                                               s ? bd1_ops : bd0_ops}
+                             : vector<uint8_t>{s ? bd1_ops : bd0_ops,
+                                               s ? b1_ops : b0_ops},
                     s ? q1_ops : q0_ops, mats.second);
         for (auto &mats : r_mats)
-            build_complementary_site_ops<decltype(r_ops), 1, 3>(
+            build_complementary_site_ops<decltype(lr_ops), 1, 3>(
                 {dxx_ops, dcd0_ops, dcd1_ops, cdd0_ops, cdd1_ops, ddc0_ops,
-                 ddc1_ops, ddc2_ops},
-                r_ops, mats.second);
+                 ddc1_ops},
+                is_right ? rr_ops : lr_ops, mats.second);
         for (auto &mats : rd_mats)
-            build_complementary_site_ops<decltype(r_ops), 1, 3>(
+            build_complementary_site_ops<decltype(lrd_ops), 1, 3>(
                 {cxx_ops, dcc0_ops, dcc1_ops, ccd0_ops, ccd1_ops, cdc0_ops,
-                 cdc1_ops, cdc2_ops},
-                rd_ops, mats.second);
-        build_complementary_site_ops<decltype(h_ops), 0, 4>(
-            {dcxx_ops,  cdxx_ops,  ddcc0_ops, ddcc1_ops, ddcc2_ops, ddcc3_ops,
-             ccdd0_ops, ccdd1_ops, cddc0_ops, cddc1_ops, cddc2_ops, cddc3_ops,
-             cdcd0_ops, cdcd1_ops, cdcd2_ops, cdcd3_ops, dcdc0_ops, dcdc1_ops,
-             dccd0_ops, dccd1_ops, dccd2_ops, dccd3_ops},
-            h_ops, h_mats);
+                 cdc1_ops},
+                is_right ? rrd_ops : lrd_ops, mats.second);
+        if (is_right)
+            build_complementary_site_ops<decltype(rh_ops), 0, 4>(
+                vector<uint8_t>{dcxx_ops,  cdxx_ops,  ddcc0_ops, ddcc1_ops,
+                                ddcc2_ops, ddcc3_ops, ccdd0_ops, ccdd1_ops,
+                                cddc0_ops, cddc1_ops, cddc2_ops, cddc3_ops,
+                                cdcd0_ops, cdcd1_ops, cdcd2_ops, cdcd3_ops,
+                                dcdc0_ops, dcdc1_ops, dccd0_ops, dccd1_ops,
+                                dccd2_ops, dccd3_ops},
+                rh_ops, h_mats);
+        else
+            build_complementary_site_ops<decltype(lh_ops), 0, 4>(
+                vector<uint8_t>{cdxx_ops,  dcxx_ops,  ccdd0_ops, ccdd1_ops,
+                                ccdd2_ops, ccdd3_ops, ddcc0_ops, ddcc1_ops,
+                                cddc0_ops, cddc1_ops, cddc2_ops, cddc3_ops,
+                                dcdc0_ops, dcdc1_ops, dcdc2_ops, dcdc3_ops,
+                                cdcd0_ops, cdcd1_ops, dccd0_ops, dccd1_ops,
+                                dccd2_ops, dccd3_ops},
+                lh_ops, h_mats);
     }
 };
 

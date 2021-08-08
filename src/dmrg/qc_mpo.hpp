@@ -1883,7 +1883,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             else
                 pmat = make_shared<SymbolicMatrix<S>>(lshape, rshape);
             Symbolic<S> &mat = *pmat;
-            if (m == 0) {
+            if (pm == 0) {
                 mat[{0, 0}] = h_op;
                 mat[{0, 1}] = i_op;
                 p = 2;
