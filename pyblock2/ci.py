@@ -51,7 +51,7 @@ class CI(lib.StreamObject):
         scratch = './nodex'
         n_threads = lib.num_threads()
         fcidump_tol = 1E-13
-        memory = 20E9
+        memory = lib.param.MAX_MEMORY * 1E6
         init_memory(isize=int(memory * 0.05),
             dsize=int(memory * 0.95), save_dir=scratch)
         Global.threading = Threading(

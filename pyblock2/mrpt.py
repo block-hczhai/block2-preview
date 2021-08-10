@@ -41,7 +41,8 @@ class NEVPT(lib.StreamObject):
         self.ci_order = ci_order
         self.dmrg_args = {
             "startM": 250, "maxM": 500, "schedule": "default",
-            "sweep_tol": 1E-6, "cutoff": 1E-14
+            "sweep_tol": 1E-6, "cutoff": 1E-14,
+            "memory": lib.param.MAX_MEMORY * 1E6
         }
 
     @property
@@ -58,7 +59,7 @@ class NEVPT(lib.StreamObject):
         scratch = './nodex'
         n_threads = lib.num_threads()
         fcidump_tol = 1E-13
-        memory = 20E9
+        memory = self.dmrg_args["memory"]
         init_memory(isize=int(memory * 0.05),
             dsize=int(memory * 0.95), save_dir=scratch)
         Global.threading = Threading(
