@@ -1556,14 +1556,26 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
+        const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
+        const uint16_t m_end =
+            hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
 #ifdef _MSC_VER
-        for (int m = 0; m < (int)n_sites; m++) {
+        for (int m = (int)m_start; m < (int)m_end; m++) {
 #else
-        for (uint16_t m = 0; m < n_sites; m++) {
+        for (uint16_t m = m_start; m < m_end; m++) {
 #endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
+                                   opt->ops);
+        }
+        if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[0];
+            hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+        }
+        if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[n_sites - 1];
+            hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
         hamil->opf->seq->mode = seqt;
@@ -2510,14 +2522,26 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
+        const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
+        const uint16_t m_end =
+            hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
 #ifdef _MSC_VER
-        for (int m = 0; m < (int)n_sites; m++) {
+        for (int m = (int)m_start; m < (int)m_end; m++) {
 #else
-        for (uint16_t m = 0; m < n_sites; m++) {
+        for (uint16_t m = m_start; m < m_end; m++) {
 #endif
             shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
+                                   opt->ops);
+        }
+        if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[0];
+            hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+        }
+        if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S>> opt = this->tensors[n_sites - 1];
+            hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
         hamil->opf->seq->mode = seqt;

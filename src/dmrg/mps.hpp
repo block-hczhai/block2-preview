@@ -1056,7 +1056,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
                 bool init_fci = true)
         : MPSInfo<S>(n_sites, vacuum, target, basis, false),
           n_inactive(n_inactive), n_external(n_external), ci_order(ci_order) {
-        assert(n_external + n_inactive < n_sites);
+        assert(n_external + n_inactive <= n_sites);
         if (init_fci)
             set_bond_dimension_fci();
     }

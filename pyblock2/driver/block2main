@@ -86,6 +86,7 @@ try:
     else:
         from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
         from block2.su2 import DMRGBigSite, LinearBigSite
+        from block2.su2 import CSFBigSite
 except ImportError:
     pass
 
@@ -144,11 +145,8 @@ for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
         elif dynamic_corr_method[0] == 'nevpt2':
             dynamic_corr_method[0] = 'nevpt2sd'
         break
-big_site_method = None
-if "big_site_fock" in dic:
-    big_site_method = "fock"
-elif "big_site_folding" in dic:
-    big_site_method = "folding"
+big_site_method = dic.get("big_site", None)
+n_cas = 0
 if dynamic_corr_method is None or dynamic_corr_method[0] == "dmrgfci":
     qc_type = QCTypes.Conventional
 else:
@@ -361,30 +359,34 @@ if pre_run or not no_pre_run:
         mpo_fold.sparse_form = mpo_fold.sparse_form[:-1] + 'S'
         mpo_fold.tf = TensorFunctions(CSROperatorFunctions(hamil.opf.cg))
     else:
+        assert dynamic_corr_method is not None
+        if dynamic_corr_method[0] in ['mrcisdt']:
+            xl = -3, -3, -3
+            xr = 3, 3, 3
+        elif dynamic_corr_method[0] in ['mrcisd', 'nevpt2sd']:
+            xl = -2, -2, -2
+            xr = 2, 2, 2
+        elif dynamic_corr_method[0] in ['mrcis', 'nevpt2s']:
+            xl = -1, -1, -1
+            xr = 1, 1, 1
+        elif dynamic_corr_method[0] in ['casci']:
+            xl = 0, 0, 0
+            xr = 0, 0, 0
+        else:
+            assert len(nelec) == 1 and len(spin) == 1
+            assert (nelec[0] + spin[0]) % 2 == 0
+            n_alpha = (nelec[0] + spin[0]) // 2
+            n_beta = (nelec[0] - spin[0]) // 2
+            xl = -n_alpha, -n_beta, -nelec[0]
+            xr = n_alpha, n_beta, nelec[0]
         if big_site_method == "fock":
-            assert dynamic_corr_method is not None
             assert "nonspinadapted" in dic
-            if dynamic_corr_method[0] in ['mrcisdt']:
-                xl = -3, -3, -3
-                xr = 3, 3, 3
-            elif dynamic_corr_method[0] in ['mrcisd', 'nevpt2sd']:
-                xl = -2, -2, -2
-                xr = 2, 2, 2
-            elif dynamic_corr_method[0] in ['mrcis', 'nevpt2s']:
-                xl = -1, -1, -1
-                xr = 1, 1, 1
-            elif dynamic_corr_method[0] in ['casci']:
-                xl = 0, 0, 0
-                xr = 0, 0, 0
-            else:
-                assert len(nelec) == 1 and len(spin) == 1
-                assert (nelec[0] + spin[0]) % 2 == 0
-                n_alpha = (nelec[0] + spin[0]) // 2
-                n_beta = (nelec[0] - spin[0]) // 2
-                xl = -n_alpha, -n_beta, -nelec[0]
-                xr = n_alpha, n_beta, nelec[0]
             big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, VectorUInt8(orb_sym), *xl, True)
             big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, VectorUInt8(orb_sym), *xr, True)
+        elif big_site_method == "csf":
+            assert "nonspinadapted" not in dic
+            big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, VectorUInt8(orb_sym[:n_inactive]))
+            big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, VectorUInt8(orb_sym[-n_external:]))
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -717,9 +719,6 @@ except ImportError:
 
 # prepare mpo
 if pre_run or not no_pre_run:
-    ntg = Global.threading.n_threads_global
-    if big_site_method == "fock":
-        Global.threading.n_threads_global = 1
     # mpo for dmrg
     _print("build mpo", time.perf_counter() - tx)
     if big_site_method == "folding":
@@ -777,8 +776,6 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         impo.save_data(scratch + '/mpo-ident.bin')
-    
-    Global.threading.n_threads_global = ntg
 
     if para_pre_run:
         if MPI is not None:
@@ -1256,7 +1253,7 @@ if not pre_run:
 
         _print("env init finished", time.perf_counter() - tx)
 
-        if big_site_method is not None:
+        if big_site_method is not None and n_cas != 0:
             dmrg = DMRGBigSite(me, VectorUBond(bond_dims), VectorDouble(noises))
             dmrg.last_site_svd = True
             dmrg.last_site_1site = dot == 2
@@ -1966,19 +1963,23 @@ if not pre_run:
             lmpo_fold.sparse_form = 'S' + lmpo_fold.sparse_form[1:-1] + 'S'
             lmpo_fold.tf = TensorFunctions(CSROperatorFunctions(hm_dyall.opf.cg))
         else:
+            assert dynamic_corr_method is not None
+            if dynamic_corr_method[0] in ['nevpt2sd']:
+                xl = -2, -2, -2
+                xr = 2, 2, 2
+            elif dynamic_corr_method[0] in ['nevpt2s']:
+                xl = -1, -1, -1
+                xr = 1, 1, 1
+            else:
+                assert False
             if big_site_method == "fock":
-                assert dynamic_corr_method is not None
                 assert "nonspinadapted" in dic
-                if dynamic_corr_method[0] in ['nevpt2sd']:
-                    xl = -2, -2, -2
-                    xr = 2, 2, 2
-                elif dynamic_corr_method[0] in ['nevpt2s']:
-                    xl = -1, -1, -1
-                    xr = 1, 1, 1
-                else:
-                    assert False
                 big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_dyall, VectorUInt8(orb_sym), *xl, True)
                 big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_dyall, VectorUInt8(orb_sym), *xr, True)
+            elif big_site_method == "csf":
+                assert "nonspinadapted" not in dic
+                big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fd_dyall, VectorUInt8(orb_sym[:n_inactive]))
+                big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fd_dyall, VectorUInt8(orb_sym[-n_external:]))
             else:
                 raise NotImplementedError
             big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -1992,9 +1993,6 @@ if not pre_run:
                     big_right = ParallelBigSite(big_right, prule)
             hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fd_dyall,
                 None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
-        
-        if big_site_method == "fock":
-            Global.threading.n_threads_global = 1
 
         # left mpo
         _print("build left mpo", time.perf_counter() - tx)
@@ -2031,8 +2029,6 @@ if not pre_run:
 
         if MPI is None or MPI.rank == 0:
             rmpo.save_data(scratch + '/rmpo.bin')
-        
-        Global.threading.n_threads_global = ntg
 
         if not para_no_pre_run:
 
@@ -2111,7 +2107,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
         
         right_bdims = VectorUBond([mps_info.bond_dim + 400])
-        if big_site_method is not None:
+        if big_site_method is not None and n_cas != 0:
             linear = LinearBigSite(lme, rme, None, VectorUBond(bond_dims), right_bdims, VectorDouble(noises))
             linear.last_site_svd = True
             linear.last_site_1site = dot == 2

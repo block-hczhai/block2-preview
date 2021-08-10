@@ -26,7 +26,7 @@ class TestDMRG : public ::testing::Test {
         // threading_() =
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
-        threading_()->seq_type = SeqTypes::Tasked;
+        threading_()->seq_type = SeqTypes::None;
         cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
@@ -78,30 +78,32 @@ TEST_F(TestDMRG, Test) {
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
 
+    shared_ptr<BigSite<SU2>> big_left = make_shared<CSFBigSite<SU2>>(
+        5, 10, false, fcidump,
+        vector<uint8_t>(orbsym.begin(), orbsym.begin() + 5));
     shared_ptr<BigSite<SU2>> big_right = make_shared<CSFBigSite<SU2>>(
-        3, 10, false, fcidump, vector<uint8_t>(orbsym.begin(), orbsym.begin() + 3));
+        5, 10, true, fcidump,
+        vector<uint8_t>(orbsym.begin(), orbsym.begin() + 5));
 
     shared_ptr<HamiltonianQC<SU2>> hamil =
         make_shared<HamiltonianQCBigSite<SU2>>(vacuum, norb, orbsym, fcidump,
-                                               nullptr, big_right);
+                                               big_left, big_right);
     shared_ptr<MPO<SU2>> mpo = make_shared<MPOQC<SU2>>(hamil, QCTypes::NC);
-
-    abort();
+    int nsite = hamil->n_sites;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SU2>>(
-        mpo, make_shared<RuleQC<SU2>>(), true, true,
-        OpNamesSet({OpNames::R, OpNames::RD}));
+    mpo = make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true,
+                                          false);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    mpo->reduce_data();
-    mpo->save_data("mpo.bin");
+    // mpo->reduce_data();
+    // mpo->save_data("mpo.bin");
 
-    mpo = make_shared<MPO<SU2>>(0);
-    mpo->load_data("mpo.bin", true);
+    // mpo = make_shared<MPO<SU2>>(0);
+    // mpo->load_data("mpo.bin", true);
 
     ubond_t bond_dim = 200;
 
@@ -111,7 +113,7 @@ TEST_F(TestDMRG, Test) {
 
     // CCSD init
     shared_ptr<MPSInfo<SU2>> mps_info =
-        make_shared<MPSInfo<SU2>>(norb, vacuum, target, hamil->basis);
+        make_shared<MPSInfo<SU2>>(nsite, vacuum, target, hamil->basis);
     // mps_info->set_bond_dimension_full_fci();
     mps_info->set_bond_dimension(bond_dim);
 
@@ -130,11 +132,11 @@ TEST_F(TestDMRG, Test) {
     // mps_info->set_bond_dimension(bond_dim);
 
     cout << "left dims = ";
-    for (int i = 0; i <= norb; i++)
+    for (int i = 0; i <= nsite; i++)
         cout << mps_info->left_dims[i]->n_states_total << " ";
     cout << endl;
     cout << "right dims = ";
-    for (int i = 0; i <= norb; i++)
+    for (int i = 0; i <= nsite; i++)
         cout << mps_info->right_dims[i]->n_states_total << " ";
     cout << endl;
     // abort();
@@ -144,7 +146,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, 2);
+    shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(nsite, 0, 2);
     auto st = mps->estimate_storage(mps_info);
     cout << "MPS memory = " << Parsing::to_size_string(st[0])
          << "; storage = " << Parsing::to_size_string(st[1]) << endl;

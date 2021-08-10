@@ -194,11 +194,10 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 if (pm == 0)
                     mshape =
                         4 * (m + 1) * (m + 1) + 8 * (m + 1) * (n_orbs - m - 1);
-                else if (pm != n_sites - 2)
-                    mshape = 4 + 8 * (n_orbs - m - 1);
                 else
-                    mshape = 4 + 8 * (n_orbs - m - 1) +
-                             4 * (n_orbs - m - 1) * (n_orbs - m - 1);
+                    mshape = 4 + 8 * (n_orbs - m - 1);
+                if (pm == n_sites - 2)
+                    mshape += 4 * (n_orbs - m - 1) * (n_orbs - m - 1);
                 shared_ptr<SymbolicColumnVector<S>> pmop =
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 shared_ptr<SymbolicColumnVector<S>> pmexpr =
@@ -535,11 +534,10 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 if (pm == 0)
                     mshape =
                         1 * (m + 1) * (m + 1) + 2 * (m + 1) * (n_orbs - m - 1);
-                else if (pm != n_sites - 2)
-                    mshape = 1 + 2 * (n_orbs - m - 1);
                 else
-                    mshape = 1 + 2 * (n_orbs - m - 1) +
-                             1 * (n_orbs - m - 1) * (n_orbs - m - 1);
+                    mshape = 1 + 2 * (n_orbs - m - 1);
+                if (pm == n_sites - 2)
+                    mshape += 1 * (n_orbs - m - 1) * (n_orbs - m - 1);
                 shared_ptr<SymbolicColumnVector<S>> pmop =
                     make_shared<SymbolicColumnVector<S>>(mshape);
                 shared_ptr<SymbolicColumnVector<S>> pmexpr =
@@ -665,7 +663,7 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 for (uint16_t j = m + 1; j < n_orbs; j++)
                     (*prmat)[{p + j - m, pd + j}] = i_op;
                 p += n_orbs - m;
-            } else if (m == n_sites - 1) {
+            } else if (pm == n_sites - 1) {
                 int pi = 0;
                 // 2*(n-m) : j / c d (j >= m)
                 for (uint16_t j = m; j < n_orbs; j++)

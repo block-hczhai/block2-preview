@@ -86,8 +86,8 @@ template <typename S> struct Hamiltonian {
                      : *max_element(orb_sym.begin(), orb_sym.end()) + 1;
     }
     virtual ~Hamiltonian() = default;
-    virtual int get_n_orbs_left() const { return 1; }
-    virtual int get_n_orbs_right() const { return 1; }
+    virtual int get_n_orbs_left() const { return 0; }
+    virtual int get_n_orbs_right() const { return 0; }
     // Fill the map with sparse matrix representation of site operators
     // The keys in map should be already set by filter_site_ops
     virtual void get_site_ops(

@@ -157,6 +157,8 @@ template <typename S> void bind_csf_big_site(py::module &m) {
         m, "CSFBigSite")
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
                       const std::vector<uint8_t> &>())
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+                      const std::vector<uint8_t> &, int>())
         .def_static("fill_csr_matrix", &CSFBigSite<S>::fill_csr_matrix)
         .def("build_site_op", &CSFBigSite<S>::build_site_op)
         .def_readwrite("fcidump", &CSFBigSite<S>::fcidump)

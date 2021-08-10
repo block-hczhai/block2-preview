@@ -25,6 +25,7 @@
 #include "../core/integral.hpp"
 #include "../core/prime.hpp"
 #include "../core/state_info.hpp"
+#include "../core/threading.hpp"
 #include "big_site.hpp"
 #include <array>
 #include <cassert>
@@ -159,8 +160,9 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                         csf_sub_idxs[pidx + j + 2] - csf_sub_idxs[pidx + j + 1];
                 if (cl != pcl && i != 1)
                     csf_sub_idxs[cidx + j + 1] =
+                        csf_sub_idxs[cidx + j] +
                         (csf_sub_idxs[cidx + j + 1] - csf_sub_idxs[cidx + j]) /
-                        pcl * cl;
+                            pcl * cl;
             }
         }
         csfs.resize(csf_sub_idxs.back());
@@ -286,7 +288,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
         }
         return r;
     }
-    LL index_config(const vector<uint8_t> &cfg) {
+    LL index_config(const vector<uint8_t> &cfg) const {
         int n_double = 0, n_unpaired = 0, twos = 0, pg = 0;
         for (int i = 0; i < n_orbs; i++) {
             switch ((cfg[i >> 2] >> ((i & 3) << 1)) & 3) {
@@ -346,7 +348,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
             r[i] = d[(cfg[i >> 2] >> ((i & 3) << 1)) & 3];
         return r;
     }
-    void set_config_twos(vector<uint8_t> &cfg, int n_unpaired, int twos) {
+    void set_config_twos(vector<uint8_t> &cfg, int n_unpaired, int twos) const {
         const int n_plus = (n_unpaired + twos) >> 1;
         for (int i = 0, j = 0; i < n_orbs; i++) {
             const uint8_t x = (cfg[i >> 2] >> ((i & 3) << 1)) & 3;
@@ -363,7 +365,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
     cfg_op_matrix_element(LL ibra, LL iket, uint8_t ops,
                           vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                           vector<array<uint16_t, L>> &orb_idxs,
-                          vector<size_t> &data_idxs) {
+                          vector<size_t> &data_idxs) const {
         if (data_idxs.size() == 0)
             data_idxs.push_back(0);
         vector<uint8_t> bra = get_config(ibra), ket = get_config(iket);
@@ -387,7 +389,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                              array<uint16_t, 1> &chg_idx,
                              vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                              vector<array<uint16_t, 1>> &orb_idxs,
-                             vector<size_t> &data_idxs) {
+                             vector<size_t> &data_idxs) const {
         if (ll != 0)
             cfg_csf_apply_ops<1>(ibra, iket, ops, chg_idx, mat, orb_idxs,
                                  data_idxs);
@@ -396,7 +398,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                              array<uint16_t, 2> &chg_idx,
                              vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                              vector<array<uint16_t, 2>> &orb_idxs,
-                             vector<size_t> &data_idxs) {
+                             vector<size_t> &data_idxs) const {
         if (ll == 0) {
             if ((ops & 1) != ((ops >> 2) & 1))
                 for (uint16_t l = 0; l < n_orbs; l++)
@@ -413,7 +415,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                              array<uint16_t, 3> &chg_idx,
                              vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                              vector<array<uint16_t, 3>> &orb_idxs,
-                             vector<size_t> &data_idxs) {
+                             vector<size_t> &data_idxs) const {
         if ((ops & 15) == 0) {
             if (ll == 1)
                 cfg_csf_apply_ops<3, 1>(ibra, iket, ops >> 4, chg_idx, mat,
@@ -444,7 +446,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                              array<uint16_t, 4> &chg_idx,
                              vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                              vector<array<uint16_t, 4>> &orb_idxs,
-                             vector<size_t> &data_idxs) {
+                             vector<size_t> &data_idxs) const {
         if ((ops & 15) == 0) {
             if (ll == 0) {
                 for (uint16_t l = 0; l < n_orbs; l++) {
@@ -516,7 +518,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                            const array<uint16_t, L> &orbs,
                            vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                            vector<array<uint16_t, L>> &orb_idxs,
-                           vector<size_t> &data_idxs) {
+                           vector<size_t> &data_idxs) const {
         cfg_apply_ops(iket, ops,
                       vector<uint16_t>(orbs.begin(), orbs.begin() + M), mat,
                       1.0, S(S::invalid), ibra);
@@ -527,7 +529,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
     }
     // same site multiplication factor
     double site_factor(int8_t nop, uint8_t q_pattern, uint8_t ops,
-                       int8_t ctr_start = 0, uint8_t ctr_order = 0) {
+                       int8_t ctr_start = 0, uint8_t ctr_order = 0) const {
         int8_t aqj = (q_pattern >> ctr_start) & 1;
         int8_t aqpj = (q_pattern >> (ctr_start + 1)) & 1;
         int8_t adq = 1, bdq = 1, cdq = 0;
@@ -562,7 +564,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
     void cfg_apply_ops(LL iket, uint8_t ops, vector<uint16_t> orb_idxs,
                        vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat,
                        double scale = 1.0, S target_bra_q = S(S::invalid),
-                       LL ibra_ref = -1) {
+                       LL ibra_ref = -1) const {
         int op_len = (int)orb_idxs.size();
         assert(is_sorted(orb_idxs.begin(), orb_idxs.end()));
         vector<uint8_t> ket = get_config(iket), bra = ket;
@@ -575,6 +577,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
         if (is_right)
             for (int i = 0; i < op_len && factor != 0; i++) {
                 int l = (int)orb_idxs[i];
+                assert(l < n_orbs);
                 site_spin_chg[l] += ((ops >> (i << 1)) & 2) ? 1 : -1;
                 const uint8_t x = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
                 if (site_op_count[l] == 0)
@@ -604,6 +607,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
         else
             for (int i = op_len - 1; i >= 0 && factor != 0; i--) {
                 int l = (int)orb_idxs[i];
+                assert(l < n_orbs);
                 site_spin_chg[l] += ((ops >> (i << 1)) & 2) ? 1 : -1;
                 const uint8_t x = (bra[l >> 2] >> ((l & 3) << 1)) & 3;
                 if (site_op_count[l] == 0)
@@ -858,7 +862,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
     vector<double> csf_apply_ops(int n_unpaired_bra, int twos_bra,
                                  int n_unpaired_ket, int twos_ket, uint8_t ops,
                                  uint8_t op_types, const vector<int> &op_idxs,
-                                 double scale, LL &n_bra, LL &n_ket) {
+                                 double scale, LL &n_bra, LL &n_ket) const {
         return is_right ? csf_apply_ops_impl<true>(n_unpaired_bra, twos_bra,
                                                    n_unpaired_ket, twos_ket,
                                                    ops, op_types, op_idxs,
@@ -873,7 +877,7 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
                                       int n_unpaired_ket, int twos_ket,
                                       uint8_t ops, uint8_t op_types,
                                       const vector<int> &op_idxs, double scale,
-                                      LL &n_bra, LL &n_ket) {
+                                      LL &n_bra, LL &n_ket) const {
         vector<double> r;
         if (n_unpaired_ket < 0 || n_unpaired_ket > n_max_unpaired ||
             n_unpaired_bra < 0 || n_unpaired_bra > n_max_unpaired)
@@ -1052,12 +1056,13 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
     shared_ptr<FCIDUMP> fcidump;
     shared_ptr<CSFSpace<S>> csf_space;
     bool is_right;
+    int iprint;
     CSFBigSite(int n_orbs, int n_max_elec, bool is_right,
                const shared_ptr<FCIDUMP> &fcidump,
-               const vector<uint8_t> &orb_sym)
+               const vector<uint8_t> &orb_sym, int iprint = 0)
         : BigSite<S>(n_orbs), csf_space(make_shared<CSFSpace<S>>(
                                   n_orbs, n_max_elec, is_right, orb_sym)),
-          is_right(is_right), fcidump(fcidump) {
+          is_right(is_right), fcidump(fcidump), iprint(iprint) {
         basis = csf_space->basis;
         op_infos = get_site_op_infos(orb_sym);
     }
@@ -1162,9 +1167,14 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
     void build_site_op(uint8_t ops, const vector<uint16_t> &orb_idxs,
                        const shared_ptr<CSRSparseMatrix<S>> &mat,
                        double scale = 1.0) const {
-        // when using openmp, use different vector for different threads
-        vector<pair<pair<MKL_INT, MKL_INT>, double>> data;
+        int ntg = threading->activate_global();
+        vector<vector<pair<pair<MKL_INT, MKL_INT>, double>>> data(ntg);
+        vector<shared_ptr<VectorAllocator<double>>> d_allocs(ntg, nullptr);
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int i = 0; i < mat->info->n; i++) {
+            const int tid = threading->get_thread_id();
+            if (d_allocs[tid] == nullptr)
+                d_allocs[tid] = make_shared<VectorAllocator<double>>();
             S ket = mat->info->quanta[i].get_ket();
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             int iket = basis->find_state(ket);
@@ -1173,11 +1183,14 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             const LL uka = csf_space->n_unpaired_idxs[csf_space->qs_idxs[iket]];
             const LL ukb =
                 csf_space->n_unpaired_idxs[csf_space->qs_idxs[iket + 1]];
-            data.clear();
+            data[tid].clear();
             for (LL k = uka; k < ukb; k++)
-                csf_space->cfg_apply_ops(k, ops, orb_idxs, data, scale, bra);
-            fill_csr_matrix(data, *mat->csr_data[i]);
+                csf_space->cfg_apply_ops(k, ops, orb_idxs, data[tid], scale,
+                                         bra);
+            mat->csr_data[i]->alloc = d_allocs[tid];
+            fill_csr_matrix(data[tid], *mat->csr_data[i]);
         }
+        threading->activate_normal();
     }
     template <typename IntOp, int8_t L, int8_t M>
     void build_complementary_site_ops(
@@ -1185,13 +1198,25 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
         const vector<pair<array<uint16_t, L>, shared_ptr<CSRSparseMatrix<S>>>>
             &mats,
         double scale = 1.0) const {
+        if (mats.size() == 0)
+            return;
+        int ntg = threading->activate_global();
         // when using openmp, use different vector for different threads
-        vector<pair<pair<MKL_INT, MKL_INT>, double>> data;
-        vector<array<uint16_t, M>> orb_idxs;
-        vector<size_t> data_idxs;
-        vector<double> data_rev;
+        vector<vector<pair<pair<MKL_INT, MKL_INT>, double>>> pdata(ntg);
+        vector<vector<array<uint16_t, M>>> porb_idxs(ntg);
+        vector<vector<size_t>> pdata_idxs(ntg);
+        vector<vector<double>> pdata_rev(ntg);
+        vector<shared_ptr<VectorAllocator<double>>> d_allocs(ntg, nullptr);
         shared_ptr<SparseMatrixInfo<S>> info = mats[0].second->info;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int i = 0; i < info->n; i++) {
+            const int tid = threading->get_thread_id();
+            if (d_allocs[tid] == nullptr)
+                d_allocs[tid] = make_shared<VectorAllocator<double>>();
+            vector<pair<pair<MKL_INT, MKL_INT>, double>> &data = pdata[tid];
+            vector<array<uint16_t, M>> &orb_idxs = porb_idxs[tid];
+            vector<size_t> &data_idxs = pdata_idxs[tid];
+            vector<double> &data_rev = pdata_rev[tid];
             S ket = info->quanta[i].get_ket();
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             int iket = basis->find_state(ket);
@@ -1225,9 +1250,11 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                         for (size_t l = data_idxs[k]; l < data_idxs[k + 1]; l++)
                             data_rev[l] = data[l].second * factor * scale;
                     }
+                mat.second->csr_data[i]->alloc = d_allocs[tid];
                 fill_csr_matrix_rev(data, *mat.second->csr_data[i], data_rev);
             }
         }
+        threading->activate_normal();
     }
     void get_site_ops(
         uint16_t m,
@@ -2547,15 +2574,21 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                 return 0;
             }
         };
+        if (iprint >= 2)
+            cout << "build p .. " << endl;
         for (uint8_t s = 0; s < 2; s++)
             for (auto &mats : p_mats[s])
                 build_complementary_site_ops<decltype(p0_ops), 2, 2>(
                     {s ? ad1_ops : ad0_ops}, s ? p1_ops : p0_ops, mats.second);
+        if (iprint >= 2)
+            cout << "build pd .. " << endl;
         for (uint8_t s = 0; s < 2; s++)
             for (auto &mats : pd_mats[s])
                 build_complementary_site_ops<decltype(p0_ops), 2, 2>(
                     {s ? a1_ops : a0_ops}, s ? p1_ops : p0_ops, mats.second,
                     s ? -1.0 : 1.0);
+        if (iprint >= 2)
+            cout << "build q .. " << endl;
         for (uint8_t s = 0; s < 2; s++)
             for (auto &mats : q_mats[s])
                 build_complementary_site_ops<decltype(q0_ops), 2, 2>(
@@ -2564,33 +2597,37 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
                              : vector<uint8_t>{s ? bd1_ops : bd0_ops,
                                                s ? b1_ops : b0_ops},
                     s ? q1_ops : q0_ops, mats.second);
+        if (iprint >= 2)
+            cout << "build r .. " << endl;
         for (auto &mats : r_mats)
             build_complementary_site_ops<decltype(lr_ops), 1, 3>(
                 {dxx_ops, dcd0_ops, dcd1_ops, cdd0_ops, cdd1_ops, ddc0_ops,
                  ddc1_ops},
                 is_right ? rr_ops : lr_ops, mats.second);
+        if (iprint >= 2)
+            cout << "build rd .. " << endl;
         for (auto &mats : rd_mats)
             build_complementary_site_ops<decltype(lrd_ops), 1, 3>(
                 {cxx_ops, dcc0_ops, dcc1_ops, ccd0_ops, ccd1_ops, cdc0_ops,
                  cdc1_ops},
                 is_right ? rrd_ops : lrd_ops, mats.second);
+        if (iprint >= 2)
+            cout << "build h .. " << endl;
         if (is_right)
             build_complementary_site_ops<decltype(rh_ops), 0, 4>(
-                vector<uint8_t>{dcxx_ops,  cdxx_ops,  ddcc0_ops, ddcc1_ops,
-                                ddcc2_ops, ddcc3_ops, ccdd0_ops, ccdd1_ops,
-                                cddc0_ops, cddc1_ops, cddc2_ops, cddc3_ops,
-                                cdcd0_ops, cdcd1_ops, cdcd2_ops, cdcd3_ops,
-                                dcdc0_ops, dcdc1_ops, dccd0_ops, dccd1_ops,
-                                dccd2_ops, dccd3_ops},
+                {dcxx_ops,  cdxx_ops,  ddcc0_ops, ddcc1_ops, ddcc2_ops,
+                 ddcc3_ops, ccdd0_ops, ccdd1_ops, cddc0_ops, cddc1_ops,
+                 cddc2_ops, cddc3_ops, cdcd0_ops, cdcd1_ops, cdcd2_ops,
+                 cdcd3_ops, dcdc0_ops, dcdc1_ops, dccd0_ops, dccd1_ops,
+                 dccd2_ops, dccd3_ops},
                 rh_ops, h_mats);
         else
             build_complementary_site_ops<decltype(lh_ops), 0, 4>(
-                vector<uint8_t>{cdxx_ops,  dcxx_ops,  ccdd0_ops, ccdd1_ops,
-                                ccdd2_ops, ccdd3_ops, ddcc0_ops, ddcc1_ops,
-                                cddc0_ops, cddc1_ops, cddc2_ops, cddc3_ops,
-                                dcdc0_ops, dcdc1_ops, dcdc2_ops, dcdc3_ops,
-                                cdcd0_ops, cdcd1_ops, dccd0_ops, dccd1_ops,
-                                dccd2_ops, dccd3_ops},
+                {cdxx_ops,  dcxx_ops,  ccdd0_ops, ccdd1_ops, ccdd2_ops,
+                 ccdd3_ops, ddcc0_ops, ddcc1_ops, cddc0_ops, cddc1_ops,
+                 cddc2_ops, cddc3_ops, dcdc0_ops, dcdc1_ops, dcdc2_ops,
+                 dcdc3_ops, cdcd0_ops, cdcd1_ops, dccd0_ops, dccd1_ops,
+                 dccd2_ops, dccd3_ops},
                 lh_ops, h_mats);
     }
 };
