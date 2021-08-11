@@ -44,7 +44,7 @@ class CI(lib.StreamObject):
     def e_tot(self):
         return np.asarray(self.e_corr) + self._scf.e_tot
     
-    def kernel(self):
+    def kernel(self, ci0=None):
 
         # Global
         Random.rand_seed(123456)
@@ -104,11 +104,15 @@ class CI(lib.StreamObject):
 
         # MPS
         info = MPSInfo(n_sites, vacuum, target, hamil.basis)
-        info.set_bond_dimension(2000)
+        info.tag = "KET%d" % self.ci_order
+        info.set_bond_dimension(20000)
         mps = MPS(n_sites, 0, 2)
         mps.initialize(info)
         mps.random_canonicalize()
         mps.tensors[mps.center].normalize()
+        if ci0 is not None:
+            ci0.load_mutable()
+            mps.tensors[mps.center].selective_copy_from(ci0.tensors[mps.center], False)
         mps.save_mutable()
         info.save_mutable()
 
@@ -122,11 +126,17 @@ class CI(lib.StreamObject):
         me.cached_contraction = True
         me.save_partition_info = True
         me.init_environments(False)
-        dmrg = DMRG(me, VectorUBond([2000]), VectorDouble([0]))
+        dmrg = DMRG(me, VectorUBond([20000]), VectorDouble([0]))
         dmrg.davidson_conv_thrds = VectorDouble([1E-12])
         dmrg.cutoff = 0
         dmrg.iprint = max(min(self.verbose - 3, 3), 0)
         ener = dmrg.solve(1, True, 0.0)
+
+        mps.load_mutable()
+        me.contract_two_dot(0, mps)
+        mps.canonical_form = "CC"
+        mps.save_mutable()
+        mps.save_data()
 
         self.converged = True
         self.e_corr = ener - self._scf.e_tot
@@ -225,8 +235,11 @@ if __name__ == '__main__':
     dm1 = myci.make_rdm1()
     myci = ci.CISD(mf).run()
     dm1x = myci.make_rdm1()
-    print(np.linalg.norm(dm1 - dm1x))
+    print('1pdm diff = ', np.linalg.norm(dm1 - dm1x))
     myci = CISDT(mf).run()
-    myci = CISDTQ(mf).run()
-    # myci = CISDTQP(mf).run()
-    # myci = CISDTQPH(mf).run()
+    myci = CISDTQ(mf)
+    _, ci0 = myci.kernel()
+    myci = CISDTQP(mf)
+    _, ci0 = myci.kernel(ci0=ci0)
+    myci = CISDTQPH(mf)
+    _, ci0 = myci.kernel(ci0=ci0)

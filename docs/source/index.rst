@@ -103,6 +103,7 @@ Features
    developer/pg-mapping
    developer/mpo-reloading
    developer/hints
+   developer/notes
 
 .. raw:: latex
 

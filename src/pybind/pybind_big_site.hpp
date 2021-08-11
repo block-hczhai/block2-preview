@@ -137,6 +137,8 @@ template <typename S> void bind_csf_big_site(py::module &m) {
         .def("cfg_apply_ops", &CSFSpace<S>::cfg_apply_ops)
         .def("csf_apply_ops", &CSFSpace<S>::csf_apply_ops)
         .def("__getitem__", &CSFSpace<S>::operator[], py::arg("idx"))
+        .def_property_readonly("n_configs", &CSFSpace<S>::n_configs)
+        .def_property_readonly("n_csfs", &CSFSpace<S>::n_csfs)
         .def_readwrite("qs", &CSFSpace<S>::qs)
         .def_readwrite("qs_idxs", &CSFSpace<S>::qs_idxs)
         .def_readwrite("n_unpaired", &CSFSpace<S>::n_unpaired)
@@ -159,7 +161,7 @@ template <typename S> void bind_csf_big_site(py::module &m) {
                       const std::vector<uint8_t> &>())
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
                       const std::vector<uint8_t> &, int>())
-        .def_static("fill_csr_matrix", &CSFBigSite<S>::fill_csr_matrix)
+        .def("fill_csr_matrix", &CSFBigSite<S>::fill_csr_matrix)
         .def("build_site_op", &CSFBigSite<S>::build_site_op)
         .def_readwrite("fcidump", &CSFBigSite<S>::fcidump)
         .def_readwrite("csf_space", &CSFBigSite<S>::csf_space)

@@ -66,6 +66,8 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
     int n_max_elec;
     int n_max_unpaired;
     bool is_right;
+    double sparse_cutoff = 1E-14;
+    double sparse_max_nonzero_ratio = 0.25;
     CSFSpace(int n_orbs, int n_max_elec, bool is_right,
              const vector<uint8_t> &orb_sym = vector<uint8_t>())
         : n_orbs(n_orbs), is_right(is_right), n_max_elec(n_max_elec) {
@@ -234,6 +236,8 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
         cg = make_shared<CG<S>>((n_max_unpaired + 1) * 2);
         cg->initialize();
     }
+    LL n_configs() const { return n_unpaired_idxs.back(); }
+    LL n_csfs() const { return csf_offsets.back(); }
     // idx in n_unpaired_idxs to config
     vector<uint8_t> get_config(LL idx) const {
         const int cl = (n_orbs >> 2) + !!(n_orbs & 3);
@@ -848,13 +852,14 @@ template <typename S> struct CSFSpace<S, typename S::is_su2_t> {
             const LL irow = i_abs_row - csf_offsets[qs_idxs[bra_i_qs]];
             const LL icol = i_abs_col - csf_offsets[qs_idxs[ket_i_qs]];
             for (int kb = 0; kb < n_bra; kb++)
-                for (int kk = 0; kk < n_ket; kk++) {
-                    // cout << (*this)[i_abs_row + kb] << " "
-                    //      << (*this)[i_abs_col + kk] << "[" << mat.size()
-                    //      << "] = " << rr[kb * n_ket + kk] << endl;
-                    mat.emplace_back(make_pair(irow + kb, icol + kk),
-                                     rr[kb * n_ket + kk]);
-                }
+                for (int kk = 0; kk < n_ket; kk++)
+                    if (abs(rr[kb * n_ket + kk]) >= sparse_cutoff) {
+                        // cout << (*this)[i_abs_row + kb] << " "
+                        //      << (*this)[i_abs_col + kk] << "[" << mat.size()
+                        //      << "] = " << rr[kb * n_ket + kk] << endl;
+                        mat.emplace_back(make_pair(irow + kb, icol + kk),
+                                         rr[kb * n_ket + kk]);
+                    }
         }
     }
     // only spin coupling inc/dec in ops is used
@@ -1096,9 +1101,8 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
         return vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
                                                                 info.end());
     }
-    static void
-    fill_csr_matrix(vector<pair<pair<MKL_INT, MKL_INT>, double>> &data,
-                    CSRMatrixRef &mat) {
+    void fill_csr_matrix(vector<pair<pair<MKL_INT, MKL_INT>, double>> &data,
+                         CSRMatrixRef &mat) const {
         const size_t n = data.size();
         assert(mat.data == nullptr);
         assert(mat.alloc != nullptr);
@@ -1115,8 +1119,9 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             else
                 data[idx2.back()].second += data[ii].second;
         mat.nnz = (MKL_INT)idx2.size();
-        mat.allocate();
-        if (mat.nnz < mat.size()) {
+        if (mat.nnz < mat.size() &&
+            mat.nnz <= csf_space->sparse_max_nonzero_ratio * mat.size()) {
+            mat.allocate();
             MKL_INT cur_row = -1;
             for (size_t k = 0; k < idx2.size(); k++) {
                 while (data[idx2[k]].first.first != cur_row)
@@ -1126,13 +1131,22 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             }
             while (mat.m != cur_row)
                 mat.rows[++cur_row] = mat.nnz;
-        } else
+        } else if (mat.nnz < mat.size()) {
+            mat.nnz = mat.size();
+            mat.allocate();
+            for (size_t k = 0; k < idx2.size(); k++)
+                mat.data[data[idx2[k]].first.second +
+                         data[idx2[k]].first.first * mat.n] =
+                    data[idx2[k]].second;
+        } else {
+            mat.allocate();
             for (size_t k = 0; k < idx2.size(); k++)
                 mat.data[k] = data[idx2[k]].second;
+        }
     }
-    static void fill_csr_matrix_rev(
+    void fill_csr_matrix_rev(
         const vector<pair<pair<MKL_INT, MKL_INT>, double>> &data,
-        CSRMatrixRef &mat, vector<double> &data_rev) {
+        CSRMatrixRef &mat, vector<double> &data_rev) const {
         const size_t n = data.size();
         assert(mat.data == nullptr);
         assert(mat.alloc != nullptr);
@@ -1149,8 +1163,9 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             else
                 data_rev[idx2.back()] += data_rev[ii];
         mat.nnz = (MKL_INT)idx2.size();
-        mat.allocate();
-        if (mat.nnz < mat.size()) {
+        if (mat.nnz < mat.size() &&
+            mat.nnz <= csf_space->sparse_max_nonzero_ratio * mat.size()) {
+            mat.allocate();
             MKL_INT cur_row = -1;
             for (size_t k = 0; k < idx2.size(); k++) {
                 while (data[idx2[k]].first.first != cur_row)
@@ -1160,9 +1175,17 @@ template <typename S> struct CSFBigSite<S, typename S::is_su2_t> : BigSite<S> {
             }
             while (mat.m != cur_row)
                 mat.rows[++cur_row] = mat.nnz;
-        } else
+        } else if (mat.nnz < mat.size()) {
+            mat.nnz = mat.size();
+            mat.allocate();
+            for (size_t k = 0; k < idx2.size(); k++)
+                mat.data[data[idx2[k]].first.second +
+                         data[idx2[k]].first.first * mat.n] = data_rev[idx2[k]];
+        } else {
+            mat.allocate();
             for (size_t k = 0; k < idx2.size(); k++)
                 mat.data[k] = data_rev[idx2[k]];
+        }
     }
     void build_site_op(uint8_t ops, const vector<uint16_t> &orb_idxs,
                        const shared_ptr<CSRSparseMatrix<S>> &mat,

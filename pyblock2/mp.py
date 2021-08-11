@@ -34,6 +34,7 @@ class MP(lib.StreamObject):
         self.mo_coeff = mo_coeff
         self.mo_occ = mo_occ
         self.e_corr = None
+        self.e_corrs = []
         self.nroots = 1
         self.frozen = frozen
         self.verbose = self.mol.verbose
@@ -43,6 +44,77 @@ class MP(lib.StreamObject):
     @property
     def e_tot(self):
         return np.asarray(self.e_corr) + self._scf.e_tot
+    
+    def _get_random_mps(self, hamil, name, ref=False):
+        if ref:
+            info = CASCIMPSInfo(hamil.n_sites, hamil.vacuum, self.target, hamil.basis, 1, 0, 1)
+            info.set_bond_dimension(1)
+        else:
+            info = MPSInfo(hamil.n_sites, hamil.vacuum, self.target, hamil.basis)
+            info.set_bond_dimension(2000)
+        info.tag = name
+        mps = MPS(hamil.n_sites, 0, 2)
+        mps.initialize(info)
+        mps.random_canonicalize()
+        mps.tensors[0].normalize()
+        mps.save_mutable()
+        info.save_mutable()
+        if mps.center == 0 and mps.dot == 2:
+            mps.move_left(hamil.opf.cg, None)
+        mps.center = 0
+        return mps
+    
+    def _mps_addition(self, hamil, name, mpoa, mpsa, mpob, mpsb):
+
+        fmps = self._get_random_mps(hamil, name)
+
+        lme = MovingEnvironment(mpoa, fmps, mpsa, "LME")
+        lme.init_environments(False)
+        rme = MovingEnvironment(mpob, fmps, mpsb, "RME")
+        rme.init_environments(False)
+        linear = Linear(None, lme, rme, VectorUBond([2000]), VectorUBond([2000]), VectorDouble([0]))
+        linear.eq_type = EquationTypes.FitAddition
+        linear.cutoff = 0
+        linear.iprint = max(min(self.verbose - 4, 3), 0)
+        linear.minres_conv_thrds = VectorDouble([1E-20])
+        linear.solve(1, True, 0)
+
+        return fmps
+    
+    def _build_hamiltonian(self, fcidump, ci_order, no_trans=False):
+
+        big_left_orig = CSFBigSite(self.n_inactive, ci_order, False,
+            fcidump, VectorUInt8([0] * self.n_inactive), max(min(self.verbose - 4, 3), 0))
+        big_right_orig = CSFBigSite(self.n_external, ci_order, True,
+            fcidump, VectorUInt8([0] * self.n_external), max(min(self.verbose - 4, 3), 0))
+        big_left = SimplifiedBigSite(big_left_orig,
+            NoTransposeRule(RuleQC()) if no_trans else RuleQC())
+        big_right = SimplifiedBigSite(big_right_orig,
+            NoTransposeRule(RuleQC()) if no_trans else RuleQC())
+        hamil = HamiltonianQCBigSite(self.vacuum, self.n_orbs,
+            VectorUInt8([0] * self.n_orbs), fcidump, big_left, big_right)
+        self.n_sites = hamil.n_sites
+        return hamil
+    
+    def _solve_linear(self, lmpo, rmpo, bra, ket):
+
+        lme = MovingEnvironment(lmpo, bra, bra, "LME")
+        lme.init_environments(False)
+        lme.delayed_contraction = OpNamesSet.normal_ops()
+        lme.cached_contraction = False
+        rme = MovingEnvironment(rmpo, bra, ket, "RME")
+        rme.init_environments(False)
+        linear = Linear(lme, rme, None, VectorUBond([2000]), VectorUBond([2000]), VectorDouble([0]))
+        linear.cutoff = 0
+        linear.iprint = max(min(self.verbose - 4, 3), 0)
+        linear.minres_conv_thrds = VectorDouble([1E-20])
+        return linear.solve(1, True, 0)
+    
+    def _expectation(self, mpo, bra, ket):
+
+        ime = MovingEnvironment(mpo, bra, ket, "IME")
+        ime.init_environments(False)
+        return Expect(ime, 2000, 2000).solve(False)
 
     def kernel(self):
 
@@ -66,7 +138,7 @@ class MP(lib.StreamObject):
         if self.verbose >= 5:
             print(Global.frame)
             print(Global.threading)
-        
+
         # FCIDUMP
         h1e = self.mo_coeff.T @ self._scf.get_hcore() @ self.mo_coeff
         e_core = self.mol.energy_nuc()
@@ -80,85 +152,61 @@ class MP(lib.StreamObject):
         error = fcidump.symmetrize(VectorUInt8([0] * self.mol.nao))
         if self.verbose >= 5:
             print('symm error = ', error)
-        
-        n_orbs = self.mol.nao
+
         self.n_orbs = self.mol.nao
-        
+        ci_order = 2
+
         # Hamiltonian
-        n_inactive = len(self.mo_occ[self.mo_occ > 1])
-        n_external = len(self.mo_occ[self.mo_occ <= 1])
-        assert n_inactive + n_external == n_orbs
-        big_left_orig = CSFBigSite(n_inactive, 2, False,
-            fcidump, VectorUInt8([0] * n_inactive), max(min(self.verbose - 4, 3), 0))
-        big_right_orig = CSFBigSite(n_external, 2, True,
-            fcidump, VectorUInt8([0] * n_external), max(min(self.verbose - 4, 3), 0))
-        big_left = SimplifiedBigSite(big_left_orig, RuleQC())
-        big_right = SimplifiedBigSite(big_right_orig, RuleQC())
-        vacuum = SU2(0)
-        target = SU2(na + nb, abs(na - nb), 0)
-        hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8([0] * n_orbs), fcidump,
-            big_left, big_right)
-        n_sites = hamil.n_sites
+        self.n_inactive = len(self.mo_occ[self.mo_occ > 1])
+        self.n_external = len(self.mo_occ[self.mo_occ <= 1])
+        assert self.n_inactive + self.n_external == self.n_orbs
+
+        self.vacuum = SU2(0)
+        self.target = SU2(na + nb, abs(na - nb), 0)
+
+        hamil = self._build_hamiltonian(fcidump, ci_order)
 
         self.hamil = hamil
 
-        # MPS
-        info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis, 1, 0, 1)
-        info.set_bond_dimension(1)
-        mps = MPS(n_sites, 0, 2)
-        mps.initialize(info)
-        mps.random_canonicalize()
-        mps.tensors[mps.center].normalize()
-        mps.save_mutable()
-        info.save_mutable()
+        ket0 = self._get_random_mps(hamil, "KET0", True)
 
         # MPO
         mpo = MPOQC(hamil, QCTypes.NC)
         mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
         # DMRG
-        me = MovingEnvironment(mpo, mps, mps, "DMRG")
+        me = MovingEnvironment(mpo, ket0, ket0, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.save_partition_info = True
         me.init_environments(False)
         dmrg = DMRG(me, VectorUBond([2000]), VectorDouble([0]))
-        dmrg.davidson_conv_thrds = VectorDouble([1E-12])
+        dmrg.davidson_conv_thrds = VectorDouble([1E-20])
         dmrg.cutoff = 0
         dmrg.iprint = max(min(self.verbose - 4, 3), 0)
         ener = dmrg.solve(1, True, 0.0)
 
         self.converged = True
         self.e_corr = ener - self._scf.e_tot
+        self.e_corrs.append(ener - self._scf.e_tot)
 
         lib.logger.note(self, 'E(MP1) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
 
-        self.mps = mps
+        self.mps = ket0
 
         if self.mp_order == 1:
-            return self.e_corr, mps
+            return self.e_corr, ket0
 
         # FCIDUMP
-        dm1 = self.make_rdm1(mps).copy(order='C')
-        fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)
+        dm1 = self.make_rdm1(ket0).copy(order='C')
+        fd_dyall = DyallFCIDUMP(fcidump, self.n_inactive, self.n_external)
         fd_dyall.initialize_from_1pdm_su2(dm1)
         error = fd_dyall.symmetrize(VectorUInt8([0] * self.mol.nao))
         if self.verbose >= 5:
             print('symm error = ', error)
         
-        # Hamiltonian
-        big_left = SimplifiedBigSite(big_left_orig, NoTransposeRule(RuleQC()))
-        big_right = SimplifiedBigSite(big_right_orig, NoTransposeRule(RuleQC()))
-        hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8([0] * n_orbs), fcidump,
-            big_left, big_right)
-        big_left_orig = CSFBigSite(n_inactive, 2, False,
-            fd_dyall, VectorUInt8([0] * n_inactive), max(min(self.verbose - 4, 3), 0))
-        big_right_orig = CSFBigSite(n_external, 2, True,
-            fd_dyall, VectorUInt8([0] * n_external), max(min(self.verbose - 4, 3), 0))
-        big_left = SimplifiedBigSite(big_left_orig, RuleQC())
-        big_right = SimplifiedBigSite(big_right_orig, RuleQC())
-        hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8([0] * n_orbs), fd_dyall,
-            big_left, big_right)
+        hm_dyall = self._build_hamiltonian(fd_dyall, ci_order, False)
+        hamil = self._build_hamiltonian(fcidump, ci_order, True)
 
         # Left MPO
         lmpo = MPOQC(hm_dyall, QCTypes.NC)
@@ -171,87 +219,96 @@ class MP(lib.StreamObject):
         rmpo = SimplifiedMPO(rmpo, NoTransposeRule(RuleQC()), True)
         rmpo.const_e -= self.e_tot
 
-        # MPS
-        mps.dot = 2
-        if mps.center == mps.n_sites - 1 and mps.dot == 2:
-            mps.center = mps.n_sites - 2
-        bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
-        bra_info.tag = 'BRA'
-        bra_info.set_bond_dimension(2000)
-        bra = MPS(n_sites, mps.center, 2)
-        bra.initialize(bra_info)
-        bra.random_canonicalize()
-        bra.tensors[bra.center].normalize()
-        bra.save_mutable()
-        bra_info.save_mutable()
-        if bra.center == 0 and bra.dot == 2:
-            bra.move_left(hamil.opf.cg, None)
-        elif bra.center == bra.n_sites - 2 and bra.dot == 2:
-            bra.move_right(hamil.opf.cg, None)
-        bra.center = mps.center
-
-        # Linear
-        lme = MovingEnvironment(lmpo, bra, bra, "LME")
-        lme.init_environments(False)
-        lme.delayed_contraction = OpNamesSet.normal_ops()
-        lme.cached_contraction = False
-        rme = MovingEnvironment(rmpo, bra, mps, "RME")
-        rme.init_environments(False)
-        linear = Linear(lme, rme, None, VectorUBond([2000]), VectorUBond([2000]), VectorDouble([0]))
-        linear.cutoff = 0
-        linear.iprint = max(min(self.verbose - 4, 3), 0)
-        linear.minres_conv_thrds = VectorDouble([1E-13])
-
-        self.e_corr = linear.solve(1, mps.center == 0, 0)
-
-        lib.logger.note(self, 'E(MP2) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
-
+        # Identity MPO
         impo = IdentityMPO(hamil.basis, hamil.basis, hamil.vacuum, hamil.opf)
         impo = SimplifiedMPO(impo, Rule())
 
-        ime = MovingEnvironment(impo, bra, mps, "IME")
-        ime.init_environments(False)
+        bra = self._get_random_mps(hamil, "BRA")
+        self.e_corr += self._solve_linear(lmpo, rmpo, bra, ket0)
+        self.e_corrs.append(self.e_corr - self.e_corrs[-1])
 
-        ovl = Expect(ime, 2000, 2000).solve(False)
-        ilmpo = 1.0 * impo
-        irmpo = (1 - ovl) * impo
+        lib.logger.note(self, 'E(MP2) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
 
-        # MPS
-        fmps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
-        fmps_info.tag = 'FMPS'
-        fmps_info.set_bond_dimension(2000)
-        fmps = MPS(n_sites, mps.center, 2)
-        fmps.initialize(fmps_info)
-        fmps.random_canonicalize()
-        fmps.tensors[fmps.center].normalize()
-        fmps.save_mutable()
-        fmps_info.save_mutable()
-        if fmps.center == 0 and fmps.dot == 2:
-            fmps.move_left(hamil.opf.cg, None)
-        elif fmps.center == fmps.n_sites - 2 and fmps.dot == 2:
-            fmps.move_right(hamil.opf.cg, None)
-        fmps.center = mps.center
-
-        lme = MovingEnvironment(ilmpo, fmps, bra, "LME")
-        lme.init_environments(False)
-        rme = MovingEnvironment(irmpo, fmps, mps, "RME")
-        rme.init_environments(False)
-        linear = Linear(None, lme, rme, VectorUBond([2000]), VectorUBond([2000]), VectorDouble([0]))
-        linear.eq_type = EquationTypes.FitAddition
-        linear.cutoff = 0
-        linear.iprint = max(min(self.verbose - 4, 3), 0)
-        linear.minres_conv_thrds = VectorDouble([1E-13])
-
-        linear.solve(1, fmps.center == 0, 0)
-        
-        fmps.load_mutable()
-        fmps.tensors[fmps.center].normalize()
-        fmps.save_mutable()
-
-        self.mps = fmps
+        self.mps = bra
 
         if self.mp_order == 2:
-            return self.e_corr, fmps
+            return self.e_corr, self.mps
+
+        dp01 = self._expectation(impo, bra, ket0)
+        ket1 = self._mps_addition(hamil, "KET1", impo, bra, (-dp01) * impo, ket0)
+        dp11 = self._expectation(impo, ket1, ket1)
+        hex1 = self._expectation(rmpo, ket1, ket1)
+        h0ex1 = -self._expectation(lmpo, ket1, ket1)
+
+        self.e_corr += hex1 - h0ex1 - self.e_corrs[0] * dp11
+        self.e_corrs.append(self.e_corr - self.e_corrs[-1])
+
+        lib.logger.note(self, 'E(MP3) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
+
+        self.mps = ket1
+
+        if self.mp_order == 3:
+            return self.e_corr, self.mps
+
+        ci_order = 4
+
+        hm_dyall = self._build_hamiltonian(fd_dyall, ci_order, True)
+        hamil = self._build_hamiltonian(fcidump, ci_order, True)
+
+        # Left MPO
+        lmpo = MPOQC(hm_dyall, QCTypes.NC)
+        lmpo = SimplifiedMPO(lmpo, NoTransposeRule(RuleQC()), True)
+        lmpo.const_e -= self.e_corrs[0] + self._scf.e_tot
+        lmpo = lmpo * -1
+
+        # Right MPO
+        rmpo = MPOQC(hamil, QCTypes.NC)
+        rmpo = SimplifiedMPO(rmpo, NoTransposeRule(RuleQC()), True)
+        rmpo.const_e -= self._scf.e_tot
+
+        # Identity MPO
+        impo = IdentityMPO(hamil.basis, hamil.basis, hamil.vacuum, hamil.opf)
+        impo = SimplifiedMPO(impo, Rule())
+
+        bra1 = self._mps_addition(hamil, "BRA1", lmpo, ket1, rmpo, ket1)
+        dp10 = self._expectation(impo, bra1, ket0)
+
+        bra2 = self._mps_addition(hamil, "BRA2", impo, bra1, (-dp10) * impo, ket0)
+
+        # Left MPO
+        lmpo = MPOQC(hm_dyall, QCTypes.NC)
+        lmpo = SimplifiedMPO(lmpo, RuleQC(), True)
+        lmpo.const_e -= self._scf.e_tot
+        lmpo = lmpo * -1
+
+        bra = self._get_random_mps(hamil, "BRA")
+        self.e_corr += self._solve_linear(lmpo, impo, bra, bra2) - self.e_corrs[1] * dp11
+        self.e_corrs.append(self.e_corr - self.e_corrs[-1])
+
+        lib.logger.note(self, 'E(MP4) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
+
+        self.mps = bra
+
+        if self.mp_order == 4:
+            return self.e_corr, self.mps
+        
+        dp02 = self._expectation(impo, bra, ket0)
+        ket2 = self._mps_addition(hamil, "KET2", impo, bra, (-dp02) * impo, ket0)
+        dp21 = self._expectation(impo, ket2, ket1)
+        dp22 = self._expectation(impo, ket2, ket2)
+        hex2 = self._expectation(rmpo, ket2, ket2)
+        h0ex2 = -self._expectation(lmpo, ket2, ket2)
+
+        self.e_corr += hex2 - h0ex2 - self.e_corrs[0] * dp22 - \
+            2 * self.e_corrs[1] * dp21 - self.e_corrs[2] * dp11 
+        self.e_corrs.append(self.e_corr - self.e_corrs[-1])
+
+        lib.logger.note(self, 'E(MP5) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
+
+        self.mps = ket2
+
+        if self.mp_order == 5:
+            return self.e_corr, self.mps
     
     def make_rdm1(self, state=None, norb=None, nelec=None):
         '''
@@ -306,6 +363,18 @@ def MP2(*args, **kwargs):
     kwargs['mp_order'] = 2
     return MP(*args, **kwargs)
 
+def MP3(*args, **kwargs):
+    kwargs['mp_order'] = 3
+    return MP(*args, **kwargs)
+
+def MP4(*args, **kwargs):
+    kwargs['mp_order'] = 4
+    return MP(*args, **kwargs)
+
+def MP5(*args, **kwargs):
+    kwargs['mp_order'] = 5
+    return MP(*args, **kwargs)
+
 if __name__ == '__main__':
 
     from pyscf import gto, scf, ci, mp
@@ -316,14 +385,31 @@ if __name__ == '__main__':
             H  0.758602  0.000000  0.504284
             H  0.758602  0.000000 -0.504284
         ''',
-        basis='ccpvdz',
+        basis='6-31g',
         verbose=3, symmetry=False, spin=0)
 
-    mf = scf.RHF(mol).run()
-    mymp = MP2(mf).run()
+    mf = scf.RHF(mol).set(conv_tol=1E-12).run()
+    # print(mf.scf_summary['e1'])
+    # print(mf.scf_summary['e2'])
+    # print(mf.mo_energy[:5].sum() * 2 + mf.mol.energy_nuc())
+    mymp = MP5(mf).run()
     # dm1 = mymp.make_rdm1()
-    # print(np.diag(dm1))
+    # print(dm1[-3:, -3:])
     mymp = mp.MP2(mf).run()
-    # dm1x = mymp.make_rdm1()
-    # print(np.diag(dm1x))
+    quit()
+    dm1x = mymp.make_rdm1()
+    # print(dm1x[-3:, -3:])
     # print(np.linalg.norm(dm1 - dm1x))
+    # from pyscf.mp.dfmp2_native import DFMP2
+    # mymp = DFMP2(mf).run()
+    # dm1yy = mymp.make_rdm1()
+    # dm1y = mymp.make_rdm1_unrelaxed()
+    # dm1z = mymp.make_rdm1_relaxed()
+    # # for xxx in dm1:
+    # #     print(xxx)
+    # # quit()
+    # print(np.linalg.norm(dm1 - dm1x))
+    # print(np.linalg.norm(dm1 - dm1yy))
+    # print(np.linalg.norm(dm1 - dm1y))
+    # print(np.diag(dm1z))
+    # print(np.linalg.norm(dm1 - dm1z))
