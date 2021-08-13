@@ -114,7 +114,7 @@ class SPDMRG:
             dm_e_pqpq = np.load(scratch + '/e_pqpq.npy')
             one_pdm = np.load(scratch + "/1pdm.npy")
 
-            E_0 = self.SPDMRG.E0(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
+            E_0 = self.SPDMRG.energy_zeroth(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
             self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
 
     def change_mps_center(self, ket, center):
