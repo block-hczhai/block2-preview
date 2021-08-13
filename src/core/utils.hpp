@@ -36,8 +36,8 @@
 #include <unistd.h>
 #define _mkdir(x) ::mkdir(x, 0755)
 #else
-#include <io.h>
 #include <direct.h>
+#include <io.h>
 #endif
 #include <vector>
 
@@ -51,8 +51,9 @@ struct timeval {
     long long tv_sec, tv_usec;
 };
 
-inline int gettimeofday(struct timeval* tp, struct timezone* tzp) {
-    chrono::system_clock::duration d = chrono::system_clock::now().time_since_epoch();
+inline int gettimeofday(struct timeval *tp, struct timezone *tzp) {
+    chrono::system_clock::duration d =
+        chrono::system_clock::now().time_since_epoch();
     chrono::seconds s = chrono::duration_cast<chrono::seconds>(d);
     tp->tv_sec = s.count();
     tp->tv_usec = chrono::duration_cast<chrono::microseconds>(d - s).count();
@@ -73,6 +74,36 @@ struct Timer {
     }
 };
 
+// Random number generator for multi-thread
+struct RandomMT {
+    mt19937 rng;
+    RandomMT(unsigned i = 0)
+        : rng(i ? i
+                : (unsigned)chrono::steady_clock::now()
+                      .time_since_epoch()
+                      .count()) {}
+    // return a integer in [a, b)
+    int rand_int(int a, int b) {
+        assert(b > a);
+        return uniform_int_distribution<int>(a, b - 1)(rng);
+    }
+    // return a double in [a, b)
+    double rand_double(double a = 0, double b = 1) {
+        assert(b > a);
+        return uniform_real_distribution<double>(a, b)(rng);
+    }
+    void fill_rand_float(float *data, size_t n, float a = 0, float b = 1) {
+        uniform_real_distribution<float> distr(a, b);
+        for (size_t i = 0; i < n; i++)
+            data[i] = distr(rng);
+    }
+    void fill_rand_double(double *data, size_t n, double a = 0, double b = 1) {
+        uniform_real_distribution<double> distr(a, b);
+        for (size_t i = 0; i < n; i++)
+            data[i] = distr(rng);
+    }
+};
+
 // Random number generator
 struct Random {
     static mt19937 &rng() {
@@ -80,8 +111,10 @@ struct Random {
         return _rng;
     }
     static void rand_seed(unsigned i = 0) {
-        rng() = mt19937(
-            i ? i : (unsigned) chrono::steady_clock::now().time_since_epoch().count());
+        rng() = mt19937(i ? i
+                          : (unsigned)chrono::steady_clock::now()
+                                .time_since_epoch()
+                                .count());
     }
     // return a integer in [a, b)
     static int rand_int(int a, int b) {
@@ -94,7 +127,7 @@ struct Random {
         return uniform_real_distribution<double>(a, b)(rng());
     }
     static void fill_rand_float(float *data, size_t n, float a = 0,
-                                 float b = 1) {
+                                float b = 1) {
         uniform_real_distribution<float> distr(a, b);
         for (size_t i = 0; i < n; i++)
             data[i] = distr(rng());
@@ -162,8 +195,7 @@ struct Parsing {
     static long long to_long_long(const string &x) { return atoll(x.c_str()); }
     static int to_int(const string &x) { return atoi(x.c_str()); }
     static double to_double(const string &x) { return atof(x.c_str()); }
-    template<typename T>
-    static string to_string(T i) {
+    template <typename T> static string to_string(T i) {
         stringstream ss;
         ss << i;
         return ss.str();

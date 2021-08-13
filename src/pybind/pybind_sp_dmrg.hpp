@@ -44,10 +44,6 @@ template <typename S> void bind_sp_dmrg(py::module &m) {
         .def_readwrite("pinfos_qvpsi0", &StochasticPDMRG<S>::pinfos_qvpsi0)
         .def_readwrite("norm_qvpsi0", &StochasticPDMRG<S>::norm_qvpsi0)
         .def_readwrite("n_sites", &StochasticPDMRG<S>::n_sites)
-        .def_readwrite("center", &StochasticPDMRG<S>::center)
-        .def_readwrite("dot", &StochasticPDMRG<S>::dot)
-        .def_readwrite("canonical_form", &StochasticPDMRG<S>::canonical_form)
-        .def_readwrite("det_string", &StochasticPDMRG<S>::det_string)
         .def("energy_zeroth",
              [](StochasticPDMRG<S> *self, const shared_ptr<FCIDUMP> &fcidump,
                 py::array_t<double> &e_pqqp, py::array_t<double> &e_pqpq,
@@ -70,5 +66,5 @@ template <typename S> void bind_sp_dmrg(py::module &m) {
              })
         .def("sampling", &StochasticPDMRG<S>::sampling)
         .def("overlap", &StochasticPDMRG<S>::overlap)
-        .def("clear", &StochasticPDMRG<S>::clear);
+        .def("parallel_sampling", &StochasticPDMRG<S>::parallel_sampling);
 }

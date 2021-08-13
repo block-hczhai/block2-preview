@@ -56,12 +56,18 @@ Perturbative Noise
 Particle Density Matrix
 -----------------------
 
-* Ghosh, D., Hachmann, J., Yanai, T., & Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. doi: `10.1063/1.2883976 <https://doi.org/10.1063/1.2883976>`_
+* Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. doi: `10.1063/1.2883976 <https://doi.org/10.1063/1.2883976>`_
 
 Determinant Coefficients
 ------------------------
 
-* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. Externally corrected CCSD with renormalized perturbative triples (R-ecCCSD (T)) and density matrix renormalization group and selected configuration interaction external sources. 2021, arXiv preprint arXiv:2102.12703. arXiv: `2102.12703 <https://arxiv.org/abs/2102.12703>`_
+* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425. doi: `10.1021/acs.jctc.1c00205 <https://doi.org/10.1021/acs.jctc.1c00205>`_
+
+Stochastic perturbative DMRG
+----------------------------
+
+* Guo, S., Li, Z., Chan, G. K. L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104.  doi: `10.1063/1.5031140 <https://doi.org/10.1063/1.5031140>`_
+* Guo, S., Li, Z., Chan, G. K. L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071. doi: `10.1021/acs.jctc.8b00273 <https://doi.org/10.1021/acs.jctc.8b00273>`_
 
 Orbital Reordering
 ------------------

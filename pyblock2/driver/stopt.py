@@ -21,6 +21,7 @@
 stochastic perturbative DMRG
 
 Author: Seunghoon Lee, 2021
+Revised: Huanchen Zhai Aug 13, 2021 (added openmp)
 """
 
 from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
@@ -62,7 +63,7 @@ class SPDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0):
+    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -72,6 +73,7 @@ class SPDMRG:
         self.verbose = verbose
         self.scratch = scratch
         self.mpo_orig = None
+        self.use_threading = use_threading
 
         self.Edmrg = np.float64(np.load(self.scratch + '/E_dmrg.npy'))
 
@@ -185,15 +187,22 @@ class SPDMRG:
         H10_2 = 0.0
 
         max_samp_per_rank = max_samp // msize
-        for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
-            # sample | D_p > with P_p = |< Psi_0 | D_p >|^2
-            self.SPDMRG.sampling(0)
-            # calculate dE_p = < D_p | H_d | D_p > - E0
-            dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            # sampling 1/(E_p-E_0)
-            H00   += 1.0 / (dE_p*np.float64(max_samp_per_rank))
-            H00_2 += 1.0 / (dE_p*dE_p*np.float64(max_samp_per_rank))
-            self.SPDMRG.clear()
+        det_string = VectorUInt8([0] * self.n_sites * 2)
+        if msize == mrank - 1:
+            n_samp_per_rank = max_samp - mrank * max_samp_per_rank
+        else:
+            n_samp_per_rank = max_samp_per_rank
+        if self.use_threading:
+            H00, H00_2 = self.SPDMRG.parallel_sampling(n_samp_per_rank, 0, self.fcidump)
+        else:
+            for num_samp in range(n_samp_per_rank):
+                # sample | D_p > with P_p = |< Psi_0 | D_p >|^2
+                self.SPDMRG.sampling(0, det_string)
+                # calculate dE_p = < D_p | H_d | D_p > - E0
+                dE_p = self.fcidump.det_energy(det_string, 0, self.n_sites) + self.fcidump.const_e
+                # sampling 1/(E_p-E_0)
+                H00   += 1.0 / (dE_p*np.float64(n_samp_per_rank))
+                H00_2 += 1.0 / (dE_p*dE_p*np.float64(n_samp_per_rank))
 
         if msize != 0:
             comm.barrier()
@@ -214,28 +223,38 @@ class SPDMRG:
 
         Aterm = []
         Bterm = []
-        max_samp_per_rank = max_samp // msize
-        if max_samp_per_rank > 10:
-            print_samp = max_samp_per_rank // 10 
+        if self.use_threading:
+            n_sub = 10
+            sub_results = [0, 0, 0, 0]
+            for i_samp in range(n_sub):
+                if i_samp == n_sub - 1:
+                    n_sub_samp = n_samp_per_rank - i_samp * (n_samp_per_rank // n_sub)
+                else:
+                    n_sub_samp = n_samp_per_rank // n_sub
+                print('%d processor: sampling %d %% done'%(mrank, (i_samp + 1) * 10))
+                results = self.SPDMRG.parallel_sampling(n_sub_samp, 1, self.fcidump)
+                sub_results = [ra + rb * n_sub_samp for ra, rb in zip(sub_results,results)]
+            H11, H11_2, H10, H10_2 = [rx / n_samp_per_rank for rx in sub_results]
         else:
-            print_samp = max_samp_per_rank  
-        for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
-            if num_samp % print_samp ==0:
-                print( '%d processor: sampling %d %% done'%(mrank, ((num_samp-mrank*max_samp_per_rank)//print_samp+1)*10) )
-            # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
-            self.SPDMRG.sampling(1)
-            # calculate dE_p = < D_p | H_d | D_p > - E0
-            dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            # sampling 1/(E_p-E_0)
-            H11   += self.norm_qvpsi0 / (dE_p*np.float64(max_samp_per_rank))
-            H11_2 += self.norm_qvpsi0*self.norm_qvpsi0 / (dE_p*dE_p*np.float64(max_samp_per_rank))
+            if max_samp_per_rank > 10:
+                print_samp = max_samp_per_rank // 10 
+            else:
+                print_samp = max_samp_per_rank  
+            for num_samp in range(n_samp_per_rank):
+                if num_samp % print_samp ==0:
+                    print( '%d processor: sampling %d %% done'%(mrank, (num_samp//print_samp+1)*10) )
+                # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
+                Sqv_p = self.SPDMRG.sampling(1, det_string)
+                # calculate dE_p = < D_p | H_d | D_p > - E0
+                dE_p = self.fcidump.det_energy(det_string, 0, self.n_sites) + self.fcidump.const_e
+                # sampling 1/(E_p-E_0)
+                H11   += self.norm_qvpsi0 / (dE_p*np.float64(max_samp_per_rank))
+                H11_2 += self.norm_qvpsi0*self.norm_qvpsi0 / (dE_p*dE_p*np.float64(max_samp_per_rank))
 
-            Sqv_p  = self.SPDMRG.overlap(0) 
-            S_p    = self.SPDMRG.overlap(1)
-            tmp    = self.norm_qvpsi0*S_p / (Sqv_p*dE_p)
-            H10   += tmp / np.float64(max_samp_per_rank)
-            H10_2 += tmp*tmp / np.float64(max_samp_per_rank)
-            self.SPDMRG.clear()
+                S_p    = self.SPDMRG.overlap(1, det_string)
+                tmp    = self.norm_qvpsi0*S_p / (Sqv_p*dE_p)
+                H10   += tmp / np.float64(max_samp_per_rank)
+                H10_2 += tmp*tmp / np.float64(max_samp_per_rank)
 
         if msize != 0:
             comm.barrier()

@@ -2,6 +2,8 @@
 Notes
 =====
 
+.. highlight:: text
+
 Build block2 in ``manylinux2010`` docker image
 ----------------------------------------------
 

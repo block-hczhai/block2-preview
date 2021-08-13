@@ -22,6 +22,7 @@ Contributors
 
 * Huanchen Zhai `@hczhai <https://github.com/hczhai>`_: DMRG and parallelization
 * Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI and big site
+* Seunghoon Lee `@seunghoonlee89 <https://github.com/seunghoonlee89>`_: Stochastic perturbative DMRG
 * Zhi-Hao Cui `@zhcui <https://github.com/zhcui>`_: user interface
 
 Features
@@ -68,6 +69,10 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
+* Stochastic perturbative DMRG
+* Dynamic correlation
+    * DMRG Multi-Reference Configuration Interaction (MRCI)
+    * DMRG NEVPT2
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm

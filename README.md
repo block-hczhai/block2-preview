@@ -16,6 +16,7 @@ Main contributors:
 
 * Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
 * Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI and big site
+* Seunghoon Lee [@seunghoonlee89](https://github.com/seunghoonlee89): Stochastic perturbative DMRG
 * Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
 If you find this package useful for your scientific research, please cite the work as:
@@ -77,6 +78,10 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
+* Stochastic perturbative DMRG
+* Dynamic correlation
+    * DMRG Multi-Reference Configuration Interaction (MRCI)
+    * DMRG NEVPT2
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
@@ -126,11 +131,16 @@ References
 
 ### Particle Density Matrix
 
-* Ghosh, D., Hachmann, J., Yanai, T., & Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117.
+* Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117.
 
 ### Determinant Coefficients
 
-* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. Externally corrected CCSD with renormalized perturbative triples (R-ecCCSD (T)) and density matrix renormalization group and selected configuration interaction external sources. 2021, arXiv preprint arXiv:2102.12703.
+* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. L. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425.
+
+### Stochastic perturbative DMRG
+
+* Guo, S., Li, Z., Chan, G. K. L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104.
+* Guo, S., Li, Z., Chan, G. K. L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071.
 
 ### Orbital Reordering
 
