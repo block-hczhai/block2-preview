@@ -63,9 +63,7 @@ template <typename S> void bind_sp_dmrg(py::module &m) {
                  double E0 = self->E0(fcidump, dm_pqqp, dm_pqpq, dm_one);
                  return E0;
              })
-        .def("sampling_ab", &StochasticPDMRG<S>::sampling_ab)
-        .def("sampling_c", &StochasticPDMRG<S>::sampling_c)
-        .def("overlap_ab", &StochasticPDMRG<S>::overlap_ab)
-        .def("overlap_c", &StochasticPDMRG<S>::overlap_c)
+        .def("sampling", &StochasticPDMRG<S>::sampling)
+        .def("overlap", &StochasticPDMRG<S>::overlap)
         .def("clear", &StochasticPDMRG<S>::clear);
 }

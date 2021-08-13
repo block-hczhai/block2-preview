@@ -73,7 +73,7 @@ class SPDMRG:
         self.scratch = scratch
         self.mpo_orig = None
 
-        self.Edmrg = float(np.load(self.scratch + '/E_dmrg.npy'))
+        self.Edmrg = np.float64(np.load(self.scratch + '/E_dmrg.npy'))
 
         if len(mps_tags) == 1 and mps_tags[0] == "KET":
             mps_tags=['ZKET', 'ZBRA']
@@ -84,10 +84,10 @@ class SPDMRG:
         mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
         comm.barrier()
-        print (mrank)
         if mrank == 0:
             self.change_mps_center(mps1, 0)
         comm.barrier()
+
         mps1.load_data()
         self.mps_psi0 = UnfusedMPS(mps1)
 
@@ -95,21 +95,20 @@ class SPDMRG:
         mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
         comm.barrier()
-        print (mrank)
         if mrank == 0:
             self.change_mps_center(mps2, 0)
         comm.barrier()
         mps2.load_data()
         self.mps_qvpsi0 = UnfusedMPS(mps2)
 
-        self.norm_qvpsi0  = float(np.load(self.scratch + '/cps_overlap.npy'))
+        self.norm_qvpsi0  = np.float64(np.load(self.scratch + '/cps_overlap.npy'))
         self.norm_qvpsi0  = self.norm_qvpsi0*self.norm_qvpsi0
 
         self.SPDMRG = StochasticPDMRG(self.mps_psi0, self.mps_qvpsi0, self.norm_qvpsi0) 
         self.n_sites = self.SPDMRG.n_sites
         if fcidump is not None:
             self.fcidump = fcidump
-            E_dmrg = float(np.load(scratch + '/E_dmrg.npy'))
+            E_dmrg = np.float64(np.load(scratch + '/E_dmrg.npy'))
             E_cas  = E_dmrg - self.fcidump.const_e 
             dm_e_pqqp = np.load(scratch + '/e_pqqp.npy')
             dm_e_pqpq = np.load(scratch + '/e_pqpq.npy')
@@ -121,7 +120,7 @@ class SPDMRG:
     def change_mps_center(self, ket, center):
         ket.load_data()
         cf = ket.canonical_form
-        print(cf)
+        _print('CF = %s'%(cf))
         cg = CG(200)
         cg.initialize()
         if ket.center == center:
@@ -129,16 +128,18 @@ class SPDMRG:
         if center == 0:
             if ket.center == ket.n_sites - 2:
                 ket.center += 1
-            ket.canonical_form = ket.canonical_form[:-1] + 'S'
+            if ket.canonical_form[-1] == 'C':
+                ket.canonical_form = ket.canonical_form[:-1] + 'S'
             while ket.center != 0:
                 ket.move_left(cg, None)
         else:
-            ket.canonical_form = 'K' + ket.canonical_form[1:]
+            if ket.canonical_form[0] == 'C':
+                ket.canonical_form = 'K' + ket.canonical_form[1:]
             while ket.center != ket.n_sites - 1:
                 ket.move_right(cg, None)
             ket.center -= 1
         if self.verbose >= 2:
-            _print('CF = %s --> %s' % (cf, ket.canonical_form))
+            _print('--> %s' % (ket.canonical_form))
         ket.save_data()
 
     def init_hamiltonian_fcidump(self, pg, filename):
@@ -167,6 +168,7 @@ class SPDMRG:
         assert pg in ["d2h", "c1"]
 
     def kernel(self, max_samp):
+        comm.barrier()
 # 1] Importance Sampling of Determinant
 # 1-1] C term
         if self.verbose >= 4:
@@ -174,7 +176,6 @@ class SPDMRG:
             _print("1-1] C term")
             _print("     sampling D_p with P_p = |<Phi_0|D_p>|^2")
             _print("     & computing <1/(E_d-E_0)>")
-        #TODO: canonicalinze mps_psi0 as CRR...R
         Cterm = []
         H00   = 0.0
         H00_2 = 0.0
@@ -186,26 +187,22 @@ class SPDMRG:
         max_samp_per_rank = max_samp // msize
         for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
             # sample | D_p > with P_p = |< Psi_0 | D_p >|^2
-            self.SPDMRG.sampling_c()
+            self.SPDMRG.sampling(0)
             # calculate dE_p = < D_p | H_d | D_p > - E0
             dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            #print(self.SPDMRG.det_string)
-            #print(dE_p, self.fcidump.const_e)
             # sampling 1/(E_p-E_0)
-            H00   += 1.0 / (dE_p*float(max_samp))
-            H00_2 += 1.0 / (dE_p*dE_p*float(max_samp))
+            H00   += 1.0 / (dE_p*np.float64(max_samp_per_rank))
+            H00_2 += 1.0 / (dE_p*dE_p*np.float64(max_samp_per_rank))
             self.SPDMRG.clear()
 
-        print(mrank, H00)
         if msize != 0:
             comm.barrier()
             H00   = comm.reduce(H00,   op=MPI.SUM, root=0)  
             H00_2 = comm.reduce(H00_2, op=MPI.SUM, root=0)  
 
         if mrank == 0: 
-            print('reduced ', H00 / msize)
             avg_Cterm = H00 / msize 
-            std_Cterm = np.sqrt(( H00_2 / msize - avg_Cterm*avg_Cterm)/float(max_samp))
+            std_Cterm = np.sqrt(abs( H00_2 / msize - avg_Cterm*avg_Cterm)/np.float64(max_samp))
 
         if mrank == 0 and self.verbose >= 4: 
             _print(" C term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
@@ -218,28 +215,28 @@ class SPDMRG:
         Aterm = []
         Bterm = []
         max_samp_per_rank = max_samp // msize
-        print_samp = max_samp // 10 
+        if max_samp_per_rank > 10:
+            print_samp = max_samp_per_rank // 10 
+        else:
+            print_samp = max_samp_per_rank  
         for num_samp in range(mrank*max_samp_per_rank, (mrank+1)*max_samp_per_rank):
             if num_samp % print_samp ==0:
-                _print( '%d processor: sampling %d %% done'%(mrank, (num_samp//print_samp+1)*10) )
+                print( '%d processor: sampling %d %% done'%(mrank, ((num_samp-mrank*max_samp_per_rank)//print_samp+1)*10) )
             # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
-            self.SPDMRG.sampling_ab()
+            self.SPDMRG.sampling(1)
             # calculate dE_p = < D_p | H_d | D_p > - E0
             dE_p = self.fcidump.det_energy(self.SPDMRG.det_string, 0, self.n_sites) + self.fcidump.const_e
-            #print(self.SPDMRG.det_string)
-            #print(dE_p, self.fcidump.const_e)
             # sampling 1/(E_p-E_0)
-            H11   += self.norm_qvpsi0 / (dE_p*float(max_samp))
-            H11_2 += self.norm_qvpsi0*self.norm_qvpsi0 / (dE_p*dE_p*float(max_samp))
+            H11   += self.norm_qvpsi0 / (dE_p*np.float64(max_samp_per_rank))
+            H11_2 += self.norm_qvpsi0*self.norm_qvpsi0 / (dE_p*dE_p*np.float64(max_samp_per_rank))
 
-            Sqv_p  = self.SPDMRG.overlap_c() 
-            S_p    = self.SPDMRG.overlap_ab()
+            Sqv_p  = self.SPDMRG.overlap(0) 
+            S_p    = self.SPDMRG.overlap(1)
             tmp    = self.norm_qvpsi0*S_p / (Sqv_p*dE_p)
-            H10   += tmp / float(max_samp)
-            H10_2 += tmp*tmp / float(max_samp)
+            H10   += tmp / np.float64(max_samp_per_rank)
+            H10_2 += tmp*tmp / np.float64(max_samp_per_rank)
             self.SPDMRG.clear()
 
-        print(mrank, H11, H10)
         if msize != 0:
             comm.barrier()
             H11   = comm.reduce(H11,   op=MPI.SUM, root=0)
@@ -248,14 +245,20 @@ class SPDMRG:
             H10_2 = comm.reduce(H10_2, op=MPI.SUM, root=0)
 
         if mrank == 0: 
-            print('reduced ', H11 / msize, H10 / msize)
             avg_Aterm = H11 / msize 
-            std_Aterm = np.sqrt(( H11_2 / msize - avg_Aterm*avg_Aterm)/float(max_samp))
+            std_Aterm = np.sqrt(abs( H11_2 / msize - avg_Aterm*avg_Aterm)/np.float64(max_samp))
             avg_Bterm = H10 / msize 
-            std_Bterm = np.sqrt(( H10_2 / msize - avg_Bterm*avg_Bterm)/float(max_samp))
+            std_Bterm = np.sqrt(abs( H10_2 / msize - avg_Bterm*avg_Bterm)/np.float64(max_samp))
             Emp2 = - avg_Aterm + avg_Bterm**2 / avg_Cterm
-            std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
-                       * ( 2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
+            with np.errstate(divide='ignore', invalid='ignore'):
+                if abs(avg_Bterm) > 1e-10:
+                    std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
+                               * ( 2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
+                else:
+                    std_Emp2 = std_Aterm
+        else: 
+            Emp2 = 0.0 
+            std_Emp2 = 0.0 
 
         if mrank == 0 and self.verbose >= 4: 
             _print("")
@@ -264,7 +267,7 @@ class SPDMRG:
             _print("         ===============")
             _print("")
             _print(" A   term = %15.10f (%15.10f)" % (avg_Aterm, std_Aterm))
-            _print(" B^2 term = %15.10f (%15.10f)" % (avg_Bterm*avg_Bterm, std_Bterm))
+            _print(" B   term = %15.10f (%15.10f)" % (avg_Bterm, std_Bterm))
             _print(" C   term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
             _print("")
             _print("    DMRG Energy = %15.10f"%(self.Edmrg))
@@ -272,7 +275,7 @@ class SPDMRG:
             _print(" --------------------------------")
             _print(" sp-DMRG Energy = %15.10f (%15.10f)"%(self.Edmrg+Emp2, std_Emp2))
 
-        return [Emp2, std_Emp2]
+        return [Emp2, std_Emp2] 
 
     def __del__(self):
         if self.hamil is not None:
