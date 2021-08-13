@@ -229,14 +229,19 @@ class MP(lib.StreamObject):
 
         lib.logger.note(self, 'E(MP2) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
 
-        self.mps = bra
+        dp01 = self._expectation(impo, bra, ket0)
+        ket1 = self._mps_addition(hamil, "KET1", impo, bra, (-dp01) * impo, ket0)
+        dp11 = self._expectation(impo, ket1, ket1)
+
+        # fac = 1 / np.sqrt(dp11 + 1), 1 / np.sqrt(dp11 + 1)
+        fac = np.sqrt(1 - dp11), 1
+        # mps1 = fac[0] * ket0 + fac[1] * ket1
+        mps1 = self._mps_addition(hamil, "MPS1", fac[0] * impo, ket0, fac[1] * impo, ket1)
+        self.mps = mps1
 
         if self.mp_order == 2:
             return self.e_corr, self.mps
 
-        dp01 = self._expectation(impo, bra, ket0)
-        ket1 = self._mps_addition(hamil, "KET1", impo, bra, (-dp01) * impo, ket0)
-        dp11 = self._expectation(impo, ket1, ket1)
         hex1 = self._expectation(rmpo, ket1, ket1)
         h0ex1 = -self._expectation(lmpo, ket1, ket1)
 
@@ -244,8 +249,6 @@ class MP(lib.StreamObject):
         self.e_corrs.append(self.e_corr - self.e_corrs[-1])
 
         lib.logger.note(self, 'E(MP3) = %.16g  E_corr = %.16g', self.e_tot, self.e_corr)
-
-        self.mps = ket1
 
         if self.mp_order == 3:
             return self.e_corr, self.mps
@@ -392,14 +395,11 @@ if __name__ == '__main__':
     # print(mf.scf_summary['e1'])
     # print(mf.scf_summary['e2'])
     # print(mf.mo_energy[:5].sum() * 2 + mf.mol.energy_nuc())
-    mymp = MP5(mf).run()
-    # dm1 = mymp.make_rdm1()
-    # print(dm1[-3:, -3:])
+    mymp = MP2(mf).run()
+    dm1 = mymp.make_rdm1()
     mymp = mp.MP2(mf).run()
-    quit()
     dm1x = mymp.make_rdm1()
-    # print(dm1x[-3:, -3:])
-    # print(np.linalg.norm(dm1 - dm1x))
+    print(np.linalg.norm(dm1 - dm1x))
     # from pyscf.mp.dfmp2_native import DFMP2
     # mymp = DFMP2(mf).run()
     # dm1yy = mymp.make_rdm1()
