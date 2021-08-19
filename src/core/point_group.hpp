@@ -26,7 +26,7 @@ using namespace std;
 
 namespace block2 {
 
-enum struct PGTypes : uint8_t { C1, C2, CI, CS, D2, C2V, C2H, D2H };
+enum struct PGTypes : uint8_t { C1, C2, CI, CS, D2, C2V, C2H, D2H, LZ };
 
 // PYSCF convention
 // https://sunqm.github.io/pyscf/symm.html
@@ -36,8 +36,8 @@ struct PointGroup {
     //     A1g B3u B2u B1g B1u B2g B3g A1u
     // 0   1   2   3   4   5   6   7   (XOR)
     // A1g B1g B2g B3g A1u B1u B2u B3u
-    static uint8_t swap_d2h(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 7, 6, 1, 5, 2, 3, 4};
+    static int16_t swap_d2h(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 7, 6, 1, 5, 2, 3, 4};
         return arr_swap[isym];
     }
     // C2V
@@ -45,8 +45,8 @@ struct PointGroup {
     //    A1 B1 B2 A2
     // 0  1  2  3  (XOR)
     // A1 A2 B1 B2
-    static uint8_t swap_c2v(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 2, 3, 1};
+    static int16_t swap_c2v(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 2, 3, 1};
         return arr_swap[isym];
     }
     // C2H
@@ -54,8 +54,8 @@ struct PointGroup {
     //    Ag Au Bu Bg
     // 0  1  2  3  (XOR)
     // Ag Bg Au Bu
-    static uint8_t swap_c2h(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 2, 3, 1};
+    static int16_t swap_c2h(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 2, 3, 1};
         return arr_swap[isym];
     }
     // D2
@@ -63,8 +63,8 @@ struct PointGroup {
     //    A1 B3 B2 B1
     // 0  1  2  3  (XOR)
     // A1 B1 B2 B3
-    static uint8_t swap_d2(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 3, 2, 1};
+    static int16_t swap_d2(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 3, 2, 1};
         return arr_swap[isym];
     }
     // CS
@@ -72,8 +72,8 @@ struct PointGroup {
     //    A' A''
     // 0  1  (XOR)
     // A' A''
-    static uint8_t swap_cs(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 1};
+    static int16_t swap_cs(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 1};
         return arr_swap[isym];
     }
     // C2
@@ -81,8 +81,8 @@ struct PointGroup {
     //    A  B
     // 0  1  (XOR)
     // A  B
-    static uint8_t swap_c2(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 1};
+    static int16_t swap_c2(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 1};
         return arr_swap[isym];
     }
     // CI
@@ -90,8 +90,8 @@ struct PointGroup {
     //    Ag Au
     // 0  1  (XOR)
     // Ag Au
-    static uint8_t swap_ci(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0, 1};
+    static int16_t swap_ci(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 1};
         return arr_swap[isym];
     }
     // C1
@@ -99,11 +99,12 @@ struct PointGroup {
     //    A
     // 0  (XOR)
     // A
-    static uint8_t swap_c1(uint8_t isym) {
-        static uint8_t arr_swap[] = {8, 0};
+    static int16_t swap_c1(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0};
         return arr_swap[isym];
     }
-    static auto swap_pg(PGTypes pg) -> uint8_t (*)(uint8_t isym) {
+    static int16_t swap_lz(int16_t isym) { return isym; }
+    static auto swap_pg(PGTypes pg) -> int16_t (*)(int16_t isym) {
         switch (pg) {
         case PGTypes::C1:
             return swap_c1;
@@ -121,8 +122,10 @@ struct PointGroup {
             return swap_c2h;
         case PGTypes::D2H:
             return swap_d2h;
+        case PGTypes::LZ:
+            return swap_lz;
         default:
-            return swap_c1;
+            return swap_lz;
         }
     }
 };

@@ -71,7 +71,7 @@ TEST_F(TestNPDM, TestSU2) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
     SU2 vacuum(0);
@@ -518,7 +518,7 @@ TEST_F(TestNPDM, TestSZ) {
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
     SZ vacuum(0);

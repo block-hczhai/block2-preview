@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "mpo.hpp"
 #include "../core/rule.hpp"
 #include "../core/threading.hpp"
+#include "mpo.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -638,9 +638,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                     mpb[0].size() + mpb[1].size()) {
                     for (int i = 0; i < 2; i++)
                         for (auto &r : mpa[i]) {
-                            int pg = dynamic_pointer_cast<OpElement<S>>(r.first)
-                                         ->q_label.pg() ^
-                                     op.pg();
+                            int pg = S::pg_mul(
+                                S::pg_inv(
+                                    dynamic_pointer_cast<OpElement<S>>(r.first)
+                                        ->q_label.pg()),
+                                op.pg());
                             for (auto &rr : r.second) {
                                 if (rr.second.size() == 1)
                                     terms.push_back(rr.second[0]);
@@ -692,9 +694,11 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 } else {
                     for (int i = 0; i < 2; i++)
                         for (auto &r : mpb[i]) {
-                            int pg = dynamic_pointer_cast<OpElement<S>>(r.first)
-                                         ->q_label.pg() ^
-                                     op.pg();
+                            int pg = S::pg_mul(
+                                S::pg_inv(
+                                    dynamic_pointer_cast<OpElement<S>>(r.first)
+                                        ->q_label.pg()),
+                                op.pg());
                             for (auto &rr : r.second) {
                                 if (rr.second.size() == 1)
                                     terms.push_back(rr.second[0]);

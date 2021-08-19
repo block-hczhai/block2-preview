@@ -45,7 +45,7 @@ TEST_F(TestDMRG, Test) {
     cout << "INT start" << endl;
     fcidump->read(filename);
     cout << "INT end .. T = " << t.get_time() << endl;
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
     SZ vacuum(0);

@@ -45,8 +45,10 @@ template <typename S> struct IdentityMPO : MPO<S> {
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
                 S delta_quantum, const shared_ptr<OperatorFunctions<S>> &opf,
-                const vector<uint8_t> &bra_orb_sym = vector<uint8_t>(),
-                const vector<uint8_t> &ket_orb_sym = vector<uint8_t>())
+                const vector<typename S::pg_t> &bra_orb_sym =
+                    vector<typename S::pg_t>(),
+                const vector<typename S::pg_t> &ket_orb_sym =
+                    vector<typename S::pg_t>())
         : MPO<S>((int)bra_basis.size()) {
         shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
@@ -56,8 +58,9 @@ template <typename S> struct IdentityMPO : MPO<S> {
             make_shared<VectorAllocator<double>>();
         assert(bra_basis.size() == ket_basis.size());
         assert(bra_orb_sym.size() == ket_orb_sym.size());
-        unordered_map<uint8_t, set<uint8_t>> ket_to_bra_map;
-        vector<pair<uint8_t, uint8_t>> map_que(ket_orb_sym.size());
+        unordered_map<typename S::pg_t, set<typename S::pg_t>> ket_to_bra_map;
+        vector<pair<typename S::pg_t, typename S::pg_t>> map_que(
+            ket_orb_sym.size());
         for (size_t ik = 0; ik < ket_orb_sym.size(); ik++)
             map_que[ik] = make_pair(ket_orb_sym[ik], bra_orb_sym[ik]);
         size_t imq = 0;
@@ -67,11 +70,12 @@ template <typename S> struct IdentityMPO : MPO<S> {
                      .count(map_que[imq].second)) {
                 ket_to_bra_map[map_que[imq].first].insert(map_que[imq].second);
                 for (auto &mm : ket_to_bra_map)
-                    if (!ket_to_bra_map.count(map_que[imq].first ^ mm.first))
+                    if (!ket_to_bra_map.count(
+                            S::pg_mul(map_que[imq].first, mm.first)))
                         for (auto &mms : mm.second)
-                            map_que.push_back(
-                                make_pair(map_que[imq].first ^ mm.first,
-                                          map_que[imq].second ^ mms));
+                            map_que.push_back(make_pair(
+                                S::pg_mul(map_que[imq].first, mm.first),
+                                S::pg_mul(map_que[imq].second, mms)));
             }
             imq++;
         }
@@ -98,8 +102,8 @@ template <typename S> struct IdentityMPO : MPO<S> {
                           qk = ket_basis[m]->quanta[j];
                         S qbp = qk;
                         qbp.set_pg(qb.pg());
-                        if (ket_to_bra_map.at((uint8_t)qk.pg())
-                                .count((uint8_t)qb.pg()) &&
+                        if (ket_to_bra_map.at((typename S::pg_t)qk.pg())
+                                .count((typename S::pg_t)qb.pg()) &&
                             qbp == qb)
                             dqs.insert((qb - qk)[0]);
                     }
@@ -211,8 +215,10 @@ template <typename S> struct IdentityMPO : MPO<S> {
                     } else {
                         for (int i = 0; i < info->n; i++)
                             if (ket_to_bra_map
-                                    .at((uint8_t)info->quanta[i].get_ket().pg())
-                                    .count((uint8_t)info->quanta[i]
+                                    .at((typename S::pg_t)info->quanta[i]
+                                            .get_ket()
+                                            .pg())
+                                    .count((typename S::pg_t)info->quanta[i]
                                                .get_bra(mat_dq)
                                                .pg()))
                                 (*mat)[i].data[0] = 1;
@@ -232,8 +238,10 @@ template <typename S> struct IdentityMPO : MPO<S> {
                         cmat->allocate();
                         if (ket_to_bra_map.size() == 0 ||
                             ket_to_bra_map
-                                .at((uint8_t)info->quanta[i].get_ket().pg())
-                                .count((uint8_t)info->quanta[i]
+                                .at((typename S::pg_t)info->quanta[i]
+                                        .get_ket()
+                                        .pg())
+                                .count((typename S::pg_t)info->quanta[i]
                                            .get_bra(mat_dq)
                                            .pg())) {
                             for (MKL_INT j = 0; j < cmat->nnz; j++)
@@ -697,27 +705,31 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     ad_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::AD, sidx,
                         S(-2, -sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     p_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     pd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::PD, sidx,
                         S(2, sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                 }
         bool need_repeat_m = mode == QCTypes::Conventional &&
                              trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
@@ -1802,38 +1814,51 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (uint16_t m = 0; m < n_orbs; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
                                                 S(1, 1, hamil->orb_sym[m]));
-            d_op[m] = make_shared<OpElement<S>>(OpNames::D, SiteIndex(m),
-                                                S(-1, 1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S>>(
+                OpNames::D, SiteIndex(m),
+                S(-1, 1, S::pg_inv(hamil->orb_sym[m])));
             mc_op[m] = make_shared<OpElement<S>>(
                 OpNames::C, SiteIndex(m), S(1, 1, hamil->orb_sym[m]), -1.0);
             md_op[m] = make_shared<OpElement<S>>(
-                OpNames::D, SiteIndex(m), S(-1, 1, hamil->orb_sym[m]), -1.0);
+                OpNames::D, SiteIndex(m),
+                S(-1, 1, S::pg_inv(hamil->orb_sym[m])), -1.0);
             trd_op[m] = make_shared<OpElement<S>>(
                 OpNames::RD, SiteIndex(m), S(1, 1, hamil->orb_sym[m]), 2.0);
             tr_op[m] = make_shared<OpElement<S>>(
-                OpNames::R, SiteIndex(m), S(-1, 1, hamil->orb_sym[m]), 2.0);
+                OpNames::R, SiteIndex(m),
+                S(-1, 1, S::pg_inv(hamil->orb_sym[m])), 2.0);
         }
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, SiteIndex(i, j, s),
-                        S(2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(2, s * 2,
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     ad_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::AD, SiteIndex(i, j, s),
-                        S(-2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(-2, s * 2,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, SiteIndex(i, j, s),
-                        S(0, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(0, s * 2,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     p_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::P, SiteIndex(i, j, s),
-                        S(-2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(-2, s * 2,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     pd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::PD, SiteIndex(i, j, s),
-                        S(2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(2, s * 2,
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, SiteIndex(i, j, s),
-                        S(0, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(0, s * 2,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                 }
         bool need_repeat_m = mode == QCTypes::Conventional &&
                              trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&

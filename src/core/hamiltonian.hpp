@@ -74,11 +74,11 @@ template <typename S> struct Hamiltonian {
     // Number of orbitals and point group symmetry irreducible representations
     uint16_t n_sites, n_syms;
     // Point group symmetry of orbitals
-    vector<uint8_t> orb_sym;
+    vector<typename S::pg_t> orb_sym;
     // For storing pre-computed CG factors for sparse matrix functions
     shared_ptr<OperatorFunctions<S>> opf = nullptr;
     DelayedOpNames delayed = DelayedOpNames::None;
-    Hamiltonian(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
+    Hamiltonian(S vacuum, int n_sites, const vector<typename S::pg_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
         n_syms = orb_sym.size() == 0

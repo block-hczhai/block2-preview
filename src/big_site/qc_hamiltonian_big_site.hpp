@@ -65,7 +65,7 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
     shared_ptr<ParallelRule<S>> parallel_rule = nullptr;
     shared_ptr<HamiltonianQC<S>> full_hamil;
     HamiltonianQCBigSite(S vacuum, int n_orbs_total,
-                         const vector<uint8_t> &orb_sym,
+                         const vector<typename S::pg_t> &orb_sym,
                          const shared_ptr<FCIDUMP> &fcidump,
                          const shared_ptr<BigSite<S>> &big_left = nullptr,
                          const shared_ptr<BigSite<S>> &big_right = nullptr)

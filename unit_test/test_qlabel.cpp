@@ -12,24 +12,28 @@ class TestQ : public ::testing::Test {
 };
 
 template <typename S> struct QZLabel {
-    const static int nmin, nmax, tsmin, tsmax;
+    const static int nmin, nmax, tsmin, tsmax, pgmin, pgmax;
     int n, twos, pg;
     QZLabel() {
         n = Random::rand_int(nmin, nmax + 1);
         twos = Random::rand_int(tsmin, tsmax + 1);
-        pg = Random::rand_int(0, 8);
+        pg = Random::rand_int(pgmin, pgmax + 1);
         if ((n & 1) != (twos & 1))
             twos = (twos & (~1)) | (n & 1);
     }
     QZLabel(int n, int twos, int pg) : n(n), twos(twos), pg(pg) {}
     bool in_range() const {
-        return n >= nmin && n <= nmax && twos >= tsmin && twos <= tsmax;
+        return n >= nmin && n <= nmax && twos >= tsmin && twos <= tsmax &&
+               pg >= pgmin && pg <= pgmax;
     }
     int multi() const { return 1; }
     int fermion() const { return n & 1; }
-    QZLabel<S> operator-() const { return QZLabel<S>(-n, -twos, pg); }
+    QZLabel<S> operator-() const {
+        return QZLabel<S>(-n, -twos, S::pg_inv(pg));
+    }
     QZLabel<S> operator+(QZLabel<S> other) const {
-        return QZLabel<S>(n + other.n, twos + other.twos, pg ^ other.pg);
+        return QZLabel<S>(n + other.n, twos + other.twos,
+                          S::pg_mul(pg, other.pg));
     }
     QZLabel<S> operator-(QZLabel<S> other) const { return *this + (-other); }
     static void check() {
@@ -102,13 +106,13 @@ template <typename S> struct QZLabel {
 };
 
 template <typename S> struct QULabel {
-    const static int nmin, nmax, tsmin, tsmax;
+    const static int nmin, nmax, tsmin, tsmax, pgmin, pgmax;
     int n, twos, twosl, pg;
     QULabel() {
         n = Random::rand_int(nmin, nmax + 1);
         twos = Random::rand_int(tsmin, tsmax + 1);
         twosl = Random::rand_int(tsmin, tsmax + 1);
-        pg = Random::rand_int(0, 8);
+        pg = Random::rand_int(pgmin, pgmax + 1);
         if ((n & 1) != (twos & 1))
             twos = (twos & (~1)) | (n & 1);
         if ((n & 1) != (twosl & 1))
@@ -118,14 +122,16 @@ template <typename S> struct QULabel {
         : n(n), twosl(twosl), twos(twos), pg(pg) {}
     bool in_range() const {
         return n >= nmin && n <= nmax && twos >= tsmin && twos <= tsmax &&
-               twosl >= tsmin && twosl <= tsmax;
+               twosl >= tsmin && twosl <= tsmax && pg >= pgmin && pg <= pgmax;
     }
     int multi() const { return twos + 1; }
     int fermion() const { return n & 1; }
-    QULabel<S> operator-() const { return QULabel<S>(-n, twosl, twos, pg); }
+    QULabel<S> operator-() const {
+        return QULabel<S>(-n, twosl, twos, S::pg_inv(pg));
+    }
     QULabel<S> operator+(QULabel<S> other) const {
         return QULabel<S>(n + other.n, abs(twos - other.twos),
-                          twos + other.twos, pg ^ other.pg);
+                          twos + other.twos, S::pg_mul(pg, other.pg));
     }
     QULabel<S> operator-(QULabel<S> other) const { return *this + (-other); }
     QULabel<S> operator[](int i) const {
@@ -133,7 +139,7 @@ template <typename S> struct QULabel {
     }
     QULabel<S> get_ket() const { return QULabel<S>(n, twos, twos, pg); }
     QULabel<S> get_bra(QULabel<S> dq) const {
-        return QULabel<S>(n + dq.n, twosl, twosl, pg ^ dq.pg);
+        return QULabel<S>(n + dq.n, twosl, twosl, S::pg_mul(pg, dq.pg));
     }
     QULabel<S> combine(QULabel<S> bra, QULabel<S> ket) const {
         return QULabel<S>(ket.n, bra.twos, ket.twos, ket.pg);
@@ -302,21 +308,43 @@ template <> const int QZLabel<SZShort>::nmin = -128;
 template <> const int QZLabel<SZShort>::nmax = 127;
 template <> const int QZLabel<SZShort>::tsmin = -128;
 template <> const int QZLabel<SZShort>::tsmax = 127;
+template <> const int QZLabel<SZShort>::pgmin = 0;
+template <> const int QZLabel<SZShort>::pgmax = 7;
 
 template <> const int QZLabel<SZLong>::nmin = -16384;
 template <> const int QZLabel<SZLong>::nmax = 16383;
 template <> const int QZLabel<SZLong>::tsmin = -16384;
 template <> const int QZLabel<SZLong>::tsmax = 16383;
+template <> const int QZLabel<SZLong>::pgmin = 0;
+template <> const int QZLabel<SZLong>::pgmax = 7;
+
+template <> const int QZLabel<SZLZ>::nmin = -1024;
+template <> const int QZLabel<SZLZ>::nmax = 1023;
+template <> const int QZLabel<SZLZ>::tsmin = -1024;
+template <> const int QZLabel<SZLZ>::tsmax = 1023;
+template <> const int QZLabel<SZLZ>::pgmin = -1024;
+template <> const int QZLabel<SZLZ>::pgmax = 1023;
 
 template <> const int QULabel<SU2Short>::nmin = -128;
 template <> const int QULabel<SU2Short>::nmax = 127;
 template <> const int QULabel<SU2Short>::tsmin = 0;
 template <> const int QULabel<SU2Short>::tsmax = 127;
+template <> const int QULabel<SU2Short>::pgmin = 0;
+template <> const int QULabel<SU2Short>::pgmax = 7;
 
 template <> const int QULabel<SU2Long>::nmin = -1024;
 template <> const int QULabel<SU2Long>::nmax = 1023;
 template <> const int QULabel<SU2Long>::tsmin = 0;
 template <> const int QULabel<SU2Long>::tsmax = 1023;
+template <> const int QULabel<SU2Long>::pgmin = 0;
+template <> const int QULabel<SU2Long>::pgmax = 7;
+
+template <> const int QULabel<SU2LZ>::nmin = -256;
+template <> const int QULabel<SU2LZ>::nmax = 255;
+template <> const int QULabel<SU2LZ>::tsmin = 0;
+template <> const int QULabel<SU2LZ>::tsmax = 255;
+template <> const int QULabel<SU2LZ>::pgmin = -256;
+template <> const int QULabel<SU2LZ>::pgmax = 255;
 
 TEST_F(TestQ, TestSZShort) {
     for (int i = 0; i < n_tests; i++)
@@ -336,4 +364,14 @@ TEST_F(TestQ, TestSU2Short) {
 TEST_F(TestQ, TestSU2Long) {
     for (int i = 0; i < n_tests; i++)
         QULabel<SU2Long>::check();
+}
+
+TEST_F(TestQ, TestSZLZ) {
+    for (int i = 0; i < n_tests; i++)
+        QZLabel<SZLZ>::check();
+}
+
+TEST_F(TestQ, TestSU2LZ) {
+    for (int i = 0; i < n_tests; i++)
+        QULabel<SU2LZ>::check();
 }

@@ -237,6 +237,7 @@ class MP(lib.StreamObject):
         fac = np.sqrt(1 - dp11), 1
         # mps1 = fac[0] * ket0 + fac[1] * ket1
         mps1 = self._mps_addition(hamil, "MPS1", fac[0] * impo, ket0, fac[1] * impo, ket1)
+
         self.mps = mps1
 
         if self.mp_order == 2:
@@ -399,15 +400,25 @@ if __name__ == '__main__':
     dm1 = mymp.make_rdm1()
     mymp = mp.MP2(mf).run()
     dm1x = mymp.make_rdm1()
+    h1e = mymp.mo_coeff.T @ mymp._scf.get_hcore() @ mymp.mo_coeff
+    print(np.einsum('pq,pq->', h1e, dm1))
+    print(np.einsum('pq,pq->', h1e, dm1x))
     print(np.linalg.norm(dm1 - dm1x))
-    # from pyscf.mp.dfmp2_native import DFMP2
-    # mymp = DFMP2(mf).run()
-    # dm1yy = mymp.make_rdm1()
-    # dm1y = mymp.make_rdm1_unrelaxed()
-    # dm1z = mymp.make_rdm1_relaxed()
-    # # for xxx in dm1:
-    # #     print(xxx)
-    # # quit()
+    quit()
+    print(np.diag(dm1))
+    print(np.diag(dm1x))
+    from pyscf.mp.dfmp2_native import DFMP2
+    mymp = DFMP2(mf).run()
+    dm1yy = mymp.make_rdm1()
+    dm1y = mymp.make_rdm1_unrelaxed()
+    dm1z = mymp.make_rdm1_relaxed()
+    print(np.linalg.norm(dm1x - dm1y))
+    print(np.linalg.norm(dm1x - dm1z))
+    print(np.diag(dm1y))
+    print(np.diag(dm1z))
+    # for xxx in dm1:
+    #     print(xxx)
+    # quit()
     # print(np.linalg.norm(dm1 - dm1x))
     # print(np.linalg.norm(dm1 - dm1yy))
     # print(np.linalg.norm(dm1 - dm1y))

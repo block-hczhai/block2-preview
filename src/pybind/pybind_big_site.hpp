@@ -172,7 +172,7 @@ template <typename S> void bind_hamiltonian_big_site(py::module &m) {
 
     py::class_<HamiltonianQCBigSite<S>, shared_ptr<HamiltonianQCBigSite<S>>,
                HamiltonianQC<S>>(m, "HamiltonianQCBigSite")
-        .def(py::init<S, int, const vector<uint8_t> &,
+        .def(py::init<S, int, const vector<typename S::pg_t> &,
                       const shared_ptr<FCIDUMP> &,
                       const shared_ptr<BigSite<S>> &,
                       const shared_ptr<BigSite<S>> &>(),

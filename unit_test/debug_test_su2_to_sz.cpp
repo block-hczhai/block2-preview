@@ -64,10 +64,10 @@ TEST_F(TestDMRG, Test) {
 
     cout << "ORB SYM = ";
     for (int i = 0; i < fcidump->n_sites(); i++)
-        cout << setw(2) << (int)fcidump->orb_sym()[i];
+        cout << setw(2) << (int)fcidump->orb_sym<uint8_t>()[i];
     cout << endl;
 
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     SU2 vacuum(0);

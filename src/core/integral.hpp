@@ -910,6 +910,41 @@ struct FCIDUMP {
                                 error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
         return error;
     }
+    // Remove integral elements that violate point group symmetry
+    // orbsym: in Lz convention
+    virtual double symmetrize(const vector<int16_t> &orbsym) {
+        uint16_t n = n_sites();
+        assert((int)orbsym.size() == n);
+        double error = 0.0;
+        for (auto &t : ts)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < (t.general ? n : i + 1); j++)
+                    if (orbsym[i] - orbsym[j])
+                        error += abs(t(i, j)), t(i, j) = 0;
+        for (auto &v : vgs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            if (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l])
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vabs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            if (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l])
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vs)
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl &&
+                                (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l]))
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        return error;
+    }
     // Target 2S or 2Sz
     uint16_t twos() const {
         return (uint16_t)Parsing::to_int(params.at("ms2"));
@@ -925,7 +960,7 @@ struct FCIDUMP {
     // Target point group irreducible representation (counting from 1)
     uint8_t isym() const { return (uint8_t)Parsing::to_int(params.at("isym")); }
     // Set point group irreducible representation for each site
-    void set_orb_sym(const vector<uint8_t> &x) {
+    template <typename T> void set_orb_sym(const vector<T> &x) {
         stringstream ss;
         for (size_t i = 0; i < x.size(); i++) {
             ss << (int)x[i];
@@ -935,12 +970,12 @@ struct FCIDUMP {
         params["orbsym"] = ss.str();
     }
     // Point group irreducible representation for each site
-    vector<uint8_t> orb_sym() const {
+    template <typename T> vector<T> orb_sym() const {
         vector<string> x = Parsing::split(params.at("orbsym"), ",", true);
-        vector<uint8_t> r;
+        vector<T> r;
         r.reserve(x.size());
         for (auto &xx : x)
-            r.push_back((uint8_t)Parsing::to_int(xx));
+            r.push_back((T)Parsing::to_int(xx));
         return r;
     }
     // energy of a determinant
@@ -1062,7 +1097,7 @@ struct FCIDUMP {
         data = rdata->data();
         ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
         if (params.count("orbsym"))
-            set_orb_sym(reorder(orb_sym(), ord));
+            set_orb_sym(reorder(orb_sym<int>(), ord));
     }
     // orbital rotation
     // rot_mat: (old, new)

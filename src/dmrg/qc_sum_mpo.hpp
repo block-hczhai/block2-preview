@@ -96,12 +96,12 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
                                               S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil->orb_sym[m]));
-                tr_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::TR, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S>>(
+                    OpNames::D, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
+                tr_op[m][s] = make_shared<OpElement<S>>(
+                    OpNames::TR, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
                 ts_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::TS, SiteIndex({m}, {s}),
                                               S(1, sz[s], hamil->orb_sym[m]));
@@ -114,19 +114,22 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     p_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                 }
             }
         int p, lt = (int)ts.size();

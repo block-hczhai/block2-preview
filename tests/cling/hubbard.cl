@@ -22,7 +22,7 @@ shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
 PGTypes pg = PGTypes::D2H;
 string filename = "data/HUBBARD-L16.FCIDUMP";
 fcidump->read(filename);
-vector<uint8_t> orbsym = fcidump->orb_sym();
+vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
 transform(orbsym.begin(), orbsym.end(), orbsym.begin(), PointGroup::swap_pg(pg));
 SU2 vacuum(0);
 SU2 target(fcidump->n_elec(), fcidump->twos(), PointGroup::swap_pg(pg)(fcidump->isym()));

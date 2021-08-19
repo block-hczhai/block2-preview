@@ -575,6 +575,43 @@ struct CompressedFCIDUMP : FCIDUMP {
         freeze();
         return error;
     }
+    // Remove integral elements that violate point group symmetry
+    // orbsym: in Lz convention
+    double symmetrize(const vector<int16_t> &orbsym) override {
+        uint16_t n = n_sites();
+        assert((int)orbsym.size() == n);
+        double error = 0.0;
+        unfreeze();
+        for (auto &t : cps_ts)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < (t.general ? n : i + 1); j++)
+                    if (orbsym[i] - orbsym[j])
+                        error += abs(t(i, j)), t(i, j) = 0;
+        for (auto &v : cps_vgs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            if (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l])
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : cps_vabs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            if (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l])
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : cps_vs)
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl &&
+                                (orbsym[i] - orbsym[j] + orbsym[k] - orbsym[l]))
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        freeze();
+        return error;
+    }
     // orbital rotation
     // rot_mat: (old, new)
     void rotate(const vector<double> &rot_mat) override {
@@ -613,7 +650,7 @@ struct CompressedFCIDUMP : FCIDUMP {
         }
         cps_ts = rts, cps_vgs = rvgs, cps_vabs = rvabs, cps_vs = rvs;
         if (params.count("orbsym"))
-            set_orb_sym(FCIDUMP::reorder(orb_sym(), ord));
+            set_orb_sym(FCIDUMP::reorder(orb_sym<int>(), ord));
         freeze();
     }
     // One-electron integral element (SU(2))

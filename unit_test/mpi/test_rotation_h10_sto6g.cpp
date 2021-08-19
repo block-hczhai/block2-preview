@@ -229,7 +229,7 @@ TEST_F(TestRotationH10STO6G, TestSU2) {
     string filename_c1 = "data/H10.STO6G.R1.8.FCIDUMP.C1";
     string filename_rot = "data/H10.STO6G.R1.8.ROTATION.LOWDIN";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -270,7 +270,7 @@ TEST_F(TestRotationH10STO6G, TestSZ) {
     string filename_c1 = "data/H10.STO6G.R1.8.FCIDUMP.C1";
     string filename_rot = "data/H10.STO6G.R1.8.ROTATION.LOWDIN";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 

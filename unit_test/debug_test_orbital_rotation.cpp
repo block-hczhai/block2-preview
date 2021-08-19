@@ -69,7 +69,7 @@ TEST_F(TestDMRG, Test) {
         // for (size_t i = 0; i < kmat.size(); i++)
         //     kmat[i] = hmat[i] * 1E-7 + kmat[i];
         auto kmat = read_occ(pdm_filename);
-        auto omat = fcidump->orb_sym();
+        auto omat = fcidump->orb_sym<uint8_t>();
         for (size_t i = 0; i < fcidump->n_sites(); i++)
             for (size_t j = 0; j < fcidump->n_sites(); j++)
                 if (omat[i] != omat[j])
@@ -112,7 +112,7 @@ TEST_F(TestDMRG, Test) {
 
     cout << "ORB SYM = ";
     for (int i = 0; i < fcidump->n_sites(); i++)
-        cout << setw(2) << (int)fcidump->orb_sym()[i];
+        cout << setw(2) << (int)fcidump->orb_sym<uint8_t>()[i];
     cout << endl;
 
     vector<uint8_t> ioccs;
@@ -123,7 +123,7 @@ TEST_F(TestDMRG, Test) {
     //      << fcidump->det_energy(ioccs, 0, fcidump->n_sites()) + fcidump->e
     //      << endl;
 
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     SU2 vacuum(0);

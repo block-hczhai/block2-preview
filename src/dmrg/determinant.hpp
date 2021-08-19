@@ -490,10 +490,11 @@ struct DeterminantTRIE<S, typename S::is_su2_t> : TRIE<DeterminantTRIE<S>> {
 };
 
 template <typename S> struct DeterminantQC {
-    vector<uint8_t> hf_occ, orb_sym;
+    vector<uint8_t> hf_occ;
+    vector<typename S::pg_t> orb_sym;
     vector<double> h1e_energy;
     int n_trials = 20, n_outer_trials = 50000;
-    DeterminantQC(const vector<uint8_t> &hf_occ, const vector<uint8_t> &orb_sym,
+    DeterminantQC(const vector<uint8_t> &hf_occ, const vector<typename S::pg_t> &orb_sym,
                   const vector<double> &h1e_energy)
         : hf_occ(hf_occ), orb_sym(orb_sym), h1e_energy(h1e_energy) {}
     struct det_less {
@@ -513,7 +514,7 @@ template <typename S> struct DeterminantQC {
         for (int i = 0; i < n_block_sites; i++) {
             n += det[i];
             if (det[i] == 1)
-                ipg ^= orb_sym[i + i_begin], twos++;
+                ipg = S::pg_mul(ipg, orb_sym[i + i_begin]), twos++;
         }
         return S(n, twos, ipg);
     }
@@ -558,7 +559,7 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     ubond_t n_det_states = 2; // number of states for each determinant
     DeterminantMPSInfo(int n_sites, S vacuum, S target,
                        const vector<shared_ptr<StateInfo<S>>> &basis,
-                       const vector<uint8_t> &orb_sym, uint8_t n_syms,
+                       const vector<typename S::pg_t> &orb_sym, uint8_t n_syms,
                        const vector<uint8_t> &iocc,
                        const shared_ptr<FCIDUMP> &fcidump)
         : iocc(iocc), fcidump(fcidump),

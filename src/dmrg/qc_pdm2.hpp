@@ -143,16 +143,19 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
                                               S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S>>(
+                    OpNames::D, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
             }
             for (uint8_t s = 0; s < 16; s++)
                 ccdd_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::CCDD,
                     SiteIndex({m, m, m, m}, {(uint8_t)SI(s), (uint8_t)SJ(s),
                                              (uint8_t)SK(s), (uint8_t)SL(s)}),
-                    S(0, sz_ccdd[s], 0));
+                    S(0, sz_ccdd[s],
+                      S::pg_mul(S::pg_mul(hamil->orb_sym[m], hamil->orb_sym[m]),
+                                S::pg_mul(S::pg_inv(hamil->orb_sym[m]),
+                                          S::pg_inv(hamil->orb_sym[m])))));
         }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
@@ -162,22 +165,25 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     // note here ad is different from common def
                     // common def ad[i][j] = D_j * D_i
                     // here ad[i][j] = D_i * D_j
                     ad_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::AD, sidx_ad,
                         S(-2, -sz_plus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     bd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::BD, sidx,
                         S(0, -sz_minus[s],
-                          hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    hamil->orb_sym[j])));
                 }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = i; j < n_sites; j++)
@@ -185,20 +191,41 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     SiteIndex sidx({i, j, j}, {(uint8_t)SI(s), (uint8_t)SJ(s),
                                                (uint8_t)SK(s)});
                     ccd_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::CCD, sidx, S(1, sz_ccd[s], hamil->orb_sym[i]));
+                        OpNames::CCD, sidx,
+                        S(1, sz_ccd[s],
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     cdc_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::CDC, sidx, S(1, sz_cdc[s], hamil->orb_sym[i]));
+                        OpNames::CDC, sidx,
+                        S(1, sz_cdc[s],
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              hamil->orb_sym[j]))));
                     cdd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::CDD, sidx,
-                        S(-1, sz_cdd[s], hamil->orb_sym[i]));
+                        S(-1, sz_cdd[s],
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     dcc_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::DCC, sidx, S(1, sz_dcc[s], hamil->orb_sym[i]));
+                        OpNames::DCC, sidx,
+                        S(1, sz_dcc[s],
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              hamil->orb_sym[j]))));
                     dcd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::DCD, sidx,
-                        S(-1, sz_dcd[s], hamil->orb_sym[i]));
+                        S(-1, sz_dcd[s],
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     ddc_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::DDC, sidx,
-                        S(-1, sz_ddc[s], hamil->orb_sym[i]));
+                        S(-1, sz_ddc[s],
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              hamil->orb_sym[j]))));
                 }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
@@ -211,8 +238,12 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                           {(uint8_t)SI(s), (uint8_t)SJ(s),
                                            (uint8_t)SK(s), (uint8_t)SL(s)}),
                                 S(0, sz_ccdd[s],
-                                  hamil->orb_sym[i] ^ hamil->orb_sym[j] ^
-                                      hamil->orb_sym[k] ^ hamil->orb_sym[l]));
+                                  S::pg_mul(
+                                      S::pg_mul(hamil->orb_sym[i],
+                                                hamil->orb_sym[j]),
+                                      S::pg_mul(
+                                          S::pg_inv(hamil->orb_sym[k]),
+                                          S::pg_inv(hamil->orb_sym[l])))));
                         }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;
@@ -1235,11 +1266,16 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_su2_t> : MPO<S> {
         for (uint16_t m = 0; m < n_sites; m++) {
             c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
                                                 S(1, 1, hamil->orb_sym[m]));
-            d_op[m] = make_shared<OpElement<S>>(OpNames::D, SiteIndex(m),
-                                                S(-1, 1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S>>(
+                OpNames::D, SiteIndex(m),
+                S(-1, 1, S::pg_inv(hamil->orb_sym[m])));
             for (uint8_t s = 0; s < 2; s++)
                 ccdd_op[m][s] = make_shared<OpElement<S>>(
-                    OpNames::CCDD, SiteIndex({m, m, m, m}, {s}), S(0, 0, 0));
+                    OpNames::CCDD, SiteIndex({m, m, m, m}, {s}),
+                    S(0, 0,
+                      S::pg_mul(S::pg_mul(hamil->orb_sym[m], hamil->orb_sym[m]),
+                                S::pg_mul(S::pg_inv(hamil->orb_sym[m]),
+                                          S::pg_inv(hamil->orb_sym[m])))));
         }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
@@ -1248,36 +1284,67 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     SiteIndex sidx_ad({j, i}, {s});
                     a_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::A, sidx,
-                        S(2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(2, s * 2,
+                          S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
                     // note here ad is different from common def
                     // common def ad[i][j] = D_j * D_i
                     // here ad[i][j] = D_i * D_j
                     ad_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::AD, sidx_ad,
-                        S(-2, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(-2, s * 2,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     b_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::B, sidx,
-                        S(0, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(0, s * 2,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_inv(hamil->orb_sym[j]))));
                     bd_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::BD, sidx,
-                        S(0, s * 2, hamil->orb_sym[i] ^ hamil->orb_sym[j]));
+                        S(0, s * 2,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    hamil->orb_sym[j])));
                 }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = i; j < n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
                     SiteIndex sidx({i, j, j}, {s});
                     ccd_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::CCD, sidx, S(1, 1, hamil->orb_sym[i]));
+                        OpNames::CCD, sidx,
+                        S(1, 1,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     cdc_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::CDC, sidx, S(1, 1, hamil->orb_sym[i]));
+                        OpNames::CDC, sidx,
+                        S(1, 1,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              hamil->orb_sym[j]))));
                     cdd_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::CDD, sidx, S(-1, 1, hamil->orb_sym[i]));
+                        OpNames::CDD, sidx,
+                        S(-1, 1,
+                          S::pg_mul(hamil->orb_sym[i],
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     dcc_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::DCC, sidx, S(1, 1, hamil->orb_sym[i]));
+                        OpNames::DCC, sidx,
+                        S(1, 1,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              hamil->orb_sym[j]))));
                     dcd_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::DCD, sidx, S(-1, 1, hamil->orb_sym[i]));
+                        OpNames::DCD, sidx,
+                        S(-1, 1,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(hamil->orb_sym[j],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                     ddc_op[i][j][s] = make_shared<OpElement<S>>(
-                        OpNames::DDC, sidx, S(-1, 1, hamil->orb_sym[i]));
+                        OpNames::DDC, sidx,
+                        S(-1, 1,
+                          S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_mul(S::pg_inv(hamil->orb_sym[j]),
+                                              hamil->orb_sym[j]))));
                 }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
@@ -1287,8 +1354,12 @@ template <typename S> struct PDM2MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             pdm2_op[i][j][k][l][s] = make_shared<OpElement<S>>(
                                 OpNames::PDM2, SiteIndex({i, j, k, l}, {s}),
                                 S(0, 0,
-                                  hamil->orb_sym[i] ^ hamil->orb_sym[j] ^
-                                      hamil->orb_sym[k] ^ hamil->orb_sym[l]));
+                                  S::pg_mul(
+                                      S::pg_mul(hamil->orb_sym[i],
+                                                hamil->orb_sym[j]),
+                                      S::pg_mul(
+                                          S::pg_inv(hamil->orb_sym[k]),
+                                          S::pg_inv(hamil->orb_sym[l])))));
                         }
         MPO<S>::const_e = 0.0;
         MPO<S>::op = zero_op;

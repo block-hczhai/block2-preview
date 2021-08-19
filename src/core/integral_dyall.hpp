@@ -270,6 +270,25 @@ struct DyallFCIDUMP : FCIDUMP {
         error += fcidump->symmetrize(orbsym);
         return error;
     }
+    // Remove integral elements that violate point group symmetry
+    // orbsym: in Lz convention
+    double symmetrize(const vector<int16_t> &orbsym) override {
+        uint16_t n = n_sites();
+        assert((int)orbsym.size() == n);
+        double error = 0.0;
+        for (auto &x : fock)
+            for (int i = 0; i < x.n; i++)
+                for (int j = 0; j < (x.general ? x.n : i + 1); j++)
+                    if (orbsym[i] - orbsym[j])
+                        error += abs(x(i, j)), x(i, j) = 0;
+        for (auto &x : heff)
+            for (int i = 0; i < x.n; i++)
+                for (int j = 0; j < (x.general ? x.n : i + 1); j++)
+                    if (orbsym[i + n_inactive] - orbsym[j + n_inactive])
+                        error += abs(x(i, j)), x(i, j) = 0;
+        error += fcidump->symmetrize(orbsym);
+        return error;
+    }
     double t(uint16_t i, uint16_t j) const override {
         if ((i < n_inactive && j < n_inactive) ||
             (i >= n_inactive + n_active && j >= n_inactive + n_active))

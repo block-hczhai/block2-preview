@@ -36,6 +36,7 @@ PYBIND11_MAKE_OPAQUE(vector<int>);
 PYBIND11_MAKE_OPAQUE(vector<char>);
 PYBIND11_MAKE_OPAQUE(vector<long long int>);
 PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
+PYBIND11_MAKE_OPAQUE(vector<int16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
@@ -845,7 +846,7 @@ template <typename S> void bind_operator(py::module &m) {
 
 template <typename S> void bind_hamiltonian(py::module &m) {
     py::class_<Hamiltonian<S>, shared_ptr<Hamiltonian<S>>>(m, "Hamiltonian")
-        .def(py::init<S, int, const vector<uint8_t> &>())
+        .def(py::init<S, int, const vector<typename S::pg_t> &>())
         .def_readwrite("n_syms", &Hamiltonian<S>::n_syms)
         .def_readwrite("opf", &Hamiltonian<S>::opf)
         .def_readwrite("n_sites", &Hamiltonian<S>::n_sites)
@@ -960,6 +961,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<pair<long long int, int>>>(m, "VectorPLLIntInt");
     py::bind_vector<vector<pair<long long int, long long int>>>(
         m, "VectorPLLIntLLInt");
+    py::bind_vector<vector<int16_t>>(m, "VectorInt16");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
@@ -1049,7 +1051,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .def_static("swap_c2h", &PointGroup::swap_c2h)
         .def_static("swap_c2v", &PointGroup::swap_c2v)
         .def_static("swap_d2", &PointGroup::swap_d2)
-        .def_static("swap_d2h", &PointGroup::swap_d2h);
+        .def_static("swap_d2h", &PointGroup::swap_d2h)
+        .def_static("swap_lz", &PointGroup::swap_lz);
 
     py::enum_<OpNames>(m, "OpNames", py::arithmetic())
         .value("H", OpNames::H)
@@ -1834,11 +1837,22 @@ template <typename S = void> void bind_matrix(py::module &m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP::deallocate)
-        .def("symmetrize", &FCIDUMP::symmetrize, py::arg("orbsym"),
+        .def("symmetrize",
+             (double (FCIDUMP::*)(const vector<uint8_t> &)) &
+                 FCIDUMP::symmetrize,
+             py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
              "Returns summed error in symmetrization\n\n"
              "    Args:\n"
              "        orbsym : in XOR convention")
+        .def("symmetrize",
+             (double (FCIDUMP::*)(const vector<int16_t> &)) &
+                 FCIDUMP::symmetrize,
+             py::arg("orbsym"),
+             "Remove integral elements that violate point group symmetry. "
+             "Returns summed error in symmetrization\n\n"
+             "    Args:\n"
+             "        orbsym : in Lz convention")
         .def("e", &FCIDUMP::e)
         .def(
             "t",
@@ -1894,8 +1908,12 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("deep_copy", &FCIDUMP::deep_copy)
         .def_static("array_reorder", &FCIDUMP::reorder<double>)
         .def_static("array_reorder", &FCIDUMP::reorder<uint8_t>)
-        .def_property("orb_sym", &FCIDUMP::orb_sym, &FCIDUMP::set_orb_sym,
+        .def_property("orb_sym", &FCIDUMP::orb_sym<uint8_t>,
+                      &FCIDUMP::set_orb_sym<uint8_t>,
                       "Orbital symmetry in molpro convention")
+        .def_property("orb_sym_lz", &FCIDUMP::orb_sym<int16_t>,
+                      &FCIDUMP::set_orb_sym<int16_t>,
+                      "Orbital symmetry in Lz convention")
         .def_property_readonly("n_elec", &FCIDUMP::n_elec)
         .def_property_readonly("twos", &FCIDUMP::twos)
         .def_property_readonly("isym", &FCIDUMP::isym)

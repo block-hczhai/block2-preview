@@ -251,7 +251,7 @@ TEST_F(TestFITPGN2631G, TestSU2) {
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     vector<uint8_t> orbsym_red = orbsym;
@@ -279,7 +279,7 @@ TEST_F(TestFITPGN2631G, TestSZ) {
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     vector<uint8_t> orbsym_red = orbsym;

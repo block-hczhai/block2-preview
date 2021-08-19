@@ -87,7 +87,7 @@ TEST_F(TestDMRG, Test) {
     //      << fcidump->det_energy(ioccs, 0, fcidump->n_sites()) + fcidump->e
     //      << endl;
 
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     SZ vacuum(0);

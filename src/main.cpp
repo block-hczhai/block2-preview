@@ -146,7 +146,7 @@ template <typename S> void run(const map<string, string> &params) {
         cout << *threading_() << endl;
     }
 
-    vector<uint8_t> orbsym = fcidump->orb_sym();
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     double integral_error = fcidump->symmetrize(orbsym);
