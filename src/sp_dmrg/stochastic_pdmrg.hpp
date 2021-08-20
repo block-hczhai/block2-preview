@@ -35,12 +35,12 @@
 #include <vector>
 
 /** Stochastic perturbative DMRG.
- * 
+ *
  * Author: Seunghoon Lee, 2021
  * Revised: Huanchen Zhai, Aug 13, 2021
  *    improved serial efficiency;
  *    added threading.
-*/
+ */
 
 using namespace std;
 
@@ -270,7 +270,7 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
 #pragma omp for schedule(static)
             for (int i_sample = 0; i_sample < n_sample; i_sample++) {
                 rand_mt.fill_rand_double((double *)rand.data(), n_sites);
-                double det_ener = 0, rnormsq = 0, snormsq = 0;
+                double det_ener = 0, rnormsq = 0, snorm = 0;
                 ptrs = pmats[0][0][0];
                 // sample psi0 / qvpsi0
                 for (int i_site = 0; i_site < n_sites; i_site++) {
@@ -343,10 +343,10 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
                         }
                         ptrs = cmp;
                         if (i_site == n_sites - 1)
-                            snormsq = cmp->norm();
+                            snorm = cmp->norm();
                     }
-                    const double tmp = norm_qvpsi0 * sqrt(snormsq) /
-                                       (sqrt(rnormsq) * det_ener);
+                    const double tmp =
+                        norm_qvpsi0 * snorm / (sqrt(rnormsq) * det_ener);
                     rr[2] += tmp;
                     rr[3] += tmp * tmp;
                 }

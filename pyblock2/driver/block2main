@@ -1012,6 +1012,8 @@ def get_mps_from_tags(iroot):
     if smps_info.bond_dim < max_bdim:
         smps_info.bond_dim = max_bdim
     smps.load_data()
+    if smps.dot == 2 and smps.center == smps.n_sites - 1:
+        smps.center = smps.n_sites - 2
     if smps.dot == 1 and dot == 2:
         if smps.center == 0 and smps.canonical_form[0] == 'S':
             cg = CG(200)
@@ -1295,6 +1297,7 @@ if not pre_run:
         if conn_centers is not None:
             me.finalize_environments()
 
+        _print("Final canonical form = ", mps.canonical_form, mps.center)
         sweep_energies.append(np.array(dmrg.energies))
         discarded_weights.append(np.array(dmrg.discarded_weights))
         sweep_energies = np.vstack(sweep_energies)
@@ -1397,6 +1400,7 @@ if not pre_run:
         cps.decomp_type = decomp_type
         cps.trunc_type = trunc_type
         ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        _print("Final canonical form = ", mps.canonical_form, mps.center)
         _print("Compression overlap = %20.15f" % ovl)
 
         if MPI is None or MPI.rank == 0:
@@ -1466,6 +1470,7 @@ if not pre_run:
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
+        _print("Final canonical form = ", bmps.canonical_form, bmps.center)
 
         if MPI is None or MPI.rank == 0:
             dmr = expect.get_1pdm(n_orbs)
@@ -1685,6 +1690,7 @@ if not pre_run:
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, mps.center == 0)
+        _print("Final canonical form = ", mps.canonical_form, mps.center)
 
         if MPI is None or MPI.rank == 0:
             if SX == SZ:
@@ -1738,6 +1744,7 @@ if not pre_run:
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
+        _print("Final canonical form = ", bmps.canonical_form, bmps.center)
 
         if MPI is None or MPI.rank == 0:
             dmr = expect.get_2pdm(n_orbs)
@@ -2152,8 +2159,20 @@ if not pre_run:
             copy_tag = dic["copy_mps"]
 
         mps.dot = dot
+        if MPI is not None:
+            MPI.barrier()
+        if MPI is None or MPI.rank == 0:
+            if (mps.center == 0 and mps.canonical_form[0] == 'S') or \
+                (mps.center == mps.n_sites - 1 and mps.canonical_form[-1] == 'K'):
+                cg = CG(200)
+                cg.initialize()
+                mps.flip_fused_form(mps.center, cg, None)
+                mps.save_data()
+        if MPI is not None:
+            MPI.barrier()
         if mps.center == mps.n_sites - 1 and mps.dot == 2:
             mps.center = mps.n_sites - 2
+        _print("Copy-init canonical form = ", mps.canonical_form, mps.center)
 
         if copy_tag == '':
             raise ValueError(
@@ -2239,6 +2258,7 @@ if not pre_run:
             cp_mps.info.save_data(scratch + '/%s-mps_info.bin' % copy_tag)
 
         mps = cp_mps
+        _print("Copy-final canonical form = ", mps.canonical_form, mps.center)
 
     # stoptDMRG sampling (sampling CSF is not supported yet) 
     if "stopt_sampling" in dic:
@@ -2264,9 +2284,9 @@ if not pre_run:
             np.save(scratch + "/stopt_e_corr.npy", e_corr)
             np.save(scratch + "/stopt_std_corr.npy", std_corr)
         
-        _print("           DMRG Energy     = %20.15f" % sp_dmrg.Edmrg)
-        _print("stochastic PDMRG Correction = %20.15f (%20.15f)" % (e_corr, std_corr))
-        _print("stochastic PDMRG Energy     = %20.15f (%20.15f)" % (sp_dmrg.Edmrg+e_corr, std_corr))
+        _print("            DMRG Energy     = %25.15f" % sp_dmrg.Edmrg)
+        _print("stochastic PDMRG Correction = %25.15f (%20.15f)" % (e_corr, std_corr))
+        _print("stochastic PDMRG Energy     = %25.15f (%20.15f)" % (sp_dmrg.Edmrg+e_corr, std_corr))
 
     # CSF/DET coefficients
     if "restart_sample" in dic or "sample" in dic:

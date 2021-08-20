@@ -63,7 +63,7 @@ class SPDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True):
+    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -74,6 +74,8 @@ class SPDMRG:
         self.scratch = scratch
         self.mpo_orig = None
         self.use_threading = use_threading
+        self.n_steps = n_steps
+        self.bdims = [0, 0]
 
         self.Edmrg = np.float64(np.load(self.scratch + '/E_dmrg.npy'))
 
@@ -85,6 +87,7 @@ class SPDMRG:
         mps1_info = MPSInfo(0)
         mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
+        self.bdims[0] = mps1.info.bond_dim
         comm.barrier()
         if mrank == 0:
             self.change_mps_center(mps1, 0)
@@ -96,6 +99,7 @@ class SPDMRG:
         mps2_info = MPSInfo(0)
         mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
+        self.bdims[1] = mps2.info.bond_dim
         comm.barrier()
         if mrank == 0:
             self.change_mps_center(mps2, 0)
@@ -122,12 +126,14 @@ class SPDMRG:
     def change_mps_center(self, ket, center):
         ket.load_data()
         cf = ket.canonical_form
-        _print('CF = %s'%(cf))
+        _print('CF = %s CENTER = %d' % (cf, ket.center))
         cg = CG(200)
         cg.initialize()
         if ket.center == center:
-            return
-        if center == 0:
+            if ket.canonical_form[0] == 'S':
+                ket.move_right(cg, None)
+                ket.move_left(cg, None)
+        elif center == 0:
             if ket.center == ket.n_sites - 2:
                 ket.center += 1
             if ket.canonical_form[-1] == 'C':
@@ -168,6 +174,28 @@ class SPDMRG:
         self.hamil = HamiltonianQC(
             vacuum, self.n_sites, self.orb_sym, self.fcidump)
         assert pg in ["d2h", "c1"]
+    
+    def compute_correction(self, max_samp_c, max_samp, H00, H00_2, H11, H11_2, H10, H10_2):
+        max_samp_c = np.float64(max_samp_c)
+        max_samp = np.float64(max_samp)
+        avg_Cterm = H00
+        std_Cterm = np.sqrt(abs(H00_2 - avg_Cterm * avg_Cterm) / max_samp_c)
+        avg_Aterm = H11
+        std_Aterm = np.sqrt(abs(H11_2 - avg_Aterm * avg_Aterm) / max_samp)
+        avg_Bterm = H10
+        std_Bterm = np.sqrt(abs(H10_2 - avg_Bterm * avg_Bterm) / max_samp)
+        Emp2 = - avg_Aterm + avg_Bterm ** 2 / avg_Cterm
+        with np.errstate(divide='ignore', invalid='ignore'):
+            if abs(avg_Bterm) > 1e-10:
+                std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
+                            * (2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
+            else:
+                std_Emp2 = std_Aterm
+        if self.verbose >= 4:
+            _print(" A   term = %15.10f (%15.10f)" % (avg_Aterm, std_Aterm))
+            _print(" B   term = %15.10f (%15.10f)" % (avg_Bterm, std_Bterm))
+            _print(" C   term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
+        return Emp2, std_Emp2
 
     def kernel(self, max_samp):
         comm.barrier()
@@ -185,6 +213,7 @@ class SPDMRG:
         H11_2 = 0.0
         H10   = 0.0
         H10_2 = 0.0
+        tx = time.perf_counter()
 
         max_samp_per_rank = max_samp // msize
         det_string = VectorUInt8([0] * self.n_sites * 2)
@@ -206,17 +235,12 @@ class SPDMRG:
 
         if msize != 0:
             comm.barrier()
-            H00   = comm.reduce(H00,   op=MPI.SUM, root=0)  
-            H00_2 = comm.reduce(H00_2, op=MPI.SUM, root=0)  
+            H00, H00_2 = [x * np.float64(n_samp_per_rank) for x in [H00, H00_2]]
+            H00   = comm.allreduce(H00,   op=MPI.SUM)
+            H00_2 = comm.allreduce(H00_2, op=MPI.SUM)
+            H00, H00_2 = [x / np.float64(max_samp) for x in [H00, H00_2]]
 
-        if mrank == 0: 
-            avg_Cterm = H00 / msize 
-            std_Cterm = np.sqrt(abs( H00_2 / msize - avg_Cterm*avg_Cterm)/np.float64(max_samp))
-
-        if mrank == 0 and self.verbose >= 4: 
-            _print(" C term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
-            _print("")
-
+        if mrank == 0 and self.verbose >= 4:
             _print("1-2] A & B term")
             _print("     sampling D_p with P_p = |<Psi_0| VQ |D_p>|^2")
             _print("     & computing <1/(E_d-E_0)> and <<D_p|Psi_0> / {(E_d-E_0) <D_p|QV|Psi_0>}>")
@@ -224,16 +248,29 @@ class SPDMRG:
         Aterm = []
         Bterm = []
         if self.use_threading:
-            n_sub = 10
+            _print("Sampling | BRA bond dimension = %d | KET bond dimension = %d | Nsample = %d"
+                % (self.bdims[1], self.bdims[0], max_samp), flush=True)
+            n_steps = 10
             sub_results = [0, 0, 0, 0]
-            for i_samp in range(n_sub):
-                if i_samp == n_sub - 1:
-                    n_sub_samp = n_samp_per_rank - i_samp * (n_samp_per_rank // n_sub)
+            current_max_samp = 0
+            tg = time.perf_counter()
+            for i_samp in range(self.n_steps):
+                if i_samp == self.n_steps - 1:
+                    n_sub_samp = n_samp_per_rank - i_samp * (n_samp_per_rank // self.n_steps)
                 else:
-                    n_sub_samp = n_samp_per_rank // n_sub
-                print('%d processor: sampling %d %% done'%(mrank, (i_samp + 1) * 10))
+                    n_sub_samp = n_samp_per_rank // self.n_steps
+                tx = time.perf_counter()
                 results = self.SPDMRG.parallel_sampling(n_sub_samp, 1, self.fcidump)
                 sub_results = [ra + rb * n_sub_samp for ra, rb in zip(sub_results,results)]
+                current_max_samp += n_sub_samp
+                fcms = np.float64(current_max_samp)
+                part_f, part_err = self.compute_correction(max_samp, current_max_samp,
+                    H00, H00_2, sub_results[0] / fcms, sub_results[1] / fcms,
+                    sub_results[2] / fcms, sub_results[3] / fcms)
+                print('Rank = %3d / %3d Step = %3d / %3d .. Nsample = %10d F = %18.10f Error = %9.2E T = %.2f' %
+                    (mrank, msize, i_samp, self.n_steps, n_sub_samp, part_f, part_err, time.perf_counter() - tx), flush=True)
+            _print("Time elapsed = %.3f" % (time.perf_counter() - tg))
+
             H11, H11_2, H10, H10_2 = [rx / n_samp_per_rank for rx in sub_results]
         else:
             if max_samp_per_rank > 10:
@@ -242,7 +279,7 @@ class SPDMRG:
                 print_samp = max_samp_per_rank  
             for num_samp in range(n_samp_per_rank):
                 if num_samp % print_samp ==0:
-                    print( '%d processor: sampling %d %% done'%(mrank, (num_samp//print_samp+1)*10) )
+                    print( 'processor %2d: sampling %2d %% done'%(mrank, (num_samp//print_samp+0)*10) )
                 # sample | D_p > with P_p = |< Psi_0 | VQ | D_p >|^2
                 Sqv_p = self.SPDMRG.sampling(1, det_string)
                 # calculate dE_p = < D_p | H_d | D_p > - E0
@@ -258,36 +295,23 @@ class SPDMRG:
 
         if msize != 0:
             comm.barrier()
-            H11   = comm.reduce(H11,   op=MPI.SUM, root=0)
-            H11_2 = comm.reduce(H11_2, op=MPI.SUM, root=0)
-            H10   = comm.reduce(H10,   op=MPI.SUM, root=0)
-            H10_2 = comm.reduce(H10_2, op=MPI.SUM, root=0)
+            H11, H11_2, H10, H10_2 = [x * np.float64(n_samp_per_rank) for x in [H11, H11_2, H10, H10_2]]
+            H11   = comm.allreduce(H11,   op=MPI.SUM)
+            H11_2 = comm.allreduce(H11_2, op=MPI.SUM)
+            H10   = comm.allreduce(H10,   op=MPI.SUM)
+            H10_2 = comm.allreduce(H10_2, op=MPI.SUM)
+            H11, H11_2, H10, H10_2 = [x / np.float64(max_samp) for x in [H11, H11_2, H10, H10_2]]
 
         if mrank == 0: 
-            avg_Aterm = H11 / msize 
-            std_Aterm = np.sqrt(abs( H11_2 / msize - avg_Aterm*avg_Aterm)/np.float64(max_samp))
-            avg_Bterm = H10 / msize 
-            std_Bterm = np.sqrt(abs( H10_2 / msize - avg_Bterm*avg_Bterm)/np.float64(max_samp))
-            Emp2 = - avg_Aterm + avg_Bterm**2 / avg_Cterm
-            with np.errstate(divide='ignore', invalid='ignore'):
-                if abs(avg_Bterm) > 1e-10:
-                    std_Emp2 = std_Aterm + avg_Bterm ** 2 / abs(avg_Cterm) \
-                               * ( 2 * std_Bterm / abs(avg_Bterm) + std_Cterm / abs(avg_Cterm) ) 
-                else:
-                    std_Emp2 = std_Aterm
+            Emp2, std_Emp2 = self.compute_correction(max_samp, max_samp, H00, H00_2, H11, H11_2, H10, H10_2)
         else: 
-            Emp2 = 0.0 
-            std_Emp2 = 0.0 
+            Emp2, std_Emp2 = 0.0, 0.0 
 
         if mrank == 0 and self.verbose >= 4: 
             _print("")
             _print("         ===============")
             _print("         === SUMMARY ===")
             _print("         ===============")
-            _print("")
-            _print(" A   term = %15.10f (%15.10f)" % (avg_Aterm, std_Aterm))
-            _print(" B   term = %15.10f (%15.10f)" % (avg_Bterm, std_Bterm))
-            _print(" C   term = %15.10f (%15.10f)" % (avg_Cterm, std_Cterm))
             _print("")
             _print("    DMRG Energy = %15.10f"%(self.Edmrg))
             _print("     MP2 Energy = %15.10f (%15.10f)"%(Emp2, std_Emp2))
