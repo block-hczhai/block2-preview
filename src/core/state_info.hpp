@@ -36,18 +36,18 @@ namespace block2 {
 #ifdef _LARGE_BOND
 typedef uint32_t ubond_t;
 typedef int64_t total_bond_t;
-#define _SI_MEM_SIZE(n) ((n) << 1)
+#define _SI_MEM_SIZE(n) ((n) * (sizeof(S) >> 2) + (n))
 #define _DBL_MEM_SIZE(n) ((n) << 1)
 #else
 #ifdef _SMALL_BOND
 typedef uint8_t ubond_t;
 typedef int32_t total_bond_t;
-#define _SI_MEM_SIZE(n) ((n) + (((n) + 3) >> 2))
+#define _SI_MEM_SIZE(n) ((n) * (sizeof(S) >> 2) + (((n) + 3) >> 2))
 #define _DBL_MEM_SIZE(n) ((n) - ((n) >> 1))
 #else
 typedef uint16_t ubond_t;
 typedef int32_t total_bond_t;
-#define _SI_MEM_SIZE(n) (((n) << 1) - ((n) >> 1))
+#define _SI_MEM_SIZE(n) ((n) * (sizeof(S) >> 2) + (n) - ((n) >> 1))
 #define _DBL_MEM_SIZE(n) (n)
 #endif
 #endif
@@ -56,8 +56,9 @@ template <typename, typename = void> struct StateInfo;
 
 // A collection of quantum symmetry labels and their quantity
 template <typename S>
-struct StateInfo<S, typename enable_if<integral_constant<
-                        bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+struct StateInfo<S,
+                 typename enable_if<integral_constant<
+                     bool, sizeof(S) % sizeof(uint32_t) == 0>::value>::type> {
     shared_ptr<vector<uint32_t>> vdata;
     // Array for symmetry labels
     S *quanta;
@@ -79,7 +80,7 @@ struct StateInfo<S, typename enable_if<integral_constant<
         uint32_t *ptr = vdata->data();
         ifs.read((char *)ptr, sizeof(uint32_t) * _SI_MEM_SIZE(n));
         quanta = (S *)ptr;
-        n_states = (ubond_t *)(ptr + n);
+        n_states = (ubond_t *)(ptr + n * (sizeof(S) >> 2));
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
@@ -118,11 +119,12 @@ struct StateInfo<S, typename enable_if<integral_constant<
         }
         n = length;
         quanta = (S *)ptr;
-        n_states = (ubond_t *)(ptr + length);
+        n_states = (ubond_t *)(ptr + length * (sizeof(S) >> 2));
     }
     void reallocate(int length) {
         if (length < n) {
-            memmove(quanta + length, n_states, length * sizeof(ubond_t));
+            memmove((uint32_t *)(quanta + length), (uint32_t *)n_states,
+                    length * sizeof(ubond_t));
             vdata->resize(_SI_MEM_SIZE(length));
             quanta = (S *)vdata->data();
             n_states = (ubond_t *)(quanta + length);
@@ -130,7 +132,8 @@ struct StateInfo<S, typename enable_if<integral_constant<
             vdata->resize(_SI_MEM_SIZE(length));
             quanta = (S *)vdata->data();
             n_states = (ubond_t *)(quanta + n);
-            memmove(quanta + length, n_states, length * sizeof(ubond_t));
+            memmove((uint32_t *)(quanta + length), (uint32_t *)n_states,
+                    length * sizeof(ubond_t));
             n_states = (ubond_t *)(quanta + length);
         }
         n = length;
@@ -273,21 +276,21 @@ struct StateInfo<S, typename enable_if<integral_constant<
     // For determining stride in tensor product of two SparseMatrix
     static StateInfo get_connection_info(const StateInfo &a, const StateInfo &b,
                                          const StateInfo &c) {
-        map<S, vector<uint32_t>> mp;
+        map<S, vector<S>> mp;
         int nc = 0, iab = 0;
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {
                 S qc = a.quanta[i] + b.quanta[j];
                 nc += qc.count();
                 for (int k = 0; k < qc.count(); k++)
-                    mp[qc[k]].push_back((i << 16) + j);
+                    mp[qc[k]].push_back(S((i << 16) + j));
             }
         StateInfo ci;
         ci.allocate(nc);
         for (int ic = 0; ic < c.n; ic++) {
-            vector<uint32_t> &v = mp.at(c.quanta[ic]);
+            vector<S> &v = mp.at(c.quanta[ic]);
             ci.n_states[ic] = iab;
-            memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(uint32_t));
+            memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(S));
             iab += (int)v.size();
         }
         ci.reallocate(iab);
@@ -342,7 +345,7 @@ template <typename, typename = void> struct StateProbability;
 template <typename S>
 struct StateProbability<
     S, typename enable_if<integral_constant<
-           bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+           bool, sizeof(S) % sizeof(uint32_t) == 0>::value>::type> {
     shared_ptr<vector<uint32_t>> vdata;
     S *quanta;
     double *probs;
@@ -354,24 +357,26 @@ struct StateProbability<
     }
     void allocate(int length, uint32_t *ptr = 0) {
         if (ptr == 0) {
-            vdata = make_shared<vector<uint32_t>>((length << 1) + length + 1);
+            vdata = make_shared<vector<uint32_t>>(
+                (length << 1) + length * (sizeof(S) >> 2) + 1);
             ptr = vdata->data();
         }
         n = length;
         quanta = (S *)ptr;
         // double must be 8-aligned
-        probs = (double *)(ptr + length + !!((size_t)(ptr + length) & 7));
+        probs = (double *)(ptr + length * (sizeof(S) >> 2) +
+                           !!((size_t)(ptr + length * (sizeof(S) >> 2)) & 7));
     }
     void reallocate(int length) {
         if (length < n) {
             memmove(quanta + length + !!((size_t)(quanta + length) & 7), probs,
                     length * sizeof(double));
-            vdata->resize((length << 1) + length + 1);
+            vdata->resize((length << 1) + length * (sizeof(S) >> 2) + 1);
             quanta = (S *)vdata->data();
             probs =
                 (double *)(quanta + length + !!((size_t)(quanta + length) & 7));
         } else if (length > n) {
-            vdata->resize((length << 1) + length + 1);
+            vdata->resize((length << 1) + length * (sizeof(S) >> 2) + 1);
             quanta = (S *)vdata->data();
             memmove(quanta + length + !!((size_t)(quanta + length) & 7), probs,
                     length * sizeof(double));

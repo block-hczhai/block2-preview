@@ -164,6 +164,84 @@ struct SZLong {
 };
 
 // Quantum number with particle number, projected spin
+// and point group irreducible representation (non-spin-adapted)
+// N/2S = -32768 ~ 32767; PG = 0 ~ 65535
+// (N: 16bits) - (0: 16bits) - (2S: 16bits) - (pg: 16bits)
+struct SZLongLong {
+    typedef void is_sz_t;
+    typedef uint8_t pg_t;
+    uint64_t data;
+    // S(invalid) must have maximal particle number n
+    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    SZLongLong() : data(0) {}
+    SZLongLong(uint64_t data) : data(data) {}
+    SZLongLong(int n, int twos, int pg)
+        : data((uint64_t)(((int64_t)n << 48) |
+                          ((uint64_t)(twos & 0xFFFFULL) << 16) |
+                          (uint64_t)(pg))) {}
+    int n() const { return (int)(((int64_t)data) >> 48); }
+    int twos() const { return (int)(int16_t)((data >> 16) & 0xFFFFULL); }
+    int pg() const { return (int)(data & 0xFFFFULL); }
+    void set_n(int n) {
+        data = (data & 0xFFFFFFFFFFFFULL) | ((uint64_t)((int64_t)n << 48));
+    }
+    void set_twos(int twos) {
+        data = (data & (~0xFFFFFFFF0000ULL)) |
+               ((uint64_t)((uint64_t)(twos & 0xFFFFULL) << 16));
+    }
+    void set_pg(int pg) { data = (data & (~0xFFFFULL)) | ((uint64_t)pg); }
+    int multiplicity() const noexcept { return 1; }
+    bool is_fermion() const noexcept { return twos() & 1; }
+    bool operator==(SZLongLong other) const noexcept {
+        return data == other.data;
+    }
+    bool operator!=(SZLongLong other) const noexcept {
+        return data != other.data;
+    }
+    bool operator<(SZLongLong other) const noexcept {
+        return data < other.data;
+    }
+    SZLongLong operator-() const noexcept {
+        return SZLongLong((data & 0xFFFFULL) |
+                          (((~data) + (1ULL << 16)) & 0xFFFF0000ULL) |
+                          (((~data) + (1ULL << 48)) & 0xFFFF000000000000ULL));
+    }
+    SZLongLong operator-(SZLongLong other) const noexcept {
+        return *this + (-other);
+    }
+    SZLongLong operator+(SZLongLong other) const noexcept {
+        return SZLongLong((((data & 0xFFFF0000FFFF0000ULL) +
+                            (other.data & 0xFFFF0000FFFF0000ULL)) &
+                           0xFFFF0000FFFF0000ULL) |
+                          ((data ^ other.data) & 0xFFFFULL));
+    }
+    SZLongLong operator[](int i) const noexcept { return *this; }
+    SZLongLong get_ket() const noexcept { return *this; }
+    SZLongLong get_bra(SZLongLong dq) const noexcept { return *this + dq; }
+    static inline int pg_inv(int a) noexcept { return a; }
+    static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    SZLongLong combine(SZLongLong bra, SZLongLong ket) const {
+        return ket + *this == bra ? ket : SZLongLong(invalid);
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    int count() const noexcept { return 1; }
+    string to_str() const {
+        stringstream ss;
+        ss << "< N=" << n() << " SZ=";
+        if (twos() & 1)
+            ss << twos() << "/2";
+        else
+            ss << (twos() >> 1);
+        ss << " PG=" << pg() << " >";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SZLongLong c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
+// Quantum number with particle number, projected spin
 // and Lz spatial symmetry as point group symmetryn (non-spin-adapted)
 // N and 2S must be of the same odd/even property (not checked)
 // N/2S/LZ (PG) = -1024 ~ 1023
@@ -462,6 +540,130 @@ struct SU2Long {
         return ss.str();
     }
     friend ostream &operator<<(ostream &os, SU2Long c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
+// Quantum number with particle number, SU(2) spin
+// and point group irreducible representation (spin-adapted)
+// N = -32768 ~ 32767; 2S/PG = 0 ~ 65535
+// (N: 16bits) - (2S: 16bits) - (2S: 16bits) - (pg: 16bits)
+struct SU2LongLong {
+    typedef void is_su2_t;
+    typedef uint8_t pg_t;
+    uint64_t data;
+    // S(invalid) must have maximal particle number n
+    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    SU2LongLong() : data(0) {}
+    SU2LongLong(uint64_t data) : data(data) {}
+    SU2LongLong(int n, int twos, int pg)
+        : data((uint64_t)(((uint64_t)(int64_t)n << 48) |
+                          ((uint64_t)twos << 32) | ((uint64_t)twos << 16) |
+                          (uint64_t)(pg))) {}
+    SU2LongLong(int n, int twos_low, int twos, int pg)
+        : data((uint64_t)(((uint64_t)(int64_t)n << 48) |
+                          ((uint64_t)twos_low << 32) | ((uint64_t)twos << 16) |
+                          (uint64_t)(pg))) {}
+    int n() const noexcept { return (int)(int16_t)(data >> 48); }
+    int twos() const noexcept {
+        return (int)(((uint64_t)data >> 16) & 0xFFFFULL);
+    }
+    int twos_low() const noexcept {
+        return (int)(((uint64_t)data >> 32) & 0xFFFFULL);
+    }
+    int pg() const noexcept { return (int)(data & 0xFFFFULL); }
+    void set_n(int n) {
+        data = (data & 0xFFFFFFFFFFFFULL) | ((uint64_t)(int64_t)n << 48);
+    }
+    void set_twos(int twos) {
+        data = (data & 0xFFFFFFFF0000FFFFULL) | ((uint64_t)twos << 16);
+    }
+    void set_twos_low(int twos) {
+        data = (data & 0xFFFF0000FFFFFFFFULL) | ((uint64_t)twos << 32);
+    }
+    void set_pg(int pg) { data = (data & (~0xFFFFULL)) | ((uint64_t)pg); }
+    int multiplicity() const noexcept { return twos() + 1; }
+    bool is_fermion() const noexcept { return (data >> 16) & 1; }
+    bool operator==(SU2LongLong other) const noexcept {
+        return data == other.data;
+    }
+    bool operator!=(SU2LongLong other) const noexcept {
+        return data != other.data;
+    }
+    bool operator<(SU2LongLong other) const noexcept {
+        return data < other.data;
+    }
+    SU2LongLong operator-() const noexcept {
+        return SU2LongLong(
+            (data & 0xFFFFFFFFFFFFULL) |
+            (((~data) + 0x1000000000000ULL) & 0xFFFF000000000000ULL));
+    }
+    SU2LongLong operator-(SU2LongLong other) const noexcept {
+        return *this + (-other);
+    }
+    SU2LongLong operator+(SU2LongLong other) const noexcept {
+        uint64_t add_data = (((data & 0xFFFF0000FFFF0000ULL) +
+                              (other.data & 0xFFFF0000FFFF0000ULL)) &
+                             0xFFFF0000FFFF0000ULL) |
+                            ((data ^ other.data) & 0xFFFFULL);
+        uint64_t sub_data_lr =
+            ((data & 0xFFFF0000ULL) << 16) - (other.data & 0xFFFF00000000ULL);
+        uint64_t sub_data_rl =
+            ((other.data & 0xFFFF0000ULL) << 16) - (data & 0xFFFF00000000ULL);
+        return SU2LongLong(add_data | min(sub_data_lr, sub_data_rl));
+    }
+    SU2LongLong operator[](int i) const noexcept {
+        return SU2LongLong(
+            ((data + ((uint64_t)i << 33)) & 0xFFFFFFFF0000FFFFULL) |
+            (((data + ((uint64_t)i << 33)) & 0xFFFF00000000ULL) >> 16));
+    }
+    SU2LongLong get_ket() const noexcept {
+        return SU2LongLong((data & 0xFFFF0000FFFFFFFFULL) |
+                           ((data & 0xFFFF0000ULL) << 16));
+    }
+    SU2LongLong get_bra(SU2LongLong dq) const noexcept {
+        return SU2LongLong(((data & 0xFFFF000000000000ULL) +
+                            (dq.data & 0xFFFF000000000000ULL)) |
+                           ((data ^ dq.data) & 0xFFFFULL) |
+                           ((data & 0xFFFF00000000ULL) >> 16) |
+                           (data & 0xFFFF00000000ULL));
+    }
+    static bool triangle(int tja, int tjb, int tjc) {
+        return !((tja + tjb + tjc) & 1) && tjc <= tja + tjb &&
+               tjc >= abs(tja - tjb);
+    }
+    static inline int pg_inv(int a) noexcept { return a; }
+    static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    SU2LongLong combine(SU2LongLong bra, SU2LongLong ket) const {
+        ket.set_twos_low(bra.twos());
+        if (ket.get_bra(*this) != bra ||
+            !triangle(ket.twos(), this->twos(), bra.twos()))
+            return SU2LongLong(invalid);
+        return ket;
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    int count() const noexcept {
+        return (int)(((data >> 17) - (data >> 33)) & 0x7FFFULL) + 1;
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "< N=" << n() << " S=";
+        // for bra, the odd/even of bra is unknown
+        if (twos_low() != twos()) {
+            if (twos_low() & 1)
+                ss << twos_low() << "/2?~";
+            else
+                ss << (twos_low() >> 1) << "?~";
+        }
+        if (twos() & 1)
+            ss << twos() << "/2";
+        else
+            ss << (twos() >> 1);
+        ss << " PG=" << pg() << " >";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SU2LongLong c) {
         os << c.to_str();
         return os;
     }

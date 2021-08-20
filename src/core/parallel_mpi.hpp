@@ -298,8 +298,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         vector<S> vsrecv(maxsz * size);
         vs.resize(maxsz, S(S::invalid));
-        ierr = MPI_Allgather(vs.data(), maxsz, MPI_UINT32_T, vsrecv.data(),
-                             maxsz, MPI_UINT32_T, comm);
+        ierr = MPI_Allgather(vs.data(), maxsz * (sizeof(S) >> 2), MPI_UINT32_T,
+                             vsrecv.data(), maxsz * (sizeof(S) >> 2),
+                             MPI_UINT32_T, comm);
         assert(ierr == 0);
         vsrecv.resize(
             distance(vsrecv.begin(),

@@ -46,7 +46,7 @@ template <typename, typename = void> struct SparseMatrixInfo;
 template <typename S>
 struct SparseMatrixInfo<
     S, typename enable_if<integral_constant<
-           bool, sizeof(S) == sizeof(uint32_t)>::value>::type> {
+           bool, sizeof(S) % sizeof(uint32_t) == 0>::value>::type> {
     shared_ptr<Allocator<uint32_t>> alloc;
     // Composite quantum number for row and column quanta
     S *quanta;
@@ -142,10 +142,10 @@ struct SparseMatrixInfo<
                 if (n[i] == -1)
                     n[i] = n[i + 1];
             nc = (int)vic.size();
-            uint32_t *ptr = ialloc->allocate((n[4] << 1));
+            uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
             uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
             quanta = (S *)ptr;
-            idx = ptr + n[4];
+            idx = ptr + n[4] * (sizeof(S) >> 2);
             stride = cptr;
             factor = (double *)(cptr + nc);
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
@@ -275,10 +275,10 @@ struct SparseMatrixInfo<
                 if (n[i] == -1)
                     n[i] = n[i + 1];
             nc = (int)viv.size();
-            uint32_t *ptr = ialloc->allocate((n[4] << 1));
+            uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
             uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
             quanta = (S *)ptr;
-            idx = ptr + n[4];
+            idx = ptr + n[4] * (sizeof(S) >> 2);
             stride = cptr;
             factor = (double *)(cptr + nc);
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
@@ -408,10 +408,10 @@ struct SparseMatrixInfo<
                 if (n[i] == -1)
                     n[i] = n[i + 1];
             nc = (int)vstride.size();
-            uint32_t *ptr = ialloc->allocate((n[4] << 1));
+            uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
             uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
             quanta = (S *)ptr;
-            idx = ptr + n[4];
+            idx = ptr + n[4] * (sizeof(S) >> 2);
             stride = cptr;
             factor = (double *)(cptr + nc);
             ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
@@ -425,15 +425,16 @@ struct SparseMatrixInfo<
             memcpy(ic, vic.data(), nc * sizeof(uint16_t));
         }
         void reallocate(bool clean) {
-            size_t length = (n[4] << 1) + (nc << 2) + nc - (nc >> 1);
+            size_t length =
+                n[4] * (sizeof(S) >> 2) + n[4] + (nc << 2) + nc - (nc >> 1);
             uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, length,
                                                clean ? 0 : length);
             if (ptr != (uint32_t *)quanta) {
                 memmove(ptr, quanta, length * sizeof(uint32_t));
                 quanta = (S *)ptr;
-                idx = ptr + n[4];
-                stride = ptr + (n[4] << 1);
-                factor = (double *)(ptr + (n[4] << 1) + nc);
+                idx = ptr + n[4] * (sizeof(S) >> 2);
+                stride = ptr + n[4] * (sizeof(S) >> 2) + n[4];
+                factor = (double *)(ptr + n[4] * (sizeof(S) >> 2) + n[4] + nc);
                 ia = (uint16_t *)(stride + nc + nc + nc), ib = ia + nc,
                 ic = ib + nc;
             }
@@ -450,8 +451,9 @@ struct SparseMatrixInfo<
         void deallocate() {
             assert(n[4] != -1);
             if (n[4] != 0 || nc != 0)
-                ialloc->deallocate((uint32_t *)quanta,
-                                   (n[4] << 1) + (nc << 2) + nc - (nc >> 1));
+                ialloc->deallocate((uint32_t *)quanta, n[4] * (sizeof(S) >> 2) +
+                                                           n[4] + (nc << 2) +
+                                                           nc - (nc >> 1));
             quanta = nullptr;
             idx = nullptr;
             stride = nullptr;
@@ -498,7 +500,8 @@ struct SparseMatrixInfo<
     void copy_data_to(SparseMatrixInfo &other) const {
         assert(other.n == n);
         memcpy(other.quanta, quanta,
-               ((n << 1) + _DBL_MEM_SIZE(n)) * sizeof(uint32_t));
+               (n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n)) *
+                   sizeof(uint32_t));
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
@@ -523,16 +526,16 @@ struct SparseMatrixInfo<
             assert(alloc == ialloc || alloc == nullptr);
             ptr = ialloc->data + psz;
         } else {
-            ptr = alloc->allocate((n << 1) + _DBL_MEM_SIZE(n));
-            ifs.read((char *)ptr,
-                     sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
+            ptr = alloc->allocate(n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n));
+            ifs.read((char *)ptr, sizeof(uint32_t) * (n * (sizeof(S) >> 2) + n +
+                                                      _DBL_MEM_SIZE(n)));
         }
         ifs.read((char *)&is_fermion, sizeof(is_fermion));
         ifs.read((char *)&is_wavefunction, sizeof(is_wavefunction));
         quanta = (S *)ptr;
-        n_states_bra = (ubond_t *)(ptr + n);
-        n_states_ket = (ubond_t *)(ptr + n) + n;
-        n_states_total = ptr + n + _DBL_MEM_SIZE(n);
+        n_states_bra = (ubond_t *)(ptr + n * (sizeof(S) >> 2));
+        n_states_ket = (ubond_t *)(ptr + n * (sizeof(S) >> 2)) + n;
+        n_states_total = ptr + n * (sizeof(S) >> 2) + _DBL_MEM_SIZE(n);
         cinfo = nullptr;
     }
     void save_data(const string &filename) const {
@@ -561,7 +564,8 @@ struct SparseMatrixInfo<
             ofs.write((char *)&psz, sizeof(psz));
         } else
             ofs.write((char *)quanta,
-                      sizeof(uint32_t) * ((n << 1) + _DBL_MEM_SIZE(n)));
+                      sizeof(uint32_t) *
+                          (n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n)));
         ofs.write((char *)&is_fermion, sizeof(is_fermion));
         ofs.write((char *)&is_wavefunction, sizeof(is_wavefunction));
     }
@@ -810,17 +814,20 @@ struct SparseMatrixInfo<
         if (ptr == 0) {
             if (alloc == nullptr)
                 alloc = ialloc;
-            ptr = alloc->allocate((length << 1) + _DBL_MEM_SIZE(length));
+            ptr = alloc->allocate(length * (sizeof(S) >> 2) + length +
+                                  _DBL_MEM_SIZE(length));
         }
         quanta = (S *)ptr;
-        n_states_bra = (ubond_t *)(ptr + length);
-        n_states_ket = (ubond_t *)(ptr + length) + length;
-        n_states_total = ptr + length + _DBL_MEM_SIZE(length);
+        n_states_bra = (ubond_t *)(ptr + length * (sizeof(S) >> 2));
+        n_states_ket = (ubond_t *)(ptr + length * (sizeof(S) >> 2)) + length;
+        n_states_total =
+            ptr + length * (sizeof(S) >> 2) + _DBL_MEM_SIZE(length);
         n = length;
     }
     void deallocate() {
         assert(n != -1);
-        alloc->deallocate((uint32_t *)quanta, (n << 1) + _DBL_MEM_SIZE(n));
+        alloc->deallocate((uint32_t *)quanta,
+                          n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n));
         alloc = nullptr;
         quanta = nullptr;
         n_states_bra = nullptr;
@@ -829,20 +836,23 @@ struct SparseMatrixInfo<
         n = -1;
     }
     void reallocate(int length) {
-        uint32_t *ptr =
-            alloc->reallocate((uint32_t *)quanta, (n << 1) + _DBL_MEM_SIZE(n),
-                              (length << 1) + _DBL_MEM_SIZE(length));
+        uint32_t *ptr = alloc->reallocate(
+            (uint32_t *)quanta, n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n),
+            length * (sizeof(S) >> 2) + length + _DBL_MEM_SIZE(length));
         if (ptr == (uint32_t *)quanta)
-            memmove(ptr + length, n_states_bra,
+            memmove(ptr + length * (sizeof(S) >> 2), (uint32_t *)n_states_bra,
                     (length + _DBL_MEM_SIZE(length)) * sizeof(uint32_t));
         else {
-            memmove(ptr, quanta,
-                    ((length << 1) + _DBL_MEM_SIZE(length)) * sizeof(uint32_t));
+            memmove(
+                ptr, (uint32_t *)quanta,
+                (length * (sizeof(S) >> 2) + length + _DBL_MEM_SIZE(length)) *
+                    sizeof(uint32_t));
             quanta = (S *)ptr;
         }
-        n_states_bra = (ubond_t *)(ptr + length);
-        n_states_ket = (ubond_t *)(ptr + length) + length;
-        n_states_total = ptr + length + _DBL_MEM_SIZE(length);
+        n_states_bra = (ubond_t *)(ptr + length * (sizeof(S) >> 2));
+        n_states_ket = (ubond_t *)(ptr + length * (sizeof(S) >> 2)) + length;
+        n_states_total =
+            ptr + length * (sizeof(S) >> 2) + _DBL_MEM_SIZE(length);
         n = length;
     }
     friend ostream &operator<<(ostream &os, const SparseMatrixInfo<S> &c) {

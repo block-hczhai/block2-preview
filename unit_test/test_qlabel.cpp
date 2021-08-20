@@ -318,6 +318,13 @@ template <> const int QZLabel<SZLong>::tsmax = 16383;
 template <> const int QZLabel<SZLong>::pgmin = 0;
 template <> const int QZLabel<SZLong>::pgmax = 7;
 
+template <> const int QZLabel<SZLongLong>::nmin = -32768;
+template <> const int QZLabel<SZLongLong>::nmax = 32767;
+template <> const int QZLabel<SZLongLong>::tsmin = -32768;
+template <> const int QZLabel<SZLongLong>::tsmax = 32767;
+template <> const int QZLabel<SZLongLong>::pgmin = 0;
+template <> const int QZLabel<SZLongLong>::pgmax = 65535;
+
 template <> const int QZLabel<SZLZ>::nmin = -1024;
 template <> const int QZLabel<SZLZ>::nmax = 1023;
 template <> const int QZLabel<SZLZ>::tsmin = -1024;
@@ -339,6 +346,13 @@ template <> const int QULabel<SU2Long>::tsmax = 1023;
 template <> const int QULabel<SU2Long>::pgmin = 0;
 template <> const int QULabel<SU2Long>::pgmax = 7;
 
+template <> const int QULabel<SU2LongLong>::nmin = -32768;
+template <> const int QULabel<SU2LongLong>::nmax = 32767;
+template <> const int QULabel<SU2LongLong>::tsmin = 0;
+template <> const int QULabel<SU2LongLong>::tsmax = 65535;
+template <> const int QULabel<SU2LongLong>::pgmin = 0;
+template <> const int QULabel<SU2LongLong>::pgmax = 65535;
+
 template <> const int QULabel<SU2LZ>::nmin = -256;
 template <> const int QULabel<SU2LZ>::nmax = 255;
 template <> const int QULabel<SU2LZ>::tsmin = 0;
@@ -356,6 +370,11 @@ TEST_F(TestQ, TestSZLong) {
         QZLabel<SZLong>::check();
 }
 
+TEST_F(TestQ, TestSZLongLong) {
+    for (int i = 0; i < n_tests; i++)
+        QZLabel<SZLongLong>::check();
+}
+
 TEST_F(TestQ, TestSU2Short) {
     for (int i = 0; i < n_tests; i++)
         QULabel<SU2Short>::check();
@@ -364,6 +383,11 @@ TEST_F(TestQ, TestSU2Short) {
 TEST_F(TestQ, TestSU2Long) {
     for (int i = 0; i < n_tests; i++)
         QULabel<SU2Long>::check();
+}
+
+TEST_F(TestQ, TestSU2LongLong) {
+    for (int i = 0; i < n_tests; i++)
+        QULabel<SU2LongLong>::check();
 }
 
 TEST_F(TestQ, TestSZLZ) {

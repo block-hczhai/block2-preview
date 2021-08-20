@@ -105,6 +105,10 @@ PYBIND11_MAKE_OPAQUE(map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2>>,
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SU2, SU2>, shared_ptr<Tensor>>>>);
 PYBIND11_MAKE_OPAQUE(map<string, string>);
+// SZLZ
+PYBIND11_MAKE_OPAQUE(vector<SZLZ>);
+// SU2LZ
+PYBIND11_MAKE_OPAQUE(vector<SU2LZ>);
 
 template <typename T> struct Array {
     T *data;
@@ -2220,6 +2224,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_property_readonly("multiplicity", &SZ::multiplicity)
         .def_property_readonly("is_fermion", &SZ::is_fermion)
         .def_property_readonly("count", &SZ::count)
+        .def_static("pg_mul", &SZ::pg_mul)
+        .def_static("pg_inv", &SZ::pg_inv)
         .def("combine", &SZ::combine)
         .def("__getitem__", &SZ::operator[])
         .def(py::self == py::self)
@@ -2250,6 +2256,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_property_readonly("multiplicity", &SU2::multiplicity)
         .def_property_readonly("is_fermion", &SU2::is_fermion)
         .def_property_readonly("count", &SU2::count)
+        .def_static("pg_mul", &SU2::pg_mul)
+        .def_static("pg_inv", &SU2::pg_inv)
         .def("combine", &SU2::combine)
         .def("__getitem__", &SU2::operator[])
         .def(py::self == py::self)
@@ -2264,6 +2272,69 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SU2::to_str);
 
     py::bind_vector<vector<SU2>>(m, "VectorSU2");
+
+    py::class_<SZLZ>(m, "SZLZ")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SZLZ *self) { return SZLZ::invalid; })
+        .def_readwrite("data", &SZLZ::data)
+        .def_property("n", &SZLZ::n, &SZLZ::set_n)
+        .def_property("twos", &SZLZ::twos, &SZLZ::set_twos)
+        .def_property("pg", &SZLZ::pg, &SZLZ::set_pg)
+        .def_property_readonly("multiplicity", &SZLZ::multiplicity)
+        .def_property_readonly("is_fermion", &SZLZ::is_fermion)
+        .def_property_readonly("count", &SZLZ::count)
+        .def_static("pg_mul", &SZLZ::pg_mul)
+        .def_static("pg_inv", &SZLZ::pg_inv)
+        .def("combine", &SZLZ::combine)
+        .def("__getitem__", &SZLZ::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SZLZ::get_ket)
+        .def("get_bra", &SZLZ::get_bra, py::arg("dq"))
+        .def("__hash__", &SZLZ::hash)
+        .def("__repr__", &SZLZ::to_str);
+
+    py::bind_vector<vector<SZLZ>>(m, "VectorSZLZ");
+
+    py::class_<SU2LZ>(m, "SU2LZ")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int, int>())
+        .def(py::init<int, int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SU2LZ *self) { return SU2LZ::invalid; })
+        .def_readwrite("data", &SU2LZ::data)
+        .def_property("n", &SU2LZ::n, &SU2LZ::set_n)
+        .def_property("twos", &SU2LZ::twos, &SU2LZ::set_twos)
+        .def_property("twos_low", &SU2LZ::twos_low, &SU2LZ::set_twos_low)
+        .def_property("pg", &SU2LZ::pg, &SU2LZ::set_pg)
+        .def_property_readonly("multiplicity", &SU2LZ::multiplicity)
+        .def_property_readonly("is_fermion", &SU2LZ::is_fermion)
+        .def_property_readonly("count", &SU2LZ::count)
+        .def_static("pg_mul", &SU2LZ::pg_mul)
+        .def_static("pg_inv", &SU2LZ::pg_inv)
+        .def("combine", &SU2LZ::combine)
+        .def("__getitem__", &SU2LZ::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SU2LZ::get_ket)
+        .def("get_bra", &SU2LZ::get_bra, py::arg("dq"))
+        .def("__hash__", &SU2LZ::hash)
+        .def("__repr__", &SU2LZ::to_str);
+
+    py::bind_vector<vector<SU2LZ>>(m, "VectorSU2LZ");
+
 }
 
 #ifdef _EXPLICIT_TEMPLATE
