@@ -141,7 +141,10 @@ def parse(fname):
             dic["trans_mps_to_sz"] = ""
     if "stopt_sampling" in dic:
         if "mps_tags" not in dic:
-            dic["mps_tags"] = "ZKET ZBRA"
+            if "nonspinadapted" in dic:
+                dic["mps_tags"] = "ZKET ZBRA"
+            else:
+                dic["mps_tags"] = "KET BRA"
 
     # restart check
     if "restart_oh" in dic:

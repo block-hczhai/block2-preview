@@ -723,14 +723,14 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
             (*op_prims[0][OpNames::N])[S(1, 1, 1, ipg)](0, 0) = 1.0;
             (*op_prims[0][OpNames::N])[S(2, 0, 0, S::pg_mul(ipg, ipg))](0, 0) =
                 2.0;
-            // NN[0] = (sum_{sigma} ad_{p,sigma} a_{p,sigma}) ^ 2
+            // NN[0] = (sum_{sigma} ad_{p,sigma} a_{p,sigma}) ^ 2 / 2
             op_prims[0][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[0][OpNames::NN]->allocate(
                 find_site_op_info(m, S(0, 0, 0)));
             (*op_prims[0][OpNames::NN])[S(0, 0, 0, 0)](0, 0) = 0.0;
-            (*op_prims[0][OpNames::NN])[S(1, 1, 1, ipg)](0, 0) = 1.0;
+            (*op_prims[0][OpNames::NN])[S(1, 1, 1, ipg)](0, 0) = 0.5;
             (*op_prims[0][OpNames::NN])[S(2, 0, 0, S::pg_mul(ipg, ipg))](0, 0) =
-                4.0;
+                2.0;
             op_prims[0][OpNames::C] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[0][OpNames::C]->allocate(
                 find_site_op_info(m, S(1, 1, ipg)));
@@ -767,14 +767,12 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 opf->product(0, op_prims[0][OpNames::D],
                              op_prims[0][OpNames::C], op_prims[s][OpNames::BD]);
             }
-            // NN[1] = sum_{sigma,tau} ad_{p,sigma} a_{p,tau} ad_{p,tau}
-            // a_{p,sigma} = -sqrt(3) B1 x B1 + B0 x B0 where B0 x B0 == 0.5 NN
+            // NN[1] = B1 x B1
             op_prims[1][OpNames::NN] = make_shared<SparseMatrix<S>>(d_alloc);
             op_prims[1][OpNames::NN]->allocate(
                 find_site_op_info(m, S(0, 0, 0)));
             opf->product(0, op_prims[1][OpNames::B], op_prims[1][OpNames::B],
-                         op_prims[1][OpNames::NN], -sqrt(3.0));
-            opf->iadd(op_prims[1][OpNames::NN], op_prims[0][OpNames::NN], 0.5);
+                         op_prims[1][OpNames::NN]);
             if (opf->seq->mode != SeqTypes::None)
                 opf->seq->simple_perform();
             op_prims[0][OpNames::R] = make_shared<SparseMatrix<S>>(d_alloc);

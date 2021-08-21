@@ -1399,7 +1399,20 @@ if not pre_run:
         cps.cutoff = float(dic.get("cutoff", 1E-14))
         cps.decomp_type = decomp_type
         cps.trunc_type = trunc_type
-        ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        if "twodot_to_onedot" not in dic:
+            ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        else:
+            tto = int(dic["twodot_to_onedot"])
+            assert len(bond_dims) > tto
+            cps.solve(tto, mps.center == 0, 0)
+            cps.bra_bond_dims = VectorUBond(bond_dims[tto:])
+            cps.me.dot = 1
+            ovl = cps.solve(len(bond_dims) - tto, mps.center == 0, sweep_tol)
+            mps.dot = 1
+            lmps.dot = 1
+            if MPI is None or MPI.rank == 0:
+                mps.save_data()
+                lmps.save_data()
         _print("Final canonical form = ", mps.canonical_form, mps.center)
         _print("Compression overlap = %20.15f" % ovl)
 
@@ -1693,29 +1706,18 @@ if not pre_run:
         _print("Final canonical form = ", mps.canonical_form, mps.center)
 
         if MPI is None or MPI.rank == 0:
-            if SX == SZ:
-                dmr = expect.get_1npc(0, n_orbs)
-                dm = np.array(dmr).copy()
-                dmr.deallocate()
-                dm = dm.reshape((n_orbs, 2, n_orbs, 2))
-                dm = np.transpose(dm, (0, 2, 1, 3))
-                dm = np.concatenate(
-                    [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
-                if orb_idx is not None:
-                    rev_idx = np.argsort(orb_idx)
-                    dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
-            else:
-                dmr = expect.get_1npc_spatial(0, n_orbs)
-                dm_pure = np.array(dmr).copy()
-                dmr.deallocate()
-                dmr = expect.get_1npc_spatial(1, n_orbs)
-                dm_mix = np.array(dmr).copy()
-                dmr.deallocate()
-                dm = np.concatenate(
-                    [dm_pure[None, :, :], dm_mix[None, :, :]], axis=0)
-                if orb_idx is not None:
-                    rev_idx = np.argsort(orb_idx)
-                    dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
+
+            dmr = expect.get_1npc_spatial(0, n_orbs)
+            dm_pure = np.array(dmr).copy()
+            dmr.deallocate()
+            dmr = expect.get_1npc_spatial(1, n_orbs)
+            dm_mix = np.array(dmr).copy()
+            dmr.deallocate()
+            dm = np.concatenate(
+                [dm_pure[None, :, :], dm_mix[None, :, :]], axis=0)
+            if orb_idx is not None:
+                rev_idx = np.argsort(orb_idx)
+                dm[:, :, :] = dm[:, rev_idx, :][:, :, rev_idx]
 
             np.save(scratch + "/1npc.npy", dm)
             mps_info.save_data(scratch + '/mps_info.bin')
@@ -1725,7 +1727,6 @@ if not pre_run:
     if "restart_diag_twopdm" in dic or "diag_twopdm" in dic:
         if MPI is None or MPI.rank == 0:
             assert nroots == 1
-            assert "nonspinadapted" not in dic
             dm_npc = np.load(scratch + "/1npc.npy")
             dm_pdm = np.load(scratch + "/1pdm.npy").sum(axis=0)
             dm_e_pqqp = dm_npc[0] - np.diag(np.diag(dm_pdm))

@@ -1315,7 +1315,13 @@ template <typename S> void bind_mpo(py::module &m) {
              &PDM1MPOQC<S>::template get_matrix_spatial<complex<double>>);
 
     py::class_<NPC1MPOQC<S>, shared_ptr<NPC1MPOQC<S>>, MPO<S>>(m, "NPC1MPOQC")
-        .def(py::init<const shared_ptr<Hamiltonian<S>> &>());
+        .def(py::init<const shared_ptr<Hamiltonian<S>> &>())
+        .def("get_matrix", &NPC1MPOQC<S>::template get_matrix<double>)
+        .def("get_matrix", &NPC1MPOQC<S>::template get_matrix<complex<double>>)
+        .def("get_matrix_spatial",
+             &NPC1MPOQC<S>::template get_matrix_spatial<double>)
+        .def("get_matrix_spatial",
+             &NPC1MPOQC<S>::template get_matrix_spatial<complex<double>>);
 
     py::class_<AncillaMPO<S>, shared_ptr<AncillaMPO<S>>, MPO<S>>(m,
                                                                  "AncillaMPO")

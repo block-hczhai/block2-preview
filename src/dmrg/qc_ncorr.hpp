@@ -237,13 +237,57 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {}
+    // s == 0: n_{p,sp} x n_{q,sq}
+    // s == 1: ad_{pa} a_{pb} x ad_{qb} a_{qa} / ad_{pb} a_{pa} x ad_{qa} a_{qb}
+    template <typename FL>
+    static GMatrix<FL> get_matrix(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        GMatrix<FL> r(nullptr, n_orbs * 2, n_orbs * 2);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                if ((s == 0 && op->site_index.s(2) == 0) ||
+                    (s == 1 && op->site_index.s(2) == 0 &&
+                     op->site_index.s(0) == op->site_index.s(1)))
+                    r(2 * op->site_index[0] + op->site_index.s(0),
+                      2 * op->site_index[1] + op->site_index.s(1)) = x.second;
+                else if (s == 1 && op->site_index.s(2) == 1)
+                    r(2 * op->site_index[0] + op->site_index.s(0),
+                      2 * op->site_index[1] + !op->site_index.s(0)) = x.second;
+            }
+        return r;
+    }
+    // s == 0: sum_(sp,sq) n_{p,sp} x n_{q,sq}
+    // s == 1: sum_(sp,sq) ad_{psp} a_{psq} x ad_{qsq} a_{qsp}
+    template <typename FL>
+    static GMatrix<FL> get_matrix_spatial(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        r.allocate();
+        r.clear();
+        GMatrix<FL> t = get_matrix(s, expectations, n_orbs);
+        for (uint16_t i = 0; i < n_orbs; i++)
+            for (uint16_t j = 0; j < n_orbs; j++)
+                r(i, j) = t(2 * i + 0, 2 * j + 0) + t(2 * i + 1, 2 * j + 1) +
+                          t(2 * i + 0, 2 * j + 1) + t(2 * i + 1, 2 * j + 0);
+        t.deallocate();
+        return r;
+    }
 };
 
 // "MPO" for charge/spin correlation (spin-adapted)
-// NN[0] = 2 * B0 x B0
-//   e_pqqp = NN[0] - delta_pq Epq
-// NN[1] = -sqrt(3) * B1 x B1 + B0 x B0
-//   e_pqpq = -NN[1] + 2 * delta_pq Epq
+// NN[0] = B0 x B0
+// NN[1] = B1 x B1
+// e_pqqp = 2 * XX[0] - delta_pq Epq
+// e_pqpq = sqrt(3) * XX[1] - XX[0] + 2 * delta_pq Epq
 // where Epq = 1pdm spatial
 template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
     NPC1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil)
@@ -333,10 +377,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     for (uint8_t s = 0; s < 2; s++) {
                         for (uint16_t j = 0; j <= m; j++) {
                             shared_ptr<OpExpr<S>> expr =
-                                s == 0 ? 2.0 * (b_op[j][0] * b_op[m + 1][0])
-                                       : (-sqrt(3.0)) *
-                                                 (b_op[j][1] * b_op[m + 1][1]) +
-                                             b_op[j][0] * b_op[m + 1][0];
+                                b_op[j][s] * b_op[m + 1][s];
                             (*pmop)[p + 2 * j] = pdm1_op[j][m + 1][s];
                             (*pmop)[p + 2 * j + 1] = pdm1_op[m + 1][j][s];
                             (*pmexpr)[p + 2 * j] = (*pmexpr)[p + 2 * j + 1] =
@@ -372,16 +413,12 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     (*plmat)[{pi, p + m}] = b_op[m][s];
                     p += m + 1;
                 }
-                for (uint16_t i = 0; i < m; i++)
-                    (*plmat)[{pb[0] + i, p + i}] = 2.0 * b_op[m][0];
-                (*plmat)[{pi, p + m}] = nn_op[m][m][0];
-                p += m + 1;
-                for (uint16_t i = 0; i < m; i++) {
-                    (*plmat)[{pb[0] + i, p + i}] = b_op[m][0];
-                    (*plmat)[{pb[1] + i, p + i}] = (-sqrt(3.0)) * b_op[m][1];
+                for (uint8_t s = 0; s < 2; s++) {
+                    for (uint16_t i = 0; i < m; i++)
+                        (*plmat)[{pb[s] + i, p + i}] = b_op[m][s];
+                    (*plmat)[{pi, p + m}] = nn_op[m][m][s];
+                    p += m + 1;
                 }
-                (*plmat)[{pi, p + m}] = nn_op[m][m][1];
-                p += m + 1;
                 assert(p == lrshape);
             }
             if (m == n_sites - 1) {
@@ -406,6 +443,54 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
     }
     void deallocate() override {}
+    template <typename FL>
+    static shared_ptr<GTensor<FL>> get_matrix_reduced(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        shared_ptr<GTensor<FL>> r =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{n_orbs, n_orbs, 2});
+        r->clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S>> op =
+                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                (*r)({op->site_index[0], op->site_index[1],
+                      op->site_index.ss()}) = x.second;
+            }
+        return r;
+    }
+    template <typename FL>
+    static GMatrix<FL> get_matrix(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        GMatrix<FL> r(nullptr, n_orbs * 2, n_orbs * 2);
+        r.allocate();
+        r.clear();
+        assert(false); // not implemented
+        return r;
+    }
+    // s == 0: sum_(sp,sq) n_{p,sp} x n_{q,sq}
+    // s == 2: sum_(sp,sq) ad_{psp} a_{psq} x ad_{qsq} a_{qsp}
+    template <typename FL>
+    static GMatrix<FL> get_matrix_spatial(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        r.allocate();
+        r.clear();
+        shared_ptr<GTensor<FL>> t = get_matrix_reduced(expectations, n_orbs);
+        for (uint16_t i = 0; i < n_orbs; i++)
+            for (uint16_t j = 0; j < n_orbs; j++) {
+                if (s == 0)
+                    r(i, j) = 2.0 * (*t)({i, j, 0});
+                else
+                    r(i, j) = (*t)({i, j, 0}) - sqrt(3) * (*t)({i, j, 1});
+            }
+        return r;
+    }
 };
 
 } // namespace block2

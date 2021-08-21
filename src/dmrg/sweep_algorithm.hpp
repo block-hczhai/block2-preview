@@ -4378,48 +4378,19 @@ template <typename S, typename FL = double> struct Expect {
             n_physical_sites = me->n_sites;
         return PDM2MPOQC<S>::get_matrix(expectations, n_physical_sites);
     }
-    // only works for SU2
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
     GMatrix<FL> get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        GMatrix<FL> r(nullptr, n_physical_sites, n_physical_sites);
-        r.allocate();
-        r.clear();
-        for (auto &v : expectations)
-            for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
-                assert(op->name == OpNames::PDM1);
-                assert(op->site_index.ss() < 2);
-                if (s == op->site_index.ss())
-                    r(op->site_index[0], op->site_index[1]) = x.second;
-            }
-        return r;
+        return NPC1MPOQC<S>::get_matrix_spatial(s, expectations, n_physical_sites);
     }
-    // only works for SZ
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
     GMatrix<FL> get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        GMatrix<FL> r(nullptr, n_physical_sites * 2, n_physical_sites * 2);
-        r.allocate();
-        r.clear();
-        for (auto &v : expectations)
-            for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
-                assert(op->name == OpNames::PDM1);
-                if (s == 0 && op->site_index.s(2) == 0)
-                    r(2 * op->site_index[0] + op->site_index.s(0),
-                      2 * op->site_index[1] + op->site_index.s(1)) = x.second;
-                else if (s == 1 && op->site_index.s(2) == 1)
-                    r(2 * op->site_index[0] + op->site_index.s(0),
-                      2 * op->site_index[1] + !op->site_index.s(0)) = x.second;
-            }
-        return r;
+        return NPC1MPOQC<S>::get_matrix(s, expectations, n_physical_sites);
     }
 };
 
