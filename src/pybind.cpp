@@ -87,6 +87,7 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_SP_DMRG
+    bind_sp_dmrg<SU2>(m_su2);
     bind_sp_dmrg<SZ>(m_sz);
 #endif
 

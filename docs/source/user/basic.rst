@@ -551,9 +551,6 @@ it is possible to calculate only the diagonal parts, which is much cheaper, usin
 ``restart_diag_twopdm`` or ``diag_twopdm``. [#note1]_
 The time cost for diagonal 2pdm is roughly 2 times of the cost of 1pdm.
 
-Limitations: Currently this only works for spin-adapted calculations. For the non-spin-adapted calculation,
-one can use the full 2pdm approach.
-
 Note that ``diag_twopdm`` implies ``onepdm`` and ``correlation``. The diagonal 2pdm is defined as:
 
 .. math::

@@ -11,7 +11,7 @@ from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, 
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
-from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP
+from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
 import numpy as np
 import time
 import os
@@ -1399,6 +1399,8 @@ if not pre_run:
         cps.cutoff = float(dic.get("cutoff", 1E-14))
         cps.decomp_type = decomp_type
         cps.trunc_type = trunc_type
+        if "stopt_compression" in dic:
+            cps.conv_type = ConvergenceTypes.LastMaximal
         if "twodot_to_onedot" not in dic:
             ovl = cps.solve(len(bond_dims), mps.center == 0, sweep_tol)
         else:
@@ -1406,7 +1408,7 @@ if not pre_run:
             assert len(bond_dims) > tto
             cps.solve(tto, mps.center == 0, 0)
             cps.bra_bond_dims = VectorUBond(bond_dims[tto:])
-            cps.me.dot = 1
+            cps.rme.dot = 1
             ovl = cps.solve(len(bond_dims) - tto, mps.center == 0, sweep_tol)
             mps.dot = 1
             lmps.dot = 1
@@ -2264,8 +2266,6 @@ if not pre_run:
     # stoptDMRG sampling (sampling CSF is not supported yet) 
     if "stopt_sampling" in dic:
 
-        assert "nonspinadapted" in dic
-
         if fcidump is None:
             raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'stoptDMRG'!")
         if MPI is not None:
@@ -2277,7 +2277,8 @@ if not pre_run:
             from stopt import SPDMRG
 
         nsample = int(dic.get("stopt_sampling", 10000))
-        sp_dmrg = SPDMRG(scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose= outputlevel) 
+        sp_dmrg = SPDMRG(su2="nonspinadapted" not in dic,
+            scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=outputlevel) 
         e_corr, std_corr = sp_dmrg.kernel(nsample)
 
         if MPI is None or MPI.rank == 0:

@@ -21,29 +21,14 @@
 stochastic perturbative DMRG
 
 Author: Seunghoon Lee, 2021
-Revised: Huanchen Zhai Aug 13, 2021 (added openmp)
+Revised: Huanchen Zhai
+    Aug 13, 2021 (added openmp)
+    Aug 20, 2021 (added su2)
 """
 
-from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
-from block2 import init_memory, release_memory, set_mkl_num_threads, SiteIndex
-from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
-from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
+from block2 import VectorUInt8
 import time
 import numpy as np
-
-# Set spin-adapted or non-spin-adapted here
-#SpinLabel = SU2
-SpinLabel = SZ
-
-if SpinLabel == SU2:
-    from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
-    from block2.su2 import MPSInfo, MPS, UnfusedMPS, MovingEnvironment, DMRG, Linear, IdentityMPO
-    from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
-else:
-    from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC, CG
-    from block2.sz import MPSInfo, MPS, UnfusedMPS, MovingEnvironment, DMRG, Linear, IdentityMPO
-    from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
-    from block2.sz import StochasticPDMRG
 
 # MPI
 from mpi4py import MPI as MPI
@@ -63,7 +48,7 @@ class SPDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20):
+    def __init__(self, su2, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -76,6 +61,12 @@ class SPDMRG:
         self.use_threading = use_threading
         self.n_steps = n_steps
         self.bdims = [0, 0]
+        self.su2 = su2
+
+        if self.su2:
+            from block2.su2 import MPSInfo, MPS, UnfusedMPS, StochasticPDMRG
+        else:
+            from block2.sz import MPSInfo, MPS, UnfusedMPS, StochasticPDMRG
 
         self.Edmrg = np.float64(np.load(self.scratch + '/E_dmrg.npy'))
 
@@ -87,7 +78,10 @@ class SPDMRG:
         mps1_info = MPSInfo(0)
         mps1_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[0]))
         mps1 = MPS(mps1_info)
-        self.bdims[0] = mps1.info.bond_dim
+        mps1_info.load_mutable()
+        max_bdim_l = max([x.n_states_total for x in mps1_info.left_dims])
+        max_bdim_r = max([x.n_states_total for x in mps1_info.right_dims])
+        self.bdims[0] = max(max_bdim_l, max_bdim_r)
         comm.barrier()
         if mrank == 0:
             self.change_mps_center(mps1, 0)
@@ -99,7 +93,10 @@ class SPDMRG:
         mps2_info = MPSInfo(0)
         mps2_info.load_data(self.scratch + '/%s-mps_info.bin'%(mps_tags[1]))
         mps2 = MPS(mps2_info)
-        self.bdims[1] = mps2.info.bond_dim
+        mps2_info.load_mutable()
+        max_bdim_l = max([x.n_states_total for x in mps2_info.left_dims])
+        max_bdim_r = max([x.n_states_total for x in mps2_info.right_dims])
+        self.bdims[1] = max(max_bdim_l, max_bdim_r)
         comm.barrier()
         if mrank == 0:
             self.change_mps_center(mps2, 0)
@@ -124,6 +121,10 @@ class SPDMRG:
             self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
 
     def change_mps_center(self, ket, center):
+        if self.su2:
+            from block2.su2 import CG
+        else:
+            from block2.sz import CG
         ket.load_data()
         cf = ket.canonical_form
         _print('CF = %s CENTER = %d' % (cf, ket.center))
@@ -149,31 +150,6 @@ class SPDMRG:
         if self.verbose >= 2:
             _print('--> %s' % (ket.canonical_form))
         ket.save_data()
-
-    def init_hamiltonian_fcidump(self, pg, filename):
-        """Read integrals from FCIDUMP file.
-        pg : point group, pg = 'c1' or 'd2h'
-        filename : FCIDUMP filename
-        """
-        if self.hamil is not None:
-            self.hamil.deallocate()
-        if self.fcidump is not None:
-            self.fcidump.deallocate()
-        if self.mpo_orig is not None:
-            self.mpo_orig.deallocate()
-        self.fcidump = FCIDUMP()
-        self.fcidump.read(filename)
-        self.orb_sym = VectorUInt8(
-            map(PointGroup.swap_d2h, self.fcidump.orb_sym))
-
-        vacuum = SpinLabel(0)
-        self.target = SpinLabel(self.fcidump.n_elec, self.fcidump.twos,
-                                PointGroup.swap_d2h(self.fcidump.isym))
-        self.n_sites = self.fcidump.n_sites
-
-        self.hamil = HamiltonianQC(
-            vacuum, self.n_sites, self.orb_sym, self.fcidump)
-        assert pg in ["d2h", "c1"]
     
     def compute_correction(self, max_samp_c, max_samp, H00, H00_2, H11, H11_2, H10, H10_2):
         max_samp_c = np.float64(max_samp_c)
@@ -319,52 +295,3 @@ class SPDMRG:
             _print(" sp-DMRG Energy = %15.10f (%15.10f)"%(self.Edmrg+Emp2, std_Emp2))
 
         return [Emp2, std_Emp2] 
-
-    def __del__(self):
-        if self.hamil is not None:
-            self.hamil.deallocate()
-        if self.fcidump is not None:
-            self.fcidump.deallocate()
-        if self.mpo_orig is not None:
-            self.mpo_orig.deallocate()
-        release_memory()
-
-if __name__ == "__main__":
-
-    import os
-    # parameters
-    n_threads = 4
-    pg = 'c1'  # point group: d2h or c1
-    FCIDUMP='H0'
-    scratch = '%s'%os.environ['SCRATCHDIR']
-    os.environ['TMPDIR'] = scratch
-
-    memory = 1E7  # 1Gb 
-    omp_threads=8
-    verbose = 3
-
-    assert SpinLabel == SZ
-    _print(("NON-" if SpinLabel == SZ else "") + "SPIN-ADAPTED")
-
-    if pg == 'd2h':
-        fcidump_sym = ["Ag", "B3u", "B2u", "B1g", "B1u", "B2g", "B3g", "Au"]
-    elif pg == 'c1':
-        fcidump_sym = ["A"]
-    else:
-        raise SPDMRGError("Point group %d not supported yet!" % pg)
-
-    Random.rand_seed(0)
-    Global.threading = Threading(
-        ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-    Global.threading.seq_type = SeqTypes.Simple
-
-    init_memory(isize=int(memory * 0.1),
-                dsize=int(memory * 0.9), save_dir=scratch)
-
-    # init: load MPS for |Psi0> and QV|Psi0> as 3-legs sparse tensors
-    SPDMRG = SPDMRG(scratch=scratch, verbose=verbose)
-    SPDMRG.init_hamiltonian_fcidump(pg, FCIDUMP)
-    nsample=1
-    SPDMRG.kernel(nsample)
-
-    del SPDMRG  # IMPORTANT!!! --> to release stack memory

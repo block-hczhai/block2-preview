@@ -1002,6 +1002,9 @@ template <typename S> struct MovingEnvironment {
                 center = n_sites - 1;
                 ket->canonical_form[center] =
                     ket->canonical_form[center] == 'C' ? 'S' : 'T';
+                if (bra != ket)
+                    bra->canonical_form[center] =
+                        bra->canonical_form[center] == 'C' ? 'S' : 'T';
                 fuse_center = mpo->schemer == nullptr
                                   ? n_sites - 2
                                   : mpo->schemer->right_trans_site;
@@ -1025,6 +1028,12 @@ template <typename S> struct MovingEnvironment {
                         ket->canonical_form[center] = 'K';
                     else if (ket->canonical_form[center] == 'M')
                         ket->canonical_form[center] = 'J';
+                    if (bra != ket) {
+                        if (bra->canonical_form[center] == 'C')
+                            bra->canonical_form[center] = 'K';
+                        else if (bra->canonical_form[center] == 'M')
+                            bra->canonical_form[center] = 'J';
+                    }
                     frame->reset(1);
                     if (envs[center + 1]->right != nullptr)
                         frame->load_data(

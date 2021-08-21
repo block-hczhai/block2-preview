@@ -271,6 +271,13 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
     impo = SimplifiedMPO(impo, Rule())
     impo = ParallelMPO(impo, ParallelRuleIdentity(MPI))
 
+[2021-08-20]
+
+**Assertion:** ::
+    dmrg/mps.hpp:1547: void block2::MPS<S>::move_left(const std::shared_ptr<block2::CG<S> >&, const std::shared_ptr<block2::ParallelRule<S> >&) [with S = block2::SU2Long]: Assertion `tensors[center - 1]->info->n != 0' failed.
+
+**Reason:** A SZ MPS is loaded for use in a SU2 code.
+
 MRCI/SCI computations
 ---------------------
 
@@ -287,6 +294,3 @@ MRCI/SCI computations
 **Solution:** Add the following code. Attention: This will change the fcidump. Use with case and check ``symmetrize_error``  ::
 
      symmetrize_error = fcidump.symmetrize(orb_sym)
-
-
-    

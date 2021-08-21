@@ -135,6 +135,11 @@ def parse(fname):
         dic["compression"] = ""
         if "mps_tags" not in dic:
             dic["mps_tags"] = "BRA"
+        if "read_mps_tags" not in dic:
+            if "nonspinadapted" in dic:
+                dic["read_mps_tags"] = "ZKET"
+            else:
+                dic["read_mps_tags"] = "KET"
         if "copy_mps" not in dic:
             dic["copy_mps"] = "ZBRA"
         if "nonspinadapted" not in dic:
