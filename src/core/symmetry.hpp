@@ -652,9 +652,9 @@ struct SU2LongLong {
         // for bra, the odd/even of bra is unknown
         if (twos_low() != twos()) {
             if (twos_low() & 1)
-                ss << twos_low() << "/2?~";
+                ss << twos_low() << "/2~";
             else
-                ss << (twos_low() >> 1) << "?~";
+                ss << (twos_low() >> 1) << "~";
         }
         if (twos() & 1)
             ss << twos() << "/2";

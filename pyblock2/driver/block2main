@@ -12,6 +12,7 @@ from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, T
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP
 import numpy as np
 import time
 import os
@@ -237,6 +238,23 @@ if pre_run or not no_pre_run:
         assert "nofiedler" in dic or "noreorder" in dic
         if "target_t" not in dic:
             dic["target_t"] = "1"
+    elif "model" in dic: # model hamiltonians
+        fmods = dic["model"].split()
+        if fmods[0] in ["hubbard", "hubbard_periodic", "hubbard_kspace", "hubbard_rspace"]:
+            assert len(fmods) in [4, 5]
+            n_sites, const_t, const_u = int(fmods[1]), float(fmods[2]), float(fmods[3])
+            if len(fmods) == 5 and fmods[4] == "per-site":
+                const_t /= n_sites
+                const_u /= n_sites
+            _print("1D %s model : L = %d T = %.5f U = %.5f" % (fmods[0], n_sites, const_t, const_u))
+            if fmods[0] == "hubbard_kspace":
+                fcidump = HubbardKSpaceFCIDUMP(n_sites, const_t, const_u)
+            else:
+                fcidump = HubbardFCIDUMP(n_sites, const_t, const_u,
+                    fmods[0] in ["hubbard_periodic", "hubbard_rspace"])
+            orb_sym = None
+        else:
+            raise RuntimeError("Model %d not supported!" % fmods[0])
     else:
         orb_sym = None
         fints = dic["orbitals"]

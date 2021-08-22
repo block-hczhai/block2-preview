@@ -957,7 +957,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
                                             double f =
-                                                hamil->v(s, sp, i, j, m, l);
+                                                hamil->v(s, sp, j, i, l, m);
                                             mat[{pa[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] =
                                                 f * d_op[m][sp];
@@ -966,11 +966,11 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint8_t sp = 0; sp < 2; sp++)
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
-                                            double f0 = 0.5 * hamil->v(s, sp, i,
-                                                                       j, m, l),
+                                            double f0 = 0.5 * hamil->v(s, sp, j,
+                                                                       i, l, m),
                                                    f1 =
-                                                       -0.5 * hamil->v(s, sp, i,
-                                                                       l, m, j);
+                                                       -0.5 * hamil->v(s, sp, l,
+                                                                       i, j, m);
                                             mat[{pa[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] +=
                                                 f0 * d_op[m][sp];
@@ -981,7 +981,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = 0; k < m; k++)
                                     for (uint16_t l = 0; l < m; l++) {
-                                        double f = hamil->v(s, sp, i, m, k, l);
+                                        double f = hamil->v(s, sp, m, i, l, k);
                                         mat[{pb[sp | (sp << 1)] + l * m + k,
                                              p + i - (m + 1)}] = f * c_op[m][s];
                                     }
@@ -989,7 +989,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint16_t j = 0; j < m; j++)
                                     for (uint16_t k = 0; k < m; k++) {
                                         double f =
-                                            -1.0 * hamil->v(s, sp, i, j, k, m);
+                                            -1.0 * hamil->v(s, sp, j, i, m, k);
                                         mat[{pb[s | (sp << 1)] + j * m + k,
                                              p + i - (m + 1)}] +=
                                             f * c_op[m][sp];
@@ -1270,8 +1270,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = m + 1; j < n_orbs; j++)
                                         for (uint16_t l = m + 1; l < n_orbs;
                                              l++) {
-                                            double f = -1.0 * hamil->v(s, sp, i,
-                                                                       j, m, l);
+                                            double f = -1.0 * hamil->v(s, sp, j,
+                                                                       i, l, m);
                                             mat[{p + i, pa[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] =
@@ -1284,9 +1284,9 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                              l++) {
                                             double f0 =
                                                 -0.5 *
-                                                hamil->v(s, sp, i, j, m, l);
-                                            double f1 = 0.5 * hamil->v(s, sp, i,
-                                                                       l, m, j);
+                                                hamil->v(s, sp, j, i, l, m);
+                                            double f1 = 0.5 * hamil->v(s, sp, l,
+                                                                       i, j, m);
                                             mat[{p + i, pa[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] +=
@@ -1300,7 +1300,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint16_t k = m + 1; k < n_orbs; k++)
                                     for (uint16_t l = m + 1; l < n_orbs; l++) {
                                         double f =
-                                            -1.0 * hamil->v(s, sp, i, m, k, l);
+                                            -1.0 * hamil->v(s, sp, m, i, l, k);
                                         mat[{p + i, pb[sp | (sp << 1)] +
                                                         (l - m - 1) * mm + k -
                                                         m - 1}] =
@@ -1309,7 +1309,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = m + 1; j < n_orbs; j++)
                                     for (uint16_t k = m + 1; k < n_orbs; k++) {
-                                        double f = hamil->v(s, sp, i, j, k, m);
+                                        double f = hamil->v(s, sp, j, i, m, k);
                                         mat[{p + i, pb[s | (sp << 1)] +
                                                         (j - m - 1) * mm + k -
                                                         m - 1}] =
@@ -2051,9 +2051,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t l = 0; l < m; l++) {
                                 double f0 =
-                                    hamil->v(i, j, m, l) + hamil->v(i, l, m, j);
+                                    hamil->v(j, i, l, m) + hamil->v(l, i, j, m);
                                 double f1 =
-                                    hamil->v(i, j, m, l) - hamil->v(i, l, m, j);
+                                    hamil->v(j, i, l, m) - hamil->v(l, i, j, m);
                                 mat[{pa0 + j * m + l, p + i - (m + 1)}] =
                                     f0 * (-0.5) * d_op[m];
                                 mat[{pa1 + j * m + l, p + i - (m + 1)}] =
@@ -2061,14 +2061,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = 0; k < m; k++)
                             for (uint16_t l = 0; l < m; l++) {
-                                double f = 2.0 * hamil->v(i, m, k, l) -
-                                           hamil->v(i, l, k, m);
+                                double f = 2.0 * hamil->v(m, i, l, k) -
+                                           hamil->v(l, i, m, k);
                                 mat[{pb0 + l * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
                             }
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t k = 0; k < m; k++) {
-                                double f = hamil->v(i, j, k, m) * sqrt(3);
+                                double f = hamil->v(j, i, m, k) * sqrt(3);
                                 mat[{pb1 + j * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
                             }
@@ -2284,9 +2284,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
                                 double f0 =
-                                    hamil->v(i, j, m, l) + hamil->v(i, l, m, j);
+                                    hamil->v(j, i, l, m) + hamil->v(l, i, j, m);
                                 double f1 =
-                                    hamil->v(i, j, m, l) - hamil->v(i, l, m, j);
+                                    hamil->v(j, i, l, m) - hamil->v(l, i, j, m);
                                 mat[{p + i, pa0 + (j - m - 1) * mm + l - m -
                                                 1}] = f0 * (-0.5) * d_op[m];
                                 mat[{p + i,
@@ -2295,15 +2295,15 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = m + 1; k < n_orbs; k++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                double f = 2.0 * hamil->v(i, m, k, l) -
-                                           hamil->v(i, l, k, m);
+                                double f = 2.0 * hamil->v(m, i, l, k) -
+                                           hamil->v(l, i, m, k);
                                 mat[{p + i, pb0 + (l - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t k = m + 1; k < n_orbs; k++) {
                                 double f =
-                                    (-1.0) * hamil->v(i, j, k, m) * sqrt(3);
+                                    (-1.0) * hamil->v(j, i, m, k) * sqrt(3);
                                 mat[{p + i, pb1 + (j - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }

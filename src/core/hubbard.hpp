@@ -21,6 +21,7 @@
 #pragma once
 
 #include "integral.hpp"
+#include <cmath>
 
 using namespace std;
 
@@ -28,12 +29,14 @@ namespace block2 {
 
 struct HubbardFCIDUMP : FCIDUMP {
     double const_u, const_t;
-    HubbardFCIDUMP(uint16_t n_sites, double t = 1, double u = 2)
-        : FCIDUMP(), const_u(u), const_t(t) {
+    bool periodic;
+    HubbardFCIDUMP(uint16_t n_sites, double t = 1, double u = 2,
+                   bool periodic = false)
+        : FCIDUMP(), const_u(u), const_t(t), periodic(periodic) {
         params.clear();
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_sites);
-        params["ms2"] = Parsing::to_string(0);
+        params["ms2"] = Parsing::to_string(n_sites & 1);
         params["isym"] = Parsing::to_string(1);
         params["iuhf"] = "0";
         stringstream ss;
@@ -45,11 +48,21 @@ struct HubbardFCIDUMP : FCIDUMP {
         params["orbsym"] = ss.str();
     }
     double t(uint16_t i, uint16_t j) const override {
-        return abs(i - j) == 1 ? const_t : 0;
+        const uint16_t n = n_sites();
+        if (periodic)
+            return ((i + n - j) % n == 1 ? const_t : 0) +
+                   ((j + n - i) % n == 1 ? const_t : 0);
+        else
+            return (i > j && i - j == 1) || (i < j && j - i == 1) ? const_t : 0;
     }
     // One-electron integral element (SZ)
     double t(uint8_t s, uint16_t i, uint16_t j) const override {
-        return abs(i - j) == 1 ? const_t : 0;
+        const int n = n_sites();
+        if (periodic)
+            return ((i + n - j) % n == 1 ? const_t : 0) +
+                   ((j + n - i) % n == 1 ? const_t : 0);
+        else
+            return (i > j && i - j == 1) || (i < j && j - i == 1) ? const_t : 0;
     }
     // Two-electron integral element (SU(2))
     double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
@@ -59,6 +72,47 @@ struct HubbardFCIDUMP : FCIDUMP {
     double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
              uint16_t l) const override {
         return i == j && j == k && k == l ? const_u : 0;
+    }
+    double e() const override { return 0.0; }
+    void deallocate() override {}
+};
+
+struct HubbardKSpaceFCIDUMP : FCIDUMP {
+    double const_u, const_t;
+    const double _pi = acos(-1);
+    HubbardKSpaceFCIDUMP(uint16_t n_sites, double t = 1, double u = 2)
+        : FCIDUMP(), const_u(u), const_t(t) {
+        params.clear();
+        params["norb"] = Parsing::to_string(n_sites);
+        params["nelec"] = Parsing::to_string(n_sites);
+        params["ms2"] = Parsing::to_string(n_sites & 1);
+        params["isym"] = Parsing::to_string(1);
+        params["iuhf"] = "0";
+        stringstream ss;
+        for (uint16_t i = 0; i < n_sites; i++) {
+            ss << "1";
+            if (i != n_sites - 1)
+                ss << ",";
+        }
+        params["orbsym"] = ss.str();
+    }
+    double t(uint16_t i, uint16_t j) const override {
+        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites()) : 0;
+    }
+    // One-electron integral element (SZ)
+    double t(uint8_t s, uint16_t i, uint16_t j) const override {
+        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites()) : 0;
+    }
+    // Two-electron integral element (SU(2))
+    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
+        const int n = n_sites();
+        return (i + n - j + k + n - l) % n == 0 ? const_u / n : 0;
+    }
+    // Two-electron integral element (SZ)
+    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+             uint16_t l) const override {
+        const int n = n_sites();
+        return (i + n - j + k + n - l) % n == 0 ? const_u / n : 0;
     }
     double e() const override { return 0.0; }
     void deallocate() override {}

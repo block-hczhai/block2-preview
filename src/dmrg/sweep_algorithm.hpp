@@ -27,6 +27,7 @@
 #include "parallel_mps.hpp"
 #include "qc_pdm1.hpp"
 #include "qc_pdm2.hpp"
+#include "qc_ncorr.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstring>

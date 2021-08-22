@@ -2112,6 +2112,20 @@ template <typename S = void> void bind_matrix(py::module &m) {
                  self->initialize_from_1pdm_sz(mr);
              });
 
+    py::class_<HubbardFCIDUMP, shared_ptr<HubbardFCIDUMP>, FCIDUMP>(
+        m, "HubbardFCIDUMP")
+        .def(py::init<uint16_t, double, double>())
+        .def(py::init<uint16_t, double, double, bool>())
+        .def_readwrite("periodic", &HubbardFCIDUMP::periodic)
+        .def_readwrite("const_u", &HubbardFCIDUMP::const_u)
+        .def_readwrite("const_t", &HubbardFCIDUMP::const_t);
+
+    py::class_<HubbardKSpaceFCIDUMP, shared_ptr<HubbardKSpaceFCIDUMP>, FCIDUMP>(
+        m, "HubbardKSpaceFCIDUMP")
+        .def(py::init<uint16_t, double, double>())
+        .def_readwrite("const_u", &HubbardKSpaceFCIDUMP::const_u)
+        .def_readwrite("const_t", &HubbardKSpaceFCIDUMP::const_t);
+
     py::class_<BatchGEMMSeq, shared_ptr<BatchGEMMSeq>>(m, "BatchGEMMSeq")
         .def_readwrite("batch", &BatchGEMMSeq::batch)
         .def_readwrite("post_batch", &BatchGEMMSeq::post_batch)
@@ -2308,8 +2322,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SU2LZ *self) { return SU2LZ::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](SU2LZ *self) { return SU2LZ::invalid; })
         .def_readwrite("data", &SU2LZ::data)
         .def_property("n", &SU2LZ::n, &SU2LZ::set_n)
         .def_property("twos", &SU2LZ::twos, &SU2LZ::set_twos)
@@ -2334,7 +2348,6 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SU2LZ::to_str);
 
     py::bind_vector<vector<SU2LZ>>(m, "VectorSU2LZ");
-
 }
 
 #ifdef _EXPLICIT_TEMPLATE

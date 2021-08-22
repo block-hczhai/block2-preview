@@ -30,7 +30,7 @@ TEST_F(TestFCIDUMP, TestRead) {
     uint8_t cr2_orbsym[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5,
                         5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
                         6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
-    vector<uint8_t> orbsym = fcidump.orb_sym();
+    vector<uint8_t> orbsym = fcidump.orb_sym<uint8_t>();
     EXPECT_TRUE(equal(orbsym.begin(), orbsym.end(), cr2_orbsym));
     EXPECT_EQ(fcidump.n_sites(), 42);
     EXPECT_EQ(fcidump.n_elec(), 48);
@@ -57,7 +57,7 @@ TEST_F(TestFCIDUMP, TestCompressedRead) {
     uint8_t cr2_orbsym[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5,
                         5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
                         6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
-    vector<uint8_t> orbsym = fcidump.orb_sym();
+    vector<uint8_t> orbsym = fcidump.orb_sym<uint8_t>();
     EXPECT_TRUE(equal(orbsym.begin(), orbsym.end(), cr2_orbsym));
     EXPECT_EQ(fcidump.n_sites(), 42);
     EXPECT_EQ(fcidump.n_elec(), 48);

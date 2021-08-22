@@ -34,7 +34,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
-              "nevpt2sd", "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling"}
+              "nevpt2sd", "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
+              "model"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -105,24 +106,6 @@ def parse(fname):
         schedule[2].extend([noise] * nswp)
     dic["schedule"] = schedule
 
-    # sanity check
-    diff = set(dic.keys()) - KNOWN_KEYS
-    if len(diff) != 0:
-        raise ValueError("Unrecognized keys (%s)" % diff)
-    if "onedot" in dic and "twodot_to_onedot" in dic:
-        raise ValueError("onedot conflicits with twodot_to_onedot.")
-    if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
-        raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
-    crs = list(set(dic.keys()) & REORDER_KEYS)
-    if len(crs) > 1:
-        raise ValueError(
-            "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crs[1]))
-    crs = list(set(dic.keys()) & DYN_CORR_KEYS)
-    if len(crs) > 1:
-        raise ValueError(
-            "Dynamic correlation keys %s and %s cannot appear simultaneously."
-                % (crs[0], crs[1]))
-
     # stopt extra keywords
     if "stopt_dmrg" in dic:
         dic["onepdm"] = ""
@@ -150,6 +133,28 @@ def parse(fname):
                 dic["mps_tags"] = "ZKET ZBRA"
             else:
                 dic["mps_tags"] = "KET BRA"
+
+    # model extra keywords
+    if "model" in dic:
+        dic["noreorder"] = ""
+
+    # sanity check
+    diff = set(dic.keys()) - KNOWN_KEYS
+    if len(diff) != 0:
+        raise ValueError("Unrecognized keys (%s)" % diff)
+    if "onedot" in dic and "twodot_to_onedot" in dic:
+        raise ValueError("onedot conflicits with twodot_to_onedot.")
+    if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
+        raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
+    crs = list(set(dic.keys()) & REORDER_KEYS)
+    if len(crs) > 1:
+        raise ValueError(
+            "Reorder keys %s and %s cannot appear simultaneously." % (crs[0], crs[1]))
+    crs = list(set(dic.keys()) & DYN_CORR_KEYS)
+    if len(crs) > 1:
+        raise ValueError(
+            "Dynamic correlation keys %s and %s cannot appear simultaneously."
+                % (crs[0], crs[1]))
 
     # restart check
     if "restart_oh" in dic:

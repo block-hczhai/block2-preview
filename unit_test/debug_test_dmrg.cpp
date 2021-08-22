@@ -58,6 +58,8 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     cout << "INT start" << endl;
     fcidump->read(filename);
+    // fcidump = make_shared<HubbardKSpaceFCIDUMP>(4, 1, 2);
+    // fcidump = make_shared<HubbardFCIDUMP>(4, 1, 2, true);
     cout << "INT end .. T = " << t.get_time() << endl;
 
     bool reorder = false;
