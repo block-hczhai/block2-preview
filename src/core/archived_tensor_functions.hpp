@@ -18,6 +18,12 @@
  *
  */
 
+/** Operations for operator tensors (renormalized operators, etc.)
+ * with internal data stored in disk file.
+ * Note: this is inefficient and may not be compatitble with many other
+ * features.
+ */
+
 #pragma once
 
 #include "archived_sparse_matrix.hpp"
@@ -27,16 +33,30 @@ using namespace std;
 
 namespace block2 {
 
-// Operations for operator tensors
+/** Operations for operator tensors with internal data stored in disk file.
+ * @tparam S Quantum label type.
+ */
 template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
     using TensorFunctions<S>::opf;
-    string filename = "";
-    mutable int64_t offset = 0;
+    string filename = ""; //!< The name of the associated disk file.
+    mutable int64_t offset =
+        0; //!< Byte offset in the file (where to read/write the content).
+    /** Constructor.
+     * @param opf Sparse matrix algebra driver.
+     */
     ArchivedTensorFunctions(const shared_ptr<OperatorFunctions<S>> &opf)
         : TensorFunctions<S>(opf) {}
+    /** Get the type of this driver for tensor functions.
+     * @return Type of this driver for tensor functions.
+     */
     TensorFunctionsTypes get_type() const override {
         return TensorFunctionsTypes::Archived;
     }
+    /** Save the content of an operator tensor into disk,
+     * transforming its internal representation to sparse matrices with internal
+     * data stored in disk file, and deallocating its memory data.
+     * @param a Operator tensor with ordinary memory storage.
+     */
     void archive_tensor(const shared_ptr<OperatorTensor<S>> &a) const {
         map<double *, vector<shared_ptr<SparseMatrix<S>>>> mp;
         for (auto &op : a->ops) {
@@ -52,7 +72,12 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             for (const auto &t : it->second)
                 t->deallocate();
     }
-    // c = a
+    /** Left assignment (copy) operation: c = a. This is the edge case for the
+     * left blocking step. Left assignment means that the operator tensor is a
+     * row vector of symbols.
+     * @param a Operator a (input).
+     * @param c Operator c (output).
+     */
     void left_assign(const shared_ptr<OperatorTensor<S>> &a,
                      shared_ptr<OperatorTensor<S>> &c) const override {
         assert(a->lmat != nullptr);
@@ -87,7 +112,12 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             }
         }
     }
-    // c = a
+    /** Right assignment (copy) operation: c = a. This is the edge case for the
+     * right blocking step. Right assignment means that the operator tensor is a
+     * column vector of symbols.
+     * @param a Operator a (input).
+     * @param c Operator c (output).
+     */
     void right_assign(const shared_ptr<OperatorTensor<S>> &a,
                       shared_ptr<OperatorTensor<S>> &c) const override {
         assert(a->rmat != nullptr);
@@ -122,7 +152,40 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             }
         }
     }
-    // vmat = expr[L part | R part] x cmat (for perturbative noise)
+    /**
+     * Partial tensor product multiplication operation: vmat = expr[L part | R
+     * part] x cmat. This is used only for perturbative noise, where only left
+     * or right block part of the Hamiltonian expression is multiplied by the
+     * wavefunction cmat, to get a perurbed wavefunction vmat.
+     * @param expr Symbolic expression in form of sum of tensor products.
+     * @param lopt Symbol lookup table for left operands in the tensor products.
+     * @param ropt Symbol lookup table for right operands in the tensor
+     * products.
+     * @param trace_right If true, the left operands in the tensor products are
+     * used. The right operands are treated as identity. Otherwise, the right
+     * operands in the tensor products are used.
+     * @param cmat Input "vector" operand (wavefunction).
+     * @param psubsl Vector of transpose pattern and delta quantum of the
+     * "matrix" operand (in the same order as cinfos).
+     * @param cinfos Vector of sparse matrix connection info (in the same order
+     * as cinfos).
+     * @param vdqs Vector of quantum number of each vmat (for lookup).
+     * @param vmats Vector of output "vectors" (perurbed wavefunctions).
+     * @param vidx If -1, there is only one perurbed wavefunction for each
+     * target quantum number (used in NoiseTypes::ReducedPerturbative).
+     * Otherwise, one vmat is created for each tensor product (used in
+     * NoiseTypes::Perturbative), and vidx is used as an incremental index in
+     * vmats.
+     * @param tvidx If -1, vmats is copied to every thread, which is the high
+     * memory mode but may be more load-balanced, the multi-thread
+     * parallelization is over different terms in expr for this case. If -2,
+     * every thread works on a single vmat, which is the low memory mode (used
+     * in NoiseTypes:: NoiseTypes::LowMem), the multi-thread parallelization is
+     * over different vmats for this case. Otherwise, if >= 0, only the
+     * specified vmat is handled, which is used only internally.
+     * @param do_reduce If true, the output vmats are accumulated to the root
+     * processor in the distributed parallel case.
+     */
     void tensor_product_partial_multiply(
         const shared_ptr<OpExpr<S>> &expr,
         const shared_ptr<OperatorTensor<S>> &lopt,
@@ -224,7 +287,22 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             break;
         }
     }
-    // vmats = expr x cmats
+    /** Tensor product multiplication operation (multi-root case): vmats = expr
+     * x cmats. Both cmats and vmats are wavefunctions with multi-target
+     * components.
+     * @param expr Symbolic expression in form of sum of tensor products.
+     * @param lopt Symbol lookup table for left operands in the tensor products.
+     * @param ropt Symbol lookup table for right operands in the tensor
+     * products.
+     * @param cmats Input "vector" operand (multi-target wavefunction).
+     * @param vmats Output "vector" result (multi-target wavefunction).
+     * @param cinfos Lookup table of sparse matrix connection info, where the
+     * key is the combined quantum number of the vmat and cmat.
+     * @param opdq The delta quantum number of expr.
+     * @param factor Sacling factor applied to the results.
+     * @param all_reduce If true, the output result is accumulated and
+     * broadcast to all processors.
+     */
     void tensor_product_multi_multiply(
         const shared_ptr<OpExpr<S>> &expr,
         const shared_ptr<OperatorTensor<S>> &lopt,
@@ -256,7 +334,19 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 }
         }
     }
-    // vmat = expr x cmat
+    /** Tensor product multiplication operation (single-root case): vmat = expr
+     * x cmat.
+     * @param expr Symbolic expression in form of sum of tensor products.
+     * @param lopt Symbol lookup table for left operands in the tensor products.
+     * @param ropt Symbol lookup table for right operands in the tensor
+     * products.
+     * @param cmat Input "vector" operand (wavefunction), assuming the cinfo is
+     * already attached.
+     * @param vmat Output "vector" result (wavefunction).
+     * @param opdq The delta quantum number of expr.
+     * @param all_reduce If true, the output result is accumulated and broadcast
+     * to all processors.
+     */
     void tensor_product_multiply(const shared_ptr<OpExpr<S>> &expr,
                                  const shared_ptr<OperatorTensor<S>> &lopt,
                                  const shared_ptr<OperatorTensor<S>> &ropt,
@@ -295,7 +385,14 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             break;
         }
     }
-    // mat = diag(expr)
+    /** Extraction of diagonal of a tensor product expression: mat = diag(expr).
+     * @param expr Symbolic expression in form of sum of tensor products.
+     * @param lopt Symbol lookup table for left operands in the tensor products.
+     * @param ropt Symbol lookup table for right operands in the tensor
+     * products.
+     * @param mat Output "vector" result (diagonal part).
+     * @param opdq The delta quantum number of expr.
+     */
     void tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
                                  const shared_ptr<OperatorTensor<S>> &lopt,
                                  const shared_ptr<OperatorTensor<S>> &ropt,
@@ -333,7 +430,13 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             break;
         }
     }
-    // mat = eval(expr)
+    /** Direct evaluation of a tensor product expression: mat = eval(expr).
+     * @param expr Symbolic expression in form of sum of tensor products.
+     * @param lop Symbol lookup table for left operands in the tensor products.
+     * @param rop Symbol lookup table for right operands in the tensor products.
+     * @param mat Output "vector" result (the sparse matrix value of the
+     * expression).
+     */
     void tensor_product(const shared_ptr<OpExpr<S>> &expr,
                         const unordered_map<shared_ptr<OpExpr<S>>,
                                             shared_ptr<SparseMatrix<S>>> &lop,
@@ -443,7 +546,18 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
             omat->deallocate();
         }
     }
-    // c = mpst_bra x a x mpst_ket
+    /** Rotation (renormalization) of a left-block operator tensor: c =
+     * mpst_bra.T x a x mpst_ket. In the above expression, [x] means
+     * multiplication. Note that the row and column of mpst_bra and mpst_ket are
+     * for system and environment indices, respectively. Left rotation means
+     * that system indices are contracted.
+     * @param a Input operator tensor a (as a row vector of symbols).
+     * @param mpst_bra Rotation matrix (bra MPS tensor) for row of sparse
+     * matrices in a.
+     * @param mpst_ket Rotation matrix (ket MPS tensor) for column of sparse
+     * matrices in a.
+     * @param c Output operator tensor c (as a row vector of symbols).
+     */
     void left_rotate(const shared_ptr<OperatorTensor<S>> &a,
                      const shared_ptr<SparseMatrix<S>> &mpst_bra,
                      const shared_ptr<SparseMatrix<S>> &mpst_ket,
@@ -477,7 +591,18 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
-    // c = mpst_bra x a x mpst_ket
+    /** Rotation (renormalization) of a right-block operator tensor: c =
+     * mpst_bra x a x mpst_ket.T. In the above expression, [x] means
+     * multiplication. Note that the row and column of mpst_bra and mpst_ket are
+     * for system and environment indices, respectively. Right rotation means
+     * that environment indices are contracted.
+     * @param a Input operator tensor a (as a column vector of symbols).
+     * @param mpst_bra Rotation matrix (bra MPS tensor) for row of sparse
+     * matrices in a.
+     * @param mpst_ket Rotation matrix (ket MPS tensor) for column of sparse
+     * matrices in a.
+     * @param c Output operator tensor c (as a column vector of symbols).
+     */
     void right_rotate(const shared_ptr<OperatorTensor<S>> &a,
                       const shared_ptr<SparseMatrix<S>> &mpst_bra,
                       const shared_ptr<SparseMatrix<S>> &mpst_ket,
@@ -511,6 +636,17 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
+    /** Compute the intermediates to speed up the tensor product operations in
+     * the next blocking step. Intermediates are formed by collecting terms
+     * sharing the same left or right operands during the MPO simplification
+     * step.
+     * @param names Operator names (symbols, only used in distributed
+     * parallelization).
+     * @param exprs Tensor product expressions (expressions of symbols).
+     * @param a Symbol lookup table for symbols in the tensor product
+     * expressions (updated).
+     * @param left Whether this is for left-blocking or right-blocking.
+     */
     void intermediates(const shared_ptr<Symbolic<S>> &names,
                        const shared_ptr<Symbolic<S>> &exprs,
                        const shared_ptr<OperatorTensor<S>> &a,
@@ -557,8 +693,14 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                     }
             }
     }
-    // Numerical transform from normal operators
-    // to complementary operators near the middle site
+    /** Numerical transform from normal operators to complementary operators
+     * near the middle site.
+     * @param a Symbol lookup table for symbols in the tensor product
+     * expressions (updated).
+     * @param names List of complementary operator names (symbols).
+     * @param exprs List of symbolic expression of complementary operators as
+     * linear combination of normal operators.
+     */
     void
     numerical_transform(const shared_ptr<OperatorTensor<S>> &a,
                         const shared_ptr<Symbolic<S>> &names,
@@ -620,7 +762,17 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
         if (opf->seq->mode == SeqTypes::Auto)
             opf->seq->auto_perform();
     }
-    // c = a x b (dot)
+    /** Tensor product operation in left blocking: c = a x b.
+     * @param a Operator a (left block tensor).
+     * @param b Operator b (dot block single-site tensor).
+     * @param c Operator c (enlarged left block tensor).
+     * @param cexprs Symbolic expression for the tensor product operation. If
+     * nullptr, this is automatically contructed from expressions in a and b.
+     * @param delayed The set of operator names for which the tensor product
+     * operation should be delayed. The delayed tensor product will not be
+     * performed here. Instead, it will be evaluated as three-tensor operations
+     * later.
+     */
     void left_contract(const shared_ptr<OperatorTensor<S>> &a,
                        const shared_ptr<OperatorTensor<S>> &b,
                        shared_ptr<OperatorTensor<S>> &c,
@@ -652,7 +804,17 @@ template <typename S> struct ArchivedTensorFunctions : TensorFunctions<S> {
                 opf->seq->auto_perform();
         }
     }
-    // c = b (dot) x a
+    /** Tensor product operation in right blocking: c = b x a.
+     * @param a Operator a (right block tensor).
+     * @param b Operator b (dot block single-site tensor).
+     * @param c Operator c (enlarged right block tensor).
+     * @param cexprs Symbolic expression for the tensor product operation. If
+     * nullptr, this is automatically contructed from expressions in b and a.
+     * @param delayed The set of operator names for which the tensor product
+     * operation should be delayed. The delayed tensor product will not be
+     * performed here. Instead, it will be evaluated as three-tensor operations
+     * later.
+     */
     void right_contract(const shared_ptr<OperatorTensor<S>> &a,
                         const shared_ptr<OperatorTensor<S>> &b,
                         shared_ptr<OperatorTensor<S>> &c,

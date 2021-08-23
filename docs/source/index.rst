@@ -119,4 +119,6 @@ Features
    :caption: API Reference
 
    api/global
+   api/sparse_matrix
+   api/tensor_functions
    api/tools

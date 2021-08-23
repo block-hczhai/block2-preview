@@ -18,7 +18,11 @@
  *
  */
 
-/** Block-sparse tensor with internal data stored in disk file. */
+/**
+ * Block-sparse tensor with internal data stored in disk file.
+ * Note: this is inefficient and may not be compatitble with many other
+ * features.
+ */
 
 #pragma once
 
