@@ -72,7 +72,6 @@ private:
         }
     }
 public:
-    using HamiltonianSCI<S>::n_syms;
     using HamiltonianSCI<S>::n_sites;
     using HamiltonianSCI<S>::vacuum;
     using HamiltonianSCI<S>::basis;
@@ -500,7 +499,7 @@ public:
         }
         // site norm operators
         map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
-            ops[this->n_syms];
+            ops[8];
         const shared_ptr<OpElement<S>> i_op =
             make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vacuum);
         const shared_ptr<OpElement<S>> n_op[2] = {
@@ -517,7 +516,7 @@ public:
                                       this->vacuum),
             make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {1, 1}),
                                       this->vacuum)};
-        for (uint8_t i = 0; i < n_syms; i++) {
+        for (uint8_t i = 0; i < 8; i++) {
             ops[i][i_op] = nullptr;
             for (uint8_t s = 0; s < 2; s++)
                 ops[i][n_op[s]] = nullptr;

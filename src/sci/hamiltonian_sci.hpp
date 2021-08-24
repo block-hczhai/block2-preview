@@ -78,8 +78,8 @@ template <typename S> struct HamiltonianSCI {
     // Sparse matrix representation for normal site operators
     vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
         *site_norm_ops;
-    // Number of sites and point group symmetry irreducible representations
-    uint16_t n_sites, n_syms;
+    // Number of sites
+    uint16_t n_sites;
     shared_ptr<OperatorFunctions<S>> opf;
     // Point group symmetry of orbitals
     vector<uint8_t> orb_sym;
@@ -88,7 +88,6 @@ template <typename S> struct HamiltonianSCI {
     HamiltonianSCI(S vacuum, int n_sites, const vector<uint8_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
-        n_syms = *max_element(orb_sym.begin(), orb_sym.end()) + 1;
         basis = vector<shared_ptr<StateInfo<S>>>(n_sites);
         site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);

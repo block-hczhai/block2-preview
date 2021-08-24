@@ -70,7 +70,6 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
     py::class_<HamiltonianSCI<S>, shared_ptr<HamiltonianSCI<S>>>(
         m, "HamiltonianSCI")
         .def(py::init<S, int, const vector<uint8_t> &>())
-        .def_readwrite("n_syms", &HamiltonianSCI<S>::n_syms)
         .def_readwrite("opf", &HamiltonianSCI<S>::opf)
         .def_readwrite("n_sites", &HamiltonianSCI<S>::n_sites)
         .def_readwrite("orb_sym", &HamiltonianSCI<S>::orb_sym)
@@ -83,7 +82,7 @@ template <typename S> void bind_hamiltonian_sci(py::module &m) {
             "site_op_infos",
             [](HamiltonianSCI<S> *self) {
                 return Array<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(
-                        self->site_op_infos, self->n_syms);
+                        self->site_op_infos, 8);
             })
     .def("get_site_ops", &HamiltonianSCI<S>::get_site_ops)
     .def("filter_site_ops", &HamiltonianSCI<S>::filter_site_ops)

@@ -39,7 +39,7 @@ if len(sys.argv) > 1:
         no_pre_run = para_no_pre_run = False
 else:
     raise ValueError("""
-        Usage: either:
+        Usage: any of:
             (A) python block2main dmrg.conf
             (B) reduced memory mode (save/load serial mpo):
                 Step 1: python block2main dmrg.conf pre
@@ -47,6 +47,7 @@ else:
             (C) extra reduced memory mode (save/load parallel mpo):
                 Step 1: python block2main dmrg.conf para-pre
                 Step 2: python block2main dmrg.conf para-run
+            (D) python block2main FCIDUMP
     """)
 
 dic = parse(fin)

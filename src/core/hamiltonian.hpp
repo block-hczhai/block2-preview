@@ -71,8 +71,8 @@ template <typename S> struct Hamiltonian {
     vector<shared_ptr<StateInfo<S>>> basis;
     // Sparse matrix info for site operators
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
-    // Number of orbitals and point group symmetry irreducible representations
-    uint16_t n_sites, n_syms;
+    // Number of orbitals
+    uint16_t n_sites;
     // Point group symmetry of orbitals
     vector<typename S::pg_t> orb_sym;
     // For storing pre-computed CG factors for sparse matrix functions
@@ -81,9 +81,6 @@ template <typename S> struct Hamiltonian {
     Hamiltonian(S vacuum, int n_sites, const vector<typename S::pg_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);
-        n_syms = orb_sym.size() == 0
-                     ? 0
-                     : *max_element(orb_sym.begin(), orb_sym.end()) + 1;
     }
     virtual ~Hamiltonian() = default;
     virtual int get_n_orbs_left() const { return 0; }

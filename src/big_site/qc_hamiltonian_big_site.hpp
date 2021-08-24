@@ -45,7 +45,6 @@ namespace block2 {
 
 /** HamiltonianQC with left and/or right big sites. */
 template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
-    using HamiltonianQC<S>::n_syms;
     using HamiltonianQC<S>::n_sites;
     using HamiltonianQC<S>::vacuum;
     using HamiltonianQC<S>::basis;
@@ -84,9 +83,6 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
         this->vacuum = full_hamil->vacuum;
         this->orb_sym = full_hamil->orb_sym;
         this->fcidump = full_hamil->fcidump;
-        n_syms = orb_sym.size() == 0
-                     ? 0
-                     : *max_element(orb_sym.begin(), orb_sym.end()) + 1;
         assert((int)orb_sym.size() == n_orbs_left + n_orbs_cas + n_orbs_right);
         basis = vector<shared_ptr<StateInfo<S>>>(
             full_hamil->basis.begin() + n_orbs_left,

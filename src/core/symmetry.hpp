@@ -71,6 +71,9 @@ struct SZShort {
     SZShort get_bra(SZShort dq) const noexcept { return *this + dq; }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SZShort combine(SZShort bra, SZShort ket) const {
         return ket + *this == bra ? ket : SZShort(invalid);
     }
@@ -142,6 +145,9 @@ struct SZLong {
     SZLong get_bra(SZLong dq) const noexcept { return *this + dq; }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SZLong combine(SZLong bra, SZLong ket) const {
         return ket + *this == bra ? ket : SZLong(invalid);
     }
@@ -220,6 +226,9 @@ struct SZLongLong {
     SZLongLong get_bra(SZLongLong dq) const noexcept { return *this + dq; }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SZLongLong combine(SZLongLong bra, SZLongLong ket) const {
         return ket + *this == bra ? ket : SZLongLong(invalid);
     }
@@ -241,6 +250,130 @@ struct SZLongLong {
     }
 };
 
+// Quantum number with particle number, projected spin,
+// point group irreducible representation, and K space symmetry
+// (non-spin-adapted)
+// KMod is the modulo of the K space symmetry, where zero means 1 << 15
+// N/2S = -32768 ~ 32767; KMod/K = 0 ~ 16383; PG = 0 ~ 15
+// (N: 16bits) - (2S: 16bits) - (KMod: 14bits) - (K: 14bits) - (pg: 4bits)
+struct SZKLong {
+    typedef void is_sz_t;
+    typedef uint32_t pg_t;
+    uint64_t data;
+    // S(invalid) must have maximal particle number n
+    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    SZKLong() : data(0) {}
+    SZKLong(uint64_t data) : data(data) {}
+    SZKLong(int n, int twos, int pg)
+        : data((uint64_t)(((int64_t)n << 48) |
+                          ((uint64_t)(twos & 0xFFFFULL) << 32) |
+                          (uint64_t)(uint32_t)pg)) {}
+    SZKLong(int n, int twos, int kmod, int k, int pg)
+        : data((uint64_t)(((int64_t)n << 48) |
+                          ((uint64_t)(twos & 0xFFFFULL) << 32) |
+                          ((uint64_t)(kmod & 0x3FFFULL) << 18) |
+                          ((uint64_t)(k & 0x3FFFULL) << 4) |
+                          (uint64_t)(uint8_t)pg)) {}
+    int n() const { return (int)(((int64_t)data) >> 48); }
+    int twos() const { return (int)(int16_t)((data >> 32) & 0xFFFFULL); }
+    int pg() const { return (int)(data & 0xFFFFFFFFULL); }
+    int pg_pg() const { return (int)(data & 0xFULL); }
+    int pg_k() const { return (int)((data >> 4) & 0x3FFFULL); }
+    int pg_k_mod() const { return (int)((data >> 18) & 0x3FFFULL); }
+    void set_n(int n) {
+        data = (data & 0xFFFFFFFFFFFFULL) | ((uint64_t)((int64_t)n << 48));
+    }
+    void set_twos(int twos) {
+        data = (data & 0xFFFF0000FFFFFFFFULL) |
+               ((uint64_t)((uint64_t)(twos & 0xFFFFULL) << 32));
+    }
+    void set_pg(int pg) {
+        data = (data & 0xFFFFFFFF00000000ULL) | ((uint64_t)(uint32_t)pg);
+    }
+    int multiplicity() const noexcept { return 1; }
+    bool is_fermion() const noexcept { return twos() & 1; }
+    bool operator==(SZKLong other) const noexcept {
+        return (data & (~0xFFFC0000ULL)) == (other.data & (~0xFFFC0000ULL));
+    }
+    bool operator!=(SZKLong other) const noexcept {
+        return (data & (~0xFFFC0000ULL)) != (other.data & (~0xFFFC0000ULL));
+    }
+    bool operator<(SZKLong other) const noexcept {
+        return (data & (~0xFFFC0000ULL)) < (other.data & (~0xFFFC0000ULL));
+    }
+    SZKLong operator-() const noexcept {
+        return SZKLong(
+            (data & 0xFFFC000FULL) |
+            min(((~data) + (1ULL << 4)) & 0x3FFF0ULL,
+                ((~data) + (1ULL << 4) + ((data >> 14) & 0x3FFF0ULL)) &
+                    0x3FFF0ULL) |
+            (((~data) + (1ULL << 32)) & 0xFFFF00000000ULL) |
+            (((~data) + (1ULL << 48)) & 0xFFFF000000000000ULL));
+    }
+    SZKLong operator-(SZKLong other) const noexcept { return *this + (-other); }
+    SZKLong operator+(SZKLong other) const noexcept {
+        uint16_t k_add_data =
+            (uint16_t)(((data & 0x3FFF0ULL) + (other.data & 0x3FFF0ULL)) >> 4);
+        uint16_t k_mod_data =
+            (uint16_t)(~(((data | other.data) >> 18) & 0x3FFFULL)) + 1;
+        return SZKLong(
+            (((data & 0xFFFF000000000000ULL) +
+              (other.data & 0xFFFF000000000000ULL)) &
+             0xFFFF000000000000ULL) |
+            (((data & 0xFFFF00000000ULL) + (other.data & 0xFFFF00000000ULL)) &
+             0xFFFF00000000ULL) |
+            (((uint64_t)min(k_add_data, (uint16_t)(k_add_data + k_mod_data))
+              << 4) &
+             0x3FFF0ULL) |
+            ((data | other.data) & 0xFFFC0000ULL) |
+            ((data ^ other.data) & 0xFULL));
+    }
+    SZKLong operator[](int i) const noexcept { return *this; }
+    SZKLong get_ket() const noexcept { return *this; }
+    SZKLong get_bra(SZKLong dq) const noexcept { return *this + dq; }
+    static inline int pg_inv(int a) noexcept {
+        return (int)(min(((~a) + (1UL << 4)) & 0x3FFF0UL,
+                         ((~a) + (1UL << 4) + ((a >> 14) & 0x3FFF0UL)) &
+                             0x3FFF0UL) |
+                     (a & 0xFFFC000FUL));
+    }
+    static inline int pg_mul(int a, int b) noexcept {
+        uint16_t add_data =
+            (uint16_t)(((a & 0x3FFF0UL) + (b & 0x3FFF0UL)) >> 4);
+        uint16_t mod_data = (uint16_t)(~(((a | b) >> 18) & 0x3FFFUL)) + 1;
+        return (
+            int)((((int)min(add_data, (uint16_t)(add_data + mod_data)) << 4) &
+                  0x3FFF0UL) |
+                 ((a ^ b) & 0xFUL) | ((a | b) & 0xFFFC0000UL));
+    }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return ((pg_t)(kmod & 0x3FFFULL) << 18) | ((pg_t)(k & 0x3FFFULL) << 4) |
+               (pg_t)(uint8_t)pg;
+    }
+    SZKLong combine(SZKLong bra, SZKLong ket) const {
+        return ket + *this == bra ? ket : SZKLong(invalid);
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    int count() const noexcept { return 1; }
+    string to_str() const {
+        stringstream ss;
+        ss << "< N=" << n() << " SZ=";
+        if (twos() & 1)
+            ss << twos() << "/2";
+        else
+            ss << (twos() >> 1);
+        ss << " K=" << pg_k();
+        if (pg_k_mod())
+            ss << "/" << pg_k_mod();
+        ss << " PG=" << pg_pg() << " >";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SZKLong c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
 // Quantum number with particle number, projected spin
 // and Lz spatial symmetry as point group symmetryn (non-spin-adapted)
 // N and 2S must be of the same odd/even property (not checked)
@@ -257,6 +390,7 @@ struct SZLZ {
     SZLZ(int n, int twos, int pg)
         : data((((uint32_t)n >> 1) << 22) |
                ((uint32_t)((twos & 0x7FFU) << 11) | (pg & 0x7FFU))) {}
+    SZLZ(int n, int twos, int kmod, int k, int pg) : SZLZ(n, twos, pg) {}
     int n() const {
         return (int)(((((int32_t)data) >> 22) << 1) | ((data >> 11) & 1));
     }
@@ -295,6 +429,9 @@ struct SZLZ {
     SZLZ get_bra(SZLZ dq) const noexcept { return *this + dq; }
     static inline int pg_inv(int a) noexcept { return -a; }
     static inline int pg_mul(int a, int b) noexcept { return a + b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)k;
+    }
     SZLZ combine(SZLZ bra, SZLZ ket) const {
         return ket + *this == bra ? ket : SZLZ(invalid);
     }
@@ -399,6 +536,9 @@ struct SU2Short {
     }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SU2Short combine(SU2Short bra, SU2Short ket) const {
         ket.set_twos_low(bra.twos());
         if (ket.get_bra(*this) != bra ||
@@ -511,6 +651,9 @@ struct SU2Long {
     }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SU2Long combine(SU2Long bra, SU2Long ket) const {
         ket.set_twos_low((bra.twos() & (~1)) | (int)ket.is_fermion());
         if (ket.get_bra(*this) != bra ||
@@ -635,6 +778,9 @@ struct SU2LongLong {
     }
     static inline int pg_inv(int a) noexcept { return a; }
     static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
     SU2LongLong combine(SU2LongLong bra, SU2LongLong ket) const {
         ket.set_twos_low(bra.twos());
         if (ket.get_bra(*this) != bra ||
@@ -670,6 +816,182 @@ struct SU2LongLong {
 };
 
 // Quantum number with particle number, SU(2) spin
+// point group irreducible representation, and K space symmetry (spin-adapted)
+// KMod is the modulo of the K space symmetry, where zero means 1 << 13
+// N = -2048 ~ 2047; 2S = 0 ~ 4095; KMod/K = 0 ~ 4095; PG = 0 ~ 15
+// (N: 12bits) - (2S: 12bits) - (2S: 12bits) - (KMod: 12bits) - (K: 12bits) -
+// (pg: 4bits)
+struct SU2KLong {
+    typedef void is_su2_t;
+    typedef uint32_t pg_t;
+    uint64_t data;
+    // S(invalid) must have maximal particle number n
+    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    SU2KLong() : data(0) {}
+    SU2KLong(uint64_t data) : data(data) {}
+    SU2KLong(int n, int twos, int pg)
+        : data((uint64_t)(((uint64_t)(int64_t)n << 52) |
+                          ((uint64_t)twos << 40) | ((uint64_t)twos << 28) |
+                          (uint64_t)(pg & 0xFFFFFFFULL))) {}
+    SU2KLong(int n, int twos_low, int twos, int pg)
+        : data((uint64_t)(((uint64_t)(int64_t)n << 52) |
+                          ((uint64_t)twos_low << 40) | ((uint64_t)twos << 28) |
+                          (uint64_t)(pg & 0xFFFFFFFULL))) {}
+    SU2KLong(int n, int twos_low, int twos, int kmod, int k, int pg)
+        : data((uint64_t)(((uint64_t)(int64_t)n << 52) |
+                          ((uint64_t)twos_low << 40) | ((uint64_t)twos << 28) |
+                          ((uint64_t)(kmod & 0xFFFULL) << 16) |
+                          ((uint64_t)(k & 0xFFFULL) << 4) |
+                          (uint64_t)(uint8_t)pg)) {}
+    int n() const noexcept { return (int)((int64_t)data >> 52); }
+    int twos() const noexcept {
+        return (int)(((uint64_t)data >> 28) & 0xFFFULL);
+    }
+    int twos_low() const noexcept {
+        return (int)(((uint64_t)data >> 40) & 0xFFFULL);
+    }
+    int pg() const noexcept { return (int)(data & 0xFFFFFFFULL); }
+    int pg_pg() const { return (int)(data & 0xFULL); }
+    int pg_k() const { return (int)((data >> 4) & 0xFFFULL); }
+    int pg_k_mod() const { return (int)((data >> 16) & 0xFFFULL); }
+    void set_n(int n) {
+        data = (data & 0xFFFFFFFFFFFFFULL) | ((uint64_t)(int64_t)n << 52);
+    }
+    void set_twos(int twos) {
+        data = (data & 0xFFFFFF000FFFFFFFULL) | ((uint64_t)twos << 28);
+    }
+    void set_twos_low(int twos) {
+        data = (data & 0xFFF000FFFFFFFFFFULL) | ((uint64_t)twos << 40);
+    }
+    void set_pg(int pg) {
+        data = (data & 0xFFFFFFFFF0000000ULL) | ((uint64_t)(pg & 0xFFFFFFFULL));
+    }
+    int multiplicity() const noexcept { return twos() + 1; }
+    bool is_fermion() const noexcept { return (data >> 28) & 1; }
+    bool operator==(SU2KLong other) const noexcept {
+        return (data & (~0xFFF0000ULL)) == (other.data & (~0xFFF0000ULL));
+    }
+    bool operator!=(SU2KLong other) const noexcept {
+        return (data & (~0xFFF0000ULL)) != (other.data & (~0xFFF0000ULL));
+    }
+    bool operator<(SU2KLong other) const noexcept {
+        return (data & (~0xFFF0000ULL)) < (other.data & (~0xFFF0000ULL));
+    }
+    SU2KLong operator-() const noexcept {
+        return SU2KLong(
+            (data & 0xFFFFFFFFF000FULL) |
+            min(((~data) + (1ULL << 4)) & 0xFFF0ULL,
+                ((~data) + (1ULL << 4) + ((data >> 12) & 0xFFF0ULL)) &
+                    0xFFF0ULL) |
+            (((~data) + (1ULL << 52)) & 0xFFF0000000000000ULL));
+    }
+    SU2KLong operator-(SU2KLong other) const noexcept {
+        return *this + (-other);
+    }
+    SU2KLong operator+(SU2KLong other) const noexcept {
+        uint16_t k_add_data =
+            (uint16_t)(((data & 0xFFF0ULL) + (other.data & 0xFFF0ULL)) >> 4);
+        uint16_t k_mod_data =
+            (uint16_t)(~(((data | other.data) >> 16) & 0xFFFULL)) + 1;
+        uint64_t add_data =
+            (((data & 0xFFF000FFF0000000ULL) +
+              (other.data & 0xFFF000FFF0000000ULL)) &
+             0xFFF000FFF0000000ULL) |
+            (((uint64_t)min(k_add_data, (uint16_t)(k_add_data + k_mod_data))
+              << 4) &
+             0xFFF0ULL) |
+            ((data | other.data) & 0xFFF0000ULL) |
+            ((data ^ other.data) & 0xFULL);
+        uint64_t sub_data_lr = ((data & 0xFFF0000000ULL) << 12) -
+                               (other.data & 0xFFF0000000000ULL);
+        uint64_t sub_data_rl = ((other.data & 0xFFF0000000ULL) << 12) -
+                               (data & 0xFFF0000000000ULL);
+        return SU2KLong(add_data | min(sub_data_lr, sub_data_rl));
+    }
+    SU2KLong operator[](int i) const noexcept {
+        return SU2KLong(
+            ((data + ((uint64_t)i << 41)) & 0xFFFFFF000FFFFFFFULL) |
+            (((data + ((uint64_t)i << 41)) & 0xFFF0000000000ULL) >> 12));
+    }
+    SU2KLong get_ket() const noexcept {
+        return SU2KLong((data & 0xFFF000FFFFFFFFFFULL) |
+                        ((data & 0xFFF0000000ULL) << 12));
+    }
+    SU2KLong get_bra(SU2KLong dq) const noexcept {
+        uint16_t k_add_data =
+            (uint16_t)(((data & 0xFFF0ULL) + (dq.data & 0xFFF0ULL)) >> 4);
+        uint16_t k_mod_data =
+            (uint16_t)(~(((data | dq.data) >> 16) & 0xFFFULL)) + 1;
+        return SU2KLong(
+            ((data & 0xFFF0000000000000ULL) +
+             (dq.data & 0xFFF0000000000000ULL)) |
+            ((data & 0xFFF0000000000ULL) >> 12) | (data & 0xFFF0000000000ULL) |
+            ((data | dq.data) & 0xFFF0000ULL) |
+            (((uint64_t)min(k_add_data, (uint16_t)(k_add_data + k_mod_data))
+              << 4) &
+             0xFFF0ULL) |
+            ((data ^ dq.data) & 0xFULL));
+    }
+    static bool triangle(int tja, int tjb, int tjc) {
+        return !((tja + tjb + tjc) & 1) && tjc <= tja + tjb &&
+               tjc >= abs(tja - tjb);
+    }
+    static inline int pg_inv(int a) noexcept {
+        return (
+            int)(min(((~a) + (1UL << 4)) & 0xFFF0UL,
+                     ((~a) + (1UL << 4) + ((a >> 14) & 0xFFF0UL)) & 0xFFF0UL) |
+                 (a & 0xFFF000FUL));
+    }
+    static inline int pg_mul(int a, int b) noexcept {
+        uint16_t add_data = (uint16_t)(((a & 0xFFF0UL) + (b & 0xFFF0UL)) >> 4);
+        uint16_t mod_data = (uint16_t)(~(((a | b) >> 16) & 0xFFFUL)) + 1;
+        return (
+            int)((((int)min(add_data, (uint16_t)(add_data + mod_data)) << 4) &
+                  0xFFF0UL) |
+                 ((a ^ b) & 0xFUL) | ((a | b) & 0xFFF0000UL));
+    }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return ((pg_t)(kmod & 0xFFFULL) << 16) | ((pg_t)(k & 0xFFFULL) << 4) |
+               (pg_t)(uint8_t)pg;
+    }
+    SU2KLong combine(SU2KLong bra, SU2KLong ket) const {
+        ket.set_twos_low(bra.twos());
+        if (ket.get_bra(*this) != bra ||
+            !triangle(ket.twos(), this->twos(), bra.twos()))
+            return SU2KLong(invalid);
+        return ket;
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    int count() const noexcept {
+        return (int)(((data >> 29) - (data >> 41)) & 0xFFFULL) + 1;
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "< N=" << n() << " S=";
+        // for bra, the odd/even of bra is unknown
+        if (twos_low() != twos()) {
+            if (twos_low() & 1)
+                ss << twos_low() << "/2~";
+            else
+                ss << (twos_low() >> 1) << "~";
+        }
+        if (twos() & 1)
+            ss << twos() << "/2";
+        else
+            ss << (twos() >> 1);
+        ss << " K=" << pg_k();
+        if (pg_k_mod())
+            ss << "/" << pg_k_mod();
+        ss << " PG=" << pg_pg() << " >";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SU2KLong c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
+// Quantum number with particle number, SU(2) spin
 // and Lz spatial symmetry as point group symmetryn (spin-adapted)
 // N and 2S must be of the same odd/even property (not checked)
 // N = -256 ~ 255; 2S = 0 ~ 255; LZ (PG) = -256 ~ 255
@@ -688,6 +1010,8 @@ struct SU2LZ {
     SU2LZ(int n, int twos_low, int twos, int pg)
         : data((uint32_t)(((n >> 1) << 24) | ((twos_low >> 1) << 17) |
                           (twos << 9) | (pg & 0x1FFU))) {}
+    SU2LZ(int n, int twos_low, int twos, int kmod, int k, int pg)
+        : SU2LZ(n, twos_low, twos, pg) {}
     int n() const noexcept {
         return (int)(((((int32_t)data) >> 24) << 1) | ((data >> 9) & 1));
     }
@@ -752,6 +1076,9 @@ struct SU2LZ {
     }
     static inline int pg_inv(int a) noexcept { return -a; }
     static inline int pg_mul(int a, int b) noexcept { return a + b; }
+    static pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)k;
+    }
     SU2LZ combine(SU2LZ bra, SU2LZ ket) const {
         ket.set_twos_low((bra.twos() & (~1)) | (int)ket.is_fermion());
         if (ket.get_bra(*this) != bra ||
@@ -788,6 +1115,8 @@ struct SU2LZ {
 
 typedef SZLong SZ;
 typedef SU2Long SU2;
+typedef SZKLong SZK;
+typedef SU2KLong SU2K;
 
 } // namespace block2
 
@@ -823,35 +1152,33 @@ inline void swap(block2::SU2 &a, block2::SU2 &b) {
     a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
 }
 
-template <> struct hash<block2::SZLZ> {
-    size_t operator()(const block2::SZLZ &s) const noexcept { return s.hash(); }
+template <> struct hash<block2::SZK> {
+    size_t operator()(const block2::SZK &s) const noexcept { return s.hash(); }
 };
 
-template <> struct less<block2::SZLZ> {
-    bool operator()(const block2::SZLZ &lhs,
-                    const block2::SZLZ &rhs) const noexcept {
+template <> struct less<block2::SZK> {
+    bool operator()(const block2::SZK &lhs,
+                    const block2::SZK &rhs) const noexcept {
         return lhs < rhs;
     }
 };
 
-inline void swap(block2::SZLZ &a, block2::SZLZ &b) {
+inline void swap(block2::SZK &a, block2::SZK &b) {
     a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
 }
 
-template <> struct hash<block2::SU2LZ> {
-    size_t operator()(const block2::SU2LZ &s) const noexcept {
-        return s.hash();
-    }
+template <> struct hash<block2::SU2K> {
+    size_t operator()(const block2::SU2K &s) const noexcept { return s.hash(); }
 };
 
-template <> struct less<block2::SU2LZ> {
-    bool operator()(const block2::SU2LZ &lhs,
-                    const block2::SU2LZ &rhs) const noexcept {
+template <> struct less<block2::SU2K> {
+    bool operator()(const block2::SU2K &lhs,
+                    const block2::SU2K &rhs) const noexcept {
         return lhs < rhs;
     }
 };
 
-inline void swap(block2::SU2LZ &a, block2::SU2LZ &b) {
+inline void swap(block2::SU2K &a, block2::SU2K &b) {
     a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
 }
 

@@ -559,13 +559,13 @@ template <typename S> struct DeterminantMPSInfo : MPSInfo<S> {
     ubond_t n_det_states = 2; // number of states for each determinant
     DeterminantMPSInfo(int n_sites, S vacuum, S target,
                        const vector<shared_ptr<StateInfo<S>>> &basis,
-                       const vector<typename S::pg_t> &orb_sym, uint8_t n_syms,
+                       const vector<typename S::pg_t> &orb_sym,
                        const vector<uint8_t> &iocc,
                        const shared_ptr<FCIDUMP> &fcidump)
         : iocc(iocc), fcidump(fcidump),
           det(make_shared<DeterminantQC<S>>(iocc, orb_sym,
                                             fcidump->h1e_energy())),
-          MPSInfo<S>(n_sites, vacuum, target, basis, n_syms) {}
+          MPSInfo<S>(n_sites, vacuum, target, basis) {}
     void set_bond_dimension(ubond_t m) override {
         this->bond_dim = m;
         this->left_dims[0] = make_shared<StateInfo<S>>(this->vacuum);

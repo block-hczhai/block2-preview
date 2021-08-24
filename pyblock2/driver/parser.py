@@ -66,6 +66,26 @@ def parse(fname):
     """
     with open(fname, 'r') as fin:
         lines = fin.readlines()
+    line = lines[0]
+    # construct input file from FCIDUMP
+    if line.strip().lower().startswith('&fci '):
+        ff = " ".join(lines).lower()
+        pars = ff.split('/' if '/' in ff else '&end')[0]
+        cont_dict = {}
+        p_key = None
+        for c in ','.join(pars.split()[1:]).split(','):
+            if '=' in c or p_key is None:
+                p_key, b = c.split('=')
+                cont_dict[p_key.strip().lower()] = b.strip()
+            elif len(c.strip()) != 0:
+                if len(cont_dict[p_key.strip().lower()]) != 0:
+                    cont_dict[p_key.strip().lower()] += ',' + c.strip()
+                else:
+                    cont_dict[p_key.strip().lower()] = c.strip()
+        lines = ["sym d2h", "orbitals %s" % fname,
+            "nelec %s" % cont_dict.get('nelec', 0), "spin %s" % cont_dict.get('ms2', 0), 
+            "irrep %s" % cont_dict.get('isym', 0), "hf_occ integral", "schedule default",
+            "maxM 500", "maxiter 30"]
     dic = {}
     schedule = []
     schedule_start = -1

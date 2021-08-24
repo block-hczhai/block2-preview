@@ -40,7 +40,6 @@ template <typename S>
 struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
     using Hamiltonian<S>::vacuum;
     using Hamiltonian<S>::n_sites;
-    using Hamiltonian<S>::n_syms;
     using Hamiltonian<S>::basis;
     using Hamiltonian<S>::site_op_infos;
     using Hamiltonian<S>::orb_sym;
@@ -622,7 +621,6 @@ template <typename S>
 struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
     using Hamiltonian<S>::vacuum;
     using Hamiltonian<S>::n_sites;
-    using Hamiltonian<S>::n_syms;
     using Hamiltonian<S>::basis;
     using Hamiltonian<S>::site_op_infos;
     using Hamiltonian<S>::orb_sym;

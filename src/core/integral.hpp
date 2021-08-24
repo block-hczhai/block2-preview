@@ -662,6 +662,10 @@ struct FCIDUMP {
             << (int)twos() << "," << endl;
         assert(params.count("orbsym") != 0);
         ofs << "  ORBSYM=" << params.at("orbsym") << "," << endl;
+        if (params.count("ksym") != 0)
+            ofs << "  KSYM=" << params.at("ksym") << "," << endl;
+        if (params.count("kmod") != 0)
+            ofs << "  KMOD=" << (int)k_mod() << "," << endl;
         ofs << "  ISYM=" << setw(4) << (int)isym() << "," << endl;
         if (uhf)
             ofs << "  IUHF=1," << endl;
@@ -945,6 +949,58 @@ struct FCIDUMP {
                                 error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
         return error;
     }
+    // Remove integral elements that violate point group symmetry
+    // ksym: k symmetry
+    virtual double symmetrize(const vector<int> &ksym, int kmod) {
+        uint16_t n = n_sites();
+        assert((int)ksym.size() == n);
+        if (vabs.size() != 0 || vs.size() != 0)
+            cout << "WARNING: k symmetry should not be used together with "
+                    "4-fold or 8-fold symmetry."
+                 << endl;
+        double error = 0.0;
+        for (auto &t : ts)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < (t.general ? n : i + 1); j++)
+                    if ((kmod == 0 && ksym[i] - ksym[j]) ||
+                        (kmod != 0 && (ksym[i] + kmod - ksym[j]) % kmod))
+                        error += abs(t(i, j)), t(i, j) = 0;
+        for (auto &v : vgs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            if ((kmod == 0 &&
+                                 ksym[i] - ksym[j] + ksym[k] - ksym[l]) ||
+                                (kmod != 0 && (ksym[i] + kmod - ksym[j] +
+                                               ksym[k] + kmod - ksym[l]) %
+                                                  kmod))
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vabs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            if ((kmod == 0 &&
+                                 ksym[i] - ksym[j] + ksym[k] - ksym[l]) ||
+                                (kmod != 0 && (ksym[i] + kmod - ksym[j] +
+                                               ksym[k] + kmod - ksym[l]) %
+                                                  kmod))
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vs)
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl &&
+                                ((kmod == 0 &&
+                                  ksym[i] - ksym[j] + ksym[k] - ksym[l]) ||
+                                 (kmod != 0 && (ksym[i] + kmod - ksym[j] +
+                                                ksym[k] + kmod - ksym[l]) %
+                                                   kmod)))
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        return error;
+    }
     // Target 2S or 2Sz
     uint16_t twos() const {
         return (uint16_t)Parsing::to_int(params.at("ms2"));
@@ -978,6 +1034,29 @@ struct FCIDUMP {
             r.push_back((T)Parsing::to_int(xx));
         return r;
     }
+    // Set k symmetry for each site
+    template <typename T> void set_k_sym(const vector<T> &x) {
+        stringstream ss;
+        for (size_t i = 0; i < x.size(); i++) {
+            ss << (int)x[i];
+            if (i != x.size() - 1)
+                ss << ",";
+        }
+        params["ksym"] = ss.str();
+    }
+    // k symmetry for each site
+    template <typename T> vector<T> k_sym() const {
+        vector<string> x = Parsing::split(params.at("ksym"), ",", true);
+        vector<T> r;
+        r.reserve(x.size());
+        for (auto &xx : x)
+            r.push_back((T)Parsing::to_int(xx));
+        return r;
+    }
+    // Set modulus for k symmetry
+    void set_k_mod(int kmod) { params["kmod"] = Parsing::to_string(kmod); }
+    // Modulus for k symmetry
+    int k_mod() const { return Parsing::to_int(params.at("kmod")); }
     // energy of a determinant
     double det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
                       uint16_t i_end) const {
