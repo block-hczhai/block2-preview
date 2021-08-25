@@ -675,27 +675,27 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 c_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
                                               S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S>>(
+                    OpNames::D, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
                 mc_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::C, SiteIndex({m}, {s}),
                     S(1, sz[s], hamil->orb_sym[m]), -1.0);
                 md_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::D, SiteIndex({m}, {s}),
-                    S(-1, -sz[s], hamil->orb_sym[m]), -1.0);
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])), -1.0);
                 rd_op[m][s] =
                     make_shared<OpElement<S>>(OpNames::RD, SiteIndex({m}, {s}),
                                               S(1, sz[s], hamil->orb_sym[m]));
-                r_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::R, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], hamil->orb_sym[m]));
+                r_op[m][s] = make_shared<OpElement<S>>(
+                    OpNames::R, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
                 mrd_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::RD, SiteIndex({m}, {s}),
                     S(1, sz[s], hamil->orb_sym[m]), -1.0);
                 mr_op[m][s] = make_shared<OpElement<S>>(
                     OpNames::R, SiteIndex({m}, {s}),
-                    S(-1, -sz[s], hamil->orb_sym[m]), -1.0);
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])), -1.0);
             }
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++)
@@ -728,8 +728,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
-                          S::pg_mul(hamil->orb_sym[i],
-                                    S::pg_inv(hamil->orb_sym[j]))));
+                          S::pg_inv(S::pg_mul(hamil->orb_sym[i],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                 }
         bool need_repeat_m = mode == QCTypes::Conventional &&
                              trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
@@ -1857,8 +1857,8 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     q_op[i][j][s] = make_shared<OpElement<S>>(
                         OpNames::Q, SiteIndex(i, j, s),
                         S(0, s * 2,
-                          S::pg_mul(hamil->orb_sym[i],
-                                    S::pg_inv(hamil->orb_sym[j]))));
+                          S::pg_inv(S::pg_mul(hamil->orb_sym[i],
+                                              S::pg_inv(hamil->orb_sym[j])))));
                 }
         bool need_repeat_m = mode == QCTypes::Conventional &&
                              trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&

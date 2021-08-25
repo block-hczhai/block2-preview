@@ -36,7 +36,7 @@ class TestDMRG : public ::testing::Test {
     }
 };
 
-typedef SU2 S;
+typedef SU2K S;
 
 TEST_F(TestDMRG, Test) {
     shared_ptr<FCIDUMP> fcidump = make_shared<CompressedFCIDUMP>(1E-13);
@@ -47,7 +47,7 @@ TEST_F(TestDMRG, Test) {
     string occ_filename = "data/CR2.SVP.OCC";
     string pdm_filename = "data/CR2.SVP.1NPC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
-    occs = read_occ(occ_filename);
+    // occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
     // occs = read_occ(occ_filename);
@@ -60,7 +60,7 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     cout << "INT start" << endl;
     fcidump->read(filename);
-    // fcidump = make_shared<HubbardKSpaceFCIDUMP>(4, 1, 2);
+    fcidump = make_shared<HubbardKSpaceFCIDUMP>(8, 1, 2);
     // fcidump = make_shared<HubbardFCIDUMP>(4, 1, 2, true);
     cout << "INT end .. T = " << t.get_time() << endl;
 
@@ -135,7 +135,7 @@ TEST_F(TestDMRG, Test) {
     vector<typename S::pg_t> pg_sym = HamiltonianQC<S>::combine_orb_sym(
         orbsym, fcidump->k_sym<int>(), fcidump->k_mod());
     uint8_t isym = PointGroup::swap_pg(pg)(fcidump->isym());
-    S target(fcidump->n_elec(), fcidump->twos(), S::pg_combine(isym, 0, fcidump->k_mod()));
+    S target(fcidump->n_elec(), fcidump->twos(), S::pg_combine(isym, 4, fcidump->k_mod()) );
     shared_ptr<HamiltonianQC<S>> hamil =
         make_shared<HamiltonianQC<S>>(vacuum, norb, pg_sym, fcidump);
 
@@ -143,17 +143,17 @@ TEST_F(TestDMRG, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+        make_shared<MPOQC<S>>(hamil, QCTypes::NC);
     // mpo = make_shared<ArchivedMPO<S>>(mpo);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
     mpo =
-        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
+        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(false, false, false, false, false, false), true, true,
                                       OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
-    // cout << mpo->get_blocking_formulas() << endl;
+    cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
     mpo->reduce_data();

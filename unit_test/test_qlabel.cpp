@@ -166,9 +166,12 @@ template <typename S> struct QULabel {
                      (kmod * (pgmax - pgmin + 1) * (kmax - kmin + 1)));
     }
     static int pg_equal(int a, int b) {
-        return a == b || (a % (pgmax - pgmin + 1) == b % (pgmax - pgmin + 1)
-            && (((a / (pgmax - pgmin + 1)) % (kmax - kmin + 1) == 0 && b / (pgmax - pgmin + 1) == 0)
-            || ((b / (pgmax - pgmin + 1)) % (kmax - kmin + 1) == 0 && a / (pgmax - pgmin + 1) == 0)));
+        return a == b ||
+               (a % (pgmax - pgmin + 1) == b % (pgmax - pgmin + 1) &&
+                (((a / (pgmax - pgmin + 1)) % (kmax - kmin + 1) == 0 &&
+                  b / (pgmax - pgmin + 1) == 0) ||
+                 ((b / (pgmax - pgmin + 1)) % (kmax - kmin + 1) == 0 &&
+                  a / (pgmax - pgmin + 1) == 0)));
     }
     QULabel<S> operator-() const {
         return QULabel<S>(-n, twosl, twos, kmod,
@@ -372,6 +375,28 @@ template <typename S> struct QULabel {
             EXPECT_EQ((q - q2).combine(q, q2).get_ket().twos(), qq2.twos);
             EXPECT_TRUE(pg_equal((q - q2).combine(q, q2).get_ket().pg(),
                                  qq2.composite_pg()));
+        }
+        if ((-qq5).in_range()) {
+            QULabel<S> qc = (-qq5).combine(qq2, qq3);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).n(), qc.n);
+            // EXPECT_EQ((-(q - q2)).combine(q2, q).twos_low(), qc.twosl);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).twos(), qc.twos);
+            EXPECT_TRUE(
+                pg_equal((-(q - q2)).combine(q2, q).pg(), qc.composite_pg()));
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).n(), qq2.n);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).twos_low(),
+                      qq2.twos);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).twos(),
+                      qq2.twos);
+            EXPECT_TRUE(
+                pg_equal((-(q - q2)).combine(q2, q).get_bra(q2 - q).pg(),
+                         qq2.composite_pg()));
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().n(), qq3.n);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().twos_low(),
+                      qq3.twos);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().twos(), qq3.twos);
+            EXPECT_TRUE(pg_equal((-(q - q2)).combine(q2, q).get_ket().pg(),
+                                 qq3.composite_pg()));
         }
     }
 };

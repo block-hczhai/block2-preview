@@ -353,7 +353,7 @@ struct SZKLong {
     SZKLong combine(SZKLong bra, SZKLong ket) const {
         return ket + *this == bra ? ket : SZKLong(invalid);
     }
-    size_t hash() const noexcept { return (size_t)data; }
+    size_t hash() const noexcept { return (size_t)(data & (~0xFFFC0000ULL)); }
     int count() const noexcept { return 1; }
     string to_str() const {
         stringstream ss;
@@ -939,7 +939,7 @@ struct SU2KLong {
     static inline int pg_inv(int a) noexcept {
         return (
             int)(min(((~a) + (1UL << 4)) & 0xFFF0UL,
-                     ((~a) + (1UL << 4) + ((a >> 14) & 0xFFF0UL)) & 0xFFF0UL) |
+                     ((~a) + (1UL << 4) + ((a >> 12) & 0xFFF0UL)) & 0xFFF0UL) |
                  (a & 0xFFF000FUL));
     }
     static inline int pg_mul(int a, int b) noexcept {
@@ -961,7 +961,7 @@ struct SU2KLong {
             return SU2KLong(invalid);
         return ket;
     }
-    size_t hash() const noexcept { return (size_t)data; }
+    size_t hash() const noexcept { return (size_t)(data & (~0xFFF0000ULL)); }
     int count() const noexcept {
         return (int)(((data >> 29) - (data >> 41)) & 0xFFFULL) + 1;
     }

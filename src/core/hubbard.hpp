@@ -21,6 +21,7 @@
 #pragma once
 
 #include "integral.hpp"
+#include "utils.hpp"
 #include <cmath>
 
 using namespace std;
@@ -95,13 +96,21 @@ struct HubbardKSpaceFCIDUMP : FCIDUMP {
                 ss << ",";
         }
         params["orbsym"] = ss.str();
+        ss = stringstream();
+        for (uint16_t i = 0; i < n_sites; i++) {
+            ss << i;
+            if (i != n_sites - 1)
+                ss << ",";
+        }
+        params["ksym"] = ss.str();
+        params["kmod"] = Parsing::to_string(n_sites);
     }
     double t(uint16_t i, uint16_t j) const override {
-        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites()) : 0;
+        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites() + _pi) : 0;
     }
     // One-electron integral element (SZ)
     double t(uint8_t s, uint16_t i, uint16_t j) const override {
-        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites()) : 0;
+        return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites() + _pi) : 0;
     }
     // Two-electron integral element (SU(2))
     double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {

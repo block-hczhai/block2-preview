@@ -78,6 +78,15 @@ template <typename S> struct Hamiltonian {
     // For storing pre-computed CG factors for sparse matrix functions
     shared_ptr<OperatorFunctions<S>> opf = nullptr;
     DelayedOpNames delayed = DelayedOpNames::None;
+    static vector<typename S::pg_t>
+    combine_orb_sym(const vector<uint8_t> &orb_sym, const vector<int> &k_sym,
+                    int k_mod) {
+        assert(orb_sym.size() == k_sym.size());
+        vector<typename S::pg_t> pg_sym(orb_sym.size());
+        for (size_t i = 0; i < pg_sym.size(); i++)
+            pg_sym[i] = S::pg_combine(orb_sym[i], k_sym[i], k_mod);
+        return pg_sym;
+    }
     Hamiltonian(S vacuum, int n_sites, const vector<typename S::pg_t> &orb_sym)
         : vacuum(vacuum), n_sites((uint16_t)n_sites), orb_sym(orb_sym) {
         assert((int)this->n_sites == n_sites);

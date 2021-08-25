@@ -1520,4 +1520,31 @@ extern template auto
 bind_trans_mps_spin_specific<SU2, SZ>(py::module &m, const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
+#ifdef _USE_KSYMM
+extern template void bind_qc_hamiltonian<SZK>(py::module &m);
+extern template void bind_parallel_dmrg<SZK>(py::module &m);
+extern template void bind_mps<SZK>(py::module &m);
+extern template void bind_partition<SZK>(py::module &m);
+extern template void bind_algorithms<SZK>(py::module &m);
+extern template void bind_mpo<SZK>(py::module &m);
+
+extern template void bind_qc_hamiltonian<SU2K>(py::module &m);
+extern template void bind_parallel_dmrg<SU2K>(py::module &m);
+extern template void bind_mps<SU2K>(py::module &m);
+extern template void bind_partition<SU2K>(py::module &m);
+extern template void bind_algorithms<SU2K>(py::module &m);
+extern template void bind_mpo<SU2K>(py::module &m);
+
+extern template auto bind_spin_specific<SZK>(py::module &m)
+    -> decltype(typename SZK::is_sz_t());
+
+extern template void bind_trans_mps<SU2K, SZK>(py::module &m,
+                                               const string &aux_name);
+extern template void bind_trans_mps<SZK, SU2K>(py::module &m,
+                                               const string &aux_name);
+extern template auto
+bind_trans_mps_spin_specific<SU2K, SZK>(py::module &m, const string &aux_name)
+    -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+#endif
+
 #endif

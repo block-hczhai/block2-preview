@@ -858,6 +858,7 @@ template <typename S> void bind_hamiltonian(py::module &m) {
         .def_readwrite("basis", &Hamiltonian<S>::basis)
         .def_readwrite("site_op_infos", &Hamiltonian<S>::site_op_infos)
         .def_readwrite("delayed", &Hamiltonian<S>::delayed)
+        .def_static("combine_orb_sym", &Hamiltonian<S>::combine_orb_sym)
         .def("get_n_orbs_left", &Hamiltonian<S>::get_n_orbs_left)
         .def("get_n_orbs_right", &Hamiltonian<S>::get_n_orbs_right)
         .def("get_site_ops", &Hamiltonian<S>::get_site_ops)
@@ -2401,5 +2402,34 @@ extern template auto
 bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
                                              const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+
+#ifdef _USE_KSYMM
+extern template void bind_cg<SZK>(py::module &m);
+extern template void bind_expr<SZK>(py::module &m);
+extern template void bind_state_info<SZK>(py::module &m, const string &name);
+extern template void bind_sparse<SZK>(py::module &m);
+extern template void bind_operator<SZK>(py::module &m);
+extern template void bind_hamiltonian<SZK>(py::module &m);
+extern template void bind_parallel<SZK>(py::module &m);
+extern template void bind_rule<SZK>(py::module &m);
+
+extern template void bind_cg<SU2K>(py::module &m);
+extern template void bind_expr<SU2K>(py::module &m);
+extern template void bind_state_info<SU2K>(py::module &m, const string &name);
+extern template void bind_sparse<SU2K>(py::module &m);
+extern template void bind_operator<SU2K>(py::module &m);
+extern template void bind_hamiltonian<SU2K>(py::module &m);
+extern template void bind_parallel<SU2K>(py::module &m);
+extern template void bind_rule<SU2K>(py::module &m);
+
+extern template void bind_trans_state_info<SU2K, SZK>(py::module &m,
+                                                      const string &aux_name);
+extern template void bind_trans_state_info<SZK, SU2K>(py::module &m,
+                                                      const string &aux_name);
+extern template auto
+bind_trans_state_info_spin_specific<SU2K, SZK>(py::module &m,
+                                               const string &aux_name)
+    -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+#endif
 
 #endif

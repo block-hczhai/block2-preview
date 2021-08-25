@@ -1046,6 +1046,8 @@ struct FCIDUMP {
     }
     // k symmetry for each site
     template <typename T> vector<T> k_sym() const {
+        if (!params.count("ksym"))
+            return vector<T>(n_sites(), (T)0);
         vector<string> x = Parsing::split(params.at("ksym"), ",", true);
         vector<T> r;
         r.reserve(x.size());
@@ -1056,7 +1058,9 @@ struct FCIDUMP {
     // Set modulus for k symmetry
     void set_k_mod(int kmod) { params["kmod"] = Parsing::to_string(kmod); }
     // Modulus for k symmetry
-    int k_mod() const { return Parsing::to_int(params.at("kmod")); }
+    int k_mod() const {
+        return params.count("kmod") ? Parsing::to_int(params.at("kmod")) : 0;
+    }
     // energy of a determinant
     double det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
                       uint16_t i_end) const {
