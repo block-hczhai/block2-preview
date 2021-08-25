@@ -730,7 +730,7 @@ template <typename S> void bind_qc_hamiltonian(py::module &m) {
     py::class_<HamiltonianQC<S>, shared_ptr<HamiltonianQC<S>>, Hamiltonian<S>>(
         m, "HamiltonianQC")
         .def(py::init<>())
-        .def(py::init<S, int, const vector<uint8_t> &,
+        .def(py::init<S, int, const vector<typename S::pg_t> &,
                       const shared_ptr<FCIDUMP> &>())
         .def_readwrite("fcidump", &HamiltonianQC<S>::fcidump)
         .def_property(
@@ -1285,7 +1285,8 @@ template <typename S> void bind_mpo(py::module &m) {
         .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, S, S,
                       const shared_ptr<OperatorFunctions<S>> &,
-                      const vector<uint8_t> &, const vector<uint8_t> &>())
+                      const vector<typename S::pg_t> &,
+                      const vector<typename S::pg_t> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S>> &>());
 
     py::class_<SiteMPO<S>, shared_ptr<SiteMPO<S>>, MPO<S>>(m, "SiteMPO")
