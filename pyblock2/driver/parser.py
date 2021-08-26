@@ -35,7 +35,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
               "nevpt2sd", "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
-              "model"}
+              "model", "k_symmetry", "k_irrep", "k_mod"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

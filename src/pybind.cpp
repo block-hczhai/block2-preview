@@ -59,15 +59,18 @@ PYBIND11_MODULE(block2, m) {
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
     bind_core<SU2>(m_su2, "SU2");
     bind_core<SZ>(m_sz, "SZ");
+    bind_trans_state_info<SU2, SZ>(m_su2, "sz");
+    bind_trans_state_info<SZ, SU2>(m_sz, "su2");
+    bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
 #ifdef _USE_KSYMM
     py::module m_su2k = m.def_submodule("su2k", "Spin-adapted with k symmetry.");
     py::module m_szk = m.def_submodule("szk", "Non-spin-adapted with k symmetry.");
     bind_core<SU2K>(m_su2k, "SU2K");
     bind_core<SZK>(m_szk, "SZK");
+    bind_trans_state_info<SU2K, SZK>(m_su2k, "szk");
+    bind_trans_state_info<SZK, SU2K>(m_szk, "su2k");
+    bind_trans_state_info_spin_specific<SU2K, SZK>(m_su2k, "szk");
 #endif
-    bind_trans_state_info<SU2, SZ>(m_su2, "sz");
-    bind_trans_state_info<SZ, SU2>(m_sz, "su2");
-    bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
 
 #ifdef _USE_DMRG
     bind_dmrg_types<>(m);
@@ -80,6 +83,9 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_KSYMM
     bind_dmrg<SU2K>(m_su2k, "SU2K");
     bind_dmrg<SZK>(m_szk, "SZK");
+    bind_trans_mps<SU2K, SZK>(m_su2k, "szk");
+    bind_trans_mps<SZK, SU2K>(m_szk, "su2k");
+    bind_trans_mps_spin_specific<SU2K, SZK>(m_su2k, "szk");
 #endif
 #endif
 

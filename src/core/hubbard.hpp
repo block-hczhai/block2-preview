@@ -104,6 +104,7 @@ struct HubbardKSpaceFCIDUMP : FCIDUMP {
         }
         params["ksym"] = ss.str();
         params["kmod"] = Parsing::to_string(n_sites);
+        params["kisym"] = Parsing::to_string(n_sites / 2);
     }
     double t(uint16_t i, uint16_t j) const override {
         return i == j ? -2 * const_t * cos(2 * _pi * i / n_sites() + _pi) : 0;

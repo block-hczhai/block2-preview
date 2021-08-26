@@ -7,7 +7,8 @@ Author:
     Zhi-Hao Cui
 """
 
-from block2 import SZ, SU2, Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
+from block2 import SZ, SU2, SZK, SU2K
+from block2 import Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
@@ -51,7 +52,7 @@ else:
     """)
 
 dic = parse(fin)
-if "nonspinadapted" in dic:
+if "nonspinadapted" in dic and "k_symmetry" not in dic:
     from block2 import VectorSZ as VectorSL
     from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
     from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
@@ -65,7 +66,7 @@ if "nonspinadapted" in dic:
     from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SZ
     TrSX = SU2
-else:
+elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
     from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
@@ -74,11 +75,39 @@ else:
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
     from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
     from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
-    from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz
+    from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
     from block2.sz import MPSInfo as TrMPSInfo
     from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
     SX = SU2
     TrSX = SZ
+elif "nonspinadapted" in dic and "k_symmetry" in dic:
+    from block2 import VectorSZK as VectorSL
+    from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+    from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+    from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+    from block2.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+    from block2.szk import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+    from block2.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+    from block2.szk import trans_state_info_to_su2k as trans_si
+    from block2.su2k import MPSInfo as TrMPSInfo
+    from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
+    SX = SZK
+    TrSX = SU2K
+else:
+    from block2 import VectorSU2K as VectorSL
+    from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+    from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+    from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+    from block2.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+    from block2.su2k import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+    from block2.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+    from block2.su2k import trans_state_info_to_szk as trans_si, trans_unfused_mps_to_szk as trans_mps
+    from block2.szk import MPSInfo as TrMPSInfo
+    from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
+    SX = SU2K
+    TrSX = SZK
 
 try:
     if "nonspinadapted" in dic:
@@ -93,10 +122,14 @@ except ImportError:
     pass
 
 try:
-    if "nonspinadapted" in dic:
+    if "nonspinadapted" in dic and "k_symmetry" not in dic:
         from block2.sz import MPICommunicator
-    else:
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
         from block2.su2 import MPICommunicator
+    elif "nonspinadapted" in dic and "k_symmetry" in dic:
+        from block2.szk import MPICommunicator
+    else:
+        from block2.su2k import MPICommunicator
     MPI = MPICommunicator()
     from mpi4py import MPI as PYMPI
     comm = PYMPI.COMM_WORLD
@@ -229,8 +262,13 @@ if pre_run or not no_pre_run:
     nelec = [int(x) for x in dic["nelec"].split()]
     spin = [int(x) for x in dic.get("spin", "0").split()]
     isym = [int(x) for x in dic.get("irrep", "1").split()]
+    iksym = [int(x) for x in dic.get("k_irrep", "0").split()]
     if "orbital_rotation" in dic:
         orb_sym = np.load(scratch + "/nat_orb_sym.npy")
+        if "k_symmetry" in dic:
+            orb_sym = VectorUInt32(orb_sym)
+        else:
+            orb_sym = VectorUInt8(orb_sym)
         kappa = np.load(scratch + "/nat_kappa.npy")
         kappa = kappa.flatten()
         n_sites = len(orb_sym)
@@ -293,12 +331,26 @@ if pre_run or not no_pre_run:
     _print("read integral finished", time.perf_counter() - tx)
 
     vacuum = SX(0)
-    target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
+    if "k_symmetry" in dic:
+        if "k_mod" in dic:
+            fcidump.k_mod = int(dic["k_mod"])
+            fcidump.k_sym = VectorInt([x % fcidump.k_mod for x in fcidump.k_sym])
+            fcidump.k_isym = fcidump.k_isym % fcidump.k_mod
+            iksym = [x % fcidump.k_mod for x in iksym]
+        target = SX(fcidump.n_elec, fcidump.twos,
+            SX.pg_combine(swap_pg(fcidump.isym), fcidump.k_isym, fcidump.k_mod))
+    else:
+        target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
     targets = []
     for inelec in nelec:
         for ispin in spin:
             for iisym in isym:
-                targets.append(SX(inelec, ispin, swap_pg(iisym)))
+                if "k_symmetry" in dic:
+                    for iiksym in iksym:
+                        targets.append(SX(inelec, ispin,
+                            SX.pg_combine(swap_pg(iisym), iiksym, fcidump.k_mod)))
+                else:
+                    targets.append(SX(inelec, ispin, swap_pg(iisym)))
     targets = VectorSL(targets)
     if len(targets) == 0:
         targets = VectorSL([target])
@@ -316,6 +368,14 @@ if pre_run or not no_pre_run:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
     sym_error = fcidump.symmetrize(orb_sym)
     _print("integral sym error = %12.4g" % sym_error)
+    if "k_symmetry" in dic:
+        pure_pg_sym = orb_sym
+        k_sym = fcidump.k_sym
+        k_mod = fcidump.k_mod
+        k_sym_error = fcidump.symmetrize(k_sym, k_mod)
+        _print("integral k sym error = %12.4g" % k_sym_error)
+        sym_error += k_sym_error
+        orb_sym = HamiltonianQC.combine_orb_sym(orb_sym, k_sym, k_mod)
     if sym_error > symmetrize_ints_tol:
         raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
                             "please check point group symmetry and FCIDUMP or set" +
@@ -334,9 +394,9 @@ if pre_run or not no_pre_run:
         _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
             % (n_inactive, n_cas, n_external))
     if big_site_method is None:
-        hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+        hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
     elif big_site_method == "folding":
-        hamil = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fcidump)
+        hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
         mpo_fold = MPOQC(hamil, qc_type)
         assert dynamic_corr_method is not None
         if dynamic_corr_method[0] in ["casci"]:
@@ -400,12 +460,12 @@ if pre_run or not no_pre_run:
             xr = n_alpha, n_beta, nelec[0]
         if big_site_method == "fock":
             assert "nonspinadapted" in dic
-            big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, VectorUInt8(orb_sym), *xl, True)
-            big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, VectorUInt8(orb_sym), *xr, True)
+            big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
+            big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, orb_sym, *xr, True)
         elif big_site_method == "csf":
             assert "nonspinadapted" not in dic
-            big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, VectorUInt8(orb_sym[:n_inactive]))
-            big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, VectorUInt8(orb_sym[-n_external:]))
+            big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
+            big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, orb_sym[-n_external:])
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -417,7 +477,7 @@ if pre_run or not no_pre_run:
             else:
                 big_left = ParallelBigSite(big_left, prule)
                 big_right = ParallelBigSite(big_right, prule)
-        hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fcidump,
+        hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
             None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
     n_sites = hamil.n_sites
 
@@ -437,15 +497,26 @@ if no_pre_run:
     impo = MPO(0)
     impo.load_data(scratch + '/mpo-ident.bin', minimal=True)
     n_sites = impo.n_sites
+    if "k_symmetry" in dic:
+        k_mod = 0
+        for b in impo.basis:
+            for bb in b.quanta:
+                k_mod = k_mod | bb.pg_k_mod
     nelec = [int(x) for x in dic["nelec"].split()]
     spin = [int(x) for x in dic.get("spin", "0").split()]
     isym = [int(x) for x in dic.get("irrep", "1").split()]
+    iksym = [int(x) for x in dic.get("k_irrep", "0").split()]
     targets = []
     swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
     for inelec in nelec:
         for ispin in spin:
             for iisym in isym:
-                targets.append(SX(inelec, ispin, swap_pg(iisym)))
+                if "k_symmetry" in dic:
+                    for iiksym in iksym:
+                        targets.append(SX(inelec, ispin,
+                            SX.pg_combine(swap_pg(iisym), iiksym, k_mod)))
+                else:
+                    targets.append(SX(inelec, ispin, swap_pg(iisym)))
     assert len(targets) != 0
     if singlet_embedding and SX == SU2:
         for it, targ in enumerate(targets):
@@ -1952,13 +2023,13 @@ if not pre_run:
                 else:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
-            hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fcidump,
+            hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
                 None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
         if big_site_method is None:
-            hm_dyall = HamiltonianQC(vacuum, n_sites, VectorUInt8(orb_sym), fd_dyall)
+            hm_dyall = HamiltonianQC(vacuum, n_sites, orb_sym, fd_dyall)
         elif big_site_method == "folding":
             assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']
-            hm_dyall = HamiltonianQC(vacuum, n_orbs, VectorUInt8(orb_sym), fd_dyall)
+            hm_dyall = HamiltonianQC(vacuum, n_orbs, orb_sym, fd_dyall)
             lmpo_fold = MPOQC(hm_dyall, qc_type)
             ci_order = len(dynamic_corr_method[0]) - 6
             lmps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
@@ -2003,12 +2074,12 @@ if not pre_run:
                 assert False
             if big_site_method == "fock":
                 assert "nonspinadapted" in dic
-                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_dyall, VectorUInt8(orb_sym), *xl, True)
-                big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_dyall, VectorUInt8(orb_sym), *xr, True)
+                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_dyall, orb_sym, *xl, True)
+                big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_dyall, orb_sym, *xr, True)
             elif big_site_method == "csf":
                 assert "nonspinadapted" not in dic
-                big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fd_dyall, VectorUInt8(orb_sym[:n_inactive]))
-                big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fd_dyall, VectorUInt8(orb_sym[-n_external:]))
+                big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fd_dyall, orb_sym[:n_inactive])
+                big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fd_dyall, orb_sym[-n_external:])
             else:
                 raise NotImplementedError
             big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -2020,7 +2091,7 @@ if not pre_run:
                 else:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
-            hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fd_dyall,
+            hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fd_dyall,
                 None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
 
         # left mpo
@@ -2203,8 +2274,7 @@ if not pre_run:
             assert "nonspinadapted" not in dic
             mps.info.load_mutable()
             mps.load_mutable()
-            cp_mps = trans_unfused_mps_to_sz(UnfusedMPS(
-                mps), copy_tag, mpo.tf.opf.cg)
+            cp_mps = trans_mps(UnfusedMPS(mps), copy_tag, mpo.tf.opf.cg)
             if "resolve_twosz" in dic:
                 res_twosz = int(dic["resolve_twosz"])
                 cp_mps.resolve_singlet_embedding(res_twosz)

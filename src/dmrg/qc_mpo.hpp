@@ -394,6 +394,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
         else
             MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
         MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S>::basis = hamil->basis;
         for (uint16_t m = 0; m < n_sites; m++) {
             // site tensor
             shared_ptr<Symbolic<S>> pmat;

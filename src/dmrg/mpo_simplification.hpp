@@ -572,6 +572,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         } break;
         case OpTypes::Sum: {
             shared_ptr<OpSum<S>> ops = dynamic_pointer_cast<OpSum<S>>(expr);
+            // merge terms that differ only by coefficients
             unordered_map<shared_ptr<OpExpr<S>>,
                           vector<shared_ptr<OpProduct<S>>>>
                 mp;
@@ -615,6 +616,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             else if (terms[0]->b == nullptr || terms.size() <= 2)
                 return make_shared<OpSum<S>>(terms);
             else if (collect_terms && op != S(S::invalid)) {
+                // extract common factors from terms
                 unordered_map<shared_ptr<OpExpr<S>>,
                               map<int, vector<shared_ptr<OpProduct<S>>>>>
                     mpa[2], mpb[2];
@@ -636,13 +638,15 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 terms.clear();
                 if (mpa[0].size() + mpa[1].size() <=
                     mpb[0].size() + mpb[1].size()) {
+                    // merge right part
                     for (int i = 0; i < 2; i++)
                         for (auto &r : mpa[i]) {
-                            int pg = S::pg_mul(
-                                S::pg_inv(
-                                    dynamic_pointer_cast<OpElement<S>>(r.first)
-                                        ->q_label.pg()),
-                                op.pg());
+                            // pgb = op.pg - pga
+                            int pga =
+                                dynamic_pointer_cast<OpElement<S>>(r.first)
+                                    ->q_label.pg();
+                            int pg =
+                                S::pg_mul(i ? pga : S::pg_inv(pga), op.pg());
                             for (auto &rr : r.second) {
                                 if (rr.second.size() == 1)
                                     terms.push_back(rr.second[0]);
@@ -652,7 +656,9 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
-                                        if (s->b->q_label.pg() != pg)
+                                        if (s->b->q_label.pg() !=
+                                            ((s->conj & 2) ? S::pg_inv(pg)
+                                                           : pg))
                                             continue;
                                         bool cj = (s->conj & 2) != 0,
                                              found = false;
@@ -692,13 +698,15 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             }
                         }
                 } else {
+                    // merge left part
                     for (int i = 0; i < 2; i++)
                         for (auto &r : mpb[i]) {
-                            int pg = S::pg_mul(
-                                S::pg_inv(
-                                    dynamic_pointer_cast<OpElement<S>>(r.first)
-                                        ->q_label.pg()),
-                                op.pg());
+                            // pga = op.pg - pgb
+                            int pgb =
+                                dynamic_pointer_cast<OpElement<S>>(r.first)
+                                    ->q_label.pg();
+                            int pg =
+                                S::pg_mul(i ? pgb : S::pg_inv(pgb), op.pg());
                             for (auto &rr : r.second) {
                                 if (rr.second.size() == 1)
                                     terms.push_back(rr.second[0]);
@@ -708,7 +716,9 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
-                                        if (s->a->q_label.pg() != pg)
+                                        if (s->a->q_label.pg() !=
+                                            ((s->conj & 1) ? S::pg_inv(pg)
+                                                           : pg))
                                             continue;
                                         bool cj = (s->conj & 1) != 0,
                                              found = false;

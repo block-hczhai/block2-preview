@@ -396,6 +396,9 @@ struct SZLZ {
     }
     int twos() const { return (int)((int16_t)(data >> 6) >> 5); }
     int pg() const { return (int)((int16_t)(data << 5) >> 5); }
+    int pg_pg() const { return 0; }
+    int pg_k() const { return (int)((int16_t)(data << 5) >> 5); }
+    int pg_k_mod() const { return 0; }
     void set_n(int n) {
         data =
             (data & 0x3FF7FFU) | (((uint32_t)n >> 1) << 22) | ((n & 1) << 11);
@@ -1020,6 +1023,9 @@ struct SU2LZ {
         return (int)(((data >> 16) & 0xFEU) | ((data >> 9) & 1));
     }
     int pg() const noexcept { return (int)((int16_t)(data << 7) >> 7); }
+    int pg_pg() const { return 0; }
+    int pg_k() const { return (int)((int16_t)(data << 7) >> 7); }
+    int pg_k_mod() const { return 0; }
     void set_n(int n) {
         data = (data & 0xFFFDFFU) | (((uint32_t)n >> 1) << 24) | ((n & 1) << 9);
     }

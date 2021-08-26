@@ -1061,6 +1061,14 @@ struct FCIDUMP {
     int k_mod() const {
         return params.count("kmod") ? Parsing::to_int(params.at("kmod")) : 0;
     }
+    // Set target state for k symmetry
+    void set_k_isym(int k_isym) {
+        params["kisym"] = Parsing::to_string(k_isym);
+    }
+    // Target state for k symmetry
+    int k_isym() const {
+        return params.count("kisym") ? Parsing::to_int(params.at("kisym")) : 0;
+    }
     // energy of a determinant
     double det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
                       uint16_t i_end) const {
