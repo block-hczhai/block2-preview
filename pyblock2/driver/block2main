@@ -232,7 +232,7 @@ if MPI is not None:
 memory = int(int(dic.get("mem", "40").split()[0]) * 1e9)
 fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 if "intmem" in dic:
-    intmemory =  int(int(dic.get("intmem", "40").split()[0]) * 1e9)
+    intmemory =  int(int(dic.get("intmem", "0.4").split()[0]) * 1e9)
     init_memory(isize=int(intmemory), dsize=int(memory), save_dir=scratch)
 else:
     init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
