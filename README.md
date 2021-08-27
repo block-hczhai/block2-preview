@@ -82,7 +82,7 @@ Features
 * Stochastic perturbative DMRG
 * Uncontracted dynamic correlation
     * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
-    * DMRG Multi-Reference Averaged Quadratic Coupled Cluster (AQCC)/ Coupled Pair Functinoal (ACPF)
+    * DMRG Multi-Reference Averaged Quadratic Coupled Cluster (AQCC)/ Coupled Pair Functional (ACPF)
     * DMRG NEVPT2/3/..., REPT2/3/..., MR-LCC, ...
 * Orbital Reordering
     * Fiedler
