@@ -67,8 +67,10 @@ def parse(fname):
     with open(fname, 'r') as fin:
         lines = fin.readlines()
     line = lines[0]
-    # construct input file from FCIDUMP
-    if line.strip().lower().startswith('&fci '):
+
+    def read_fcidump(fd):
+        with open(fd, 'r') as fin:
+            lines = fin.readlines()
         ff = " ".join(lines).lower()
         pars = ff.split('/' if '/' in ff else '&end')[0]
         cont_dict = {}
@@ -82,10 +84,16 @@ def parse(fname):
                     cont_dict[p_key.strip().lower()] += ',' + c.strip()
                 else:
                     cont_dict[p_key.strip().lower()] = c.strip()
+        return cont_dict
+
+    # construct input file from FCIDUMP
+    if line.strip().lower().startswith('&fci '):
+        cont_dict = read_fcidump(fname)
         lines = ["sym d2h", "orbitals %s" % fname,
             "nelec %s" % cont_dict.get('nelec', 0), "spin %s" % cont_dict.get('ms2', 0), 
             "irrep %s" % cont_dict.get('isym', 0), "hf_occ integral", "schedule default",
             "maxM 500", "maxiter 30"]
+
     dic = {}
     schedule = []
     schedule_start = -1
@@ -157,6 +165,19 @@ def parse(fname):
     # model extra keywords
     if "model" in dic:
         dic["noreorder"] = ""
+
+    # optional keywords that can be obtained from fcidump
+    if "orbitals" in dic and ("nelec" not in dic or "spin" not in dic or "irrep" not in dic or
+        ("k_symmetry" in dic and "k_irrep" not in idc)):
+        cont_dict = read_fcidump(dic["orbitals"])
+        if "nelec" not in dic and "nelec" in cont_dict:
+            dic["nelec"] = cont_dict["nelec"]
+        if "spin" not in dic and "ms2" in cont_dict:
+            dic["spin"] = cont_dict["ms2"]
+        if "irrep" not in dic and "isym" in cont_dict:
+            dic["irrep"] = cont_dict["isym"]
+        if "k_symmetry" in dic and "k_irrep" not in dic and "kisym" in cont_dict:
+            dic["k_irrep"] = cont_dict["kisym"]
 
     # sanity check
     diff = set(dic.keys()) - KNOWN_KEYS
