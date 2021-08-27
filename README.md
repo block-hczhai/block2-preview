@@ -15,7 +15,7 @@ The block2 code is developed and maintained in Garnet Chan group at Caltech.
 Main contributors:
 
 * Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
-* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI and big site
+* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI/MRPT and big site
 * Seunghoon Lee [@seunghoonlee89](https://github.com/seunghoonlee89): Stochastic perturbative DMRG
 * Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
@@ -80,9 +80,10 @@ Features
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
 * Stochastic perturbative DMRG
-* Dynamic correlation
-    * DMRG Multi-Reference Configuration Interaction (MRCI)
-    * DMRG NEVPT2
+* Uncontracted dynamic correlation
+    * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
+    * DMRG Multi-Reference Averaged Quadratic Coupled Cluster (AQCC)/ Coupled Pair Functinoal (ACPF)
+    * DMRG NEVPT2/3/..., REPT2/3/..., MR-LCC, ...
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
@@ -94,7 +95,7 @@ Features
 References
 ----------
 
-### Qauntum Chemisty DMRG
+### Quantum Chemisty DMRG
 
 * Chan, G. K.-L.; Head-Gordon, M. Highly correlated calculations with a polynomial cost algorithm: A study of the density matrix renormalization group. *The Journal of Chemical Physics* 2002, **116**, 4462–4476.
 * Sharma, S.; Chan, G. K.-L. Spin-adapted density matrix renormalization group algorithms for quantum chemistry. *The Journalof Chemical Physics* 2012, **136**, 124121.
@@ -133,6 +134,24 @@ References
 ### Particle Density Matrix
 
 * Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117.
+
+### MR correlation theories 
+- Szalay, P. G.; Müller, T.; Gidofalvi, G.; Lischka, H.; Shepard, R. Multiconfiguration Self-Consistent Field and Multireference Configuration Interaction Methods and Applications. *Chemical Reviews* 2012, **112**, 108-181. https://doi.org/10.1021/cr200137a.
+- Gdanitz, R. J., Ahlrichs, R. The Averaged Coupled-Pair Functional (ACPF): A Size-Extensive Modification of MR CI(SD). *Chemical Physics Letters* 1988, **143**, 413-420. https://doi.org/10.1016/0009-2614(88)87388-3.
+- Szalay, P. G., Bartlett, R. J. Multi-Reference Averaged Quadratic Coupled-Cluster Method: A Size-Extensive Modification of Multi-Reference CI. *Chemical Physics Letters* 1993, **214**, 481-488. https://doi.org/10.1016/0009-2614(93)85670-J.
+
+- Laidig, W. D.; Bartlett, R. J. A Multi-Reference Coupled-Cluster Method for Molecular Applications. *Chemical Physics Letters* 1984, **104**, 424-430. https://doi.org/10.1016/0009-2614(84)85617-1.
+- Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. https://doi.org/10.1063/1.452291.
+
+- Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. https://doi.org/10.1063/1.1361246.
+- Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. https://doi.org/10.1007/s00214-006-0207-0.
+
+- Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. https://doi.org/10.1016/j.chemphys.2008.10.004.
+- Fink, R. F. Two New Unitary-Invariant and Size-Consistent Perturbation Theoretical Approaches to the Electron Correlation Energy. *Chemical Physics Letters* 2006, **428**, 461–466. https://doi.org/10.1016/j.cplett.2006.07.081.
+
+- Sharma, S., Chan, G. K.-L. Communication: A Flexible Multi-Reference Perturbation Theory by Minimizing the Hylleraas Functional with Matrix Product States. *The Journal of Chemical Physics* 2014, **141**, 111101. https://doi.org/10.1063/1.4895977.
+- Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. https://doi.org/10.1063/1.4928643.
+- Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. https://doi.org/10.1063/1.4939752.
 
 ### Determinant Coefficients
 

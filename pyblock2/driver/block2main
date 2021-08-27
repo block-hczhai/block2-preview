@@ -231,7 +231,11 @@ if MPI is not None:
 # global settings
 memory = int(int(dic.get("mem", "40").split()[0]) * 1e9)
 fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
-init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
+if "intmem" in dic:
+    intmemory =  int(int(dic["intmem"].split()[0]) * 1e9)
+    init_memory(isize=int(intmemory), dsize=int(memory), save_dir=scratch)
+else:
+    init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(
     ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,

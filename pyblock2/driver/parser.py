@@ -16,7 +16,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "twodot_to_onedot", "twodot", "onedot", "sweep_tol",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix",
               "noreorder", "fiedler", "reorder", "gaopt", "nofiedler", "irrep_reorder",
-              "num_thrds", "mkl_thrds", "mem", "oh", "nonspinadapted",
+              "num_thrds", "mkl_thrds", "mem", "intmem", "oh", "nonspinadapted",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
               "twopdm", "restart_twopdm", "startM", "maxM", "symmetrize_ints",
               "diag_twopdm", "restart_diag_twopdm",
@@ -166,6 +166,8 @@ def parse(fname):
         raise ValueError("onedot conflicits with twodot_to_onedot.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
+    if "intmem" in dic and (not dic["intmem"][-1] in ['g', 'G']):
+        raise ValueError("memory unit (%s) should be G" % (dic["intmem"][-1]))
     crs = list(set(dic.keys()) & REORDER_KEYS)
     if len(crs) > 1:
         raise ValueError(
