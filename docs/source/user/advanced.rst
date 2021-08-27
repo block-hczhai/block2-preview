@@ -554,3 +554,205 @@ MPS using the keyword ``restart_sample 0``.
 If the given MPS has a very small bond dimension, or the target (output) MPS has a very large bond dimension
 (namely, "decompression"), one should use the keyword ``random_mps_init`` to allow a better random
 initial guess for the target MPS. Otherwise, the generated output MPS may be inaccurate.
+
+LZ Symmetry
+-----------
+
+For diatomic molecules or model Hamiltonian with translational symmetry (such as 1D Hubbard model in momentum space),
+it is possible to utilize additional K space symmetry.
+To support the K space symmetry, the code must be compiled with the option ``-DUSE_KSYMM=ON`` (default).
+
+One can add the keyword ``k_symmetry`` in the input file to use this additional symmetry.
+Point group symmetry can be used together with k symmetry.
+Therefore, even for system without K space symmetry, the calculation can still run as normal when the keyword ``k_symmetry`` is added.
+Note, however, the MPS or MPO generated from an input file with/without the keyword ``k_symmetry``,
+cannot be reloaded with an input file without/with the keyword ``k_symmetry``.
+
+.. highlight:: python3
+
+For molecules, the integral file (FCIDUMP file) must be generated in a special way so that the K/LZ symmetry can be used.
+the following python script can be used to generate the integral with :math:`C_2 \otimes L_z` symmetry: ::
+
+    import numpy as np
+    from pyscf import gto, scf, ao2mo, symm, tools
+    from block2 import FCIDUMP, VectorUInt8, VectorInt
+
+    def lz_symm_adaptation(mol):
+        z_irrep_map = {} # map from dooh to lz
+        g_irrep_map = {} # map from dooh to c2
+        symm_orb_map = {} # orbital rotation
+        for ix in mol.irrep_id:
+            rx, qx = ix % 10, ix // 10
+            g_irrep_map[ix] = rx & 4
+            z_irrep_map[ix] = (-1) ** ((rx & 1) == ((rx & 4) >> 2)) * ((qx << 1) + ((rx & 2) >> 1))
+            if z_irrep_map[ix] == 0:
+                symm_orb_map[(ix, ix)] = 1
+            else:
+                if (rx & 1) == ((rx & 4) >> 2):
+                    symm_orb_map[(ix, ix)] = -np.sqrt(0.5) * ((rx & 2) - 1)
+                else:
+                    symm_orb_map[(ix, ix)] = -np.sqrt(0.5) * 1j
+                symm_orb_map[(ix, ix ^ 1)] = symm_orb_map[(ix, ix)] * 1j
+
+        z_irrep_map = [z_irrep_map[ix] for ix in mol.irrep_id]
+        g_irrep_map = [g_irrep_map[ix] for ix in mol.irrep_id]
+        rev_symm_orb = [np.zeros_like(x) for x in mol.symm_orb]
+        for iix, ix in enumerate(mol.irrep_id):
+            for iiy, iy in enumerate(mol.irrep_id):
+                if (ix, iy) in symm_orb_map:
+                    rev_symm_orb[iix] = rev_symm_orb[iix] + symm_orb_map[(ix, iy)] * mol.symm_orb[iiy]
+        return rev_symm_orb, z_irrep_map, g_irrep_map
+
+    mol = gto.M(
+        atom=[["C", (0, 0, 0)],
+              ["C", (0, 0, 1.2425)]],
+        basis='ccpvdz',
+        symmetry='dooh')
+
+    mol.symm_orb, z_irrep, g_irrep = lz_symm_adaptation(mol)
+    mf = scf.RHF(mol)
+    mf.run()
+
+    h1e = mf.mo_coeff.conj().T @ mf.get_hcore() @ mf.mo_coeff
+    print('h1e imag = ', np.linalg.norm(h1e.imag))
+    assert np.linalg.norm(h1e.imag) < 1E-14
+    e_core = mol.energy_nuc()
+    h1e = h1e.real.flatten()
+    _eri = ao2mo.restore(1, mf._eri, mol.nao)
+    g2e = np.einsum('pqrs,pi,qj,rk,sl->ijkl', _eri,
+        mf.mo_coeff.conj(), mf.mo_coeff, mf.mo_coeff.conj(), mf.mo_coeff, optimize=True)
+    print('g2e imag = ', np.linalg.norm(g2e.imag))
+    assert np.linalg.norm(g2e.imag) < 1E-14
+    g2e = g2e.real.flatten()
+
+    fcidump_tol = 1E-13
+    na = nb = mol.nelectron // 2
+    n_mo = mol.nao
+    h1e[np.abs(h1e) < fcidump_tol] = 0
+    g2e[np.abs(g2e) < fcidump_tol] = 0
+
+    orb_sym_z = symm.label_orb_symm(mol, z_irrep, mol.symm_orb, mf.mo_coeff, check=True)
+    orb_sym_g = symm.label_orb_symm(mol, g_irrep, mol.symm_orb, mf.mo_coeff, check=True)
+
+    fcidump = FCIDUMP()
+    fcidump.initialize_su2(n_mo, na + nb, na - nb, 1, e_core, h1e, g2e)
+
+    orb_sym_mp = VectorUInt8([tools.fcidump.ORBSYM_MAP['D2h'][i] for i in orb_sym_g])
+    fcidump.orb_sym = VectorUInt8(orb_sym_mp)
+    print('g symm error = ', fcidump.symmetrize(VectorUInt8(orb_sym_g)))
+
+    fcidump.k_sym = VectorInt(orb_sym_z)
+    fcidump.k_mod = 0
+    print('z symm error = ', fcidump.symmetrize(fcidump.k_sym, fcidump.k_mod))
+
+    fcidump.write('FCIDUMP')
+
+.. highlight:: text
+
+Note that, if only the LZ symmetry is required, one can simply set ``orb_sym_g[:] = 0``.
+
+The following input file can be used to perform the calculation with :math:`C_2 \otimes L_z` symmetry: ::
+
+    sym d2h
+    orbitals FCIDUMP
+    k_symmetry
+    k_irrep 0
+
+    nelec 12
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule
+    0  500 1E-8 1E-3
+    4  500 1E-8 1E-4
+    8  500 1E-9 1E-5
+    12 500 1E-9 0
+    end
+    maxiter 30
+
+Where the ``k_irrep`` can be used to set the eigenvalue of LZ in the target state.
+Note that it can be easier for the Davidson procedure to get stuck in local minima with high symmetry.
+It is therefore recommended to use a custom schedule with larger noise and smaller Davidson threshold.
+
+Some reference outputs for this input file: ::
+
+    $ grep 'Time elapsed' dmrg-1.out | tail -1
+    Time elapsed =     73.529 | E =     -75.7291544157 | DE = -6.31e-07 | DW = 1.28e-05
+    $ grep 'DMRG Energy' dmrg-1.out
+    DMRG Energy =  -75.729154415733063
+
+Initial Guess with Occupation Numbers
+-------------------------------------
+
+When there are too many orbitals, and the default ``warmup fci`` initial guess is used,
+the initial MPS can have very large bond dimension
+(especially when the LZ symmetry is used, since LZ is not a finite group)
+and the first sweep will take very long time.
+Once can use ``warmup occ`` initial guess to solve this problem, where another keywrod ``occ`` should be used,
+followed by a list of (fractional) occupation numbers separated by the space character, to set the occupation numbers.
+The occupation numbers can be obtained from a DMRG calculation using the same integral with/without K symmetry (or some other methods like CCSD and MP2).
+If ``onepdm`` is in the input file, the occupation numbers will be printed at the end of the output.
+
+The following input file will perform the DMRG calculation using the same integral without the K symmetry (but with C2 symmetry): ::
+
+    sym d2h
+    orbitals FCIDUMP
+
+    nelec 12
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule
+    0  500 1E-8 1E-3
+    4  500 1E-8 1E-4
+    8  500 1E-9 1E-5
+    12 500 1E-9 0
+    end
+    maxiter 30
+    onepdm
+
+Some reference outputs for this input file: ::
+
+    $ grep 'Time elapsed' dmrg-1.out | tail -2 | head -1
+    Time elapsed =    190.549 | E =     -75.7314655815 | DE = -1.88e-07 | DW = 1.53e-05
+    $ grep 'DMRG Energy' dmrg-1.out
+    DMRG Energy =  -75.731465581478815
+    $ grep 'DMRG OCC' dmrg-1.out
+    DMRG OCC =   2.000 2.000 1.957 1.626 1.870 1.870 0.360 0.098 0.098 0.006 0.008 0.008 0.008 0.013 0.014 0.014 0.011 0.006 0.006 0.006 0.005 0.005 0.002 0.002 0.002 0.001 0.001 0.001
+
+The following input file will perform the DMRG calculation using the K symmetry, but with initial guess generated from occupation numbers: ::
+
+    sym d2h
+    orbitals FCIDUMP
+    k_symmetry
+    k_irrep 0
+    warmup occ
+    occ 2.000 2.000 1.957 1.626 1.870 1.870 0.360 0.098 0.098 0.006 0.008 0.008 0.008 0.013 0.014 0.014 0.011 0.006 0.006 0.006 0.005 0.005 0.002 0.002 0.002 0.001 0.001 0.001
+    cbias 0.2
+
+    nelec 12
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule
+    0  500 1E-8 1E-3
+    4  500 1E-8 1E-4
+    8  500 1E-9 1E-5
+    12 500 1E-9 0
+    end
+    maxiter 30
+
+Here ``cbias`` is the keyword to add a constant bias to the occ, so that 2.0 becomes 2.0 - cbias, and 0.098 becomes 0.098 + cbias.
+Without the bias it is also easy to converge to a local minima.
+
+Some reference outputs for this input file: ::
+
+    $ grep 'Time elapsed' dmrg-3.out | tail -1
+    Time elapsed =     55.938 | E =     -75.7244716369 | DE = -5.25e-07 | DW = 7.45e-06
+    $ grep 'DMRG Energy' dmrg-3.out
+    DMRG Energy =  -75.724471636942383
+
+Here the calculation runs faster because the better initial guess, but the energy becomes worse.

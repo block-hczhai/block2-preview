@@ -1055,8 +1055,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .def_static("swap_c2h", &PointGroup::swap_c2h)
         .def_static("swap_c2v", &PointGroup::swap_c2v)
         .def_static("swap_d2", &PointGroup::swap_d2)
-        .def_static("swap_d2h", &PointGroup::swap_d2h)
-        .def_static("swap_lz", &PointGroup::swap_lz);
+        .def_static("swap_d2h", &PointGroup::swap_d2h);
 
     py::enum_<OpNames>(m, "OpNames", py::arithmetic())
         .value("H", OpNames::H)

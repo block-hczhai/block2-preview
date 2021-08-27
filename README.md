@@ -42,6 +42,7 @@ Features
     * U(1) particle number symmetry
     * SU(2) or U(1) spin symmetry
     * Abelian point group symmetry
+    * Translational / Lz symmetry
 * Sweep algorithms (1-site / 2-site / 2-site to 1-site transition)
     * Ground-State DMRG
         * Decomposition types: density matrix / SVD

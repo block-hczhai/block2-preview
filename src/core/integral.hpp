@@ -1189,6 +1189,8 @@ struct FCIDUMP {
         ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
         if (params.count("orbsym"))
             set_orb_sym(reorder(orb_sym<int>(), ord));
+        if (params.count("ksym"))
+            set_k_sym(reorder(k_sym<int>(), ord));
     }
     // orbital rotation
     // rot_mat: (old, new)
