@@ -168,7 +168,7 @@ def parse(fname):
 
     # optional keywords that can be obtained from fcidump
     if "orbitals" in dic and ("nelec" not in dic or "spin" not in dic or "irrep" not in dic or
-        ("k_symmetry" in dic and "k_irrep" not in idc)):
+        ("k_symmetry" in dic and "k_irrep" not in dic)):
         cont_dict = read_fcidump(dic["orbitals"])
         if "nelec" not in dic and "nelec" in cont_dict:
             dic["nelec"] = cont_dict["nelec"]
