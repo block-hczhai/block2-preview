@@ -574,7 +574,8 @@ For molecules, the integral file (FCIDUMP file) must be generated in a special w
 the following python script can be used to generate the integral with :math:`C_2 \otimes L_z` symmetry: ::
 
     import numpy as np
-    from pyscf import gto, scf, ao2mo, symm, tools
+    from functools import reduce
+    from pyscf import gto, scf, ao2mo, symm, tools, lib
     from block2 import FCIDUMP, VectorUInt8, VectorInt
 
     def lz_symm_adaptation(mol):
@@ -602,6 +603,38 @@ the following python script can be used to generate the integral with :math:`C_2
                 if (ix, iy) in symm_orb_map:
                     rev_symm_orb[iix] = rev_symm_orb[iix] + symm_orb_map[(ix, iy)] * mol.symm_orb[iiy]
         return rev_symm_orb, z_irrep_map, g_irrep_map
+
+    def label_orb_symm(mol, irrep_name, symm_orb, mo, s=None, check=True, tol=1e-9):
+        nmo = mo.shape[1]
+        if s is None:
+            s = mol.intor_symmetric('int1e_ovlp')
+        s_mo = np.dot(s, mo)
+        norm = np.zeros((len(irrep_name), nmo))
+        for i, csym in enumerate(symm_orb):
+            moso = np.dot(csym.conj().T, s_mo)
+            ovlpso = reduce(np.dot, (csym.conj().T, s, csym))
+            try:
+                s_moso = lib.cho_solve(ovlpso, moso)
+            except:
+                ovlpso[np.diag_indices(csym.shape[1])] += 1e-12
+                s_moso = lib.cho_solve(ovlpso, moso)
+            norm[i] = np.einsum('ki,ki->i', moso.conj(), s_moso).real
+        norm /= np.sum(norm, axis=0)  # for orbitals which are not normalized
+        iridx = np.argmax(norm, axis=0)
+        orbsym = np.asarray([irrep_name[i] for i in iridx])
+
+        if check:
+            largest_norm = norm[iridx,np.arange(nmo)]
+            orbidx = np.where(largest_norm < 1-tol)[0]
+            if orbidx.size > 0:
+                idx = np.where(largest_norm < 1-tol*1e2)[0]
+                if idx.size > 0:
+                    raise ValueError('orbitals %s not symmetrized, norm = %s' %
+                                    (idx, largest_norm[idx]))
+                else:
+                    raise ValueError('orbitals %s not strictly symmetrized.',
+                                np.unique(orbidx))
+        return orbsym
 
     mol = gto.M(
         atom=[["C", (0, 0, 0)],
@@ -631,8 +664,9 @@ the following python script can be used to generate the integral with :math:`C_2
     h1e[np.abs(h1e) < fcidump_tol] = 0
     g2e[np.abs(g2e) < fcidump_tol] = 0
 
-    orb_sym_z = symm.label_orb_symm(mol, z_irrep, mol.symm_orb, mf.mo_coeff, check=True)
-    orb_sym_g = symm.label_orb_symm(mol, g_irrep, mol.symm_orb, mf.mo_coeff, check=True)
+    orb_sym_z = label_orb_symm(mol, z_irrep, mol.symm_orb, mf.mo_coeff, check=True)
+    orb_sym_g = label_orb_symm(mol, g_irrep, mol.symm_orb, mf.mo_coeff, check=True)
+    print(orb_sym_z)
 
     fcidump = FCIDUMP()
     fcidump.initialize_su2(n_mo, na + nb, na - nb, 1, e_core, h1e, g2e)
