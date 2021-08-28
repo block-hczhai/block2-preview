@@ -399,7 +399,7 @@ The following script will read the spin-adapted singlet embedding MPS and tranfo
     resolve_twosz -2
     normalize_mps
 
-Here the keyword ``resolve_twosz`` indicates that the transformed SZ MPS will have projected spin ``2 * SZ = 2``.
+Here the keyword ``resolve_twosz`` indicates that the transformed SZ MPS will have projected spin ``2 * SZ = -2``.
 For this case since ``2 * S = 2``, the possible values for ``resolve_twosz`` are ``-2, 0, 2``.
 If the keyword ``resolve_twosz`` is not given, an MPS with ensemble of all possible projected spins will be produced
 (which is often not very useful).
@@ -578,6 +578,8 @@ the following python script can be used to generate the integral with :math:`C_2
     from pyscf import gto, scf, ao2mo, symm, tools, lib
     from block2 import FCIDUMP, VectorUInt8, VectorInt
 
+    # adapted from https://github.com/hczhai/pyscf/blob/1.6/examples/symm/33-lz_adaption.py
+    # with the sign of lz
     def lz_symm_adaptation(mol):
         z_irrep_map = {} # map from dooh to lz
         g_irrep_map = {} # map from dooh to c2
@@ -604,6 +606,8 @@ the following python script can be used to generate the integral with :math:`C_2
                     rev_symm_orb[iix] = rev_symm_orb[iix] + symm_orb_map[(ix, iy)] * mol.symm_orb[iiy]
         return rev_symm_orb, z_irrep_map, g_irrep_map
 
+    # copied from https://github.com/hczhai/pyscf/blob/1.6/pyscf/symm/addons.py#L29
+    # with the support for complex orbitals
     def label_orb_symm(mol, irrep_name, symm_orb, mo, s=None, check=True, tol=1e-9):
         nmo = mo.shape[1]
         if s is None:

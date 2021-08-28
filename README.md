@@ -97,61 +97,62 @@ References
 
 ### Quantum Chemisty DMRG
 
-* Chan, G. K.-L.; Head-Gordon, M. Highly correlated calculations with a polynomial cost algorithm: A study of the density matrix renormalization group. *The Journal of Chemical Physics* 2002, **116**, 4462–4476.
-* Sharma, S.; Chan, G. K.-L. Spin-adapted density matrix renormalization group algorithms for quantum chemistry. *The Journalof Chemical Physics* 2012, **136**, 124121.
-* Wouters, S.; Van Neck, D. The density matrix renormalization group for ab initio quantum chemistry. *The European Physical Journal D* 2014, **68**, 272.
+* Chan, G. K.-L.; Head-Gordon, M. Highly correlated calculations with a polynomial cost algorithm: A study of the density matrix renormalization group. *The Journal of Chemical Physics* 2002, **116**, 4462–4476. https://doi.org/10.1063/1.1449459.
+* Sharma, S.; Chan, G. K.-L. Spin-adapted density matrix renormalization group algorithms for quantum chemistry. *The Journalof Chemical Physics* 2012, **136**, 124121. https://doi.org/10.1063/1.3695642.
+* Wouters, S.; Van Neck, D. The density matrix renormalization group for ab initio quantum chemistry. *The European Physical Journal D* 2014, **68**, 272. https://doi.org/10.1140/epjd/e2014-50500-1.
 
 ### Parallelization
 
-* Chan, G. K.-L. An algorithm for large scale density matrix renormalization group calculations. *The Journal of Chemical Physics* 2004, **120**, 3172–3178.
-* Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group  algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102.
-* Stoudenmire, E.; White, S. R. Real-space parallel density matrix renormalization group. *Physical Review B* 2013, **87**, 155137.
-* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+* Chan, G. K.-L. An algorithm for large scale density matrix renormalization group calculations. *The Journal of Chemical Physics* 2004, **120**, 3172–3178. https://doi.org/10.1063/1.1638734.
+* Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group  algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102. https://doi.org/10.1063/1.4955108.
+* Stoudenmire, E.; White, S. R. Real-space parallel density matrix renormalization group. *Physical Review B* 2013, **87**, 155137. https://doi.org/10.1103/PhysRevB.87.155137.
+* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. https://doi.org/10.1063/5.0050902.
 
 ### Spin-Orbit Coupling
 
-* Sayfutyarova, E. R., Chan, G. K. L. A state interaction spin-orbit coupling density matrix renormalization group method. *The Journal of Chemical Physics* 2016, **144**, 234301.
-* Sayfutyarova, E. R., Chan, G. K. L. Electron paramagnetic resonance g-tensors from state interaction spin-orbit coupling density matrix renormalization group. *The Journal of Chemical Physics* 2018, **148**, 184103.
+* Sayfutyarova, E. R., Chan, G. K. L. A state interaction spin-orbit coupling density matrix renormalization group method. *The Journal of Chemical Physics* 2016, **144**, 234301. https://doi.org/10.1063/1.4953445.
+* Sayfutyarova, E. R., Chan, G. K. L. Electron paramagnetic resonance g-tensors from state interaction spin-orbit coupling density matrix renormalization group. *The Journal of Chemical Physics* 2018, **148**, 184103. https://doi.org/10.1063/1.5020079.
 
 ### Green's Function
 
-* Ronca, E., Li, Z., Jimenez-Hoyos, C. A., Chan, G. K. L. Time-step targeting time-dependent and dynamical density matrix renormalization group algorithms with ab initio Hamiltonians. *Journal of Chemical Theory and Computation* 2017, **13**, 5560-5571.
+* Ronca, E., Li, Z., Jimenez-Hoyos, C. A., Chan, G. K. L. Time-step targeting time-dependent and dynamical density matrix renormalization group algorithms with ab initio Hamiltonians. *Journal of Chemical Theory and Computation* 2017, **13**, 5560-5571. https://doi.org/10.1021/acs.jctc.7b00682.
 
 ### Finite-Temperature DMRG
 
-* Feiguin, A. E., White, S. R. Finite-temperature density matrix renormalization using an enlarged Hilbert space. *Physical Review B* 2005, **72**, 220401.
-* Feiguin, A. E., White, S. R. Time-step targeting methods for real-time dynamics using the density matrix renormalization group. *Physical Review B* 2005, **72**, 020404.
+* Feiguin, A. E., White, S. R. Finite-temperature density matrix renormalization using an enlarged Hilbert space. *Physical Review B* 2005, **72**, 220401. https://doi.org/10.1103/PhysRevB.72.220401.
+* Feiguin, A. E., White, S. R. Time-step targeting methods for real-time dynamics using the density matrix renormalization group. *Physical Review B* 2005, **72**, 020404. https://doi.org/10.1103/PhysRevB.72.020404.
 
 ### Linear Response
 
-* Sharma, S., Chan, G. K. Communication: A flexible multi-reference perturbation theory by minimizing the Hylleraas functional with matrix product states. *Journal of Chemical Physics* 2014, **141**, 111101.
+* Sharma, S., Chan, G. K. Communication: A flexible multi-reference perturbation theory by minimizing the Hylleraas functional with matrix product states. *Journal of Chemical Physics* 2014, **141**, 111101. https://doi.org/10.1063/1.4895977.
 
 ### Perturbative Noise
 
-* White, S. R. Density matrix renormalization group algorithms with a single center site. *Physical Review B* 2005, **72**, 180403.
-* Hubig, C., McCulloch, I. P., Schollwöck, U., Wolf, F. A. Strictly single-site DMRG algorithm with subspace expansion. *Physical Review B* 2015, **91**, 155115.
+* White, S. R. Density matrix renormalization group algorithms with a single center site. *Physical Review B* 2005, **72**, 180403. https://doi.org/10.1103/PhysRevB.72.180403.
+* Hubig, C., McCulloch, I. P., Schollwöck, U., Wolf, F. A. Strictly single-site DMRG algorithm with subspace expansion. *Physical Review B* 2015, **91**, 155115. https://doi.org/10.1103/PhysRevB.91.155115.
 
 ### Particle Density Matrix
 
-* Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117.
+* Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. https://doi.org/10.1063/1.2883976.
 
-### MR correlation theories 
-- Szalay, P. G.; Müller, T.; Gidofalvi, G.; Lischka, H.; Shepard, R. Multiconfiguration Self-Consistent Field and Multireference Configuration Interaction Methods and Applications. *Chemical Reviews* 2012, **112**, 108-181. https://doi.org/10.1021/cr200137a.
-- Gdanitz, R. J., Ahlrichs, R. The Averaged Coupled-Pair Functional (ACPF): A Size-Extensive Modification of MR CI(SD). *Chemical Physics Letters* 1988, **143**, 413-420. https://doi.org/10.1016/0009-2614(88)87388-3.
-- Szalay, P. G., Bartlett, R. J. Multi-Reference Averaged Quadratic Coupled-Cluster Method: A Size-Extensive Modification of Multi-Reference CI. *Chemical Physics Letters* 1993, **214**, 481-488. https://doi.org/10.1016/0009-2614(93)85670-J.
+### Multi-Reference Correlation Theories
 
-- Laidig, W. D.; Bartlett, R. J. A Multi-Reference Coupled-Cluster Method for Molecular Applications. *Chemical Physics Letters* 1984, **104**, 424-430. https://doi.org/10.1016/0009-2614(84)85617-1.
-- Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. https://doi.org/10.1063/1.452291.
+* Szalay, P. G.; Müller, T.; Gidofalvi, G.; Lischka, H.; Shepard, R. Multiconfiguration Self-Consistent Field and Multireference Configuration Interaction Methods and Applications. *Chemical Reviews* 2012, **112**, 108-181. https://doi.org/10.1021/cr200137a.
+* Gdanitz, R. J., Ahlrichs, R. The Averaged Coupled-Pair Functional (ACPF): A Size-Extensive Modification of MR CI(SD). *Chemical Physics Letters* 1988, **143**, 413-420. https://doi.org/10.1016/0009-2614(88)87388-3.
+* Szalay, P. G., Bartlett, R. J. Multi-Reference Averaged Quadratic Coupled-Cluster Method: A Size-Extensive Modification of Multi-Reference CI. *Chemical Physics Letters* 1993, **214**, 481-488. https://doi.org/10.1016/0009-2614(93)85670-J.
 
-- Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. https://doi.org/10.1063/1.1361246.
-- Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. https://doi.org/10.1007/s00214-006-0207-0.
+* Laidig, W. D.; Bartlett, R. J. A Multi-Reference Coupled-Cluster Method for Molecular Applications. *Chemical Physics Letters* 1984, **104**, 424-430. https://doi.org/10.1016/0009-2614(84)85617-1.
+* Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. https://doi.org/10.1063/1.452291.
 
-- Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. https://doi.org/10.1016/j.chemphys.2008.10.004.
-- Fink, R. F. Two New Unitary-Invariant and Size-Consistent Perturbation Theoretical Approaches to the Electron Correlation Energy. *Chemical Physics Letters* 2006, **428**, 461–466. https://doi.org/10.1016/j.cplett.2006.07.081.
+* Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. https://doi.org/10.1063/1.1361246.
+* Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. https://doi.org/10.1007/s00214-006-0207-0.
 
-- Sharma, S., Chan, G. K.-L. Communication: A Flexible Multi-Reference Perturbation Theory by Minimizing the Hylleraas Functional with Matrix Product States. *The Journal of Chemical Physics* 2014, **141**, 111101. https://doi.org/10.1063/1.4895977.
-- Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. https://doi.org/10.1063/1.4928643.
-- Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. https://doi.org/10.1063/1.4939752.
+* Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. https://doi.org/10.1016/j.chemphys.2008.10.004.
+* Fink, R. F. Two New Unitary-Invariant and Size-Consistent Perturbation Theoretical Approaches to the Electron Correlation Energy. *Chemical Physics Letters* 2006, **428**, 461–466. https://doi.org/10.1016/j.cplett.2006.07.081.
+
+* Sharma, S., Chan, G. K.-L. Communication: A Flexible Multi-Reference Perturbation Theory by Minimizing the Hylleraas Functional with Matrix Product States. *The Journal of Chemical Physics* 2014, **141**, 111101. https://doi.org/10.1063/1.4895977.
+* Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. https://doi.org/10.1063/1.4928643.
+* Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. https://doi.org/10.1063/1.4939752.
 
 ### Determinant Coefficients
 

@@ -58,6 +58,26 @@ Particle Density Matrix
 
 * Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. doi: `10.1063/1.2883976 <https://doi.org/10.1063/1.2883976>`_
 
+Multi-Reference Correlation Theories
+------------------------------------
+
+* Szalay, P. G.; Müller, T.; Gidofalvi, G.; Lischka, H.; Shepard, R. Multiconfiguration Self-Consistent Field and Multireference Configuration Interaction Methods and Applications. *Chemical Reviews* 2012, **112**, 108-181. doi: `10.1021/cr200137a <https://doi.org/10.1021/cr200137a>`_
+* Gdanitz, R. J., Ahlrichs, R. The Averaged Coupled-Pair Functional (ACPF): A Size-Extensive Modification of MR CI(SD). *Chemical Physics Letters* 1988, **143**, 413-420. doi: `10.1016/0009-2614(88)87388-3 <https://doi.org/10.1016/0009-2614(88)87388-3>`_
+* Szalay, P. G., Bartlett, R. J. Multi-Reference Averaged Quadratic Coupled-Cluster Method: A Size-Extensive Modification of Multi-Reference CI. *Chemical Physics Letters* 1993, **214**, 481-488. doi: `10.1016/0009-2614(93)85670-J <https://doi.org/10.1016/0009-2614(93)85670-J>`_
+
+* Laidig, W. D.; Bartlett, R. J. A Multi-Reference Coupled-Cluster Method for Molecular Applications. *Chemical Physics Letters* 1984, **104**, 424-430. doi: `10.1016/0009-2614(84)85617-1 <https://doi.org/10.1016/0009-2614(84)85617-1>`_
+* Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. doi: `10.1063/1.452291 <https://doi.org/10.1063/1.452291>`_
+
+* Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. doi: `10.1063/1.1361246 <https://doi.org/10.1063/1.1361246>`_
+* Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. doi: `10.1007/s00214-006-0207-0 <https://doi.org/10.1007/s00214-006-0207-0>`_
+
+* Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. doi: `10.1016/j.chemphys.2008.10.004 <https://doi.org/10.1016/j.chemphys.2008.10.004>`_
+* Fink, R. F. Two New Unitary-Invariant and Size-Consistent Perturbation Theoretical Approaches to the Electron Correlation Energy. *Chemical Physics Letters* 2006, **428**, 461–466. doi: `10.1016/j.cplett.2006.07.081 <https://doi.org/10.1016/j.cplett.2006.07.081>`_
+
+* Sharma, S., Chan, G. K.-L. Communication: A Flexible Multi-Reference Perturbation Theory by Minimizing the Hylleraas Functional with Matrix Product States. *The Journal of Chemical Physics* 2014, **141**, 111101. doi: `10.1063/1.4895977 <https://doi.org/10.1063/1.4895977>`_
+* Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. doi: `10.1063/1.4928643 <https://doi.org/10.1063/1.4928643>`_
+* Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. doi: `10.1063/1.4939752 <https://doi.org/10.1063/1.4939752>`_
+
 Determinant Coefficients
 ------------------------
 

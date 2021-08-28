@@ -21,7 +21,7 @@ Contributors
 """"""""""""
 
 * Huanchen Zhai `@hczhai <https://github.com/hczhai>`_: DMRG and parallelization
-* Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI and big site
+* Henrik R. Larsson `@h-larsson <https://github.com/h-larsson>`_: DMRG-MRCI/MRPT and big site
 * Seunghoon Lee `@seunghoonlee89 <https://github.com/seunghoonlee89>`_: Stochastic perturbative DMRG
 * Zhi-Hao Cui `@zhcui <https://github.com/zhcui>`_: user interface
 
@@ -71,9 +71,10 @@ Features
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
 * Stochastic perturbative DMRG
-* Dynamic correlation
-    * DMRG Multi-Reference Configuration Interaction (MRCI)
-    * DMRG NEVPT2
+* Uncontracted dynamic correlation
+    * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
+    * DMRG Multi-Reference Averaged Quadratic Coupled Cluster (AQCC)/ Coupled Pair Functional (ACPF)
+    * DMRG NEVPT2/3/..., REPT2/3/..., MR-LCC, ...
 * Orbital Reordering
     * Fiedler
     * Genetic algorithm
@@ -93,6 +94,7 @@ Features
    user/installation
    user/basic
    user/advanced
+   user/keywords
    user/mps-io
    user/references
 
