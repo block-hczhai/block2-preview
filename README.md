@@ -156,16 +156,16 @@ References
 
 ### Determinant Coefficients
 
-* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. L. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425.
+* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. L. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425. https://doi.org/10.1021/acs.jctc.1c00205.
 
-### Stochastic perturbative DMRG
+### Perturbative DMRG
 
-* Guo, S., Li, Z., Chan, G. K. L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104.
-* Guo, S., Li, Z., Chan, G. K. L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071.
+* Guo, S., Li, Z., Chan, G. K. L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104. https://doi.org/10.1063/1.5031140.
+* Guo, S., Li, Z., Chan, G. K. L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071. https://doi.org/10.1021/acs.jctc.8b00273.
 
 ### Orbital Reordering
 
-* Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.;Chan, G. K.-L. The ab-initio density  matrix renormalization group in practice. *The Journal of Chemical Physics* 2015, **142**, 034102.
+* Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.;Chan, G. K.-L. The ab-initio density  matrix renormalization group in practice. *The Journal of Chemical Physics* 2015, **142**, 034102. https://doi.org/10.1063/1.4905329.
 
 Manual Installation
 -------------------
