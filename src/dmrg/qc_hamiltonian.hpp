@@ -398,7 +398,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::R:
                 i = op.site_index[0];
                 s = op.site_index.ss();
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(t(s, i, m)) < TINY &&
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY))
@@ -424,7 +425,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::RD:
                 i = op.site_index[0];
                 s = op.site_index.ss();
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(t(s, m, i)) < TINY &&
                      abs(v(s, 0, m, i, m, m)) < TINY &&
                      abs(v(s, 1, m, i, m, m)) < TINY))
@@ -450,7 +452,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::TR:
                 i = op.site_index[0];
                 s = op.site_index.ss();
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(t(s, i, m)) < TINY &&
                      abs(v(s, 0, i, m, m, m)) < TINY &&
                      abs(v(s, 1, i, m, m, m)) < TINY &&
@@ -486,7 +489,8 @@ struct HamiltonianQC<S, typename S::is_sz_t> : Hamiltonian<S> {
             case OpNames::TS:
                 i = op.site_index[0];
                 s = op.site_index.ss();
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(v(s, 0, m, i, m, m)) < TINY &&
                      abs(v(s, 1, m, i, m, m)) < TINY &&
                      abs(v(0, s, m, m, m, i)) < TINY &&
@@ -919,7 +923,8 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 break;
             case OpNames::R:
                 i = op.site_index[0];
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(t(i, m)) < TINY && abs(v(i, m, m, m)) < TINY))
                     p.second = zero;
                 else if (!(delayed & DelayedOpNames::R)) {
@@ -939,7 +944,8 @@ struct HamiltonianQC<S, typename S::is_su2_t> : Hamiltonian<S> {
                 break;
             case OpNames::RD:
                 i = op.site_index[0];
-                if (S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m])) ||
+                if (!S::pg_equal(
+                        0, S::pg_mul(orb_sym[i], S::pg_inv(orb_sym[m]))) ||
                     (abs(t(m, i)) < TINY && abs(v(m, i, m, m)) < TINY))
                     p.second = zero;
                 else if (!(delayed & DelayedOpNames::RD)) {

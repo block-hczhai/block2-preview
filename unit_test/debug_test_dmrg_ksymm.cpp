@@ -48,7 +48,9 @@ TEST_F(TestDMRG, Test) {
     string pdm_filename = "data/CR2.SVP.1NPC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
     // occs = read_occ(occ_filename);
-    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename =
+        "data/C2.PVDZ.FCIDUMP.C2LZ"; // E = -75.731365791537598 (M = 500)
     // string occ_filename = "data/H2O.TZVP.OCC";
     // occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
@@ -60,7 +62,16 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     cout << "INT start" << endl;
     fcidump->read(filename);
-    fcidump = make_shared<HubbardKSpaceFCIDUMP>(8, 1, 2);
+    int k_mod = 4;
+    fcidump->set_k_mod(k_mod);
+    auto x = fcidump->k_sym<int>();
+    if (k_mod != 0) {
+        for (int i = 0; i < x.size(); i++)
+            x[i] = (x[i] + k_mod * 10) % k_mod, cout << (int)x[i] << " ";
+        cout << endl;
+    }
+    fcidump->set_k_sym(x);
+    // fcidump = make_shared<HubbardKSpaceFCIDUMP>(8, 1, 2);
     // fcidump = make_shared<HubbardFCIDUMP>(4, 1, 2, true);
     cout << "INT end .. T = " << t.get_time() << endl;
 
@@ -132,18 +143,22 @@ TEST_F(TestDMRG, Test) {
     S vacuum(0);
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
+    double err1 = fcidump->symmetrize(orbsym);
+    double err2 = fcidump->symmetrize(fcidump->k_sym<int>(), k_mod);
+    cout << err1 << " " << err2 << endl;
     vector<typename S::pg_t> pg_sym = HamiltonianQC<S>::combine_orb_sym(
         orbsym, fcidump->k_sym<int>(), fcidump->k_mod());
     uint8_t isym = PointGroup::swap_pg(pg)(fcidump->isym());
     S target(fcidump->n_elec(), fcidump->twos(),
-             S::pg_combine(isym, 4, fcidump->k_mod()));
+             S::pg_combine(isym, 0, fcidump->k_mod()));
     shared_ptr<HamiltonianQC<S>> hamil =
         make_shared<HamiltonianQC<S>>(vacuum, norb, pg_sym, fcidump);
 
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo = make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S>> mpo =
+        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
     // mpo = make_shared<ArchivedMPO<S>>(mpo);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
@@ -152,15 +167,16 @@ TEST_F(TestDMRG, Test) {
     mpo =
         make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
                                       OpNamesSet({OpNames::R, OpNames::RD}));
+
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
-    cout << mpo->get_blocking_formulas() << endl;
+    // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
-    mpo->reduce_data();
-    mpo->save_data("mpo.bin");
+    // mpo->reduce_data();
+    // mpo->save_data("mpo.bin");
 
-    mpo = make_shared<MPO<S>>(0);
-    mpo->load_data("mpo.bin", true);
+    // mpo = make_shared<MPO<S>>(0);
+    // mpo->load_data("mpo.bin", true);
 
     ubond_t bond_dim = 200;
 

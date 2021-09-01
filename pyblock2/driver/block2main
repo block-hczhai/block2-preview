@@ -338,7 +338,8 @@ if pre_run or not no_pre_run:
     if "k_symmetry" in dic:
         if "k_mod" in dic:
             fcidump.k_mod = int(dic["k_mod"])
-            fcidump.k_sym = VectorInt([x % fcidump.k_mod for x in fcidump.k_sym])
+            if fcidump.k_mod != 0:
+                fcidump.k_sym = VectorInt([x % fcidump.k_mod for x in fcidump.k_sym])
             fcidump.k_isym = fcidump.k_isym % fcidump.k_mod
             iksym = [x % fcidump.k_mod for x in iksym]
         target = SX(fcidump.n_elec, fcidump.twos,

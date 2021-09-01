@@ -656,9 +656,10 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
-                                        if (s->b->q_label.pg() !=
-                                            ((s->conj & 2) ? S::pg_inv(pg)
-                                                           : pg))
+                                        if (!S::pg_equal(s->b->q_label.pg(),
+                                                         (s->conj & 2)
+                                                             ? S::pg_inv(pg)
+                                                             : pg))
                                             continue;
                                         bool cj = (s->conj & 2) != 0,
                                              found = false;
@@ -716,9 +717,10 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
-                                        if (s->a->q_label.pg() !=
-                                            ((s->conj & 1) ? S::pg_inv(pg)
-                                                           : pg))
+                                        if (!S::pg_equal(s->a->q_label.pg(),
+                                                         (s->conj & 1)
+                                                             ? S::pg_inv(pg)
+                                                             : pg))
                                             continue;
                                         bool cj = (s->conj & 1) != 0,
                                              found = false;

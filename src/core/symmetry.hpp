@@ -74,6 +74,7 @@ struct SZShort {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SZShort combine(SZShort bra, SZShort ket) const {
         return ket + *this == bra ? ket : SZShort(invalid);
     }
@@ -148,6 +149,7 @@ struct SZLong {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SZLong combine(SZLong bra, SZLong ket) const {
         return ket + *this == bra ? ket : SZLong(invalid);
     }
@@ -229,6 +231,7 @@ struct SZLongLong {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SZLongLong combine(SZLongLong bra, SZLongLong ket) const {
         return ket + *this == bra ? ket : SZLongLong(invalid);
     }
@@ -350,6 +353,9 @@ struct SZKLong {
         return ((pg_t)(kmod & 0x3FFFULL) << 18) | ((pg_t)(k & 0x3FFFULL) << 4) |
                (pg_t)(uint8_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept {
+        return (a & (~0xFFFC0000UL)) == (b & (~0xFFFC0000UL));
+    }
     SZKLong combine(SZKLong bra, SZKLong ket) const {
         return ket + *this == bra ? ket : SZKLong(invalid);
     }
@@ -435,6 +441,7 @@ struct SZLZ {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)k;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SZLZ combine(SZLZ bra, SZLZ ket) const {
         return ket + *this == bra ? ket : SZLZ(invalid);
     }
@@ -542,6 +549,7 @@ struct SU2Short {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SU2Short combine(SU2Short bra, SU2Short ket) const {
         ket.set_twos_low(bra.twos());
         if (ket.get_bra(*this) != bra ||
@@ -657,6 +665,7 @@ struct SU2Long {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SU2Long combine(SU2Long bra, SU2Long ket) const {
         ket.set_twos_low((bra.twos() & (~1)) | (int)ket.is_fermion());
         if (ket.get_bra(*this) != bra ||
@@ -784,6 +793,7 @@ struct SU2LongLong {
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)pg;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SU2LongLong combine(SU2LongLong bra, SU2LongLong ket) const {
         ket.set_twos_low(bra.twos());
         if (ket.get_bra(*this) != bra ||
@@ -954,8 +964,11 @@ struct SU2KLong {
                  ((a ^ b) & 0xFUL) | ((a | b) & 0xFFF0000UL));
     }
     static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
-        return ((pg_t)(kmod & 0xFFFULL) << 16) | ((pg_t)(k & 0xFFFULL) << 4) |
+        return ((pg_t)(kmod & 0xFFFUL) << 16) | ((pg_t)(k & 0xFFFUL) << 4) |
                (pg_t)(uint8_t)pg;
+    }
+    static inline bool pg_equal(int a, int b) noexcept {
+        return (a & (~0xFFF0000UL)) == (b & (~0xFFF0000UL));
     }
     SU2KLong combine(SU2KLong bra, SU2KLong ket) const {
         ket.set_twos_low(bra.twos());
@@ -1085,6 +1098,7 @@ struct SU2LZ {
     static pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
         return (pg_t)k;
     }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
     SU2LZ combine(SU2LZ bra, SU2LZ ket) const {
         ket.set_twos_low((bra.twos() & (~1)) | (int)ket.is_fermion());
         if (ket.get_bra(*this) != bra ||

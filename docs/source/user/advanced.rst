@@ -660,6 +660,9 @@ the following python script can be used to generate the integral with :math:`C_2
         mf.mo_coeff.conj(), mf.mo_coeff, mf.mo_coeff.conj(), mf.mo_coeff, optimize=True)
     print('g2e imag = ', np.linalg.norm(g2e.imag))
     assert np.linalg.norm(g2e.imag) < 1E-14
+    print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((1, 0, 3, 2))))
+    print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((2, 3, 0, 1))))
+    print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((3, 2, 1, 0))))
     g2e = g2e.real.flatten()
 
     fcidump_tol = 1E-13
@@ -720,14 +723,54 @@ Some reference outputs for this input file: ::
     $ grep 'DMRG Energy' dmrg-1.out
     DMRG Energy =  -75.729154415733063
 
-Initial Guess with Occupation Numbers
--------------------------------------
-
 When there are too many orbitals, and the default ``warmup fci`` initial guess is used,
 the initial MPS can have very large bond dimension
 (especially when the LZ symmetry is used, since LZ is not a finite group)
 and the first sweep will take very long time.
-Once can use ``warmup occ`` initial guess to solve this problem, where another keywrod ``occ`` should be used,
+
+One way to solve this is to limit the LZ to a finite group, using modular arithmetic.
+We can limit LZ to Z4 or Z2. The efficiency gain will be smaller, but the convergence may be more stable.
+The keyword ``k_mod`` can be used to set the modulus. When ``k_mod = 0``, it is the original infinite LZ group.
+
+The following input file can be used to perform the calculation with :math:`C_2 \otimes Z_4` symmetry: ::
+
+    sym d2h
+    orbitals FCIDUMP
+    k_symmetry
+    k_irrep 0
+    k_mod 4
+
+    nelec 12
+    spin 0
+    irrep 1
+
+    hf_occ integral
+    schedule
+    0  500 1E-8 1E-3
+    4  500 1E-8 1E-4
+    8  500 1E-9 1E-5
+    12 500 1E-9 0
+    end
+    maxiter 30
+
+Some reference outputs for this input file: ::
+
+    $ grep 'Time elapsed' dmrg-2.out | tail -1
+    Time elapsed =    111.491 | E =     -75.7292222457 | DE = -8.17e-08 | DW = 1.28e-05
+    $ grep 'DMRG Energy' dmrg-2.out
+    DMRG Energy =  -75.729222245693876
+
+Similarly, setting ``k_mod 2`` gives the following output: ::
+
+    $ grep 'Time elapsed' dmrg-3.out | tail -1
+    Time elapsed =    135.394 | E =     -75.7314583188 | DE = -3.97e-07 | DW = 1.49e-05
+    $ grep 'DMRG Energy' dmrg-3.out
+    DMRG Energy =  -75.731458318751280
+
+Initial Guess with Occupation Numbers
+-------------------------------------
+
+Once can use ``warmup occ`` initial guess to solve the initial guess problem, where another keywrod ``occ`` should be used,
 followed by a list of (fractional) occupation numbers separated by the space character, to set the occupation numbers.
 The occupation numbers can be obtained from a DMRG calculation using the same integral with/without K symmetry (or some other methods like CCSD and MP2).
 If ``onepdm`` is in the input file, the occupation numbers will be printed at the end of the output.

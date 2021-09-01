@@ -2250,6 +2250,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_inv", &SZ::pg_inv)
         .def_static("pg_combine", &SZ::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SZ::pg_equal)
         .def("combine", &SZ::combine)
         .def("__getitem__", &SZ::operator[])
         .def(py::self == py::self)
@@ -2284,6 +2285,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_inv", &SU2::pg_inv)
         .def_static("pg_combine", &SU2::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SU2::pg_equal)
         .def("combine", &SU2::combine)
         .def("__getitem__", &SU2::operator[])
         .def(py::self == py::self)
@@ -2320,6 +2322,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_inv", &SZK::pg_inv)
         .def_static("pg_combine", &SZK::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SZK::pg_equal)
         .def("combine", &SZK::combine)
         .def("__getitem__", &SZK::operator[])
         .def(py::self == py::self)
@@ -2358,6 +2361,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_inv", &SU2K::pg_inv)
         .def_static("pg_combine", &SU2K::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SU2K::pg_equal)
         .def("combine", &SU2K::combine)
         .def("__getitem__", &SU2K::operator[])
         .def(py::self == py::self)
