@@ -169,6 +169,7 @@ sweep_tol = float(dic.get("sweep_tol", 1e-6))
 cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 singlet_embedding = "singlet_embedding" in dic
 siv = dic.get("symmetrize_ints", 1E-10)
+init_mps_center = int(dic.get("init_mps_center", 0))
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
 dynamic_corr_method = None
 for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
@@ -744,14 +745,14 @@ elif pre_run or not no_pre_run:
 
     if conn_centers is not None:
         assert nroots == 1
-        mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+        mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
     elif nroots != 1 or len(targets) != 1:
-        mps = MultiMPS(n_sites, 0, dot, nroots)
+        mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorDouble([float(x) for x in weights.split()])
     else:
-        mps = MPS(n_sites, 0, dot)
+        mps = MPS(n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     if nroots == 1:
@@ -1278,6 +1279,8 @@ if not pre_run:
                 dmrg.ext_mes.append(ext_me)
             if "lowmem_noise" in dic:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+            if "dm_noise" in dic:
+                dmrg.noise_type = NoiseTypes.DensityMatrix
             else:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
             dmrg.cutoff = float(dic.get("cutoff", 1E-14))

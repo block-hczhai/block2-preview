@@ -21,7 +21,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "twopdm", "restart_twopdm", "startM", "maxM", "symmetrize_ints",
               "diag_twopdm", "restart_diag_twopdm",
               "occ", "bias", "cbias", "correlation", "restart_correlation",
-              "lowmem_noise", "conn_centers", "restart_dir", "cutoff",
+              "lowmem_noise", "dm_noise", "conn_centers", "restart_dir", "cutoff",
               "sym", "irrep", "weights", "statespecific", "mps_tags",
               "tran_onepdm", "tran_twopdm", "restart_tran_onepdm",
               "restart_tran_twopdm", "soc", "overlap", "tran_oh",
@@ -35,7 +35,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
               "nevpt2sd", "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
-              "model", "k_symmetry", "k_irrep", "k_mod"}
+              "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

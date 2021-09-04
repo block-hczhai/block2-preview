@@ -283,6 +283,10 @@ maxM
 lowmem\_noise
     Optional. If given, the noise step will require less memory but potentially worse openmp load-balancing.
 
+dm\_noise
+    Optional. If given, the density matrix noise will be used instead of the default perturbative noise.
+    Density matrix noise is much cheaper but not very effective.
+
 cutoff
     Optional. Followed by a small float number. States with eigenvalue below this number will be discarded,
     even when the bond dimension is large enough to keep this state. Default is 1E-14.
@@ -362,6 +366,10 @@ bias
 cbias
     Optional. Followed by a non-negative float number. If not 0.0, sets a constant shift towards the equal-possibility occ.
     ``cbias`` is normally useful for shifting integral occ, while ``bias`` only shifts fractional occ.
+
+init_mps_center
+    Optional. Followed by a site index (counting from zero). Default is zero.
+    This is the canonical center for the initial guess MPS.
 
 full\_fci\_space
     Optional, not useful for general user. If ``full_fci_space`` keyword is in the input (with no associated value), the full fci space is used (including block quantum numbers outside the space of the wavefunction target quantum number).
