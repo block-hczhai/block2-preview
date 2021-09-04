@@ -81,14 +81,18 @@ enum struct OpNames : uint8_t {
     DCC,
     DCD,
     DDC,
-    TEMP
+    TEMP,
+    XL,
+    XR,
+    X
 };
 
 inline ostream &operator<<(ostream &os, const OpNames c) {
     const static string repr[] = {
-        "Zero", "H",   "I",   "N",   "NN",  "C",   "D",   "R",   "RD",   "A",
-        "AD",   "P",   "PD",  "B",   "BD",  "Q",   "TR",  "TS",  "PDM1", "PDM2",
-        "CCDD", "CCD", "CDC", "CDD", "DCC", "DCD", "DDC", "TEMP"};
+        "Zero", "H",   "I",    "N",    "NN",   "C",   "D",   "R",
+        "RD",   "A",   "AD",   "P",    "PD",   "B",   "BD",  "Q",
+        "TR",   "TS",  "PDM1", "PDM2", "CCDD", "CCD", "CDC", "CDD",
+        "DCC",  "DCD", "DDC",  "TEMP", "XL",   "XR",  "X"};
     os << repr[(uint8_t)c];
     return os;
 }

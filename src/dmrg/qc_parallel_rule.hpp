@@ -69,6 +69,10 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
         case OpNames::TEMP:
             return ParallelProperty(find_index(si[0], si[1]) % comm->size,
                                     ParallelOpTypes::None);
+        case OpNames::X:
+        case OpNames::XL:
+        case OpNames::XR:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
         default:
             assert(false);
         }
@@ -107,6 +111,10 @@ template <typename S> struct ParallelRuleOneBodyQC : ParallelRule<S> {
         case OpNames::TEMP:
             return ParallelProperty(find_index(si[0], si[1]) % comm->size,
                                     ParallelOpTypes::None);
+        case OpNames::X:
+        case OpNames::XL:
+        case OpNames::XR:
+            return ParallelProperty(0, ParallelOpTypes::Repeated);
         default:
             assert(false);
         }

@@ -7,7 +7,7 @@ OPTION(USE_DMRG "DMRG" ON)
 OPTION(USE_SCI "SCI" ON)
 OPTION(USE_BIG_SITE "BigSite" ON)
 OPTION(USE_SP_DMRG "StochasticPDMRG" ON)
-OPTION(USE_KSYMM "KSymmetry" ON)
+OPTION(USE_KSYMM "KSymmetry" OFF)
 
 # Project Name (must be python module name)
 

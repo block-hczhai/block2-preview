@@ -1085,7 +1085,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("DCC", OpNames::DCC)
         .value("DCD", OpNames::DCD)
         .value("DDC", OpNames::DDC)
-        .value("TEMP", OpNames::TEMP);
+        .value("TEMP", OpNames::TEMP)
+        .value("XL", OpNames::XL)
+        .value("XR", OpNames::XR)
+        .value("X", OpNames::X);
 
     py::enum_<DelayedOpNames>(m, "DelayedOpNames", py::arithmetic())
         .value("Nothing", DelayedOpNames::None)

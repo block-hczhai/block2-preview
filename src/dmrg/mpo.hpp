@@ -21,11 +21,11 @@
 #pragma once
 
 #include "../core/csr_operator_functions.hpp"
-#include "mps.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/rule.hpp"
 #include "../core/symbolic.hpp"
 #include "../core/tensor_functions.hpp"
+#include "mps.hpp"
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -1089,6 +1089,10 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
             auto &y = MPO<S>::left_operator_exprs[m];
             x = x->copy();
             y = y->copy();
+            if (y->get_type() != x->get_type()) {
+                y = make_shared<SymbolicRowVector<S>>(x->n);
+                y->data = MPO<S>::left_operator_exprs[m]->data;
+            }
             for (size_t j = 0; j < x->data.size(); j++)
                 if (x->data[j] == i_op) {
                     found = true;
@@ -1099,6 +1103,12 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
                 y->data.push_back(i_op * i_op);
                 assert(x->get_type() == SymTypes::RVec);
                 x->n = y->n = (int)x->data.size();
+                if (m == 0) {
+                    auto &z = MPO<S>::tensors[m]->lmat;
+                    z = z->copy();
+                    z->data.push_back(i_op);
+                    z->n = (int)z->data.size();
+                }
             }
         }
         for (size_t m = 0; m < MPO<S>::right_operator_names.size(); m++) {
@@ -1107,6 +1117,10 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
             auto &y = MPO<S>::right_operator_exprs[m];
             x = x->copy();
             y = y->copy();
+            if (y->get_type() != x->get_type()) {
+                y = make_shared<SymbolicColumnVector<S>>(x->m);
+                y->data = MPO<S>::right_operator_exprs[m]->data;
+            }
             for (size_t j = 0; j < x->data.size(); j++)
                 if (x->data[j] == i_op) {
                     found = true;
@@ -1117,6 +1131,12 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
                 y->data.push_back(i_op * i_op);
                 assert(x->get_type() == SymTypes::CVec);
                 x->m = y->m = (int)x->data.size();
+                if (m == mpo->n_sites - 1) {
+                    auto &z = MPO<S>::tensors[m]->rmat;
+                    z = z->copy();
+                    z->data.push_back(i_op);
+                    z->m = (int)z->data.size();
+                }
             }
         }
     }
