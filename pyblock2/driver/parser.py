@@ -169,15 +169,16 @@ def parse(fname):
     # optional keywords that can be obtained from fcidump
     if "orbitals" in dic and ("nelec" not in dic or "spin" not in dic or "irrep" not in dic or
         ("k_symmetry" in dic and "k_irrep" not in dic)):
-        cont_dict = read_fcidump(dic["orbitals"])
-        if "nelec" not in dic and "nelec" in cont_dict:
-            dic["nelec"] = cont_dict["nelec"]
-        if "spin" not in dic and "ms2" in cont_dict:
-            dic["spin"] = cont_dict["ms2"]
-        if "irrep" not in dic and "isym" in cont_dict:
-            dic["irrep"] = cont_dict["isym"]
-        if "k_symmetry" in dic and "k_irrep" not in dic and "kisym" in cont_dict:
-            dic["k_irrep"] = cont_dict["kisym"]
+        if open(dic["orbitals"], 'rb').read(4) != b'\x89HDF':
+            cont_dict = read_fcidump(dic["orbitals"])
+            if "nelec" not in dic and "nelec" in cont_dict:
+                dic["nelec"] = cont_dict["nelec"]
+            if "spin" not in dic and "ms2" in cont_dict:
+                dic["spin"] = cont_dict["ms2"]
+            if "irrep" not in dic and "isym" in cont_dict:
+                dic["irrep"] = cont_dict["isym"]
+            if "k_symmetry" in dic and "k_irrep" not in dic and "kisym" in cont_dict:
+                dic["k_irrep"] = cont_dict["kisym"]
 
     # sanity check
     diff = set(dic.keys()) - KNOWN_KEYS
@@ -350,28 +351,44 @@ def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
     e_core = float(Ham.H0)
     n_sites = Ham.norb
     fcidump = FCIDUMP()
+    
+    if len(h1e) == 2: # UHF
+        mh1e_a = h1e[0][np.tril_indices(n_sites)]
+        mh1e_a[np.abs(mh1e_a) < tol] = 0.0
+        mh1e_b = h1e[1][np.tril_indices(n_sites)]
+        mh1e_b[np.abs(mh1e_b) < tol] = 0.0
+        mh1e = (mh1e_a, mh1e_b)
 
-    mh1e_a = np.zeros((n_sites * (n_sites + 1) // 2))
-    mh1e_b = np.zeros((n_sites * (n_sites + 1) // 2))
-    mh1e = (mh1e_a, mh1e_b)
-    for xmh1e, xh1e in zip(mh1e, h1e):
-        k = 0
-        for i in range(0, n_sites):
-            for j in range(0, i + 1):
-                #assert abs(xh1e[i, j] - xh1e[j, i]) < tol
-                xmh1e[k] = xh1e[i, j]
-                k += 1
-        xmh1e[np.abs(xmh1e) < tol] = 0.0
+        g2e_aa = ao2mo.restore(8, g2e[0], n_sites)
+        non0_idx  = (g2e_aa <  tol)
+        non0_idx &= (g2e_aa > -tol)
+        g2e_aa[non0_idx] = 0.0
+        
+        g2e_bb = ao2mo.restore(8, g2e[1], n_sites)
+        non0_idx  = (g2e_bb <  tol)
+        non0_idx &= (g2e_bb > -tol)
+        g2e_bb[non0_idx] = 0.0
+        
+        g2e_ab = ao2mo.restore(4, g2e[2], n_sites)
+        non0_idx  = (g2e_ab <  tol)
+        non0_idx &= (g2e_ab > -tol)
+        g2e_ab[non0_idx] = 0.0
+        non0_idx = None
 
-    g2e_aa = ao2mo.restore(8, g2e[0], n_sites)
-    g2e_bb = ao2mo.restore(8, g2e[1], n_sites)
-    g2e_ab = ao2mo.restore(4, g2e[2], n_sites)
-
-    mg2e = (g2e_aa, g2e_bb, g2e_ab)
-    for xmg2e in mg2e:
-        xmg2e[np.abs(xmg2e) < tol] = 0.0
-    fcidump.initialize_sz(
-        n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
+        mg2e = (g2e_aa, g2e_bb, g2e_ab)
+        fcidump.initialize_sz(n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
+    elif len(h1e) == 1: # RHF
+        mh1e = h1e[0][np.tril_indices(n_sites)]
+        mh1e[np.abs(mh1e) < tol] = 0.0
+        mg2e = ao2mo.restore(8, g2e[0], n_sites)
+        non0_idx  = (mg2e <  tol)
+        non0_idx &= (mg2e > -tol)
+        mg2e[non0_idx] = 0.0
+        non0_idx = None
+        fcidump.initialize_su2(n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
+    else:
+        raise ValueError("h1e dimension error, len = %s", len(h1e))
+    
     if orb_sym is None:
         orb_sym = [1] * n_sites
     fcidump.orb_sym = VectorUInt8(orb_sym)
@@ -449,7 +466,13 @@ def get_schedule(dic):
         raise ValueError("Unrecognized schedule type (%s)" % sch_type)
     return schedule
 
+def test_read_integral():
+    # UHF intergal
+    ints = read_integral("ints.h5", n_elec=4, twos=0, tol=1e-12, isym=1, orb_sym=None)
+    # RHF integral
+    ints = read_integral("ints_res.h5", n_elec=16, twos=0, tol=1e-8, isym=1, orb_sym=None)
 
 if __name__ == "__main__":
-    dic = parse(fname="./test/dmrg.conf.6")
+    dic = parse(fname="./dmrg.conf")
     print(dic)
+    test_read_integral()
