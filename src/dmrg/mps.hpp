@@ -147,10 +147,17 @@ template <typename S> struct MPSInfo {
                 (*arr)[i] = make_shared<StateInfo<S>>();
                 (*arr)[i]->load_data(ifs);
             }
-        for (int i = 0; i <= n_sites; i++)
+        bond_dim = 0;
+        for (int i = 0; i <= n_sites; i++){
             left_dims[i] = make_shared<StateInfo<S>>();
-        for (int i = n_sites; i >= 0; i--)
+            bond_dim = max(bond_dim, 
+                    static_cast<ubond_t>(left_dims[i]->n_states_total));
+        }
+        for (int i = n_sites; i >= 0; i--){
             right_dims[i] = make_shared<StateInfo<S>>();
+            bond_dim = max(bond_dim, 
+                    static_cast<ubond_t>(right_dims[i]->n_states_total));
+        }
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
