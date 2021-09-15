@@ -147,17 +147,10 @@ template <typename S> struct MPSInfo {
                 (*arr)[i] = make_shared<StateInfo<S>>();
                 (*arr)[i]->load_data(ifs);
             }
-        bond_dim = 0;
-        for (int i = 0; i <= n_sites; i++){
+        for (int i = 0; i <= n_sites; i++)
             left_dims[i] = make_shared<StateInfo<S>>();
-            bond_dim = max(bond_dim, 
-                    static_cast<ubond_t>(left_dims[i]->n_states_total));
-        }
-        for (int i = n_sites; i >= 0; i--){
+        for (int i = n_sites; i >= 0; i--)
             right_dims[i] = make_shared<StateInfo<S>>();
-            bond_dim = max(bond_dim, 
-                    static_cast<ubond_t>(right_dims[i]->n_states_total));
-        }
     }
     void load_data(const string &filename) {
         ifstream ifs(filename.c_str(), ios::binary);
@@ -729,17 +722,35 @@ template <typename S> struct MPSInfo {
                 right_dims[i]->save_data(get_filename(false, i));
             }
     }
-    void load_mutable_left() const {
-        for (int i = 0; i <= n_sites; i++)
+    void load_mutable_left() {
+        bool update_bond_dim = bond_dim == 0;
+        for (int i = 0; i <= n_sites; i++){
             left_dims[i]->load_data(get_filename(true, i));
+            if(update_bond_dim){
+                bond_dim = max(bond_dim, 
+                     static_cast<ubond_t>(left_dims[i]->n_states_total));
+            }
+        }
     }
-    void load_mutable_right() const {
-        for (int i = n_sites; i >= 0; i--)
+    void load_mutable_right() {
+        bool update_bond_dim = bond_dim == 0;
+        for (int i = n_sites; i >= 0; i--){
             right_dims[i]->load_data(get_filename(false, i));
+            if(update_bond_dim){
+                bond_dim = max(bond_dim, 
+                     static_cast<ubond_t>(right_dims[i]->n_states_total));
+            }
+        }
     }
-    void load_mutable() const {
+    void load_mutable() {
+        bool update_bond_dim = bond_dim == 0;
         load_mutable_left();
+        auto bond_dim_save = bond_dim;
+        if(update_bond_dim){
+            bond_dim = 0; 
+        }
         load_mutable_right();
+        bond_dim = max(bond_dim,bond_dim_save);
     }
     void deallocate_mutable() {
         for (int i = 0; i <= n_sites; i++)
