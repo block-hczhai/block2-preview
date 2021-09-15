@@ -93,7 +93,7 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;
     S target;
-    ubond_t bond_dim;
+    mutable ubond_t bond_dim;
     // States in each site
     vector<shared_ptr<StateInfo<S>>> basis;
     // Maximal possible states for left/right block (may be equal to/smaller
@@ -722,7 +722,7 @@ template <typename S> struct MPSInfo {
                 right_dims[i]->save_data(get_filename(false, i));
             }
     }
-    void load_mutable_left() {
+    void load_mutable_left() const {
         bool update_bond_dim = bond_dim == 0;
         for (int i = 0; i <= n_sites; i++){
             left_dims[i]->load_data(get_filename(true, i));
@@ -732,7 +732,7 @@ template <typename S> struct MPSInfo {
             }
         }
     }
-    void load_mutable_right() {
+    void load_mutable_right() const {
         bool update_bond_dim = bond_dim == 0;
         for (int i = n_sites; i >= 0; i--){
             right_dims[i]->load_data(get_filename(false, i));
@@ -742,7 +742,7 @@ template <typename S> struct MPSInfo {
             }
         }
     }
-    void load_mutable() {
+    void load_mutable() const {
         bool update_bond_dim = bond_dim == 0;
         load_mutable_left();
         auto bond_dim_save = bond_dim;
