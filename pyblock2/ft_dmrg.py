@@ -61,7 +61,8 @@ def _init(SpinLabel):
     import tools; tools.init(SpinLabel)
     from tools import saveMPStoDir, loadMPSfromDir
     import numpy as np
-    from typing import List
+    import scipy
+    from typing import List, Union
 
     if hasMPI:
         MPI = MPICommunicator()
@@ -262,7 +263,8 @@ def _init(SpinLabel):
                                  bond_dim: int,
                                  save_dir=None,
                                  tag="psi_t0", dot=2,
-                                 n_sub_sweeps_init=6, n_sub_sweeps=2) -> MPS:
+                                 n_sub_sweeps_init=6, n_sub_sweeps=2,
+                                 normalize=True) -> Union[MPS,float]:
             """ Get the initial ground state by propagating a maximally entangled state until beta
             exp(-beta H) |max_entangled>
             Currently uses RK4 algorithm
@@ -276,7 +278,8 @@ def _init(SpinLabel):
             :param dot: MPS dot (2 or 1)
             :param n_sub_sweeps_init: Initial number of sweeps for RK4 algorithm
             :param n_sub_sweeps:  Number of sweeps for RK4 algorithm
-            :return: mps
+            :param normalize: Normalize mps during propagation
+            :return: mps, energy - mu * <n>
             """
             assert self.fcidump is not None, "call init_hamiltonian first"
             mps_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum, self.target, self.hamil.basis)
@@ -321,18 +324,139 @@ def _init(SpinLabel):
             me.init_environments(False)
             te = TimeEvolution(me, VectorUBond([bond_dim]), TETypes.RK4, n_sub_sweeps_init)
             te.iprint = self.verbose
-            te.solve(n_steps, dbeta, mps.center == 0)
+            te.normalize_mps = normalize
+            te.solve(1, dbeta, mps.center == 0)
+            te.n_sub_sweeps = n_sub_sweeps
             if n_steps != 1:
                 # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-                te.solve(n_steps-1, dbeta, mps.center == 0, n_sub_sweeps)
+                te.solve(n_steps-1, dbeta, mps.center == 0)
+            energy_minus_mu_n = te.energies[-1]
 
             mpo.deallocate()
             self.hamil.mu = 0
             if save_dir is not None:
                 saveMPStoDir(mps, save_dir)
-            _print("# done")
-            _print("##############################")
-            return mps
+            if self.verbose > 0:
+                _print("# done")
+                _print("##############################")
+            return mps, energy_minus_mu_n
+
+        def optimize_mu(self, n_elec,
+                        mu_init: float,
+                        beta: float, dbeta: float,
+                        bond_dim: int,
+                        save_dir=None,
+                        tol=1e-3, maxiter=10,
+                        tag="psi_t0", dot=2,
+                        n_sub_sweeps_init=6, n_sub_sweeps=2) -> Union[MPS, float]:
+            """ Optimize chemical potential via conjugate gradient minimzation of <N>
+            Currently only implemented for <N> = <Nalpha + Nbeta>; ie not for SZ
+
+            :param n_elec: Total number of electrons
+            :param mu_init: Initial value. This is important as the optimization landscape is not convex
+            :param beta: Inverse temperature
+            :param dbeta: "time" step
+            :param bond_dim: Max bond dimension for MPS
+            :param save_dir: If not None, save final MPS to this directory
+            :param tag: MPS tag
+            :param dot: MPS dot (2 or 1)
+            :param n_sub_sweeps_init: Initial number of sweeps for RK4 algorithm
+            :param n_sub_sweeps:  Number of sweeps for RK4 algorithm
+            :return: mps, energy - mu * <n>
+            :param tol: chemical potential optimization tolerance
+            :param maxiter: Max iterations in minimizer
+            :return: MPS and optimal chemical potential
+            """
+            # number operator
+            assert self.fcidump is not None, "call init_hamiltonian first"
+            assert self.hamil is not None, "call init_hamiltonian first"
+            fcidump_n = FCIDUMP()
+            n_sites = self.n_physical_sites
+            h1e = np.zeros((n_sites * (n_sites + 1) // 2))
+            k = 0
+            for i in range(n_sites):
+                for j in range(i + 1):
+                    if i == j:
+                        h1e[k] = 1
+                    k += 1
+            g2e = np.zeros(n_sites**4)
+            fcidump_n.initialize_su2(n_sites, self.fcidump.n_elec, self.fcidump.twos,
+                                     self.fcidump.isym, 0.0, h1e, g2e)
+            # number operator squared
+            fcidump_nn = FCIDUMP()
+            g2e = g2e.reshape([n_sites]*4)
+            for i in range(n_sites):
+                for j in range(n_sites):
+                    g2e[i,i,j,j] = 2
+            g2e = g2e.ravel()
+            fcidump_nn.initialize_su2(n_sites, self.fcidump.n_elec, self.fcidump.twos,
+                                     self.fcidump.isym, 0.0, h1e, g2e)
+            del g2e, h1e
+            hamil_n = HamiltonianQC(self.hamil.vacuum, self.n_physical_sites, self.orb_sym, fcidump_n)
+            hamil_nn = HamiltonianQC(self.hamil.vacuum, self.n_physical_sites, self.orb_sym, fcidump_nn)
+            mpo_n = MPOQC(hamil_n, QCTypes.Conventional)
+            mpo_n = SimplifiedMPO(AncillaMPO(mpo_n), RuleQC(), True, True,
+                                OpNamesSet((OpNames.R, OpNames.RD)))
+            mpo_nn = MPOQC(hamil_nn, QCTypes.Conventional)
+            mpo_nn = SimplifiedMPO(AncillaMPO(mpo_nn), RuleQC(), True, True,
+                                  OpNamesSet((OpNames.R, OpNames.RD)))
+
+            used_mps = [None] # mutable; changes in solve
+            def solve(mu):
+                # switch verbose off
+                verbose = self.verbose
+                if self.verbose < 3:
+                    self.verbose = 0
+                mps, energy_minus_mu_n = self.prepare_ground_state(mu, beta, dbeta, bond_dim, save_dir, tag, dot,
+                                                n_sub_sweeps_init, n_sub_sweeps)
+                used_mps[0] = mps
+                self.verbose = verbose
+                # expectation valeus
+                me_n = MovingEnvironment(mpo_n, mps, mps, "me_n")
+                me_nn = MovingEnvironment(mpo_nn, mps, mps, "me_nn")
+                me_n.init_environments(False)
+                me_nn.init_environments(False)
+
+                erw_n = Expect(me_n, bond_dim, bond_dim).solve(False)
+                erw_nn = Expect(me_nn, bond_dim, bond_dim).solve(False)
+                derw_n = beta * (erw_nn - erw_n**2)
+                diff = erw_n - n_elec
+                fmu = diff**2  # optimize this
+                gmu = 2 * diff * derw_n
+                E = energy_minus_mu_n + erw_n * mu
+                if self.verbose > 1:
+                    _print(f"mu = {mu:17.12f} E = {E:17.12f} <N> = {erw_n:17.12f} <N^2> = {erw_nn:17.12f} "
+                      f" <dN/dmu>={derw_n:17.12f} | F[mu] = {fmu:17.12f} grad[mu]={gmu:17.12f}")
+                return fmu, gmu
+
+            # implement caching for solver
+            mu_cache = {}
+            def f(mu):
+                mu = mu[0]
+                if mu not in mu_cache:
+                    mu_cache[mu] = solve(mu)
+                return mu_cache[mu][0]
+
+            def g(mu):
+                mu = mu[0]
+                if mu not in mu_cache:
+                    mu_cache[mu] = solve(mu)
+                return mu_cache[mu][1]
+
+
+            if self.verbose > 1:
+                _print("#~~~~~~~~~~~~~~~~~~~~")
+                _print("# Start optimizing mu")
+                opt_mu = scipy.optimize.minimize(f, mu_init, method="CG", jac=g, tol=tol,
+                                                 options={'disp': self.verbose > 0, 'maxiter': maxiter})
+            if self.verbose > 1:
+                _print("# done. opt result=",opt_mu)
+                _print("#~~~~~~~~~~~~~~~~~~~~")
+            mpo_nn.deallocate()
+            mpo_n.deallocate()
+            fcidump_n.deallocate()
+            fcidump_nn.deallocate()
+            return used_mps[0], opt_mu.x[0]
 
         def __del__(self):
             if self.hamil is not None:

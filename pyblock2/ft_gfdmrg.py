@@ -469,7 +469,8 @@ if __name__ == "__main__":
     dmrg = GFDMRG(scratch=scratch, memory=4e9,
                   verbose=3, omp_threads=n_threads)
     dmrg.init_hamiltonian_fcidump(point_group, "fcidump")
-    mps = dmrg.prepare_ground_state(mu, beta, dbeta, MAX_M)
+    #mps, mu = dmrg.optimize_mu(dmrg.fcidump.n_elec,mu, beta, dbeta, MAX_M)
+    mps = dmrg.prepare_ground_state(mu, beta, dbeta, MAX_M)[0]
 
 
     eta = 0.005
