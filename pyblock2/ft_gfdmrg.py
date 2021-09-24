@@ -21,7 +21,7 @@
 """ Finite temperature DDMRG++ for Green's Function.
 
 :author: Henrik R. Larsson, Sep 2021
-        Based on zero temperature gfdmprg from Huanchen Zhai
+        Based on zero temperature GFDMRG from Huanchen Zhai
 """
 
 from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
@@ -46,6 +46,7 @@ if SpinLabel == SU2:
         hasMPI = True
     except ImportError:
         hasMPI = False
+    from ft_dmrg import FTDMRG_SU2 as FTDMRG
 else:
     from block2.sz import AncillaMPO, AncillaMPSInfo
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
@@ -57,10 +58,12 @@ else:
         hasMPI = True
     except ImportError:
         hasMPI = False
+    from ft_dmrg import FTDMRG_SZ as FTDMRG
 import tools; tools.init(SpinLabel)
-from tools import saveMPStoDir, loadMPSfromDir, changeCanonicalForm
+from tools import saveMPStoDir, loadMPSfromDir
 import numpy as np
 from typing import List
+
 
 if hasMPI:
     MPI = MPICommunicator()
@@ -74,191 +77,10 @@ else:
 _print = tools.getVerbosePrinter(MPI.rank == 0, flush=True)
 
 
-class GFDMRGError(Exception):
-    pass
-
-
-class GFDMRG:
+class GFDMRG(FTDMRG):
     """
     DDMRG++ for Green's Function for molecules.
     """
-
-    def __init__(self, scratch='./nodex', memory=1 * 1E9, omp_threads=8, verbose=2,
-                 print_statistics=True, mpi=None, delayed_contraction=True):
-        """
-        :param scratch: Used scratchdir
-        :param memory:  Stackmemory in bytes
-        :param omp_threads: Number of omp threads
-        :param verbose: Detail of print statements: 0 (quiet), 2 (per sweep), 3 (per iteration)
-        :param print_statistics: Print memory statistics before/ after each call
-        :param mpi: MPI class
-        :param delayed_contraction: Use of it in MovingEnvironment (recommended if there are not multiple MEs)
-        """
-        self.fcidump = None
-        self.hamil = None
-        self.verbose = verbose
-        self.scratch = scratch
-        self.mpo_orig = None
-        self.print_statistics = print_statistics
-        self.mpi = mpi
-        self.delayed_contraction = delayed_contraction
-        self.idx = None # reorder
-        self.ridx = None # inv reorder
-        self.swap_pg = None # PointGroup.swap_XX; initialized in init_fcidump*
-        self.orb_sym = None
-        self.target = None
-        self.n_physical_sites = None
-        self.n_sites = None
-
-        Random.rand_seed(0)
-        isize = int(1e8) # hrl: typically <  200MB
-        init_memory(isize=isize, dsize=int(memory), save_dir=scratch)
-        Global.threading = Threading(
-            ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global, omp_threads, omp_threads, 1)
-        Global.threading.seq_type = SeqTypes.Tasked
-        Global.frame.load_buffering = False
-        Global.frame.save_buffering = False
-        Global.frame.use_main_stack = False
-        Global.frame.minimal_disk_usage = True
-
-        if self.verbose >= 2:
-            _print(Global.frame)
-            _print(Global.threading)
-
-        if mpi is not None:
-            if SpinLabel == SU2:
-                from block2.su2 import ParallelRuleQC, ParallelRuleNPDMQC, ParallelRuleSiteQC
-                from block2.su2 import ParallelRuleSiteQC, ParallelRuleIdentity
-            else:
-                from block2.sz import ParallelRuleQC, ParallelRuleNPDMQC
-                from block2.sz import ParallelRuleSiteQC, ParallelRuleIdentity
-            self.prule = ParallelRuleQC(mpi)
-            self.pdmrule = ParallelRuleNPDMQC(mpi)
-            self.siterule = ParallelRuleSiteQC(mpi)
-            self.identrule = ParallelRuleIdentity(mpi)
-        else:
-            self.prule = None
-            self.pdmrule = None
-            self.siterule = None
-            self.identrule = None
-
-    @staticmethod
-    def fmt_size(i, suffix='B'):
-        if i < 1000:
-            return "%d %s" % (i, suffix)
-        else:
-            a = 1024
-            for pf in "KMGTPEZY":
-                p = 2
-                for k in [10, 100, 1000]:
-                    if i < k * a:
-                        return "%%.%df %%s%%s" % p % (i / a, pf, suffix)
-                    p -= 1
-                a *= 1024
-        return "??? " + suffix
-
-    def init_hamiltonian_fcidump(self, pointgroup: str, filename: str, idx=None):
-        """Read integrals from FCIDUMP file
-
-        :param pointgroup: Used point group  (c1, c2v,..)
-        :param filename: FCIDUMP file
-        :param idx: Optional orbital reordering index
-        """
-        assert self.fcidump is None
-        self.fcidump = FCIDUMP()
-        self.fcidump.read(filename)
-        if idx is not None:
-            self.fcidump.reorder(VectorUInt16(idx))
-            self.idx = idx
-            self.ridx = np.argsort(idx)
-        self.swap_pg = getattr(PointGroup, "swap_" + pointgroup)
-        self.orb_sym = VectorUInt8(
-            map(self.swap_pg, self.fcidump.orb_sym))
-
-        vacuum = SpinLabel(0)
-        # hrl: twos should be 0 for thermal state; and n_elec = n_sites (2*n_sites_physical)
-        self.target = SpinLabel(2 * self.fcidump.n_sites, 0, self.swap_pg(self.fcidump.isym))
-        self.n_physical_sites = self.fcidump.n_sites
-        self.n_sites = self.fcidump.n_sites * 2
-
-        self.hamil = HamiltonianQC(
-            vacuum, self.n_physical_sites, self.orb_sym, self.fcidump)
-
-    def init_hamiltonian(self, n_elec: int, twos: int, isym: int, orb_sym: List[int],
-                         e_core: float, h1e: np.ndarray, g2e: np.ndarray, tol=1E-13, idx=None,
-                         save_fcidump=None):
-        """ Initialize fcidump based on integrals
-
-        :param pointgroup: Used point group  (c1, c2v,..)
-        :param n_elec: Total number of electrons
-        :param twos: 2S quantum number
-        :param isym: Wavefunction point group symmetry
-        :param orb_sym: Orbital symmetry in *molpro* notation (not PySCF XOR)
-        :param e_core: Core energy
-        :param h1e: One-electron integrals
-        :param g2e: Two-electron integrals
-        :param tol:  All integral values below tol will be set to zero
-        :param idx: Optional orbital reordering index
-        :param save_fcidump: Use this file to write an fcidump file (for later usage)
-        """
-        n_sites = h1e.shape[0]
-        assert self.fcidump is None
-        self.fcidump = FCIDUMP()
-        self.swap_pg = getattr(PointGroup, "swap_" + pointgroup)
-        if not isinstance(h1e, tuple):
-            mh1e = np.zeros((n_sites * (n_sites + 1) // 2))
-            k = 0
-            for i in range(0, n_sites):
-                for j in range(0, i + 1):
-                    assert abs(h1e[i, j] - h1e[j, i]) < tol
-                    mh1e[k] = h1e[i, j]
-                    k += 1
-            mg2e = g2e.ravel()
-            mh1e[np.abs(mh1e) < tol] = 0.0
-            mg2e[np.abs(mg2e) < tol] = 0.0
-            self.fcidump.initialize_su2(
-                n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
-        else:
-            assert SpinLabel == SZ
-            assert isinstance(h1e, tuple) and len(h1e) == 2
-            assert isinstance(g2e, tuple) and len(g2e) == 3
-            mh1e_a = np.zeros((n_sites * (n_sites + 1) // 2))
-            mh1e_b = np.zeros((n_sites * (n_sites + 1) // 2))
-            mh1e = (mh1e_a, mh1e_b)
-            for xmh1e, xh1e in zip(mh1e, h1e):
-                k = 0
-                for i in range(0, n_sites):
-                    for j in range(0, i + 1):
-                        assert abs(xh1e[i, j] - xh1e[j, i]) < tol
-                        xmh1e[k] = xh1e[i, j]
-                        k += 1
-                xmh1e[np.abs(xmh1e) < tol] = 0.0
-            mg2e = tuple(xg2e.ravel() for xg2e in g2e)
-            for xmg2e in mg2e:
-                xmg2e[np.abs(xmg2e) < tol] = 0.0
-            self.fcidump.initialize_sz(
-                n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
-        assert not np.any(np.array(orb_sym) == 0), "orb_sym should be in molpro notation"
-        self.fcidump.orb_sym = VectorUInt8(orb_sym)
-        if idx is not None:
-            self.fcidump.reorder(VectorUInt16(idx))
-            self.idx = idx
-            self.ridx = np.argsort(idx)
-        self.orb_sym = VectorUInt8(map(self.swap_pg, self.fcidump.orb_sym))
-
-        vacuum = SpinLabel(0)
-        self.target = SpinLabel(2 * self.fcidump.n_sites, 0, self.swap_pg(self.fcidump.isym))
-        self.n_physical_sites = self.fcidump.n_sites
-        self.n_sites = self.fcidump.n_sites * 2
-
-        self.hamil = HamiltonianQC(vacuum, self.n_sites, self.orb_sym, self.fcidump)
-
-        if save_fcidump is not None:
-            if self.mpi is None or self.mpi.rank == 0:
-                self.fcidump.orb_sym = VectorUInt8(orb_sym)
-                self.fcidump.write(save_fcidump)
-            if self.mpi is not None:
-                self.mpi.barrier()
 
     def greens_function(self, mps: MPS, E0: float, omegas: np.ndarray, eta: float,
                         idxs: List[int],
@@ -596,7 +418,7 @@ class GFDMRG:
                             _print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
                                    (w, idx2, idx, time.perf_counter() - t))
         mps.save_data()
-        mps_info.deallocate()
+        mps.info.deallocate()
 
         if self.print_statistics:
             _print("GF PEAK MEM USAGE:",
@@ -607,20 +429,11 @@ class GFDMRG:
 
         return gf_mat
 
-    def __del__(self):
-        if self.hamil is not None:
-            self.hamil.deallocate()
-        if self.fcidump is not None:
-            self.fcidump.deallocate()
-        if self.mpo_orig is not None:
-            self.mpo_orig.deallocate()
-        #release_memory() # hrl: error: 'NoneType' object is not callable
-
 if __name__ == "__main__":
 
     # parameters
     n_threads = 2
-    point_group = 'c2v'
+    point_group = 'c1'
     scratch = '/tmp/block2'
     load_dir = None
 
@@ -646,7 +459,7 @@ if __name__ == "__main__":
     cps_n_sweeps=30
 
     beta = 80 # inverse temperature
-    beta_step = 0.5 # "time" step
+    dbeta = 0.5 # "time" step
     mu = -0.026282794560 # Chemical potential for initial state preparation
 
     #################################################
@@ -656,65 +469,7 @@ if __name__ == "__main__":
     dmrg = GFDMRG(scratch=scratch, memory=4e9,
                   verbose=3, omp_threads=n_threads)
     dmrg.init_hamiltonian_fcidump(point_group, "fcidump")
-
-    # Ancilla MPS (thermal)
-    mps_info = AncillaMPSInfo(dmrg.n_physical_sites, dmrg.hamil.vacuum, dmrg.target, dmrg.hamil.basis)
-    mps_info.tag = "psi0"
-    if True:
-        # Perform actual work instead of reading in
-        from block2 import TETypes
-        if SpinLabel == SU2:
-            from block2.su2 import TimeEvolution
-        else:
-            from block2.sz import TimeEvolution
-
-        mps_info.set_thermal_limit()
-        mps_info.save_mutable()
-        mps_info.deallocate_mutable()
-
-        mps = MPS(dmrg.n_sites, dmrg.n_sites - 2, 2)
-        mps_info.load_mutable()
-        mps.initialize(mps_info)
-        mps.fill_thermal_limit()
-        mps.canonicalize()
-
-        mps.save_mutable()
-        mps.deallocate()
-        mps_info.deallocate_mutable()
-        mps.save_data()
-
-
-        # Propagation
-        print("##############################")
-        print("# Initial MPS propagation")
-        n_steps = int(beta / beta_step + 1) // 2  # propagate until beta/2
-        # MPO
-        dmrg.hamil.mu = mu
-        mpo = MPOQC(dmrg.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(AncillaMPO(mpo), RuleQC(), True, True,
-                            OpNamesSet((OpNames.R, OpNames.RD)))
-        mpo = IdentityAddedMPO(mpo) # hrl: sometimes const_e causes trouble for AncillaMPO
-        # TE
-        me = MovingEnvironment(mpo, mps, mps, "TE")
-        me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = True
-        me.init_environments(False)
-        te = TimeEvolution(me, VectorUBond(cps_bond_dims), TETypes.RK4, 6)
-        te.iprint = 3
-        te.solve(n_steps, beta_step/2, mps.center == 0)
-        if n_steps != 1:
-            # after the first beta step, use 2 sweeps (or 1 sweep) for each beta step
-            te.solve(n_steps-1, beta_step/2, mps.center == 0, 2)
-
-        mpo.deallocate()
-        dmrg.hamil.mu = 0
-        del me, te
-        saveMPStoDir(mps, "ft_gs_mps")
-        print("##############################")
-    #################################################
-    # GFDMRG
-    #################################################
-    mps = loadMPSfromDir(mps_info, "ft_gs_mps")
+    mps = dmrg.prepare_ground_state(mu, beta, dbeta, MAX_M)
 
 
     eta = 0.005
@@ -724,7 +479,7 @@ if __name__ == "__main__":
     omegas = omegas[::-1]
     idxs = [0] # Calc S_ii
     alpha = True # alpha or beta spin
-    fOut = open("ft_ddmrg_freqs_block2.dat","w")
+    fOut = open("ft_gfdmrg_freqs.dat","w")
     fOut.write(f"# eta={eta}\n")
     fOut.write("# omega  Re(gf)  Im(gf)\n")
     def callback(i,j,omega,gf):
