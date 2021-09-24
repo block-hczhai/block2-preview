@@ -422,7 +422,7 @@ def _init(SpinLabel):
                 derw_n = beta * (erw_nn - erw_n**2)
                 diff = erw_n - n_elec
                 fmu = diff**2  # optimize this
-                gmu = 2 * diff * derw_n
+                gmu = 2 * diff * derw_n # gradent of fmu w.r.t mu
                 E = energy_minus_mu_n + erw_n * mu
                 if self.verbose > 1:
                     _print(f"mu = {mu:17.12f} E = {E:17.12f} <N> = {erw_n:17.12f} <N^2> = {erw_nn:17.12f} "
