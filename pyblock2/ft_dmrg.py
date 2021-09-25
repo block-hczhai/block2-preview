@@ -62,7 +62,7 @@ def _init(SpinLabel):
     from tools import saveMPStoDir, loadMPSfromDir
     import numpy as np
     import scipy
-    from typing import List, Union
+    from typing import List, Union, Tuple
 
     if hasMPI:
         MPI = MPICommunicator()
@@ -264,7 +264,7 @@ def _init(SpinLabel):
                                  save_dir=None,
                                  tag="psi_t0", dot=2,
                                  n_sub_sweeps_init=6, n_sub_sweeps=2,
-                                 normalize=True) -> Union[MPS,float]:
+                                 normalize=True) -> Tuple[MPS,float]:
             """ Get the initial ground state by propagating a maximally entangled state until beta
             exp(-beta H) |max_entangled>
             Currently uses RK4 algorithm
@@ -348,7 +348,7 @@ def _init(SpinLabel):
                         save_dir=None,
                         tol=1e-3, maxiter=10,
                         tag="psi_t0", dot=2,
-                        n_sub_sweeps_init=6, n_sub_sweeps=2) -> Union[MPS, float]:
+                        n_sub_sweeps_init=6, n_sub_sweeps=2) -> Tuple[MPS, float]:
             """ Optimize chemical potential via conjugate gradient minimzation of <N>
             Currently only implemented for <N> = <Nalpha + Nbeta>; ie not for SZ
 

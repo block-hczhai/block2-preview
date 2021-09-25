@@ -18,17 +18,16 @@
 #
 #
 
-""" Finite temperature DDMRG++ for Green's Function.
+""" Finite temperature td-DMRG for Green's Function (time-domain => frequency domain).
 
 :author: Henrik R. Larsson, Sep 2021
-        Based on zero temperature GFDMRG from Huanchen Zhai
 """
 
 from block2 import SU2, SZ, Global, OpNamesSet, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
-from block2 import OrbitalOrdering, VectorUInt16
+from block2 import OrbitalOrdering, VectorUInt16, TETypes
 import time
 
 # Set spin-adapted or non-spin-adapted here
@@ -41,6 +40,7 @@ if SpinLabel == SU2:
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO, IdentityAddedMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.su2 import VectorOpElement, LocalMPO
+    from block2.su2 import ComplexExpect, MultiMPS, TimeEvolution
     try:
         from block2.su2 import MPICommunicator
         hasMPI = True
@@ -53,6 +53,7 @@ else:
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO, IdentityAddedMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.sz import VectorOpElement, LocalMPO
+    from block2.sz import ComplexExpect, MultiMPS, TimeEvolution
     try:
         from block2.sz import MPICommunicator
         hasMPI = True
@@ -60,10 +61,9 @@ else:
         hasMPI = False
     from ft_dmrg import FTDMRG_SZ as FTDMRG
 import tools; tools.init(SpinLabel)
-from tools import saveMPStoDir, loadMPSfromDir
+from tools import saveMPStoDir, loadMPSfromDir, changeCanonicalForm
 import numpy as np
-from typing import List, Union, Tuple
-
+from typing import List, Tuple, Union
 
 if hasMPI:
     MPI = MPICommunicator()
@@ -77,44 +77,40 @@ else:
 _print = tools.getVerbosePrinter(MPI.rank == 0, flush=True)
 
 
-class GFDMRG(FTDMRG):
+class RT_GFDMRG(FTDMRG):
     """
-    DDMRG++ for Green's Function for molecules.
+    Finite temperature td-DMRG for Green's Function in time domain.
     """
 
-    def greens_function(self, mps: MPS, E0: float, omegas: np.ndarray, eta: float,
+    def greens_function(self, mps: MPS, E0: float,
+                        tmax: float,
+                        dt: float,
                         idxs: List[int],
-                        bond_dims: List[int], noises: List[float],
-                        solver_tol: float, conv_tol: float, n_sweeps: int,
+                        bond_dim: int,
                         cps_bond_dims: List[int], cps_noises: List[float],
                         cps_conv_tol: float, cps_n_sweeps: float,
-                        diag_only=False, alpha=True, addition = False,
+                        diag_only=False, alpha=True,
                         cutoff=1E-14,
                         max_solver_iter=20000,
                         max_solver_iter_off_diag=0,
                         occs=None, bias=1.0, mo_coeff=None,
-                        callback=lambda i,j,w,gf:None) -> np.ndarray:
-        """ Solve for the Green's function.
-        GF_ij(omega + i eta) = <psi0| V_i' inv(H - E0 + omega + i eta) V_j |psi0>
-        With V_i = a_i or a'_i.
+                        callback=lambda i,j,t,gf:None) -> Tuple[np.ndarray, np.ndarray]:
+        """ Solve for the Green's function in time-domain.
+        GF_ij(t) = -i theta(t) <psi0| V_i' exp[i (H-E0) t] V_j |psi0>
+        With V_i = a_i or a'_i. theta(t) is the step function (no time-reversal symm)
         Note the definition of the sign of frequency omega.
         The GF is solved via the correction MPS C = inv(H - E0 + omega + i eta) V |psi0>
 
         :param mps: Start state psi0
         :param E0: Hamiltonian shift, typically ground state energy
-        :param omegas: Frequencies the GF is computed
-        :param eta: Broadening parameter
+        :param tmax: Max. propagation time
+        :param dt: time step
         :param idxs: GF orbital indices to compute GF_ij, with i,j in idxs
-        :param bond_dims: Number of bond dimensions for each sweep for the correction MPS
-        :param noises: Noises for each sweep
-        :param solver_tol: Convergence tolerance for linear system solver
-        :param conv_tol: Sweep convergence tolerance
-        :param n_sweeps: Number of sweeps
+        :param bond_dim: Max bond dimension during propagation
         :param cps_bond_dims: Number of bond dimensions for each sweep for V |þsi0>
         :param cps_noises: Noises for each sweep for V |þsi0>
         :param cps_conv_tol:  Sweep convergence tolerance for V |þsi0>
         :param cps_n_sweeps: Number of sweeps for obtaining V |psi0>
-        :param addition: If true, use -H + E0 instead of H - E0
         :param cutoff: Bond dimension cutoff for sweeps
         :param diag_only: Solve only diagonal of GF: GF_ii
         :param alpha: Creation/annihilation operator refers to alpha spin (otherwise: beta spin)
@@ -123,9 +119,9 @@ class GFDMRG(FTDMRG):
         :param occs: Optional occupation number vector for V|psi0> initialization
         :param bias: Optional occupation number bias for V|psi0> initialization
         :param mo_coeff: MPO is in MO basis but GF should be computed in AO basis
-        :param callback: Callback functino after each GF computation.
-                        Called as callback(i,j,w,GF_ij(omega))
-        :return: the GF matrix
+        :param callback: Callback function after each GF computation.
+                        Called as callback(i,j,t,GF_ij(t), GF_ij(2t) * delta_ij)
+        :return: propagation times, GF matrix, diagonal of GF matrix(2*t) [assuming real-valued initial state]
         """
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
@@ -147,14 +143,9 @@ class GFDMRG(FTDMRG):
             else:
                 from block2.sz import ParallelMPO
 
-        if addition:
-            mpo = -1.0 * self.mpo_orig
-            mpo.const_e += E0
-        else:
-            mpo = 1.0 * self.mpo_orig
-            mpo.const_e -= E0
+        mpo = 1.0 * self.mpo_orig
+        mpo.const_e -= E0
 
-        #omegas += mpo.const_e
         #mpo.const_e = 0 # hrl: sometimes const_e causes trouble for AncillaMPO
         mpo = IdentityAddedMPO(mpo) # hrl: alternative
 
@@ -162,17 +153,16 @@ class GFDMRG(FTDMRG):
             mpo = ParallelMPO(mpo, self.prule)
 
         if self.print_statistics:
-            _print('GF MPO BOND DIMS = ', ''.join(
+            _print('RT-GF MPO BOND DIMS = ', ''.join(
                 ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
-            max_d = max(bond_dims)
             mps_info2 = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
                                 self.target, self.hamil.basis)
-            mps_info2.set_bond_dimension(max_d)
+            mps_info2.set_bond_dimension(bond_dim)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            _print("GF EST MAX MPS BOND DIMS = ", ''.join(
+            _print("RT-GF EST MAX MPS BOND DIMS = ", ''.join(
                 ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            _print("GF EST PEAK MEM = ", GFDMRG.fmt_size(
-                mem2), " SCRATCH = ", GFDMRG.fmt_size(disk))
+            _print("RT-GF EST PEAK MEM = ", RT_GFDMRG.fmt_size(
+                mem2), " SCRATCH = ", RT_GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
 
@@ -181,29 +171,6 @@ class GFDMRG(FTDMRG):
 
         if self.mpi is not None:
             impo = ParallelMPO(impo, self.identrule)
-
-        def align_mps_center(ket, ref):
-            # center itself may be "K" or "C"
-            isOk = ket.center == ref.center
-            isOk = isOk and ket.canonical_form[ket.center+1:] == ref.canonical_form[ref.center+1:]
-            isOk = isOk and ket.canonical_form[:ket.center] == ref.canonical_form[:ref.center]
-            if isOk:
-                return
-            if self.mpi is not None:
-                self.mpi.barrier()
-            cf = ket.canonical_form
-            if ref.center == 0:
-                ket.center += 1
-                ket.canonical_form = ket.canonical_form[:-1] + 'S'
-                while ket.center != 0:
-                    ket.move_left(mpo.tf.opf.cg, self.prule)
-            else:
-                ket.canonical_form = 'K' + ket.canonical_form[1:]
-                while ket.center != ket.n_sites - 1:
-                    ket.move_right(mpo.tf.opf.cg, self.prule)
-                ket.center -= 1
-            if self.verbose >= 2:
-                _print('CF = %s --> %s' % (cf, ket.canonical_form))
 
         ############################################
         # Prepare creation/annihilation operators
@@ -222,19 +189,11 @@ class GFDMRG(FTDMRG):
 
         for ii, idx in enumerate(gidxs):
             if SpinLabel == SZ:
-                if addition:
-                    ops[ii] = OpElement(OpNames.C, SiteIndex(
-                        (idx, ), (0 if alpha else 1, )), SZ(1, 1 if alpha else -1, self.orb_sym[idx]))
-                else:
-                    ops[ii] = OpElement(OpNames.D, SiteIndex(
-                        (idx, ), (0 if alpha else 1, )), SZ(-1, -1 if alpha else 1, self.orb_sym[idx]))
+                ops[ii] = OpElement(OpNames.D, SiteIndex(
+                    (idx, ), (0 if alpha else 1, )), SZ(-1, -1 if alpha else 1, self.orb_sym[idx]))
             else:
-                if addition:
-                    ops[ii] = OpElement(OpNames.C, SiteIndex(
-                        (idx, ), ()), SU2(1, 1, self.orb_sym[idx]))
-                else:
-                    ops[ii] = OpElement(OpNames.D, SiteIndex(
-                        (idx, ), ()), SU2(-1, 1, self.orb_sym[idx]))
+                ops[ii] = OpElement(OpNames.D, SiteIndex(
+                    (idx, ), ()), SU2(-1, 1, self.orb_sym[idx]))
 
         ############################################
         # Solve V_i |psi0>
@@ -317,126 +276,152 @@ class GFDMRG(FTDMRG):
                 _print('>>> COMPLETE Compression Site = %4d | Time = %.2f <<<' %
                        (idx, time.perf_counter() - t))
 
+
         ############################################
         # Big GF LOOP
         ############################################
-        gf_mat = np.zeros((len(idxs), len(idxs), len(omegas)), dtype=complex)
+        n_steps = int(tmax/dt + 1)
+        ts = np.linspace(0, tmax, n_steps) # times
+        dt = ts[1]-ts[0]
+        gf_mat = np.zeros((len(idxs), len(idxs), n_steps), dtype=complex)
+        gf_mat2t = np.zeros((len(idxs), n_steps), dtype=complex) # diagonal
+        ts2t = 2 * ts
 
+        # for autocorrelation
+        idMPO = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)), RuleQC(), True, True)
         for ii, idx in enumerate(idxs):
 
-            if rkets[ii].center != mps.center:
-                align_mps_center(rkets[ii], mps)
-            lme = MovingEnvironment(mpo, rkets[ii], rkets[ii], "LHS")
-            lme.init_environments(False)
-            rme = MovingEnvironment(rmpos[ii], rkets[ii], mps, "RHS")
-            rme.init_environments(False)
+            #
+            # make MPS complex-valued
+            #
+            mps = MultiMPS.make_complex(rkets[ii], "mps_t")
+            mps_t0 = MultiMPS.make_complex(rkets[ii], "mps_t0")
+            if mps.dot != 1: # change to 2dot
+                mps.load_data()
+                mps_t0.load_data()
+                mps.canonical_form = 'M' + mps.canonical_form[1:]
+                mps_t0.canonical_form = 'M' + mps_t0.canonical_form[1:]
+                mps.dot = 2
+                mps_t0.dot = 2
+                mps.save_data()
+                mps_t0.save_data()
+
+            # MPO for autocorrelation
+            idME = MovingEnvironment(idMPO, mps_t0, mps, "acorr")
+            acorr = ComplexExpect(idME, bond_dim, bond_dim)
+
+            me = MovingEnvironment(mpo, mps, mps, "TE")
             if self.delayed_contraction:
-                lme.delayed_contraction = OpNamesSet.normal_ops()
-                rme.delayed_contraction = OpNamesSet.normal_ops()
+                me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = True
+            me.init_environments()
 
-            linear = Linear(lme, rme, VectorUBond(bond_dims),
-                            VectorUBond(cps_bond_dims[-1:]), VectorDouble(noises))
-            linear.gf_eta = eta
-            linear.minres_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
-            linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
-            # TZ: Not raising error even if CG is not converged
-            linear.minres_soft_max_iter = max_solver_iter
-            linear.minres_max_iter = max_solver_iter + 1000
-            linear.eq_type = EquationTypes.GreensFunction
-            linear.iprint = max(self.verbose - 1, 0)
-            linear.cutoff = cutoff
+            method = TETypes.RK4
+            # TODO make input parameters
+            n_sub_sweeps = 2
+            n_sub_sweeps_init = 4
+            exp_tol = 1e-6
+            te = TimeEvolution(me, VectorUBond([bond_dim]), method, n_sub_sweeps_init)
+            te.cutoff = 0  # for tiny systems, this is important
+            te.iprint = 6  # ft.verbose
+            te.normalize_mps = False
 
-            for iw, w in enumerate(omegas):
+            for it, tt in enumerate(ts):
 
                 if self.verbose >= 2:
-                    _print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' %
-                           (w, idx, idx))
+                    _print('>>>   START  TD-GF TIME = %10.5f Site = %4d %4d <<<' %
+                           (tt, idx, idx))
                 t = time.perf_counter()
 
-                linear.tme = None
-                linear.minres_soft_max_iter = max_solver_iter
-                linear.noises = VectorDouble(noises)
-                linear.bra_bond_dims = VectorUBond(bond_dims)
-                linear.gf_omega = w
-                linear.solve(n_sweeps, mps.center == 0, conv_tol)
-                # set noises to 0 for next round
-                noises = [0]
-                min_site = np.argmin(np.array(linear.sweep_targets)[:, 1])
-                if mps.center == 0:
-                    min_site = mps.n_sites - 2 - min_site
-                _print("GF.IMAG MIN SITE = %4d" % min_site)
-                rgf, igf = linear.targets[-1]
-                gf_mat[ii, ii, iw] = rgf + 1j * igf
-                callback(ii,ii,w,gf_mat[ii,ii,iw])
+                if it != 0: # time zero: no propagation
+                    te.solve(1, +1j * dt, mps.center == 0, tol=exp_tol)
+                    te.n_sub_sweeps = n_sub_sweeps
+
+                idME.init_environments()
+                gf_mat[ii, ii, it] = acorr.solve(False) * -1j
+                #
+                # double time trick
+                # acorr(2t) = <psi(t)*|psi(t)>: here: site of center wavefunction ("state averaged")
+                # This only works for the diagonal of the GF matrix, though
+                if mps.wfns[0].data.size == 0:
+                    loaded = True
+                    mps.load_tensor(mps.center)
+                vec = mps.wfns[0].data + 1j * mps.wfns[1].data
+                gf_mat2t[ii, it] = np.vdot(vec.conj(),vec) * -1j
+                if loaded:
+                    mps.unload_tensor(mps.center)
+                callback(ii,ii,tt,gf_mat[ii,ii,it], gf_mat2t[ii,it])
+                #
 
                 dmain, dseco, imain, iseco = Global.frame.peak_used_memory
 
                 if self.verbose >= 1:
-                    _print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
-                           ("ADD" if addition else "REM", idx, idx, w, rgf, igf, time.perf_counter() - t))
+                    rgf, igf = gf_mat[ii,ii,it].real, gf_mat[ii,ii,it].imag
+                    _print("=== TD-GF (%4d%4d | TIME = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
+                           (idx, idx, tt, rgf, igf, time.perf_counter() - t))
 
                 if self.verbose >= 2:
-                    _print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
-                           (w, idx, idx, time.perf_counter() - t))
+                    _print('>>> COMPLETE TD-GF TIME = %10.5f Site = %4d %4d | Time = %.2f <<<' %
+                           (tt, idx, idx, time.perf_counter() - t))
 
                 if diag_only:
                     continue
 
                 for jj, idx2 in enumerate(idxs):
-
                     if jj > ii and rkets[jj].info.target == rkets[ii].info.target:
 
-                        if rkets[jj].center != rkets[ii].center:
-                            align_mps_center(rkets[jj], rkets[ii])
-
                         if self.verbose >= 2:
-                            _print('>>>   START  GF OMEGA = %10.5f Site = %4d %4d <<<' % (
-                                w, idx2, idx))
+                            _print('>>>   START  TD-GF TIME = %10.5f Site = %4d %4d <<<' % (
+                                tt, idx2, idx))
                         t = time.perf_counter()
+                        mps_t0j = MultiMPS.make_complex(rkets[jj], "mps_t0j")
+                        assert mps_t0j[jj].center == mps.center, f"mps[j] form: {mps_t0j.canonical_form} \n" \
+                                                                 f" mps[i] form: {mps.canonical_form}"
 
-                        tme = MovingEnvironment(
-                            impo, rkets[jj], rkets[ii], "GF")
-                        tme.init_environments(False)
-                        if self.delayed_contraction:
-                            tme.delayed_contraction = OpNamesSet.normal_ops()
-                        linear.noises = VectorDouble(noises[-1:])
-                        linear.bra_bond_dims = VectorUBond(bond_dims[-1:])
-                        linear.target_bra_bond_dim = cps_bond_dims[-1]
-                        linear.target_ket_bond_dim = cps_bond_dims[-1]
-                        linear.tme = tme
-                        if max_solver_iter_off_diag == 0:
-                            linear.solve(1, mps.center != 0, 0)
-                            rgf, igf = linear.targets[-1]
-                        else:
-                            linear.minres_soft_max_iter = max_solver_iter_off_diag if \
-                                max_solver_iter_off_diag != -1 else max_solver_iter
-                            linear.solve(1, mps.center == 0, 0)
-                            if mps.center == 0:
-                                rgf, igf = np.array(linear.sweep_targets)[::-1][min_site]
-                            else:
-                                rgf, igf = np.array(linear.sweep_targets)[min_site]
-                        gf_mat[jj, ii, iw] = rgf + 1j * igf
-                        gf_mat[ii, jj, iw] = rgf + 1j * igf
-                        callback(ii,jj,w,gf_mat[ii,jj,iw])
+                        idMEj = MovingEnvironment(idMPO, mps_t0j, mps, "acorr_j")
+                        idMEj.init_environments()
+                        acorrj = ComplexExpect(idME, bond_dim, bond_dim)
+                        gf_mat[jj, ii, it] = gf_mat[ii, jj, it] = acorr.solve(False) * -1j
+
+                        callback(ii,jj,tt,gf_mat[ii,jj,it],0.0)
 
                         if self.verbose >= 1:
-                            _print("=== %3s GF (%4d%4d | OMEGA = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
-                                   ("ADD" if addition else "REM", idx2, idx, w, rgf, igf, time.perf_counter() - t))
-
+                            rgf, igf = gf_mat[ii, jj, it].real, gf_mat[ii, jj, it].imag
+                            _print("=== TD-GF (%4d%4d | TIME = %10.5f ) = RE %20.15f + IM %20.15f === T = %7.2f" %
+                                   (idx2, idx, tt, rgf, igf, time.perf_counter() - t))
                         if self.verbose >= 2:
-                            _print('>>> COMPLETE GF OMEGA = %10.5f Site = %4d %4d | Time = %.2f <<<' %
-                                   (w, idx2, idx, time.perf_counter() - t))
+                            _print('>>> COMPLETE GF TIME = %10.5f Site = %4d %4d | Time = %.2f <<<' %
+                                   (tt, idx2, idx, time.perf_counter() - t))
         mps.save_data()
+        idMPO.deallocate()
         mps.info.deallocate()
 
         if self.print_statistics:
-            _print("GF PEAK MEM USAGE:",
-                   "DMEM = ", GFDMRG.fmt_size(dmain + dseco),
+            _print("TD-GF PEAK MEM USAGE:",
+                   "DMEM = ", RT_GFDMRG.fmt_size(dmain + dseco),
                    "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-                   "IMEM = ", GFDMRG.fmt_size(imain + iseco),
+                   "IMEM = ", RT_GFDMRG.fmt_size(imain + iseco),
                    "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
-        return gf_mat
+        return ts, gf_mat, gf_mat2t
+
+    def fourier_transform_gf(self,ts: np.ndarray, gf:np.ndarray, eta:float)\
+            -> Tuple[np.ndarray, np.ndarray]:
+        """  Fourier transform the GF
+         (assuming that the time-date of the gf-tensor is in t the last dimension)
+
+        :param ts: Propagation times
+        :param gf: Greens function tensor: i x j x ts
+        :param eta: Regularization
+        :returns: omegas, gf in frequency domain
+        """
+        assert np.allclose(np.linspace(0,ts[-1],len(ts)), ts), "assume evenly spaced ts"
+        dt = ts[1] - ts[0]
+        omegas = np.fft.fftshift(np.fft.fftfreq(len(ts), dt)) * 2 * np.pi
+        gf_freq = np.fft.fftshift(np.fft.fft(gf * np.exp(-eta*ts))) * dt
+        gf_freq.real *= -1 # make consistent with GF definition
+        return omegas, gf_freq
+
 
 if __name__ == "__main__":
 
@@ -457,11 +442,6 @@ if __name__ == "__main__":
 
 
     MAX_M = 50
-    gf_bond_dims=[MAX_M]
-    gf_noises=[1E-3, 5E-4, 0]
-    gf_tol=1E-4
-    solver_tol=1E-6
-    gf_n_steps = 20
     cps_bond_dims=[MAX_M] # Bond dimension of \hat a_i |psi> *and* |psi> (in time evolution)
     cps_noises=[0]
     cps_tol=1E-7
@@ -472,34 +452,51 @@ if __name__ == "__main__":
     mu = -0.026282794560 # Chemical potential for initial state preparation
 
     #################################################
-    # Prepare inital state
+    # Prepare initial state
     #################################################
 
-    dmrg = GFDMRG(scratch=scratch, memory=4e9,
+    dmrg = RT_GFDMRG(scratch=scratch, memory=4e9,
                   verbose=3, omp_threads=n_threads)
     dmrg.init_hamiltonian_fcidump(point_group, "fcidump")
     #mps, mu = dmrg.optimize_mu(dmrg.fcidump.n_elec,mu, beta, dbeta, MAX_M)
     mps = dmrg.prepare_ground_state(mu, beta, dbeta, MAX_M)[0]
 
 
-    eta = 0.005
-    omegas = np.linspace(-1,0,200)
-    # Frequencies more far away seem to be much harder to converge.
-    # So it is better to start with small omegas and then use that as initial guess.
-    omegas = omegas[::-1]
+    tEnd = np.pi / 0.01
+    dt = 0.1 # 1 / max(E)
     idxs = [0] # Calc S_ii
     alpha = True # alpha or beta spin
-    fOut = open("ft_gfdmrg_freqs.dat","w")
-    fOut.write(f"# eta={eta}\n")
-    fOut.write("# omega  Re(gf)  Im(gf)\n")
-    def callback(i,j,omega,gf):
-        print("-----",omega,":",gf)
-        fOut.write(f"{omega:16.7f}   {gf.real:16.7f}  {gf.imag:16.7f}\n")
+    fOut = open("ft_tddmrg_gf.dat","w")
+    fOut.write("# t  Re(gf)  Im(gf)\n")
+    fOut2 = open("ft_tddmrg_gf_2t.dat","w")
+    fOut2.write("# t  Re(gf)  Im(gf)\n")
+    def callback(i,j,t,gf, gf2t):
+        print("-----",t,":",gf)
+        fOut.write(f"{t:16.7f}   {gf.real:16.7f}  {gf.imag:16.7f}\n")
         fOut.flush()
-    gf = dmrg.greens_function(mps, E0, omegas, eta, idxs,
-                              gf_bond_dims, gf_noises, solver_tol, gf_tol, gf_n_steps,
-                              cps_bond_dims, cps_noises, cps_tol, cps_n_sweeps,
-                              addition=False, diag_only=False,
-                              alpha=alpha, max_solver_iter_off_diag=0,
-                              callback=callback)
+        fOut2.write(f"{2*t:16.7f}   {gf2t.real:16.7f}  {gf2t.imag:16.7f}\n")
+        fOut2.flush()
+    ts, gf ,gf2t = dmrg.greens_function(mps, E0, tEnd, dt, idxs,
+                          MAX_M,
+                          cps_bond_dims, cps_noises, cps_tol, cps_n_sweeps,
+                          diag_only=False,
+                          alpha=alpha, max_solver_iter_off_diag=0,
+                          callback=callback)
+    eta = 0.005
+    omegas, gf_freq = dmrg.fourier_transform_gf(ts, gf, eta)
+    gf_freq = gf_freq.ravel()
+
+    fOut.close()
+    fOut2.close()
+    fOut = open("ft_tddmrg_gf_ft.dat","w")
+    fOut.write("# omega  Re(gf)  Im(gf)\n")
+    for i in range(len(omegas)):
+        fOut.write(f"{omegas[i]:16.7f}   {gf_freq[i].real:16.7f}  {gf_freq[i].imag:16.7f}\n")
+    fOut.close()
+    fOut = open("ft_tddmrg_gf_ft2.dat","w")
+    omegas, gf_freq = dmrg.fourier_transform_gf(2*ts, gf2t, eta)
+    gf_freq = gf_freq.ravel()
+    fOut.write("# omega  Re(gf)  Im(gf)\n")
+    for i in range(len(omegas)):
+        fOut.write(f"{omegas[i]:16.7f}   {gf_freq[i].real:16.7f}  {gf_freq[i].imag:16.7f}\n")
     fOut.close()
