@@ -94,7 +94,8 @@ class RT_GFDMRG(FTDMRG):
                         max_solver_iter=20000,
                         max_solver_iter_off_diag=0,
                         occs=None, bias=1.0, mo_coeff=None,
-                        callback=lambda i,j,t,gf:None) -> Tuple[np.ndarray, np.ndarray]:
+                        callback=lambda i,j,t,gf:None,
+                        n_sub_sweeps=2, n_sub_sweeps_init = 4, exp_tol = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
         """ Solve for the Green's function in time-domain.
         GF_ij(t) = -i theta(t) <psi0| V_i' exp[i (H-E0) t] V_j |psi0>
         With V_i = a_i or a'_i. theta(t) is the step function (no time-reversal symm)
@@ -121,6 +122,9 @@ class RT_GFDMRG(FTDMRG):
         :param mo_coeff: MPO is in MO basis but GF should be computed in AO basis
         :param callback: Callback function after each GF computation.
                         Called as callback(i,j,t,GF_ij(t), GF_ij(2t) * delta_ij)
+        :param n_sub_sweeps: Number of sub sweeps for RK4 time evolution
+        :param n_sub_sweeps_int:  Number of sub sweeps for RK4 time evolution during initial dt
+        :param exp_tol: exp(M) |vec> solver tolerance
         :return: propagation times, GF matrix, diagonal of GF matrix(2*t) [assuming real-valued initial state]
         """
         ops = [None] * len(idxs)
@@ -317,10 +321,6 @@ class RT_GFDMRG(FTDMRG):
             me.init_environments()
 
             method = TETypes.RK4
-            # TODO make input parameters
-            n_sub_sweeps = 2
-            n_sub_sweeps_init = 4
-            exp_tol = 1e-6
             te = TimeEvolution(me, VectorUBond([bond_dim]), method, n_sub_sweeps_init)
             te.cutoff = 0  # for tiny systems, this is important
             te.iprint = 6  # ft.verbose
@@ -466,9 +466,9 @@ if __name__ == "__main__":
     dt = 0.1 # 1 / max(E)
     idxs = [0] # Calc S_ii
     alpha = True # alpha or beta spin
-    fOut = open("ft_tddmrg_gf.dat","w")
+    fOut = open("test_ft_tddmrg_gf.dat","w")
     fOut.write("# t  Re(gf)  Im(gf)\n")
-    fOut2 = open("ft_tddmrg_gf_2t.dat","w")
+    fOut2 = open("test_ft_tddmrg_gf_2t.dat","w")
     fOut2.write("# t  Re(gf)  Im(gf)\n")
     def callback(i,j,t,gf, gf2t):
         print("-----",t,":",gf)
@@ -488,12 +488,12 @@ if __name__ == "__main__":
 
     fOut.close()
     fOut2.close()
-    fOut = open("ft_tddmrg_gf_ft.dat","w")
+    fOut = open("test_ft_tddmrg_gf_ft.dat","w")
     fOut.write("# omega  Re(gf)  Im(gf)\n")
     for i in range(len(omegas)):
         fOut.write(f"{omegas[i]:16.7f}   {gf_freq[i].real:16.7f}  {gf_freq[i].imag:16.7f}\n")
     fOut.close()
-    fOut = open("ft_tddmrg_gf_ft2.dat","w")
+    fOut = open("test_ft_tddmrg_gf_ft2.dat","w")
     omegas, gf_freq = dmrg.fourier_transform_gf(2*ts, gf2t, eta)
     gf_freq = gf_freq.ravel()
     fOut.write("# omega  Re(gf)  Im(gf)\n")
