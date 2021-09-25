@@ -224,9 +224,6 @@ def init(SpinLabel: Union[SZ, SU2]):
             dmrg.trunc_type = TruncationTypes.KeepOne * keepStates
         dmrg.cutoff = 0.0
         dmrg.quanta_cutoff = 0.0
-        dmrg.decomp_last_site = False
-        dmrg.last_site_svd = True
-        dmrg.last_site_1site = mps.dot == 2
         dmrg.forward = mps.center == 0 or mps.center == 1
         dmrg.davidson_soft_max_iter = 0
         dmrg.iprint = 0

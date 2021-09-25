@@ -374,8 +374,11 @@ class RT_GFDMRG(FTDMRG):
                             _print('>>>   START  TD-GF TIME = %10.5f Site = %4d %4d <<<' % (
                                 tt, idx2, idx))
                         t = time.perf_counter()
+                        if rkets[jj].center != mps.center:
+                            # TODO: don't do this on rkets[jj] directly
+                            changeCanonicalForm(rkets[jj], self.identrule)
                         mps_t0j = MultiMPS.make_complex(rkets[jj], "mps_t0j")
-                        assert mps_t0j[jj].center == mps.center, f"mps[j] form: {mps_t0j.canonical_form} \n" \
+                        assert mps_t0j.center == mps.center, f"\nmps[j] form: {mps_t0j.canonical_form} \n" \
                                                                  f" mps[i] form: {mps.canonical_form}"
 
                         idMEj = MovingEnvironment(idMPO, mps_t0j, mps, "acorr_j")
