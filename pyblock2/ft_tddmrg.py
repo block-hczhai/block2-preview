@@ -383,8 +383,8 @@ class RT_GFDMRG(FTDMRG):
 
                         idMEj = MovingEnvironment(idMPO, mps_t0j, mps, "acorr_j")
                         idMEj.init_environments()
-                        acorrj = ComplexExpect(idME, bond_dim, bond_dim)
-                        gf_mat[jj, ii, it] = gf_mat[ii, jj, it] = acorr.solve(False) * -1j
+                        acorrj = ComplexExpect(idMEj, bond_dim, bond_dim)
+                        gf_mat[jj, ii, it] = gf_mat[ii, jj, it] = acorrj.solve(False) * -1j
 
                         callback(ii,jj,tt,gf_mat[ii,jj,it],0.0)
 
@@ -421,7 +421,7 @@ class RT_GFDMRG(FTDMRG):
         assert np.allclose(np.linspace(0,ts[-1],len(ts)), ts), "assume evenly spaced ts"
         dt = ts[1] - ts[0]
         omegas = np.fft.fftshift(np.fft.fftfreq(len(ts), dt)) * 2 * np.pi
-        gf_freq = np.fft.fftshift(np.fft.fft(gf * np.exp(-eta*ts))) * dt
+        gf_freq = np.fft.fftshift(np.fft.fft(gf * np.exp(-eta*ts)),axes=-1) * dt
         gf_freq.real *= -1 # make consistent with GF definition
         return omegas, gf_freq
 
