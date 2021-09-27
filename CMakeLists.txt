@@ -149,6 +149,7 @@ IF (NOT(APPLE) AND NOT(WIN32))
     SET(NO_AS_NEEDED -Wl,--no-as-needed)
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     SET(XPREP -Xpreprocessor)
+    INCLUDE_DIRECTORIES(/usr/local/include)
 ENDIF()
 
 SET(PTHREAD pthread)

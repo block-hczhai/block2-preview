@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestBatchGEMM : public ::testing::Test {
   protected:
-    size_t isize = 1E8;
-    size_t dsize = 1E10;
+    size_t isize = 1L << 20;
+    size_t dsize = 1L << 24;
     static const int n_tests = 200;
     void SetUp() override {
         Random::rand_seed(1969);

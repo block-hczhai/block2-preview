@@ -1,5 +1,7 @@
 
 [![Documentation Status](https://readthedocs.org/projects/block2/badge/?version=latest)](https://block2.readthedocs.io/en/latest/?badge=latest)
+[![Build Status](https://github.com/block-hczhai/block2-preview/workflows/build/badge.svg)](https://github.com/block-hczhai/block2-preview/actions/workflows/build.yml)
+[![License](https://img.shields.io/github/license/block-hczhai/block2-preview)](https://www.gnu.org/licenses/gpl-3.0)
 
 block2
 ======

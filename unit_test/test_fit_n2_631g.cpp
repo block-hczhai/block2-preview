@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestFITN2631G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 32;
 
     template <typename S>
     void test_dmrg(int n_ext, int ci_order, const S target, double energy,

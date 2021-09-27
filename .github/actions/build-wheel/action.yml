@@ -1,0 +1,18 @@
+# action.yml
+name: 'build manylinux wheel'
+inputs:
+  python-version:
+    required: true
+    default: '3.7'
+  parallel:
+    required: false
+    default: 'serial'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.python-version }}
+    - ${{ inputs.parallel }}
+branding:
+  icon: 'package'
+  color: 'green'

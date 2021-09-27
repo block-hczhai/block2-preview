@@ -37,8 +37,8 @@ class TestRotationH10STO6G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 28;
-    size_t dsize = 1L << 32;
+    size_t isize = 1L << 22;
+    size_t dsize = 1L << 30;
 
     template <typename S>
     void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
@@ -142,7 +142,8 @@ void TestRotationH10STO6G::test_dmrg(
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     // MPO construction
     cout << "MPO ROT start" << endl;

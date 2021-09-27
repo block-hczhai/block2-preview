@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestOneSiteITDDMRGH8STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 32;
 
     template <typename S>
     void test_imag_te(int n_sites, int n_physical_sites, S target,
