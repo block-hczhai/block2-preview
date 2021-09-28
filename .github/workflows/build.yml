@@ -17,36 +17,81 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-latest, macos-latest ]
         python: [ 3.7, 3.8, 3.9 ]
         manylinux: [ 2010 ]
         plat: [ x86_64 ]
-        macos-target: [ "10.10" ]
       fail-fast: true
 
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: build
+          python-version: ${{ matrix.python }}
+
+      - name: install requirements
         env:
           MKLROOT: ~/.local
         run: |
-          which python3
-          python3 -m pip install pip build twine --upgrade
-          python3 -m pip install mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
-          sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=/usr/bin/python3'," setup.py
-          python3 -m build
+          export PYT=$(which python)
+          python -m pip install pip build twine --upgrade
+          python -m pip install mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
+
+      - name: build gtest (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libgtest-dev
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo cp lib/*.a /usr/lib
+
+      - name: build gtest (macos)
+        if: matrix.os == 'macos-latest'
+        run: |
+          git clone -b release-1.10.0 https://github.com/google/googletest
+          cd googletest
+          cmake CMakeLists.txt
+          make
+          make install
+
       - name: test
+        env:
+          MKLROOT: ~/.local
         run: |
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DMPI=OFF -DOMP_LIB=GNU -DTBB=ON -DLARGE_BOND=ON
           make
           ./block2_tests
-      - name: Release
-        uses: softprops/action-gh-release@v1
+
+      - name: build wheels (macos)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          echo ${TAG_STRING:11}
+          sed -i "" "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          python -m pip install wheel
+          python -m pip wheel . -w ./dist --no-deps
+
+      - name: prepare build wheels (manylinux)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          echo ${TAG_STRING:11}
+          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
+
+      - name: build wheels (manylinux)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        uses: ./.github/actions/build-wheel
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: release
         if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
         with:
           files: dist/*
