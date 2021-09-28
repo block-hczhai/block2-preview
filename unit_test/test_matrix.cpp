@@ -353,8 +353,8 @@ TEST_F(TestMatrix, TestHarmonicDavidson) {
                 : DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond;
         vector<double> vw = MatrixFunctions::harmonic_davidson(
             mop, aa, bs, shift, davidson_type, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, n * k * 100,
-            -1, 2, 30);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-9, n * k * 500,
+            -1, 2, 35);
         ASSERT_EQ((int)vw.size(), k);
         DiagonalMatrix w(&vw[0], k);
         MatrixFunctions::eigs(a, ww);
@@ -374,7 +374,7 @@ TEST_F(TestMatrix, TestHarmonicDavidson) {
                      else if (shift >= ww.data[i])
                          return shift - ww.data[i] < shift - ww.data[j];
                      else
-                         return ww.data[i] - shift >= ww.data[j] - shift;
+                         return ww.data[i] - shift > ww.data[j] - shift;
                  });
         else if (davidson_type & DavidsonTypes::GreaterThan)
             sort(eigval_idxs.begin(), eigval_idxs.end(),
@@ -384,7 +384,7 @@ TEST_F(TestMatrix, TestHarmonicDavidson) {
                      else if (shift > ww.data[i])
                          return shift - ww.data[i] > shift - ww.data[j];
                      else
-                         return ww.data[i] - shift <= ww.data[j] - shift;
+                         return ww.data[i] - shift < ww.data[j] - shift;
                  });
         // last root may be inaccurate (rare)
         for (int i = 0; i < k - 1; i++)

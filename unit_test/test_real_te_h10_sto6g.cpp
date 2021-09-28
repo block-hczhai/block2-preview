@@ -233,7 +233,7 @@ void TestRealTEH10STO6G::test_dmrg(S target,
              << " EX = " << fixed << setw(22) << setprecision(12) << overlaps[i]
              << " ERROR = " << scientific << setprecision(3) << setw(10)
              << (overlaps[i] - te_refs[i]) << endl;
-        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-7);
+        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-6);
     }
 
     dmps_info->deallocate();
