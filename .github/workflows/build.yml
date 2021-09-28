@@ -54,6 +54,8 @@ jobs:
           cmake CMakeLists.txt
           make
           make install
+          brew update
+          brew install libomp
 
       - name: test
         env:
