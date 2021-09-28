@@ -63,7 +63,7 @@ void TestDMRGSingletEmbedding::test_dmrg(
     Random::rand_seed(0);
 
     for (int i = 0; i < (int)targets.size(); i++)
-        for (int j = 0; j < (int)targets[i].size(); j++) {
+        for (int j = 0, k = 0; j < (int)targets[i].size(); j++) {
 
             S target = targets[i][j];
             S se_target = S(target.n() + target.twos(), 0, target.pg());
