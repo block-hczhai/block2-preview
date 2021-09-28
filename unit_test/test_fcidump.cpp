@@ -7,7 +7,7 @@ using namespace block2;
 class TestFCIDUMP : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t dsize = 1L << 32;
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
