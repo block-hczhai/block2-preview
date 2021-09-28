@@ -106,6 +106,7 @@ void TestDelayedN2STO3G::test_dmrg(const vector<vector<S>> &targets,
 
             if (abs(energy - energies[i][j]) >= 1E-7 && k < 3) {
                 k++, j--;
+                cout << "!!! RETRY ... " << endl;
                 continue;
             }
 
