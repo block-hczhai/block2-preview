@@ -61,7 +61,7 @@ jobs:
         run: |
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DMPI=OFF -DOMP_LIB=GNU -DTBB=ON -DLARGE_BOND=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON
           make
           ./block2_tests
 
