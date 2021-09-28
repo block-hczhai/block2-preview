@@ -57,14 +57,18 @@ jobs:
           brew update
           brew install libomp
 
-      - name: test
+      - name: build test
         env:
           MKLROOT: ~/.local
         run: |
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON
-          make
+          make -j 4
+
+      - name: run test
+        run: |
+          cd build_test
           ./block2_tests
 
       - name: build wheels (macos)

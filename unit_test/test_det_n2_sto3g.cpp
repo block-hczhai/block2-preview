@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestDETN2STO3G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 28;
 
     template <typename S>
     void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name);

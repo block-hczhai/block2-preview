@@ -6,8 +6,8 @@ using namespace block2;
 
 class TestCG : public ::testing::Test {
   protected:
-    size_t isize = 1E7;
-    size_t dsize = 1E7;
+    size_t isize = 1L << 20;
+    size_t dsize = 1L << 24;
     static const int max_twoj = 300;
     static const int n_tests = 10000;
     CG<SU2> cg;

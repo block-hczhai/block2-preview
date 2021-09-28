@@ -14,7 +14,7 @@ class TestMatrix : public ::testing::Test {
             MatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
-    size_t isize = 1L << 20;
+    size_t isize = 1L << 24;
     size_t dsize = 1L << 28;
     void SetUp() override {
         Random::rand_seed(0);

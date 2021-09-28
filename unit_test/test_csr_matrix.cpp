@@ -7,8 +7,8 @@ using namespace block2;
 class TestCSRMatrix : public ::testing::Test {
   protected:
     static const int n_tests = 200;
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 30;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 28;
     double sparsity = 0.5;
     void fill_sparse_double(double *data, size_t n) {
         Random::fill_rand_double(data, n);
