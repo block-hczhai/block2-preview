@@ -164,11 +164,11 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
 }
 
 TEST_F(TestComplexMatrix, TestGCROT) {
-    for (int i = 0; i < n_tests * 10; i++) {
+    for (int i = 0; i < n_tests; i++) {
         MKL_INT m = Random::rand_int(1, 300);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
-        double eta = 0.005;
+        double eta = 0.05;
         MatrixRef ra(dalloc_()->allocate(m * m), m, m);
         MatrixRef rax(dalloc_()->allocate(m * m), m, m);
         MatrixRef rb(dalloc_()->allocate(n * m), m, n);
