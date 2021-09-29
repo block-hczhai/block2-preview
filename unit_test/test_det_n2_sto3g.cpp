@@ -11,7 +11,8 @@ class TestDETN2STO3G : public ::testing::Test {
     size_t dsize = 1L << 32;
 
     template <typename S>
-    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name);
+    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -29,7 +30,8 @@ class TestDETN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestDETN2STO3G::test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+void TestDETN2STO3G::test_dmrg(const S target,
+                               const shared_ptr<HamiltonianQC<S>> &hamil,
                                const string &name) {
 
     vector<double> coeffs = {
@@ -161,7 +163,8 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
+        vacuum, fcidump->n_sites(), orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, " SZ");
 
@@ -180,8 +183,9 @@ TEST_F(TestDETN2STO3G, TestSU2) {
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
-              PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
+               PointGroup::swap_pg(pg)(fcidump->isym()));
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
+        vacuum, fcidump->n_sites(), orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2");
 

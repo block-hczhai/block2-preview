@@ -11,13 +11,14 @@ class TestLinearN2STO3G : public ::testing::Test {
     size_t dsize = 1L << 24;
 
     template <typename S>
-    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   int dot);
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name, int dot);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -29,7 +30,8 @@ class TestLinearN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestLinearN2STO3G::test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+void TestLinearN2STO3G::test_dmrg(S target,
+                                  const shared_ptr<HamiltonianQC<S>> &hamil,
                                   const string &name, int dot) {
 
     double energy_std = -107.654122447525;
@@ -186,7 +188,8 @@ TEST_F(TestLinearN2STO3G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
     test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
@@ -211,7 +214,8 @@ TEST_F(TestLinearN2STO3G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
     test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);

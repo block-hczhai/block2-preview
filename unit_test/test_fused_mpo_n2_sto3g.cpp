@@ -78,7 +78,6 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     }
     mpo->tf = make_shared<TensorFunctions<S>>(
         make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
-    mpo->tf->opf->seq = hamil->opf->seq;
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -188,6 +187,7 @@ TEST_F(TestFusedMPON2STO3G, TestSU2) {
 
     targets.resize(2);
     energies.resize(2);
+
     hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",

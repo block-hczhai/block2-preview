@@ -14,12 +14,14 @@ class TestAncillaH8STO6G : public ::testing::Test {
     void test_imag_te(int n_sites, int n_physical_sites, S target,
                       const vector<double> &energies_fted,
                       const vector<double> &energies_m500,
-                      const shared_ptr<HamiltonianQC<S>> &hamil, const string &name);
+                      const shared_ptr<HamiltonianQC<S>> &hamil,
+                      const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -150,7 +152,8 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, n_physical_sites, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
+        vacuum, n_physical_sites, orbsym, fcidump);
     hamil->mu = -1.0;
     hamil->fcidump->const_e = 0.0;
 
@@ -187,10 +190,10 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, n_physical_sites, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
+        vacuum, n_physical_sites, orbsym, fcidump);
     hamil->mu = -1.0;
     hamil->fcidump->const_e = 0.0;
-    hamil->opf->seq->mode = SeqTypes::Simple;
 
     test_imag_te<SZ>(n_sites, n_physical_sites, target, energies_fted,
                      energies_m500, hamil, "SZ");

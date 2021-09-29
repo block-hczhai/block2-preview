@@ -12,14 +12,15 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
 
     template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<double> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   ubond_t bond_dim, uint16_t nroots);
+                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            1);
         threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
@@ -47,7 +48,8 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
+    mpo =
+        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
                                       OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
@@ -137,7 +139,8 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2", 200, 10);
 
@@ -184,7 +187,8 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ",
                   (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()),

@@ -13,8 +13,8 @@ class TestOneSiteDMRGN2STO3G : public ::testing::Test {
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   DecompositionTypes dt, NoiseTypes nt);
+                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         Random::rand_seed(0);
@@ -34,11 +34,10 @@ class TestOneSiteDMRGN2STO3G : public ::testing::Test {
 };
 
 template <typename S>
-void TestOneSiteDMRGN2STO3G::test_dmrg(const vector<vector<S>> &targets,
-                                       const vector<vector<double>> &energies,
-                                       const shared_ptr<HamiltonianQC<S>> &hamil,
-                                       const string &name,
-                                       DecompositionTypes dt, NoiseTypes nt) {
+void TestOneSiteDMRGN2STO3G::test_dmrg(
+    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
+    const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
+    DecompositionTypes dt, NoiseTypes nt) {
     Timer t;
     t.get_time();
     // MPO construction
@@ -149,7 +148,8 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSU2) {
     energies[7] = {-107.116397543375, -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2",
                    DecompositionTypes::DensityMatrix,
@@ -214,7 +214,8 @@ TEST_F(TestOneSiteDMRGN2STO3G, TestSZ) {
                    -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(targets, energies, hamil, "SZ",
                   DecompositionTypes::DensityMatrix, NoiseTypes::DensityMatrix);
