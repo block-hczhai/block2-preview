@@ -39,6 +39,9 @@ class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 22;
     size_t dsize = 1L << 30;
+    template <typename S>
+    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
@@ -63,14 +66,14 @@ void TestDETN2STO3G::test_dmrg(const S target,
                                const string &name) {
 
 #ifdef _HAS_MPI
-    shared_ptr<ParallelCommunicator<SZ>> para_comm =
-        make_shared<MPICommunicator<SZ>>();
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
 #else
-    shared_ptr<ParallelCommunicator<SZ>> para_comm =
-        make_shared<ParallelCommunicator<SZ>>(1, 0, 0);
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRule<SZ>> para_rule =
-        make_shared<ParallelRuleQC<SZ>>(para_comm);
+    shared_ptr<ParallelRule<S>> para_rule =
+        make_shared<ParallelRuleQC<S>>(para_comm);
 
     vector<double> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
