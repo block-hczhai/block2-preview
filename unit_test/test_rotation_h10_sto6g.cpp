@@ -95,7 +95,8 @@ void TestRotationH10STO6G::test_dmrg(
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     // MPO construction
     cout << "MPO ROT start" << endl;
