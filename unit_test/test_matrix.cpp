@@ -525,10 +525,11 @@ TEST_F(TestMatrix, TestInverse) {
 }
 
 TEST_F(TestMatrix, TestCG) {
-    for (int i = 0; i < n_tests * 10; i++) {
+    for (int i = 0; i < n_tests; i++) {
         MKL_INT m = Random::rand_int(1, 200);
         MKL_INT n = 1;
         int nmult = 0;
+        double eta = 0.05;
         MatrixRef a(dalloc_()->allocate(m * m), m, m);
         MatrixRef af(dalloc_()->allocate(m * m), m, m);
         DiagonalMatrix aa(dalloc_()->allocate(m), m);
@@ -540,7 +541,7 @@ TEST_F(TestMatrix, TestCG) {
         Random::fill_rand_double(xg.data, xg.size());
         MatrixFunctions::multiply(af, false, af, true, a, 1.0, 0.0);
         for (MKL_INT ki = 0; ki < m; ki++)
-            aa(ki, ki) = a(ki, ki);
+            a(ki, ki) += eta, aa(ki, ki) = a(ki, ki);
         MatrixFunctions::copy(af, a);
         MatrixFunctions::copy(x, b);
         MatrixFunctions::linear(af, x);
@@ -548,7 +549,7 @@ TEST_F(TestMatrix, TestCG) {
         double func = MatrixFunctions::conjugate_gradient(
             mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
             (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 0, 1E-3));
+        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -563,6 +564,7 @@ TEST_F(TestMatrix, TestDeflatedCG) {
         MKL_INT m = Random::rand_int(1, 200);
         MKL_INT n = 1;
         int nmult = 0;
+        double eta = 0.05;
         MatrixRef a(dalloc_()->allocate(m * m), m, m);
         MatrixRef af(dalloc_()->allocate(m * m), m, m);
         MatrixRef ag(dalloc_()->allocate(m * m), m, m);
@@ -574,6 +576,8 @@ TEST_F(TestMatrix, TestDeflatedCG) {
         Random::fill_rand_double(b.data, b.size());
         Random::fill_rand_double(xg.data, xg.size());
         MatrixFunctions::multiply(af, false, af, true, a, 1.0, 0.0);
+        for (MKL_INT ki = 0; ki < m; ki++)
+            a(ki, ki) += eta;
         MatrixFunctions::copy(ag, a);
         MatrixFunctions::eigs(ag, aa);
         MatrixRef w(ag.data, m, 1);
@@ -587,7 +591,7 @@ TEST_F(TestMatrix, TestDeflatedCG) {
             mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
             (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000, -1,
             vector<MatrixRef>{w});
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 0, 1E-4));
+        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-4, 1E-4));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
