@@ -173,7 +173,8 @@ void TestLinearN2STO3G::test_dmrg(S target,
 
     para_comm->tcomm = 0.0;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     shared_ptr<MPSInfo<S>> imps_info = make_shared<MPSInfo<S>>(
         hamil->n_sites, hamil->vacuum, target, hamil->basis);
@@ -212,7 +213,7 @@ void TestLinearN2STO3G::test_dmrg(S target,
     cps->decomp_type = DecompositionTypes::DensityMatrix;
     double norm = cps->solve(10, mps->center == 0, 1E-10);
 
-    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), 1E-7);
+    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), dot == 1 ? 1E-4 : 1E-7);
 
     // Energy ME
     shared_ptr<MovingEnvironment<S>> eme =
@@ -238,7 +239,7 @@ void TestLinearN2STO3G::test_dmrg(S target,
 
     para_comm->tcomm = 0.0;
 
-    EXPECT_LT(abs(energy + 1.0), 1E-7);
+    EXPECT_LT(abs(energy + 1.0), dot == 1 ? 1E-4 : 1E-7);
 
     imps_info->deallocate();
     mps_info->deallocate();
