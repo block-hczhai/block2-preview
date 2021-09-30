@@ -64,7 +64,7 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
 
     // MPS
     // 2-site is not very stable
-    Random::rand_seed(1234);
+    Random::rand_seed(585056219);
 
     shared_ptr<MultiMPS<S>> mps =
         make_shared<MultiMPS<S>>(hamil->n_sites, 0, 2, nroots);
