@@ -119,7 +119,7 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_m500[i]) << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 5E-5);
     }
 
     mps_info_thermal->deallocate();

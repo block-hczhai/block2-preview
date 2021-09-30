@@ -174,7 +174,7 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
              << setw(3) << fixed << setprecision(0)
              << (para_comm->tcomm * 100 / tt) << "%)" << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-5);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 5E-5);
     }
 
     para_comm->tcomm = 0.0;
