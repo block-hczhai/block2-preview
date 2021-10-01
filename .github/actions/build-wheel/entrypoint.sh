@@ -40,9 +40,12 @@ if [ "${PARALLEL}" = "mpi" ]; then
     sed -i "s/name='block2'/name='block2-mpi'/g" setup.py
     sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmpi", "libopen-pal", "libopen-rte"]): continue' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
-    sed -i '/for soname, src_path/a \                if "libmpi" in soname: patcher.replace_needed(fn, soname, "libmpi.so")' \
+    sed -i '/for soname, src_path/a \                if "libmpi.so" in soname: patcher.replace_needed(fn, soname, "libmpi.so")' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 fi
+
+sed -i '/new_soname = src_name/a \    if any(x in src_name for x in ["libmkl_avx2", "libmkl_avx512"]): new_soname = src_name' \
+    $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 
 /opt/python/"${PY_VER}"/bin/pip wheel . -w ./dist --no-deps
 
