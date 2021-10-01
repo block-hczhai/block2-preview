@@ -100,6 +100,7 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
+            dmrg->davidson_soft_max_iter = 4000;
             double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             cout << "== PAR " << name << " ==" << setw(20) << target
