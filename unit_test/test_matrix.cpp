@@ -18,6 +18,9 @@ class TestMatrix : public ::testing::Test {
     size_t dsize = 1L << 28;
     void SetUp() override {
         Random::rand_seed(0);
+        unsigned int sd = (unsigned)Random::rand_int(1, 1 << 30);
+        cout << "seed = " << sd << endl;
+        Random::rand_seed(sd);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
     }
     void TearDown() override {
