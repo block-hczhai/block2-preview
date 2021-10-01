@@ -54,7 +54,7 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-3, 1E-4, 1E-5, 1E-6, 0.0};
+    vector<double> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -64,7 +64,7 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
 
     // MPS
     // 2-site is not very stable
-    Random::rand_seed(585056219);
+    Random::rand_seed(585076219);
 
     shared_ptr<MultiMPS<S>> mps =
         make_shared<MultiMPS<S>>(hamil->n_sites, 0, 2, nroots);
