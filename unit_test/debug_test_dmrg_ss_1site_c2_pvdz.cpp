@@ -5,10 +5,10 @@
 
 using namespace block2;
 
-class TestDMRGStateSpecific : public ::testing::Test {
+class TestOneSiteDMRGStateSpecific : public ::testing::Test {
   protected:
-    size_t isize = 1L << 26;
-    size_t dsize = 1L << 30;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 32;
 
     template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<double> &energies,
@@ -34,7 +34,7 @@ class TestDMRGStateSpecific : public ::testing::Test {
 };
 
 template <typename S>
-void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
+void TestOneSiteDMRGStateSpecific::test_dmrg(const vector<S> &targets,
                                       const vector<double> &energies,
                                       const shared_ptr<HamiltonianQC<S>> &hamil,
                                       const string &name, DecompositionTypes dt,
@@ -54,10 +54,6 @@ void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
                                       OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
-    cout << "MPO add identity start" << endl;
-    mpo = make_shared<IdentityAddedMPO<S>>(mpo);
-    cout << "MPO add identity end .. T = " << t.get_time() << endl;
-
     // Identity MPO
     cout << "Identity MPO start" << endl;
     shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
@@ -68,8 +64,8 @@ void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
     int nroots = (int)energies.size() / 2;
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500};
     vector<ubond_t> ss_bdims = {500};
-    vector<double> noises = {1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7,
-                             1E-7, 1E-7, 1E-7, 1E-7, 0.0};
+    vector<double> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5,
+                             1E-5, 1E-5, 1E-5, 1E-5, 0.0};
 
     t.get_time();
 
@@ -104,7 +100,14 @@ void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
     dmrg->iprint = 2;
     dmrg->decomp_type = dt;
     dmrg->noise_type = nt;
-    dmrg->solve(30, mps->center == 0, 1E-7);
+    dmrg->solve(6, mps->center == 0, 1E-7);
+
+    me->dot = 1;
+
+    dmrg->solve(25, mps->center == 0, 1E-7);
+
+    mps->dot = 1;
+    mps->save_data();
 
     // deallocate persistent stack memory
     double tt = t.get_time();
@@ -117,7 +120,7 @@ void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
              << (dmrg->energies.back()[ir] - energies[ir]) << " T = " << fixed
              << setw(10) << setprecision(3) << tt << endl;
 
-        EXPECT_LT(abs(dmrg->energies.back()[ir] - energies[ir]), 5E-5);
+        EXPECT_LT(abs(dmrg->energies.back()[ir] - energies[ir]), 5E-4);
     }
 
     vector<shared_ptr<MPS<S>>> ext_mpss;
@@ -178,14 +181,14 @@ void TestDMRGStateSpecific::test_dmrg(const vector<S> &targets,
              << endl;
 
         EXPECT_LT(abs(ss_dmrg->energies.back()[0] - energies[ir + nroots]),
-                  5E-5);
+                  5E-4);
     }
 
     mps_info->deallocate();
     mpo->deallocate();
 }
 
-TEST_F(TestDMRGStateSpecific, TestSU2) {
+TEST_F(TestOneSiteDMRGStateSpecific, TestSU2) {
 
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;
@@ -216,7 +219,7 @@ TEST_F(TestDMRGStateSpecific, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestDMRGStateSpecific, TestSZ) {
+TEST_F(TestOneSiteDMRGStateSpecific, TestSZ) {
 
     shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
     PGTypes pg = PGTypes::D2H;

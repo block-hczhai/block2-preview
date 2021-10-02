@@ -76,7 +76,7 @@ class FTDMRG:
         n_elec = self.fcidump.n_sites * 2
 
         vacuum = SpinLabel(0)
-        self.target = SpinLabel(n_elec, self.fcidump.twos,
+        self.target = SpinLabel(n_elec, 0, # twos is 0 for a thermal state; n_elec = n_sites
                                 PointGroup.swap_d2h(self.fcidump.isym))
         self.n_physical_sites = self.fcidump.n_sites
         self.n_sites = self.fcidump.n_sites * 2
@@ -125,7 +125,7 @@ class FTDMRG:
         self.orb_sym = VectorUInt8(map(PointGroup.swap_d2h, orb_sym))
 
         vacuum = SpinLabel(0)
-        self.target = SpinLabel(n_elec, twos, PointGroup.swap_d2h(isym))
+        self.target = SpinLabel(n_elec, 0, PointGroup.swap_d2h(isym))
         self.n_physical_sites = n_sites
         self.n_sites = n_sites * 2
 

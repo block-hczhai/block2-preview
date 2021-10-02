@@ -37,20 +37,21 @@ class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 26;
-    size_t dsize = 1L << 32;
+    size_t isize = 1L << 22;
+    size_t dsize = 1L << 30;
 
     template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<double> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   ubond_t bond_dim, uint16_t nroots);
+                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4, 4);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
+            4);
+        threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
     }
     void TearDown() override {
@@ -63,11 +64,10 @@ class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
 bool TestOneSiteDMRGN2STO3GSA::_mpi = MPITest::okay();
 
 template <typename S>
-void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
-                                  const vector<double> &energies,
-                                  const shared_ptr<HamiltonianQC<S>> &hamil,
-                                  const string &name, ubond_t bond_dim,
-                                  uint16_t nroots) {
+void TestOneSiteDMRGN2STO3GSA::test_dmrg(
+    const vector<S> &targets, const vector<double> &energies,
+    const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
+    ubond_t bond_dim, uint16_t nroots) {
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<S>> para_comm =
@@ -98,7 +98,7 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    vector<double> noises = {1E-5, 1E-7, 1E-8, 0.0};
 
     t.get_time();
 
@@ -107,7 +107,8 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
-    Random::rand_seed(0);
+    // 1-site is not very stable
+    Random::rand_seed(1234);
 
     shared_ptr<MultiMPS<S>> mps =
         make_shared<MultiMPS<S>>(hamil->n_sites, 0, 1, nroots);
@@ -124,10 +125,13 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     shared_ptr<MovingEnvironment<S>> me =
         make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
     me->init_environments(false);
+    me->delayed_contraction = OpNamesSet::normal_ops();
+    me->cached_contraction = true;
 
     // DMRG
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
     dmrg->iprint = 2;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     // deallocate persistent stack memory
@@ -190,7 +194,8 @@ TEST_F(TestOneSiteDMRGN2STO3GSA, TestSU2) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(targets, energies, hamil, "SU2", 200, 10);
 
@@ -237,9 +242,12 @@ TEST_F(TestOneSiteDMRGN2STO3GSA, TestSZ) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ", 400, 16);
+    test_dmrg<SZ>(targets, energies, hamil, "SZ",
+                  (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()),
+                  16);
 
     hamil->deallocate();
     fcidump->deallocate();

@@ -7,8 +7,8 @@ using namespace block2;
 class TestCSFSpace : public ::testing::Test {
   protected:
     static const int n_tests = 200;
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 30;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 32;
     double norm(const vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat) const {
         double normsq = 0;
         for (auto &mmat : mat)

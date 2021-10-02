@@ -115,7 +115,6 @@ template <typename S> struct ParallelFCIDUMP : FCIDUMP {
                    ? FCIDUMP::v(sl, sr, i, j, k, l)
                    : 0;
     }
-    double e() const override { return rule->index_available() ? const_e : 0; }
 };
 
 // One- and two-electron integrals

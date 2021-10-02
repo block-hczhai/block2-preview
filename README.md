@@ -1,5 +1,7 @@
 
 [![Documentation Status](https://readthedocs.org/projects/block2/badge/?version=latest)](https://block2.readthedocs.io/en/latest/?badge=latest)
+[![Build Status](https://github.com/block-hczhai/block2-preview/workflows/build/badge.svg)](https://github.com/block-hczhai/block2-preview/actions/workflows/build.yml)
+[![License](https://img.shields.io/github/license/block-hczhai/block2-preview)](https://www.gnu.org/licenses/gpl-3.0)
 
 block2
 ======
@@ -15,7 +17,7 @@ The block2 code is developed and maintained in Garnet Chan group at Caltech.
 Main contributors:
 
 * Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
-* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI/MRPT and big site
+* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI/MRPT, large site, Green's function in frequency and time for finite temp.  
 * Seunghoon Lee [@seunghoonlee89](https://github.com/seunghoonlee89): Stochastic perturbative DMRG
 * Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
 
@@ -58,6 +60,8 @@ Features
         * Time dependent variational principle method
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
+    * Green's function
+    * Time evolution
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
     * 1PDM / 2PDM

@@ -978,8 +978,7 @@ struct MatrixFunctions {
                              else if (shift >= ld.data[i])
                                  return shift - ld.data[i] < shift - ld.data[j];
                              else
-                                 return ld.data[i] - shift >=
-                                        ld.data[j] - shift;
+                                 return ld.data[i] - shift > ld.data[j] - shift;
                          });
                 else if (davidson_type & DavidsonTypes::GreaterThan)
                     sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
@@ -989,8 +988,7 @@ struct MatrixFunctions {
                              else if (shift > ld.data[i])
                                  return shift - ld.data[i] > shift - ld.data[j];
                              else
-                                 return ld.data[i] - shift <=
-                                        ld.data[j] - shift;
+                                 return ld.data[i] - shift < ld.data[j] - shift;
                          });
                 for (int i = 0; i < ck; i++) {
                     int ii = eigval_idxs[i];

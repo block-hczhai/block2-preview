@@ -37,20 +37,20 @@ class TestRealTEH10STO6G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 28;
-    size_t dsize = 1L << 32;
+    size_t isize = 1L << 22;
+    size_t dsize = 1L << 30;
 
     template <typename S>
-    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   int dot, TETypes te_type);
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const string &name, int dot, TETypes te_type);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->minimal_disk_usage = true;
         frame_()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4,
-            4, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
+            1);
         threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
@@ -64,7 +64,8 @@ class TestRealTEH10STO6G : public ::testing::Test {
 bool TestRealTEH10STO6G::_mpi = MPITest::okay();
 
 template <typename S>
-void TestRealTEH10STO6G::test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+void TestRealTEH10STO6G::test_dmrg(S target,
+                                   const shared_ptr<HamiltonianQC<S>> &hamil,
                                    const string &name, int dot,
                                    TETypes te_type) {
 
@@ -218,7 +219,8 @@ void TestRealTEH10STO6G::test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> 
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     // D APPLY MPS
     shared_ptr<MPSInfo<S>> dmps_info = make_shared<MPSInfo<S>>(
@@ -295,7 +297,7 @@ void TestRealTEH10STO6G::test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> 
              << " EX = " << fixed << setw(22) << setprecision(12) << overlaps[i]
              << " ERROR = " << scientific << setprecision(3) << setw(10)
              << (overlaps[i] - te_refs[i]) << endl;
-        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-7);
+        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-6);
     }
 
     dmps_info->deallocate();
@@ -318,7 +320,8 @@ TEST_F(TestRealTEH10STO6G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SU2>(target, hamil, "SU2/2-site/TDVP", 2, TETypes::TangentSpace);
     test_dmrg<SU2>(target, hamil, " SU2/2-site/RK4", 2, TETypes::RK4);
@@ -345,7 +348,8 @@ TEST_F(TestRealTEH10STO6G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ>> hamil =
+        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
 
     test_dmrg<SZ>(target, hamil, " SZ/2-site/TDVP", 2, TETypes::TangentSpace);
     test_dmrg<SZ>(target, hamil, "  SZ/2-site/RK4", 2, TETypes::RK4);

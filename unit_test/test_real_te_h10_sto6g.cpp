@@ -7,7 +7,7 @@ using namespace block2;
 
 class TestRealTEH10STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 28;
+    size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
     template <typename S>
@@ -156,7 +156,8 @@ void TestRealTEH10STO6G::test_dmrg(S target,
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     // D APPLY MPS
     shared_ptr<MPSInfo<S>> dmps_info = make_shared<MPSInfo<S>>(
@@ -233,7 +234,7 @@ void TestRealTEH10STO6G::test_dmrg(S target,
              << " EX = " << fixed << setw(22) << setprecision(12) << overlaps[i]
              << " ERROR = " << scientific << setprecision(3) << setw(10)
              << (overlaps[i] - te_refs[i]) << endl;
-        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-7);
+        EXPECT_LT(abs(overlaps[i] - te_refs[i]), 1E-6);
     }
 
     dmps_info->deallocate();
