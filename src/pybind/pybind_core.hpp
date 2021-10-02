@@ -1913,6 +1913,9 @@ template <typename S = void> void bind_matrix(py::module &m) {
         .def("exchange_matrix", &FCIDUMP::exchange_matrix)
         .def("abs_exchange_matrix", &FCIDUMP::abs_exchange_matrix)
         .def("h1e_matrix", &FCIDUMP::h1e_matrix)
+        .def("g2e_1fold", &FCIDUMP::g2e_1fold)
+        .def("g2e_4fold", &FCIDUMP::g2e_4fold)
+        .def("g2e_8fold", &FCIDUMP::g2e_8fold)
         .def("abs_h1e_matrix", &FCIDUMP::abs_h1e_matrix)
         .def("reorder",
              (void (FCIDUMP::*)(const vector<uint16_t> &)) & FCIDUMP::reorder)

@@ -34,6 +34,7 @@ To run a DMRG calculation, please use the following command:
 where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
 
 Documentation: https://block2.readthedocs.io/en/latest/
+Source code: https://github.com/block-hczhai/block2-preview
 
 Features
 --------

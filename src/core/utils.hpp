@@ -167,7 +167,7 @@ struct Parsing {
             last = index + 1;
             index = s.find_first_of(delim, last);
         }
-        if (s.length() > last)
+        if (!remove_empty || s.length() > last)
             r.push_back(s.substr(last, s.length() - last));
         return r;
     }
