@@ -2777,84 +2777,14 @@ template <typename S> struct MovingEnvironment {
         int i, const shared_ptr<MPSInfo<S>> &mps_info,
         const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
-        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
-            make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
-        vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
-        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
-        mps_info->load_left_dims(i);
-        mps_info->load_right_dims(i + 1);
-        l = *mps_info->left_dims[i], m = *mps_info->basis[i],
-        r = *mps_info->right_dims[i + 1];
-        lm =
-            StateInfo<S>::tensor_product(l, m, *mps_info->left_dims_fci[i + 1]);
-        lmc = StateInfo<S>::get_connection_info(l, m, lm);
-        mr = StateInfo<S>::tensor_product(m, r, *mps_info->right_dims_fci[i]);
-        mrc = StateInfo<S>::get_connection_info(m, r, mr);
-        vector<shared_ptr<SparseMatrixInfo<S>>> owinfos = old_wfns[0]->infos;
-        wfn_infos.resize(old_wfns[0]->n);
-        for (int j = 0; j < old_wfns[0]->n; j++) {
-            wfn_infos[j] = make_shared<SparseMatrixInfo<S>>(i_alloc);
-            wfn_infos[j]->initialize(lm, r, owinfos[j]->delta_quantum,
-                                     owinfos[j]->is_fermion,
-                                     owinfos[j]->is_wavefunction);
-        }
-        wfns.resize(old_wfns.size());
-        for (int k = 0; k < (int)old_wfns.size(); k++) {
-            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
-            wfns[k]->allocate(wfn_infos);
-        }
-        for (int k = 0; k < (int)old_wfns.size(); k++)
-            for (int j = 0; j < old_wfns[k]->n; j++)
-                (*wfns[k])[j]->swap_to_fused_left((*old_wfns[k])[j], l, m, r,
-                                                  mr, mrc, lm, lmc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
-        return wfns;
+            return mps_info->swap_multi_wfn_to_fused_left(i, old_wfns, cg);
     }
     static vector<shared_ptr<SparseMatrixGroup<S>>>
     swap_multi_wfn_to_fused_right(
         int i, const shared_ptr<MPSInfo<S>> &mps_info,
         const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
-        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
-            make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
-        vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
-        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
-        mps_info->load_left_dims(i);
-        mps_info->load_right_dims(i + 1);
-        l = *mps_info->left_dims[i], m = *mps_info->basis[i],
-        r = *mps_info->right_dims[i + 1];
-        lm =
-            StateInfo<S>::tensor_product(l, m, *mps_info->left_dims_fci[i + 1]);
-        lmc = StateInfo<S>::get_connection_info(l, m, lm);
-        mr = StateInfo<S>::tensor_product(m, r, *mps_info->right_dims_fci[i]);
-        mrc = StateInfo<S>::get_connection_info(m, r, mr);
-        vector<shared_ptr<SparseMatrixInfo<S>>> owinfos = old_wfns[0]->infos;
-        wfn_infos.resize(old_wfns[0]->n);
-        for (int j = 0; j < old_wfns[0]->n; j++) {
-            wfn_infos[j] = make_shared<SparseMatrixInfo<S>>(i_alloc);
-            wfn_infos[j]->initialize(l, mr, owinfos[j]->delta_quantum,
-                                     owinfos[j]->is_fermion,
-                                     owinfos[j]->is_wavefunction);
-        }
-        wfns.resize(old_wfns.size());
-        for (int k = 0; k < (int)old_wfns.size(); k++) {
-            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
-            wfns[k]->allocate(wfn_infos);
-        }
-        for (int k = 0; k < (int)old_wfns.size(); k++)
-            for (int j = 0; j < old_wfns[k]->n; j++)
-                (*wfns[k])[j]->swap_to_fused_right((*old_wfns[k])[j], l, m, r,
-                                                   lm, lmc, mr, mrc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
-        return wfns;
+        return mps_info->swap_multi_wfn_to_fused_right(i, old_wfns, cg);
     }
     // Change the fusing type of MPS tensor so that it can be used in next sweep
     // iteration

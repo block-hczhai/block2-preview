@@ -632,7 +632,7 @@ elif "fullrestart" in dic:
     mps = MPS(mps_info) if nroots == 1 and len(
         targets) == 1 else MultiMPS(mps_info)
     mps.load_data()
-    if mps.dot != dot and nroots == 1:
+    if mps.dot != dot:
         if MPI is not None:
             MPI.barrier()
         mps.dot = dot
@@ -651,13 +651,39 @@ elif "fullrestart" in dic:
     if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
         mps.center += 1
         forward = True
-    elif mps.canonical_form[mps.center] == 'C' and mps.center != 0:
+        if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
+            if MPI is not None:
+                MPI.barrier()
+            cg = CG(200)
+            cg.initialize()
+            mps.flip_fused_form(mps.center, cg, prule)
+            mps.save_data()
+            if MPI is not None:
+                MPI.barrier()
+            mps.load_mutable()
+            mps.info.load_mutable()
+            if MPI is not None:
+                MPI.barrier()
+    elif mps.canonical_form[mps.center] in "CMKJST" and mps.center != 0:
+        if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
+            if MPI is not None:
+                MPI.barrier()
+            cg = CG(200)
+            cg.initialize()
+            mps.flip_fused_form(mps.center, cg, prule)
+            mps.save_data()
+            if MPI is not None:
+                MPI.barrier()
+            mps.load_mutable()
+            mps.info.load_mutable()
+            if MPI is not None:
+                MPI.barrier()
         mps.center -= 1
         forward = False
-    elif mps.center == mps.n_sites - 1 and mps.dot == 2 and nroots == 1:
+    elif mps.center == mps.n_sites - 1 and mps.dot == 2:
         if MPI is not None:
             MPI.barrier()
-        if mps.canonical_form[mps.center] == 'K':
+        if mps.canonical_form[mps.center] in "KJ":
             cg = CG(200)
             cg.initialize()
             mps.flip_fused_form(mps.center, cg, prule)
@@ -670,10 +696,10 @@ elif "fullrestart" in dic:
         mps.info.load_mutable()
         if MPI is not None:
             MPI.barrier()
-    elif mps.center == 0 and mps.dot == 2 and nroots == 1:
+    elif mps.center == 0 and mps.dot == 2:
         if MPI is not None:
             MPI.barrier()
-        if mps.canonical_form[mps.center] == 'S':
+        if mps.canonical_form[mps.center] in "ST":
             cg = CG(200)
             cg.initialize()
             mps.flip_fused_form(mps.center, cg, prule)

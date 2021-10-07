@@ -22,8 +22,8 @@
 
 #include "../core/expr.hpp"
 #include "../core/matrix.hpp"
-#include "moving_environment.hpp"
 #include "../core/sparse_matrix.hpp"
+#include "moving_environment.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -1862,7 +1862,9 @@ template <typename S> struct TimeEvolution {
         assert(me->dot == 2 || me->dot == 1);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
-                me->ket->canonical_form[i + 1] == 'M')
+                me->ket->canonical_form[i + 1] == 'M' ||
+                me->ket->canonical_form[i] == 'J' ||
+                me->ket->canonical_form[i] == 'T')
                 return update_multi_two_dot(i, forward, advance, beta, bond_dim,
                                             noise);
             else {
@@ -1873,7 +1875,8 @@ template <typename S> struct TimeEvolution {
             }
         } else {
             if (me->ket->canonical_form[i] == 'J' ||
-                me->ket->canonical_form[i] == 'T')
+                me->ket->canonical_form[i] == 'T' ||
+                me->ket->canonical_form[i] == 'M')
                 return update_multi_one_dot(i, forward, advance, beta, bond_dim,
                                             noise);
             else {

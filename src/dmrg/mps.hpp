@@ -675,6 +675,82 @@ template <typename S> struct MPSInfo {
         lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
+    vector<shared_ptr<SparseMatrixGroup<S>>> swap_multi_wfn_to_fused_left(
+        int i, const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+        const shared_ptr<CG<S>> &cg) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
+        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
+        load_left_dims(i);
+        load_right_dims(i + 1);
+        l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
+        lm = StateInfo<S>::tensor_product(l, m, *left_dims_fci[i + 1]);
+        lmc = StateInfo<S>::get_connection_info(l, m, lm);
+        mr = StateInfo<S>::tensor_product(m, r, *right_dims_fci[i]);
+        mrc = StateInfo<S>::get_connection_info(m, r, mr);
+        vector<shared_ptr<SparseMatrixInfo<S>>> owinfos = old_wfns[0]->infos;
+        wfn_infos.resize(old_wfns[0]->n);
+        for (int j = 0; j < old_wfns[0]->n; j++) {
+            wfn_infos[j] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            wfn_infos[j]->initialize(lm, r, owinfos[j]->delta_quantum,
+                                     owinfos[j]->is_fermion,
+                                     owinfos[j]->is_wavefunction);
+        }
+        wfns.resize(old_wfns.size());
+        for (int k = 0; k < (int)old_wfns.size(); k++) {
+            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            wfns[k]->allocate(wfn_infos);
+        }
+        for (int k = 0; k < (int)old_wfns.size(); k++)
+            for (int j = 0; j < old_wfns[k]->n; j++)
+                (*wfns[k])[j]->swap_to_fused_left((*old_wfns[k])[j], l, m, r,
+                                                  mr, mrc, lm, lmc, cg);
+        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
+        lm.deallocate(), r.deallocate(), l.deallocate();
+        return wfns;
+    }
+    vector<shared_ptr<SparseMatrixGroup<S>>> swap_multi_wfn_to_fused_right(
+        int i, const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+        const shared_ptr<CG<S>> &cg) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
+        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
+        load_left_dims(i);
+        load_right_dims(i + 1);
+        l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
+        lm = StateInfo<S>::tensor_product(l, m, *left_dims_fci[i + 1]);
+        lmc = StateInfo<S>::get_connection_info(l, m, lm);
+        mr = StateInfo<S>::tensor_product(m, r, *right_dims_fci[i]);
+        mrc = StateInfo<S>::get_connection_info(m, r, mr);
+        vector<shared_ptr<SparseMatrixInfo<S>>> owinfos = old_wfns[0]->infos;
+        wfn_infos.resize(old_wfns[0]->n);
+        for (int j = 0; j < old_wfns[0]->n; j++) {
+            wfn_infos[j] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            wfn_infos[j]->initialize(l, mr, owinfos[j]->delta_quantum,
+                                     owinfos[j]->is_fermion,
+                                     owinfos[j]->is_wavefunction);
+        }
+        wfns.resize(old_wfns.size());
+        for (int k = 0; k < (int)old_wfns.size(); k++) {
+            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            wfns[k]->allocate(wfn_infos);
+        }
+        for (int k = 0; k < (int)old_wfns.size(); k++)
+            for (int j = 0; j < old_wfns[k]->n; j++)
+                (*wfns[k])[j]->swap_to_fused_right((*old_wfns[k])[j], l, m, r,
+                                                   lm, lmc, mr, mrc, cg);
+        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
+        lm.deallocate(), r.deallocate(), l.deallocate();
+        return wfns;
+    }
     string get_filename(bool left, int i, const string &dir = "") const {
         stringstream ss;
         ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
@@ -1350,7 +1426,7 @@ template <typename S> struct MPS {
                 }
             }
     }
-    void
+    virtual void
     flip_fused_form(int center, const shared_ptr<CG<S>> &cg,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         if (para_rule == nullptr || para_rule->is_root()) {
