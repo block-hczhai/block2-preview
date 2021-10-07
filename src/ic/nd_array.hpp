@@ -510,7 +510,7 @@ struct NDArray {
             trans_a = 0;
         else if (nbr != 0 &&
                  (idxax[ctr_idx[0]] != 0 || idxax[ctr_idx[nbr - 1]] != nbr - 1))
-            trans_a == 0;
+            trans_a = 0;
         else if (nctr == 0)
             trans_a = 1;
         else if (idxax[ctr_idx[nbr]] == nbr &&
@@ -524,7 +524,7 @@ struct NDArray {
             trans_b = 0;
         else if (nbr != 0 && !(idxbx[ctr_idx[0]] == 0 &&
                                idxbx[ctr_idx[nbr - 1]] == nbr - 1))
-            trans_b == 0;
+            trans_b = 0;
         else if (nctr == 0)
             trans_b = 1;
         else if (idxbx[ctr_idx[nbr]] == nbr &&
