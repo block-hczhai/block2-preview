@@ -9,9 +9,18 @@ Installation
 Using ``pip``
 -------------
 
-One can install ``block2`` using ::
+One can install ``block2`` using ``pip``:
 
-    pip install block2
+* OpenMP-only version (no MPI dependence) ::
+
+      pip install block2
+
+* Hybrid openMP/MPI version (requiring openMPI 4.0.x installed) ::
+
+      pip install block2-mpi
+
+* Binary format are prepared via ``pip`` for python 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI).
+  If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source.
 
 Manual Installation
 -------------------

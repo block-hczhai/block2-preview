@@ -656,7 +656,7 @@ elif "fullrestart" in dic:
                 MPI.barrier()
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule)
+            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -670,7 +670,7 @@ elif "fullrestart" in dic:
                 MPI.barrier()
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule)
+            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -686,7 +686,7 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "KJ":
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule)
+            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
         mps.center = mps.n_sites - 2
         mps.save_data()
         forward = False
@@ -702,7 +702,7 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "ST":
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule)
+            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
         mps.save_data()
         forward = True
         if MPI is not None:
