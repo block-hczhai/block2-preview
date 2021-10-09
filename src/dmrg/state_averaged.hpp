@@ -224,6 +224,29 @@ template <typename S> struct MultiMPS : MPS<S> {
         if (init_right)
             MPS<S>::initialize_right(info, center + dot);
     }
+    void flip_fused_form(
+        int center, const shared_ptr<CG<S>> &cg,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) override {
+        if (para_rule == nullptr || para_rule->is_root()) {
+            load_wavefunction(center);
+            if (canonical_form[center] == 'T')
+                wfns = info->swap_multi_wfn_to_fused_left(center, wfns, cg);
+            else if (canonical_form[center] == 'J')
+                wfns = info->swap_multi_wfn_to_fused_right(center, wfns, cg);
+            else
+                assert(false);
+            save_wavefunction(center);
+            unload_wavefunction(center);
+        }
+        if (canonical_form[center] == 'T')
+            canonical_form[center] = 'J';
+        else if (canonical_form[center] == 'J')
+            canonical_form[center] = 'T';
+        else
+            assert(false);
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
+    }
     void random_canonicalize() override {
         for (int i = 0; i < n_sites; i++)
             MPS<S>::random_canonicalize_tensor(i);

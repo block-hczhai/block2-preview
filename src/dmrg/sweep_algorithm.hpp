@@ -25,9 +25,9 @@
 #include "../core/sparse_matrix.hpp"
 #include "moving_environment.hpp"
 #include "parallel_mps.hpp"
+#include "qc_ncorr.hpp"
 #include "qc_pdm1.hpp"
 #include "qc_pdm2.hpp"
-#include "qc_ncorr.hpp"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -1163,7 +1163,9 @@ template <typename S> struct DMRG {
         Iteration it(vector<double>(), 0, 0, 0);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
-                me->ket->canonical_form[i + 1] == 'M')
+                me->ket->canonical_form[i + 1] == 'M' ||
+                me->ket->canonical_form[i] == 'J' ||
+                me->ket->canonical_form[i] == 'T')
                 it = update_multi_two_dot(i, forward, bond_dim, noise,
                                           davidson_conv_thrd);
             else
@@ -1171,7 +1173,8 @@ template <typename S> struct DMRG {
                                     davidson_conv_thrd);
         } else {
             if (me->ket->canonical_form[i] == 'J' ||
-                me->ket->canonical_form[i] == 'T')
+                me->ket->canonical_form[i] == 'T' ||
+                me->ket->canonical_form[i] == 'M')
                 it = update_multi_one_dot(i, forward, bond_dim, noise,
                                           davidson_conv_thrd);
             else
@@ -4277,7 +4280,9 @@ template <typename S, typename FL = double> struct Expect {
         assert(me->dot == 1 || me->dot == 2);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
-                me->ket->canonical_form[i + 1] == 'M')
+                me->ket->canonical_form[i + 1] == 'M' ||
+                me->ket->canonical_form[i] == 'J' ||
+                me->ket->canonical_form[i] == 'T')
                 return update_multi_two_dot(i, forward, propagate, bra_bond_dim,
                                             ket_bond_dim);
             else
@@ -4285,7 +4290,8 @@ template <typename S, typename FL = double> struct Expect {
                                       ket_bond_dim);
         } else {
             if (me->ket->canonical_form[i] == 'J' ||
-                me->ket->canonical_form[i] == 'T')
+                me->ket->canonical_form[i] == 'T' ||
+                me->ket->canonical_form[i] == 'M')
                 return update_multi_one_dot(i, forward, propagate, bra_bond_dim,
                                             ket_bond_dim);
             else
@@ -4384,7 +4390,8 @@ template <typename S, typename FL = double> struct Expect {
     GMatrix<FL> get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
-        return NPC1MPOQC<S>::get_matrix_spatial(s, expectations, n_physical_sites);
+        return NPC1MPOQC<S>::get_matrix_spatial(s, expectations,
+                                                n_physical_sites);
     }
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin

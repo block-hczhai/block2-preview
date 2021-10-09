@@ -134,6 +134,10 @@ template <typename S> void bind_mps(py::module &m) {
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
         .def("swap_wfn_to_fused_left", &MPSInfo<S>::swap_wfn_to_fused_left)
         .def("swap_wfn_to_fused_right", &MPSInfo<S>::swap_wfn_to_fused_right)
+        .def("swap_multi_wfn_to_fused_left",
+             &MPSInfo<S>::swap_multi_wfn_to_fused_left)
+        .def("swap_multi_wfn_to_fused_right",
+             &MPSInfo<S>::swap_multi_wfn_to_fused_right)
         .def("get_filename", &MPSInfo<S>::get_filename, py::arg("left"),
              py::arg("i"), py::arg("dir") = "")
         .def("save_mutable", &MPSInfo<S>::save_mutable)
