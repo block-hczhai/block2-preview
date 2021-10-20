@@ -207,6 +207,19 @@ template <typename S> void bind_mps(py::module &m) {
                        "Up to how many electrons are allowed in ext. orbitals: "
                        "2 gives MR-CISD");
 
+    py::class_<NEVPTMPSInfo<S>, shared_ptr<NEVPTMPSInfo<S>>, MPSInfo<S>>(
+        m, "NEVPTMPSInfo")
+        .def(py::init<int, int, int, int, S, S,
+                      const vector<shared_ptr<StateInfo<S>>> &>())
+        .def(py::init<int, int, int, int, int, S, S,
+                      const vector<shared_ptr<StateInfo<S>>> &>())
+        .def_readwrite("n_inactive", &NEVPTMPSInfo<S>::n_inactive,
+                       "Number of inactive orbitals")
+        .def_readwrite("n_external", &NEVPTMPSInfo<S>::n_external,
+                       "Number of external orbitals")
+        .def_readwrite("n_ex_inactive", &NEVPTMPSInfo<S>::n_ex_inactive)
+        .def_readwrite("n_ex_external", &NEVPTMPSInfo<S>::n_ex_external);
+
     py::class_<AncillaMPSInfo<S>, shared_ptr<AncillaMPSInfo<S>>, MPSInfo<S>>(
         m, "AncillaMPSInfo")
         .def_readwrite("n_physical_sites", &AncillaMPSInfo<S>::n_physical_sites)

@@ -34,7 +34,9 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
-              "nevpt2sd", "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
+              "nevpt2sd",  "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+              "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
+              "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
               "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
