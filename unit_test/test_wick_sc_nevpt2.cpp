@@ -14,9 +14,36 @@ TEST_F(TestWickSCNEVPT2, TestSCNEVPT2) {
 
     WickSCNEVPT2 wsc;
 
-    // cout << wsc.to_einsum() << endl;
+    //  cout << wsc.to_einsum() << endl;
 
-    vector<WickExpr> axx_ref(26), axx_eq(26), xx_ref(19), xx_eq(19);
+    wsc.defs["hbar"] = WickExpr::parse_def(
+        "hbar[ab] = h[ab] \n - 0.5 SUM <c> w[accb]", wsc.idx_map, wsc.perm_map);
+    wsc.defs["hp"] = WickExpr::parse_def(
+        "hp[mn] = h[mn] \n - 1.0 SUM <b> w[mbbn]", wsc.idx_map, wsc.perm_map);
+    wsc.defs["E1T"] = WickExpr::parse_def(
+        "E1T[a,b] = 2.0 delta[ab] \n - E1[b,a]", wsc.idx_map, wsc.perm_map);
+    wsc.defs["E2TX"] = WickExpr::parse_def(
+        "E2TX[pq,ab] = E2[ab,pq] \n + delta[pb] E1[a,q] \n"
+        "delta[qa] E1[b,p] \n - 2.0 delta[pa] E1[b,q] \n"
+        "- 2.0 delta[qb] E1[a,p] \n - 2.0 delta[pb] delta[qa] \n"
+        "+ 4.0 delta[ap] delta[bq]",
+        wsc.idx_map, wsc.perm_map);
+    wsc.defs["E2T"] = WickExpr::parse_def(
+        "E2T[pq,ab] = E1T[p,a] E1T[q,b] \n - delta[qa] E1T[p,b]", wsc.idx_map,
+        wsc.perm_map);
+    wsc.defs["E2T"].second = wsc.defs["E2T"].second.substitute(wsc.defs);
+    assert((wsc.defs["E2T"].second - wsc.defs["E2TX"].second)
+               .expand()
+               .simplify()
+               .terms.size() == 0);
+    wsc.defs["E3T"] = WickExpr::parse_def(
+        "E3T[pqg,abc] = E1T[p,a] E1T[q,b] E1T[g,c] \n"
+        " - delta[ag] E2T[pq,cb] \n - delta[aq] E2T[pg,bc] \n"
+        " - delta[bg] E2T[pq,ac] \n - delta[aq] delta[bg] E1T[p,c]",
+        wsc.idx_map, wsc.perm_map);
+    wsc.defs["E3T"].second = wsc.defs["E3T"].second.substitute(wsc.defs);
+
+    vector<WickExpr> xx_ref(19), xx_eq(19);
 
     xx_ref[11] = WickExpr::parse(R"TEX(
  + 4.0 SUM <rsij> gamma[ij] gamma[rs] w[rsij] w[rsij]
@@ -114,14 +141,38 @@ TEST_F(TestWickSCNEVPT2, TestSCNEVPT2) {
                      .add_spin_free_trans_symm()
                      .simplify();
 
-    xx_eq[11] = wsc.make_x11();
-    xx_eq[12] = wsc.make_x12();
-    xx_eq[13] = wsc.make_x13();
-    xx_eq[14] = wsc.make_x14();
-    xx_eq[15] = wsc.make_x15();
-    xx_eq[16] = wsc.make_x16();
-    xx_eq[17] = wsc.make_x17();
-    xx_eq[18] = wsc.make_x18();
+    // Eq (3) ijrs
+    xx_eq[11] = wsc.build_norm("gamma[ij] gamma[rs] w[rsij] E1[r,i] E1[s,j] \n"
+                               "gamma[ij] gamma[rs] w[rsji] E1[s,i] E1[r,j]",
+                               true);
+    // Eq (4) rsi
+    xx_eq[12] = wsc.build_norm("SUM <a> gamma[rs] w[rsia] E1[r,i] E1[s,a] \n"
+                               "SUM <a> gamma[rs] w[sria] E1[s,i] E1[r,a]",
+                               true);
+    // Eq (5) ijr
+    xx_eq[13] = wsc.build_norm("SUM <a> gamma[ij] w[raji] E1[r,j] E1[a,i] \n"
+                               "SUM <a> gamma[ij] w[raij] E1[r,i] E1[a,j]",
+                               true);
+    // Eq (6) rs
+    xx_eq[14] =
+        wsc.build_norm("SUM <ab> gamma[rs] w[rsba] E1[r,b] E1[s,a]", true);
+    // Eq (7) ij
+    xx_eq[15] =
+        wsc.build_norm("SUM <ab> gamma[ij] w[baij] E1[b,i] E1[a,j]", true);
+    // Eq (8) ir
+    xx_eq[16] = wsc.build_norm("SUM <ab> w[raib] E1[r,i] E1[a,b] \n"
+                               "SUM <ab> w[rabi] E1[a,i] E1[r,b] \n"
+                               "h[ri] E1[r,i]",
+                               true);
+    // Eq (9) r
+    xx_eq[17] = wsc.build_norm("SUM <abc> w[rabc] E1[r,b] E1[a,c] \n"
+                               "SUM <a> h[ra] E1[r,a] \n"
+                               "- SUM <ab> w[rbba] E1[r,a]",
+                               true);
+    // Eq (10) i
+    xx_eq[18] = wsc.build_norm("SUM <abc> w[baic] E1[b,i] E1[a,c] \n"
+                               "SUM <a> h[ai] E1[a,i]",
+                               true);
 
     for (auto &ix : vector<int>{11, 12, 13, 14, 15, 16, 17, 18}) {
         WickExpr diff = (xx_eq[ix] - xx_ref[ix]).simplify();
@@ -131,27 +182,12 @@ TEST_F(TestWickSCNEVPT2, TestSCNEVPT2) {
         EXPECT_TRUE(diff.terms.size() == 0);
     }
 
-    return;
+    vector<WickExpr> axx_ref(30), axx_eq(30);
 
-    //    axx_ref[7] = WickExpr::parse(R"TEX(
-    //  - 1.0 SUM <d> hp[ad] E2[pq,db]
-    //  - 1.0 SUM <d> hp[bd] E2[pq,ad]
-    //  - 1.0 SUM <def> w[daef] E3[pqd,fbe]
-    //  - 0.5 SUM <def> w[daef] delta[df] E2[pq,eb]
-    //  - 0.5 SUM <def> w[daef] delta[bd] E2[pq,fe]
-    //  - 1.0 SUM <def> w[dbef] E3[pqd,afe]
-    //  - 0.5 SUM <def> w[dbef] delta[ad] E2[pq,ef]
-    //  - 0.5 SUM <def> w[dbef] delta[df] E2[pq,ae]
-    // )TEX",
-    //                                  wsc.idx_map, wsc.perm_map)
-    //                      .substitute(wsc.defs)
-    //                      .expand()
-    //                      .add_spin_free_trans_symm()
-    //                      .simplify();
-
+    // revised heff-prime -> hbar
     axx_ref[7] = WickExpr::parse(R"TEX(
- - 1.0 SUM <rspqabd> gamma[rs] w[rsqp] w[rsba] hp[ad] E2[pq,db]
- - 1.0 SUM <rspqabd> gamma[rs] w[rsqp] w[rsba] hp[bd] E2[pq,ad]
+ - 1.0 SUM <rspqabd> gamma[rs] w[rsqp] w[rsba] hbar[ad] E2[pq,db]
+ - 1.0 SUM <rspqabd> gamma[rs] w[rsqp] w[rsba] hbar[bd] E2[pq,ad]
  - 1.0 SUM <rspqabdef> gamma[rs] w[rsqp] w[rsba] w[daef] E3[pqd,fbe]
  - 0.5 SUM <rspqabdef> gamma[rs] w[rsqp] w[rsba] w[daef] delta[df] E2[pq,eb]
  - 0.5 SUM <rspqabdef> gamma[rs] w[rsqp] w[rsba] w[daef] delta[bd] E2[pq,fe]
@@ -165,13 +201,14 @@ TEST_F(TestWickSCNEVPT2, TestSCNEVPT2) {
                      .add_spin_free_trans_symm()
                      .simplify();
 
+    // revised heff-prime -> hbar
     axx_ref[9] = WickExpr::parse(R"TEX(
- + 1.0 SUM <ijpqabc> gamma[ij] w[qpij] w[baij] hp[ca] E2T[pq,cb]
- + 1.0 SUM <ijpqabc> gamma[ij] w[qpij] w[baij] hp[cb] E2T[pq,ac]
+ + 1.0 SUM <ijpqabc> gamma[ij] w[qpij] w[baij] hbar[ca] E2T[pq,cb]
+ + 1.0 SUM <ijpqabc> gamma[ij] w[qpij] w[baij] hbar[cb] E2T[pq,ac]
  - 1.0 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdea] E3T[pqe,dbc]
  + 2.0 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdea] delta[ce] E2T[pq,db]
- - 0.5 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdea] delta[de] E2T[pq,cb]
  - 0.5 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdea] delta[be] E2T[pq,dc]
+ - 0.5 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdea] delta[de] E2T[pq,cb]
  - 1.0 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdeb] E3T[pqe,adc]
  + 2.0 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdeb] delta[ce] E2T[pq,ad]
  - 0.5 SUM <ijpqabcde> gamma[ij] w[qpij] w[baij] w[cdeb] delta[ae] E2T[pq,cd]
@@ -183,113 +220,17 @@ TEST_F(TestWickSCNEVPT2, TestSCNEVPT2) {
                      .add_spin_free_trans_symm()
                      .simplify();
 
-    axx_ref[12] = WickExpr::parse(R"TEX(
- + 1.0 SUM <c> hbar[ca] E1[q,p] E1[c,b]
- - 1.0 SUM <c> hbar[bc] E1[q,p] E1[a,c]
- + 0.5 SUM <cde> w[cdea] E1[q,p] E1[c,e] E1[d,b]
- + 0.5 SUM <cde> w[cdea] E1[q,p] E1[d,b] E1[c,e]
- - 0.5 SUM <cde> w[bced] E1[q,p] E1[a,e] E1[c,d]
- - 0.5 SUM <cde> w[bced] E1[q,p] E1[c,d] E1[a,e]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
+    // rs
+    axx_eq[7] = wsc.build_communicator(
+        "SUM <ab> gamma[rs] w[rsba] E1[r,b] E1[s,a]", true);
+    // ij
+    axx_eq[9] = wsc.build_communicator(
+        "SUM <ab> gamma[ij] w[baij] E1[b,i] E1[a,j]", true);
 
-    axx_ref[13] = WickExpr::parse(R"TEX(
- - 1.0 SUM <c> hbar[bc] E1T[p,a] E1[q,c]
- - 1.0 SUM <c> hbar[bc] delta[qp] E1[c,a]
- + 1.0 SUM <c> hbar[ca] E1T[p,c] E1[q,b]
- + 1.0 SUM <c> hbar[ca] delta[qp] E1[b,c]
- - 0.5 SUM <cde> w[cbed] E1[c,e] E1T[p,a] E1[q,d]
- - 0.5 SUM <cde> w[cbed] E1T[p,a] E1[q,d] E1[c,e]
- - 0.5 SUM <cde> w[cbed] delta[qp] E1[c,e] E1[a,d]
- - 0.5 SUM <cde> w[cbed] delta[qp] E1[a,d] E1[c,e]
- - 0.5 SUM <cde> w[cbed] delta[pc] E1T[e,a] E1[q,d]
- + 0.5 SUM <cde> w[cbed] delta[qe] E1T[p,a] E1[c,d]
- + 0.5 SUM <cde> w[cdea] E1[c,e] E1T[p,d] E1[q,b]
- + 0.5 SUM <cde> w[cdea] E1T[p,d] E1[q,b] E1[c,e]
- + 0.5 SUM <cde> w[cdea] delta[qp] E1[c,e] E1[d,b]
- + 0.5 SUM <cde> w[cdea] delta[qp] E1[d,b] E1[c,e]
- + 0.5 SUM <cde> w[cdea] delta[pc] E1T[e,d] E1[q,b]
- - 0.5 SUM <cde> w[cdea] delta[qe] E1T[p,d] E1[c,b]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
-
-    axx_ref[16] = WickExpr::parse(R"TEX(
- + 1.0 SUM <d> hbar[da] E1[g,p] E1[q,b] E1[d,c]
- - 1.0 SUM <d> hbar[cd] E1[g,p] E1[q,b] E1[a,d]
- - 1.0 SUM <d> hbar[bd] E1[g,p] E1[q,d] E1[a,c]
- + 1.0 SUM <def> w[defa] E1[g,p] E1[q,b] E1[d,f] E1[e,c]
- - 1.0 SUM <def> w[dcfe] E1[g,p] E1[q,b] E1[d,f] E1[a,e]
- - 1.0 SUM <def> w[dbfe] E1[g,p] E1[q,e] E1[d,f] E1[a,c]
- + 1.0 SUM <de> w[cdea] E1[g,p] E1[q,b] E1[d,e]
- - 0.5 SUM <de> w[deea] E1[g,p] E1[q,b] E1[d,c]
- - 0.5 SUM <de> w[cdde] E1[g,p] E1[q,b] E1[a,e]
- + 0.5 SUM <de> w[bdde] E1[g,p] E1[q,e] E1[a,c]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
-
-    axx_ref[17] = WickExpr::parse(R"TEX(
- - 1.0 SUM <c> hp[ac] E1[g,p] E1[q,c]
- - 1.0 SUM <cef> w[acef] E1[g,p] E1[q,e] E1[c,f]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
-
-    axx_ref[18] = WickExpr::parse(R"TEX(
- + 1.0 SUM <d> hbar[da] E1[p,b] E1[d,c]
- - 1.0 SUM <d> hbar[cd] E1[p,b] E1[a,d]
- - 1.0 SUM <d> hbar[bd] E1[p,d] E1[a,c]
- + 1.0 SUM <def> w[defa] E1[p,b] E1[d,f] E1[e,c]
- - 1.0 SUM <def> w[dcfe] E1[p,b] E1[d,f] E1[a,e]
- - 1.0 SUM <def> w[dbfe] E1[p,e] E1[d,f] E1[a,c]
- + 1.0 SUM <de> w[cdea] E1[p,b] E1[d,e]
- - 0.5 SUM <de> w[deea] E1[p,b] E1[d,c]
- - 0.5 SUM <de> w[cdde] E1[p,b] E1[a,e]
- + 0.5 SUM <de> w[bdde] E1[p,e] E1[a,c]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
-
-    axx_ref[19] = WickExpr::parse(R"TEX(
- - 1.0 SUM <c> hp[ac] E1[p,c]
- - 1.0 SUM <cef> w[acef] E1[p,e] E1[c,f]
-)TEX",
-                                  wsc.idx_map, wsc.perm_map)
-                      .substitute(wsc.defs)
-                      .expand()
-                      .add_spin_free_trans_symm()
-                      .simplify();
-
-    axx_eq[7] = wsc.make_a7();
-    //  axx_eq[9] = wsc.make_a9();
-    // axx_eq[12] = wsc.make_a12();
-    // axx_eq[13] = wsc.make_a13();
-    // axx_eq[16] = wsc.make_a16();
-    //  axx_eq[17] = wsc.make_a17();
-    //  axx_eq[18] = wsc.make_a18();
-    //  axx_eq[19] = wsc.make_a19();
-
-    for (auto &ix : vector<int>{7}) {
+    for (auto &ix : vector<int>{7, 9}) {
         WickExpr diff = (axx_eq[ix] - axx_ref[ix]).simplify();
-        cout << axx_ref[ix] << endl;
-        cout << axx_eq[ix] << endl;
+        //   cout << axx_ref[ix] << endl;
+        //   cout << axx_eq[ix] << endl;
         cout << "DIFF A" << ix << " = " << diff << endl;
         EXPECT_TRUE(diff.terms.size() == 0);
     }
