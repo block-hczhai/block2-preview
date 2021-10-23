@@ -815,17 +815,19 @@ else:
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
-        mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
+        mps_info.set_bond_dimension_using_occ(
+            bond_dims[0], occs, bias=bias)
+
     if conn_centers is not None:
         assert nroots == 1
-        mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+        mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
     elif nroots != 1 or len(targets) != 1:
-        mps = MultiMPS(n_sites, 0, dot, nroots)
+        mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorDouble([float(x) for x in weights.split()])
     else:
-        mps = MPS(mps_info.n_sites, 0, dot)
+        mps = MPS(mps_info.n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     if nroots == 1:
