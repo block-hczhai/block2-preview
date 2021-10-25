@@ -1,5 +1,8 @@
 
 [![Documentation Status](https://readthedocs.org/projects/block2/badge/?version=latest)](https://block2.readthedocs.io/en/latest/?badge=latest)
+[![Build Status](https://github.com/block-hczhai/block2-preview/workflows/build/badge.svg)](https://github.com/block-hczhai/block2-preview/actions/workflows/build.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![PyPI version](https://badge.fury.io/py/block2.svg)](https://badge.fury.io/py/block2)
 
 block2
 ======
@@ -15,17 +18,25 @@ The block2 code is developed and maintained in Garnet Chan group at Caltech.
 Main contributors:
 
 * Huanchen Zhai [@hczhai](https://github.com/hczhai): DMRG and parallelization
-* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI/MRPT and big site
+* Henrik R. Larsson [@h-larsson](https://github.com/h-larsson): DMRG-MRCI/MRPT, large site, Green's function in frequency and time for finite temp.  
 * Seunghoon Lee [@seunghoonlee89](https://github.com/seunghoonlee89): Stochastic perturbative DMRG
-* Zhi-Hao Cui [@zhcui](https://github.com/zhcui): user interface
+* Zhi-Hao Cui [@zhcui](https://github.com/zhcui): User interface
 
 If you find this package useful for your scientific research, please cite the work as:
 
 Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
-One can install ``block2`` using:
+One can install ``block2`` using ``pip``:
 
-    pip install block2
+* OpenMP-only version (no MPI dependence)
+
+      pip install block2
+
+* Hybrid openMP/MPI version (requiring openMPI 4.0.x installed)
+
+      pip install block2-mpi
+
+* Binary format are prepared via ``pip`` for python 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI). If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source.
 
 To run a DMRG calculation, please use the following command:
 
@@ -34,6 +45,8 @@ To run a DMRG calculation, please use the following command:
 where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
 
 Documentation: https://block2.readthedocs.io/en/latest/
+
+Source code: https://github.com/block-hczhai/block2-preview
 
 Features
 --------
@@ -57,6 +70,8 @@ Features
         * Time dependent variational principle method
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
+    * Green's function
+    * Time evolution
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
     * 1PDM / 2PDM
@@ -267,7 +282,7 @@ enables debug flags.
 ### Supported operating systems and compilers
 
 * Linux + gcc 9.2.0 + MKL 2019
-* MacOS 10.15 + Apple clang 12.0 + MKL 2021
+* MacOS 10.15 + Apple clang 12.0 + MKL 2021 (MKL 2019 required for `pip install`)
 * MacOS 10.15 + icpc 2021.1 + MKL 2021
 * Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021
 

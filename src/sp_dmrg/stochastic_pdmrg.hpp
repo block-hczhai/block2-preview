@@ -519,7 +519,8 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
             }
         }
         return sqrt(rnorm);
-    } // ityp == 0: <Psi^(0)|VQ|D>
+    }
+    // ityp == 0: <Psi^(0)|VQ|D>
     // ityp == 1: <Psi^(0)|D>
     double overlap(int ityp, const vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =

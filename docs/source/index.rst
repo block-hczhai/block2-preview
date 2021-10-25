@@ -17,6 +17,9 @@ The block2 code is developed as an improved version of `StackBlock <https://sans
 where the low-level structure of the code has been completely rewritten.
 The block2 code is developed and maintained in Garnet Chan group at Caltech.
 
+Documentation: https://block2.readthedocs.io/en/latest/
+Source code: https://github.com/block-hczhai/block2-preview
+
 Contributors
 """"""""""""
 

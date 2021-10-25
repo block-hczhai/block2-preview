@@ -86,7 +86,7 @@ setup(name='block2',
       author_email='hczhai@ucla.edu',
       url='https://github.com/block-hczhai/block2-preview',
       install_requires=[
-          "mkl",
+          "mkl==2019",
           "mkl-include",
           "intel-openmp",
           "numpy",

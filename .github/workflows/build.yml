@@ -1,0 +1,196 @@
+name: build
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - v*
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        python: [ 3.7, 3.8, 3.9 ]
+        manylinux: [ 2010 ]
+        plat: [ x86_64 ]
+        parallel: [ mpi, serial ]
+        exclude:
+          - os: macos-latest
+            parallel: mpi
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: install requirements
+        env:
+          MKLROOT: ~/.local
+        run: |
+          export PYT=$(which python)
+          python -m pip install pip build twine --upgrade
+          python -m pip install mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
+
+      - name: install requirements (linux / mpi)
+        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libopenmpi-dev
+          python -m pip install mpi4py
+
+      - name: build gtest (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libgtest-dev
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo cp lib/*.a /usr/lib
+
+      - name: build gtest (macos)
+        if: matrix.os == 'macos-latest'
+        run: |
+          git clone -b release-1.10.0 https://github.com/google/googletest
+          cd googletest
+          cmake CMakeLists.txt
+          make
+          make install
+          brew update
+          brew install libomp
+
+      - name: build test (serial)
+        if: matrix.parallel == 'serial'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          mkdir build_test
+          cd build_test
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON
+          make -j 4
+
+      - name: run test (serial)
+        if: matrix.parallel == 'serial'
+        run: |
+          cd build_test
+          ./block2_tests
+
+      - name: build test (mpi)
+        if: matrix.parallel == 'mpi'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          sed -i "s|unit_test/test_|unit_test/mpi/test_|" CMakeLists.txt
+          mkdir build_test
+          cd build_test
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON
+          make -j 4
+
+      - name: run test (mpi)
+        if: matrix.parallel == 'mpi'
+        run: |
+          cd build_test
+          mpirun -n 2 ./block2_tests
+
+      - name: build wheels (macos)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          echo ${TAG_STRING:11}
+          sed -i "" "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          python -m pip install wheel
+          python -m pip wheel . -w ./dist --no-deps
+
+      - name: prepare build wheels (manylinux)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          echo ${TAG_STRING:11}
+          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
+
+      - name: build wheels (manylinux)
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        uses: ./.github/actions/build-wheel
+        with:
+          python-version: ${{ matrix.python }}
+          parallel: ${{ matrix.parallel }}
+
+      - name: release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+
+      - name: upload artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist-${{ matrix.parallel }}
+          path: dist
+          retention-days: 2
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: build source dist (serial)
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          echo ${TAG_STRING:11}
+          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          python -m pip install pip build twine --upgrade
+          python -m build --sdist
+
+      - name: download wheels (serial)
+        uses: actions/download-artifact@v2
+        with:
+          name: dist-serial
+          path: dist
+
+      - name: publish to pypi (serial)
+        uses: pypa/gh-action-pypi-publish@v1.4.2
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: build source dist (mpi)
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+        run: |
+          rm -r dist
+          echo ${TAG_STRING:11}
+          sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
+          sed -i "s/name='block2'/name='block2-mpi'/g" setup.py
+          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          python -m build --sdist
+
+      - name: download wheels (mpi)
+        uses: actions/download-artifact@v2
+        with:
+          name: dist-mpi
+          path: dist
+
+      - name: publish to pypi (mpi)
+        uses: pypa/gh-action-pypi-publish@v1.4.2
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_MPI_TOKEN }}

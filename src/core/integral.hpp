@@ -1118,6 +1118,49 @@ struct FCIDUMP {
                 r[i * n + j] += t(i, j);
         return r;
     }
+    // g2e 1-fold
+    vector<double> g2e_1fold() const {
+        const int n = n_sites();
+        const size_t m = (size_t)n * n;
+        vector<double> r(m * m, 0);
+        size_t ijkl = 0;
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                for (int k = 0; k < n; k++)
+                    for (int l = 0; l < n; l++)
+                        r[ijkl++] = v(i, j, k, l);
+        assert(ijkl == r.size());
+        return r;
+    }
+    // g2e 4-fold
+    vector<double> g2e_4fold() const {
+        const int n = n_sites();
+        const size_t m = (size_t)n * (n + 1) >> 1;
+        vector<double> r(m * m, 0);
+        size_t ijkl = 0;
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j <= i; j++)
+                for (int k = 0; k < n; k++)
+                    for (int l = 0; l <= k; l++)
+                        r[ijkl++] = v(i, j, k, l);
+        assert(ijkl == r.size());
+        return r;
+    }
+    // g2e 8-fold
+    vector<double> g2e_8fold() const {
+        const int n = n_sites();
+        const size_t m = (size_t)n * (n + 1) >> 1;
+        vector<double> r(m * (m + 1) >> 1, 0);
+        size_t ijkl = 0;
+        for (int i = 0, ij = 0; i < n; i++)
+            for (int j = 0; j <= i; j++, ij++)
+                for (int k = 0, kl = 0; k <= i; k++)
+                    for (int l = 0; l <= k; l++, kl++)
+                        if (ij >= kl)
+                            r[ijkl++] = v(i, j, k, l);
+        assert(ijkl == r.size());
+        return r;
+    }
     // exchange matrix
     vector<double> exchange_matrix() const {
         uint16_t n = n_sites();

@@ -34,6 +34,10 @@
 #include "block2_sp_dmrg.hpp"
 #endif
 
+#ifdef _USE_IC
+#include "block2_ic.hpp"
+#endif
+
 #ifdef _USE_SCI
 #include "sci/abstract_sci_wrapper.hpp"
 #include "sci/hamiltonian_sci.hpp"

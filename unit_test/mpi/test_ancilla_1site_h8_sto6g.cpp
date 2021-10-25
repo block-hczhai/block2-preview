@@ -37,8 +37,8 @@ class TestOneSiteAncillaH8STO6G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 22;
+    size_t dsize = 1L << 30;
 
     template <typename S>
     void test_imag_te(int n_sites, int n_physical_sites, S target,
@@ -113,7 +113,8 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
     impo = make_shared<ParallelMPO<S>>(impo, ident_rule);
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
-    ubond_t bond_dim = 500;
+    ubond_t bond_dim =
+        (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max());
     double beta = 0.05;
     vector<ubond_t> bdims = {bond_dim};
     vector<double> te_energies, noises = {0.0};
@@ -213,7 +214,7 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
              << setw(3) << fixed << setprecision(0)
              << (para_comm->tcomm * 100 / tt) << "%)" << endl;
 
-        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 1E-4);
+        EXPECT_LT(abs(te_energies[i] - energies_m500[i]), 2E-4);
     }
 
     para_comm->tcomm = 0.0;

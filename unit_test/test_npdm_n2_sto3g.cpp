@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestNPDM : public ::testing::Test {
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 32;
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");

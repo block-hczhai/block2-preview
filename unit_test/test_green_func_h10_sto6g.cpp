@@ -7,7 +7,7 @@ using namespace block2;
 
 class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 28;
+    size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
     template <typename S>
@@ -129,7 +129,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
     // DMRG
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    dmrg->decomp_type = DecompositionTypes::SVD;
+    dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     double energy = dmrg->solve(20, mps->center == 0, 1E-12);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
@@ -138,7 +138,8 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(S target,
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy - energy_std), 1E-7);
+    // 1-site can be unstable
+    EXPECT_LT(abs(energy - energy_std), dot == 1 ? 1E-4 : 1E-7);
 
     // D APPLY MPS
     shared_ptr<MPSInfo<S>> dmps_info = make_shared<MPSInfo<S>>(
