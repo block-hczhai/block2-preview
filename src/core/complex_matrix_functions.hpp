@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "utils.hpp"
 #include "matrix_functions.hpp"
 #include <complex>
 
@@ -73,6 +74,14 @@ extern void zgemm(const char *transa, const char *transb, const MKL_INT *m,
 // LU factorization
 extern void zgetrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+// QR factorization
+extern void zgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+
+extern void zungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
 
 // matrix inverse
 extern void zgetri(const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
@@ -256,11 +265,12 @@ struct ComplexMatrixFunctions {
         ialloc->deallocate(work, a.n * _MINTSZ);
     }
     // c.n is used for ldc; a.n is used for lda
+    // hrl: ATTENTION: conja/conjb means here *transpose* and not adjoint
     static void multiply(const ComplexMatrixRef &a, bool conja,
                          const ComplexMatrixRef &b, bool conjb,
                          const ComplexMatrixRef &c, complex<double> scale,
                          complex<double> cfactor) {
-        // if assertion failes here, check whether it is the case
+        // if assertion fails here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
         if (!conja && !conjb) {
@@ -832,6 +842,318 @@ struct ComplexMatrixFunctions {
             pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;
     }
-};
+
+    /** Use Induced Dimension Reduction method [IDR(s)] to solve A x = b
+     *  IDR(1) is identical to BI-CGSTAB.
+     *
+     *  Based on https://github.com/astudillor/idrs, which itself is based on the IDR(s)'authors
+     *     matlab version from http://homepage.tudelft.nl/1w5b5/idrs-software.html
+     *
+     * See (1) Van Gijzen, M. B.; Sonneveld, P.
+     *      Algorithm 913: An Elegant IDR(s) Variant That Efficiently Exploits Biorthogonality Properties.
+     *      ACM Trans. Math. Softw. 2011, 38 (1), 1–19. https://doi.org/10.1145/2049662.2049667.
+     *      (Fig. 2)
+     *
+     * @author: Henrik R. Larsson, based on versions by Reinaldo Astudillo and Martin B. van Gijzen
+     *
+     * @param op Computes op(x) = A x
+     * @param a_diagonal Diagonal of A; used for preconditioning
+     * @param x Input guess/ output solution
+     * @param b Right-hand side
+     * @param nmult Used number of matrix-vector products (same as niter)
+     * @param niter Used total number of iterations
+     * @param S Shadow space; similar to Krylov space in GMRES
+     *              Typically, s being around 10 or even 4 is enough.
+     *              Only very badly conditioned problems require s ~ 100; see (1).
+     *            S=1 is identical to BI-CGSTAB.
+     * @param iprint Whether to print output during the iterations
+     * @param pcomm MPI communicator
+     * @param precond_reg Preconditioning regularizer. Fix the inverse of a_diagonal to be at max. the inverse of this.
+     * @param tol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
+     * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
+     * @param max_iter Maximum number of iterations. Throws error afterward.
+     * @param soft_max_iter Maximum number of iterations, without throwing error
+     * @param orthogonalize_P Orthogonalize the random space P matrix of size ( N x S).
+     *                                      May be good for numerical stability.
+     * @param random_seed Random seed for setting up P. Defaults to day-time-convolution
+     * @return <x,b>
+     */
+    template <typename MatMul, typename PComm>
+    static complex<double>
+    idrs(MatMul &op, const ComplexDiagonalMatrix &a_diagonal, ComplexMatrixRef x,
+         ComplexMatrixRef b,
+         int &nmult, int &niter,
+         const int S = 8,
+         const bool iprint = false, const PComm &pcomm = nullptr,
+         const double precond_reg = 1e-8,
+         const double tol = 1E-3,
+         const double atol = 0.0,
+         const int max_iter = 5000,
+         const int soft_max_iter = -1,
+         const bool orthogonalize_P = true,
+         const int random_seed = -1) {
+        assert(b.m == x.m);
+        assert(b.n == x.n);
+        const auto N = b.m; // vector size
+        assert(b.n == 1 && "IDRS currently only implemented for rhf being a vector.");
+        using cmplx = complex<double>;
+        // Allocations
+        ComplexMatrixRef r(nullptr, N, 1); // Residual
+        ComplexMatrixRef P(nullptr, S, N); // Shadow-space matrix; S will be left null space of P
+        ComplexMatrixRef f(nullptr, S, 1); // P r
+        ComplexMatrixRef cStorage(nullptr, S, 1); // Mc = f
+        ComplexMatrixRef v(nullptr, N, 1); // r - G c
+        ComplexMatrixRef tmp(nullptr, N, 1);
+        //                          vvv changed from py implementation for row-majorness
+        ComplexMatrixRef G(nullptr, S, N); // Subspace matrix; for updating residual
+        ComplexMatrixRef U(nullptr, S, N); // For updating x.
+        ComplexMatrixRef M(nullptr, S, S); // M = P' G
+        ComplexMatrixRef MM(nullptr, S, S); // copy of M
+        r.allocate(); r.clear();
+        P.allocate(); P.clear();
+        f.allocate(); f.clear();
+        cStorage.allocate(); cStorage.clear();
+        v.allocate(); v.clear();
+        tmp.allocate(); tmp.clear();
+        G.allocate(); G.clear();
+        U.allocate(); U.clear();
+        M.allocate(); M.clear();
+        MM.allocate(); MM.clear();
+        // Initialization
+        const auto norm_b = norm(b);
+        const auto used_tol = max(tol * norm_b, atol);
+        // compute residual: r = b - Ax
+        if(norm(x) > 1e-20){
+            op(x,tmp);
+            copy(r,b);
+            iadd(b, tmp,-1.);
+        }else{
+            copy(r,b);
+        }
+        double norm_r = norm(r);
+        if (pcomm != nullptr)
+            pcomm->broadcast(&norm_r, 1, pcomm->root);
+        // Fill P with random numbers. Let's hope it is of full rank.
+        {
+            Random rgen;
+            rgen.rand_seed(random_seed);
+            for (size_t s = 0; s < S; ++s) {
+                for (size_t j = 0; j < N; ++j) {
+                    P(s, j) = cmplx(rgen.rand_double(-1,1), rgen.rand_double(-1,1));
+                }
+            }
+            if(orthogonalize_P){
+                // Make P orthogonal. This is not required but may improve numerical stability.
+                // The original code IDR(S) does it.
+                MKL_INT k = min(P.m, P.n);
+                vector<cmplx> tau(k);
+                vector<cmplx> work(P.m);
+                MKL_INT info = 0;
+                zgeqrf(&P.n, &P.m, P.data, &P.n, tau.data(), work.data(), &P.m, &info);
+                assert(info == 0 && "IDR(S): Fail in QR decomposition of random matrix P");
+                zungqr(&P.n, &P.m, &k, P.data, &P.n, tau.data(), work.data(), &P.m, &info);
+                assert(info == 0 && "IDR(S): Fail in Q build up of QR decomposition of random matrix P");
+            }
+        }
+        // M = 1
+        for (size_t i = 0; i < S; ++i) {
+                M(i,i) = 1.;
+        }
+        const double angle = 0.7071067811865476; // To avoid too small residuals
+                                                 //  see (1) on page 4; same as Bi-CGSTAB; sqrt(2)/2
+        cmplx omega(1.,0.);
+        // do it
+        const auto doContinue = [max_iter, soft_max_iter, used_tol](int iter, double rnorm){
+            if(rnorm <= used_tol){
+                return false;
+            }
+            return iter < max_iter &&
+                   (soft_max_iter == -1 || iter < soft_max_iter);
+        };
+        niter = 0;
+        if(iprint){
+            cout << endl << "Start IDR(" <<S<< ")" << endl;
+            cout << "tol= "<<tol<<" atol= "<<atol<<" used tol= "<<used_tol <<endl;
+            cout << "maxiter:" << max_iter << "; "<< soft_max_iter << endl;
+            auto xdb = complex_dot(x,b);
+            cout << "Initially:         " << fixed
+                 << setw(15) << setprecision(8) << real(xdb) << "+"
+                 << setw(15) << setprecision(8) << imag(xdb) << "i"
+                 << scientific << setw(13) << setprecision(2) << norm_r
+                 << endl;
+        }
+        while (doContinue(niter, norm_r)){
+            // vvv I need P.conj() @ r ...; on the other hand, P is random anyways. so it should not matter?
+            //multiply(P,false, r,false, f, cmplx(1.0,0.0), cmplx(0.0,0.0));
+            for(size_t i = 0; i < S; ++i){
+                f(i, 0) = complex_dot(ComplexMatrixRef(&P(i, 0), N, 1), r);
+            }
+            for(size_t k = 0; k < S; ++k){ // Krylov space setup
+                // solve Mc = f
+                const auto size = S - k;
+                ComplexMatrixRef c(cStorage.data, size, 1);
+                {
+                    // c = la.solve(M[k:S, k:S], f[k:S])
+                    // TODO: avoid copy&paste; would it work by changing lda?
+                    ComplexMatrixRef M2(MM.data, size, size);
+                    ComplexMatrixRef ff(&f(k,0), size, 1);
+                    for(size_t i = k; i < S; ++i){
+                        for(size_t j = k; j < S; ++j) {
+                            M2(i-k,j-k) = M(i,j);
+                        }
+                    }
+                    least_squares(M2, ff, c); // zgels may be a bit overkill but I guess it can't hurt and S is small
+                }
+                // v = r - G[k:S,:].T @ c
+                copy(v, r);
+                //       vv this should work as I assume that G is row-major
+                //                          ATTENTION:      vvv is transpose, not adjoint (I do want transpose here)
+                multiply(ComplexMatrixRef(&G(k, 0), size, N), true, c, false, v,
+                         cmplx(-1.0, 0.0), cmplx(1.0, 0.0));
+                // Precondition
+                for (size_t i = 0; i < N; ++i){
+                    if (abs(a_diagonal(i,i)) > precond_reg){
+                        v(i,0) /= a_diagonal(i,i);
+                    }else{
+                        v(i,0) /= precond_reg;
+                    }
+                }
+                // Compute new U[:,k] and G[:,k]; G[:,k] is in space G_j
+                // ATTENTION: vv Need to be N x 1 and not 1 x N.
+                //  Otherwise an assertion explodes somewhere deep in the code when cllaed op
+                ComplexMatrixRef uk(&U(k, 0), N, 1);
+                ComplexMatrixRef gk(&G(k, 0), N, 1);
+                //       uk = U c + omega v
+                // tmp = U[k:S,:].T @ cc
+                copy(tmp, v);
+                multiply(ComplexMatrixRef(&U(k, 0), size, N), true, c, false, tmp,
+                         cmplx(1.0, 0.0), omega);
+                copy(uk, tmp);
+                // G = A @ U[:,k]
+                op(uk, gk);
+                // Bi-Orthogonalize the new basis vectors
+                for (size_t i = 0; i < k; ++i){
+                    auto alpha = complex_dot(ComplexMatrixRef(&P(i,0), N, 1), gk);
+                    alpha /= M(i,i);
+                    iadd(gk, ComplexMatrixRef(&G(i,0), N, 1), -alpha);
+                    iadd(uk, ComplexMatrixRef(&U(i,0), N, 1), -alpha);
+                }
+                // M = P' G (first k-1 entries are zero)
+                for (size_t i = k; i < S; ++i){
+                    M(i,k) = complex_dot(ComplexMatrixRef(&P(i,0), N, 1), gk);
+                }
+                if( abs(M(k,k)) < 1e-20){ //oops!
+                    if(iprint){
+                        cout << "ATTENTION! |M(k,k)| < 1e-20" << endl;
+                    }
+                    break;
+                }
+                // Make r orthogonal to g_i, i = 1..k
+                const auto beta = f(k,0) / M(k, k);
+                iadd(r, gk, -beta);
+                iadd(x, uk, +beta);
+                norm_r = norm(r);
+                if (pcomm != nullptr) {
+                    pcomm->broadcast(x.data, x.size(), pcomm->root);
+                    pcomm->broadcast(r.data, r.size(), pcomm->root);
+                    pcomm->broadcast(&norm_r, 1, pcomm->root);
+                }
+                ++niter;
+                if (iprint) {
+                    auto xdb = complex_dot(x,b);
+                    cout << setw(6) << niter << " inner " << setw(6) << k << fixed
+                         << setw(15) << setprecision(8) << real(xdb) << "+"
+                         << setw(15) << setprecision(8) << imag(xdb) << "i"
+                         << scientific << setw(13) << setprecision(2) << norm_r
+                         << endl;
+                }
+                if(not doContinue(niter, norm_r)){
+                    break;
+                }
+                // New f = P'*r (first k components are zero)
+                if(k < S - 1){
+                    for (size_t j = k + 1; j < S; ++j) {
+                        f(j,0) -= beta * M(j,k);
+                    }
+                }
+            } // Krylov space setup
+
+            if(not doContinue(niter, norm_r)){
+                break;
+            }
+            // Precondition v = Minv r; TODO avoid copy&paste
+            for (size_t i = 0; i < N; i++) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    v(i, 0) = r(i, 0) / a_diagonal(i, i);
+                } else {
+                    v(i, 0) = r(i, 0) / precond_reg;
+                }
+            }
+
+            op(v,tmp); // tmp = A v
+            const auto norm_Av = norm(tmp);
+            const auto tr = complex_dot(tmp, r);
+            omega = tr / complex_dot(tmp,tmp);
+            auto abs_rho = abs(tr / (norm_Av * norm_r));
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&abs_rho, 1, pcomm->root);
+                pcomm->broadcast(&omega, 1, pcomm->root);
+            }
+            if (abs_rho < angle){
+                omega *= angle / abs_rho;
+            }
+            // r -= omega t; x += omega v
+            iadd(r, tmp, -omega);
+            iadd(x, v, +omega);
+            if (pcomm != nullptr) {
+                pcomm->broadcast(x.data, x.size(), pcomm->root);
+                pcomm->broadcast(r.data, r.size(), pcomm->root);
+            }
+            norm_r = norm(r);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&norm_r, 1, pcomm->root);
+            ++niter;
+            if (iprint) {
+                auto xdb = complex_dot(x,b);
+                cout << setw(6) << niter << " outer " << fixed
+                     << setw(15) << setprecision(8) << real(xdb) << "+"
+                     << setw(15) << setprecision(8) << imag(xdb) << "i"
+                     << scientific << setw(13) << setprecision(2) << norm_r
+                     << endl;
+            }
+            if(norm_r <= used_tol){
+                break;
+            }
+        }
+
+        // Deallocations
+        MM.deallocate();
+        M.deallocate();
+        U.deallocate();
+        G.deallocate();
+        tmp.deallocate();
+        v.deallocate();
+        cStorage.deallocate();
+        f.deallocate();
+        P.deallocate();
+        r.deallocate();
+
+        if (niter >= max_iter && norm_r > used_tol) {
+            cerr << "Error: linear solver IDR(S) not converged!" << endl;
+            cerr << "\t total number of iterations used:" << niter << endl;
+            cerr << "\t S=:" << S << endl;
+            cerr << "\t ||Ax-b||=" << norm_r << endl;
+            throw runtime_error("Linear solver IDR(S) not converged.");
+        }
+        nmult = niter;
+        auto out = complex_dot(x,b);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+            pcomm->broadcast(&out, 1, pcomm->root);
+        }
+        return out;
+    }
+
+    };
 
 } // namespace block2

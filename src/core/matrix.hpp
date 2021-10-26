@@ -134,6 +134,8 @@ template <> struct GMatrix<complex<double>> {
     GMatrix(complex<double> *data, MKL_INT m, MKL_INT n)
         : data(data), m(m), n(n) {}
     complex<double> &operator()(MKL_INT i, MKL_INT j) const {
+        assert(i >= 0 and i < m);
+        assert(j >= 0 and j < n);
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
