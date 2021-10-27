@@ -883,7 +883,7 @@ struct ComplexMatrixFunctions {
     idrs(MatMul &op, const ComplexDiagonalMatrix &a_diagonal, ComplexMatrixRef x,
          ComplexMatrixRef b,
          int &nmult, int &niter,
-         const int S = 8,
+         int S = 8,
          const bool iprint = false, const PComm &pcomm = nullptr,
          const double precond_reg = 1e-8,
          const double tol = 1E-3,
@@ -895,7 +895,9 @@ struct ComplexMatrixFunctions {
         assert(b.m == x.m);
         assert(b.n == x.n);
         const auto N = b.m; // vector size
-        assert(b.n == 1 && "IDRS currently only implemented for rhf being a vector.");
+        S = min(S,N); // Gracefully change S to sth reasonable.
+                      // This should only affect tiny linear problems.
+        assert(b.n == 1 && "IDRS currently only implemented for rhs being a vector.");
         using cmplx = complex<double>;
         // Allocations
         ComplexMatrixRef r(nullptr, N, 1); // Residual
@@ -926,7 +928,7 @@ struct ComplexMatrixFunctions {
         if(norm(x) > 1e-20){
             op(x,tmp);
             copy(r,b);
-            iadd(b, tmp,-1.);
+            iadd(r, tmp,-1.);
         }else{
             copy(r,b);
         }
@@ -974,7 +976,7 @@ struct ComplexMatrixFunctions {
         if(iprint){
             cout << endl << "Start IDR(" <<S<< ")" << endl;
             cout << "tol= "<<tol<<" atol= "<<atol<<" used tol= "<<used_tol <<endl;
-            cout << "maxiter:" << max_iter << "; "<< soft_max_iter << endl;
+            cout << "maxiter: " << max_iter << "; "<< soft_max_iter << endl;
             auto xdb = complex_dot(x,b);
             cout << "Initially:         " << fixed
                  << setw(15) << setprecision(8) << real(xdb) << "+"
@@ -1062,8 +1064,8 @@ struct ComplexMatrixFunctions {
                 if (iprint) {
                     auto xdb = complex_dot(x,b);
                     cout << setw(6) << niter << " inner " << setw(6) << k << fixed
-                         << setw(15) << setprecision(8) << real(xdb) << "+"
-                         << setw(15) << setprecision(8) << imag(xdb) << "i"
+                         << setw(17) << setprecision(8) << real(xdb) << "+"
+                         << setw(17) << setprecision(8) << imag(xdb) << "i"
                          << scientific << setw(13) << setprecision(2) << norm_r
                          << endl;
                 }
@@ -1116,8 +1118,8 @@ struct ComplexMatrixFunctions {
             if (iprint) {
                 auto xdb = complex_dot(x,b);
                 cout << setw(6) << niter << " outer " << fixed
-                     << setw(15) << setprecision(8) << real(xdb) << "+"
-                     << setw(15) << setprecision(8) << imag(xdb) << "i"
+                     << setw(17) << setprecision(8) << real(xdb) << "+"
+                     << setw(17) << setprecision(8) << imag(xdb) << "i"
                      << scientific << setw(13) << setprecision(2) << norm_r
                      << endl;
             }
