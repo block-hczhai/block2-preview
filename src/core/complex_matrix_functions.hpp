@@ -975,7 +975,9 @@ struct ComplexMatrixFunctions {
         niter = 0;
         if(iprint){
             cout << endl << "Start IDR(" <<S<< ")" << endl;
-            cout << "tol= "<<tol<<" atol= "<<atol<<" used tol= "<<used_tol <<endl;
+            cout << "tol= "<< scientific << tol
+                << " atol= " << scientific << atol
+                <<" used tol= "<< scientific << used_tol <<endl;
             cout << "maxiter: " << max_iter << "; "<< soft_max_iter << endl;
             auto xdb = complex_dot(x,b);
             cout << "Initially:         " << fixed
