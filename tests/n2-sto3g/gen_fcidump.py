@@ -69,6 +69,6 @@ qh1e = gh1e[np.tril_indices(n * 2)]
 qg2e = ao2mo.restore(8, gg2e, n * 2)
 
 fd3 = FCIDUMP()
-fd3.initialize_su2(n * 2, n_elec, n_elec, 1, e_core, gh1e, gg2e)
+fd3.initialize_su2(n * 2, n_elec, n_elec, 1, e_core, qh1e, qg2e)
 fd3.orb_sym = VectorUInt8([orb_sym[i // 2] for i in range(n * 2)])
 fd3.write('N2.STO3G.G.FCIDUMP')

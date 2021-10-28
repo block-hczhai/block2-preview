@@ -1159,7 +1159,7 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
         MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
         // Restrict left_dims_fci
         for (int i = 0; i < n_inactive; ++i) {
-            auto &state_info = left_dims_fci[i];
+            auto &state_info = left_dims_fci[i + 1];
             int max_n = 0;
             for (int q = 0; q < state_info->n; ++q)
                 if (state_info->quanta[q].n() > max_n)
@@ -1179,6 +1179,86 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<MRCIMPSInfo<S>>(*this);
+        info->tag = new_tag;
+        shallow_copy_to(info);
+        return info;
+    }
+};
+
+/** Restrict quantum numbers to describe an uncontracted NEVPT wavefunction. */
+template <typename S> struct NEVPTMPSInfo : MPSInfo<S> {
+    using MPSInfo<S>::left_dims_fci;
+    using MPSInfo<S>::right_dims_fci;
+    using MPSInfo<S>::left_dims;
+    using MPSInfo<S>::right_dims;
+    using MPSInfo<S>::vacuum;
+    using MPSInfo<S>::target;
+    using MPSInfo<S>::n_sites;
+    using MPSInfo<S>::basis;
+    using MPSInfo<S>::shallow_copy_to;
+    using MPSInfo<S>::set_bond_dimension_fci;
+    using MPSInfo<S>::set_bond_dimension_full_fci;
+    int n_inactive;    //!> Number of inactive orbitals: CI space
+    int n_external;    //!> Number of external orbitals: CI space
+    int n_ex_inactive; //!> How many electrons are allowed to be removed from
+                       //! inactive orbitals
+    int n_ex_external; //!> How many electrons are allowed to be added to
+                       //! external orbitals
+    NEVPTMPSInfo(int n_sites, int n_external, int n_ex_inactive,
+                 int n_ex_external, S vacuum, S target,
+                 const vector<shared_ptr<StateInfo<S>>> &basis,
+                 bool init_fci = true)
+        : NEVPTMPSInfo(n_sites, 0, n_external, n_ex_inactive, n_ex_external,
+                       vacuum, target, basis, init_fci) {}
+    NEVPTMPSInfo(int n_sites, int n_inactive, int n_external, int n_ex_inactive,
+                 int n_ex_external, S vacuum, S target,
+                 const vector<shared_ptr<StateInfo<S>>> &basis,
+                 bool init_fci = true)
+        : MPSInfo<S>(n_sites, vacuum, target, basis, false),
+          n_inactive(n_inactive), n_external(n_external),
+          n_ex_inactive(n_ex_inactive), n_ex_external(n_ex_external) {
+        assert(n_external + n_inactive <= n_sites);
+        if (init_fci)
+            set_bond_dimension_fci();
+    }
+    void set_bond_dimension(ubond_t m) override {
+        MPSInfo<S>::set_bond_dimension(m);
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i]->collect();
+    }
+    void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
+                                     S right_vacuum = S(S::invalid)) override {
+        MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
+        // restrict left_dims_fci
+        for (int i = 0; i < n_inactive; ++i) {
+            auto &state_info = left_dims_fci[i + 1];
+            int max_n = 0;
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() > max_n)
+                    max_n = state_info->quanta[q].n();
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() < max_n - n_ex_inactive ||
+                    state_info->quanta[q].twos() > n_ex_inactive)
+                    state_info->n_states[q] = 0;
+                else if (i == n_inactive - 1 &&
+                         state_info->quanta[q].n() != max_n - n_ex_inactive)
+                    state_info->n_states[q] = 0;
+        }
+        // restrict right_dims_fci
+        for (int i = n_sites - n_external; i < n_sites; ++i) {
+            auto &state_info = right_dims_fci[i];
+            for (int q = 0; q < state_info->n; ++q)
+                if (state_info->quanta[q].n() > n_ex_external)
+                    state_info->n_states[q] = 0;
+                else if (i == n_sites - n_external &&
+                         state_info->quanta[q].n() != n_ex_external)
+                    state_info->n_states[q] = 0;
+        }
+    }
+    shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
+        shared_ptr<MPSInfo<S>> info = make_shared<NEVPTMPSInfo<S>>(*this);
         info->tag = new_tag;
         shallow_copy_to(info);
         return info;

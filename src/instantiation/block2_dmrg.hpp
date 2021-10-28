@@ -103,6 +103,7 @@ extern template struct block2::MPSInfo<block2::SZ>;
 extern template struct block2::DynamicMPSInfo<block2::SZ>;
 extern template struct block2::CASCIMPSInfo<block2::SZ>;
 extern template struct block2::MRCIMPSInfo<block2::SZ>;
+extern template struct block2::NEVPTMPSInfo<block2::SZ>;
 extern template struct block2::AncillaMPSInfo<block2::SZ>;
 extern template struct block2::MPS<block2::SZ, double>;
 
@@ -110,6 +111,7 @@ extern template struct block2::MPSInfo<block2::SU2>;
 extern template struct block2::DynamicMPSInfo<block2::SU2>;
 extern template struct block2::CASCIMPSInfo<block2::SU2>;
 extern template struct block2::MRCIMPSInfo<block2::SU2>;
+extern template struct block2::NEVPTMPSInfo<block2::SU2>;
 extern template struct block2::AncillaMPSInfo<block2::SU2>;
 extern template struct block2::MPS<block2::SU2, double>;
 
@@ -282,6 +284,7 @@ extern template struct block2::MPSInfo<block2::SZK>;
 extern template struct block2::DynamicMPSInfo<block2::SZK>;
 extern template struct block2::CASCIMPSInfo<block2::SZK>;
 extern template struct block2::MRCIMPSInfo<block2::SZK>;
+extern template struct block2::NEVPTMPSInfo<block2::SZK>;
 extern template struct block2::AncillaMPSInfo<block2::SZK>;
 extern template struct block2::MPS<block2::SZK, double>;
 
@@ -289,6 +292,7 @@ extern template struct block2::MPSInfo<block2::SU2K>;
 extern template struct block2::DynamicMPSInfo<block2::SU2K>;
 extern template struct block2::CASCIMPSInfo<block2::SU2K>;
 extern template struct block2::MRCIMPSInfo<block2::SU2K>;
+extern template struct block2::NEVPTMPSInfo<block2::SU2K>;
 extern template struct block2::AncillaMPSInfo<block2::SU2K>;
 extern template struct block2::MPS<block2::SU2K, double>;
 

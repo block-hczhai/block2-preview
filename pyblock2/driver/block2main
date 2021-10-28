@@ -55,7 +55,7 @@ dic = parse(fin)
 if "nonspinadapted" in dic and "k_symmetry" not in dic:
     from block2 import VectorSZ as VectorSL
     from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
     from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -69,7 +69,7 @@ if "nonspinadapted" in dic and "k_symmetry" not in dic:
 elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
     from block2 import VectorSU2 as VectorSL
     from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
     from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -83,7 +83,7 @@ elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
 elif "nonspinadapted" in dic and "k_symmetry" in dic:
     from block2 import VectorSZK as VectorSL
     from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
     from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -97,7 +97,7 @@ elif "nonspinadapted" in dic and "k_symmetry" in dic:
 else:
     from block2 import VectorSU2K as VectorSL
     from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, ParallelRuleQC
+    from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
     from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
     from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
     from block2.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -173,7 +173,9 @@ init_mps_center = int(dic.get("init_mps_center", 0))
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
 dynamic_corr_method = None
 for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
-                "casci", "nevpt2", "nevpt2s", "nevpt2sd"]:
+                "casci", "nevpt2", "nevpt2s", "nevpt2sd",
+                "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+                "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
     if dyn_key in dic:
         dynamic_corr_method = [dyn_key, [int(x) for x in dic[dyn_key].split()]]
         if dynamic_corr_method[0] == 'mrci':
@@ -413,6 +415,12 @@ if pre_run or not no_pre_run:
         elif dynamic_corr_method[0] in ["nevpt2sd", "nevpt2s"]:
             ci_order = len(dynamic_corr_method[0]) - 6
             mps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+        elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi",
+            "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+            sub_space = dynamic_corr_method[0][7:]
+            n_ex_inactive = sub_space.count('i') + sub_space.count('j')
+            n_ex_external = sub_space.count('r') + sub_space.count('s')
+            mps_info_fold = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum, target, hamil.basis)
         for i in range(n_external - 1):
             _print("fold right %d / %d" % (i, n_external))
             mpo_fold = FusedMPO(mpo_fold, hamil.basis, mpo_fold.n_sites - 2, mpo_fold.n_sites - 1, mps_info_fold.right_dims_fci[mpo_fold.n_sites - 2])
@@ -454,6 +462,14 @@ if pre_run or not no_pre_run:
         elif dynamic_corr_method[0] in ['mrcis', 'nevpt2s']:
             xl = -1, -1, -1
             xr = 1, 1, 1
+        elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+            "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+            # this is not correct yet
+            sub_space = dynamic_corr_method[0][7:]
+            n_ex_inactive = sub_space.count('i') + sub_space.count('j')
+            n_ex_external = sub_space.count('r') + sub_space.count('s')
+            xl = -n_ex_inactive, -n_ex_inactive, -n_ex_inactive
+            xr = n_ex_inactive, n_ex_inactive, n_ex_inactive
         elif dynamic_corr_method[0] in ['casci']:
             xl = 0, 0, 0
             xr = 0, 0, 0
@@ -729,7 +745,8 @@ elif pre_run or not no_pre_run:
     else:
         if nroots == 1 and len(targets) == 1:
             if dynamic_corr_method is not None:
-                if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd"]:
+                if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij",
+                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
                     if big_site_method is not None:
                         mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
                             1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
@@ -798,17 +815,19 @@ else:
     if occs is None:
         mps_info.set_bond_dimension(bond_dims[0])
     else:
-        mps_info.set_bond_dimension_using_occ(bond_dims[0], occs, bias=bias)
+        mps_info.set_bond_dimension_using_occ(
+            bond_dims[0], occs, bias=bias)
+
     if conn_centers is not None:
         assert nroots == 1
-        mps = ParallelMPS(mps_info.n_sites, 0, dot, mps_prule)
+        mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
     elif nroots != 1 or len(targets) != 1:
-        mps = MultiMPS(n_sites, 0, dot, nroots)
+        mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorDouble([float(x) for x in weights.split()])
     else:
-        mps = MPS(mps_info.n_sites, 0, dot)
+        mps = MPS(mps_info.n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     if nroots == 1:
@@ -1487,7 +1506,8 @@ if not pre_run:
                 plt.savefig(scratch + "/extrapolation.png", dpi=600)
 
         if dynamic_corr_method is not None:
-            if dynamic_corr_method[0] in ['casci', 'nevpt2s', 'nevpt2sd']:
+            if dynamic_corr_method[0] in ['casci', 'nevpt2s', 'nevpt2sd', "nevpt2-ijrs", "nevpt2-ij",
+                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
                 _print("DMRG-CASCI Energy = %20.15f" % E_dmrg)
             elif dynamic_corr_method[0] in ['dmrgfci']:
                 _print("DMRG-FCI Energy = %20.15f" % E_dmrg)
@@ -2020,7 +2040,8 @@ if not pre_run:
             np.save(scratch + "/E_oh.npy", mat_oh)
     
     # NEVPT2
-    if dynamic_corr_method is not None and dynamic_corr_method[0] in ["nevpt2s", "nevpt2sd"]:
+    if dynamic_corr_method is not None and dynamic_corr_method[0] in ["nevpt2s", "nevpt2sd",
+        "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
 
         if fcidump is None:
             raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'nevpt2'!")
@@ -2062,11 +2083,19 @@ if not pre_run:
         if big_site_method is None:
             hm_dyall = HamiltonianQC(vacuum, n_sites, orb_sym, fd_dyall)
         elif big_site_method == "folding":
-            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']
+            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s', "nevpt2-ijrs", "nevpt2-ij",
+                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
             hm_dyall = HamiltonianQC(vacuum, n_orbs, orb_sym, fd_dyall)
             lmpo_fold = MPOQC(hm_dyall, qc_type)
-            ci_order = len(dynamic_corr_method[0]) - 6
-            lmps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
+            if dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']:
+                ci_order = len(dynamic_corr_method[0]) - 6
+                lmps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
+            else:
+                sub_space = dynamic_corr_method[0][7:]
+                n_ex_inactive = sub_space.count('i') + sub_space.count('j')
+                n_ex_external = sub_space.count('r') + sub_space.count('s')
+                lmps_info_fold = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum,
+                    target, hm_dyall.basis)
             for i in range(n_external - 1):
                 _print("fold right %d / %d" % (i, n_external))
                 lmpo_fold = FusedMPO(lmpo_fold, hm_dyall.basis, lmpo_fold.n_sites - 2,
@@ -2104,6 +2133,14 @@ if not pre_run:
             elif dynamic_corr_method[0] in ['nevpt2s']:
                 xl = -1, -1, -1
                 xr = 1, 1, 1
+            elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+            "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                # this is not correct yet
+                sub_space = dynamic_corr_method[0][7:]
+                n_ex_inactive = sub_space.count('i') + sub_space.count('j')
+                n_ex_external = sub_space.count('r') + sub_space.count('s')
+                xl = -n_ex_inactive, -n_ex_inactive, -n_ex_inactive
+                xr = n_ex_inactive, n_ex_inactive, n_ex_inactive
             else:
                 assert False
             if big_site_method == "fock":
@@ -2184,9 +2221,17 @@ if not pre_run:
         if big_site_method is not None:
             bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
         else:
-            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']
-            ci_order = len(dynamic_corr_method[0]) - 6
-            bra_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+            assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s', "nevpt2-ijrs", "nevpt2-ij",
+                "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
+            if dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']:
+                ci_order = len(dynamic_corr_method[0]) - 6
+                bra_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+            else:
+                sub_space = dynamic_corr_method[0][7:]
+                n_ex_inactive = sub_space.count('i') + sub_space.count('j')
+                n_ex_external = sub_space.count('r') + sub_space.count('s')
+                bra_info = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum,
+                    target, hamil.basis)
 
         if singlet_embedding and SX == SU2:
             left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
