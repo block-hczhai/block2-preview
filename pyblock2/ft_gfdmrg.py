@@ -339,6 +339,11 @@ class GFDMRG(FTDMRG):
             linear.gf_eta = eta
             linear.minres_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+            # NOTE: This pair (m,k) specifies the gcrot(m,k) sizes.
+            #       (-S,k) (negative first entry activates NOT gcrot but IDR(S) 
+            #               The second number is then ignored
+            linear.gcrotmk_size = (80,-1) 
+
             # TZ: Not raising error even if CG is not converged
             linear.minres_soft_max_iter = max_solver_iter
             linear.minres_max_iter = max_solver_iter + 1000

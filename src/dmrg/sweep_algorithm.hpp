@@ -1861,6 +1861,8 @@ template <typename S> struct Linear {
     // number of eigenvalues solved using harmonic Davidson
     // for deflated CG; 0 means normal CG
     int cg_n_harmonic_projection = 0;
+    // ATTENTION: If gcrotmk_site[0] == -S: use IDR(S)
+    //      the second parameter will then be ignored
     pair<int, int> gcrotmk_size = make_pair(40, -1);
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;

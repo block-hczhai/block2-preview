@@ -93,7 +93,8 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;
     S target;
-    ubond_t bond_dim;
+    ubond_t bond_dim; // hrl: ATTENTION: This has different meanings in different contexts.
+                      //  Use with care. It is not always the max. bond dimension.
     // States in each site
     vector<shared_ptr<StateInfo<S>>> basis;
     // Maximal possible states for left/right block (may be equal to/smaller

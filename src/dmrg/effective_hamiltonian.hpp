@@ -50,7 +50,7 @@ enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
-enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT };
+enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT, IDRS };
 
 template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
 
@@ -453,11 +453,25 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         ComplexMatrixFunctions::fill_complex(
             cket, mket, MatrixRef(nullptr, mket.m, mket.n));
         // solve bra
-        complex<double> gf = ComplexMatrixFunctions::gcrotmk(
-            op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
-            gcrotmk_size.second, iprint,
-            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter);
+        complex<double> gf;
+        if(gcrotmk_size.first < 0){
+            // hrl: Use IDR(S).
+            //      Currently, solver type is not a parameter so use this dirty(?) trick.
+            const auto idrs_tol = sqrt(conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
+            const double idrs_atol = 0.;
+            const double precond_reg = 1e-8;
+            gf = ComplexMatrixFunctions::idrs(
+                    op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
+                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                    precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+
+        }else{
+            gf = ComplexMatrixFunctions::gcrotmk(
+                    op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
+                    gcrotmk_size.second, iprint,
+                    para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                    max_iter, soft_max_iter);
+        }
         gf = conj(gf);
         ComplexMatrixFunctions::extract_complex(cbra, rbra, ibra);
         if (compute_diag)
@@ -623,6 +637,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                 else
                     return (*this)(a, b);
             };
+        assert( solver_type != LinearSolverTypes::IDRS &&
+                "Currently IDR(S) is only implemented for complex-valued data");
         double r =
             solver_type == LinearSolverTypes::CG
                 ? MatrixFunctions::conjugate_gradient(
