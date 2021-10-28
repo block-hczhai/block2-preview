@@ -32,242 +32,264 @@
 namespace py = pybind11;
 using namespace block2;
 
-template <typename S> void bind_big_site(py::module &m) {
+template <typename S, typename FL> void bind_fl_big_site(py::module &m) {
 
-    py::class_<BigSite<S>, shared_ptr<BigSite<S>>>(m, "BigSite")
+    py::class_<BigSite<S, FL>, shared_ptr<BigSite<S, FL>>>(m, "BigSite")
         .def(py::init<int>())
-        .def_readwrite("n_orbs", &BigSite<S>::n_orbs)
-        .def_readwrite("basis", &BigSite<S>::basis)
-        .def_readwrite("op_infos", &BigSite<S>::op_infos)
-        .def("get_site_ops", &BigSite<S>::get_site_ops);
+        .def_readwrite("n_orbs", &BigSite<S, FL>::n_orbs)
+        .def_readwrite("basis", &BigSite<S, FL>::basis)
+        .def_readwrite("op_infos", &BigSite<S, FL>::op_infos)
+        .def("get_site_ops", &BigSite<S, FL>::get_site_ops);
 
-    py::class_<SimplifiedBigSite<S>, shared_ptr<SimplifiedBigSite<S>>,
-               BigSite<S>>(m, "SimplifiedBigSite")
-        .def(py::init<const shared_ptr<BigSite<S>> &,
-                      const shared_ptr<Rule<S>> &>())
-        .def_readwrite("big_site", &SimplifiedBigSite<S>::big_site)
-        .def_readwrite("rule", &SimplifiedBigSite<S>::rule);
+    py::class_<SimplifiedBigSite<S, FL>, shared_ptr<SimplifiedBigSite<S, FL>>,
+               BigSite<S, FL>>(m, "SimplifiedBigSite")
+        .def(py::init<const shared_ptr<BigSite<S, FL>> &,
+                      const shared_ptr<Rule<S, FL>> &>())
+        .def_readwrite("big_site", &SimplifiedBigSite<S, FL>::big_site)
+        .def_readwrite("rule", &SimplifiedBigSite<S, FL>::rule);
 
-    py::class_<ParallelBigSite<S>, shared_ptr<ParallelBigSite<S>>, BigSite<S>>(
-        m, "ParallelBigSite")
-        .def(py::init<const shared_ptr<BigSite<S>> &,
-                      const shared_ptr<ParallelRule<S>> &>())
-        .def_readwrite("big_site", &ParallelBigSite<S>::big_site)
-        .def_readwrite("rule", &ParallelBigSite<S>::rule);
+    py::class_<ParallelBigSite<S, FL>, shared_ptr<ParallelBigSite<S, FL>>,
+               BigSite<S, FL>>(m, "ParallelBigSite")
+        .def(py::init<const shared_ptr<BigSite<S, FL>> &,
+                      const shared_ptr<ParallelRule<S, FL>> &>())
+        .def_readwrite("big_site", &ParallelBigSite<S, FL>::big_site)
+        .def_readwrite("rule", &ParallelBigSite<S, FL>::rule);
 }
 
-template <typename S> void bind_sci_big_site_fock(py::module &m) {
+template <typename S, typename FL> void bind_fl_sci_big_site_fock(py::module &m) {
 
-    py::class_<SCIFockBigSite<S>, shared_ptr<SCIFockBigSite<S>>, BigSite<S>>(
-        m, "SCIFockBigSite")
-        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+    py::class_<SCIFockBigSite<S, FL>, shared_ptr<SCIFockBigSite<S, FL>>,
+               BigSite<S, FL>>(m, "SCIFockBigSite")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
                       const std::vector<uint8_t> &, int, int, int, bool>(),
              py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
              py::arg("fcidump"), py::arg("orbsym"), py::arg("nMaxAlphaEl"),
              py::arg("nMaxBetaEl"), py::arg("nMaxEl"),
              py::arg("verbose") = true,
              "Initialization via generated CI space based on nMax*")
-        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
                       const std::vector<uint8_t> &, const vector<vector<int>> &,
                       bool>(),
              py::arg("nOrb"), py::arg("nOrbThis"), py::arg("isRight"),
              py::arg("fcidump"), py::arg("orbsym"), py::arg("occs"),
              py::arg("verbose") = true,
              "Initialization via externally given determinants in `occs`")
-        .def_readwrite("excludeQNs", &SCIFockBigSite<S>::excludeQNs)
-        .def_static("ras_space", &SCIFockBigSite<S>::ras_space)
-        .def_readonly("quantumNumbers", &SCIFockBigSite<S>::quantumNumbers)
-        .def_readonly("nOrbOther", &SCIFockBigSite<S>::nOrbOther)
-        .def_readonly("nOrbThis", &SCIFockBigSite<S>::nOrbThis)
-        .def_readonly("nOrb", &SCIFockBigSite<S>::nOrb)
-        .def_readonly("isRight", &SCIFockBigSite<S>::isRight)
-        .def_readonly("nMaxAlphaEl", &SCIFockBigSite<S>::nMaxAlphaEl)
-        .def_readonly("nMaxBetaEl", &SCIFockBigSite<S>::nMaxBetaEl)
-        .def_readonly("nMaxEl", &SCIFockBigSite<S>::nMaxEl)
-        .def_readonly("nDet", &SCIFockBigSite<S>::nDet)
-        .def_readwrite("sparsityThresh", &SCIFockBigSite<S>::sparsityThresh,
+        .def_readwrite("excludeQNs", &SCIFockBigSite<S, FL>::excludeQNs)
+        .def_static("ras_space", &SCIFockBigSite<S, FL>::ras_space)
+        .def_readonly("quantumNumbers", &SCIFockBigSite<S, FL>::quantumNumbers)
+        .def_readonly("nOrbOther", &SCIFockBigSite<S, FL>::nOrbOther)
+        .def_readonly("nOrbThis", &SCIFockBigSite<S, FL>::nOrbThis)
+        .def_readonly("nOrb", &SCIFockBigSite<S, FL>::nOrb)
+        .def_readonly("isRight", &SCIFockBigSite<S, FL>::isRight)
+        .def_readonly("nMaxAlphaEl", &SCIFockBigSite<S, FL>::nMaxAlphaEl)
+        .def_readonly("nMaxBetaEl", &SCIFockBigSite<S, FL>::nMaxBetaEl)
+        .def_readonly("nMaxEl", &SCIFockBigSite<S, FL>::nMaxEl)
+        .def_readonly("nDet", &SCIFockBigSite<S, FL>::nDet)
+        .def_readwrite("sparsityThresh", &SCIFockBigSite<S, FL>::sparsityThresh,
                        "After > #zeros/#tot the sparse matrix is activated")
-        .def_readwrite("sparsityStart", &SCIFockBigSite<S>::sparsityStart,
+        .def_readwrite("sparsityStart", &SCIFockBigSite<S, FL>::sparsityStart,
                        "After which matrix size (nCol * nRow) should sparse "
                        "matrices be activated")
-        .def_readwrite("eps", &SCIFockBigSite<S>::eps,
+        .def_readwrite("eps", &SCIFockBigSite<S, FL>::eps,
                        "Sparsity value threshold. Everything below eps will be "
                        "set to 0.0")
-        .def("setOmpThreads", &SCIFockBigSite<S>::setOmpThreads)
+        .def("setOmpThreads", &SCIFockBigSite<S, FL>::setOmpThreads)
         // vv setter
-        .def_property("qnIdxBra", nullptr,
-                      (void (SCIFockBigSite<S>::*)(const std::vector<int> &)) &
-                          SCIFockBigSite<S>::setQnIdxBra)
-        .def_property("qnIdxKet", nullptr,
-                      (void (SCIFockBigSite<S>::*)(const std::vector<int> &)) &
-                          SCIFockBigSite<S>::setQnIdxKet)
+        .def_property(
+            "qnIdxBra", nullptr,
+            (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
+                SCIFockBigSite<S, FL>::setQnIdxBra)
+        .def_property(
+            "qnIdxKet", nullptr,
+            (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
+                SCIFockBigSite<S, FL>::setQnIdxKet)
         .def("setQnIdxBra",
-             (void (SCIFockBigSite<S>::*)(const std::vector<int> &,
-                                          const std::vector<char> &)) &
-                 SCIFockBigSite<S>::setQnIdxBra)
+             (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
+                                              const std::vector<char> &)) &
+                 SCIFockBigSite<S, FL>::setQnIdxBra)
         .def("setQnIdxKet",
-             (void (SCIFockBigSite<S>::*)(const std::vector<int> &,
-                                          const std::vector<char> &)) &
-                 SCIFockBigSite<S>::setQnIdxKet)
-        .def_readwrite("qnIdxBraH", &SCIFockBigSite<S>::qnIdxBraH)
-        .def_readwrite("qnIdxKetH", &SCIFockBigSite<S>::qnIdxKetH)
-        .def_readwrite("qnIdxBraQ", &SCIFockBigSite<S>::qnIdxBraQ)
-        .def_readwrite("qnIdxKetQ", &SCIFockBigSite<S>::qnIdxKetQ)
-        .def_readwrite("qnIdxBraI", &SCIFockBigSite<S>::qnIdxBraI)
-        .def_readwrite("qnIdxKetI", &SCIFockBigSite<S>::qnIdxKetI)
-        .def_readwrite("qnIdxBraA", &SCIFockBigSite<S>::qnIdxBraA)
-        .def_readwrite("qnIdxKetA", &SCIFockBigSite<S>::qnIdxKetA)
-        .def_readwrite("qnIdxBraB", &SCIFockBigSite<S>::qnIdxBraB)
-        .def_readwrite("qnIdxKetB", &SCIFockBigSite<S>::qnIdxKetB)
-        .def_readwrite("qnIdxBraP", &SCIFockBigSite<S>::qnIdxBraP)
-        .def_readwrite("qnIdxKetP", &SCIFockBigSite<S>::qnIdxKetP)
-        .def_readwrite("qnIdxBraR", &SCIFockBigSite<S>::qnIdxBraR)
-        .def_readwrite("qnIdxKetR", &SCIFockBigSite<S>::qnIdxKetR)
-        .def_readwrite("qnIdxBraC", &SCIFockBigSite<S>::qnIdxBraC)
-        .def_readwrite("qnIdxKetC", &SCIFockBigSite<S>::qnIdxKetC);
+             (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
+                                              const std::vector<char> &)) &
+                 SCIFockBigSite<S, FL>::setQnIdxKet)
+        .def_readwrite("qnIdxBraH", &SCIFockBigSite<S, FL>::qnIdxBraH)
+        .def_readwrite("qnIdxKetH", &SCIFockBigSite<S, FL>::qnIdxKetH)
+        .def_readwrite("qnIdxBraQ", &SCIFockBigSite<S, FL>::qnIdxBraQ)
+        .def_readwrite("qnIdxKetQ", &SCIFockBigSite<S, FL>::qnIdxKetQ)
+        .def_readwrite("qnIdxBraI", &SCIFockBigSite<S, FL>::qnIdxBraI)
+        .def_readwrite("qnIdxKetI", &SCIFockBigSite<S, FL>::qnIdxKetI)
+        .def_readwrite("qnIdxBraA", &SCIFockBigSite<S, FL>::qnIdxBraA)
+        .def_readwrite("qnIdxKetA", &SCIFockBigSite<S, FL>::qnIdxKetA)
+        .def_readwrite("qnIdxBraB", &SCIFockBigSite<S, FL>::qnIdxBraB)
+        .def_readwrite("qnIdxKetB", &SCIFockBigSite<S, FL>::qnIdxKetB)
+        .def_readwrite("qnIdxBraP", &SCIFockBigSite<S, FL>::qnIdxBraP)
+        .def_readwrite("qnIdxKetP", &SCIFockBigSite<S, FL>::qnIdxKetP)
+        .def_readwrite("qnIdxBraR", &SCIFockBigSite<S, FL>::qnIdxBraR)
+        .def_readwrite("qnIdxKetR", &SCIFockBigSite<S, FL>::qnIdxKetR)
+        .def_readwrite("qnIdxBraC", &SCIFockBigSite<S, FL>::qnIdxBraC)
+        .def_readwrite("qnIdxKetC", &SCIFockBigSite<S, FL>::qnIdxKetC);
 }
 
-template <typename S> void bind_csf_big_site(py::module &m) {
+template <typename S, typename FL> void bind_fl_csf_big_site(py::module &m) {
 
-    py::class_<CSFSpace<S>, shared_ptr<CSFSpace<S>>>(m, "CSFSpace")
+    py::class_<CSFSpace<S, FL>, shared_ptr<CSFSpace<S, FL>>>(m, "CSFSpace")
         .def(py::init<int, int, bool, const std::vector<uint8_t> &>())
-        .def("get_config", &CSFSpace<S>::get_config)
-        .def("index_config", &CSFSpace<S>::index_config)
-        .def("to_string", &CSFSpace<S>::to_string)
-        .def("cfg_apply_ops", &CSFSpace<S>::cfg_apply_ops)
-        .def("csf_apply_ops", &CSFSpace<S>::csf_apply_ops)
-        .def("__getitem__", &CSFSpace<S>::operator[], py::arg("idx"))
-        .def_property_readonly("n_configs", &CSFSpace<S>::n_configs)
-        .def_property_readonly("n_csfs", &CSFSpace<S>::n_csfs)
-        .def_readwrite("qs", &CSFSpace<S>::qs)
-        .def_readwrite("qs_idxs", &CSFSpace<S>::qs_idxs)
-        .def_readwrite("n_unpaired", &CSFSpace<S>::n_unpaired)
-        .def_readwrite("n_unpaired_shapes", &CSFSpace<S>::n_unpaired_shapes)
-        .def_readwrite("csfs", &CSFSpace<S>::csfs)
-        .def_readwrite("csf_idxs", &CSFSpace<S>::csf_idxs)
-        .def_readwrite("csf_sub_idxs", &CSFSpace<S>::csf_sub_idxs)
-        .def_readwrite("csf_offsets", &CSFSpace<S>::csf_offsets)
-        .def_readwrite("combinatorics", &CSFSpace<S>::combinatorics)
-        .def_readwrite("basis", &CSFSpace<S>::basis)
-        .def_readwrite("cg", &CSFSpace<S>::cg)
-        .def_readwrite("n_orbs", &CSFSpace<S>::n_orbs)
-        .def_readwrite("n_max_elec", &CSFSpace<S>::n_max_elec)
-        .def_readwrite("n_max_unpaired", &CSFSpace<S>::n_max_unpaired)
-        .def_readwrite("is_right", &CSFSpace<S>::is_right);
+        .def("get_config", &CSFSpace<S, FL>::get_config)
+        .def("index_config", &CSFSpace<S, FL>::index_config)
+        .def("to_string", &CSFSpace<S, FL>::to_string)
+        .def("cfg_apply_ops", &CSFSpace<S, FL>::cfg_apply_ops)
+        .def("csf_apply_ops", &CSFSpace<S, FL>::csf_apply_ops)
+        .def("__getitem__", &CSFSpace<S, FL>::operator[], py::arg("idx"))
+        .def_property_readonly("n_configs", &CSFSpace<S, FL>::n_configs)
+        .def_property_readonly("n_csfs", &CSFSpace<S, FL>::n_csfs)
+        .def_readwrite("qs", &CSFSpace<S, FL>::qs)
+        .def_readwrite("qs_idxs", &CSFSpace<S, FL>::qs_idxs)
+        .def_readwrite("n_unpaired", &CSFSpace<S, FL>::n_unpaired)
+        .def_readwrite("n_unpaired_shapes", &CSFSpace<S, FL>::n_unpaired_shapes)
+        .def_readwrite("csfs", &CSFSpace<S, FL>::csfs)
+        .def_readwrite("csf_idxs", &CSFSpace<S, FL>::csf_idxs)
+        .def_readwrite("csf_sub_idxs", &CSFSpace<S, FL>::csf_sub_idxs)
+        .def_readwrite("csf_offsets", &CSFSpace<S, FL>::csf_offsets)
+        .def_readwrite("combinatorics", &CSFSpace<S, FL>::combinatorics)
+        .def_readwrite("basis", &CSFSpace<S, FL>::basis)
+        .def_readwrite("cg", &CSFSpace<S, FL>::cg)
+        .def_readwrite("n_orbs", &CSFSpace<S, FL>::n_orbs)
+        .def_readwrite("n_max_elec", &CSFSpace<S, FL>::n_max_elec)
+        .def_readwrite("n_max_unpaired", &CSFSpace<S, FL>::n_max_unpaired)
+        .def_readwrite("is_right", &CSFSpace<S, FL>::is_right);
 
-    py::class_<CSFBigSite<S>, shared_ptr<CSFBigSite<S>>, BigSite<S>>(
-        m, "CSFBigSite")
-        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+    py::class_<CSFBigSite<S, FL>, shared_ptr<CSFBigSite<S, FL>>,
+               BigSite<S, FL>>(m, "CSFBigSite")
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
                       const std::vector<uint8_t> &>())
-        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP> &,
+        .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
                       const std::vector<uint8_t> &, int>())
-        .def("fill_csr_matrix", &CSFBigSite<S>::fill_csr_matrix)
-        .def("build_site_op", &CSFBigSite<S>::build_site_op)
-        .def_readwrite("fcidump", &CSFBigSite<S>::fcidump)
-        .def_readwrite("csf_space", &CSFBigSite<S>::csf_space)
-        .def_readwrite("is_right", &CSFBigSite<S>::is_right);
+        .def("fill_csr_matrix", &CSFBigSite<S, FL>::fill_csr_matrix)
+        .def("build_site_op", &CSFBigSite<S, FL>::build_site_op)
+        .def_readwrite("fcidump", &CSFBigSite<S, FL>::fcidump)
+        .def_readwrite("csf_space", &CSFBigSite<S, FL>::csf_space)
+        .def_readwrite("is_right", &CSFBigSite<S, FL>::is_right);
 }
 
-template <typename S> void bind_hamiltonian_big_site(py::module &m) {
+template <typename S, typename FL>
+void bind_fl_hamiltonian_big_site(py::module &m) {
 
-    py::class_<HamiltonianQCBigSite<S>, shared_ptr<HamiltonianQCBigSite<S>>,
-               HamiltonianQC<S>>(m, "HamiltonianQCBigSite")
+    py::class_<HamiltonianQCBigSite<S, FL>,
+               shared_ptr<HamiltonianQCBigSite<S, FL>>, HamiltonianQC<S, FL>>(
+        m, "HamiltonianQCBigSite")
         .def(py::init<S, int, const vector<typename S::pg_t> &,
-                      const shared_ptr<FCIDUMP> &,
-                      const shared_ptr<BigSite<S>> &,
-                      const shared_ptr<BigSite<S>> &>(),
+                      const shared_ptr<FCIDUMP<FL>> &,
+                      const shared_ptr<BigSite<S, FL>> &,
+                      const shared_ptr<BigSite<S, FL>> &>(),
              py::arg("vacuum"), py::arg("n_orbs_total"), py::arg("orb_sym"),
              py::arg("fcidump"), py::arg("big_left") = nullptr,
              py::arg("big_right") = nullptr)
-        .def_readwrite("big_left", &HamiltonianQCBigSite<S>::big_left)
-        .def_readwrite("big_right", &HamiltonianQCBigSite<S>::big_right)
-        .def_readwrite("n_orbs", &HamiltonianQCBigSite<S>::n_orbs)
-        .def_readwrite("n_orbs_left", &HamiltonianQCBigSite<S>::n_orbs_left)
-        .def_readwrite("n_orbs_right", &HamiltonianQCBigSite<S>::n_orbs_right)
-        .def_readwrite("n_orbs_cas", &HamiltonianQCBigSite<S>::n_orbs_cas)
-        .def_readwrite("full_hamil", &HamiltonianQCBigSite<S>::full_hamil);
+        .def_readwrite("big_left", &HamiltonianQCBigSite<S, FL>::big_left)
+        .def_readwrite("big_right", &HamiltonianQCBigSite<S, FL>::big_right)
+        .def_readwrite("n_orbs", &HamiltonianQCBigSite<S, FL>::n_orbs)
+        .def_readwrite("n_orbs_left", &HamiltonianQCBigSite<S, FL>::n_orbs_left)
+        .def_readwrite("n_orbs_right",
+                       &HamiltonianQCBigSite<S, FL>::n_orbs_right)
+        .def_readwrite("n_orbs_cas", &HamiltonianQCBigSite<S, FL>::n_orbs_cas)
+        .def_readwrite("full_hamil", &HamiltonianQCBigSite<S, FL>::full_hamil);
 }
 
-template <typename S> void bind_dmrg_big_site(py::module &m) {
+template <typename S, typename FL, typename FLS>
+void bind_fl_dmrg_big_site(py::module &m) {
 
-    py::class_<DMRGBigSite<S>, shared_ptr<DMRGBigSite<S>>, DMRG<S>>(
-        m, "DMRGBigSite")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<ubond_t> &, const vector<double> &>())
-        .def_readwrite("last_site_svd", &DMRGBigSite<S>::last_site_svd)
-        .def_readwrite("last_site_1site", &DMRGBigSite<S>::last_site_1site)
-        .def("blocking", &DMRGBigSite<S>::blocking);
+    py::class_<DMRGBigSite<S, FL, FLS>, shared_ptr<DMRGBigSite<S, FL, FLS>>,
+               DMRG<S, FL, FLS>>(m, "DMRGBigSite")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRG<S, FL, FLS>::FPS> &>())
+        .def_readwrite("last_site_svd", &DMRGBigSite<S, FL, FLS>::last_site_svd)
+        .def_readwrite("last_site_1site",
+                       &DMRGBigSite<S, FL, FLS>::last_site_1site)
+        .def("blocking", &DMRGBigSite<S, FL, FLS>::blocking);
 
-    py::class_<LinearBigSite<S>, shared_ptr<LinearBigSite<S>>, Linear<S>>(
-        m, "LinearBigSite")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+    py::class_<LinearBigSite<S, FL, FLS>, shared_ptr<LinearBigSite<S, FL, FLS>>,
+               Linear<S, FL, FLS>>(m, "LinearBigSite")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
-                      const vector<double> &>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<typename Linear<S, FL, FLS>::FPS> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
-                      const vector<double> &>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<typename Linear<S, FL, FLS>::FPS> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &,
-                      const vector<double> &>())
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
-                      const shared_ptr<MovingEnvironment<S>> &,
+                      const vector<typename Linear<S, FL, FLS>::FPS> &>())
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
                       const vector<ubond_t> &, const vector<ubond_t> &>())
-        .def_readwrite("last_site_svd", &LinearBigSite<S>::last_site_svd)
-        .def_readwrite("last_site_1site", &LinearBigSite<S>::last_site_1site)
-        .def("blocking", &LinearBigSite<S>::blocking);
+        .def_readwrite("last_site_svd",
+                       &LinearBigSite<S, FL, FLS>::last_site_svd)
+        .def_readwrite("last_site_1site",
+                       &LinearBigSite<S, FL, FLS>::last_site_1site)
+        .def("blocking", &LinearBigSite<S, FL, FLS>::blocking);
 
-    py::class_<DMRGBigSiteAQCCOLD<S>, shared_ptr<DMRGBigSiteAQCCOLD<S>>,
-               DMRGBigSite<S>>(m, "DMRGBigSiteAQCCOLD")
-        .def(py::init<const shared_ptr<MovingEnvironment<S>> &,
-                      const vector<ubond_t> &, const vector<double> &, double,
-                      double, const std::vector<S> &>())
-        .def_readwrite("max_aqcc_iter", &DMRGBigSiteAQCCOLD<S>::max_aqcc_iter)
-        .def_readwrite("g_factor", &DMRGBigSiteAQCCOLD<S>::g_factor)
-        .def_readwrite("delta_e", &DMRGBigSiteAQCCOLD<S>::delta_e)
-        .def_readwrite("ref_energy", &DMRGBigSiteAQCCOLD<S>::ref_energy);
+    py::class_<DMRGBigSiteAQCCOLD<S, FL, FLS>,
+               shared_ptr<DMRGBigSiteAQCCOLD<S, FL, FLS>>,
+               DMRGBigSite<S, FL, FLS>>(m, "DMRGBigSiteAQCCOLD")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRGBigSite<S, FL, FLS>::FPS> &, FL,
+                      typename DMRGBigSite<S, FL, FLS>::FPS,
+                      const std::vector<S> &>())
+        .def_readwrite("max_aqcc_iter",
+                       &DMRGBigSiteAQCCOLD<S, FL, FLS>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGBigSiteAQCCOLD<S, FL, FLS>::g_factor)
+        .def_readwrite("delta_e", &DMRGBigSiteAQCCOLD<S, FL, FLS>::delta_e)
+        .def_readwrite("ref_energy",
+                       &DMRGBigSiteAQCCOLD<S, FL, FLS>::ref_energy);
 
-    py::class_<DMRGBigSiteAQCC<S>, shared_ptr<DMRGBigSiteAQCC<S>>,
-               DMRGBigSite<S>>(m, "DMRGBigSiteAQCC")
-        .def(
-            py::init<const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const vector<ubond_t> &, const vector<double> &, double>(),
-            "Frozen/CAS mode: Only one big site at the end")
-        .def(
-            py::init<const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const vector<ubond_t> &, const vector<double> &, double>(),
-            "Frozen/CAS mode ACPF2: Only one big site at the end")
-        .def(
-            py::init<const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const vector<ubond_t> &, const vector<double> &, double>(),
-            "RAS mode: Big sites on both ends")
-        .def(
-            py::init<const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const shared_ptr<MovingEnvironment<S>> &, double,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const shared_ptr<MovingEnvironment<S>> &,
-                     const vector<ubond_t> &, const vector<double> &, double>(),
-            "RAS ACPF2 mode: Big sites on both ends")
-        .def_readwrite("smallest_energy", &DMRGBigSiteAQCC<S>::smallest_energy)
-        .def_readwrite("max_aqcc_iter", &DMRGBigSiteAQCC<S>::max_aqcc_iter)
-        .def_readwrite("g_factor", &DMRGBigSiteAQCC<S>::g_factor)
-        .def_readwrite("g_factor2", &DMRGBigSiteAQCC<S>::g_factor2)
-        .def_readwrite("ACPF2_mode", &DMRGBigSiteAQCC<S>::ACPF2_mode)
-        .def_readwrite("RAS_mode", &DMRGBigSiteAQCC<S>::RAS_mode)
-        .def_readwrite("delta_e", &DMRGBigSiteAQCC<S>::delta_e)
-        .def_readwrite("ref_energy", &DMRGBigSiteAQCC<S>::ref_energy);
+    py::class_<DMRGBigSiteAQCC<S, FL, FLS>,
+               shared_ptr<DMRGBigSiteAQCC<S, FL, FLS>>,
+               DMRGBigSite<S, FL, FLS>>(m, "DMRGBigSiteAQCC")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRGBigSite<S, FL, FLS>::FPS> &,
+                      typename DMRGBigSite<S, FL, FLS>::FPS>(),
+             "Frozen/CAS mode: Only one big site at the end")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRGBigSite<S, FL, FLS>::FPS> &,
+                      typename DMRGBigSite<S, FL, FLS>::FPS>(),
+             "Frozen/CAS mode ACPF2: Only one big site at the end")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRGBigSite<S, FL, FLS>::FPS> &,
+                      typename DMRGBigSite<S, FL, FLS>::FPS>(),
+             "RAS mode: Big sites on both ends")
+        .def(py::init<const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &, FL,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const shared_ptr<MovingEnvironment<S, FL, FLS>> &,
+                      const vector<ubond_t> &,
+                      const vector<typename DMRGBigSite<S, FL, FLS>::FPS> &,
+                      typename DMRGBigSite<S, FL, FLS>::FPS>(),
+             "RAS ACPF2 mode: Big sites on both ends")
+        .def_readwrite("smallest_energy",
+                       &DMRGBigSiteAQCC<S, FL, FLS>::smallest_energy)
+        .def_readwrite("max_aqcc_iter",
+                       &DMRGBigSiteAQCC<S, FL, FLS>::max_aqcc_iter)
+        .def_readwrite("g_factor", &DMRGBigSiteAQCC<S, FL, FLS>::g_factor)
+        .def_readwrite("g_factor2", &DMRGBigSiteAQCC<S, FL, FLS>::g_factor2)
+        .def_readwrite("ACPF2_mode", &DMRGBigSiteAQCC<S, FL, FLS>::ACPF2_mode)
+        .def_readwrite("RAS_mode", &DMRGBigSiteAQCC<S, FL, FLS>::RAS_mode)
+        .def_readwrite("delta_e", &DMRGBigSiteAQCC<S, FL, FLS>::delta_e)
+        .def_readwrite("ref_energy", &DMRGBigSiteAQCC<S, FL, FLS>::ref_energy);
 }

@@ -62,6 +62,8 @@ PYBIND11_MODULE(block2, m) {
     bind_io<>(m);
     bind_matrix<>(m);
     bind_symmetry<>(m);
+    bind_fl_matrix<double>(m);
+    bind_post_matrix<>(m);
 
     bind_core<SU2>(m_su2, "SU2");
     bind_core<SZ>(m_sz, "SZ");
@@ -88,35 +90,35 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg<SZ>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
     bind_trans_mps<SZ, SU2>(m_sz, "su2");
-    bind_trans_mps_spin_specific<SU2, SZ>(m_su2, "sz");
+    bind_fl_trans_mps_spin_specific<SU2, SZ, double>(m_su2, "sz");
 #ifdef _USE_KSYMM
     bind_dmrg<SU2K>(m_su2k, "SU2K");
     bind_dmrg<SZK>(m_szk, "SZK");
     bind_trans_mps<SU2K, SZK>(m_su2k, "szk");
     bind_trans_mps<SZK, SU2K>(m_szk, "su2k");
-    bind_trans_mps_spin_specific<SU2K, SZK>(m_su2k, "szk");
+    bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(m_su2k, "szk");
 #endif
 #endif
 
 #ifdef _USE_BIG_SITE
-    bind_big_site<SU2>(m_su2);
-    bind_hamiltonian_big_site<SU2>(m_su2);
-    bind_dmrg_big_site<SU2>(m_su2);
-    bind_big_site<SZ>(m_sz);
-    bind_hamiltonian_big_site<SZ>(m_sz);
-    bind_dmrg_big_site<SZ>(m_sz);
+    bind_fl_big_site<SU2, double>(m_su2);
+    bind_fl_hamiltonian_big_site<SU2, double>(m_su2);
+    bind_fl_dmrg_big_site<SU2, double, double>(m_su2);
+    bind_fl_big_site<SZ, double>(m_sz);
+    bind_fl_hamiltonian_big_site<SZ, double>(m_sz);
+    bind_fl_dmrg_big_site<SZ, double, double>(m_sz);
 
-    bind_sci_big_site_fock<SZ>(m_sz);
+    bind_fl_sci_big_site_fock<SZ, double>(m_sz);
 
-    bind_csf_big_site<SU2>(m_su2);
+    bind_fl_csf_big_site<SU2, double>(m_su2);
 #endif
 
 #ifdef _USE_SP_DMRG
-    bind_sp_dmrg<SU2>(m_su2);
-    bind_sp_dmrg<SZ>(m_sz);
+    bind_fl_sp_dmrg<SU2, double>(m_su2);
+    bind_fl_sp_dmrg<SZ, double>(m_sz);
 #ifdef _USE_KSYMM
-    bind_sp_dmrg<SU2K>(m_su2k);
-    bind_sp_dmrg<SZK>(m_szk);
+    bind_fl_sp_dmrg<SU2K, double>(m_su2k);
+    bind_fl_sp_dmrg<SZK, double>(m_szk);
 #endif
 #endif
 

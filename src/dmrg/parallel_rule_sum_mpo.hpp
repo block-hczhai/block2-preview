@@ -30,18 +30,19 @@ using namespace std;
 namespace block2 {
 
 // Rule for parallel dispatcher for quantum chemistry sum MPO
-template <typename S> struct ParallelRuleSumMPO : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRuleSumMPO : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     uint16_t n_sites;
     ParallelRuleSumMPO(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleSumMPO<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleSumMPO>(r->comm, r->comm_type);
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         return ParallelProperty(comm->rank, ParallelOpTypes::None);
     }
     bool index_available() const noexcept { return comm->rank == comm->root; }
@@ -59,14 +60,14 @@ template <typename S> struct ParallelRuleSumMPO : ParallelRule<S> {
 };
 
 // Symmetry rules for simplifying quantum chemistry sum MPO (non-spin-adapted)
-template <typename S> struct SumMPORule : Rule<S> {
-    shared_ptr<Rule<S>> prim_rule;
-    shared_ptr<ParallelRuleSumMPO<S>> para_rule;
-    SumMPORule(const shared_ptr<Rule<S>> &rule,
-               const shared_ptr<ParallelRuleSumMPO<S>> &para_rule)
+template <typename S, typename FL> struct SumMPORule : Rule<S, FL> {
+    shared_ptr<Rule<S, FL>> prim_rule;
+    shared_ptr<ParallelRuleSumMPO<S, FL>> para_rule;
+    SumMPORule(const shared_ptr<Rule<S, FL>> &rule,
+               const shared_ptr<ParallelRuleSumMPO<S, FL>> &para_rule)
         : prim_rule(rule), para_rule(para_rule) {}
-    shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         if (op->site_index.size() == 1 ||
             (op->site_index.size() == 2 &&
              para_rule->index_available(op->site_index[0]) &&
@@ -79,40 +80,41 @@ template <typename S> struct SumMPORule : Rule<S> {
 
 // One- and two-electron integrals
 // distriubed over mpi procs
-template <typename S> struct ParallelFCIDUMP : FCIDUMP {
-    using FCIDUMP::const_e;
-    using FCIDUMP::e;
-    using FCIDUMP::n_sites;
-    using FCIDUMP::t;
-    using FCIDUMP::v;
-    shared_ptr<ParallelRuleSumMPO<S>> rule;
-    ParallelFCIDUMP(const shared_ptr<ParallelRuleSumMPO<S>> &rule)
-        : rule(rule), FCIDUMP() {}
+template <typename S, typename FL> struct ParallelFCIDUMP : FCIDUMP<FL> {
+    using FCIDUMP<FL>::const_e;
+    using FCIDUMP<FL>::e;
+    using FCIDUMP<FL>::n_sites;
+    using FCIDUMP<FL>::t;
+    using FCIDUMP<FL>::v;
+    shared_ptr<ParallelRuleSumMPO<S, FL>> rule;
+    ParallelFCIDUMP(const shared_ptr<ParallelRuleSumMPO<S, FL>> &rule)
+        : rule(rule), FCIDUMP<FL>() {}
     // One-electron integral element (SU(2))
-    double t(uint16_t i, uint16_t j) const override {
+    FL t(uint16_t i, uint16_t j) const override {
         if (rule->n_sites == 0)
             rule->n_sites = n_sites();
-        return rule->index_available(i, j) ? FCIDUMP::t(i, j) : 0;
+        return rule->index_available(i, j) ? FCIDUMP<FL>::t(i, j) : 0;
     }
     // One-electron integral element (SZ)
-    double t(uint8_t s, uint16_t i, uint16_t j) const override {
+    FL t(uint8_t s, uint16_t i, uint16_t j) const override {
         if (rule->n_sites == 0)
             rule->n_sites = n_sites();
-        return rule->index_available(i, j) ? FCIDUMP::t(s, i, j) : 0;
+        return rule->index_available(i, j) ? FCIDUMP<FL>::t(s, i, j) : 0;
     }
     // Two-electron integral element (SU(2))
-    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
+    FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
         if (rule->n_sites == 0)
             rule->n_sites = n_sites();
-        return rule->index_available(i, j, k, l) ? FCIDUMP::v(i, j, k, l) : 0;
+        return rule->index_available(i, j, k, l) ? FCIDUMP<FL>::v(i, j, k, l)
+                                                 : 0;
     }
     // Two-electron integral element (SZ)
-    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
-             uint16_t l) const override {
+    FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+         uint16_t l) const override {
         if (rule->n_sites == 0)
             rule->n_sites = n_sites();
         return rule->index_available(i, j, k, l)
-                   ? FCIDUMP::v(sl, sr, i, j, k, l)
+                   ? FCIDUMP<FL>::v(sl, sr, i, j, k, l)
                    : 0;
     }
 };
@@ -120,44 +122,45 @@ template <typename S> struct ParallelFCIDUMP : FCIDUMP {
 // One- and two-electron integrals
 // gijkl = 2(vijkl - vkjil)
 // i <= k; j <= l
-struct SymmetricFCIDUMP : FCIDUMP {
-    using FCIDUMP::const_e;
-    using FCIDUMP::e;
-    using FCIDUMP::n_sites;
-    using FCIDUMP::t;
-    using FCIDUMP::v;
-    SymmetricFCIDUMP() : FCIDUMP() {}
+template <typename FL> struct SymmetricFCIDUMP : FCIDUMP<FL> {
+    using FCIDUMP<FL>::const_e;
+    using FCIDUMP<FL>::e;
+    using FCIDUMP<FL>::n_sites;
+    using FCIDUMP<FL>::t;
+    using FCIDUMP<FL>::v;
+    SymmetricFCIDUMP() : FCIDUMP<FL>() {}
     // Two-electron integral element (SU(2))
-    double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
+    FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
         if (i < k && j < l)
-            return 2 * (FCIDUMP::v(i, j, k, l) - FCIDUMP::v(k, j, i, l));
+            return 2 *
+                   (FCIDUMP<FL>::v(i, j, k, l) - FCIDUMP<FL>::v(k, j, i, l));
         else if (i < k && j == l)
-            return FCIDUMP::v(i, j, k, l) - FCIDUMP::v(k, j, i, l);
+            return FCIDUMP<FL>::v(i, j, k, l) - FCIDUMP<FL>::v(k, j, i, l);
         else if (i == k && j < l)
-            return FCIDUMP::v(i, j, k, l) - FCIDUMP::v(i, l, k, j);
+            return FCIDUMP<FL>::v(i, j, k, l) - FCIDUMP<FL>::v(i, l, k, j);
         else if (i == k && j == l)
-            return FCIDUMP::v(i, j, k, l);
+            return FCIDUMP<FL>::v(i, j, k, l);
         else
             return 0;
     }
     // Two-electron integral element (SZ)
-    double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
-             uint16_t l) const override {
+    FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+         uint16_t l) const override {
         if (i < k && j < l)
-            return 2 * (FCIDUMP::v(sl, sr, i, j, k, l) -
-                        FCIDUMP::v(sl, sr, k, j, i, l));
+            return 2 * (FCIDUMP<FL>::v(sl, sr, i, j, k, l) -
+                        FCIDUMP<FL>::v(sl, sr, k, j, i, l));
         else if (i < k && j == l)
-            return FCIDUMP::v(sl, sr, i, j, k, l) -
-                   FCIDUMP::v(sl, sr, k, j, i, l);
+            return FCIDUMP<FL>::v(sl, sr, i, j, k, l) -
+                   FCIDUMP<FL>::v(sl, sr, k, j, i, l);
         else if (i == k && j < l)
-            return FCIDUMP::v(sl, sr, i, j, k, l) -
-                   FCIDUMP::v(sl, sr, i, l, k, j);
+            return FCIDUMP<FL>::v(sl, sr, i, j, k, l) -
+                   FCIDUMP<FL>::v(sl, sr, i, l, k, j);
         else if (i == k && j == l)
-            return FCIDUMP::v(sl, sr, i, j, k, l);
+            return FCIDUMP<FL>::v(sl, sr, i, j, k, l);
         else
             return 0;
     }
-    double e() const override { return const_e; }
+    FL e() const override { return const_e; }
 };
 
 } // namespace block2

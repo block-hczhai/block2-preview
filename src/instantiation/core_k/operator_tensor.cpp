@@ -20,8 +20,8 @@
 
 #include "../block2_core.hpp"
 
-template struct block2::OperatorTensor<block2::SZK>;
-template struct block2::DelayedOperatorTensor<block2::SZK>;
+template struct block2::OperatorTensor<block2::SZK, double>;
+template struct block2::DelayedOperatorTensor<block2::SZK, double>;
 
-template struct block2::OperatorTensor<block2::SU2K>;
-template struct block2::DelayedOperatorTensor<block2::SU2K>;
+template struct block2::OperatorTensor<block2::SU2K, double>;
+template struct block2::DelayedOperatorTensor<block2::SU2K, double>;

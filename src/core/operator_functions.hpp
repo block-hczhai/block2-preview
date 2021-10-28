@@ -24,9 +24,9 @@
 #include "cg.hpp"
 #include "matrix_functions.hpp"
 #include "sparse_matrix.hpp"
+#include <array>
 #include <cassert>
 #include <memory>
-#include <array>
 
 using namespace std;
 
@@ -65,24 +65,24 @@ inline NoiseTypes operator|(NoiseTypes a, NoiseTypes b) {
 }
 
 // SparseMatrix operations
-template <typename S> struct OperatorFunctions {
+template <typename S, typename FL> struct OperatorFunctions {
     shared_ptr<CG<S>> cg;
-    shared_ptr<BatchGEMMSeq> seq = nullptr;
+    shared_ptr<BatchGEMMSeq<FL>> seq = nullptr;
     OperatorFunctions(const shared_ptr<CG<S>> &cg) : cg(cg) {
-        seq = make_shared<BatchGEMMSeq>(0, threading->seq_type);
+        seq = make_shared<BatchGEMMSeq<FL>>(0, threading->seq_type);
     }
     virtual ~OperatorFunctions() = default;
     virtual SparseMatrixTypes get_type() const {
         return SparseMatrixTypes::Normal;
     }
-    virtual shared_ptr<OperatorFunctions<S>> copy() const {
-        shared_ptr<OperatorFunctions<S>> opf =
-            make_shared<OperatorFunctions<S>>(this->cg);
+    virtual shared_ptr<OperatorFunctions> copy() const {
+        shared_ptr<OperatorFunctions> opf =
+            make_shared<OperatorFunctions>(this->cg);
         opf->seq = this->seq->copy();
         return opf;
     }
     virtual void
-    parallel_reduce(const vector<shared_ptr<SparseMatrix<S>>> &mats, int i,
+    parallel_reduce(const vector<shared_ptr<SparseMatrix<S, FL>>> &mats, int i,
                     int j) const {
         assert(j > i);
         if (j - i == 1)
@@ -99,13 +99,13 @@ template <typename S> struct OperatorFunctions {
         parallel_reduce(mats, m, j);
 #pragma omp taskwait
 #endif
-        MatrixFunctions::iadd(
-            MatrixRef(mats[i]->data, 1, (MKL_INT)mats[i]->total_memory),
-            MatrixRef(mats[m]->data, 1, (MKL_INT)mats[m]->total_memory), 1.0);
+        GMatrixFunctions<FL>::iadd(
+            GMatrix<FL>(mats[i]->data, 1, (MKL_INT)mats[i]->total_memory),
+            GMatrix<FL>(mats[m]->data, 1, (MKL_INT)mats[m]->total_memory), 1.0);
     }
     virtual void
-    parallel_reduce(const vector<shared_ptr<SparseMatrixGroup<S>>> &mats, int i,
-                    int j) const {
+    parallel_reduce(const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &mats,
+                    int i, int j) const {
         assert(j > i);
         if (j - i == 1)
             return;
@@ -122,36 +122,36 @@ template <typename S> struct OperatorFunctions {
 #endif
         // avoid possible int32 overflow
         for (int j = 0; j < mats[i]->n; j++)
-            MatrixFunctions::iadd(
-                MatrixRef((*mats[i])[j]->data, 1,
-                          (MKL_INT)(*mats[i])[j]->total_memory),
-                MatrixRef((*mats[m])[j]->data, 1,
-                          (MKL_INT)(*mats[m])[j]->total_memory),
+            GMatrixFunctions<FL>::iadd(
+                GMatrix<FL>((*mats[i])[j]->data, 1,
+                            (MKL_INT)(*mats[i])[j]->total_memory),
+                GMatrix<FL>((*mats[m])[j]->data, 1,
+                            (MKL_INT)(*mats[m])[j]->total_memory),
                 1.0);
     }
     // a += b * scale
-    virtual void iadd(const shared_ptr<SparseMatrix<S>> &a,
-                      const shared_ptr<SparseMatrix<S>> &b, double scale = 1.0,
+    virtual void iadd(const shared_ptr<SparseMatrix<S, FL>> &a,
+                      const shared_ptr<SparseMatrix<S, FL>> &b, FL scale = 1.0,
                       bool conj = false) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
         if (a->info == b->info && !conj) {
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked) {
-                seq->iadd(MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
-                          MatrixRef(b->data, 1, (MKL_INT)b->total_memory),
+                seq->iadd(GMatrix<FL>(a->data, 1, (MKL_INT)a->total_memory),
+                          GMatrix<FL>(b->data, 1, (MKL_INT)b->total_memory),
                           scale * b->factor, a->factor);
                 a->factor = 1.0;
             } else {
                 if (a->factor != 1.0) {
-                    MatrixFunctions::iscale(
-                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
+                    GMatrixFunctions<FL>::iscale(
+                        GMatrix<FL>(a->data, 1, (MKL_INT)a->total_memory),
                         a->factor);
                     a->factor = 1.0;
                 }
                 if (scale != 0.0)
-                    MatrixFunctions::iadd(
-                        MatrixRef(a->data, 1, (MKL_INT)a->total_memory),
-                        MatrixRef(b->data, 1, (MKL_INT)b->total_memory),
+                    GMatrixFunctions<FL>::iadd(
+                        GMatrix<FL>(a->data, 1, (MKL_INT)a->total_memory),
+                        GMatrix<FL>(b->data, 1, (MKL_INT)b->total_memory),
                         scale * b->factor);
             }
         } else {
@@ -162,7 +162,7 @@ template <typename S> struct OperatorFunctions {
                 S bq = conj ? bdq.combine(ket, bra) : bdq.combine(bra, ket);
                 if (bq != S(S::invalid) &&
                     ((ib = b->info->find_state(bq)) != -1)) {
-                    double factor = scale * b->factor;
+                    FL factor = scale * b->factor;
                     if (conj)
                         factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
                                                    ket.twos());
@@ -171,21 +171,21 @@ template <typename S> struct OperatorFunctions {
                         seq->iadd((*a)[ia], (*b)[ib], factor, a->factor, conj);
                     else {
                         if (a->factor != 1.0)
-                            MatrixFunctions::iscale((*a)[ia], a->factor);
+                            GMatrixFunctions<FL>::iscale((*a)[ia], a->factor);
                         if (factor != 0.0)
-                            MatrixFunctions::iadd((*a)[ia], (*b)[ib], factor,
-                                                  conj);
+                            GMatrixFunctions<FL>::iadd((*a)[ia], (*b)[ib],
+                                                       factor, conj);
                     }
                 }
             }
             a->factor = 1;
         }
     }
-    virtual void tensor_rotate(const shared_ptr<SparseMatrix<S>> &a,
-                               const shared_ptr<SparseMatrix<S>> &c,
-                               const shared_ptr<SparseMatrix<S>> &rot_bra,
-                               const shared_ptr<SparseMatrix<S>> &rot_ket,
-                               bool trans, double scale = 1.0) const {
+    virtual void tensor_rotate(const shared_ptr<SparseMatrix<S, FL>> &a,
+                               const shared_ptr<SparseMatrix<S, FL>> &c,
+                               const shared_ptr<SparseMatrix<S, FL>> &rot_bra,
+                               const shared_ptr<SparseMatrix<S, FL>> &rot_ket,
+                               bool trans, FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
                rot_bra->get_type() == SparseMatrixTypes::Normal &&
@@ -207,17 +207,19 @@ template <typename S> struct OperatorFunctions {
                 seq->rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra], !trans,
                             (*rot_ket)[iket], trans, scale);
             else
-                MatrixFunctions::rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra],
-                                        !trans, (*rot_ket)[iket], trans, scale);
+                GMatrixFunctions<FL>::rotate((*a)[ia], (*c)[ic],
+                                             (*rot_bra)[ibra], !trans,
+                                             (*rot_ket)[iket], trans, scale);
         }
         if (seq->mode & SeqTypes::Simple)
             seq->simple_perform();
     }
-    virtual void tensor_product_diagonal(uint8_t conj,
-                                         const shared_ptr<SparseMatrix<S>> &a,
-                                         const shared_ptr<SparseMatrix<S>> &b,
-                                         const shared_ptr<SparseMatrix<S>> &c,
-                                         S opdq, double scale = 1.0) const {
+    virtual void
+    tensor_product_diagonal(uint8_t conj,
+                            const shared_ptr<SparseMatrix<S, FL>> &a,
+                            const shared_ptr<SparseMatrix<S, FL>> &b,
+                            const shared_ptr<SparseMatrix<S, FL>> &c, S opdq,
+                            FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
@@ -243,19 +245,19 @@ template <typename S> struct OperatorFunctions {
                 seq->tensor_product_diagonal((*a)[ia], (*b)[ib], (*c)[ic],
                                              scale * factor);
             else
-                MatrixFunctions::tensor_product_diagonal(
+                GMatrixFunctions<FL>::tensor_product_diagonal(
                     (*a)[ia], (*b)[ib], (*c)[ic], scale * factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
     }
     virtual void three_tensor_product_diagonal(
-        uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
-        const shared_ptr<SparseMatrix<S>> &b,
-        const shared_ptr<SparseMatrix<S>> &c, uint8_t dconj,
-        const shared_ptr<SparseMatrix<S>> &da,
-        const shared_ptr<SparseMatrix<S>> &db, bool dleft, S opdq,
-        double scale = 1.0) const {
+        uint8_t conj, const shared_ptr<SparseMatrix<S, FL>> &a,
+        const shared_ptr<SparseMatrix<S, FL>> &b,
+        const shared_ptr<SparseMatrix<S, FL>> &c, uint8_t dconj,
+        const shared_ptr<SparseMatrix<S, FL>> &da,
+        const shared_ptr<SparseMatrix<S, FL>> &db, bool dleft, S opdq,
+        FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -265,7 +267,7 @@ template <typename S> struct OperatorFunctions {
         assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        const shared_ptr<SparseMatrix<S>> dc = (dleft ? a : b);
+        const shared_ptr<SparseMatrix<S, FL>> dc = (dleft ? a : b);
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         S dadq = da->info->delta_quantum, dbdq = db->info->delta_quantum,
@@ -311,7 +313,7 @@ template <typename S> struct OperatorFunctions {
                         if (seq->mode == SeqTypes::Simple)
                             break;
                     } else
-                        MatrixFunctions::three_tensor_product_diagonal(
+                        GMatrixFunctions<FL>::three_tensor_product_diagonal(
                             (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
                             (*db)[idb], (dconj & 2) >> 1, dleft,
                             scale * factor * dfactor, stride);
@@ -350,11 +352,11 @@ template <typename S> struct OperatorFunctions {
     // b = < v | a | c >
     virtual void
     tensor_partial_expectation(uint8_t conj,
-                               const shared_ptr<SparseMatrix<S>> &a,
-                               const shared_ptr<SparseMatrix<S>> &b,
-                               const shared_ptr<SparseMatrix<S>> &c,
-                               const shared_ptr<SparseMatrix<S>> &v, S opdq,
-                               double scale = 1.0) const {
+                               const shared_ptr<SparseMatrix<S, FL>> &a,
+                               const shared_ptr<SparseMatrix<S, FL>> &b,
+                               const shared_ptr<SparseMatrix<S, FL>> &c,
+                               const shared_ptr<SparseMatrix<S, FL>> &v, S opdq,
+                               FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -395,7 +397,7 @@ template <typename S> struct OperatorFunctions {
                 seq->rotate((*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv],
                             (*c)[ic], scale * factor);
             else
-                seq->cumulative_nflop += MatrixFunctions::rotate(
+                seq->cumulative_nflop += GMatrixFunctions<FL>::rotate(
                     (*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv], (*c)[ic],
                     scale * factor);
         }
@@ -403,13 +405,12 @@ template <typename S> struct OperatorFunctions {
             seq->simple_perform();
     }
     // v = (a x b) @ c
-    virtual void
-    tensor_product_multiply(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
-                            const shared_ptr<SparseMatrix<S>> &b,
-                            const shared_ptr<SparseMatrix<S>> &c,
-                            const shared_ptr<SparseMatrix<S>> &v, S opdq,
-                            double scale = 1.0,
-                            TraceTypes tt = TraceTypes::None) const {
+    virtual void tensor_product_multiply(
+        uint8_t conj, const shared_ptr<SparseMatrix<S, FL>> &a,
+        const shared_ptr<SparseMatrix<S, FL>> &b,
+        const shared_ptr<SparseMatrix<S, FL>> &c,
+        const shared_ptr<SparseMatrix<S, FL>> &v, S opdq, FL scale = 1.0,
+        TraceTypes tt = TraceTypes::None) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -442,7 +443,7 @@ template <typename S> struct OperatorFunctions {
                     seq->rotate((*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                 (*b)[ib], !(conj & 2), scale * factor);
                 else
-                    seq->cumulative_nflop += MatrixFunctions::rotate(
+                    seq->cumulative_nflop += GMatrixFunctions<FL>::rotate(
                         (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*b)[ib],
                         !(conj & 2), scale * factor);
                 break;
@@ -451,18 +452,18 @@ template <typename S> struct OperatorFunctions {
                     seq->multiply((*c)[ic], false, (*b)[ib], !(conj & 2),
                                   (*v)[iv], scale * factor, 1.0);
                 else
-                    MatrixFunctions::multiply((*c)[ic], false, (*b)[ib],
-                                              !(conj & 2), (*v)[iv],
-                                              scale * factor, 1.0);
+                    GMatrixFunctions<FL>::multiply((*c)[ic], false, (*b)[ib],
+                                                   !(conj & 2), (*v)[iv],
+                                                   scale * factor, 1.0);
                 break;
             case TraceTypes::Right:
                 if (seq->mode != SeqTypes::None)
                     seq->multiply((*a)[ia], conj & 1, (*c)[ic], false, (*v)[iv],
                                   scale * factor, 1.0);
                 else
-                    MatrixFunctions::multiply((*a)[ia], conj & 1, (*c)[ic],
-                                              false, (*v)[iv], scale * factor,
-                                              1.0);
+                    GMatrixFunctions<FL>::multiply((*a)[ia], conj & 1, (*c)[ic],
+                                                   false, (*v)[iv],
+                                                   scale * factor, 1.0);
                 break;
             default:
                 assert(false);
@@ -472,13 +473,13 @@ template <typename S> struct OperatorFunctions {
             seq->simple_perform();
     }
     virtual void three_tensor_product_multiply(
-        uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
-        const shared_ptr<SparseMatrix<S>> &b,
-        const shared_ptr<SparseMatrix<S>> &c,
-        const shared_ptr<SparseMatrix<S>> &v, uint8_t dconj,
-        const shared_ptr<SparseMatrix<S>> &da,
-        const shared_ptr<SparseMatrix<S>> &db, bool dleft, S opdq,
-        double scale = 1.0, TraceTypes tt = TraceTypes::None) const {
+        uint8_t conj, const shared_ptr<SparseMatrix<S, FL>> &a,
+        const shared_ptr<SparseMatrix<S, FL>> &b,
+        const shared_ptr<SparseMatrix<S, FL>> &c,
+        const shared_ptr<SparseMatrix<S, FL>> &v, uint8_t dconj,
+        const shared_ptr<SparseMatrix<S, FL>> &da,
+        const shared_ptr<SparseMatrix<S, FL>> &db, bool dleft, S opdq,
+        FL scale = 1.0, TraceTypes tt = TraceTypes::None) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal &&
@@ -490,7 +491,7 @@ template <typename S> struct OperatorFunctions {
         assert(v->factor == 1.0);
         if (abs(scale) < TINY)
             return;
-        const shared_ptr<SparseMatrix<S>> dc = (dleft ? a : b);
+        const shared_ptr<SparseMatrix<S, FL>> dc = (dleft ? a : b);
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
         S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
         S dadq = da->info->delta_quantum, dbdq = db->info->delta_quantum,
@@ -542,7 +543,7 @@ template <typename S> struct OperatorFunctions {
                                               scale * factor * dfactor, stride);
                         else
                             seq->cumulative_nflop +=
-                                MatrixFunctions::three_rotate(
+                                GMatrixFunctions<FL>::three_rotate(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
@@ -557,7 +558,7 @@ template <typename S> struct OperatorFunctions {
                                 scale * factor * dfactor, stride);
                         else
                             seq->cumulative_nflop +=
-                                MatrixFunctions::three_rotate_tr_left(
+                                GMatrixFunctions<FL>::three_rotate_tr_left(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
@@ -572,7 +573,7 @@ template <typename S> struct OperatorFunctions {
                                 scale * factor * dfactor, stride);
                         else
                             seq->cumulative_nflop +=
-                                MatrixFunctions::three_rotate_tr_right(
+                                GMatrixFunctions<FL>::three_rotate_tr_right(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
@@ -592,10 +593,10 @@ template <typename S> struct OperatorFunctions {
         }
     }
     virtual void tensor_product(uint8_t conj,
-                                const shared_ptr<SparseMatrix<S>> &a,
-                                const shared_ptr<SparseMatrix<S>> &b,
-                                const shared_ptr<SparseMatrix<S>> &c,
-                                double scale = 1.0) const {
+                                const shared_ptr<SparseMatrix<S, FL>> &a,
+                                const shared_ptr<SparseMatrix<S, FL>> &b,
+                                const shared_ptr<SparseMatrix<S, FL>> &c,
+                                FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
@@ -624,18 +625,18 @@ template <typename S> struct OperatorFunctions {
                                     (conj & 2) >> 1, (*c)[ic], scale * factor,
                                     stride);
             else
-                MatrixFunctions::tensor_product((*a)[ia], conj & 1, (*b)[ib],
-                                                (conj & 2) >> 1, (*c)[ic],
-                                                scale * factor, stride);
+                GMatrixFunctions<FL>::tensor_product(
+                    (*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*c)[ic],
+                    scale * factor, stride);
         }
         if (seq->mode & SeqTypes::Simple)
             seq->simple_perform();
     }
     // c = a * b * scale
-    void product(uint8_t conj, const shared_ptr<SparseMatrix<S>> &a,
-                 const shared_ptr<SparseMatrix<S>> &b,
-                 const shared_ptr<SparseMatrix<S>> &c,
-                 double scale = 1.0) const {
+    void product(uint8_t conj, const shared_ptr<SparseMatrix<S, FL>> &a,
+                 const shared_ptr<SparseMatrix<S, FL>> &b,
+                 const shared_ptr<SparseMatrix<S, FL>> &c,
+                 FL scale = 1.0) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
@@ -678,42 +679,41 @@ template <typename S> struct OperatorFunctions {
                                 factor *= cg->transpose_cg((-sbdq).twos(),
                                                            aqprime.twos(),
                                                            cqprime.twos());
-                            MatrixFunctions::multiply((*a)[ia], cja, (*b)[ib],
-                                                      cjb, (*c)[ic],
-                                                      scale * factor, 1.0);
+                            GMatrixFunctions<FL>::multiply(
+                                (*a)[ia], cja, (*b)[ib], cjb, (*c)[ic],
+                                scale * factor, 1.0);
                         }
                     }
                 }
             }
         }
     }
-    virtual double dot_product(const shared_ptr<SparseMatrix<S>> &a,
-                               const shared_ptr<SparseMatrix<S>> &b,
-                               double scale = 1.0) {
+    virtual FL dot_product(const shared_ptr<SparseMatrix<S, FL>> &a,
+                           const shared_ptr<SparseMatrix<S, FL>> &b,
+                           FL scale = 1.0) {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
         assert(a->total_memory == b->total_memory);
-        double r = 0;
-        MatrixRef amat(a->data, (MKL_INT)a->total_memory, 1);
-        MatrixRef bmat(b->data, (MKL_INT)b->total_memory, 1);
+        GMatrix<FL> amat(a->data, (MKL_INT)a->total_memory, 1);
+        GMatrix<FL> bmat(b->data, (MKL_INT)b->total_memory, 1);
         seq->cumulative_nflop += a->total_memory;
-        return MatrixFunctions::dot(amat, bmat) * scale;
+        return GMatrixFunctions<FL>::dot(amat, bmat) * scale;
     }
     // Product with transposed tensor: [a] x [b]^T or [a]^T x [b]
     static void
-    trans_product(const shared_ptr<SparseMatrix<S>> &a,
-                  const shared_ptr<SparseMatrix<S>> &b, bool trace_right,
-                  double noise = 0.0,
+    trans_product(const shared_ptr<SparseMatrix<S, FL>> &a,
+                  const shared_ptr<SparseMatrix<S, FL>> &b, bool trace_right,
+                  FL noise = 0.0,
                   NoiseTypes noise_type = NoiseTypes::DensityMatrix) {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
-        double scale = a->factor * a->factor, noise_scale = 0;
+        FL scale = a->factor * a->factor, noise_scale = 0;
         assert(b->factor == 1.0);
         if (abs(scale) < TINY &&
             (noise == 0.0 || (!(noise_type & NoiseTypes::Wavefunction) &&
                               !(noise_type & NoiseTypes::DensityMatrix))))
             return;
-        SparseMatrix<S> tmp;
+        SparseMatrix<S, FL> tmp;
         if (noise != 0 && (noise_type & NoiseTypes::Wavefunction)) {
             tmp.allocate(a->info);
             tmp.randomize(-0.5, 0.5);
@@ -730,14 +730,15 @@ template <typename S> struct OperatorFunctions {
                 int ib = b->info->find_state(qb);
                 if (ib == -1)
                     continue;
-                MatrixFunctions::multiply((*a)[ia], false, (*a)[ia], true,
-                                          (*b)[ib], scale, 1.0);
+                GMatrixFunctions<FL>::multiply((*a)[ia], false, (*a)[ia], true,
+                                               (*b)[ib], scale, 1.0);
                 if (noise_scale != 0 && (noise_type & NoiseTypes::Wavefunction))
-                    MatrixFunctions::multiply(tmp[ia], false, tmp[ia], true,
-                                              (*b)[ib], noise_scale, 1.0);
+                    GMatrixFunctions<FL>::multiply(tmp[ia], false, tmp[ia],
+                                                   true, (*b)[ib], noise_scale,
+                                                   1.0);
                 else if (noise_scale != 0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
-                    MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
+                    GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         else
             for (int ia = 0; ia < a->info->n; ia++) {
@@ -745,14 +746,15 @@ template <typename S> struct OperatorFunctions {
                 int ib = b->info->find_state(qb);
                 if (ib == -1)
                     continue;
-                MatrixFunctions::multiply((*a)[ia], true, (*a)[ia], false,
-                                          (*b)[ib], scale, 1.0);
+                GMatrixFunctions<FL>::multiply((*a)[ia], true, (*a)[ia], false,
+                                               (*b)[ib], scale, 1.0);
                 if (noise_scale != 0 && (noise_type & NoiseTypes::Wavefunction))
-                    MatrixFunctions::multiply(tmp[ia], true, tmp[ia], false,
-                                              (*b)[ib], noise_scale, 1.0);
+                    GMatrixFunctions<FL>::multiply(tmp[ia], true, tmp[ia],
+                                                   false, (*b)[ib], noise_scale,
+                                                   1.0);
                 else if (noise_scale != 0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
-                    MatrixFunctions::iadd((*b)[ib], tmp[ib], noise_scale);
+                    GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
             }
         if (noise != 0)
             tmp.deallocate();

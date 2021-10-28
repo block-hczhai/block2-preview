@@ -39,9 +39,9 @@ TEST_F(TestMatrix, TestRotate) {
         MatrixRef a(dalloc_()->allocate(nb * mk), nb, mk);
         MatrixRef c(dalloc_()->allocate(mb * nk), mb, nk);
         MatrixRef ba(dalloc_()->allocate(mb * mk), mb, mk);
-        Random::fill_rand_double(k.data, k.size());
-        Random::fill_rand_double(b.data, b.size());
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(k.data, k.size());
+        Random::fill<double>(b.data, b.size());
+        Random::fill<double>(a.data, a.size());
         bool conjk = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
         MatrixRef tk = k, tb = b;
@@ -90,8 +90,8 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
         MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
         MatrixRef c(dalloc_()->allocate(ma * nb), ma, nb);
-        Random::fill_rand_double(a.data, a.size());
-        Random::fill_rand_double(b.data, b.size());
+        Random::fill<double>(a.data, a.size());
+        Random::fill<double>(b.data, b.size());
         c.clear();
         MatrixFunctions::tensor_product_diagonal(a, b, c, 2.0);
         for (MKL_INT ia = 0; ia < ma; ia++)
@@ -104,7 +104,8 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
 }
 
 TEST_F(TestMatrix, TestThreeRotate) {
-    shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(0, SeqTypes::None);
+    shared_ptr<BatchGEMMSeq<double>> seq =
+        make_shared<BatchGEMMSeq<double>>(0, SeqTypes::None);
     const int sz = 200;
     for (int i = 0; i < n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
@@ -128,9 +129,9 @@ TEST_F(TestMatrix, TestThreeRotate) {
         MatrixRef a(dalloc_()->allocate(nb * mk), nb, mk);
         MatrixRef c(dalloc_()->allocate(mb * nk), mb, nk);
         MatrixRef cc(dalloc_()->allocate(mb * nk), mb, nk);
-        Random::fill_rand_double(da.data, da.size());
-        Random::fill_rand_double(db.data, db.size());
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(da.data, da.size());
+        Random::fill<double>(db.data, db.size());
+        Random::fill<double>(a.data, a.size());
         MKL_INT dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
         MKL_INT dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
         if (conjb)
@@ -170,7 +171,7 @@ TEST_F(TestMatrix, TestThreeRotate) {
 }
 
 TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
-    shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
+    shared_ptr<BatchGEMM<double>> batch = make_shared<BatchGEMM<double>>();
     for (int i = 0; i < n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
         MKL_INT ll = Random::rand_int(0, 2);
@@ -191,8 +192,8 @@ TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
         MatrixRef cc(dalloc_()->allocate(mdc * mx), mdc, mx);
         if (!ll)
             c = c.flip_dims(), cc = cc.flip_dims();
-        Random::fill_rand_double(da.data, da.size());
-        Random::fill_rand_double(db.data, db.size());
+        Random::fill<double>(da.data, da.size());
+        Random::fill<double>(db.data, db.size());
         MKL_INT dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
         MKL_INT dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
         dcn_stride = dcm_stride;
@@ -224,7 +225,7 @@ TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
 }
 
 TEST_F(TestMatrix, TestTensorProduct) {
-    shared_ptr<BatchGEMM> batch = make_shared<BatchGEMM>();
+    shared_ptr<BatchGEMM<double>> batch = make_shared<BatchGEMM<double>>();
     for (int i = 0; i < n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 3), jj = Random::rand_int(0, 2);
         MKL_INT ma = Random::rand_int(1, 700), na = Random::rand_int(1, 700);
@@ -241,8 +242,8 @@ TEST_F(TestMatrix, TestTensorProduct) {
         MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
         MatrixRef c(dalloc_()->allocate(mc * nc), mc, nc);
-        Random::fill_rand_double(a.data, a.size());
-        Random::fill_rand_double(b.data, b.size());
+        Random::fill<double>(a.data, a.size());
+        Random::fill<double>(b.data, b.size());
         c.clear();
         bool conja = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
@@ -297,8 +298,8 @@ TEST_F(TestMatrix, TestExponential) {
         MatrixRef v(dalloc_()->allocate(n), n, 1);
         MatrixRef u(dalloc_()->allocate(n), n, 1);
         MatrixRef w(dalloc_()->allocate(n), n, 1);
-        Random::fill_rand_double(a.data, a.size());
-        Random::fill_rand_double(v.data, v.size());
+        Random::fill<double>(a.data, a.size());
+        Random::fill<double>(v.data, v.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = a(ki, kj);
@@ -339,7 +340,7 @@ TEST_F(TestMatrix, TestHarmonicDavidson) {
         DiagonalMatrix aa(dalloc_()->allocate(n), n);
         DiagonalMatrix ww(dalloc_()->allocate(n), n);
         vector<MatrixRef> bs(k, MatrixRef(nullptr, n, 1));
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = a(ki, kj);
@@ -420,7 +421,7 @@ TEST_F(TestMatrix, TestDavidson) {
         DiagonalMatrix aa(dalloc_()->allocate(n), n);
         DiagonalMatrix ww(dalloc_()->allocate(n), n);
         vector<MatrixRef> bs(k, MatrixRef(nullptr, n, 1));
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = a(ki, kj);
@@ -466,9 +467,9 @@ TEST_F(TestMatrix, TestMinRes) {
         MatrixRef b(dalloc_()->allocate(n * m), n, m);
         MatrixRef x(dalloc_()->allocate(n * m), n, m);
         MatrixRef xg(dalloc_()->allocate(n * m), n, m);
-        Random::fill_rand_double(a.data, a.size());
-        Random::fill_rand_double(b.data, b.size());
-        Random::fill_rand_double(xg.data, xg.size());
+        Random::fill<double>(a.data, a.size());
+        Random::fill<double>(b.data, b.size());
+        Random::fill<double>(xg.data, xg.size());
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(ki, kj) = a(kj, ki);
@@ -497,8 +498,8 @@ TEST_F(TestMatrix, TestLinear) {
         MatrixRef b(dalloc_()->allocate(n * m), n, m);
         MatrixRef bg(dalloc_()->allocate(n * m), n, m);
         MatrixRef x(dalloc_()->allocate(n * m), n, m);
-        Random::fill_rand_double(a.data, a.size());
-        Random::fill_rand_double(b.data, b.size());
+        Random::fill<double>(a.data, a.size());
+        Random::fill<double>(b.data, b.size());
         MatrixFunctions::copy(af, a);
         MatrixFunctions::copy(x, b);
         MatrixFunctions::linear(af, x);
@@ -518,7 +519,7 @@ TEST_F(TestMatrix, TestInverse) {
         MatrixRef a(dalloc_()->allocate(m * m), m, m);
         MatrixRef af(dalloc_()->allocate(m * m), m, m);
         MatrixRef idt(dalloc_()->allocate(m * m), m, m);
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         MatrixFunctions::copy(af, a);
         MatrixFunctions::inverse(a);
         MatrixFunctions::multiply(a, false, af, false, idt, 1.0, 0.0);
@@ -542,9 +543,9 @@ TEST_F(TestMatrix, TestCG) {
         MatrixRef b(dalloc_()->allocate(n * m), n, m);
         MatrixRef x(dalloc_()->allocate(n * m), n, m);
         MatrixRef xg(dalloc_()->allocate(n * m), n, m);
-        Random::fill_rand_double(af.data, af.size());
-        Random::fill_rand_double(b.data, b.size());
-        Random::fill_rand_double(xg.data, xg.size());
+        Random::fill<double>(af.data, af.size());
+        Random::fill<double>(b.data, b.size());
+        Random::fill<double>(xg.data, xg.size());
         MatrixFunctions::multiply(af, false, af, true, a, 1.0, 0.0);
         for (MKL_INT ki = 0; ki < m; ki++)
             a(ki, ki) += eta, aa(ki, ki) = a(ki, ki);
@@ -578,9 +579,9 @@ TEST_F(TestMatrix, TestDeflatedCG) {
         MatrixRef b(dalloc_()->allocate(n * m), n, m);
         MatrixRef x(dalloc_()->allocate(n * m), n, m);
         MatrixRef xg(dalloc_()->allocate(n * m), n, m);
-        Random::fill_rand_double(af.data, af.size());
-        Random::fill_rand_double(b.data, b.size());
-        Random::fill_rand_double(xg.data, xg.size());
+        Random::fill<double>(af.data, af.size());
+        Random::fill<double>(b.data, b.size());
+        Random::fill<double>(xg.data, xg.size());
         MatrixFunctions::multiply(af, false, af, true, a, 1.0, 0.0);
         for (MKL_INT ki = 0; ki < m; ki++)
             a(ki, ki) += eta;
@@ -615,7 +616,7 @@ TEST_F(TestMatrix, TestEigs) {
         MatrixRef ap(dalloc_()->allocate(m * m), m, m);
         MatrixRef ag(dalloc_()->allocate(m * m), m, m);
         DiagonalMatrix w(dalloc_()->allocate(m), m);
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj <= ki; kj++)
                 ap(ki, kj) = ap(kj, ki) = a(ki, kj);
@@ -645,7 +646,7 @@ TEST_F(TestMatrix, TestSVD) {
         shared_ptr<Tensor> kk = make_shared<Tensor>(vector<MKL_INT>{k, k});
         shared_ptr<Tensor> ll = make_shared<Tensor>(vector<MKL_INT>{m, m});
         shared_ptr<Tensor> rr = make_shared<Tensor>(vector<MKL_INT>{n, n});
-        Random::fill_rand_double(a->data.data(), a->size());
+        Random::fill<double>(a->data.data(), a->size());
         MatrixFunctions::copy(aa->ref(), a->ref());
         if (Random::rand_int(0, 2))
             MatrixFunctions::accurate_svd(a->ref(), l->ref(),
@@ -692,7 +693,7 @@ TEST_F(TestMatrix, TestQR) {
         MKL_INT k = min(m, n);
         MatrixRef a(dalloc_()->allocate(m * n), m, n);
         MatrixRef qr(dalloc_()->allocate(m * n), m, n);
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         MatrixRef q(dalloc_()->allocate(m * k), m, k);
         MatrixRef qq(dalloc_()->allocate(m * m), m, m);
         MatrixRef qqk(dalloc_()->allocate(k * k), k, k);
@@ -724,7 +725,7 @@ TEST_F(TestMatrix, TestLQ) {
         MKL_INT k = min(m, n);
         MatrixRef a(dalloc_()->allocate(m * n), m, n);
         MatrixRef lq(dalloc_()->allocate(m * n), m, n);
-        Random::fill_rand_double(a.data, a.size());
+        Random::fill<double>(a.data, a.size());
         MatrixRef l(dalloc_()->allocate(m * k), m, k);
         MatrixRef q(dalloc_()->allocate(n * k), k, n);
         MatrixRef qq(dalloc_()->allocate(n * n), n, n);

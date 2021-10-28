@@ -10,11 +10,11 @@ class TestAncillaH8STO6G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_imag_te(int n_sites, int n_physical_sites, S target,
                       const vector<double> &energies_fted,
                       const vector<double> &energies_m500,
-                      const shared_ptr<HamiltonianQC<S>> &hamil,
+                      const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                       const string &name);
     void SetUp() override {
         Random::rand_seed(0);
@@ -32,37 +32,36 @@ class TestAncillaH8STO6G : public ::testing::Test {
     }
 };
 
-template <typename S>
-void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
-                                      S target,
-                                      const vector<double> &energies_fted,
-                                      const vector<double> &energies_m500,
-                                      const shared_ptr<HamiltonianQC<S>> &hamil,
-                                      const string &name) {
+template <typename S, typename FL>
+void TestAncillaH8STO6G::test_imag_te(
+    int n_sites, int n_physical_sites, S target,
+    const vector<double> &energies_fted, const vector<double> &energies_m500,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name) {
 
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // Ancilla MPO construction
     cout << "Ancilla MPO start" << endl;
-    mpo = make_shared<AncillaMPO<S>>(mpo, false, true);
+    mpo = make_shared<AncillaMPO<S, FL>>(mpo, false, true);
     cout << "Ancilla MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim =
         (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max());
-    double beta = 0.05;
+    FL beta = 0.05;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> te_energies;
+    vector<FL> te_energies;
 
     // Ancilla MPSInfo (thermal)
     Random::rand_seed(0);
@@ -74,8 +73,8 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mps_info_thermal->tag = "KET";
 
     // Ancilla MPS (thermal)
-    shared_ptr<MPS<S>> mps_thermal =
-        make_shared<MPS<S>>(n_sites, n_sites - 2, 2);
+    shared_ptr<MPS<S, FL>> mps_thermal =
+        make_shared<MPS<S, FL>>(n_sites, n_sites - 2, 2);
     mps_thermal->initialize(mps_info_thermal);
     mps_thermal->fill_thermal_limit();
 
@@ -86,16 +85,18 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
     mps_info_thermal->deallocate_mutable();
 
     // TE ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps_thermal, mps_thermal, "TE");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps_thermal, mps_thermal,
+                                                  "TE");
     me->init_environments(false);
 
-    shared_ptr<Expect<S>> ex = make_shared<Expect<S>>(me, bond_dim, bond_dim);
+    shared_ptr<Expect<S, FL, FL>> ex =
+        make_shared<Expect<S, FL, FL>>(me, bond_dim, bond_dim);
     te_energies.push_back(ex->solve(false));
 
     // Imaginary TE
-    shared_ptr<TimeEvolution<S>> te =
-        make_shared<TimeEvolution<S>>(me, bdims, TETypes::RK4);
+    shared_ptr<TimeEvolution<S, FL, FL>> te =
+        make_shared<TimeEvolution<S, FL, FL>>(me, bdims, TETypes::RK4);
     te->iprint = 2;
     te->n_sub_sweeps = 6;
     te->solve(1, beta / 2, mps_thermal->center == 0);
@@ -127,7 +128,7 @@ void TestAncillaH8STO6G::test_imag_te(int n_sites, int n_physical_sites,
 }
 
 TEST_F(TestAncillaH8STO6G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
@@ -152,20 +153,21 @@ TEST_F(TestAncillaH8STO6G, TestSU2) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
-        vacuum, n_physical_sites, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, n_physical_sites,
+                                                orbsym, fcidump);
     hamil->mu = -1.0;
     hamil->fcidump->const_e = 0.0;
 
-    test_imag_te<SU2>(n_sites, n_physical_sites, target, energies_fted,
-                      energies_m500, hamil, "SU2");
+    test_imag_te<SU2, double>(n_sites, n_physical_sites, target, energies_fted,
+                              energies_m500, hamil, "SU2");
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestAncillaH8STO6G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H8.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
@@ -190,13 +192,14 @@ TEST_F(TestAncillaH8STO6G, TestSZ) {
     int n_physical_sites = fcidump->n_sites();
     int n_sites = n_physical_sites * 2;
 
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
-        vacuum, n_physical_sites, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, n_physical_sites, orbsym,
+                                               fcidump);
     hamil->mu = -1.0;
     hamil->fcidump->const_e = 0.0;
 
-    test_imag_te<SZ>(n_sites, n_physical_sites, target, energies_fted,
-                     energies_m500, hamil, "SZ");
+    test_imag_te<SZ, double>(n_sites, n_physical_sites, target, energies_fted,
+                             energies_m500, hamil, "SZ");
 
     hamil->deallocate();
     fcidump->deallocate();

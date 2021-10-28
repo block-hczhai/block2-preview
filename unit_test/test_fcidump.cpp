@@ -12,7 +12,8 @@ class TestFCIDUMP : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8, 8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            8);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
@@ -24,12 +25,12 @@ class TestFCIDUMP : public ::testing::Test {
 };
 
 TEST_F(TestFCIDUMP, TestRead) {
-    FCIDUMP fcidump;
+    FCIDUMP<double> fcidump;
     string filename = "data/CR2.SVP.FCIDUMP";
     fcidump.read(filename);
     uint8_t cr2_orbsym[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5,
-                        5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
-                        6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
+                            5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
+                            6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
     vector<uint8_t> orbsym = fcidump.orb_sym<uint8_t>();
     EXPECT_TRUE(equal(orbsym.begin(), orbsym.end(), cr2_orbsym));
     EXPECT_EQ(fcidump.n_sites(), 42);
@@ -50,13 +51,13 @@ TEST_F(TestFCIDUMP, TestRead) {
 }
 
 TEST_F(TestFCIDUMP, TestCompressedRead) {
-    CompressedFCIDUMP fcidump(5E-16);
+    CompressedFCIDUMP<double> fcidump(5E-16);
     string filename = "data/CR2.SVP.FCIDUMP";
     fcidump.read(filename);
     fcidump.unfreeze();
     uint8_t cr2_orbsym[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 5,
-                        5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
-                        6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
+                            5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 2, 2, 6, 6,
+                            6, 6, 3, 3, 3, 3, 7, 7, 7, 7, 4, 4, 8, 8};
     vector<uint8_t> orbsym = fcidump.orb_sym<uint8_t>();
     EXPECT_TRUE(equal(orbsym.begin(), orbsym.end(), cr2_orbsym));
     EXPECT_EQ(fcidump.n_sites(), 42);
@@ -69,7 +70,8 @@ TEST_F(TestFCIDUMP, TestCompressedRead) {
     EXPECT_LT(abs(fcidump.cps_ts[0](0, 3) - 0.1592759388906264), 1E-15);
     EXPECT_EQ(fcidump.cps_ts[0](0, 3), fcidump.cps_ts[0](3, 0));
     EXPECT_EQ(fcidump.cps_ts[0](1, 3), 0.0);
-    EXPECT_LT(abs(fcidump.cps_vs[0](0, 2, 1, 1) - (-0.0000819523306820)), 1E-15);
+    EXPECT_LT(abs(fcidump.cps_vs[0](0, 2, 1, 1) - (-0.0000819523306820)),
+              1E-15);
     EXPECT_EQ(fcidump.cps_vs[0](0, 2, 1, 1), fcidump.cps_vs[0](2, 0, 1, 1));
     EXPECT_EQ(fcidump.cps_vs[0](0, 2, 1, 1), fcidump.cps_vs[0](1, 1, 0, 2));
     EXPECT_EQ(fcidump.cps_vs[0](0, 2, 1, 1), fcidump.cps_vs[0](1, 1, 2, 0));

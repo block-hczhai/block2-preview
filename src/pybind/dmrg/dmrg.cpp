@@ -20,6 +20,6 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_algorithms<SZ>(py::module &m);
-template void bind_algorithms<SU2>(py::module &m);
+template void bind_fl_dmrg<SZ, double, double>(py::module &m);
+template void bind_fl_dmrg<SU2, double, double>(py::module &m);
 

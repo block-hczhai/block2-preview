@@ -40,8 +40,8 @@ class TestLinearN2STO3G : public ::testing::Test {
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
 
-    template <typename S>
-    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+    template <typename S, typename FL>
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, int dot);
     void SetUp() override {
         Random::rand_seed(0);
@@ -61,9 +61,9 @@ class TestLinearN2STO3G : public ::testing::Test {
 
 bool TestLinearN2STO3G::_mpi = MPITest::okay();
 
-template <typename S>
+template <typename S, typename FL>
 void TestLinearN2STO3G::test_dmrg(S target,
-                                  const shared_ptr<HamiltonianQC<S>> &hamil,
+                                  const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                   const string &name, int dot) {
 
     double energy_std = -107.654122447525;
@@ -75,53 +75,54 @@ void TestLinearN2STO3G::test_dmrg(S target,
     shared_ptr<ParallelCommunicator<S>> para_comm =
         make_shared<ParallelCommunicator<S>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRule<S>> para_rule =
-        make_shared<ParallelRuleQC<S>>(para_comm);
-    shared_ptr<ParallelRule<S>> ident_rule =
-        make_shared<ParallelRuleIdentity<S>>(para_comm);
+    shared_ptr<ParallelRule<S, FL>> para_rule =
+        make_shared<ParallelRuleQC<S, FL>>(para_comm);
+    shared_ptr<ParallelRule<S, FL>> ident_rule =
+        make_shared<ParallelRuleIdentity<S, FL>>(para_comm);
 
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
     cout << "MPO parallelization start" << endl;
-    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    mpo = make_shared<ParallelMPO<S, FL>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> ntr_mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> ntr_mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification (no transpose)
     cout << "MPO simplification (no transpose) start" << endl;
-    ntr_mpo = make_shared<SimplifiedMPO<S>>(
-        ntr_mpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()),
+    ntr_mpo = make_shared<SimplifiedMPO<S, FL>>(
+        ntr_mpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
         true);
     cout << "MPO simplification (no transpose) end .. T = " << t.get_time()
          << endl;
 
     // MPO parallelization (no transpose)
     cout << "MPO parallelization (no transpose) start" << endl;
-    ntr_mpo = make_shared<ParallelMPO<S>>(ntr_mpo, para_rule);
+    ntr_mpo = make_shared<ParallelMPO<S, FL>>(ntr_mpo, para_rule);
     cout << "MPO parallelization (no transpose) end .. T = " << t.get_time()
          << endl;
 
     // Identity MPO
     cout << "Identity MPO start" << endl;
-    shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
-    impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
-    impo = make_shared<ParallelMPO<S>>(impo, ident_rule);
+    shared_ptr<MPO<S, FL>> impo = make_shared<IdentityMPO<S, FL>>(hamil);
+    impo = make_shared<SimplifiedMPO<S, FL>>(impo, make_shared<Rule<S, FL>>());
+    impo = make_shared<ParallelMPO<S, FL>>(impo, ident_rule);
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200, bra_bond_dim = 100;
@@ -138,7 +139,8 @@ void TestLinearN2STO3G::test_dmrg(S target,
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, dot);
+    shared_ptr<MPS<S, FL>> mps =
+        make_shared<MPS<S, FL>>(hamil->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -149,12 +151,13 @@ void TestLinearN2STO3G::test_dmrg(S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     me->init_environments(false);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
@@ -181,8 +184,8 @@ void TestLinearN2STO3G::test_dmrg(S target,
     imps_info->set_bond_dimension(bra_bond_dim);
     imps_info->tag = "BRA";
 
-    shared_ptr<MPS<S>> imps =
-        make_shared<MPS<S>>(hamil->n_sites, mps->center, dot);
+    shared_ptr<MPS<S, FL>> imps =
+        make_shared<MPS<S, FL>>(hamil->n_sites, mps->center, dot);
     imps->initialize(imps_info);
     imps->random_canonicalize();
 
@@ -193,13 +196,13 @@ void TestLinearN2STO3G::test_dmrg(S target,
     imps_info->deallocate_mutable();
 
     // Negative identity ME
-    shared_ptr<MovingEnvironment<S>> ime =
-        make_shared<MovingEnvironment<S>>(-impo, imps, mps, "COMPRESS");
+    shared_ptr<MovingEnvironment<S, FL, FL>> ime =
+        make_shared<MovingEnvironment<S, FL, FL>>(-impo, imps, mps, "COMPRESS");
     ime->init_environments();
 
     // Left ME
-    shared_ptr<MovingEnvironment<S>> lme =
-        make_shared<MovingEnvironment<S>>(mpo, imps, imps, "LINEAR");
+    shared_ptr<MovingEnvironment<S, FL, FL>> lme =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, imps, imps, "LINEAR");
     double ce = mpo->const_e;
     mpo->const_e = 0;
     lme->init_environments();
@@ -207,8 +210,8 @@ void TestLinearN2STO3G::test_dmrg(S target,
     // Linear
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = bdims;
     noises = {1E-4, 1E-6, 1E-8, 0};
-    shared_ptr<Linear<S>> cps =
-        make_shared<Linear<S>>(lme, ime, bra_bdims, ket_bdims, noises);
+    shared_ptr<Linear<S, FL, FL>> cps =
+        make_shared<Linear<S, FL, FL>>(lme, ime, bra_bdims, ket_bdims, noises);
     cps->noise_type = NoiseTypes::ReducedPerturbative;
     cps->decomp_type = DecompositionTypes::DensityMatrix;
     double norm = cps->solve(10, mps->center == 0, 1E-10);
@@ -216,12 +219,13 @@ void TestLinearN2STO3G::test_dmrg(S target,
     EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), dot == 1 ? 1E-4 : 1E-7);
 
     // Energy ME
-    shared_ptr<MovingEnvironment<S>> eme =
-        make_shared<MovingEnvironment<S>>(ntr_mpo, imps, mps, "EXPECT");
+    shared_ptr<MovingEnvironment<S, FL, FL>> eme =
+        make_shared<MovingEnvironment<S, FL, FL>>(ntr_mpo, imps, mps, "EXPECT");
     ntr_mpo->const_e = 0;
     eme->init_environments(false);
 
-    shared_ptr<Expect<S>> ex2 = make_shared<Expect<S>>(eme, bond_dim, bond_dim);
+    shared_ptr<Expect<S, FL, FL>> ex2 =
+        make_shared<Expect<S, FL, FL>>(eme, bond_dim, bond_dim);
     energy = ex2->solve(false);
 
     para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
@@ -249,7 +253,7 @@ void TestLinearN2STO3G::test_dmrg(S target,
 }
 
 TEST_F(TestLinearN2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -262,18 +266,18 @@ TEST_F(TestLinearN2STO3G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
-    test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
+    test_dmrg<SU2, double>(target, hamil, "SU2/2-site", 2);
+    test_dmrg<SU2, double>(target, hamil, "SU2/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestLinearN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -288,11 +292,11 @@ TEST_F(TestLinearN2STO3G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil =
-        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
-    test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
+    test_dmrg<SZ, double>(target, hamil, "SZ/2-site", 2);
+    test_dmrg<SZ, double>(target, hamil, "SZ/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();

@@ -23,6 +23,7 @@
 #include "allocator.hpp"
 #include "matrix.hpp"
 #include "matrix_functions.hpp"
+#include "complex_matrix_functions.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iomanip>
@@ -35,37 +36,45 @@ using namespace std;
 namespace block2 {
 
 // Compressed-Sparse-Row matrix
-struct CSRMatrixRef {
-    shared_ptr<Allocator<double>> alloc = nullptr;
+template <typename FL> struct GCSRMatrix {
+    typedef typename GMatrix<FL>::FP FP;
+    static const int cpx_sz = sizeof(FL) / sizeof(FP);
+    shared_ptr<Allocator<FP>> alloc = nullptr;
     MKL_INT m, n, nnz; // m is rows, n is cols, nnz is number of nonzeros
-    double *data;
+    FL *data;
     MKL_INT *rows, *cols;
-    CSRMatrixRef()
+    GCSRMatrix()
         : m(0), n(0), nnz(0), data(nullptr), rows(nullptr), cols(nullptr) {}
-    CSRMatrixRef(MKL_INT m, MKL_INT n, MKL_INT nnz = 0) : m(m), n(n), nnz(nnz) {
-        alloc = make_shared<VectorAllocator<double>>();
+    GCSRMatrix(MKL_INT m, MKL_INT n, MKL_INT nnz = 0) : m(m), n(n), nnz(nnz) {
+        alloc = make_shared<VectorAllocator<FP>>();
         allocate();
         if (nnz != size())
             memset(rows, 0, (m + 1) * sizeof(MKL_INT));
     }
-    CSRMatrixRef(MKL_INT m, MKL_INT n, MKL_INT nnz, double *data, MKL_INT *rows,
+    GCSRMatrix(MKL_INT m, MKL_INT n, MKL_INT nnz, FL *data, MKL_INT *rows,
                  MKL_INT *cols)
         : m(m), n(n), nnz(nnz), data(data), rows(rows), cols(cols) {}
     size_t size() const { return (size_t)m * n; }
     MKL_INT memory_size() const {
-        if (sizeof(MKL_INT) == 4)
+        if (sizeof(MKL_INT) + sizeof(MKL_INT) == sizeof(FL))
             return nnz == m * n ? nnz : nnz + ((nnz + m + 2) >> 1);
-        else
+        else if (sizeof(MKL_INT) == sizeof(FL))
             return nnz == m * n ? nnz : nnz + nnz + m + 1;
+        else if ((sizeof(MKL_INT) << 2) == sizeof(FL))
+            return nnz == m * n ? nnz : nnz + ((nnz + m + 4) >> 1);
+        else {
+            assert(false);
+            return 0;
+        }
     }
     void load_data(istream &ifs) {
         ifs.read((char *)&m, sizeof(m));
         ifs.read((char *)&n, sizeof(n));
         ifs.read((char *)&nnz, sizeof(nnz));
         if (alloc == nullptr)
-            alloc = make_shared<VectorAllocator<double>>();
+            alloc = make_shared<VectorAllocator<FP>>();
         allocate();
-        ifs.read((char *)data, sizeof(double) * nnz);
+        ifs.read((char *)data, sizeof(FL) * nnz);
         if (nnz != size()) {
             ifs.read((char *)cols, sizeof(MKL_INT) * nnz);
             ifs.read((char *)rows, sizeof(MKL_INT) * (m + 1));
@@ -76,16 +85,16 @@ struct CSRMatrixRef {
         ofs.write((char *)&m, sizeof(m));
         ofs.write((char *)&n, sizeof(n));
         ofs.write((char *)&nnz, sizeof(nnz));
-        ofs.write((char *)data, sizeof(double) * nnz);
+        ofs.write((char *)data, sizeof(FL) * nnz);
         if (nnz != size()) {
             ofs.write((char *)cols, sizeof(MKL_INT) * nnz);
             ofs.write((char *)rows, sizeof(MKL_INT) * m);
             ofs.write((char *)&nnz, sizeof(MKL_INT));
         }
     }
-    CSRMatrixRef
-    transpose(const shared_ptr<Allocator<double>> &alloc = nullptr) const {
-        CSRMatrixRef r(n, m, nnz, nullptr, nullptr, nullptr);
+    GCSRMatrix
+    transpose(const shared_ptr<Allocator<FP>> &alloc = nullptr) const {
+        GCSRMatrix r(n, m, nnz, nullptr, nullptr, nullptr);
         r.alloc = alloc;
         r.allocate();
         if (r.nnz != r.size()) {
@@ -106,15 +115,15 @@ struct CSRMatrixRef {
                 r.rows[ia] -= r.rows[ia] - (ia == 0 ? 0 : r.rows[ia - 1]);
         } else
             for (MKL_INT i = 0, inc = 1; i < n; i++)
-                dcopy(&m, data + i, &n, r.data + i * m, &inc);
+                xcopy<FL>(&m, data + i, &n, r.data + i * m, &inc);
         return r;
     }
-    double sparsity() const { return 1.0 - (double)nnz / (m * n); }
-    void allocate(double *ptr = nullptr) {
+    FP sparsity() const { return 1.0 - (FP)nnz / (m * n); }
+    void allocate(FL *ptr = nullptr) {
         if (ptr == nullptr) {
             if (alloc == nullptr)
                 alloc = dalloc;
-            data = alloc->allocate(memory_size());
+            data = (FL *)alloc->allocate(memory_size() * cpx_sz);
         } else
             data = ptr;
         if (nnz == size())
@@ -129,21 +138,21 @@ struct CSRMatrixRef {
             data = nullptr;
         else {
             assert(data != nullptr);
-            alloc->deallocate(data, memory_size());
+            alloc->deallocate(data, memory_size() * cpx_sz);
             alloc = nullptr;
             data = nullptr;
             cols = rows = nullptr;
         }
     }
-    MatrixRef dense_ref() const {
+    GMatrix<FL> dense_ref() const {
         assert(nnz == size());
-        return MatrixRef(data, m, n);
+        return GMatrix<FL>(data, m, n);
     }
-    CSRMatrixRef deep_copy() const {
-        CSRMatrixRef r(m, n, nnz, nullptr, nullptr, nullptr);
-        r.alloc = make_shared<VectorAllocator<double>>();
+    GCSRMatrix deep_copy() const {
+        GCSRMatrix r(m, n, nnz, nullptr, nullptr, nullptr);
+        r.alloc = make_shared<VectorAllocator<FP>>();
         r.allocate();
-        memcpy(r.data, data, nnz * sizeof(double));
+        memcpy(r.data, data, nnz * sizeof(FL));
         if (nnz != size()) {
             memcpy(r.cols, cols, nnz * sizeof(MKL_INT));
             memcpy(r.rows, rows, m * sizeof(MKL_INT));
@@ -151,7 +160,7 @@ struct CSRMatrixRef {
         }
         return r;
     }
-    friend ostream &operator<<(ostream &os, const CSRMatrixRef &mat) {
+    friend ostream &operator<<(ostream &os, const GCSRMatrix &mat) {
         if (mat.nnz == mat.size())
             os << "CSR-DENSE-" << mat.dense_ref();
         else {
@@ -171,14 +180,14 @@ struct CSRMatrixRef {
         return os;
     }
     // copy
-    void from_dense(const MatrixRef &mat, double cutoff = TINY) {
-        alloc = make_shared<VectorAllocator<double>>();
+    void from_dense(const GMatrix<FL> &mat, FP cutoff = TINY) {
+        alloc = make_shared<VectorAllocator<FP>>();
         m = mat.m, n = mat.n, nnz = 0;
         for (MKL_INT i = 0; i < mat.size(); i++)
             nnz += abs(mat.data[i]) > cutoff;
         allocate();
         if (nnz == size())
-            memcpy(data, mat.data, sizeof(double) * size());
+            memcpy(data, mat.data, sizeof(FL) * size());
         else {
             for (MKL_INT i = 0, k = 0; i < m; i++) {
                 rows[i] = k;
@@ -189,9 +198,9 @@ struct CSRMatrixRef {
             rows[m] = nnz;
         }
     }
-    void to_dense(MatrixRef mat) const {
+    void to_dense( GMatrix<FL> mat) const {
         if (nnz == size())
-            memcpy(mat.data, data, sizeof(double) * size());
+            memcpy(mat.data, data, sizeof(FL) * size());
         else {
             mat.clear();
             for (MKL_INT i = 0; i < m; i++) {
@@ -201,33 +210,35 @@ struct CSRMatrixRef {
             }
         }
     }
-    void diag(MatrixRef x) const {
+    void diag(GMatrix<FL> x) const {
         assert(m == n);
         if (nnz == size()) {
             const MKL_INT inc = 1, ind = n + 1;
-            dcopy(&m, data, &ind, x.data, &inc);
+            xcopy<FL>(&m, data, &ind, x.data, &inc);
         } else {
             x.clear();
             if (nnz != 0)
                 for (MKL_INT i = 0; i < m; i++) {
                     MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
-                    MKL_INT ic =
-                        (MKL_INT)(lower_bound(cols + rows[i], cols + rows_end, i) - cols);
+                    MKL_INT ic = (MKL_INT)(lower_bound(cols + rows[i],
+                                                       cols + rows_end, i) -
+                                           cols);
                     if (ic != rows_end && cols[ic] == i)
                         x.data[i] = data[ic];
                 }
         }
     }
-    double trace() const {
+    FL trace() const {
         assert(m == n);
         if (nnz == size())
             return dense_ref().trace();
         else {
-            double r = 0;
+            FL r = 0;
             for (MKL_INT i = 0; i < m; i++) {
                 MKL_INT rows_end = i == m - 1 ? nnz : rows[i + 1];
                 MKL_INT ic =
-                    (MKL_INT)(lower_bound(cols + rows[i], cols + rows_end, i) - cols);
+                    (MKL_INT)(lower_bound(cols + rows[i], cols + rows_end, i) -
+                              cols);
                 if (ic != rows_end && cols[ic] == i)
                     r += data[ic];
             }

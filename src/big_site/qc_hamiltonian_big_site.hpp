@@ -44,15 +44,17 @@ using namespace std;
 namespace block2 {
 
 /** HamiltonianQC with left and/or right big sites. */
-template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
-    using HamiltonianQC<S>::n_sites;
-    using HamiltonianQC<S>::vacuum;
-    using HamiltonianQC<S>::basis;
-    using HamiltonianQC<S>::site_op_infos;
-    using HamiltonianQC<S>::find_site_op_info;
-    using HamiltonianQC<S>::opf;
-    using HamiltonianQC<S>::delayed;
-    shared_ptr<BigSite<S>> big_left,
+template <typename S, typename FL>
+struct HamiltonianQCBigSite : HamiltonianQC<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using HamiltonianQC<S, FL>::n_sites;
+    using HamiltonianQC<S, FL>::vacuum;
+    using HamiltonianQC<S, FL>::basis;
+    using HamiltonianQC<S, FL>::site_op_infos;
+    using HamiltonianQC<S, FL>::find_site_op_info;
+    using HamiltonianQC<S, FL>::opf;
+    using HamiltonianQC<S, FL>::delayed;
+    shared_ptr<BigSite<S, FL>> big_left,
         big_right; //!< Wrapper classes for the physical operators/determinants
                    //!< on the big site
     int n_orbs_left;  //!> Number of spatial orbitals for the left big site
@@ -60,23 +62,23 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
     int n_orbs_cas;   //!> Number of spatial orbitals in CAS (handled by normal
                       //! MPS)
     int n_orbs;
-    shared_ptr<Rule<S>> rule = nullptr;
-    shared_ptr<ParallelRule<S>> parallel_rule = nullptr;
-    shared_ptr<HamiltonianQC<S>> full_hamil;
+    shared_ptr<Rule<S, FL>> rule = nullptr;
+    shared_ptr<ParallelRule<S, FL>> parallel_rule = nullptr;
+    shared_ptr<HamiltonianQC<S, FL>> full_hamil;
     HamiltonianQCBigSite(S vacuum, int n_orbs_total,
                          const vector<typename S::pg_t> &orb_sym,
-                         const shared_ptr<FCIDUMP> &fcidump,
-                         const shared_ptr<BigSite<S>> &big_left = nullptr,
-                         const shared_ptr<BigSite<S>> &big_right = nullptr)
-        : HamiltonianQC<S>(), big_left(big_left), big_right(big_right),
+                         const shared_ptr<FCIDUMP<FL>> &fcidump,
+                         const shared_ptr<BigSite<S, FL>> &big_left = nullptr,
+                         const shared_ptr<BigSite<S, FL>> &big_right = nullptr)
+        : HamiltonianQC<S, FL>(), big_left(big_left), big_right(big_right),
           n_orbs(n_orbs_total),
           n_orbs_left(big_left == nullptr ? 0 : big_left->n_orbs),
           n_orbs_right(big_right == nullptr ? 0 : big_right->n_orbs),
           n_orbs_cas(n_orbs_total - n_orbs_left - n_orbs_right) {
-        full_hamil = make_shared<HamiltonianQC<S>>(vacuum, n_orbs_total,
-                                                   orb_sym, fcidump);
+        full_hamil = make_shared<HamiltonianQC<S, FL>>(vacuum, n_orbs_total,
+                                                       orb_sym, fcidump);
         if (big_left != nullptr || big_right != nullptr)
-            opf = make_shared<CSROperatorFunctions<S>>(full_hamil->opf->cg);
+            opf = make_shared<CSROperatorFunctions<S, FL>>(full_hamil->opf->cg);
         else
             opf = full_hamil->opf;
         n_sites = n_orbs_cas + !!n_orbs_left + !!n_orbs_right;
@@ -121,13 +123,13 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
     }
     void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
-        const override {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        shared_ptr<HamiltonianQCBigSite<S>> ph = nullptr;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<HamiltonianQCBigSite> ph = nullptr;
         if (delayed != DelayedOpNames::None) {
-            ph = make_shared<HamiltonianQCBigSite<S>>(*this);
+            ph = make_shared<HamiltonianQCBigSite>(*this);
             ph->delayed = DelayedOpNames::None;
         }
         if (m == n_sites - 1 && big_right != nullptr) {
@@ -135,11 +137,11 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
                 big_right->get_site_ops(m, ops);
             else {
                 for (auto &p : ops) {
-                    OpElement<S> &op =
-                        *dynamic_pointer_cast<OpElement<S>>(p.first);
-                    p.second =
-                        make_shared<DelayedSparseMatrix<S, Hamiltonian<S>>>(
-                            ph, m, p.first, find_site_op_info(m, op.q_label));
+                    OpElement<S, FL> &op =
+                        *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                    p.second = make_shared<
+                        DelayedSparseMatrix<S, FL, Hamiltonian<S, FL>>>(
+                        ph, m, p.first, find_site_op_info(m, op.q_label));
                 }
             }
         } else if (m == 0 && big_left != nullptr) {
@@ -147,11 +149,11 @@ template <typename S> struct HamiltonianQCBigSite : HamiltonianQC<S> {
                 big_left->get_site_ops(m, ops);
             else {
                 for (auto &p : ops) {
-                    OpElement<S> &op =
-                        *dynamic_pointer_cast<OpElement<S>>(p.first);
-                    p.second =
-                        make_shared<DelayedSparseMatrix<S, Hamiltonian<S>>>(
-                            ph, m, p.first, find_site_op_info(m, op.q_label));
+                    OpElement<S, FL> &op =
+                        *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                    p.second = make_shared<
+                        DelayedSparseMatrix<S, FL, Hamiltonian<S, FL>>>(
+                        ph, m, p.first, find_site_op_info(m, op.q_label));
                 }
             }
         } else

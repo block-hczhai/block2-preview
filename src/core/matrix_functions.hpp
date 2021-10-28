@@ -125,6 +125,11 @@ extern void dgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   const MKL_INT *ldb, double *work, const MKL_INT *lwork,
                   MKL_INT *info);
 
+// matrix copy
+// mat [b] = mat [a]
+extern void dlacpy(const char *uplo, const int *m, const int *n,
+                   const double *a, const int *lda, double *b, const int *ldb);
+
 #endif
 }
 
@@ -149,8 +154,11 @@ inline DavidsonTypes operator|(DavidsonTypes a, DavidsonTypes b) {
     return DavidsonTypes((uint8_t)a | (uint8_t)b);
 }
 
+// General matrix operations
+template <typename FL> struct GMatrixFunctions;
+
 // Dense matrix operations
-struct MatrixFunctions {
+template <> struct GMatrixFunctions<double> {
     // a = b
     static void copy(const MatrixRef &a, const MatrixRef &b,
                      const MKL_INT inca = 1, const MKL_INT incb = 1) {
@@ -1698,8 +1706,8 @@ struct MatrixFunctions {
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 MKL_INT iptr =
                     expo_pade(6, n, h.data(), n, t, work.data()).first;
-                MatrixFunctions::multiply(MatrixRef(work.data() + iptr, n, n),
-                                          true, v, false, e, 1.0, 0.0);
+                multiply(MatrixRef(work.data() + iptr, n, n), true, v, false, e,
+                         1.0, 0.0);
                 memcpy(v.data, e.data, sizeof(double) * n);
             }
             if (pcomm != nullptr)
@@ -1718,9 +1726,9 @@ struct MatrixFunctions {
         anorm += abs(consta) * n;
         if (anorm < 1E-10)
             anorm = 1.0;
-        MKL_INT nmult = MatrixFunctions::expo_krylov(
-            lop, n, m, t, v.data, w.data(), conv_thrd, anorm, work.data(),
-            lwork, symmetric, iprint, (PComm)pcomm);
+        MKL_INT nmult =
+            expo_krylov(lop, n, m, t, v.data, w.data(), conv_thrd, anorm,
+                        work.data(), lwork, symmetric, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(double) * n);
         return (int)nmult;
     }
@@ -2941,5 +2949,7 @@ struct MatrixFunctions {
         return func;
     }
 };
+
+typedef GMatrixFunctions<double> MatrixFunctions;
 
 } // namespace block2

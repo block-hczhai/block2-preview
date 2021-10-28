@@ -10,8 +10,8 @@ class TestRealTEH10STO6G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
-    template <typename S>
-    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+    template <typename S, typename FL>
+    void test_dmrg(S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, int dot, TETypes te_type);
     void SetUp() override {
         Random::rand_seed(0);
@@ -31,11 +31,10 @@ class TestRealTEH10STO6G : public ::testing::Test {
     }
 };
 
-template <typename S>
-void TestRealTEH10STO6G::test_dmrg(S target,
-                                   const shared_ptr<HamiltonianQC<S>> &hamil,
-                                   const string &name, int dot,
-                                   TETypes te_type) {
+template <typename S, typename FL>
+void TestRealTEH10STO6G::test_dmrg(
+    S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
+    int dot, TETypes te_type) {
 
     double igf_std = -0.2286598562666365;
     double energy_std = -5.424385375684663;
@@ -59,65 +58,71 @@ void TestRealTEH10STO6G::test_dmrg(S target,
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     cout << "C/D MPO start" << endl;
     bool su2 = S(1, 1, 0).multiplicity() == 2;
-    shared_ptr<OpElement<S>> c_op, d_op;
+    shared_ptr<OpElement<S, FL>> c_op, d_op;
     uint16_t isite = 4;
     if (su2) {
-        c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {}),
-                                         S(1, 1, hamil->orb_sym[isite]));
-        d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({isite}, {}),
-                                         S(-1, 1, hamil->orb_sym[isite]));
+        c_op = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex({isite}, {}),
+                                             S(1, 1, hamil->orb_sym[isite]));
+        d_op = make_shared<OpElement<S, FL>>(OpNames::D, SiteIndex({isite}, {}),
+                                             S(-1, 1, hamil->orb_sym[isite]));
         igf_std *= -sqrt(2);
     } else {
-        c_op = make_shared<OpElement<S>>(OpNames::C, SiteIndex({isite}, {0}),
-                                         S(1, 1, hamil->orb_sym[isite]));
-        d_op = make_shared<OpElement<S>>(OpNames::D, SiteIndex({isite}, {0}),
-                                         S(-1, -1, hamil->orb_sym[isite]));
+        c_op =
+            make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex({isite}, {0}),
+                                          S(1, 1, hamil->orb_sym[isite]));
+        d_op =
+            make_shared<OpElement<S, FL>>(OpNames::D, SiteIndex({isite}, {0}),
+                                          S(-1, -1, hamil->orb_sym[isite]));
     }
-    shared_ptr<MPO<S>> cmpo = make_shared<SiteMPO<S>>(hamil, c_op);
-    shared_ptr<MPO<S>> dmpo = make_shared<SiteMPO<S>>(hamil, d_op);
+    shared_ptr<MPO<S, FL>> cmpo = make_shared<SiteMPO<S, FL>>(hamil, c_op);
+    shared_ptr<MPO<S, FL>> dmpo = make_shared<SiteMPO<S, FL>>(hamil, d_op);
     cout << "C/D MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification (no transpose)
     cout << "C/D MPO simplification (no transpose) start" << endl;
-    cmpo = make_shared<SimplifiedMPO<S>>(
-        cmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
-    dmpo = make_shared<SimplifiedMPO<S>>(
-        dmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
+    cmpo = make_shared<SimplifiedMPO<S, FL>>(
+        cmpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
+        true);
+    dmpo = make_shared<SimplifiedMPO<S, FL>>(
+        dmpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
+        true);
     cout << "C/D MPO simplification (no transpose) end .. T = " << t.get_time()
          << endl;
 
     // Identity MPO
     cout << "Identity MPO start" << endl;
-    shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
-    impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
+    shared_ptr<MPO<S, FL>> impo = make_shared<IdentityMPO<S, FL>>(hamil);
+    impo = make_shared<SimplifiedMPO<S, FL>>(impo, make_shared<Rule<S, FL>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
     // LMPO construction (no transpose)
     cout << "LMPO start" << endl;
-    shared_ptr<MPO<S>> lmpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> lmpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "LMPO end .. T = " << t.get_time() << endl;
 
     // LMPO simplification (no transpose)
     cout << "LMPO simplification start" << endl;
-    lmpo = make_shared<SimplifiedMPO<S>>(
-        lmpo, make_shared<NoTransposeRule<S>>(make_shared<RuleQC<S>>()), true);
+    lmpo = make_shared<SimplifiedMPO<S, FL>>(
+        lmpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
+        true);
     cout << "LMPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t ket_bond_dim = 500, bra_bond_dim = 750;
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = {ket_bond_dim};
-    vector<double> noises = {1E-6, 1E-8, 1E-10, 0};
+    vector<FL> noises = {1E-6, 1E-8, 1E-10, 0};
 
     t.get_time();
 
@@ -129,7 +134,8 @@ void TestRealTEH10STO6G::test_dmrg(S target,
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, dot);
+    shared_ptr<MPS<S, FL>> mps =
+        make_shared<MPS<S, FL>>(hamil->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -140,12 +146,13 @@ void TestRealTEH10STO6G::test_dmrg(S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     me->init_environments(false);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, ket_bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::SVD;
     double energy = dmrg->solve(20, mps->center == 0, 1E-12);
@@ -165,8 +172,8 @@ void TestRealTEH10STO6G::test_dmrg(S target,
     dmps_info->set_bond_dimension(bra_bond_dim);
     dmps_info->tag = "DBRA";
 
-    shared_ptr<MPS<S>> dmps =
-        make_shared<MPS<S>>(hamil->n_sites, mps->center, dot);
+    shared_ptr<MPS<S, FL>> dmps =
+        make_shared<MPS<S, FL>>(hamil->n_sites, mps->center, dot);
     dmps->initialize(dmps_info);
     dmps->random_canonicalize();
 
@@ -177,52 +184,55 @@ void TestRealTEH10STO6G::test_dmrg(S target,
     dmps_info->deallocate_mutable();
 
     // D APPLY ME
-    shared_ptr<MovingEnvironment<S>> dme =
-        make_shared<MovingEnvironment<S>>(dmpo, dmps, mps, "CPS-D");
+    shared_ptr<MovingEnvironment<S, FL, FL>> dme =
+        make_shared<MovingEnvironment<S, FL, FL>>(dmpo, dmps, mps, "CPS-D");
     dme->init_environments();
 
     // LEFT ME
-    shared_ptr<MovingEnvironment<S>> llme =
-        make_shared<MovingEnvironment<S>>(lmpo, dmps, dmps, "LLHS");
+    shared_ptr<MovingEnvironment<S, FL, FL>> llme =
+        make_shared<MovingEnvironment<S, FL, FL>>(lmpo, dmps, dmps, "LLHS");
     llme->init_environments();
 
     // Compression
-    shared_ptr<Linear<S>> cps =
-        make_shared<Linear<S>>(llme, dme, bra_bdims, ket_bdims, noises);
+    shared_ptr<Linear<S, FL, FL>> cps =
+        make_shared<Linear<S, FL, FL>>(llme, dme, bra_bdims, ket_bdims, noises);
     cps->noise_type = NoiseTypes::ReducedPerturbative;
     cps->decomp_type = DecompositionTypes::SVD;
     cps->eq_type = EquationTypes::PerturbativeCompression;
     double norm = cps->solve(20, mps->center == 0, 1E-12);
 
     // complex MPS
-    shared_ptr<MultiMPS<S>> cpx_ref = MultiMPS<S>::make_complex(dmps, "CPX-R");
-    shared_ptr<MultiMPS<S>> cpx_mps = MultiMPS<S>::make_complex(dmps, "CPX-D");
+    shared_ptr<MultiMPS<S, FL>> cpx_ref =
+        MultiMPS<S, FL>::make_complex(dmps, "CPX-R");
+    shared_ptr<MultiMPS<S, FL>> cpx_mps =
+        MultiMPS<S, FL>::make_complex(dmps, "CPX-D");
 
     double dt = 0.1;
     int n_steps = 20;
-    shared_ptr<MovingEnvironment<S>> xme =
-        make_shared<MovingEnvironment<S>>(lmpo, cpx_mps, cpx_mps, "XTD");
-    shared_ptr<MovingEnvironment<S>> mme =
-        make_shared<MovingEnvironment<S>>(impo, cpx_ref, cpx_mps, "II");
+    shared_ptr<MovingEnvironment<S, FL, FL>> xme =
+        make_shared<MovingEnvironment<S, FL, FL>>(lmpo, cpx_mps, cpx_mps,
+                                                  "XTD");
+    shared_ptr<MovingEnvironment<S, FL, FL>> mme =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo, cpx_ref, cpx_mps, "II");
     lmpo->const_e -= energy;
     xme->init_environments();
-    shared_ptr<TimeEvolution<S>> te =
-        make_shared<TimeEvolution<S>>(xme, bra_bdims, te_type);
+    shared_ptr<TimeEvolution<S, FL, FL>> te =
+        make_shared<TimeEvolution<S, FL, FL>>(xme, bra_bdims, te_type);
     te->iprint = 2;
     te->n_sub_sweeps = te->mode == TETypes::TangentSpace ? 1 : 2;
     te->normalize_mps = false;
-    shared_ptr<Expect<S, complex<double>>> ex =
-        make_shared<Expect<S, complex<double>>>(mme, bra_bond_dim,
-                                                bra_bond_dim);
-    vector<complex<double>> overlaps;
+    shared_ptr<Expect<S, FL, FL, complex<FL>>> ex =
+        make_shared<Expect<S, FL, FL, complex<FL>>>(mme, bra_bond_dim,
+                                                    bra_bond_dim);
+    vector<complex<FL>> overlaps;
     for (int i = 0; i < n_steps; i++) {
         if (te->mode == TETypes::TangentSpace)
-            te->solve(2, complex<double>(0, dt / 2), cpx_mps->center == 0);
+            te->solve(2, complex<FL>(0, dt / 2), cpx_mps->center == 0);
         else
-            te->solve(1, complex<double>(0, dt), cpx_mps->center == 0);
+            te->solve(1, complex<FL>(0, dt), cpx_mps->center == 0);
         mme->init_environments();
         EXPECT_LT(abs(te->energies.back() - energy_dyn), 1E-7);
-        complex<double> overlap = ex->solve(false);
+        complex<FL> overlap = ex->solve(false);
         overlaps.push_back(overlap);
         cout << setprecision(12);
         cout << i * dt << " " << overlap << endl;
@@ -244,7 +254,7 @@ void TestRealTEH10STO6G::test_dmrg(S target,
 }
 
 TEST_F(TestRealTEH10STO6G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H10.STO6G.R1.8.FCIDUMP.LOWDIN";
     fcidump->read(filename);
@@ -257,20 +267,22 @@ TEST_F(TestRealTEH10STO6G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(target, hamil, "SU2/2-site/TDVP", 2, TETypes::TangentSpace);
-    test_dmrg<SU2>(target, hamil, " SU2/2-site/RK4", 2, TETypes::RK4);
-    test_dmrg<SU2>(target, hamil, "SU2/1-site/TDVP", 1, TETypes::TangentSpace);
-    test_dmrg<SU2>(target, hamil, " SU2/1-site/RK4", 1, TETypes::RK4);
+    test_dmrg<SU2, double>(target, hamil, "SU2/2-site/TDVP", 2,
+                           TETypes::TangentSpace);
+    test_dmrg<SU2, double>(target, hamil, " SU2/2-site/RK4", 2, TETypes::RK4);
+    test_dmrg<SU2, double>(target, hamil, "SU2/1-site/TDVP", 1,
+                           TETypes::TangentSpace);
+    test_dmrg<SU2, double>(target, hamil, " SU2/1-site/RK4", 1, TETypes::RK4);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestRealTEH10STO6G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H10.STO6G.R1.8.FCIDUMP.LOWDIN";
     fcidump->read(filename);
@@ -285,13 +297,15 @@ TEST_F(TestRealTEH10STO6G, TestSZ) {
     double energy_std = -107.654122447525;
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil =
-        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(target, hamil, " SZ/2-site/TDVP", 2, TETypes::TangentSpace);
-    test_dmrg<SZ>(target, hamil, "  SZ/2-site/RK4", 2, TETypes::RK4);
-    test_dmrg<SZ>(target, hamil, " SZ/1-site/TDVP", 1, TETypes::TangentSpace);
-    test_dmrg<SZ>(target, hamil, "  SZ/1-site/RK4", 1, TETypes::RK4);
+    test_dmrg<SZ, double>(target, hamil, " SZ/2-site/TDVP", 2,
+                          TETypes::TangentSpace);
+    test_dmrg<SZ, double>(target, hamil, "  SZ/2-site/RK4", 2, TETypes::RK4);
+    test_dmrg<SZ, double>(target, hamil, " SZ/1-site/TDVP", 1,
+                          TETypes::TangentSpace);
+    test_dmrg<SZ, double>(target, hamil, "  SZ/1-site/RK4", 1, TETypes::RK4);
 
     hamil->deallocate();
     fcidump->deallocate();

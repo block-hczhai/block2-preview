@@ -40,10 +40,10 @@ class TestSumMPON2STO3G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 28;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
@@ -64,10 +64,10 @@ class TestSumMPON2STO3G : public ::testing::Test {
 
 bool TestSumMPON2STO3G::_mpi = MPITest::okay();
 
-template <typename S>
+template <typename S, typename FL>
 void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                   const vector<vector<double>> &energies,
-                                  const shared_ptr<HamiltonianQC<S>> &hamil,
+                                  const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                   const string &name, DecompositionTypes dt,
                                   NoiseTypes nt) {
 
@@ -78,8 +78,8 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     shared_ptr<ParallelCommunicator<S>> para_comm =
         make_shared<ParallelCommunicator<S>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRuleSumMPO<S>> para_rule =
-        make_shared<ParallelRuleSumMPO<S>>(para_comm);
+    shared_ptr<ParallelRuleSumMPO<S, FL>> para_rule =
+        make_shared<ParallelRuleSumMPO<S, FL>>(para_comm);
 
     vector<uint16_t> ts;
     para_rule->n_sites = hamil->n_sites;
@@ -91,19 +91,20 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo = make_shared<SumMPOQC<S>>(hamil, ts);
+    shared_ptr<MPO<S, FL>> mpo = make_shared<SumMPOQC<S, FL>>(hamil, ts);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(
-        mpo, make_shared<SumMPORule<S>>(make_shared<RuleQC<S>>(), para_rule),
+    mpo = make_shared<SimplifiedMPO<S, FL>>(
+        mpo,
+        make_shared<SumMPORule<S, FL>>(make_shared<RuleQC<S, FL>>(), para_rule),
         true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
     cout << "MPO parallelization start" << endl;
-    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    mpo = make_shared<ParallelMPO<S, FL>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -124,7 +125,8 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
+            shared_ptr<MPS<S, FL>> mps =
+                make_shared<MPS<S, FL>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -135,12 +137,14 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             mps_info->deallocate_mutable();
 
             // ME
-            shared_ptr<MovingEnvironment<S>> me =
-                make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+            shared_ptr<MovingEnvironment<S, FL, FL>> me =
+                make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
+                                                          "DMRG");
             me->init_environments(false);
 
             // DMRG
-            shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+            shared_ptr<DMRG<S, FL, FL>> dmrg =
+                make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
@@ -187,10 +191,11 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
     shared_ptr<ParallelCommunicator<SZ>> para_comm =
         make_shared<ParallelCommunicator<SZ>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRuleSumMPO<SZ>> para_rule =
-        make_shared<ParallelRuleSumMPO<SZ>>(para_comm);
+    shared_ptr<ParallelRuleSumMPO<SZ, double>> para_rule =
+        make_shared<ParallelRuleSumMPO<SZ, double>>(para_comm);
 
-    shared_ptr<FCIDUMP> fcidump = make_shared<ParallelFCIDUMP<SZ>>(para_rule);
+    shared_ptr<FCIDUMP<double>> fcidump =
+        make_shared<ParallelFCIDUMP<SZ, double>>(para_rule);
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -226,22 +231,24 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
                    -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil =
-        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::DensityMatrix);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ",
+                          DecompositionTypes::DensityMatrix,
+                          NoiseTypes::DensityMatrix);
 
     targets.resize(2);
     energies.resize(2);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
-                  DecompositionTypes::DensityMatrix,
-                  NoiseTypes::ReducedPerturbative);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
-                  NoiseTypes::Wavefunction);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT SVD",
-                  DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ PERT",
+                          DecompositionTypes::DensityMatrix,
+                          NoiseTypes::ReducedPerturbative);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ SVD",
+                          DecompositionTypes::SVD, NoiseTypes::Wavefunction);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ PERT SVD",
+                          DecompositionTypes::SVD,
+                          NoiseTypes::ReducedPerturbative);
 
     hamil->deallocate();
     fcidump->deallocate();

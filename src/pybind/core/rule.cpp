@@ -20,5 +20,5 @@
 
 #include "../pybind_core.hpp"
 
-template void bind_rule<SZ>(py::module &m);
-template void bind_rule<SU2>(py::module &m);
+template void bind_fl_rule<SZ, double>(py::module &m);
+template void bind_fl_rule<SU2, double>(py::module &m);

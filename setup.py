@@ -41,7 +41,8 @@ class CMakeBuild(build_ext):
                 '-DPYTHON_EXECUTABLE_HINT={}'.format(sys.executable),
                 '-DUSE_MKL=ON',
                 '-DBUILD_LIB=ON',
-                '-DLARGE_BOND=ON'
+                '-DLARGE_BOND=ON',
+                '-DUSE_KSYMM=ON'
             ]
 
             # We can handle some platform-specific settings at our discretion

@@ -46,6 +46,8 @@ template <typename FL> struct GMatrix;
 
 // 2D dense matrix stored in stack memory
 template <> struct GMatrix<double> {
+    typedef double FP;
+    typedef complex<double> FC;
     MKL_INT m, n; // m is rows, n is cols
     double *data;
     GMatrix(double *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
@@ -84,10 +86,12 @@ template <> struct GMatrix<double> {
 
 typedef GMatrix<double> MatrixRef;
 
+template <typename FL> struct GDiagonalMatrix;
+
 // Diagonal matrix
-struct DiagonalMatrix : MatrixRef {
+template <> struct GDiagonalMatrix<double> : GMatrix<double> {
     double zero = 0.0;
-    DiagonalMatrix(double *data, MKL_INT n) : MatrixRef(data, n, n) {}
+    GDiagonalMatrix(double *data, MKL_INT n) : GMatrix<double>(data, n, n) {}
     double &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? *(data + i) : const_cast<double &>(zero);
     }
@@ -101,7 +105,7 @@ struct DiagonalMatrix : MatrixRef {
         data = nullptr;
     }
     void clear() { memset(data, 0, size() * sizeof(double)); }
-    friend ostream &operator<<(ostream &os, const DiagonalMatrix &mat) {
+    friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
         for (MKL_INT j = 0; j < mat.n; j++)
@@ -111,24 +115,32 @@ struct DiagonalMatrix : MatrixRef {
     }
 };
 
+typedef GDiagonalMatrix<double> DiagonalMatrix;
+
+template <typename FL> struct GIdentityMatrix;
+
 // Identity matrix
-struct IdentityMatrix : DiagonalMatrix {
+template <> struct GIdentityMatrix<double> : GDiagonalMatrix<double> {
     double one = 1.0;
-    IdentityMatrix(MKL_INT n) : DiagonalMatrix(nullptr, n) {}
+    GIdentityMatrix(MKL_INT n) : GDiagonalMatrix<double>(nullptr, n) {}
     double &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? const_cast<double &>(one) : const_cast<double &>(zero);
     }
     void allocate() {}
     void deallocate() {}
     void clear() {}
-    friend ostream &operator<<(ostream &os, const IdentityMatrix &mat) {
+    friend ostream &operator<<(ostream &os, const GIdentityMatrix &mat) {
         os << "IDENT MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         return os;
     }
 };
 
+typedef GIdentityMatrix<double> IdentityMatrix;
+
 // complex dense matrix
 template <> struct GMatrix<complex<double>> {
+    typedef double FP;
+    typedef complex<double> FC;
     MKL_INT m, n; // m is rows, n is cols
     complex<double> *data;
     GMatrix(complex<double> *data, MKL_INT m, MKL_INT n)
@@ -171,9 +183,9 @@ template <> struct GMatrix<complex<double>> {
 typedef GMatrix<complex<double>> ComplexMatrixRef;
 
 // Diagonal complex matrix
-struct ComplexDiagonalMatrix : ComplexMatrixRef {
+template <> struct GDiagonalMatrix<complex<double>> : GMatrix<complex<double>> {
     complex<double> zero = 0.0;
-    ComplexDiagonalMatrix(complex<double> *data, MKL_INT n)
+    GDiagonalMatrix(complex<double> *data, MKL_INT n)
         : ComplexMatrixRef(data, n, n) {}
     complex<double> &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? *(data + i) : const_cast<complex<double> &>(zero);
@@ -190,7 +202,7 @@ struct ComplexDiagonalMatrix : ComplexMatrixRef {
         data = nullptr;
     }
     void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
-    friend ostream &operator<<(ostream &os, const ComplexDiagonalMatrix &mat) {
+    friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
         for (MKL_INT j = 0; j < mat.n; j++)
@@ -199,6 +211,8 @@ struct ComplexDiagonalMatrix : ComplexMatrixRef {
         return os;
     }
 };
+
+typedef GDiagonalMatrix<complex<double>> ComplexDiagonalMatrixRef;
 
 // General rank-n dense tensor
 template <typename FL> struct GTensor {

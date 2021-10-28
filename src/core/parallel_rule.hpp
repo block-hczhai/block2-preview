@@ -51,7 +51,13 @@ template <typename S> struct ParallelCommunicator {
         return nullptr;
     }
     virtual void barrier() { assert(size == 1); }
-    virtual void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
+    virtual void broadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
+                           int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    broadcast(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+              int owner) {
         assert(size == 1);
     }
     virtual void broadcast(double *data, size_t len, int owner) {
@@ -60,10 +66,19 @@ template <typename S> struct ParallelCommunicator {
     virtual void broadcast(complex<double> *data, size_t len, int owner) {
         assert(size == 1);
     }
-    virtual void ibroadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
+    virtual void ibroadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
+                            int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    ibroadcast(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+               int owner) {
         assert(size == 1);
     }
     virtual void ibroadcast(double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ibroadcast(complex<double> *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void broadcast(int *data, size_t len, int owner) {
@@ -76,37 +91,82 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_sum(complex<double> *data, size_t len) {
         assert(size == 1);
     }
-    virtual void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) {
+    virtual void
+    allreduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat) {
         assert(size == 1);
     }
-    virtual void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) {
+    virtual void allreduce_sum(
+        const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat) {
+        assert(size == 1);
+    }
+    virtual void allreduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat) {
+        assert(size == 1);
+    }
+    virtual void
+    allreduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat) {
         assert(size == 1);
     }
     virtual void allreduce_sum(vector<S> &vs) { assert(size == 1); }
-    virtual void allreduce_logical_or(char *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_logical_or(char *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_xor(char *data, size_t len) { assert(size == 1); }
     virtual void allreduce_min(double *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_min(complex<double> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_min(vector<vector<double>> &vs) {
         assert(size == 1);
     }
     virtual void allreduce_min(vector<double> &vs) { assert(size == 1); }
+    virtual void allreduce_min(vector<complex<double>> &vs) {
+        assert(size == 1);
+    }
     virtual void allreduce_max(double *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_max(complex<double> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_max(vector<double> &vs) { assert(size == 1); }
-    virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat,
+    virtual void allreduce_max(vector<complex<double>> &vs) {
+        assert(size == 1);
+    }
+    virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat,
                             int owner) {
         assert(size == 1);
     }
-    virtual void reduce_sum(const shared_ptr<SparseMatrix<S>> &mat, int owner) {
+    virtual void
+    reduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat,
+               int owner) {
         assert(size == 1);
     }
-    virtual void ireduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
+    virtual void reduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
+                            int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    reduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+               int owner) {
+        assert(size == 1);
+    }
+    virtual void ireduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
                              int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    ireduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                int owner) {
         assert(size == 1);
     }
     virtual void reduce_sum(double *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void reduce_sum(complex<double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void ireduce_sum(double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ireduce_sum(complex<double> *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void reduce_sum(uint64_t *data, size_t len, int owner) {
@@ -137,7 +197,9 @@ inline ParallelCommTypes operator|(ParallelCommTypes a, ParallelCommTypes b) {
 }
 
 // Rule for parallel dispatcher
-template <typename S> struct ParallelRule {
+template <typename, typename = void, typename = void> struct ParallelRule;
+
+template <typename S> struct ParallelRule<S> {
     shared_ptr<ParallelCommunicator<S>> comm;
     ParallelCommTypes comm_type;
     ParallelRule(const shared_ptr<ParallelCommunicator<S>> &comm,
@@ -163,54 +225,71 @@ template <typename S> struct ParallelRule {
         return make_shared<ParallelRule<S>>(comm->split(igroup, irank),
                                             comm_type);
     }
+    bool is_root() const noexcept { return comm->rank == comm->root; }
+};
+
+template <typename S, typename FL>
+struct ParallelRule<S, FL> : ParallelRule<S> {
+    using ParallelRule<S>::comm;
+    using ParallelRule<S>::comm_type;
+    using ParallelRule<S>::get_parallel_type;
+    ParallelRule(const shared_ptr<ParallelCommunicator<S>> &comm,
+                 ParallelCommTypes comm_type = ParallelCommTypes::None)
+        : ParallelRule<S>(comm, comm_type) {}
+    virtual ~ParallelRule() = default;
     virtual ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const {
         return ParallelProperty();
     }
-    bool is_root() const noexcept { return comm->rank == comm->root; }
     bool available(const shared_ptr<OpExpr<S>> &op,
                    int node = -1) const noexcept {
         return (node == -1 ? own(op) : owner(op) == node) || repeat(op);
     }
     bool own(const shared_ptr<OpExpr<S>> &op) const noexcept {
         assert(op->get_type() == OpTypes::Elem);
-        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        ParallelProperty pp =
+            (*this)(dynamic_pointer_cast<OpElement<S, FL>>(op));
         return pp.owner == comm->rank;
     }
     int owner(const shared_ptr<OpExpr<S>> &op) const noexcept {
         assert(op->get_type() == OpTypes::Elem);
-        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        ParallelProperty pp =
+            (*this)(dynamic_pointer_cast<OpElement<S, FL>>(op));
         return pp.owner;
     }
     bool repeat(const shared_ptr<OpExpr<S>> &op) const noexcept {
         assert(op->get_type() == OpTypes::Elem);
-        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        ParallelProperty pp =
+            (*this)(dynamic_pointer_cast<OpElement<S, FL>>(op));
         return pp.ptype & ParallelOpTypes::Repeated;
     }
     bool partial(const shared_ptr<OpExpr<S>> &op) const noexcept {
         assert(op->get_type() == OpTypes::Elem);
-        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        ParallelProperty pp =
+            (*this)(dynamic_pointer_cast<OpElement<S, FL>>(op));
         return pp.ptype & ParallelOpTypes::Partial;
     }
     bool number(const shared_ptr<OpExpr<S>> &op) const noexcept {
         assert(op->get_type() == OpTypes::Elem);
-        ParallelProperty pp = (*this)(dynamic_pointer_cast<OpElement<S>>(op));
+        ParallelProperty pp =
+            (*this)(dynamic_pointer_cast<OpElement<S, FL>>(op));
         return pp.ptype & ParallelOpTypes::Number;
     }
     template <typename T>
-    void distributed_apply(T f, const vector<shared_ptr<OpExpr<S>>> &ops,
-                           const vector<shared_ptr<OpExpr<S>>> &exprs,
-                           vector<shared_ptr<SparseMatrix<S>>> &mats) const {
+    void
+    distributed_apply(T f, const vector<shared_ptr<OpExpr<S>>> &ops,
+                      const vector<shared_ptr<OpExpr<S>>> &exprs,
+                      vector<shared_ptr<SparseMatrix<S, FL>>> &mats) const {
         assert(ops.size() == exprs.size());
-        vector<pair<shared_ptr<OpElement<S>>, shared_ptr<OpExprRef<S>>>>
+        vector<pair<shared_ptr<OpElement<S, FL>>, shared_ptr<OpExprRef<S>>>>
             op_exprs(exprs.size());
         for (size_t i = 0; i < exprs.size(); i++) {
             if (i < mats.size() && mats[i] == nullptr)
                 continue;
-            shared_ptr<OpElement<S>> cop =
-                dynamic_pointer_cast<OpElement<S>>(ops[i]);
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(abs_value(ops[i]));
+            shared_ptr<OpElement<S, FL>> cop =
+                dynamic_pointer_cast<OpElement<S, FL>>(ops[i]);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(abs_value(ops[i]));
             shared_ptr<OpExpr<S>> expr = exprs[i] * (1 / cop->factor);
             if (get_parallel_type() & ParallelTypes::NewScheme)
                 assert(expr->get_type() == OpTypes::ExprRef);
@@ -228,7 +307,7 @@ template <typename S> struct ParallelRule {
         for (size_t i = 0; i < exprs.size(); i++) {
             if (i < mats.size() && mats[i] == nullptr)
                 continue;
-            shared_ptr<OpElement<S>> op = op_exprs[i].first;
+            shared_ptr<OpElement<S, FL>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             bool req =
                 partial(op) ? (expr_ref->is_local ? own(op) : true) : own(op);
@@ -248,7 +327,7 @@ template <typename S> struct ParallelRule {
         for (size_t i = 0; i < mats.size(); i++) {
             if (mats[i] == nullptr)
                 continue;
-            shared_ptr<OpElement<S>> op = op_exprs[i].first;
+            shared_ptr<OpElement<S, FL>> op = op_exprs[i].first;
             shared_ptr<OpExprRef<S>> expr_ref = op_exprs[i].second;
             if (!(comm_type & ParallelCommTypes::NonBlocking)) {
                 if (partial(op) && !expr_ref->is_local)
@@ -300,15 +379,16 @@ template <typename S> struct ParallelRule {
         case OpTypes::Zero:
             return zero_ref;
         case OpTypes::Elem:
-            if (available(dynamic_pointer_cast<OpElement<S>>(expr), owner))
+            if (available(dynamic_pointer_cast<OpElement<S, FL>>(expr), owner))
                 return make_shared<OpExprRef<S>>(expr, true, expr);
             else
                 return zero_ref;
         case OpTypes::Prod: {
-            shared_ptr<OpProduct<S>> op =
-                dynamic_pointer_cast<OpProduct<S>>(expr);
+            shared_ptr<OpProduct<S, FL>> op =
+                dynamic_pointer_cast<OpProduct<S, FL>>(expr);
             if (op->b == nullptr) {
-                if (available(dynamic_pointer_cast<OpElement<S>>(op->a), owner))
+                if (available(dynamic_pointer_cast<OpElement<S, FL>>(op->a),
+                              owner))
                     return make_shared<OpExprRef<S>>(expr, true, expr);
                 else
                     return zero_ref;
@@ -322,8 +402,8 @@ template <typename S> struct ParallelRule {
                 return zero_ref;
         }
         case OpTypes::SumProd: {
-            shared_ptr<OpSumProd<S>> op =
-                dynamic_pointer_cast<OpSumProd<S>>(expr);
+            shared_ptr<OpSumProd<S, FL>> op =
+                dynamic_pointer_cast<OpSumProd<S, FL>>(expr);
             if (op->a != nullptr && op->b != nullptr)
                 // when using modern scheme, we do not need to re-parallelize
                 // 3-operator operation formulas
@@ -334,7 +414,7 @@ template <typename S> struct ParallelRule {
                 if (!aa && !pa)
                     return zero_ref;
                 else {
-                    vector<shared_ptr<OpElement<S>>> ops;
+                    vector<shared_ptr<OpElement<S, FL>>> ops;
                     vector<bool> conjs;
                     for (size_t i = 0; i < op->ops.size(); i++)
                         if (available(op->ops[i], owner) ||
@@ -345,17 +425,17 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpProduct<S>>(op->a, ops[0], op->factor,
-                                                      op->conj ^
-                                                          (conjs[0] << 1)),
+                            make_shared<OpProduct<S, FL>>(
+                                op->a, ops[0], op->factor,
+                                op->conj ^ (conjs[0] << 1)),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
                         if (conjs[0])
                             conjs.flip(), cjx ^= 1 << 1;
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpSumProd<S>>(op->a, ops, conjs,
-                                                      op->factor, cjx, op->c),
+                            make_shared<OpSumProd<S, FL>>(
+                                op->a, ops, conjs, op->factor, cjx, op->c),
                             ops.size() == op->ops.size(), expr);
                     }
                 }
@@ -365,7 +445,7 @@ template <typename S> struct ParallelRule {
                 if (!ab && !pb)
                     return zero_ref;
                 else {
-                    vector<shared_ptr<OpElement<S>>> ops;
+                    vector<shared_ptr<OpElement<S, FL>>> ops;
                     vector<bool> conjs;
                     for (size_t i = 0; i < op->ops.size(); i++)
                         if (available(op->ops[i], owner) ||
@@ -376,24 +456,25 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^
-                                                          (uint8_t)conjs[0]),
+                            make_shared<OpProduct<S, FL>>(
+                                ops[0], op->b, op->factor,
+                                op->conj ^ (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
                         if (conjs[0])
                             conjs.flip(), cjx ^= 1;
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpSumProd<S>>(ops, op->b, conjs,
-                                                      op->factor, cjx, op->c),
+                            make_shared<OpSumProd<S, FL>>(
+                                ops, op->b, conjs, op->factor, cjx, op->c),
                             ops.size() == op->ops.size(), expr);
                     }
                 }
             }
         }
         case OpTypes::Sum: {
-            shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
+            shared_ptr<OpSum<S, FL>> op =
+                dynamic_pointer_cast<OpSum<S, FL>>(expr);
             vector<shared_ptr<OpExpr<S>>> strings;
             strings.reserve(op->strings.size());
             bool is_local = true;
@@ -436,13 +517,13 @@ template <typename S> struct ParallelRule {
         if (expr->get_type() == OpTypes::Zero)
             return make_shared<OpExprRef<S>>(expr, true, expr);
         else if (expr->get_type() == OpTypes::Elem) {
-            if (available(dynamic_pointer_cast<OpElement<S>>(expr), owner))
+            if (available(dynamic_pointer_cast<OpElement<S, FL>>(expr), owner))
                 return make_shared<OpExprRef<S>>(expr, true, expr);
             else
                 return zero_ref;
         } else if (expr->get_type() == OpTypes::Prod) {
-            shared_ptr<OpProduct<S>> op =
-                dynamic_pointer_cast<OpProduct<S>>(expr);
+            shared_ptr<OpProduct<S, FL>> op =
+                dynamic_pointer_cast<OpProduct<S, FL>>(expr);
             bool aa = available(op->a, owner),
                  ab = op->b == nullptr ? true : available(op->b, owner);
             if (aa && ab)
@@ -450,8 +531,8 @@ template <typename S> struct ParallelRule {
             else
                 return zero_ref;
         } else if (expr->get_type() == OpTypes::SumProd) {
-            shared_ptr<OpSumProd<S>> op =
-                dynamic_pointer_cast<OpSumProd<S>>(expr);
+            shared_ptr<OpSumProd<S, FL>> op =
+                dynamic_pointer_cast<OpSumProd<S, FL>>(expr);
             if (op->a != nullptr && op->b != nullptr) {
                 bool aa = available(op->a, owner), ab = available(op->b, owner);
                 bool pda = op->ops[0]->name == OpNames::TEMP,
@@ -466,7 +547,7 @@ template <typename S> struct ParallelRule {
                 if (!available(op->a, owner))
                     return zero_ref;
                 else {
-                    vector<shared_ptr<OpElement<S>>> ops;
+                    vector<shared_ptr<OpElement<S, FL>>> ops;
                     vector<bool> conjs;
                     for (size_t i = 0; i < op->ops.size(); i++)
                         if (available(op->ops[i], owner))
@@ -476,17 +557,17 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpProduct<S>>(op->a, ops[0], op->factor,
-                                                      op->conj ^
-                                                          (conjs[0] << 1)),
+                            make_shared<OpProduct<S, FL>>(
+                                op->a, ops[0], op->factor,
+                                op->conj ^ (conjs[0] << 1)),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
                         if (conjs[0])
                             conjs.flip(), cjx ^= 1 << 1;
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpSumProd<S>>(op->a, ops, conjs,
-                                                      op->factor, cjx, op->c),
+                            make_shared<OpSumProd<S, FL>>(
+                                op->a, ops, conjs, op->factor, cjx, op->c),
                             ops.size() == op->ops.size(), expr);
                     }
                 }
@@ -494,7 +575,7 @@ template <typename S> struct ParallelRule {
                 if (!available(op->b, owner))
                     return zero_ref;
                 else {
-                    vector<shared_ptr<OpElement<S>>> ops;
+                    vector<shared_ptr<OpElement<S, FL>>> ops;
                     vector<bool> conjs;
                     for (size_t i = 0; i < op->ops.size(); i++)
                         if (available(op->ops[i], owner))
@@ -504,23 +585,24 @@ template <typename S> struct ParallelRule {
                         return zero_ref;
                     else if (ops.size() == 1 && op->c == nullptr)
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpProduct<S>>(ops[0], op->b, op->factor,
-                                                      op->conj ^
-                                                          (uint8_t)conjs[0]),
+                            make_shared<OpProduct<S, FL>>(
+                                ops[0], op->b, op->factor,
+                                op->conj ^ (uint8_t)conjs[0]),
                             ops.size() == op->ops.size(), expr);
                     else {
                         uint8_t cjx = op->conj;
                         if (conjs[0])
                             conjs.flip(), cjx ^= 1;
                         return make_shared<OpExprRef<S>>(
-                            make_shared<OpSumProd<S>>(ops, op->b, conjs,
-                                                      op->factor, cjx, op->c),
+                            make_shared<OpSumProd<S, FL>>(
+                                ops, op->b, conjs, op->factor, cjx, op->c),
                             ops.size() == op->ops.size(), expr);
                     }
                 }
             }
         } else if (expr->get_type() == OpTypes::Sum) {
-            shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(expr);
+            shared_ptr<OpSum<S, FL>> op =
+                dynamic_pointer_cast<OpSum<S, FL>>(expr);
             vector<shared_ptr<OpExpr<S>>> strings;
             bool is_local = true;
             for (size_t i = 0; i < op->strings.size(); i++) {

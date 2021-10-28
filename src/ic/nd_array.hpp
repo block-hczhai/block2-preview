@@ -1,8 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2021 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -142,7 +141,7 @@ struct NDArray {
     }
     static NDArray random(const vector<MKL_INT> &shape) {
         NDArray r(shape);
-        Random::fill_rand_double(r.data, r.size());
+        Random::fill<double>(r.data, r.size());
         return r;
     }
     int ndim() const { return (int)shape.size(); }

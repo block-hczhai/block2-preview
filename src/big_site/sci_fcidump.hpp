@@ -51,21 +51,21 @@ template <typename T> struct DenseMat {
 };
 
 /** Replacement of Eigen::SparseMatrix<double, Eigen::RowMajor, MKL_INT>. */
-template <typename T> struct COOSparseMat {
+template <typename FL> struct COOSparseMat {
     MKL_INT m, n;
-    vector<pair<pair<MKL_INT, MKL_INT>, T>> data;
+    vector<pair<pair<MKL_INT, MKL_INT>, FL>> data;
     COOSparseMat() {}
     void resize(MKL_INT m, MKL_INT n) { this->m = m, this->n = n; }
     void reserve(size_t n) { data.resize(n); }
-    T &insert(MKL_INT i, MKL_INT j) {
+    FL &insert(MKL_INT i, MKL_INT j) {
         data.push_back(make_pair(make_pair(i, j), 0));
         return data.back().second;
     }
     void
-    setFromTriplets(const vector<pair<pair<MKL_INT, MKL_INT>, T>> &tri_data) {
+    setFromTriplets(const vector<pair<pair<MKL_INT, MKL_INT>, FL>> &tri_data) {
         data = tri_data;
     }
-    void fillCSR(CSRMatrixRef &mat) {
+    void fillCSR(GCSRMatrix<FL> &mat) {
         assert(m == mat.m);
         assert(n == mat.n);
         assert(mat.data == nullptr);
@@ -84,7 +84,7 @@ template <typename T> struct COOSparseMat {
                 data[idx2.back()].second += data[ii].second;
         mat.nnz = (MKL_INT)idx2.size();
         assert(mat.nnz != mat.size());
-        mat.alloc = make_shared<VectorAllocator<double>>();
+        mat.alloc = make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         mat.allocate();
         MKL_INT cur_row = -1;
         for (size_t k = 0; k < idx2.size(); k++) {
@@ -101,12 +101,12 @@ template <typename T> struct COOSparseMat {
 } // namespace sci_detail
 
 struct SCIFCIDUMPTwoInt {
-    std::shared_ptr<block2::FCIDUMP> fcidump;
+    std::shared_ptr<block2::FCIDUMP<double>> fcidump;
     int nOrbOther, nOrbThis, nOrb; //!< *spatial* orbitals
     int nSOrbOther, nSOrbThis;     //!< *spin* orbitals
     sci_detail::DenseMat<double> Direct,
         Exchange; // Only for the external space! Size is #spatial orbitals
-    SCIFCIDUMPTwoInt(const std::shared_ptr<block2::FCIDUMP> &fcidump,
+    SCIFCIDUMPTwoInt(const std::shared_ptr<block2::FCIDUMP<double>> &fcidump,
                      int nOrbOther, int nOrbThis, bool isRight)
         : fcidump{fcidump}, nOrbOther{nOrbOther}, nOrbThis{nOrbThis},
           nOrb{nOrbOther + nOrbThis},
@@ -215,10 +215,10 @@ struct SCIFCIDUMPTwoInt {
 };
 
 struct SCIFCIDUMPOneInt {
-    std::shared_ptr<block2::FCIDUMP> fcidump;
+    std::shared_ptr<block2::FCIDUMP<double>> fcidump;
     int nOrbOther, nOrbThis, nOrb; //!< *spatial* orbitals
     int nSOrbOther, nSOrbThis;     //!< *spin* orbitals
-    SCIFCIDUMPOneInt(const std::shared_ptr<block2::FCIDUMP> &fcidump,
+    SCIFCIDUMPOneInt(const std::shared_ptr<block2::FCIDUMP<double>> &fcidump,
                      int nOrbOther, int nOrbThis, bool isRight)
         : fcidump{fcidump}, nOrbOther{nOrbOther}, nOrbThis{nOrbThis},
           nOrb{nOrbOther + nOrbThis},

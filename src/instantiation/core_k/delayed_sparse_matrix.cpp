@@ -20,13 +20,13 @@
 
 #include "../block2_core.hpp"
 
-template struct block2::DelayedSparseMatrix<block2::SZK>;
-template struct block2::DelayedSparseMatrix<block2::SU2K>;
-template struct block2::DelayedSparseMatrix<block2::SZK,
-                                            block2::SparseMatrix<block2::SZK>>;
-template struct block2::DelayedSparseMatrix<block2::SU2K,
-                                            block2::SparseMatrix<block2::SU2K>>;
+template struct block2::DelayedSparseMatrix<block2::SZK, double>;
+template struct block2::DelayedSparseMatrix<block2::SU2K, double>;
 template struct block2::DelayedSparseMatrix<
-    block2::SZK, block2::CSRSparseMatrix<block2::SZK>>;
+    block2::SZK, double, block2::SparseMatrix<block2::SZK, double>>;
 template struct block2::DelayedSparseMatrix<
-    block2::SU2K, block2::CSRSparseMatrix<block2::SU2K>>;
+    block2::SU2K, double, block2::SparseMatrix<block2::SU2K, double>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SZK, double, block2::CSRSparseMatrix<block2::SZK, double>>;
+template struct block2::DelayedSparseMatrix<
+    block2::SU2K, double, block2::CSRSparseMatrix<block2::SU2K, double>>;

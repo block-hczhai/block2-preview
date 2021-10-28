@@ -23,7 +23,7 @@ TEST_F(TestFFT, TestFFT) {
         FFT fft;
         DFT dft;
         vector<complex<double>> arr(n), arx;
-        Random::fill_rand_double((double *)arr.data(), n * 2);
+        Random::fill<double>((double *)arr.data(), n * 2);
         arx = arr;
         fft.fft(arx.data(), n, true);
         dft.fft(arr.data(), n, true);

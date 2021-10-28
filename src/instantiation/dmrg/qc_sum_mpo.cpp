@@ -20,4 +20,4 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::SumMPOQC<block2::SZ>;
+template struct block2::SumMPOQC<block2::SZ, double>;

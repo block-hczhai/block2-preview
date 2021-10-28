@@ -28,23 +28,23 @@ using namespace std;
 namespace block2 {
 
 // Rule for MPO simplification
-template <typename S> struct Rule {
+template <typename S, typename FL> struct Rule {
     Rule() {}
     virtual ~Rule() = default;
-    virtual shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const {
+    virtual shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const {
         return nullptr;
     }
 };
 
 // Remove rules involving transposed operator from a rule
 // The original rule is not changed
-template <typename S> struct NoTransposeRule : Rule<S> {
-    shared_ptr<Rule<S>> prim_rule;
-    NoTransposeRule(const shared_ptr<Rule<S>> &rule) : prim_rule(rule) {}
-    shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
-        shared_ptr<OpElementRef<S>> r = prim_rule->operator()(op);
+template <typename S, typename FL> struct NoTransposeRule : Rule<S, FL> {
+    shared_ptr<Rule<S, FL>> prim_rule;
+    NoTransposeRule(const shared_ptr<Rule<S, FL>> &rule) : prim_rule(rule) {}
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
+        shared_ptr<OpElementRef<S, FL>> r = prim_rule->operator()(op);
         return r == nullptr || r->trans ? nullptr : r;
     }
 };

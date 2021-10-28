@@ -28,21 +28,21 @@ using namespace std;
 namespace block2 {
 
 // Rule for parallel dispatcher for quantum chemistry MPO
-template <typename S> struct ParallelRuleQC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL> struct ParallelRuleQC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     ParallelRuleQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                    ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleQC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleQC>(r->comm, r->comm_type);
     }
     static int find_index(uint16_t i, uint16_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (op->name) {
         case OpNames::I:
@@ -76,27 +76,28 @@ template <typename S> struct ParallelRuleQC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for quantum chemistry MPO with only one-body
 // term
-template <typename S> struct ParallelRuleOneBodyQC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRuleOneBodyQC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     ParallelRuleOneBodyQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                           ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleOneBodyQC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleOneBodyQC>(r->comm, r->comm_type);
     }
     static int find_index(uint16_t i, uint16_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
                      : ((int)i * (i + 1) >> 1) + j;
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (op->name) {
         case OpNames::I:
@@ -118,28 +119,29 @@ template <typename S> struct ParallelRuleOneBodyQC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for quantum chemistry 1PDM
 // this one should provide better scalability than ParallelRuleNPDMQC
-template <typename S> struct ParallelRulePDM1QC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRulePDM1QC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     mutable ParallelRulePartitionTypes partition;
     ParallelRulePDM1QC(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRulePDM1QC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRulePDM1QC>(r->comm, r->comm_type);
     }
     void set_partition(ParallelRulePartitionTypes partition) const override {
         this->partition = partition;
     }
     static uint64_t find_index(uint32_t i, uint32_t j) { return i < j ? j : i; }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (partition) {
         case ParallelRulePartitionTypes::Left:
@@ -174,21 +176,22 @@ template <typename S> struct ParallelRulePDM1QC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for quantum chemistry 2PDM
 // this one should provide better scalability than ParallelRuleNPDMQC
-template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRulePDM2QC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     mutable ParallelRulePartitionTypes partition;
     ParallelRulePDM2QC(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRulePDM2QC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRulePDM2QC>(r->comm, r->comm_type);
     }
     void set_partition(ParallelRulePartitionTypes partition) const override {
         this->partition = partition;
@@ -206,7 +209,7 @@ template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
             return find_index(arr[2], arr[3]);
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (partition) {
         case ParallelRulePartitionTypes::Left:
@@ -251,19 +254,20 @@ template <typename S> struct ParallelRulePDM2QC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for quantum chemistry NPDM
-template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRuleNPDMQC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     ParallelRuleNPDMQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleNPDMQC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleNPDMQC>(r->comm, r->comm_type);
     }
     static uint64_t find_index(uint32_t i, uint32_t j) {
         return i < j ? ((int)j * (j + 1) >> 1) + i
@@ -274,7 +278,7 @@ template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
         return find_index(p, q);
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (op->name) {
         case OpNames::I:
@@ -314,22 +318,23 @@ template <typename S> struct ParallelRuleNPDMQC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for SiteMPO/LocalMPO
-template <typename S> struct ParallelRuleSiteQC : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRuleSiteQC : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     ParallelRuleSiteQC(const shared_ptr<ParallelCommunicator<S>> &comm,
                        ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleSiteQC<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleSiteQC>(r->comm, r->comm_type);
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (op->name) {
         case OpNames::I:
@@ -342,22 +347,23 @@ template <typename S> struct ParallelRuleSiteQC : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 
 // Rule for parallel dispatcher for IdentityMPO
-template <typename S> struct ParallelRuleIdentity : ParallelRule<S> {
-    using ParallelRule<S>::comm;
+template <typename S, typename FL>
+struct ParallelRuleIdentity : ParallelRule<S, FL> {
+    using ParallelRule<S, FL>::comm;
     ParallelRuleIdentity(const shared_ptr<ParallelCommunicator<S>> &comm,
                          ParallelCommTypes comm_type = ParallelCommTypes::None)
-        : ParallelRule<S>(comm, comm_type) {}
+        : ParallelRule<S, FL>(comm, comm_type) {}
     shared_ptr<ParallelRule<S>> split(int gsize) const override {
-        shared_ptr<ParallelRule<S>> r = ParallelRule<S>::split(gsize);
-        return make_shared<ParallelRuleIdentity<S>>(r->comm, r->comm_type);
+        shared_ptr<ParallelRule<S>> r = ParallelRule<S, FL>::split(gsize);
+        return make_shared<ParallelRuleIdentity>(r->comm, r->comm_type);
     }
     ParallelProperty
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         SiteIndex si = op->site_index;
         switch (op->name) {
         case OpNames::I:
@@ -365,7 +371,7 @@ template <typename S> struct ParallelRuleIdentity : ParallelRule<S> {
         default:
             assert(false);
         }
-        return ParallelRule<S>::operator()(op);
+        return ParallelRule<S, FL>::operator()(op);
     }
 };
 

@@ -22,3 +22,6 @@
 
 template void bind_sparse<SZ>(py::module &m);
 template void bind_sparse<SU2>(py::module &m);
+
+template void bind_fl_sparse<SZ, double>(py::module &m);
+template void bind_fl_sparse<SU2, double>(py::module &m);

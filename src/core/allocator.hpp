@@ -326,7 +326,7 @@ struct DataFrame {
     //!< Buffers for loading. Skpping reading a file with certain filename, if
     //!< the contents of the file with that filename is in the loading buffer.
     mutable vector<pair<string, shared_ptr<stringstream>>> save_buffers;
-    //!< Buffers for Async saving.
+    //!< Buffers for async saving.
     mutable vector<shared_future<void>> save_futures;
     //!< Async saving files.
     bool load_buffering = false, //!< Whether load buffering should be used. If

@@ -41,8 +41,8 @@ TEST_F(TestComplexMatrix, TestExponential) {
         ComplexMatrixRef v((complex<double> *)dalloc_()->allocate(n * 2), n, 1);
         ComplexMatrixRef u((complex<double> *)dalloc_()->allocate(n * 2), n, 1);
         ComplexMatrixRef w((complex<double> *)dalloc_()->allocate(n * 2), n, 1);
-        Random::fill_rand_double((double *)a.data, a.size());
-        Random::fill_rand_double((double *)v.data, v.size() * 2);
+        Random::fill<double>((double *)a.data, a.size());
+        Random::fill<double>((double *)v.data, v.size() * 2);
         for (MKL_INT ki = 0; ki < n; ki++) {
             ca(ki, ki) = a(ki, ki);
             for (MKL_INT kj = 0; kj < ki; kj++)
@@ -87,9 +87,9 @@ TEST_F(TestComplexMatrix, TestEig) {
                             m, m);
         ComplexMatrixRef ag((complex<double> *)dalloc_()->allocate(m * m * 2),
                             m, m);
-        ComplexDiagonalMatrix w((complex<double> *)dalloc_()->allocate(m * 2),
-                                m);
-        Random::fill_rand_double((double *)a.data, a.size() * 2);
+        ComplexDiagonalMatrixRef w(
+            (complex<double> *)dalloc_()->allocate(m * 2), m);
+        Random::fill<double>((double *)a.data, a.size() * 2);
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < m; kj++)
                 ap(ki, kj) = a(ki, kj);
@@ -124,7 +124,7 @@ TEST_F(TestComplexMatrix, TestInverse) {
                             m, m);
         ComplexMatrixRef ag((complex<double> *)dalloc_()->allocate(m * m * 2),
                             m, m);
-        Random::fill_rand_double((double *)a.data, a.size() * 2);
+        Random::fill<double>((double *)a.data, a.size() * 2);
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < m; kj++)
                 ap(ki, kj) = a(ki, kj);
@@ -149,8 +149,8 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
         ComplexMatrixRef br((complex<double> *)dalloc_()->allocate(m * 2), m,
                             1);
         ComplexMatrixRef x((complex<double> *)dalloc_()->allocate(n * 2), n, 1);
-        Random::fill_rand_double((double *)a.data, a.size() * 2);
-        Random::fill_rand_double((double *)b.data, b.size() * 2);
+        Random::fill<double>((double *)a.data, a.size() * 2);
+        Random::fill<double>((double *)b.data, b.size() * 2);
         double res = ComplexMatrixFunctions::least_squares(a, b, x);
         ComplexMatrixFunctions::multiply(a, false, x, false, br, 1.0, 0.0);
         ComplexMatrixFunctions::iadd(br, b, -1);
@@ -183,9 +183,9 @@ TEST_F(TestComplexMatrix, TestGCROT) {
                            n);
         ComplexMatrixRef xg((complex<double> *)dalloc_()->allocate(n * m * 2),
                             m, n);
-        Random::fill_rand_double(ra.data, ra.size());
-        Random::fill_rand_double(rax.data, rax.size());
-        Random::fill_rand_double(rb.data, rb.size());
+        Random::fill<double>(ra.data, ra.size());
+        Random::fill<double>(rax.data, rax.size());
+        Random::fill<double>(rb.data, rb.size());
         a.clear();
         b.clear();
         MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
@@ -193,17 +193,18 @@ TEST_F(TestComplexMatrix, TestGCROT) {
         for (MKL_INT k = 0; k < n; k++)
             a(k, k) += complex<double>(0, eta);
         ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
-        Random::fill_rand_double(rb.data, rb.size());
+        Random::fill<double>(rb.data, rb.size());
         ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
-        Random::fill_rand_double(rb.data, rb.size());
+        Random::fill<double>(rb.data, rb.size());
         ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 af(k, j) = a(j, k);
         MatMul mop(a);
         complex<double> func = ComplexMatrixFunctions::gcrotmk(
-            mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 20, -1,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 10000);
+            mop, ComplexDiagonalMatrixRef(nullptr, 0), x, b, nmult, niter, 20,
+            -1, false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14,
+            10000);
         ComplexMatrixFunctions::copy(xg, b);
         ComplexMatrixFunctions::linear(af, xg.flip_dims());
         ComplexMatrixFunctions::extract_complex(xg, rbg,

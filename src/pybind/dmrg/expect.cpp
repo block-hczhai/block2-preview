@@ -20,6 +20,14 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_algorithms<SZK>(py::module &m);
-template void bind_algorithms<SU2K>(py::module &m);
+template void bind_fl_expect<SZ, double, double, double>(py::module &m,
+                                                         const string &name);
+template void
+bind_fl_expect<SZ, double, double, complex<double>>(py::module &m,
+                                                    const string &name);
 
+template void bind_fl_expect<SU2, double, double, double>(py::module &m,
+                                                          const string &name);
+template void
+bind_fl_expect<SU2, double, double, complex<double>>(py::module &m,
+                                                     const string &name);

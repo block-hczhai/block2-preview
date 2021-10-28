@@ -36,14 +36,17 @@ namespace block2 {
 /** Block-sparse Matrix associated with disk storage, representing sparse
  * operator.
  * @tparam S Quantum label type.
+ * @tparam FL float point type.
  */
-template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
-    using SparseMatrix<S>::alloc;
-    using SparseMatrix<S>::info;
-    using SparseMatrix<S>::data;
-    using SparseMatrix<S>::factor;
-    using SparseMatrix<S>::total_memory;
-    using SparseMatrix<S>::allocate;
+template <typename S, typename FL>
+struct ArchivedSparseMatrix : SparseMatrix<S, FL> {
+    using SparseMatrix<S, FL>::alloc;
+    using SparseMatrix<S, FL>::info;
+    using SparseMatrix<S, FL>::data;
+    using SparseMatrix<S, FL>::factor;
+    using SparseMatrix<S, FL>::total_memory;
+    using SparseMatrix<S, FL>::allocate;
+    using typename SparseMatrix<S, FL>::FP;
     string filename;    //!< The name of the associated disk file.
     int64_t offset = 0; //!< Byte offset in the file.
     SparseMatrixTypes
@@ -55,8 +58,8 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
      * @param alloc Memory allocator.
      */
     ArchivedSparseMatrix(const string &filename, int64_t offset,
-                         const shared_ptr<Allocator<double>> &alloc = nullptr)
-        : SparseMatrix<S>(alloc), filename(filename), offset(offset) {}
+                         const shared_ptr<Allocator<FP>> &alloc = nullptr)
+        : SparseMatrix<S, FL>(alloc), filename(filename), offset(offset) {}
     /** Get the type of this sparse matrix.
      * @return Type of this sparse matrix.
      */
@@ -70,7 +73,7 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
      * allocation will happen).
      */
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
-                  double *ptr = 0) override {
+                  FL *ptr = 0) override {
         assert(false);
     }
     /** Release the allocated memory. This method does nothing here, since no
@@ -79,12 +82,12 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
     /** Load the sparse matrix data from disk.
      * @return A normal or CSR sparse matrix (with data in memory).
      */
-    shared_ptr<SparseMatrix<S>> load_archive() {
+    shared_ptr<SparseMatrix<S, FL>> load_archive() {
         if (alloc == nullptr)
             alloc = dalloc;
         if (sparse_type == SparseMatrixTypes::Normal) {
-            shared_ptr<SparseMatrix<S>> mat =
-                make_shared<SparseMatrix<S>>(alloc);
+            shared_ptr<SparseMatrix<S, FL>> mat =
+                make_shared<SparseMatrix<S, FL>>(alloc);
             mat->info = info;
             mat->total_memory = info->get_total_memory();
             total_memory = mat->total_memory;
@@ -92,24 +95,24 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
             if (total_memory != 0) {
                 mat->data = alloc->allocate(mat->total_memory);
                 ifstream ifs(filename.c_str(), ios::binary);
-                ifs.seekg(sizeof(double) * offset);
-                ifs.read((char *)mat->data, sizeof(double) * mat->total_memory);
+                ifs.seekg(sizeof(FL) * offset);
+                ifs.read((char *)mat->data, sizeof(FL) * mat->total_memory);
                 ifs.close();
             } else
                 mat->data = nullptr;
             return mat;
         } else if (sparse_type == SparseMatrixTypes::CSR) {
-            shared_ptr<CSRSparseMatrix<S>> mat =
-                make_shared<CSRSparseMatrix<S>>(nullptr);
+            shared_ptr<CSRSparseMatrix<S, FL>> mat =
+                make_shared<CSRSparseMatrix<S, FL>>(nullptr);
             mat->info = info;
             mat->csr_data.resize(info->n);
             mat->factor = factor;
             mat->total_memory = 0;
             if (info->n != 0) {
                 ifstream ifs(filename.c_str(), ios::binary);
-                ifs.seekg(sizeof(double) * offset);
+                ifs.seekg(sizeof(FL) * offset);
                 for (int i = 0; i < info->n; i++) {
-                    mat->csr_data[i] = make_shared<CSRMatrixRef>();
+                    mat->csr_data[i] = make_shared<GCSRMatrix<FL>>();
                     mat->csr_data[i]->load_data(ifs);
                 }
                 ifs.close();
@@ -121,7 +124,7 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
     /** Write the sparse matrix data to disk.
      * @param mat A normal or CSR sparse matrix (with data in memory).
      */
-    void save_archive(const shared_ptr<SparseMatrix<S>> &mat) {
+    void save_archive(const shared_ptr<SparseMatrix<S, FL>> &mat) {
         sparse_type = mat->get_type();
         alloc = mat->alloc;
         info = mat->info;
@@ -134,27 +137,27 @@ template <typename S> struct ArchivedSparseMatrix : SparseMatrix<S> {
                              ios::binary | ios::out | ios::app);
                 ofs.close();
                 ofs.open(filename.c_str(), ios::binary | ios::in);
-                ofs.seekp(sizeof(double) * offset);
-                ofs.write((char *)mat->data, sizeof(double) * total_memory);
+                ofs.seekp(sizeof(FL) * offset);
+                ofs.write((char *)mat->data, sizeof(FL) * total_memory);
                 ofs.close();
             }
         } else if (sparse_type == SparseMatrixTypes::CSR) {
             alloc = nullptr;
             if (info->n != 0) {
-                shared_ptr<CSRSparseMatrix<S>> smat =
-                    dynamic_pointer_cast<CSRSparseMatrix<S>>(mat);
+                shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                    dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(mat);
                 ofstream ofs(filename.c_str(),
                              ios::binary | ios::out | ios::app);
                 ofs.close();
                 ofs.open(filename.c_str(), ios::binary | ios::in);
-                ofs.seekp(sizeof(double) * offset);
+                ofs.seekp(sizeof(FL) * offset);
                 for (int i = 0; i < info->n; i++)
                     smat->csr_data[i]->save_data(ofs);
-                total_memory = ((size_t)ofs.tellp() - sizeof(double) * offset +
-                                sizeof(double) - 1) /
-                               sizeof(double);
+                total_memory = ((size_t)ofs.tellp() - sizeof(FL) * offset +
+                                sizeof(FL) - 1) /
+                               sizeof(FL);
                 assert((size_t)ofs.tellp() <=
-                       sizeof(double) * (offset + total_memory));
+                       sizeof(FL) * (offset + total_memory));
                 ofs.close();
             } else
                 total_memory = 0;

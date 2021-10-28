@@ -37,22 +37,22 @@ namespace block2 {
  * data in a site tensor at a time.
  * @tparam S Quantum label type.
  */
-template <typename S> struct ArchivedMPO : MPO<S> {
-    using MPO<S>::n_sites;
+template <typename S, typename FL> struct ArchivedMPO : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
     /** Constructor.
      * @param mpo The original MPO.
      * @param tag The tag for constructing a unique filename for this MPO.
      */
-    ArchivedMPO(const shared_ptr<MPO<S>> &mpo, const string &tag = "MPO")
-        : MPO<S>(*mpo) {
-        shared_ptr<ArchivedTensorFunctions<S>> artf =
-            make_shared<ArchivedTensorFunctions<S>>(mpo->tf->opf);
-        MPO<S>::tf = artf;
+    ArchivedMPO(const shared_ptr<MPO<S, FL>> &mpo, const string &tag = "MPO")
+        : MPO<S, FL>(*mpo) {
+        shared_ptr<ArchivedTensorFunctions<S, FL>> artf =
+            make_shared<ArchivedTensorFunctions<S, FL>>(mpo->tf->opf);
+        MPO<S, FL>::tf = artf;
         artf->filename =
             frame->save_dir + "/" + frame->prefix_distri + ".AR." + tag;
         artf->offset = 0;
         for (int16_t m = n_sites - 1; m >= 0; m--)
-            artf->archive_tensor(MPO<S>::tensors[m]);
+            artf->archive_tensor(MPO<S, FL>::tensors[m]);
     }
     /** Deallocate operator data in this MPO.
      * Since all MPO tensor data is stored in disk, this method does nothing.

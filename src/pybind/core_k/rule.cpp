@@ -20,5 +20,5 @@
 
 #include "../pybind_core.hpp"
 
-template void bind_rule<SZK>(py::module &m);
-template void bind_rule<SU2K>(py::module &m);
+template void bind_fl_rule<SZK, double>(py::module &m);
+template void bind_fl_rule<SU2K, double>(py::module &m);

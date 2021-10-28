@@ -39,8 +39,9 @@ class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 22;
     size_t dsize = 1L << 30;
-    template <typename S>
-    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+    template <typename S, typename FL>
+    void test_dmrg(const S target,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name);
     void SetUp() override {
         Random::rand_seed(0);
@@ -60,9 +61,9 @@ class TestDETN2STO3G : public ::testing::Test {
 
 bool TestDETN2STO3G::_mpi = MPITest::okay();
 
-template <typename S>
+template <typename S, typename FL>
 void TestDETN2STO3G::test_dmrg(const S target,
-                               const shared_ptr<HamiltonianQC<S>> &hamil,
+                               const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                const string &name) {
 
 #ifdef _HAS_MPI
@@ -72,8 +73,8 @@ void TestDETN2STO3G::test_dmrg(const S target,
     shared_ptr<ParallelCommunicator<S>> para_comm =
         make_shared<ParallelCommunicator<S>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRule<S>> para_rule =
-        make_shared<ParallelRuleQC<S>>(para_comm);
+    shared_ptr<ParallelRule<S, FL>> para_rule =
+        make_shared<ParallelRuleQC<S, FL>>(para_comm);
 
     vector<double> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
@@ -113,18 +114,19 @@ void TestDETN2STO3G::test_dmrg(const S target,
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // MPO parallelization
     cout << "MPO parallelization start" << endl;
-    mpo = make_shared<ParallelMPO<S>>(mpo, para_rule);
+    mpo = make_shared<ParallelMPO<S, FL>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -138,7 +140,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
 
     // MPS
     Random::rand_seed(0);
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -149,8 +151,8 @@ void TestDETN2STO3G::test_dmrg(const S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -162,22 +164,23 @@ void TestDETN2STO3G::test_dmrg(const S target,
     // DMRG
     vector<ubond_t> bdims = {bond_dim};
     vector<double> noises = {1E-8, 0.0};
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->solve(10, true, 1E-13);
 
-    shared_ptr<DeterminantTRIE<S>> dtrie =
-        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
+    shared_ptr<DeterminantTRIE<S, FL>> dtrie =
+        make_shared<DeterminantTRIE<S, FL>>(mps->n_sites, true);
 
-    shared_ptr<DeterminantTRIE<S>> dtrie_ref =
-        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
+    shared_ptr<DeterminantTRIE<S, FL>> dtrie_ref =
+        make_shared<DeterminantTRIE<S, FL>>(mps->n_sites, true);
 
     vector<uint8_t> ref = {0, 0, 0, 3, 3, 3, 3, 3, 3, 3};
     do {
         dtrie_ref->push_back(ref);
     } while (next_permutation(ref.begin(), ref.end()));
 
-    dtrie->evaluate(make_shared<UnfusedMPS<S>>(mps), 1E-7);
+    dtrie->evaluate(make_shared<UnfusedMPS<S, FL>>(mps), 1E-7);
     cout << dtrie->size() << endl;
 
     for (int i = 0; i < (int)dtrie_ref->size(); i++) {
@@ -200,7 +203,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
 }
 
 TEST_F(TestDETN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -211,17 +214,18 @@ TEST_F(TestDETN2STO3G, TestSZ) {
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),
+                                               orbsym, fcidump);
 
-    test_dmrg<SZ>(target, hamil, " SZ");
+    test_dmrg<SZ, double>(target, hamil, " SZ");
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestDETN2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -232,10 +236,11 @@ TEST_F(TestDETN2STO3G, TestSU2) {
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
+                                                orbsym, fcidump);
 
-    test_dmrg<SU2>(target, hamil, "SU2");
+    test_dmrg<SU2, double>(target, hamil, "SU2");
 
     hamil->deallocate();
     fcidump->deallocate();

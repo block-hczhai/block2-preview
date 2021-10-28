@@ -47,27 +47,29 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct StochasticPDMRG;
+template <typename, typename, typename = void> struct StochasticPDMRG;
 
 // stochastic perturbative DMRG
 // JCP 148 21104 (2018), doi: 10.1063/1.5031140
-template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
-    shared_ptr<SparseMatrix<S>> left_psi0, left_qvpsi0;
-    vector<shared_ptr<SparseTensor<S>>> tensors_psi0, tensors_qvpsi0;
-    double norm_qvpsi0;
+template <typename S, typename FL>
+struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
+    typedef typename GMatrix<FL>::FP FP;
+    shared_ptr<SparseMatrix<S, FL>> left_psi0, left_qvpsi0;
+    vector<shared_ptr<SparseTensor<S, FL>>> tensors_psi0, tensors_qvpsi0;
+    FP norm_qvpsi0;
     vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos_psi0, pinfos_qvpsi0;
     int n_sites;
     uint8_t phys_dim;
     StochasticPDMRG() {}
-    StochasticPDMRG(const shared_ptr<UnfusedMPS<S>> &mps_psi0,
-                    const shared_ptr<UnfusedMPS<S>> &mps_qvpsi0,
-                    const double norm) {
+    StochasticPDMRG(const shared_ptr<UnfusedMPS<S, FL>> &mps_psi0,
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps_qvpsi0,
+                    const FP norm) {
         this->initialize(mps_psi0, mps_qvpsi0, norm);
     }
     // initialize
-    void initialize(const shared_ptr<UnfusedMPS<S>> &mps_psi0,
-                    const shared_ptr<UnfusedMPS<S>> &mps_qvpsi0,
-                    const double norm) {
+    void initialize(const shared_ptr<UnfusedMPS<S, FL>> &mps_psi0,
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps_qvpsi0,
+                    const FP norm) {
         Random::rand_seed(0);
         n_sites = mps_psi0->n_sites;
         phys_dim = 4;
@@ -87,7 +89,7 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
     }
     // generate stateinfo map
     void gen_si_map(vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
-                    const shared_ptr<UnfusedMPS<S>> &mps) const {
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
 
@@ -124,18 +126,18 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
     }
     // ityp == 0: sampling a determinant for C term
     // ityp == 1: sampling a determinant for A,B term
-    double sampling(int ityp, vector<uint8_t> &det_string) const {
+    FP sampling(int ityp, vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 0 ? pinfos_psi0 : pinfos_qvpsi0;
-        const vector<shared_ptr<SparseTensor<S>>> &tensors =
+        const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
             ityp == 0 ? tensors_psi0 : tensors_qvpsi0;
 
-        shared_ptr<SparseMatrix<S>> ptrs;
+        shared_ptr<SparseMatrix<S, FL>> ptrs;
 
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        shared_ptr<SparseMatrix<S>> initp =
-            make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> initp =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         initp->allocate(pinfos[0][0]);
         for (size_t j = 0; j < initp->total_memory; j++)
             initp->data[j] = 1.0;
@@ -143,26 +145,26 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
         ptrs = initp;
 
         det_string.resize(2 * n_sites);
-        vector<double> rand(n_sites);
-        Random::fill_rand_double((double *)rand.data(), n_sites);
-        vector<double> cp(phys_dim), accp(phys_dim + 1, 0);
-        vector<shared_ptr<SparseMatrix<S>>> ptrs_save(phys_dim);
-        double rnorm = 0;
+        vector<FP> rand(n_sites);
+        Random::fill<FP>((FP *)rand.data(), n_sites);
+        vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
+        vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
+        FP rnorm = 0;
         for (int i_site = 0; i_site < n_sites; i_site++) {
             for (uint8_t d = 0; d < phys_dim; d++) {
-                shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                shared_ptr<SparseMatrix<S>> cmp =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                shared_ptr<SparseMatrix<S, FL>> cmp =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 cmp->allocate(pinfos[i_site + 1][d]);
                 for (auto &m : tensors[i_site]->data[d]) {
                     S bra = m.first.first, ket = m.first.second;
                     if (pmp->info->find_state(bra) == -1)
                         continue;
-                    MatrixFunctions::multiply((*pmp)[bra], false,
-                                              m.second->ref(), false,
-                                              (*cmp)[ket], 1.0, 1.0);
+                    GMatrixFunctions<FL>::multiply((*pmp)[bra], false,
+                                                   m.second->ref(), false,
+                                                   (*cmp)[ket], 1.0, 1.0);
                 }
-                double tmp = cmp->norm();
+                FP tmp = cmp->norm();
                 cp[d] = tmp * tmp;
                 ptrs_save[d] = cmp;
             }
@@ -183,17 +185,17 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
     }
     // ityp == 0: <Psi^(0)|VQ|D>
     // ityp == 1: <Psi^(0)|D>
-    double overlap(int ityp, const vector<uint8_t> &det_string) const {
+    FP overlap(int ityp, const vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 1 ? pinfos_psi0 : pinfos_qvpsi0;
-        const vector<shared_ptr<SparseTensor<S>>> &tensors =
+        const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
             ityp == 1 ? tensors_psi0 : tensors_qvpsi0;
 
-        shared_ptr<SparseMatrix<S>> ptrs;
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        shared_ptr<SparseMatrix<S>> initp =
-            make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> ptrs;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> initp =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         initp->allocate(pinfos[0][0]);
         for (size_t j = 0; j < initp->total_memory; j++)
             initp->data[j] = 1.0;
@@ -202,16 +204,17 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
 
         for (int i_site = 0; i_site < n_sites; i_site++) {
             int d = det_string[2 * i_site] + (det_string[2 * i_site + 1] << 1);
-            shared_ptr<SparseMatrix<S>> pmp = ptrs;
-            shared_ptr<SparseMatrix<S>> cmp =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+            shared_ptr<SparseMatrix<S, FL>> cmp =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             cmp->allocate(pinfos[i_site + 1][d]);
             for (auto &m : tensors[i_site]->data[d]) {
                 S bra = m.first.first, ket = m.first.second;
                 if (pmp->info->find_state(bra) == -1)
                     continue;
-                MatrixFunctions::multiply((*pmp)[bra], false, m.second->ref(),
-                                          false, (*cmp)[ket], 1.0, 1.0);
+                GMatrixFunctions<FL>::multiply((*pmp)[bra], false,
+                                               m.second->ref(), false,
+                                               (*cmp)[ket], 1.0, 1.0);
             }
             ptrs = cmp;
             if (i_site == n_sites - 1)
@@ -221,15 +224,15 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
     }
     void
     gen_tmp_mats(const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
-                 const vector<shared_ptr<SparseTensor<S>>> &tensors,
-                 vector<vector<shared_ptr<SparseMatrix<S>>>> &pmats) const {
+                 const vector<shared_ptr<SparseTensor<S, FL>>> &tensors,
+                 vector<vector<shared_ptr<SparseMatrix<S, FL>>>> &pmats) const {
         pmats.resize(n_sites + 1);
-        shared_ptr<VectorAllocator<double>> dd_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> dd_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i_site = 0; i_site < n_sites + 1; i_site++) {
             pmats[i_site].resize(pinfos[i_site].size());
             for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
-                pmats[i_site][d] = make_shared<SparseMatrix<S>>(dd_alloc);
+                pmats[i_site][d] = make_shared<SparseMatrix<S, FL>>(dd_alloc);
                 pmats[i_site][d]->allocate(pinfos[i_site][d]);
             }
         }
@@ -241,17 +244,19 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
     //      return H00, H00sq
     // ityp == 1: sampling a determinant for A,B term
     //      return H11, H11sq, H10, H10sq
-    vector<double> parallel_sampling(int n_sample, int ityp,
-                                     const shared_ptr<FCIDUMP> &fcidump) const {
-        vector<double> r(ityp == 0 ? 2 : 4, 0);
+    template <typename FLI>
+    vector<FP>
+    parallel_sampling(int n_sample, int ityp,
+                      const shared_ptr<FCIDUMP<FLI>> &fcidump) const {
+        vector<FP> r(ityp == 0 ? 2 : 4, 0);
         int ntg = threading->activate_global();
         unsigned rand_sd =
             (unsigned)Random::rand_int(0, numeric_limits<int>::max());
-        vector<vector<double>> prr(ntg, r);
+        vector<vector<FP>> prr(ntg, r);
 #pragma omp parallel num_threads(ntg)
         {
-            vector<vector<vector<shared_ptr<SparseMatrix<S>>>>> pmats;
-            vector<const vector<shared_ptr<SparseTensor<S>>> *> tensors;
+            vector<vector<vector<shared_ptr<SparseMatrix<S, FL>>>>> pmats;
+            vector<const vector<shared_ptr<SparseTensor<S, FL>>> *> tensors;
             int tid = threading->get_thread_id();
             RandomMT rand_mt((unsigned)(rand_sd + tid));
             if (ityp == 0) {
@@ -265,33 +270,33 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
                 gen_tmp_mats(pinfos_qvpsi0, tensors_qvpsi0, pmats[0]);
                 gen_tmp_mats(pinfos_psi0, tensors_psi0, pmats[1]);
             }
-            vector<double> rand(n_sites);
+            vector<FP> rand(n_sites);
             vector<uint8_t> det_string(n_sites);
-            vector<double> cp(phys_dim), accp(phys_dim + 1, 0);
-            vector<shared_ptr<SparseMatrix<S>>> ptrs_save(phys_dim);
-            shared_ptr<SparseMatrix<S>> ptrs;
-            vector<double> &rr = prr[tid];
+            vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
+            vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+            vector<FP> &rr = prr[tid];
 #pragma omp for schedule(static)
             for (int i_sample = 0; i_sample < n_sample; i_sample++) {
-                rand_mt.fill_rand_double((double *)rand.data(), n_sites);
-                double det_ener = 0, rnormsq = 0, snorm = 0;
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FP det_ener = 0, rnormsq = 0, snorm = 0;
                 ptrs = pmats[0][0][0];
                 // sample psi0 / qvpsi0
                 for (int i_site = 0; i_site < n_sites; i_site++) {
                     for (uint8_t d = 0; d < phys_dim; d++) {
-                        shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                        shared_ptr<SparseMatrix<S>> cmp =
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
                             pmats[0][i_site + 1][d];
                         cmp->clear();
                         for (auto &m : (*tensors[0])[i_site]->data[d]) {
                             S bra = m.first.first, ket = m.first.second;
                             if (pmp->info->find_state(bra) == -1)
                                 continue;
-                            MatrixFunctions::multiply((*pmp)[bra], false,
-                                                      m.second->ref(), false,
-                                                      (*cmp)[ket], 1.0, 1.0);
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
                         }
-                        double tmp = cmp->norm();
+                        FP tmp = cmp->norm();
                         cp[d] = tmp * tmp;
                         ptrs_save[d] = cmp;
                     }
@@ -310,19 +315,20 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
                 for (uint16_t i = 0; i < n_sites; i++)
                     for (uint8_t si = 0; si < 2; si++)
                         if (det_string[i] & (si + 1)) {
-                            det_ener += fcidump->t(si, i, i);
+                            det_ener += (FP)fcidump->t(si, i, i);
                             for (uint16_t j = 0; j < n_sites; j++)
                                 for (uint8_t sj = 0; sj < 2; sj++)
                                     if (det_string[j] & (sj + 1)) {
-                                        det_ener += 0.5 * fcidump->v(si, sj, i,
-                                                                     i, j, j);
+                                        det_ener +=
+                                            0.5 *
+                                            (FP)fcidump->v(si, sj, i, i, j, j);
                                         if (si == sj)
                                             det_ener -=
-                                                0.5 *
-                                                fcidump->v(si, sj, i, j, j, i);
+                                                0.5 * (FP)fcidump->v(si, sj, i,
+                                                                     j, j, i);
                                     }
                         }
-                det_ener += fcidump->const_e;
+                det_ener += (FP)fcidump->const_e;
                 if (ityp == 0) {
                     rr[0] += 1 / det_ener;
                     rr[1] += 1 / (det_ener * det_ener);
@@ -333,23 +339,23 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
                     // overlap psi0
                     for (int i_site = 0; i_site < n_sites; i_site++) {
                         const uint8_t d = det_string[i_site];
-                        shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                        shared_ptr<SparseMatrix<S>> cmp =
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
                             pmats[1][i_site + 1][d];
                         cmp->clear();
                         for (auto &m : (*tensors[1])[i_site]->data[d]) {
                             S bra = m.first.first, ket = m.first.second;
                             if (pmp->info->find_state(bra) == -1)
                                 continue;
-                            MatrixFunctions::multiply((*pmp)[bra], false,
-                                                      m.second->ref(), false,
-                                                      (*cmp)[ket], 1.0, 1.0);
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
                         }
                         ptrs = cmp;
                         if (i_site == n_sites - 1)
                             snorm = cmp->norm();
                     }
-                    const double tmp =
+                    const FP tmp =
                         norm_qvpsi0 * snorm / (sqrt(rnormsq) * det_ener);
                     rr[2] += tmp;
                     rr[3] += tmp * tmp;
@@ -365,9 +371,11 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
         threading->activate_normal();
         return r;
     }
-    double energy_zeroth(const shared_ptr<FCIDUMP> &fcidump, MatrixRef e_pqqp,
-                         MatrixRef e_pqpq, MatrixRef pdm1) {
-        double ener = 0.0;
+    template <typename FLI>
+    FP energy_zeroth(const shared_ptr<FCIDUMP<FLI>> &fcidump,
+                     GMatrix<FLI> e_pqqp, GMatrix<FLI> e_pqpq,
+                     GMatrix<FLI> pdm1) {
+        FLI ener = 0.0;
         assert(e_pqqp.size() == e_pqpq.size());
 
         for (uint16_t p = 0; p < fcidump->n_sites(); p++) {
@@ -380,26 +388,28 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_sz_t> {
             ener += 0.5 * e_pqqp(p, p) * fcidump->v(p, p, p, p);
             ener += pdm1(p, p) * fcidump->t(p, p);
         }
-        return ener;
+        return (FP)ener;
     }
 };
 
-template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
-    shared_ptr<SparseMatrix<S>> left_psi0, left_qvpsi0;
-    vector<shared_ptr<SparseTensor<S>>> tensors_psi0, tensors_qvpsi0;
-    double norm_qvpsi0;
+template <typename S, typename FL>
+struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
+    typedef typename GMatrix<FL>::FP FP;
+    shared_ptr<SparseMatrix<S, FL>> left_psi0, left_qvpsi0;
+    vector<shared_ptr<SparseTensor<S, FL>>> tensors_psi0, tensors_qvpsi0;
+    FP norm_qvpsi0;
     vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos_psi0, pinfos_qvpsi0;
     int n_sites;
     uint8_t phys_dim;
     StochasticPDMRG() {}
-    StochasticPDMRG(const shared_ptr<UnfusedMPS<S>> &mps_psi0,
-                    const shared_ptr<UnfusedMPS<S>> &mps_qvpsi0,
-                    const double norm) {
+    StochasticPDMRG(const shared_ptr<UnfusedMPS<S, FL>> &mps_psi0,
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps_qvpsi0,
+                    const FP norm) {
         this->initialize(mps_psi0, mps_qvpsi0, norm);
     }
-    void initialize(const shared_ptr<UnfusedMPS<S>> &mps_psi0,
-                    const shared_ptr<UnfusedMPS<S>> &mps_qvpsi0,
-                    const double norm) {
+    void initialize(const shared_ptr<UnfusedMPS<S, FL>> &mps_psi0,
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps_qvpsi0,
+                    const FP norm) {
         Random::rand_seed(0);
         n_sites = mps_psi0->n_sites;
         phys_dim = 4;
@@ -418,7 +428,7 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
         norm_qvpsi0 = norm;
     }
     void gen_si_map(vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
-                    const shared_ptr<UnfusedMPS<S>> &mps) const {
+                    const shared_ptr<UnfusedMPS<S, FL>> &mps) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
 
@@ -459,18 +469,18 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
     }
     // ityp == 0: sampling a determinant for C term
     // ityp == 1: sampling a determinant for A,B term
-    double sampling(int ityp, vector<uint8_t> &det_string) const {
+    FP sampling(int ityp, vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 0 ? pinfos_psi0 : pinfos_qvpsi0;
-        const vector<shared_ptr<SparseTensor<S>>> &tensors =
+        const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
             ityp == 0 ? tensors_psi0 : tensors_qvpsi0;
 
-        shared_ptr<SparseMatrix<S>> ptrs;
+        shared_ptr<SparseMatrix<S, FL>> ptrs;
 
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        shared_ptr<SparseMatrix<S>> initp =
-            make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> initp =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         initp->allocate(pinfos[0][0]);
         for (size_t j = 0; j < initp->total_memory; j++)
             initp->data[j] = 1.0;
@@ -478,17 +488,17 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
         ptrs = initp;
 
         det_string.resize(2 * n_sites);
-        vector<double> rand(n_sites);
-        Random::fill_rand_double((double *)rand.data(), n_sites);
-        vector<double> cp(phys_dim), accp(phys_dim + 1, 0);
-        vector<shared_ptr<SparseMatrix<S>>> ptrs_save(phys_dim);
-        double rnorm = 0;
+        vector<FP> rand(n_sites);
+        Random::fill<FP>((FP *)rand.data(), n_sites);
+        vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
+        vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
+        FP rnorm = 0;
         for (int i_site = 0; i_site < n_sites; i_site++) {
             for (uint8_t d = 0; d < phys_dim; d++) {
                 int dd = d >= 2 ? d - 1 : d;
-                shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                shared_ptr<SparseMatrix<S>> cmp =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                shared_ptr<SparseMatrix<S, FL>> cmp =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 cmp->allocate(pinfos[i_site + 1][d]);
                 for (auto &m : tensors[i_site]->data[dd]) {
                     S bra = m.first.first, ket = m.first.second;
@@ -497,11 +507,11 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                         continue;
                     if (pmp->info->find_state(bra) == -1)
                         continue;
-                    MatrixFunctions::multiply((*pmp)[bra], false,
-                                              m.second->ref(), false,
-                                              (*cmp)[ket], 1.0, 1.0);
+                    GMatrixFunctions<FL>::multiply((*pmp)[bra], false,
+                                                   m.second->ref(), false,
+                                                   (*cmp)[ket], 1.0, 1.0);
                 }
-                double tmp = cmp->norm();
+                FP tmp = cmp->norm();
                 cp[d] = tmp * tmp;
                 ptrs_save[d] = cmp;
             }
@@ -522,17 +532,17 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
     }
     // ityp == 0: <Psi^(0)|VQ|D>
     // ityp == 1: <Psi^(0)|D>
-    double overlap(int ityp, const vector<uint8_t> &det_string) const {
+    FP overlap(int ityp, const vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 1 ? pinfos_psi0 : pinfos_qvpsi0;
-        const vector<shared_ptr<SparseTensor<S>>> &tensors =
+        const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
             ityp == 1 ? tensors_psi0 : tensors_qvpsi0;
 
-        shared_ptr<SparseMatrix<S>> ptrs;
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        shared_ptr<SparseMatrix<S>> initp =
-            make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> ptrs;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> initp =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         initp->allocate(pinfos[0][0]);
         for (size_t j = 0; j < initp->total_memory; j++)
             initp->data[j] = 1.0;
@@ -542,9 +552,9 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
         for (int i_site = 0; i_site < n_sites; i_site++) {
             int d = det_string[2 * i_site] + (det_string[2 * i_site + 1] << 1);
             int dd = d >= 2 ? d - 1 : d;
-            shared_ptr<SparseMatrix<S>> pmp = ptrs;
-            shared_ptr<SparseMatrix<S>> cmp =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+            shared_ptr<SparseMatrix<S, FL>> cmp =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             cmp->allocate(pinfos[i_site + 1][d]);
             for (auto &m : tensors[i_site]->data[dd]) {
                 S bra = m.first.first, ket = m.first.second;
@@ -553,8 +563,9 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                     continue;
                 if (pmp->info->find_state(bra) == -1)
                     continue;
-                MatrixFunctions::multiply((*pmp)[bra], false, m.second->ref(),
-                                          false, (*cmp)[ket], 1.0, 1.0);
+                GMatrixFunctions<FL>::multiply((*pmp)[bra], false,
+                                               m.second->ref(), false,
+                                               (*cmp)[ket], 1.0, 1.0);
             }
             ptrs = cmp;
             if (i_site == n_sites - 1)
@@ -564,15 +575,15 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
     }
     void
     gen_tmp_mats(const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
-                 const vector<shared_ptr<SparseTensor<S>>> &tensors,
-                 vector<vector<shared_ptr<SparseMatrix<S>>>> &pmats) const {
+                 const vector<shared_ptr<SparseTensor<S, FL>>> &tensors,
+                 vector<vector<shared_ptr<SparseMatrix<S, FL>>>> &pmats) const {
         pmats.resize(n_sites + 1);
-        shared_ptr<VectorAllocator<double>> dd_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> dd_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i_site = 0; i_site < n_sites + 1; i_site++) {
             pmats[i_site].resize(pinfos[i_site].size());
             for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
-                pmats[i_site][d] = make_shared<SparseMatrix<S>>(dd_alloc);
+                pmats[i_site][d] = make_shared<SparseMatrix<S, FL>>(dd_alloc);
                 pmats[i_site][d]->allocate(pinfos[i_site][d]);
             }
         }
@@ -584,17 +595,19 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
     //      return H00, H00sq
     // ityp == 1: sampling a determinant for A,B term
     //      return H11, H11sq, H10, H10sq
-    vector<double> parallel_sampling(int n_sample, int ityp,
-                                     const shared_ptr<FCIDUMP> &fcidump) const {
-        vector<double> r(ityp == 0 ? 2 : 4, 0);
+    template <typename FLI>
+    vector<FP>
+    parallel_sampling(int n_sample, int ityp,
+                      const shared_ptr<FCIDUMP<FLI>> &fcidump) const {
+        vector<FP> r(ityp == 0 ? 2 : 4, 0);
         int ntg = threading->activate_global();
         unsigned rand_sd =
             (unsigned)Random::rand_int(0, numeric_limits<int>::max());
-        vector<vector<double>> prr(ntg, r);
+        vector<vector<FP>> prr(ntg, r);
 #pragma omp parallel num_threads(ntg)
         {
-            vector<vector<vector<shared_ptr<SparseMatrix<S>>>>> pmats;
-            vector<const vector<shared_ptr<SparseTensor<S>>> *> tensors;
+            vector<vector<vector<shared_ptr<SparseMatrix<S, FL>>>>> pmats;
+            vector<const vector<shared_ptr<SparseTensor<S, FL>>> *> tensors;
             int tid = threading->get_thread_id();
             RandomMT rand_mt((unsigned)(rand_sd + tid));
             if (ityp == 0) {
@@ -608,23 +621,23 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                 gen_tmp_mats(pinfos_qvpsi0, tensors_qvpsi0, pmats[0]);
                 gen_tmp_mats(pinfos_psi0, tensors_psi0, pmats[1]);
             }
-            vector<double> rand(n_sites);
+            vector<FP> rand(n_sites);
             vector<uint8_t> det_string(n_sites);
-            vector<double> cp(phys_dim), accp(phys_dim + 1, 0);
-            vector<shared_ptr<SparseMatrix<S>>> ptrs_save(phys_dim);
-            shared_ptr<SparseMatrix<S>> ptrs;
-            vector<double> &rr = prr[tid];
+            vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
+            vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+            vector<FP> &rr = prr[tid];
 #pragma omp for schedule(static)
             for (int i_sample = 0; i_sample < n_sample; i_sample++) {
-                rand_mt.fill_rand_double((double *)rand.data(), n_sites);
-                double det_ener = 0, rnormsq = 0, snorm = 0;
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FP det_ener = 0, rnormsq = 0, snorm = 0;
                 ptrs = pmats[0][0][0];
                 // sample psi0 / qvpsi0
                 for (int i_site = 0; i_site < n_sites; i_site++) {
                     for (uint8_t d = 0; d < phys_dim; d++) {
                         int dd = d >= 2 ? d - 1 : d;
-                        shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                        shared_ptr<SparseMatrix<S>> cmp =
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
                             pmats[0][i_site + 1][d];
                         cmp->clear();
                         for (auto &m : (*tensors[0])[i_site]->data[dd]) {
@@ -635,11 +648,11 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                                 continue;
                             if (pmp->info->find_state(bra) == -1)
                                 continue;
-                            MatrixFunctions::multiply((*pmp)[bra], false,
-                                                      m.second->ref(), false,
-                                                      (*cmp)[ket], 1.0, 1.0);
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
                         }
-                        double tmp = cmp->norm();
+                        FP tmp = cmp->norm();
                         cp[d] = tmp * tmp;
                         ptrs_save[d] = cmp;
                     }
@@ -658,19 +671,20 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                 for (uint16_t i = 0; i < n_sites; i++)
                     for (uint8_t si = 0; si < 2; si++)
                         if (det_string[i] & (si + 1)) {
-                            det_ener += fcidump->t(si, i, i);
+                            det_ener += (FP)fcidump->t(si, i, i);
                             for (uint16_t j = 0; j < n_sites; j++)
                                 for (uint8_t sj = 0; sj < 2; sj++)
                                     if (det_string[j] & (sj + 1)) {
-                                        det_ener += 0.5 * fcidump->v(si, sj, i,
-                                                                     i, j, j);
+                                        det_ener +=
+                                            0.5 *
+                                            (FP)fcidump->v(si, sj, i, i, j, j);
                                         if (si == sj)
                                             det_ener -=
-                                                0.5 *
-                                                fcidump->v(si, sj, i, j, j, i);
+                                                0.5 * (FP)fcidump->v(si, sj, i,
+                                                                     j, j, i);
                                     }
                         }
-                det_ener += fcidump->const_e;
+                det_ener += (FP)fcidump->const_e;
                 if (ityp == 0) {
                     rr[0] += 1 / det_ener;
                     rr[1] += 1 / (det_ener * det_ener);
@@ -682,8 +696,8 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                     for (int i_site = 0; i_site < n_sites; i_site++) {
                         const uint8_t d = det_string[i_site];
                         int dd = d >= 2 ? d - 1 : d;
-                        shared_ptr<SparseMatrix<S>> pmp = ptrs;
-                        shared_ptr<SparseMatrix<S>> cmp =
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
                             pmats[1][i_site + 1][d];
                         cmp->clear();
                         for (auto &m : (*tensors[1])[i_site]->data[dd]) {
@@ -694,15 +708,15 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
                                 continue;
                             if (pmp->info->find_state(bra) == -1)
                                 continue;
-                            MatrixFunctions::multiply((*pmp)[bra], false,
-                                                      m.second->ref(), false,
-                                                      (*cmp)[ket], 1.0, 1.0);
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
                         }
                         ptrs = cmp;
                         if (i_site == n_sites - 1)
                             snorm = cmp->norm();
                     }
-                    const double tmp =
+                    const FP tmp =
                         norm_qvpsi0 * snorm / (sqrt(rnormsq) * det_ener);
                     rr[2] += tmp;
                     rr[3] += tmp * tmp;
@@ -718,9 +732,11 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
         threading->activate_normal();
         return r;
     }
-    double energy_zeroth(const shared_ptr<FCIDUMP> &fcidump, MatrixRef e_pqqp,
-                         MatrixRef e_pqpq, MatrixRef pdm1) {
-        double ener = 0.0;
+    template <typename FLI>
+    FP energy_zeroth(const shared_ptr<FCIDUMP<FLI>> &fcidump,
+                     GMatrix<FLI> e_pqqp, GMatrix<FLI> e_pqpq,
+                     GMatrix<FLI> pdm1) {
+        FLI ener = 0.0;
         assert(e_pqqp.size() == e_pqpq.size());
 
         for (uint16_t p = 0; p < fcidump->n_sites(); p++) {
@@ -733,7 +749,7 @@ template <typename S> struct StochasticPDMRG<S, typename S::is_su2_t> {
             ener += 0.5 * e_pqqp(p, p) * fcidump->v(p, p, p, p);
             ener += pdm1(p, p) * fcidump->t(p, p);
         }
-        return ener;
+        return (FP)ener;
     }
 };
 

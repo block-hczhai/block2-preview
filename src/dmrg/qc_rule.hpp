@@ -28,81 +28,82 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct RuleQC;
+template <typename, typename, typename = void> struct RuleQC;
 
 // Symmetry rules for simplifying quantum chemistry MPO (non-spin-adapted)
-template <typename S> struct RuleQC<S, typename S::is_sz_t> : Rule<S> {
+template <typename S, typename FL>
+struct RuleQC<S, FL, typename S::is_sz_t> : Rule<S, FL> {
     uint8_t mask;
     const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
     RuleQC(bool d = true, bool r = true, bool a = true, bool p = true,
            bool b = true, bool q = true)
         : mask((d << D) | (r << R) | (a << A) | (p << P) | (b << B) |
                (q << Q)) {}
-    shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         switch (op->name) {
         case OpNames::D:
-            return (mask & (1 << D)) ? make_shared<OpElementRef<S>>(
-                                           make_shared<OpElement<S>>(
+            return (mask & (1 << D)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
                                                OpNames::C, op->site_index,
                                                -op->q_label, op->factor),
                                            true, 1)
                                      : nullptr;
         case OpNames::RD:
-            return (mask & (1 << R)) ? make_shared<OpElementRef<S>>(
-                                           make_shared<OpElement<S>>(
+            return (mask & (1 << R)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
                                                OpNames::R, op->site_index,
                                                -op->q_label, op->factor),
                                            true, 1)
                                      : nullptr;
         case OpNames::A:
             return (mask & (1 << A)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(OpNames::A,
-                                                       op->site_index.flip(),
-                                                       op->q_label, op->factor),
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::A, op->site_index.flip(), op->q_label,
+                                 op->factor),
                              false, -1)
                        : nullptr;
         case OpNames::AD:
             return (mask & (1 << A))
                        ? (op->site_index[0] <= op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::A, op->site_index,
                                         -op->q_label, op->factor),
                                     true, 1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::A, op->site_index.flip(),
                                         -op->q_label, op->factor),
                                     true, -1))
                        : nullptr;
         case OpNames::P:
             return (mask & (1 << P)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(OpNames::P,
-                                                       op->site_index.flip(),
-                                                       op->q_label, op->factor),
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::P, op->site_index.flip(), op->q_label,
+                                 op->factor),
                              false, -1)
                        : nullptr;
         case OpNames::PD:
             return (mask & (1 << P))
                        ? (op->site_index[0] <= op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::P, op->site_index,
                                         -op->q_label, op->factor),
                                     true, 1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::P, op->site_index.flip(),
                                         -op->q_label, op->factor),
                                     true, -1))
                        : nullptr;
         case OpNames::B:
             return (mask & (1 << B)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::B, op->site_index.flip(),
                                  -op->q_label, op->factor),
                              true, 1)
@@ -112,21 +113,21 @@ template <typename S> struct RuleQC<S, typename S::is_sz_t> : Rule<S> {
             return ((mask & (1 << B)) &&
                     (op->site_index[0] != op->site_index[1]))
                        ? (op->site_index[0] < op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::B, op->site_index,
                                         -op->q_label, op->factor),
                                     true, -1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::B, op->site_index.flip(),
                                         op->q_label, op->factor),
                                     false, -1))
                        : nullptr;
         case OpNames::Q:
             return (mask & (1 << Q)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::Q, op->site_index.flip(),
                                  -op->q_label, op->factor),
                              true, 1)
@@ -138,26 +139,27 @@ template <typename S> struct RuleQC<S, typename S::is_sz_t> : Rule<S> {
 };
 
 // Symmetry rules for simplifying quantum chemistry MPO (spin-adapted)
-template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
+template <typename S, typename FL>
+struct RuleQC<S, FL, typename S::is_su2_t> : Rule<S, FL> {
     uint8_t mask;
     const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
     RuleQC(bool d = true, bool r = true, bool a = true, bool p = true,
            bool b = true, bool q = true)
         : mask((d << D) | (r << R) | (a << A) | (p << P) | (b << B) |
                (q << Q)) {}
-    shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
         switch (op->name) {
         case OpNames::D:
-            return (mask & (1 << D)) ? make_shared<OpElementRef<S>>(
-                                           make_shared<OpElement<S>>(
+            return (mask & (1 << D)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
                                                OpNames::C, op->site_index,
                                                -op->q_label, op->factor),
                                            true, 1)
                                      : nullptr;
         case OpNames::RD:
-            return (mask & (1 << R)) ? make_shared<OpElementRef<S>>(
-                                           make_shared<OpElement<S>>(
+            return (mask & (1 << R)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
                                                OpNames::R, op->site_index,
                                                -op->q_label, op->factor),
                                            true, -1)
@@ -165,8 +167,8 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
         // Aij[S] = mul('Ci', 'Cj', S)
         case OpNames::A:
             return (mask & (1 << A)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::A, op->site_index.flip_spatial(),
                                  op->q_label, op->factor),
                              false, op->site_index.s() ? -1 : 1)
@@ -175,13 +177,13 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
         case OpNames::AD:
             return (mask & (1 << A))
                        ? (op->site_index[0] <= op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::A, op->site_index,
                                         -op->q_label, op->factor),
                                     true, op->site_index.s() ? 1 : -1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::A,
                                         op->site_index.flip_spatial(),
                                         -op->q_label, op->factor),
@@ -189,8 +191,8 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                        : nullptr;
         case OpNames::P:
             return (mask & (1 << P)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::P, op->site_index.flip_spatial(),
                                  op->q_label, op->factor),
                              false, op->site_index.s() ? -1 : 1)
@@ -198,13 +200,13 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
         case OpNames::PD:
             return (mask & (1 << P))
                        ? (op->site_index[0] <= op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::P, op->site_index,
                                         -op->q_label, op->factor),
                                     true, op->site_index.s() ? 1 : -1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::P,
                                         op->site_index.flip_spatial(),
                                         -op->q_label, op->factor),
@@ -213,8 +215,8 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
         // Bij[S] = mul('Ci', 'Dj', S)
         case OpNames::B:
             return (mask & (1 << B)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::B, op->site_index.flip_spatial(),
                                  -op->q_label, op->factor),
                              true, op->site_index.s() ? -1 : 1)
@@ -224,13 +226,13 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
             return ((mask & (1 << B)) &&
                     (op->site_index[0] != op->site_index[1]))
                        ? (op->site_index[0] < op->site_index[1]
-                              ? make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::B, op->site_index,
                                         -op->q_label, op->factor),
                                     true, 1)
-                              : make_shared<OpElementRef<S>>(
-                                    make_shared<OpElement<S>>(
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
                                         OpNames::B,
                                         op->site_index.flip_spatial(),
                                         op->q_label, op->factor),
@@ -238,8 +240,8 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
                        : nullptr;
         case OpNames::Q:
             return (mask & (1 << Q)) && op->site_index[0] > op->site_index[1]
-                       ? make_shared<OpElementRef<S>>(
-                             make_shared<OpElement<S>>(
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
                                  OpNames::Q, op->site_index.flip_spatial(),
                                  -op->q_label, op->factor),
                              true, op->site_index.s() ? -1 : 1)
@@ -251,15 +253,16 @@ template <typename S> struct RuleQC<S, typename S::is_su2_t> : Rule<S> {
 };
 
 // For anti-Hermitian Hamiltonian with only one-body terms
-template <typename S> struct AntiHermitianRuleQC : Rule<S> {
-    shared_ptr<Rule<S>> prim_rule;
-    AntiHermitianRuleQC(const shared_ptr<Rule<S>> &rule) : prim_rule(rule) {}
-    shared_ptr<OpElementRef<S>>
-    operator()(const shared_ptr<OpElement<S>> &op) const override {
-        shared_ptr<OpElementRef<S>> r = prim_rule->operator()(op);
-        return op->name == OpNames::RD
-                   ? make_shared<OpElementRef<S>>(r->op, r->trans, -r->factor)
-                   : r;
+template <typename S, typename FL> struct AntiHermitianRuleQC : Rule<S, FL> {
+    shared_ptr<Rule<S, FL>> prim_rule;
+    AntiHermitianRuleQC(const shared_ptr<Rule<S, FL>> &rule)
+        : prim_rule(rule) {}
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
+        shared_ptr<OpElementRef<S, FL>> r = prim_rule->operator()(op);
+        return op->name == OpNames::RD ? make_shared<OpElementRef<S, FL>>(
+                                             r->op, r->trans, -r->factor)
+                                       : r;
     }
 };
 

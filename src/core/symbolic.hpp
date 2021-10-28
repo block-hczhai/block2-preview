@@ -183,7 +183,7 @@ inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ostream &ofs) {
     }
 }
 
-template <typename S>
+template <typename S, typename FL>
 inline shared_ptr<Symbolic<S>> load_symbolic(istream &ifs) {
     SymTypes tp;
     int m, n, sz;
@@ -193,7 +193,7 @@ inline shared_ptr<Symbolic<S>> load_symbolic(istream &ifs) {
     ifs.read((char *)&sz, sizeof(sz));
     vector<shared_ptr<OpExpr<S>>> data(sz);
     for (int i = 0; i < sz; i++)
-        data[i] = load_expr<S>(ifs);
+        data[i] = load_expr<S, FL>(ifs);
     if (tp == SymTypes::RVec) {
         assert(m == 1 && sz == n);
         return make_shared<SymbolicRowVector<S>>(n, data);

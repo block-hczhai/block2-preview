@@ -20,5 +20,5 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_parallel_dmrg<SZK>(py::module &m);
-template void bind_parallel_dmrg<SU2K>(py::module &m);
+template void bind_fl_parallel_dmrg<SZK, double>(py::module &m);
+template void bind_fl_parallel_dmrg<SU2K, double>(py::module &m);

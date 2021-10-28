@@ -20,5 +20,5 @@
 
 #include "../pybind_dmrg.hpp"
 
-template auto bind_spin_specific<SZ>(py::module &m)
+template auto bind_fl_spin_specific<SZ, double>(py::module &m)
     -> decltype(typename SZ::is_sz_t());

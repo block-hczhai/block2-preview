@@ -61,7 +61,8 @@ std::string strPrintf(const std::string &format, Args... args) {
                        buf.get() + size - 1); // We don't want the '\0' inside
 }
 
-template <typename S> void setMatrixToZero(block2::CSRSparseMatrix<S> &mat) {
+template <typename S, typename FL>
+void setMatrixToZero(block2::CSRSparseMatrix<S, FL> &mat) {
     mat.factor = 0.0;
     if (mat.csr_data.size() != 0) {
         for (int i = 0; i < mat.info->n; ++i) {
@@ -79,10 +80,10 @@ template <typename S> void setMatrixToZero(block2::CSRSparseMatrix<S> &mat) {
 
 /** This is for SCIFockBigSiteExcludeQNs: Some matrices may not be allocated as
  * they are excluded...*/
-template <typename S, typename EntryTuple>
+template <typename S, typename FL, typename EntryTuple>
 void allocateEmptyMatrices(std::vector<EntryTuple> &vec) {
     for (auto &tupl : vec) {
-        block2::CSRSparseMatrix<S> &mat = tupl.mat;
+        block2::CSRSparseMatrix<S, FL> &mat = tupl.mat;
         if (mat.factor != 0.0) {
             for (auto &m : mat.csr_data) {
                 if (m->data == nullptr) {
@@ -96,8 +97,8 @@ void allocateEmptyMatrices(std::vector<EntryTuple> &vec) {
 
 } // namespace sci_detail
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::checkOMP() const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::checkOMP() const {
 #ifdef _SCI_USE_OMP_ON
     auto explainIt = []() {
         cerr << " This may happen if the program links against several openMP "
@@ -165,10 +166,10 @@ void SCIFockBigSite<S, typename S::is_sz_t>::checkOMP() const {
 #endif
 }
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::get_site_ops(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::get_site_ops(
     uint16_t m,
-    unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
+    unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>> &ops)
     const {
     const int iSite = m;
     int ii, jj; // spin orbital indices
@@ -179,10 +180,10 @@ void SCIFockBigSite<S, typename S::is_sz_t>::get_site_ops(
     unordered_map<S, std::vector<entryTuple2>> opsQ, opsP, opsPD;
     unordered_map<S, std::vector<entryTuple1>> opsR, opsRD;
     for (auto &p : ops) {
-        shared_ptr<OpElement<S>> pop =
-            dynamic_pointer_cast<OpElement<S>>(p.first);
-        OpElement<S> &op = *pop;
-        auto pmat = make_shared<CSRSparseMatrix<S>>();
+        shared_ptr<OpElement<S, FL>> pop =
+            dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+        OpElement<S, FL> &op = *pop;
+        auto pmat = make_shared<CSRSparseMatrix<S, FL>>();
         auto &mat = *pmat;
         p.second = pmat;
         // ATTENTION vv if you change allocation, you need to change the
@@ -192,7 +193,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::get_site_ops(
         //      of the individual matrices in the fillOp* routines.
         //      So here, the CSRMatrices are only initialized (i.e., their
         //      sizes are set)
-        mat.initialize(BigSite<S>::find_site_op_info(op.q_label));
+        mat.initialize(BigSite<S, FL>::find_site_op_info(op.q_label));
         const auto &delta_qn = op.q_label;
         if (false and op.name == OpNames::R) { // DEBUG
             cout << "m == " << iSite << "allocate" << op.name << "s"
@@ -298,8 +299,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::get_site_ops(
     finalize();
 }
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::finalize() const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::finalize() const {
     // TODO: fragSpace could also be deleted, or at least the unordered_map
     //                        #counts  time  <time>   sparsity  dense sparse
     const std::string fStr =
@@ -395,13 +396,13 @@ void SCIFockBigSite<S, typename S::is_sz_t>::finalize() const {
     cout << "#----------------------------------" << endl;
 }
 
-template <typename S>
-SCIFockBigSite<S, typename S::is_sz_t>::SCIFockBigSite(
+template <typename S, typename FL>
+SCIFockBigSite<S, FL, typename S::is_sz_t>::SCIFockBigSite(
     int nOrb, int nOrbThis, bool isRight,
-    const std::shared_ptr<block2::FCIDUMP> &fcidump,
+    const std::shared_ptr<block2::FCIDUMP<FL>> &fcidump,
     const std::vector<uint8_t> &orbsym, int nMaxAlphaEl, int nMaxBetaEl,
     int nMaxEl, const vector<vector<int>> &poccs, bool verbose)
-    : BigSite<S>(nOrbThis), nOrbOther{nOrb - nOrbThis}, nOrbThis{nOrbThis},
+    : BigSite<S, FL>(nOrbThis), nOrbOther{nOrb - nOrbThis}, nOrbThis{nOrbThis},
       nOrb{nOrb}, isRight{isRight}, nMaxAlphaEl{nMaxAlphaEl},
       nMaxBetaEl{nMaxBetaEl}, nMaxEl{nMaxEl}, verbose{verbose},
       ints2(fcidump, nOrbOther, nOrbThis, isRight),
@@ -794,7 +795,7 @@ SCIFockBigSite<S, typename S::is_sz_t>::SCIFockBigSite(
     for (int iq = 0; iq < (int)quantumNumbers.size(); iq++)
         b->n_states[iq] = offsets[iq].second - offsets[iq].first;
     b->sort_states();
-    BigSite<S>::basis = b;
+    BigSite<S, FL>::basis = b;
     // hz: set big site op_infos
     shared_ptr<VectorAllocator<uint32_t>> i_alloc =
         make_shared<VectorAllocator<uint32_t>>();
@@ -813,17 +814,17 @@ SCIFockBigSite<S, typename S::is_sz_t>::SCIFockBigSite(
         p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
         p.second->initialize(*b, *b, p.first, p.first.is_fermion());
     }
-    BigSite<S>::op_infos = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+    BigSite<S, FL>::op_infos = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
         info.begin(), info.end());
 }
 
 ///////////////////////////////////////////////////////////////
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_I(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_I(
     BLSparseMatrix &mat) const {
     const auto qSize = static_cast<int>(quantumNumbers.size());
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     if (!excludeQNs) {
         for (int iQ = 0; iQ < qSize; ++iQ) {
             auto &sym = quantumNumbers[iQ];
@@ -832,7 +833,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_I(
                 sparsityStart) { // Dense; this is important as
                                  // there are also 1 x 1 matrices
                 mat[sym].nnz = mat[sym].size();
-                mat[sym].alloc = make_shared<VectorAllocator<double>>();
+                mat[sym].alloc =
+                    make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
                 mat[sym].allocate();
                 auto o1 = offsets[iQ].first;
                 auto o2 = offsets[iQ].second;
@@ -872,7 +874,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_I(
                 sparsityStart) { // Dense; this is important as there are also 1
                                  // x 1 matrices
                 mat[sym].nnz = mat[sym].size();
-                mat[sym].alloc = make_shared<VectorAllocator<double>>();
+                mat[sym].alloc =
+                    make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
                 mat[sym].allocate();
                 auto o1 = offsets[iQ].first;
                 auto o2 = offsets[iQ].second;
@@ -903,12 +906,12 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_I(
         }
     }
 }
-template <typename S>
+template <typename S, typename FL>
 template <bool Symmetrize>
-size_t SCIFockBigSite<S, typename S::is_sz_t>::fillCoeffs(
-    sci_detail::COOSparseMat<double> &cooMat,
+size_t SCIFockBigSite<S, FL, typename S::is_sz_t>::fillCoeffs(
+    sci_detail::COOSparseMat<FL> &cooMat,
     sci_detail::DenseMat<TripletVec> &coeffs, const int iRow,
-    block2::CSRMatrixRef &mat, double &summSparsity, size_t &numSparse,
+    block2::GCSRMatrix<FL> &mat, double &summSparsity, size_t &numSparse,
     size_t &numDense, size_t &usedMem) const {
     assert(coeffs.m == ompThreads);
     assert(sparsityStart > 1);
@@ -938,9 +941,9 @@ size_t SCIFockBigSite<S, typename S::is_sz_t>::fillCoeffs(
         sparsity > sparsityThresh and mat.size() >= sparsityStart;
     if (not isSparse) {
         mat.nnz = mat.size();
-        mat.alloc = make_shared<VectorAllocator<double>>();
+        mat.alloc = make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         mat.allocate();
-        memset(mat.data, 0.0, mat.size() * sizeof(double));
+        memset(mat.data, 0.0, mat.size() * sizeof(FL));
         auto matRef = mat.dense_ref();
         for (int ii = 0; ii < ompThreads; ++ii) {
             for (const auto &tripl : coeffs(ii, iRow)) {
@@ -984,19 +987,19 @@ size_t SCIFockBigSite<S, typename S::is_sz_t>::fillCoeffs(
         ++numSparse;
         //                                     vv bit of overestimation for CSR
         //                                     format
-        usedMem += nCount * (sizeof(double) +
+        usedMem += nCount * (sizeof(FL) +
                              2 * sizeof(int)); // int in native implementation
     } else {
         ++numDense;
-        usedMem += mat.size() * sizeof(double);
+        usedMem += mat.size() * sizeof(FL);
     }
     return nCount;
 }
 
-template <typename S>
+template <typename S, typename FL>
 std::vector<std::pair<int, int>>
-SCIFockBigSite<S, typename S::is_sz_t>::getQNpairs(const BLSparseMatrix &mat,
-                                                   const S &deltaQN) const {
+SCIFockBigSite<S, FL, typename S::is_sz_t>::getQNpairs(
+    const BLSparseMatrix &mat, const S &deltaQN) const {
     constexpr bool verbose = false;
     std::vector<std::pair<int, int>> pairs;
     const auto qSize = static_cast<int>(quantumNumbers.size());
@@ -1022,18 +1025,18 @@ SCIFockBigSite<S, typename S::is_sz_t>::getQNpairs(const BLSparseMatrix &mat,
     }
     return pairs;
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_N(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_N(
     BLSparseMatrix &mat) const {
     throw std::runtime_error("not implemented");
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_NN(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_NN(
     BLSparseMatrix &mat) const {
     throw std::runtime_error("not implemented");
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_H(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_H(
     BLSparseMatrix &mat) const {
     checkOMP();
     Timer clock;
@@ -1042,7 +1045,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_H(
     const auto qnSiz = qnPairs.size();
     sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, 1);
     size_t nonZeros = 0;
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     for (int itQN = 0; itQN < qnSiz; ++itQN) {
         const auto ketQN = qnPairs[itQN].first;
         const auto braQN = qnPairs[itQN].second;
@@ -1156,11 +1159,10 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_H(
     qnCountsH += qnSiz;
     totCountsH += 1;
 }
-template <typename S>
+template <typename S, typename FL>
 template <bool Cop>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_C_impl(const S &deltaQN,
-                                                           BLSparseMatrix &mat,
-                                                           int iOrb) const {
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_C_impl(
+    const S &deltaQN, BLSparseMatrix &mat, int iOrb) const {
     checkOMP();
     const auto iOrbL = iOrb - (isRight ? nOrbOther * 2 : 0);
     Timer clock;
@@ -1169,7 +1171,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_C_impl(const S &deltaQN,
     const auto qnSiz = qnPairs.size();
     sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, 1);
     size_t nonZeros = 0;
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     for (int itQN = 0; itQN < qnSiz; ++itQN) {
         const auto ketQN = qnPairs[itQN].first;
         const auto braQN = qnPairs[itQN].second;
@@ -1237,22 +1239,22 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_C_impl(const S &deltaQN,
         totCountsD += 1;
     }
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_C(const S &deltaQN,
-                                                      BLSparseMatrix &mat,
-                                                      int iOrb) const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_C(const S &deltaQN,
+                                                          BLSparseMatrix &mat,
+                                                          int iOrb) const {
     fillOp_C_impl<true>(deltaQN, mat, iOrb);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_D(const S &deltaQN,
-                                                      BLSparseMatrix &mat,
-                                                      int iOrb) const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_D(const S &deltaQN,
+                                                          BLSparseMatrix &mat,
+                                                          int iOrb) const {
     fillOp_C_impl<false>(deltaQN, mat, iOrb);
 }
 
-template <typename S>
+template <typename S, typename FL>
 template <bool Dagger>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_R_impl(
     const S &deltaQN, std::vector<entryTuple1> &entries) const {
     checkOMP();
     Timer clock;
@@ -1261,10 +1263,10 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
     const int entrySize = entries.size();
     const auto qnPairs = getQNpairsR(refMat, deltaQN);
     sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, entrySize);
-    vector<vector<double>> Hijs(ompThreads, vector<double>(entrySize, 0));
+    vector<vector<FL>> Hijs(ompThreads, vector<FL>(entrySize, 0));
     const auto qnSiz = qnPairs.size();
     std::vector<size_t> nonZeros(entrySize, 0);
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     for (int itQN = 0; itQN < qnSiz; ++itQN) {
         const auto ketQN = qnPairs[itQN].first;
         const auto braQN = qnPairs[itQN].second;
@@ -1323,12 +1325,12 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
                  *
                  */
                 auto &Hij = Hijs[iThread];
-                memset(Hij.data(), 0, Hij.size() * sizeof(double));
+                memset(Hij.data(), 0, Hij.size() * sizeof(FL));
                 // vv this is the parity coming from applying ll destruction to
                 // ket.
                 //      Since ll is looped from 0 to nOrb, I flip the sign for
                 //      every occupied orbital l
-                double signL = 1.;
+                FL signL = 1.;
                 // TODO: vvv The bra loop could also be inside this
                 // vvv for R, we have l  |bra>
                 //     for R', we have <ket| l' = <ket l|
@@ -1348,7 +1350,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
                         // energy expression
                         for (int xx = 0; xx < entrySize; ++xx) {
                             const auto iOrb = entries[xx].iOrb;
-                            double energy = 0.0;
+                            FL energy = 0.0;
                             for (int i = 0; i < closed.size(); i++) {
                                 energy +=
                                     ints2.intsR(iOrb, ll, closed[i], closed[i]);
@@ -1394,7 +1396,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
                         if (ncre == 1) {
                             auto i = cre[0], a = des[0];
                             // <a|R_x|b> = sum_jkl (xl|jk) <a|j'kl|b>
-                            double sgn = signL;
+                            FL sgn = signL;
                             ket.parity(std::min(i, a), std::max(i, a), sgn);
                             for (int xx = 0; xx < entrySize; ++xx) {
                                 const auto integral =
@@ -1453,29 +1455,27 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R_impl(
         totCountsR += 1;
     }
     if (doAllocateEmptyMats()) {
-        sci_detail::allocateEmptyMatrices<S>(entries);
+        sci_detail::allocateEmptyMatrices<S, FL>(entries);
     }
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_R(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_R(
     const S &deltaQN, std::vector<entryTuple1> &entries) const {
     // new R = R + 1/2 S; see
     // https://pyblock-dmrg.readthedocs.io/en/latest/DMRG/unrestricted.html
     // say("-------- fill Op R:",iOrb);
     fillOp_R_impl<false>(deltaQN, entries);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_RD(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_RD(
     const S &deltaQN, std::vector<entryTuple1> &entries) const {
     // say("FILL RD");
     fillOp_R_impl<true>(deltaQN, entries);
 }
-template <typename S>
+template <typename S, typename FL>
 template <int Type>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_AB_impl(const S &deltaQN,
-                                                            BLSparseMatrix &mat,
-                                                            int iOrb,
-                                                            int jOrb) const {
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_AB_impl(
+    const S &deltaQN, BLSparseMatrix &mat, int iOrb, int jOrb) const {
     checkOMP();
     const auto iOrbL = iOrb - (isRight ? nOrbOther * 2 : 0);
     const auto jOrbL = jOrb - (isRight ? nOrbOther * 2 : 0);
@@ -1486,7 +1486,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_AB_impl(const S &deltaQN,
     sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, 1);
     const auto qnSiz = qnPairs.size();
     size_t nonZeros = 0;
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
 #ifndef _SCI_USE_OMP_ON
     std::pair<int, std::vector<int>> applResult;
     std::pair<int, std::vector<int>> applResult2;
@@ -1594,11 +1594,11 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_AB_impl(const S &deltaQN,
         }
     }
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_A(const S &deltaQN,
-                                                      BLSparseMatrix &mat,
-                                                      int iOrb,
-                                                      int jOrb) const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_A(const S &deltaQN,
+                                                          BLSparseMatrix &mat,
+                                                          int iOrb,
+                                                          int jOrb) const {
     // ATTENTION:
     //  block2 definition: A_ij = i' j'; AD_ij = j i
     //   my definition (consistent with 10.1063/1.1638734):
@@ -1606,26 +1606,26 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_A(const S &deltaQN,
     // => so here, I need to cale A' routine
     fillOp_AB_impl<1>(deltaQN, mat, jOrb, iOrb);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_AD(const S &deltaQN,
-                                                       BLSparseMatrix &mat,
-                                                       int iOrb,
-                                                       int jOrb) const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_AD(const S &deltaQN,
+                                                           BLSparseMatrix &mat,
+                                                           int iOrb,
+                                                           int jOrb) const {
     /** Fill A' = j'i' (note order!) */
     // See above... AD and A are interchanged
     fillOp_AB_impl<0>(deltaQN, mat, jOrb, iOrb);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_B(const S &deltaQN,
-                                                      BLSparseMatrix &mat,
-                                                      int iOrb,
-                                                      int jOrb) const {
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_B(const S &deltaQN,
+                                                          BLSparseMatrix &mat,
+                                                          int iOrb,
+                                                          int jOrb) const {
     fillOp_AB_impl<2>(deltaQN, mat, iOrb, jOrb);
 }
 
-template <typename S>
+template <typename S, typename FL>
 template <bool Dagger>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_P_impl(
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_P_impl(
     const S &deltaQN, std::vector<entryTuple2> &entries) const {
     checkOMP();
     assert(isRight and "Should not happen for left big site and NC MPO!");
@@ -1638,7 +1638,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_P_impl(
         refMat, deltaQN); // all entries should generate the same pairs!
     const auto qnSiz = qnPairs.size();
     std::vector<size_t> nonZeros(entrySize, 0);
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     for (int itQN = 0; itQN < qnSiz; ++itQN) {
         const auto ketQN = qnPairs[itQN].first;
         const auto braQN = qnPairs[itQN].second;
@@ -1717,8 +1717,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_P_impl(
                     int k = std::min(chg[0], chg[1]);
                     int l = std::max(chg[0], chg[1]);
                     assert(k < l);
-                    double Hij;
-                    double sgn = 1.0;
+                    FL Hij;
+                    FL sgn = 1.0;
                     if (Dagger ? bra.nEl() != 2 : ket.nEl() != 2) {
                         ket.parity(k, l, sgn); // Not needed for CISD
                     }
@@ -1770,21 +1770,21 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_P_impl(
         totCountsP += 1;
     }
     if (doAllocateEmptyMats()) {
-        sci_detail::allocateEmptyMatrices<S>(entries);
+        sci_detail::allocateEmptyMatrices<S, FL>(entries);
     }
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_P(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_P(
     const S &deltaQN, std::vector<entryTuple2> &entries) const {
     fillOp_P_impl<false>(deltaQN, entries);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_PD(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_PD(
     const S &deltaQN, std::vector<entryTuple2> &entries) const {
     fillOp_P_impl<true>(deltaQN, entries);
 }
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_Q(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::fillOp_Q(
     const S &deltaQN, std::vector<entryTuple2> &entries) const {
     assert(isRight and "Should not happen for left big site and NC MPO!");
     // sum_kl [ [xy|kl] - [xl|ky] ] k' l
@@ -1798,7 +1798,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_Q(
     sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, entrySize);
     const auto qnSiz = qnPairs.size();
     std::vector<size_t> nonZeros(entrySize, 0);
-    sci_detail::COOSparseMat<double> smat;
+    sci_detail::COOSparseMat<FL> smat;
     for (int itQN = 0; itQN < qnSiz; ++itQN) {
         const auto ketQN = qnPairs[itQN].first;
         const auto braQN = qnPairs[itQN].second;
@@ -1827,7 +1827,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_Q(
                 if (iD == jD) { // Diagonal
                     auto closed = bra.getClosed();
                     for (int xx = 0; xx < entrySize; ++xx) {
-                        double energy = 0.0;
+                        FL energy = 0.0;
                         for (int i = 0; i < closed.size(); i++) {
                             energy +=
                                 ints2.intsQ(entries[xx].iOrb, entries[xx].jOrb,
@@ -1879,7 +1879,7 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_Q(
                     //    say(ii,jj,"ops",bra.getClosed(),"ket",ket.getClosed(),"cre",cre[0],cre[1],"des",des[0],des[1]);
                     //}
                     assert(ncre == 1 and ndes == 1);
-                    double sgn = 1.0;
+                    FL sgn = 1.0;
                     ket.parity(min(cre[0], des[0]), max(cre[0], des[0]), sgn);
                     for (int xx = 0; xx < entrySize; ++xx) {
                         const auto integral = ints2.intsQ(
@@ -1912,14 +1912,14 @@ void SCIFockBigSite<S, typename S::is_sz_t>::fillOp_Q(
     qnCountsQ += qnSiz * entrySize;
     totCountsQ += 1;
     if (doAllocateEmptyMats()) {
-        sci_detail::allocateEmptyMatrices<S>(entries);
+        sci_detail::allocateEmptyMatrices<S, FL>(entries);
     }
 }
 
 // hz: the following are from sciblock2/src/SciWrapperExcludeQNs.cpp
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::setQnIdxBra(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::setQnIdxBra(
     const std::vector<int> &inp, const std::vector<char> &ops) {
     if (ops.size() == 1 and ops[0] == 'X') {
         qnIdxBraH = inp;
@@ -1965,8 +1965,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::setQnIdxBra(
     }
 }
 
-template <typename S>
-void SCIFockBigSite<S, typename S::is_sz_t>::setQnIdxKet(
+template <typename S, typename FL>
+void SCIFockBigSite<S, FL, typename S::is_sz_t>::setQnIdxKet(
     const std::vector<int> &inp, const std::vector<char> &ops) {
     if (ops.size() == 1 and ops[0] == 'X') {
         qnIdxKetH = inp;
@@ -2012,8 +2012,8 @@ void SCIFockBigSite<S, typename S::is_sz_t>::setQnIdxKet(
     }
 }
 
-template <typename S>
-bool SCIFockBigSite<S, typename S::is_sz_t>::idxInKet(
+template <typename S, typename FL>
+bool SCIFockBigSite<S, FL, typename S::is_sz_t>::idxInKet(
     const int braIdx, const std::vector<int> &qnIdxKet) const {
     if (qnIdxKet.size() > 0) {
         bool inKet = false;
@@ -2029,9 +2029,9 @@ bool SCIFockBigSite<S, typename S::is_sz_t>::idxInKet(
     }
 }
 
-template <typename S>
+template <typename S, typename FL>
 std::vector<std::pair<int, int>>
-SCIFockBigSite<S, typename S::is_sz_t>::getQNPairsImpl(
+SCIFockBigSite<S, FL, typename S::is_sz_t>::getQNPairsImpl(
     const BLSparseMatrix &mat, const S &deltaQN,
     const std::vector<int> &qnIdxBra, const std::vector<int> &qnIdxKet) const {
     std::vector<std::pair<int, int>> pairs;
@@ -2076,7 +2076,8 @@ SCIFockBigSite<S, typename S::is_sz_t>::getQNPairsImpl(
                 continue;
             }
             mat[sym].nnz = 0;
-            mat[sym].alloc = make_shared<VectorAllocator<double>>();
+            mat[sym].alloc =
+                make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
             mat[sym].allocate();
             assert(mat[sym].data != nullptr);
         }
@@ -2084,6 +2085,6 @@ SCIFockBigSite<S, typename S::is_sz_t>::getQNPairsImpl(
     return pairs;
 }
 
-template class SCIFockBigSite<block2::SZ>;
+template class SCIFockBigSite<block2::SZ, double>;
 
 } // namespace block2

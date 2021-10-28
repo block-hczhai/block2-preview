@@ -21,9 +21,9 @@
 #include "../block2_core.hpp"
 
 template struct block2::SparseMatrixInfo<block2::SZK>;
-template struct block2::SparseMatrix<block2::SZK>;
-template struct block2::SparseMatrixGroup<block2::SZK>;
+template struct block2::SparseMatrix<block2::SZK, double>;
+template struct block2::SparseMatrixGroup<block2::SZK, double>;
 
 template struct block2::SparseMatrixInfo<block2::SU2K>;
-template struct block2::SparseMatrix<block2::SU2K>;
-template struct block2::SparseMatrixGroup<block2::SU2K>;
+template struct block2::SparseMatrix<block2::SU2K, double>;
+template struct block2::SparseMatrixGroup<block2::SU2K, double>;

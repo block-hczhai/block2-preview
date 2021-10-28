@@ -22,6 +22,7 @@
 
 template void bind_trans_mps<SU2, SZ>(py::module &m, const string &aux_name);
 template void bind_trans_mps<SZ, SU2>(py::module &m, const string &aux_name);
-template auto bind_trans_mps_spin_specific<SU2, SZ>(py::module &m,
-                                                const string &aux_name)
+template auto
+bind_fl_trans_mps_spin_specific<SU2, SZ, double>(py::module &m,
+                                                 const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));

@@ -10,10 +10,10 @@ class TestTTODMRGSingletEmbedding : public ::testing::Test {
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<double>> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const vector<vector<FL>> &energies,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt,
                    int tto);
     void SetUp() override {
@@ -35,29 +35,29 @@ class TestTTODMRGSingletEmbedding : public ::testing::Test {
     }
 };
 
-template <typename S>
+template <typename S, typename FL>
 void TestTTODMRGSingletEmbedding::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
-    const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
+    const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt, int tto) {
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
-                                      OpNamesSet({OpNames::R, OpNames::RD}));
+    mpo = make_shared<SimplifiedMPO<S, FL>>(
+        mpo, make_shared<RuleQC<S, FL>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    vector<FL> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -77,7 +77,8 @@ void TestTTODMRGSingletEmbedding::test_dmrg(
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
+            shared_ptr<MPS<S, FL>> mps =
+                make_shared<MPS<S, FL>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -88,14 +89,16 @@ void TestTTODMRGSingletEmbedding::test_dmrg(
             mps_info->deallocate_mutable();
 
             // ME
-            shared_ptr<MovingEnvironment<S>> me =
-                make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+            shared_ptr<MovingEnvironment<S, FL, FL>> me =
+                make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
+                                                          "DMRG");
             me->init_environments(false);
             me->delayed_contraction = OpNamesSet::normal_ops();
             me->cached_contraction = true;
 
             // DMRG
-            shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+            shared_ptr<DMRG<S, FL, FL>> dmrg =
+                make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
@@ -103,7 +106,7 @@ void TestTTODMRGSingletEmbedding::test_dmrg(
             dmrg->solve(tto, mps->center == 0, 0);
 
             me->dot = 1;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -130,7 +133,7 @@ void TestTTODMRGSingletEmbedding::test_dmrg(
 
 TEST_F(TestTTODMRGSingletEmbedding, TestSU2) {
 
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -158,22 +161,22 @@ TEST_F(TestTTODMRGSingletEmbedding, TestSU2) {
     energies[7] = {-107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
     targets.resize(2);
     energies.resize(2);
 
     for (int tto = 4; tto < 8; tto++) {
-        test_dmrg<SU2>(targets, energies, hamil, "SU2",
-                       DecompositionTypes::DensityMatrix,
-                       NoiseTypes::DensityMatrix, tto);
-        test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
-                       DecompositionTypes::DensityMatrix,
-                       NoiseTypes::ReducedPerturbative, tto);
-        test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
-                       DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative,
-                       tto);
+        test_dmrg<SU2, double>(targets, energies, hamil, "SU2",
+                               DecompositionTypes::DensityMatrix,
+                               NoiseTypes::DensityMatrix, tto);
+        test_dmrg<SU2, double>(targets, energies, hamil, "SU2 RED PERT",
+                               DecompositionTypes::DensityMatrix,
+                               NoiseTypes::ReducedPerturbative, tto);
+        test_dmrg<SU2, double>(targets, energies, hamil, "SU2 SVD RED PERT",
+                               DecompositionTypes::SVD,
+                               NoiseTypes::ReducedPerturbative, tto);
     }
 
     hamil->deallocate();

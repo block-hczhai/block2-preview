@@ -33,24 +33,25 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct PDM1MPOQC;
+template <typename, typename, typename = void> struct PDM1MPOQC;
 
 // "MPO" for one particle density matrix (non-spin-adapted)
-template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    PDM1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil, uint8_t ds = 0)
-        : MPO<S>(hamil->n_sites) {
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+template <typename S, typename FL>
+struct PDM1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
+        : MPO<S, FL>(hamil->n_sites) {
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
             OpNames::Zero, SiteIndex(), hamil->vacuum);
         assert(ds == 0);
-        const uint16_t n_sites = MPO<S>::n_sites;
+        const uint16_t n_sites = MPO<S, FL>::n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
@@ -76,34 +77,34 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_orbs; m++)
             for (uint8_t s = 0; s < 2; s++) {
-                c_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
-                                              S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
+                c_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::C, SiteIndex({m}, {s}),
+                    S(1, sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::D, SiteIndex({m}, {s}),
+                    S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
             }
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++)
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
-                    b_op[i][j][s] = make_shared<OpElement<S>>(
+                    b_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
                           S::pg_mul(hamil->orb_sym[i],
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    pdm1_op[i][j][s] = make_shared<OpElement<S>>(
+                    pdm1_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::PDM1, sidx,
                         S(0, sz_minus[s],
                           S::pg_mul(hamil->orb_sym[i],
                                     S::pg_inv(hamil->orb_sym[j]))));
                 }
-        MPO<S>::const_e = 0.0;
-        MPO<S>::op = zero_op;
-        MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::schemer = nullptr;
+        MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         for (uint16_t pm = 0; pm < n_sites; pm++) {
             uint16_t m = pm + n_orbs_big_left - 1;
             // left operator names
@@ -258,8 +259,8 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 this->middle_operator_exprs.push_back(pmexpr);
             }
             // site tensors
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             // left operator names
             //   1 : identity
             //   1*4 : mm / cd
@@ -364,7 +365,6 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {}
-    template <typename FL>
     static GMatrix<FL> get_matrix(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
@@ -373,15 +373,14 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         r.clear();
         for (auto &v : expectations)
             for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(x.first);
                 assert(op->name == OpNames::PDM1);
                 r(2 * op->site_index[0] + op->site_index.s(0),
                   2 * op->site_index[1] + op->site_index.s(1)) = x.second;
             }
         return r;
     }
-    template <typename FL>
     static GMatrix<FL> get_matrix_spatial(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
@@ -405,21 +404,22 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_sz_t> : MPO<S> {
 // ds = 1 (spin-orbit) triplet excitation operators
 //     dm[i, j]    =      sqrt(2) < a^{\dagger[1/2]}_i \otimes_[1] a^{[1/2]}_j >
 //                 = (-1) sqrt(2) < a^{[1/2]}_j \otimes_[1] a^{\dagger[1/2]}_i >
-template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
-    PDM1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil, uint8_t ds = 0)
-        : MPO<S>(hamil->n_sites) {
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+template <typename S, typename FL>
+struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
+        : MPO<S, FL>(hamil->n_sites) {
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
             OpNames::Zero, SiteIndex(), S(0, ds * 2, 0));
         assert(ds == 0 || ds == 1);
-        const auto n_sites = MPO<S>::n_sites;
+        const auto n_sites = MPO<S, FL>::n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
@@ -437,29 +437,30 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         shared_ptr<OpExpr<S>> pdm1_op[n_orbs][n_orbs];
 #endif
         for (uint16_t m = 0; m < n_orbs; m++) {
-            c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
-                                                S(1, 1, hamil->orb_sym[m]));
-            d_op[m] = make_shared<OpElement<S>>(OpNames::D, SiteIndex(m),
-                                                S(-1, 1, S::pg_inv(hamil->orb_sym[m])));
+            c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
+                                                    S(1, 1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S, FL>>(
+                OpNames::D, SiteIndex(m),
+                S(-1, 1, S::pg_inv(hamil->orb_sym[m])));
         }
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++) {
-                b_op[i][j] = make_shared<OpElement<S>>(
+                b_op[i][j] = make_shared<OpElement<S, FL>>(
                     OpNames::B, SiteIndex(i, j, ds),
                     S(0, ds * 2,
                       S::pg_mul(hamil->orb_sym[i],
                                 S::pg_inv(hamil->orb_sym[j]))));
-                pdm1_op[i][j] = make_shared<OpElement<S>>(
+                pdm1_op[i][j] = make_shared<OpElement<S, FL>>(
                     OpNames::PDM1, SiteIndex(i, j),
                     S(0, ds * 2,
                       S::pg_mul(hamil->orb_sym[i],
                                 S::pg_inv(hamil->orb_sym[j]))));
             }
-        MPO<S>::const_e = 0.0;
-        MPO<S>::op = zero_op;
-        MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::schemer = nullptr;
+        MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         for (uint16_t pm = 0; pm < n_sites; pm++) {
             uint16_t m = pm + n_orbs_big_left - 1;
             // left operator names
@@ -597,8 +598,8 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 this->middle_operator_exprs.push_back(pmexpr);
             }
             // site tensors
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             // left operator names
             //   1 : identity
             //   1 : mm / cd
@@ -691,7 +692,6 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
     }
     void deallocate() override {}
     // only for singlet
-    template <typename FL>
     static GMatrix<FL> get_matrix(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
@@ -707,7 +707,6 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         t.deallocate();
         return r;
     }
-    template <typename FL>
     static GMatrix<FL> get_matrix_spatial(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
@@ -716,8 +715,8 @@ template <typename S> struct PDM1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         r.clear();
         for (auto &v : expectations)
             for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(x.first);
                 assert(op->name == OpNames::PDM1);
                 r(op->site_index[0], op->site_index[1]) = x.second;
             }

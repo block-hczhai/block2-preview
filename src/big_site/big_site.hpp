@@ -21,11 +21,11 @@
 
 #pragma once
 
+#include "../core/delayed_sparse_matrix.hpp"
 #include "../core/expr.hpp"
 #include "../core/parallel_rule.hpp"
 #include "../core/rule.hpp"
 #include "../core/sparse_matrix.hpp"
-#include "../core/delayed_sparse_matrix.hpp"
 #include "../core/state_info.hpp"
 #include <memory>
 #include <unordered_map>
@@ -35,7 +35,7 @@ using namespace std;
 namespace block2 {
 
 /** The interface for a big site. */
-template <typename S> struct BigSite {
+template <typename S, typename FL> struct BigSite {
     int n_orbs; //!< Spatial orbitals in the big site
     shared_ptr<StateInfo<S>> basis;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> op_infos;
@@ -43,8 +43,8 @@ template <typename S> struct BigSite {
     virtual ~BigSite() = default;
     virtual void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
-        const {}
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const {}
     // Find sparse matrix info for site operator with the given delta quantum q
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(S q) const {
         auto p = lower_bound(op_infos.begin(), op_infos.end(), q,
@@ -56,35 +56,36 @@ template <typename S> struct BigSite {
     }
 };
 
-template <typename S> struct SimplifiedBigSite : BigSite<S> {
-    shared_ptr<BigSite<S>> big_site;
-    shared_ptr<Rule<S>> rule;
-    SimplifiedBigSite(const shared_ptr<BigSite<S>> &big_site,
-                      const shared_ptr<Rule<S>> &rule)
-        : BigSite<S>(*big_site), big_site(big_site), rule(rule) {}
+template <typename S, typename FL> struct SimplifiedBigSite : BigSite<S, FL> {
+    shared_ptr<BigSite<S, FL>> big_site;
+    shared_ptr<Rule<S, FL>> rule;
+    SimplifiedBigSite(const shared_ptr<BigSite<S, FL>> &big_site,
+                      const shared_ptr<Rule<S, FL>> &rule)
+        : BigSite<S, FL>(*big_site), big_site(big_site), rule(rule) {}
     virtual ~SimplifiedBigSite() = default;
     void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
-        const override {
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> kops;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override {
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            kops;
         kops.reserve(ops.size());
         for (auto &p : ops) {
             assert(p.second == nullptr);
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             if ((*rule)(op) != nullptr)
-                p.second = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(
+                p.second = make_shared<DelayedSparseMatrix<S, FL, OpExpr<S>>>(
                     m, p.first, big_site->find_site_op_info(op->q_label));
             else
                 kops[p.first] = nullptr;
         }
         big_site->get_site_ops(m, kops);
         for (auto &p : ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             if (p.second != nullptr) {
-                shared_ptr<OpElement<S>> ref_op = (*rule)(op)->op;
+                shared_ptr<OpElement<S, FL>> ref_op = (*rule)(op)->op;
                 if (kops.count(ref_op) && (kops.at(ref_op)->factor == 0 ||
                                            kops.at(ref_op)->norm() < TINY))
                     p.second->factor = 0;
@@ -94,25 +95,26 @@ template <typename S> struct SimplifiedBigSite : BigSite<S> {
     }
 };
 
-template <typename S> struct ParallelBigSite : BigSite<S> {
-    shared_ptr<BigSite<S>> big_site;
-    shared_ptr<ParallelRule<S>> rule;
-    ParallelBigSite(const shared_ptr<BigSite<S>> &big_site,
-                    const shared_ptr<ParallelRule<S>> &rule)
-        : BigSite<S>(*big_site), big_site(big_site), rule(rule) {}
+template <typename S, typename FL> struct ParallelBigSite : BigSite<S, FL> {
+    shared_ptr<BigSite<S, FL>> big_site;
+    shared_ptr<ParallelRule<S, FL>> rule;
+    ParallelBigSite(const shared_ptr<BigSite<S, FL>> &big_site,
+                    const shared_ptr<ParallelRule<S, FL>> &rule)
+        : BigSite<S, FL>(*big_site), big_site(big_site), rule(rule) {}
     virtual ~ParallelBigSite() = default;
     void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
-        const override {
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> kops;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override {
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            kops;
         kops.reserve(ops.size());
         for (auto &p : ops) {
             assert(p.second == nullptr);
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             if (!rule->available(op))
-                p.second = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(
+                p.second = make_shared<DelayedSparseMatrix<S, FL, OpExpr<S>>>(
                     m, p.first, big_site->find_site_op_info(op->q_label));
             else
                 kops[p.first] = nullptr;

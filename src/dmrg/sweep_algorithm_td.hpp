@@ -58,37 +58,38 @@ inline TETypes operator|(TETypes a, TETypes b) {
 enum struct TruncPatternTypes : uint8_t { None, TruncAfterOdd, TruncAfterEven };
 
 // Imaginary/Real Time Evolution (td-DMRG++/RK4)
-template <typename S> struct TDDMRG {
-    shared_ptr<MovingEnvironment<S>> me;
-    shared_ptr<MovingEnvironment<S>> lme, rme;
+template <typename S, typename FL, typename FLS> struct TDDMRG {
+    typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
+    shared_ptr<MovingEnvironment<S, FL, FLS>> me;
+    shared_ptr<MovingEnvironment<S, FL, FLS>> lme, rme;
     vector<ubond_t> bond_dims;
-    vector<double> noises;
-    vector<double> energies;
-    vector<double> normsqs;
-    vector<double> discarded_weights;
+    vector<FPS> noises;
+    vector<FPS> energies;
+    vector<FPS> normsqs;
+    vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
     bool forward;
     TETypes mode = TETypes::ImagTE | TETypes::RK4PP;
     int n_sub_sweeps = 1;
-    vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
+    vector<FPS> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
-    double cutoff = 1E-14;
+    FPS cutoff = 1E-14;
     bool decomp_last_site = true;
     bool hermitian = true; //!< Whether the Hamiltonian is Hermitian (symmetric)
     size_t sweep_cumulative_nflop = 0;
-    TDDMRG(const shared_ptr<MovingEnvironment<S>> &me,
+    TDDMRG(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
            const vector<ubond_t> &bond_dims,
-           const vector<double> &noises = vector<double>())
+           const vector<FPS> &noises = vector<FPS>())
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
-        double energy, normsq, error;
+        FPS energy, normsq, error;
         int nmult, mmps;
         double tmult;
         size_t nflop;
-        Iteration(double energy, double normsq, double error, int mmps,
-                  int nmult, size_t nflop = 0, double tmult = 1.0)
+        Iteration(FPS energy, FPS normsq, FPS error, int mmps, int nmult,
+                  size_t nflop = 0, double tmult = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nmult(nmult), nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
@@ -104,12 +105,12 @@ template <typename S> struct TDDMRG {
         }
     };
     // one-site algorithm
-    Iteration update_one_dot(int i, bool forward, bool advance, double beta,
-                             ubond_t bond_dim, double noise) {
+    Iteration update_one_dot(int i, bool forward, bool advance, FPS beta,
+                             ubond_t bond_dim, FPS noise) {
         assert(rme->bra != rme->ket);
         frame->activate(0);
         bool fuse_left = i <= rme->fuse_center;
-        vector<shared_ptr<MPS<S>>> mpss = {rme->bra, rme->ket};
+        vector<shared_ptr<MPS<S, FLS>>> mpss = {rme->bra, rme->ket};
         for (auto &mps : mpss) {
             if (mps->canonical_form[i] == 'C') {
                 if (i == 0)
@@ -126,42 +127,42 @@ template <typename S> struct TDDMRG {
             mps->load_tensor(i);
             if ((fuse_left && mps->canonical_form[i] == 'S') ||
                 (!fuse_left && mps->canonical_form[i] == 'K')) {
-                shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
                 if (fuse_left && mps->canonical_form[i] == 'S')
                     mps->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
                             i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
                 else if (!fuse_left && mps->canonical_form[i] == 'K')
                     mps->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
                             i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
                 prev_wfn->info->deallocate();
                 prev_wfn->deallocate();
             }
         }
-        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
-        tuple<double, double, int, size_t, double> pdi;
+        shared_ptr<SparseMatrixGroup<S, FLS>> pbra = nullptr;
+        tuple<FPS, FPS, int, size_t, double> pdi;
         bool last_site =
             (forward && i == me->n_sites - 1) || (!forward && i == 0);
-        vector<shared_ptr<SparseMatrix<S>>> mrk4;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> mrk4;
         // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> r_eff = rme->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, FL>> r_eff = rme->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
             rme->bra->tensors[i], rme->ket->tensors[i]);
         auto rvmt =
             r_eff->first_rk4_apply(-beta, me->mpo->const_e, rme->para_rule);
         r_eff->deallocate();
-        vector<shared_ptr<SparseMatrix<S>>> hkets = rvmt.first;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> hkets = rvmt.first;
         memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
-               hkets[0]->total_memory * sizeof(double));
-        shared_ptr<EffectiveHamiltonian<S>> l_eff = lme->eff_ham(
+               hkets[0]->total_memory * sizeof(FLS));
+        shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             lme->bra->tensors[i], lme->ket->tensors[i]);
         if ((mode & TETypes::RK4PP) && !last_site) {
             auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
                                                 hkets[1], false, me->para_rule);
             memcpy(lme->bra->tensors[i]->data, lvmt.first.back()->data,
-                   hkets[0]->total_memory * sizeof(double));
+                   hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
             pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
@@ -174,7 +175,7 @@ template <typename S> struct TDDMRG {
         get<2>(pdi) += get<0>(rvmt.second);
         get<3>(pdi) += get<1>(rvmt.second);
         get<4>(pdi) += get<2>(rvmt.second);
-        double bra_error = 0.0;
+        FPS bra_error = 0.0;
         int bra_mmps = 0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             if (!decomp_last_site &&
@@ -189,30 +190,29 @@ template <typename S> struct TDDMRG {
                 // change to fused form for splitting
                 if (fuse_left != forward) {
                     for (auto &mps : mpss) {
-                        shared_ptr<SparseMatrix<S>> prev_wfn = mps->tensors[i];
+                        shared_ptr<SparseMatrix<S, FLS>> prev_wfn =
+                            mps->tensors[i];
                         if (!fuse_left && forward)
-                            mps->tensors[i] =
-                                MovingEnvironment<S>::swap_wfn_to_fused_left(
-                                    i, mps->info, prev_wfn,
-                                    me->mpo->tf->opf->cg);
+                            mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                                swap_wfn_to_fused_left(i, mps->info, prev_wfn,
+                                                       me->mpo->tf->opf->cg);
                         else if (fuse_left && !forward)
-                            mps->tensors[i] =
-                                MovingEnvironment<S>::swap_wfn_to_fused_right(
-                                    i, mps->info, prev_wfn,
-                                    me->mpo->tf->opf->cg);
+                            mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                                swap_wfn_to_fused_right(i, mps->info, prev_wfn,
+                                                        me->mpo->tf->opf->cg);
                         prev_wfn->info->deallocate();
                         prev_wfn->deallocate();
                     }
                     if (pbra != nullptr) {
-                        vector<shared_ptr<SparseMatrixGroup<S>>> prev_pbras = {
-                            pbra};
+                        vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
+                            prev_pbras = {pbra};
                         if (!fuse_left && forward)
-                            pbra = MovingEnvironment<S>::
+                            pbra = MovingEnvironment<S, FL, FLS>::
                                 swap_multi_wfn_to_fused_left(
                                     i, rme->bra->info, prev_pbras,
                                     me->mpo->tf->opf->cg)[0];
                         else if (fuse_left && !forward)
-                            pbra = MovingEnvironment<S>::
+                            pbra = MovingEnvironment<S, FL, FLS>::
                                 swap_multi_wfn_to_fused_right(
                                     i, rme->bra->info, prev_pbras,
                                     me->mpo->tf->opf->cg)[0];
@@ -221,81 +221,82 @@ template <typename S> struct TDDMRG {
                     }
                     if (mrk4.size() != 0)
                         for (size_t ip = 0; ip < mrk4.size(); ip++) {
-                            shared_ptr<SparseMatrix<S>> prev_wfn = mrk4[ip];
+                            shared_ptr<SparseMatrix<S, FLS>> prev_wfn =
+                                mrk4[ip];
                             if (!fuse_left && forward)
-                                mrk4[ip] = MovingEnvironment<S>::
+                                mrk4[ip] = MovingEnvironment<S, FL, FLS>::
                                     swap_wfn_to_fused_left(
                                         i, rme->bra->info, prev_wfn,
                                         me->mpo->tf->opf->cg);
                             else if (fuse_left && !forward)
-                                mrk4[ip] = MovingEnvironment<S>::
+                                mrk4[ip] = MovingEnvironment<S, FL, FLS>::
                                     swap_wfn_to_fused_right(
                                         i, rme->bra->info, prev_wfn,
                                         me->mpo->tf->opf->cg);
                             prev_wfn->deallocate();
                         }
                 }
-                vector<shared_ptr<SparseMatrix<S>>> old_wfns;
+                vector<shared_ptr<SparseMatrix<S, FLS>>> old_wfns;
                 for (auto &mps : mpss)
                     old_wfns.push_back(mps->tensors[i]);
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     assert(pbra != nullptr);
                 for (auto &mps : mpss) {
                     // splitting of wavefunction
-                    shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
-                    shared_ptr<SparseMatrix<S>> left, right;
-                    shared_ptr<SparseMatrix<S>> dm = nullptr;
-                    double error;
+                    shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
+                    shared_ptr<SparseMatrix<S, FLS>> left, right;
+                    shared_ptr<SparseMatrix<S, FLS>> dm = nullptr;
+                    FPS error;
                     if (decomp_type == DecompositionTypes::DensityMatrix) {
                         if (mps != rme->bra) {
-                            dm = MovingEnvironment<S>::density_matrix(
+                            dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                                 mps->info->vacuum, old_wfn, forward, 0.0,
                                 NoiseTypes::None);
                         } else if (mrk4.size() == 0) {
-                            dm = MovingEnvironment<S>::density_matrix(
+                            dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                                 mps->info->vacuum, old_wfn, forward, noise,
                                 noise_type, 1.0, pbra);
                         } else {
-                            dm = MovingEnvironment<S>::density_matrix(
+                            dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                                 mps->info->vacuum, old_wfn, forward, noise,
                                 noise_type, weights[0], pbra);
                             assert(mrk4.size() == 3);
                             for (int i = 0; i < 3; i++)
-                                MovingEnvironment<S>::density_matrix_add_wfn(
-                                    dm, mrk4[i], forward, weights[i + 1]);
+                                MovingEnvironment<S, FL, FLS>::
+                                    density_matrix_add_wfn(dm, mrk4[i], forward,
+                                                           weights[i + 1]);
                         }
-                        error = MovingEnvironment<S>::split_density_matrix(
-                            dm, old_wfn, bond_dim, forward, false, left, right,
-                            cutoff, trunc_type);
+                        error =
+                            MovingEnvironment<S, FL, FLS>::split_density_matrix(
+                                dm, old_wfn, bond_dim, forward, false, left,
+                                right, cutoff, trunc_type);
                     } else if (decomp_type == DecompositionTypes::SVD ||
                                decomp_type == DecompositionTypes::PureSVD) {
                         if (mps != rme->bra) {
-                            error =
-                                MovingEnvironment<S>::split_wavefunction_svd(
+                            error = MovingEnvironment<S, FL, FLS>::
+                                split_wavefunction_svd(
                                     mps->info->vacuum, old_wfn, bond_dim,
                                     forward, false, left, right, cutoff,
                                     trunc_type, decomp_type, nullptr);
                         } else {
                             if (noise != 0 && mps == rme->bra) {
                                 if (noise_type & NoiseTypes::Wavefunction)
-                                    MovingEnvironment<
-                                        S>::wavefunction_add_noise(old_wfn,
-                                                                   noise);
+                                    MovingEnvironment<S, FL, FLS>::
+                                        wavefunction_add_noise(old_wfn, noise);
                                 else if (noise_type & NoiseTypes::Perturbative)
-                                    MovingEnvironment<
-                                        S>::scale_perturbative_noise(noise,
-                                                                     noise_type,
-                                                                     pbra);
+                                    MovingEnvironment<S, FL, FLS>::
+                                        scale_perturbative_noise(
+                                            noise, noise_type, pbra);
                             }
-                            vector<double> xweights = {1};
-                            vector<shared_ptr<SparseMatrix<S>>> xwfns = {};
+                            vector<FPS> xweights = {1};
+                            vector<shared_ptr<SparseMatrix<S, FLS>>> xwfns = {};
                             if (mrk4.size() != 0) {
                                 assert(mrk4.size() == 3);
                                 xweights = weights;
                                 xwfns = mrk4;
                             }
-                            error =
-                                MovingEnvironment<S>::split_wavefunction_svd(
+                            error = MovingEnvironment<S, FL, FLS>::
+                                split_wavefunction_svd(
                                     mps->info->vacuum, old_wfn, bond_dim,
                                     forward, false, left, right, cutoff,
                                     trunc_type, decomp_type, pbra, xwfns,
@@ -314,15 +315,16 @@ template <typename S> struct TDDMRG {
                         mps->info->left_dims[i + 1] = info;
                         mps->info->save_left_dims(i + 1);
                         if (i != me->n_sites - 1) {
-                            MovingEnvironment<S>::contract_one_dot(
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
                                 i + 1, right, mps, forward);
                             mps->save_tensor(i + 1);
                             mps->unload_tensor(i + 1);
                             mps->canonical_form[i] = 'L';
                             mps->canonical_form[i + 1] = 'S';
                         } else {
-                            mps->tensors[i] = make_shared<SparseMatrix<S>>();
-                            MovingEnvironment<S>::contract_one_dot(
+                            mps->tensors[i] =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
                                 i, right, mps, !forward);
                             mps->save_tensor(i);
                             mps->unload_tensor(i);
@@ -335,16 +337,17 @@ template <typename S> struct TDDMRG {
                         mps->info->right_dims[i] = info;
                         mps->info->save_right_dims(i);
                         if (i > 0) {
-                            MovingEnvironment<S>::contract_one_dot(
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
                                 i - 1, left, mps, forward);
                             mps->save_tensor(i - 1);
                             mps->unload_tensor(i - 1);
                             mps->canonical_form[i - 1] = 'K';
                             mps->canonical_form[i] = 'R';
                         } else {
-                            mps->tensors[i] = make_shared<SparseMatrix<S>>();
-                            MovingEnvironment<S>::contract_one_dot(i, left, mps,
-                                                                   !forward);
+                            mps->tensors[i] =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                                i, left, mps, !forward);
                             mps->save_tensor(i);
                             mps->unload_tensor(i);
                             mps->canonical_form[i] = 'S';
@@ -365,7 +368,7 @@ template <typename S> struct TDDMRG {
                         dm->deallocate();
                     }
                 }
-                for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S>>>(
+                for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S, FLS>>>(
                          old_wfns.rbegin(), old_wfns.rend())) {
                     old_wfn->info->deallocate();
                     old_wfn->deallocate();
@@ -396,7 +399,7 @@ template <typename S> struct TDDMRG {
                     }
                 }
             for (auto &mps :
-                 vector<shared_ptr<MPS<S>>>(mpss.rbegin(), mpss.rend()))
+                 vector<shared_ptr<MPS<S, FLS>>>(mpss.rbegin(), mpss.rend()))
                 mps->unload_tensor(i);
         }
         if (pbra != nullptr) {
@@ -410,41 +413,41 @@ template <typename S> struct TDDMRG {
                          get<2>(pdi), get<3>(pdi), get<4>(pdi));
     }
     // two-site algorithm
-    Iteration update_two_dot(int i, bool forward, bool advance, double beta,
-                             ubond_t bond_dim, double noise) {
+    Iteration update_two_dot(int i, bool forward, bool advance, FPS beta,
+                             ubond_t bond_dim, FPS noise) {
         assert(rme->bra != rme->ket);
         frame->activate(0);
-        vector<shared_ptr<MPS<S>>> mpss = {rme->bra, rme->ket};
+        vector<shared_ptr<MPS<S, FLS>>> mpss = {rme->bra, rme->ket};
         for (auto &mps : mpss) {
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
-                MovingEnvironment<S>::contract_two_dot(i, mps);
+                MovingEnvironment<S, FL, FLS>::contract_two_dot(i, mps);
             else {
                 mps->load_tensor(i);
                 mps->tensors[i + 1] = nullptr;
             }
         }
-        shared_ptr<SparseMatrixGroup<S>> pbra = nullptr;
-        tuple<double, double, int, size_t, double> pdi;
+        shared_ptr<SparseMatrixGroup<S, FLS>> pbra = nullptr;
+        tuple<FPS, FPS, int, size_t, double> pdi;
         bool last_site =
             (forward && i + 1 == me->n_sites - 1) || (!forward && i == 0);
-        vector<shared_ptr<SparseMatrix<S>>> mrk4;
-        shared_ptr<EffectiveHamiltonian<S>> r_eff =
+        vector<shared_ptr<SparseMatrix<S, FLS>>> mrk4;
+        shared_ptr<EffectiveHamiltonian<S, FL>> r_eff =
             rme->eff_ham(FuseTypes::FuseLR, forward, false,
                          rme->bra->tensors[i], rme->ket->tensors[i]);
         auto rvmt =
             r_eff->first_rk4_apply(-beta, me->mpo->const_e, rme->para_rule);
         r_eff->deallocate();
-        vector<shared_ptr<SparseMatrix<S>>> hkets = rvmt.first;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> hkets = rvmt.first;
         memcpy(lme->bra->tensors[i]->data, hkets[0]->data,
-               hkets[0]->total_memory * sizeof(double));
-        shared_ptr<EffectiveHamiltonian<S>> l_eff =
+               hkets[0]->total_memory * sizeof(FLS));
+        shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
             lme->eff_ham(FuseTypes::FuseLR, forward, true, lme->bra->tensors[i],
                          lme->ket->tensors[i]);
         if ((mode & TETypes::RK4PP) && !last_site) {
             auto lvmt = l_eff->second_rk4_apply(-beta, me->mpo->const_e,
                                                 hkets[1], false, me->para_rule);
             memcpy(lme->bra->tensors[i]->data, lvmt.first.back()->data,
-                   hkets[0]->total_memory * sizeof(double));
+                   hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
             pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
@@ -457,66 +460,72 @@ template <typename S> struct TDDMRG {
         get<2>(pdi) += get<0>(rvmt.second);
         get<3>(pdi) += get<1>(rvmt.second);
         get<4>(pdi) += get<2>(rvmt.second);
-        vector<shared_ptr<SparseMatrix<S>>> old_wfns;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> old_wfns;
         for (auto &mps : mpss)
             old_wfns.push_back(mps->tensors[i]);
-        double bra_error = 0.0;
+        FPS bra_error = 0.0;
         int bra_mmps = 0;
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             assert(pbra != nullptr);
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             for (auto &mps : mpss) {
-                shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
-                shared_ptr<SparseMatrix<S>> dm = nullptr;
-                double error;
+                shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S, FLS>> dm = nullptr;
+                FPS error;
                 if (decomp_type == DecompositionTypes::DensityMatrix) {
                     if (mps != rme->bra) {
-                        dm = MovingEnvironment<S>::density_matrix(
+                        dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                             mps->info->vacuum, old_wfn, forward, 0.0,
                             NoiseTypes::None);
                     } else if (mrk4.size() == 0) {
-                        dm = MovingEnvironment<S>::density_matrix(
+                        dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                             mps->info->vacuum, old_wfn, forward, noise,
                             noise_type, 1.0, pbra);
                     } else {
-                        dm = MovingEnvironment<S>::density_matrix(
+                        dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                             mps->info->vacuum, old_wfn, forward, noise,
                             noise_type, weights[0], pbra);
                         assert(mrk4.size() == 3);
                         for (int i = 0; i < 3; i++)
-                            MovingEnvironment<S>::density_matrix_add_wfn(
-                                dm, mrk4[i], forward, weights[i + 1]);
+                            MovingEnvironment<S, FL, FLS>::
+                                density_matrix_add_wfn(dm, mrk4[i], forward,
+                                                       weights[i + 1]);
                     }
-                    error = MovingEnvironment<S>::split_density_matrix(
+                    error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                         dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
                         mps->tensors[i + 1], cutoff, trunc_type);
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
                     if (mps != rme->bra) {
-                        error = MovingEnvironment<S>::split_wavefunction_svd(
-                            mps->info->vacuum, old_wfn, bond_dim, forward,
-                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
-                            trunc_type, decomp_type, nullptr);
+                        error = MovingEnvironment<S, FL, FLS>::
+                            split_wavefunction_svd(
+                                mps->info->vacuum, old_wfn, bond_dim, forward,
+                                false, mps->tensors[i], mps->tensors[i + 1],
+                                cutoff, trunc_type, decomp_type, nullptr);
                     } else {
                         if (noise != 0 && mps == rme->bra) {
                             if (noise_type & NoiseTypes::Wavefunction)
-                                MovingEnvironment<S>::wavefunction_add_noise(
-                                    old_wfn, noise);
+                                MovingEnvironment<
+                                    S, FL, FLS>::wavefunction_add_noise(old_wfn,
+                                                                        noise);
                             else if (noise_type & NoiseTypes::Perturbative)
-                                MovingEnvironment<S>::scale_perturbative_noise(
-                                    noise, noise_type, pbra);
+                                MovingEnvironment<S, FL, FLS>::
+                                    scale_perturbative_noise(noise, noise_type,
+                                                             pbra);
                         }
-                        vector<double> xweights = {1};
-                        vector<shared_ptr<SparseMatrix<S>>> xwfns = {};
+                        vector<FPS> xweights = {1};
+                        vector<shared_ptr<SparseMatrix<S, FLS>>> xwfns = {};
                         if (mrk4.size() != 0) {
                             assert(mrk4.size() == 3);
                             xweights = weights;
                             xwfns = mrk4;
                         }
-                        error = MovingEnvironment<S>::split_wavefunction_svd(
-                            mps->info->vacuum, old_wfn, bond_dim, forward,
-                            false, mps->tensors[i], mps->tensors[i + 1], cutoff,
-                            trunc_type, decomp_type, pbra, xwfns, xweights);
+                        error = MovingEnvironment<S, FL, FLS>::
+                            split_wavefunction_svd(
+                                mps->info->vacuum, old_wfn, bond_dim, forward,
+                                false, mps->tensors[i], mps->tensors[i + 1],
+                                cutoff, trunc_type, decomp_type, pbra, xwfns,
+                                xweights);
                     }
                 } else
                     assert(false);
@@ -554,7 +563,7 @@ template <typename S> struct TDDMRG {
             }
         } else {
             for (auto &mps : mpss) {
-                mps->tensors[i + 1] = make_shared<SparseMatrix<S>>();
+                mps->tensors[i + 1] = make_shared<SparseMatrix<S, FLS>>();
                 if (forward) {
                     mps->canonical_form[i] = 'L';
                     mps->canonical_form[i + 1] = 'C';
@@ -572,7 +581,7 @@ template <typename S> struct TDDMRG {
             mrk->deallocate();
         for (auto hket : hkets)
             hket->deallocate();
-        for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S>>>(
+        for (auto &old_wfn : vector<shared_ptr<SparseMatrix<S, FLS>>>(
                  old_wfns.rbegin(), old_wfns.rend())) {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
@@ -581,7 +590,7 @@ template <typename S> struct TDDMRG {
             me->para_rule->comm->barrier();
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             for (auto &mps : mpss) {
-                MovingEnvironment<S>::propagate_wfn(
+                MovingEnvironment<S, FL, FLS>::propagate_wfn(
                     i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
                 mps->save_data();
             }
@@ -592,8 +601,8 @@ template <typename S> struct TDDMRG {
                          get<1>(pdi) * get<1>(pdi), bra_error, bra_mmps,
                          get<2>(pdi), get<3>(pdi), get<4>(pdi));
     }
-    Iteration blocking(int i, bool forward, bool advance, double beta,
-                       ubond_t bond_dim, double noise) {
+    Iteration blocking(int i, bool forward, bool advance, FPS beta,
+                       ubond_t bond_dim, FPS noise) {
         lme->move_to(i);
         rme->move_to(i);
         assert(rme->dot == 2 || rme->dot == 1);
@@ -602,15 +611,15 @@ template <typename S> struct TDDMRG {
         else
             return update_one_dot(i, forward, advance, beta, bond_dim, noise);
     }
-    tuple<double, double, double> sweep(bool forward, bool advance, double beta,
-                                        ubond_t bond_dim, double noise) {
+    tuple<FPS, FPS, FPS> sweep(bool forward, bool advance, FPS beta,
+                               ubond_t bond_dim, FPS noise) {
         lme->prepare();
         rme->prepare();
-        vector<double> energies, normsqs;
+        vector<FPS> energies, normsqs;
         sweep_cumulative_nflop = 0;
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
-        double largest_error = 0.0;
+        FPS largest_error = 0.0;
         if (forward)
             for (int it = rme->center; it < rme->n_sites - rme->dot + 1; it++)
                 sweep_range.push_back(it);
@@ -675,8 +684,7 @@ template <typename S> struct TDDMRG {
         rme->bra = me->ket->shallow_copy(avail_mps_tag);
         lme->bra = lme->ket = rme->bra;
     }
-    double solve(int n_sweeps, double beta, bool forward = true,
-                 double tol = 1E-6) {
+    FPS solve(int n_sweeps, FPS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
@@ -757,13 +765,15 @@ template <typename S> struct TDDMRG {
 };
 
 // Imaginary/Real Time Evolution
-template <typename S> struct TimeEvolution {
-    shared_ptr<MovingEnvironment<S>> me;
+template <typename S, typename FL, typename FLS> struct TimeEvolution {
+    typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
+    typedef typename MovingEnvironment<S, FL, FLS>::FCS FCS;
+    shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<ubond_t> bond_dims;
-    vector<double> noises;
-    vector<double> energies;
-    vector<double> normsqs;
-    vector<double> discarded_weights;
+    vector<FPS> noises;
+    vector<FPS> energies;
+    vector<FPS> normsqs;
+    vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     TruncPatternTypes trunc_pattern = TruncPatternTypes::None;
@@ -771,24 +781,24 @@ template <typename S> struct TimeEvolution {
     bool forward;
     TETypes mode;
     int n_sub_sweeps;
-    vector<double> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
+    vector<FPS> weights = {1.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 3.0};
     uint8_t iprint = 2;
-    double cutoff = 1E-14;
+    FPS cutoff = 1E-14;
     bool normalize_mps = true;
     bool hermitian = true; //!< Whether the Hamiltonian is Hermitian (symmetric)
     size_t sweep_cumulative_nflop = 0;
-    TimeEvolution(const shared_ptr<MovingEnvironment<S>> &me,
+    TimeEvolution(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
                   const vector<ubond_t> &bond_dims,
                   TETypes mode = TETypes::TangentSpace, int n_sub_sweeps = 1)
-        : me(me), bond_dims(bond_dims), noises(vector<double>{0.0}),
+        : me(me), bond_dims(bond_dims), noises(vector<FPS>{0.0}),
           forward(false), mode(mode), n_sub_sweeps(n_sub_sweeps) {}
     struct Iteration {
-        double energy, normsq, error;
+        FPS energy, normsq, error;
         int nexpo, nexpok, mmps;
         double texpo;
         size_t nflop;
-        Iteration(double energy, double normsq, double error, int mmps,
-                  int nexpo, int nexpok, size_t nflop = 0, double texpo = 1.0)
+        Iteration(FPS energy, FPS normsq, FPS error, int mmps, int nexpo,
+                  int nexpok, size_t nflop = 0, double texpo = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nexpo(nexpo), nexpok(nexpok), nflop(nflop), texpo(texpo) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
@@ -804,8 +814,8 @@ template <typename S> struct TimeEvolution {
         }
     };
     // one-site algorithm - real MPS - imag time
-    Iteration update_one_dot(int i, bool forward, bool advance, double beta,
-                             ubond_t bond_dim, double noise) {
+    Iteration update_one_dot(int i, bool forward, bool advance, FLS beta,
+                             ubond_t bond_dim, FPS noise) {
         frame->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (me->ket->canonical_form[i] == 'C') {
@@ -823,14 +833,14 @@ template <typename S> struct TimeEvolution {
         me->ket->load_tensor(i);
         if ((fuse_left && me->ket->canonical_form[i] == 'S') ||
             (!fuse_left && me->ket->canonical_form[i] == 'K')) {
-            shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+            shared_ptr<SparseMatrix<S, FLS>> prev_wfn = me->ket->tensors[i];
             if (fuse_left && me->ket->canonical_form[i] == 'S')
                 me->ket->tensors[i] =
-                    MovingEnvironment<S>::swap_wfn_to_fused_left(
+                    MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
                         i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
             else if (!fuse_left && me->ket->canonical_form[i] == 'K')
                 me->ket->tensors[i] =
-                    MovingEnvironment<S>::swap_wfn_to_fused_right(
+                    MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
                         i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
             prev_wfn->info->deallocate();
             prev_wfn->deallocate();
@@ -840,9 +850,9 @@ template <typename S> struct TimeEvolution {
             ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
-        tuple<double, double, int, size_t, double> pdi;
+        tuple<FPS, FPS, int, size_t, double> pdi;
         // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
         if (!advance &&
@@ -854,11 +864,11 @@ template <typename S> struct TimeEvolution {
             MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
-                   h_eff->ket->total_memory * sizeof(double));
+                   h_eff->ket->total_memory * sizeof(FLS));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
                                     iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
-                   h_eff->ket->total_memory * sizeof(double));
+                   h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -874,41 +884,41 @@ template <typename S> struct TimeEvolution {
         }
         h_eff->deallocate();
         int bdim = bond_dim, mmps = 0, expok = 0;
-        double error = 0.0;
-        shared_ptr<SparseMatrix<S>> dm = nullptr;
-        shared_ptr<SparseMatrix<S>> old_wfn;
-        shared_ptr<SparseMatrix<S>> left = nullptr, right = nullptr;
+        FPS error = 0.0;
+        shared_ptr<SparseMatrix<S, FLS>> dm = nullptr;
+        shared_ptr<SparseMatrix<S, FLS>> old_wfn;
+        shared_ptr<SparseMatrix<S, FLS>> left = nullptr, right = nullptr;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             // change to fused form for splitting
             if (fuse_left != forward) {
-                shared_ptr<SparseMatrix<S>> prev_wfn = me->ket->tensors[i];
+                shared_ptr<SparseMatrix<S, FLS>> prev_wfn = me->ket->tensors[i];
                 if (!fuse_left && forward)
                     me->ket->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_left(
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
                             i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
                 else if (fuse_left && !forward)
                     me->ket->tensors[i] =
-                        MovingEnvironment<S>::swap_wfn_to_fused_right(
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
                             i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
                 if (pdpf.size() != 0) {
-                    shared_ptr<SparseMatrix<S>> tmp_wfn;
+                    shared_ptr<SparseMatrix<S, FLS>> tmp_wfn;
                     for (size_t ip = 0; ip < pdpf.size(); ip++) {
                         assert(pdpf[ip].size() == prev_wfn->total_memory);
                         memcpy(prev_wfn->data, pdpf[ip].data,
-                               pdpf[ip].size() * sizeof(double));
+                               pdpf[ip].size() * sizeof(FLS));
                         if (!fuse_left && forward)
-                            tmp_wfn =
-                                MovingEnvironment<S>::swap_wfn_to_fused_left(
-                                    i, me->ket->info, prev_wfn,
-                                    me->mpo->tf->opf->cg);
+                            tmp_wfn = MovingEnvironment<S, FL, FLS>::
+                                swap_wfn_to_fused_left(i, me->ket->info,
+                                                       prev_wfn,
+                                                       me->mpo->tf->opf->cg);
                         else if (fuse_left && !forward)
-                            tmp_wfn =
-                                MovingEnvironment<S>::swap_wfn_to_fused_right(
-                                    i, me->ket->info, prev_wfn,
-                                    me->mpo->tf->opf->cg);
+                            tmp_wfn = MovingEnvironment<S, FL, FLS>::
+                                swap_wfn_to_fused_right(i, me->ket->info,
+                                                        prev_wfn,
+                                                        me->mpo->tf->opf->cg);
                         assert(pdpf[ip].size() == tmp_wfn->total_memory);
                         memcpy(pdpf[ip].data, tmp_wfn->data,
-                               pdpf[ip].size() * sizeof(double));
+                               pdpf[ip].size() * sizeof(FLS));
                         tmp_wfn->info->deallocate();
                         tmp_wfn->deallocate();
                     }
@@ -918,17 +928,17 @@ template <typename S> struct TimeEvolution {
             }
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix(
+                dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                     me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
                     noise_type, weights[0]);
-                MovingEnvironment<S>::density_matrix_add_matrices(
+                MovingEnvironment<S, FL, FLS>::density_matrix_add_matrices(
                     dm, me->ket->tensors[i], forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
-                dm = MovingEnvironment<S>::density_matrix(
+                dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                     me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
                     noise_type);
             // splitting of wavefunction
@@ -938,7 +948,7 @@ template <typename S> struct TimeEvolution {
                 (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
                  i % 2 == 1))
                 bdim = -1;
-            error = MovingEnvironment<S>::split_density_matrix(
+            error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                 dm, me->ket->tensors[i], bdim, forward, false, left, right,
                 cutoff, trunc_type);
         } else {
@@ -991,18 +1001,18 @@ template <typename S> struct TimeEvolution {
                 me->para_rule->comm->barrier();
                 if (!me->para_rule->is_root()) {
                     if (forward) {
-                        right = make_shared<SparseMatrix<S>>();
+                        right = make_shared<SparseMatrix<S, FLS>>();
                         right->load_data(me->ket->get_filename(-2), true);
                     } else {
-                        left = make_shared<SparseMatrix<S>>();
+                        left = make_shared<SparseMatrix<S, FLS>>();
                         left->load_data(me->ket->get_filename(-2), true);
                     }
                 }
             }
             if (forward) {
-                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                me->ket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i + 1, true);
-                shared_ptr<EffectiveHamiltonian<S>> k_eff = me->eff_ham(
+                shared_ptr<EffectiveHamiltonian<S, FL>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
                                              iprint >= 3, me->para_rule);
@@ -1012,15 +1022,15 @@ template <typename S> struct TimeEvolution {
                         right->normalize();
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    MovingEnvironment<S>::contract_one_dot(i + 1, right,
-                                                           me->ket, forward);
+                    MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                        i + 1, right, me->ket, forward);
                     me->ket->save_tensor(i + 1);
                     me->ket->unload_tensor(i + 1);
                 }
             } else {
-                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                me->ket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i - 1, true);
-                shared_ptr<EffectiveHamiltonian<S>> k_eff =
+                shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
                                              iprint >= 3, me->para_rule);
@@ -1030,8 +1040,8 @@ template <typename S> struct TimeEvolution {
                         left->normalize();
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    MovingEnvironment<S>::contract_one_dot(i - 1, left, me->ket,
-                                                           forward);
+                    MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                        i - 1, left, me->ket, forward);
                     me->ket->save_tensor(i - 1);
                     me->ket->unload_tensor(i - 1);
                 }
@@ -1041,27 +1051,29 @@ template <typename S> struct TimeEvolution {
                 // propagation
                 if (forward) {
                     if (i != me->n_sites - 1) {
-                        MovingEnvironment<S>::contract_one_dot(
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
                             i + 1, right, me->ket, forward);
                         me->ket->save_tensor(i + 1);
                         me->ket->unload_tensor(i + 1);
                     } else {
-                        me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                        MovingEnvironment<S>::contract_one_dot(
+                        me->ket->tensors[i] =
+                            make_shared<SparseMatrix<S, FLS>>();
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
                             i, right, me->ket, !forward);
                         me->ket->save_tensor(i);
                         me->ket->unload_tensor(i);
                     }
                 } else {
                     if (i > 0) {
-                        MovingEnvironment<S>::contract_one_dot(
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
                             i - 1, left, me->ket, forward);
                         me->ket->save_tensor(i - 1);
                         me->ket->unload_tensor(i - 1);
                     } else {
-                        me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
-                        MovingEnvironment<S>::contract_one_dot(i, left, me->ket,
-                                                               !forward);
+                        me->ket->tensors[i] =
+                            make_shared<SparseMatrix<S, FLS>>();
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                            i, left, me->ket, !forward);
                         me->ket->save_tensor(i);
                         me->ket->unload_tensor(i);
                     }
@@ -1103,24 +1115,24 @@ template <typename S> struct TimeEvolution {
                          expok, get<3>(pdi), get<4>(pdi));
     }
     // two-site algorithm - real MPS - imag time
-    Iteration update_two_dot(int i, bool forward, bool advance, double beta,
-                             ubond_t bond_dim, double noise) {
+    Iteration update_two_dot(int i, bool forward, bool advance, FLS beta,
+                             ubond_t bond_dim, FPS noise) {
         frame->activate(0);
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr)
-            MovingEnvironment<S>::contract_two_dot(i, me->ket);
+            MovingEnvironment<S, FL, FLS>::contract_two_dot(i, me->ket);
         else {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        tuple<double, double, int, size_t, double> pdi;
-        shared_ptr<SparseMatrix<S>> old_wfn = me->ket->tensors[i];
+        tuple<FPS, FPS, int, size_t, double> pdi;
+        shared_ptr<SparseMatrix<S, FLS>> old_wfn = me->ket->tensors[i];
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+        shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
         if (!advance &&
@@ -1132,11 +1144,11 @@ template <typename S> struct TimeEvolution {
             MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
-                   h_eff->ket->total_memory * sizeof(double));
+                   h_eff->ket->total_memory * sizeof(FLS));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
                                     iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
-                   h_eff->ket->total_memory * sizeof(double));
+                   h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1152,30 +1164,30 @@ template <typename S> struct TimeEvolution {
         }
         h_eff->deallocate();
         int bdim = bond_dim, mmps = 0;
-        double error = 0.0;
-        shared_ptr<SparseMatrix<S>> dm;
+        FPS error = 0.0;
+        shared_ptr<SparseMatrix<S, FLS>> dm;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix(
+                dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                     me->ket->info->vacuum, h_eff->ket, forward, noise,
                     noise_type, weights[0]);
-                MovingEnvironment<S>::density_matrix_add_matrices(
+                MovingEnvironment<S, FL, FLS>::density_matrix_add_matrices(
                     dm, h_eff->ket, forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
-                dm = MovingEnvironment<S>::density_matrix(me->ket->info->vacuum,
-                                                          h_eff->ket, forward,
-                                                          noise, noise_type);
+                dm = MovingEnvironment<S, FL, FLS>::density_matrix(
+                    me->ket->info->vacuum, h_eff->ket, forward, noise,
+                    noise_type);
             if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
                  i % 2 == 0) ||
                 (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
                  i % 2 == 1))
                 bdim = -1;
-            error = MovingEnvironment<S>::split_density_matrix(
+            error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                 dm, h_eff->ket, bdim, forward, false, me->ket->tensors[i],
                 me->ket->tensors[i + 1], cutoff, trunc_type);
         } else {
@@ -1222,7 +1234,7 @@ template <typename S> struct TimeEvolution {
             dm->info->deallocate();
             dm->deallocate();
         } else {
-            me->ket->tensors[i + 1] = make_shared<SparseMatrix<S>>();
+            me->ket->tensors[i + 1] = make_shared<SparseMatrix<S, FLS>>();
             if (forward) {
                 me->ket->canonical_form[i] = 'L';
                 me->ket->canonical_form[i + 1] = 'C';
@@ -1240,7 +1252,7 @@ template <typename S> struct TimeEvolution {
             i + 1 != me->n_sites - 1) {
             me->move_to(i + 1, true);
             me->ket->load_tensor(i + 1);
-            shared_ptr<EffectiveHamiltonian<S>> k_eff =
+            shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
                             me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
@@ -1257,7 +1269,7 @@ template <typename S> struct TimeEvolution {
         } else if (mode == TETypes::TangentSpace && !forward && i != 0) {
             me->move_to(i - 1, true);
             me->ket->load_tensor(i);
-            shared_ptr<EffectiveHamiltonian<S>> k_eff =
+            shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,
                             me->bra->tensors[i], me->ket->tensors[i]);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
@@ -1273,8 +1285,8 @@ template <typename S> struct TimeEvolution {
             expok = get<2>(pdk);
         }
         if (me->para_rule == nullptr || me->para_rule->is_root())
-            MovingEnvironment<S>::propagate_wfn(i, me->n_sites, me->ket,
-                                                forward, me->mpo->tf->opf->cg);
+            MovingEnvironment<S, FL, FLS>::propagate_wfn(
+                i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
         me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -1284,11 +1296,10 @@ template <typename S> struct TimeEvolution {
     }
     // one-site algorithm - complex MPS - complex time
     // canonical form for wavefunction: J = left-fused, T = right-fused
-    Iteration update_multi_one_dot(int i, bool forward, bool advance,
-                                   complex<double> beta, ubond_t bond_dim,
-                                   double noise) {
-        shared_ptr<MultiMPS<S>> mket =
-            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+    Iteration update_multi_one_dot(int i, bool forward, bool advance, FCS beta,
+                                   ubond_t bond_dim, FPS noise) {
+        shared_ptr<MultiMPS<S, FLS>> mket =
+            dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         frame->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (mket->canonical_form[i] == 'M') {
@@ -1306,14 +1317,16 @@ template <typename S> struct TimeEvolution {
         mket->load_tensor(i);
         if ((fuse_left && mket->canonical_form[i] == 'T') ||
             (!fuse_left && mket->canonical_form[i] == 'J')) {
-            vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mket->wfns;
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>> prev_wfns =
+                mket->wfns;
             if (fuse_left && mket->canonical_form[i] == 'T')
-                mket->wfns = MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
-                    i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
-            else if (!fuse_left && mket->canonical_form[i] == 'J')
                 mket->wfns =
-                    MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
+                    MovingEnvironment<S, FL, FLS>::swap_multi_wfn_to_fused_left(
                         i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+            else if (!fuse_left && mket->canonical_form[i] == 'J')
+                mket->wfns = MovingEnvironment<S, FL, FLS>::
+                    swap_multi_wfn_to_fused_right(i, mket->info, prev_wfns,
+                                                  me->mpo->tf->opf->cg);
             for (int j = (int)prev_wfns.size() - 1; j >= 0; j--)
                 prev_wfns[j]->deallocate();
             if (prev_wfns.size() != 0)
@@ -1324,9 +1337,9 @@ template <typename S> struct TimeEvolution {
             ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
-        tuple<double, double, int, size_t, double> pdi;
+        tuple<FPS, FPS, int, size_t, double> pdi;
         // effective hamiltonian
-        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+        shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                               forward, true);
         if (!advance &&
@@ -1340,15 +1353,15 @@ template <typename S> struct TimeEvolution {
             tmp_re.allocate();
             tmp_im.allocate();
             memcpy(tmp_re.data, h_eff->ket[0]->data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
-                   h_eff->ket[1]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(FLS));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
                                     me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(h_eff->ket[1]->data, tmp_im.data,
-                   h_eff->ket[1]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(FLS));
             tmp_im.deallocate();
             tmp_re.deallocate();
             auto pdp =
@@ -1365,23 +1378,24 @@ template <typename S> struct TimeEvolution {
         }
         h_eff->deallocate();
         int bdim = bond_dim, mmps = 0, expok = 0;
-        double error = 0.0;
-        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns, new_wfns;
-        shared_ptr<SparseMatrix<S>> dm, rot;
+        FPS error = 0.0;
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns, new_wfns;
+        shared_ptr<SparseMatrix<S, FLS>> dm, rot;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             // change to fused form for splitting
             if (fuse_left != forward) {
-                vector<shared_ptr<SparseMatrixGroup<S>>> prev_wfns = mket->wfns;
+                vector<shared_ptr<SparseMatrixGroup<S, FLS>>> prev_wfns =
+                    mket->wfns;
                 if (!fuse_left && forward)
-                    mket->wfns =
-                        MovingEnvironment<S>::swap_multi_wfn_to_fused_left(
-                            i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+                    mket->wfns = MovingEnvironment<S, FL, FLS>::
+                        swap_multi_wfn_to_fused_left(i, mket->info, prev_wfns,
+                                                     me->mpo->tf->opf->cg);
                 else if (fuse_left && !forward)
-                    mket->wfns =
-                        MovingEnvironment<S>::swap_multi_wfn_to_fused_right(
-                            i, mket->info, prev_wfns, me->mpo->tf->opf->cg);
+                    mket->wfns = MovingEnvironment<S, FL, FLS>::
+                        swap_multi_wfn_to_fused_right(i, mket->info, prev_wfns,
+                                                      me->mpo->tf->opf->cg);
                 if (pdpf.size() != 0) {
-                    vector<shared_ptr<SparseMatrixGroup<S>>> tmp_wfns;
+                    vector<shared_ptr<SparseMatrixGroup<S, FLS>>> tmp_wfns;
                     size_t np = prev_wfns.size() * prev_wfns[0]->n;
                     for (size_t ip = 0; ip < pdpf.size(); ip += np) {
                         for (size_t ipx = 0, ipk = 0; ipx < prev_wfns.size();
@@ -1392,15 +1406,15 @@ template <typename S> struct TimeEvolution {
                                        (*prev_wfns[ipx])[ipy]->total_memory);
                                 memcpy((*prev_wfns[ipx])[ipy]->data,
                                        pdpf[ip + ipk].data,
-                                       pdpf[ip + ipk].size() * sizeof(double));
+                                       pdpf[ip + ipk].size() * sizeof(FLS));
                             }
                         if (!fuse_left && forward)
-                            tmp_wfns = MovingEnvironment<S>::
+                            tmp_wfns = MovingEnvironment<S, FL, FLS>::
                                 swap_multi_wfn_to_fused_left(
                                     i, mket->info, prev_wfns,
                                     me->mpo->tf->opf->cg);
                         else if (fuse_left && !forward)
-                            tmp_wfns = MovingEnvironment<S>::
+                            tmp_wfns = MovingEnvironment<S, FL, FLS>::
                                 swap_multi_wfn_to_fused_right(
                                     i, mket->info, prev_wfns,
                                     me->mpo->tf->opf->cg);
@@ -1412,7 +1426,7 @@ template <typename S> struct TimeEvolution {
                                        (*tmp_wfns[ipx])[ipy]->total_memory);
                                 memcpy(pdpf[ip + ipk].data,
                                        (*tmp_wfns[ipx])[ipy]->data,
-                                       pdpf[ip + ipk].size() * sizeof(double));
+                                       pdpf[ip + ipk].size() * sizeof(FLS));
                             }
                         for (int j = (int)tmp_wfns.size() - 1; j >= 0; j--)
                             tmp_wfns[j]->deallocate();
@@ -1428,26 +1442,28 @@ template <typename S> struct TimeEvolution {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             old_wfns = mket->wfns;
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                    mket->info->vacuum, mket->wfns, mket->weights, forward,
-                    noise, noise_type, weights[0]);
-                MovingEnvironment<S>::density_matrix_add_matrix_groups(
+                dm = MovingEnvironment<S, FL, FLS>::
+                    density_matrix_with_multi_target(
+                        mket->info->vacuum, mket->wfns, mket->weights, forward,
+                        noise, noise_type, weights[0]);
+                MovingEnvironment<S, FL, FLS>::density_matrix_add_matrix_groups(
                     dm, mket->wfns, forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
-                dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                    me->ket->info->vacuum, mket->wfns, mket->weights, forward,
-                    noise, noise_type);
+                dm = MovingEnvironment<S, FL, FLS>::
+                    density_matrix_with_multi_target(
+                        me->ket->info->vacuum, mket->wfns, mket->weights,
+                        forward, noise, noise_type);
             // splitting of wavefunction
             if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
                  i % 2 == 0) ||
                 (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
                  i % 2 == 1))
                 bdim = -1;
-            error = MovingEnvironment<S>::multi_split_density_matrix(
+            error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                 dm, mket->wfns, bdim, forward, false, new_wfns, rot, cutoff,
                 trunc_type);
         } else {
@@ -1465,7 +1481,7 @@ template <typename S> struct TimeEvolution {
             if (forward) {
                 if (normalize_mps && mode == TETypes::RK4 &&
                     (i != me->n_sites - 1 || !advance))
-                    SparseMatrixGroup<S>::normalize_all(new_wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(new_wfns);
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
@@ -1476,7 +1492,7 @@ template <typename S> struct TimeEvolution {
             } else {
                 if (normalize_mps && mode == TETypes::RK4 &&
                     (i != 0 || !advance))
-                    SparseMatrixGroup<S>::normalize_all(new_wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(new_wfns);
                 mket->tensors[i] = rot;
                 mket->save_tensor(i);
                 info = rot->info->extract_state_info(forward);
@@ -1489,8 +1505,8 @@ template <typename S> struct TimeEvolution {
         }
         if (mode == TETypes::TangentSpace &&
             ((forward && i != me->n_sites - 1) || (!forward && i != 0))) {
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
+            shared_ptr<VectorAllocator<FPS>> d_alloc =
+                make_shared<VectorAllocator<FPS>>();
             if (me->para_rule != nullptr) {
                 if (me->para_rule->is_root())
                     for (size_t j = 0; j < new_wfns.size(); j++)
@@ -1505,7 +1521,7 @@ template <typename S> struct TimeEvolution {
                         make_shared<VectorAllocator<uint32_t>>();
                     for (size_t j = 0; j < new_wfns.size(); j++) {
                         new_wfns[j] =
-                            make_shared<SparseMatrixGroup<S>>(d_alloc);
+                            make_shared<SparseMatrixGroup<S, FLS>>(d_alloc);
                         new_wfns[j]->load_data(
                             mket->get_wfn_filename((int)j -
                                                    (int)new_wfns.size()),
@@ -1515,13 +1531,14 @@ template <typename S> struct TimeEvolution {
                 }
             }
             for (size_t j = 0; j < mket->wfns.size(); j++)
-                mket->wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
-            mket->tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+                mket->wfns[j] = make_shared<SparseMatrixGroup<S, FLS>>(d_alloc);
+            mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
             if (forward) {
                 me->move_to(i + 1, true);
-                vector<shared_ptr<SparseMatrixGroup<S>>> kwfns = mket->wfns;
+                vector<shared_ptr<SparseMatrixGroup<S, FLS>>> kwfns =
+                    mket->wfns;
                 mket->wfns = new_wfns;
-                shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> k_eff =
+                shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                     me->multi_eff_ham(FuseTypes::NoFuseL, forward, true);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
@@ -1529,19 +1546,20 @@ template <typename S> struct TimeEvolution {
                 mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
-                        SparseMatrixGroup<S>::normalize_all(new_wfns);
+                        SparseMatrixGroup<S, FLS>::normalize_all(new_wfns);
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    MovingEnvironment<S>::contract_multi_one_dot(
+                    MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                         i + 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i + 1);
                     mket->unload_wavefunction(i + 1);
                 }
             } else {
                 me->move_to(i - 1, true);
-                vector<shared_ptr<SparseMatrixGroup<S>>> kwfns = mket->wfns;
+                vector<shared_ptr<SparseMatrixGroup<S, FLS>>> kwfns =
+                    mket->wfns;
                 mket->wfns = new_wfns;
-                shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> k_eff =
+                shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                     me->multi_eff_ham(FuseTypes::NoFuseR, forward, true);
                 auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
                                              iprint >= 3, me->para_rule);
@@ -1549,10 +1567,10 @@ template <typename S> struct TimeEvolution {
                 mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
-                        SparseMatrixGroup<S>::normalize_all(new_wfns);
+                        SparseMatrixGroup<S, FLS>::normalize_all(new_wfns);
                     get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
                     expok = get<2>(pdk);
-                    MovingEnvironment<S>::contract_multi_one_dot(
+                    MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                         i - 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i - 1);
                     mket->unload_wavefunction(i - 1);
@@ -1563,26 +1581,26 @@ template <typename S> struct TimeEvolution {
                 // propagation
                 if (forward) {
                     if (i != me->n_sites - 1) {
-                        MovingEnvironment<S>::contract_multi_one_dot(
+                        MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                             i + 1, new_wfns, mket, forward);
                         mket->save_wavefunction(i + 1);
                         mket->unload_wavefunction(i + 1);
                     } else {
-                        mket->tensors[i] = make_shared<SparseMatrix<S>>();
-                        MovingEnvironment<S>::contract_multi_one_dot(
+                        mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
+                        MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                             i, new_wfns, mket, !forward);
                         mket->save_wavefunction(i);
                         mket->unload_wavefunction(i);
                     }
                 } else {
                     if (i > 0) {
-                        MovingEnvironment<S>::contract_multi_one_dot(
+                        MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                             i - 1, new_wfns, mket, forward);
                         mket->save_wavefunction(i - 1);
                         mket->unload_wavefunction(i - 1);
                     } else {
-                        mket->tensors[i] = make_shared<SparseMatrix<S>>();
-                        MovingEnvironment<S>::contract_multi_one_dot(
+                        mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
+                        MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                             i, new_wfns, mket, !forward);
                         mket->save_wavefunction(i);
                         mket->unload_wavefunction(i);
@@ -1634,7 +1652,7 @@ template <typename S> struct TimeEvolution {
         } else {
             if (forward) {
                 if (i != me->n_sites - 1) {
-                    mket->tensors[i] = make_shared<SparseMatrix<S>>();
+                    mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                     mket->tensors[i + 1] = nullptr;
                     mket->canonical_form[i] = 'L';
                     mket->canonical_form[i + 1] = 'T';
@@ -1643,7 +1661,7 @@ template <typename S> struct TimeEvolution {
             } else {
                 if (i > 0) {
                     mket->tensors[i - 1] = nullptr;
-                    mket->tensors[i] = make_shared<SparseMatrix<S>>();
+                    mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                     mket->canonical_form[i - 1] = 'J';
                     mket->canonical_form[i] = 'R';
                 } else
@@ -1659,26 +1677,25 @@ template <typename S> struct TimeEvolution {
     }
     // two-site algorithm - complex MPS - complex time
     // canonical form for wavefunction: M = multi center
-    Iteration update_multi_two_dot(int i, bool forward, bool advance,
-                                   complex<double> beta, ubond_t bond_dim,
-                                   double noise) {
-        shared_ptr<MultiMPS<S>> mket =
-            dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+    Iteration update_multi_two_dot(int i, bool forward, bool advance, FCS beta,
+                                   ubond_t bond_dim, FPS noise) {
+        shared_ptr<MultiMPS<S, FLS>> mket =
+            dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         frame->activate(0);
         if (mket->tensors[i] != nullptr || mket->tensors[i + 1] != nullptr)
-            MovingEnvironment<S>::contract_multi_two_dot(i, mket);
+            MovingEnvironment<S, FL, FLS>::contract_multi_two_dot(i, mket);
         else {
             mket->load_tensor(i);
             mket->tensors[i] = mket->tensors[i + 1] = nullptr;
         }
-        tuple<double, double, int, size_t, double> pdi;
-        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mket->wfns;
+        tuple<FPS, FPS, int, size_t, double> pdi;
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns = mket->wfns;
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<MatrixRef> pdpf;
-        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> h_eff =
+        shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
@@ -1691,15 +1708,15 @@ template <typename S> struct TimeEvolution {
             tmp_re.allocate();
             tmp_im.allocate();
             memcpy(tmp_re.data, h_eff->ket[0]->data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
-                   h_eff->ket[1]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(FLS));
             pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
                                     me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
-                   h_eff->ket[0]->total_memory * sizeof(double));
+                   h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(h_eff->ket[1]->data, tmp_im.data,
-                   h_eff->ket[1]->total_memory * sizeof(double));
+                   h_eff->ket[1]->total_memory * sizeof(FLS));
             tmp_im.deallocate();
             tmp_re.deallocate();
             auto pdp =
@@ -1716,30 +1733,32 @@ template <typename S> struct TimeEvolution {
         }
         h_eff->deallocate();
         int bdim = bond_dim, mmps = 0;
-        double error = 0.0;
-        shared_ptr<SparseMatrix<S>> dm;
+        FPS error = 0.0;
+        shared_ptr<SparseMatrix<S, FLS>> dm;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             if (pdpf.size() != 0) {
-                dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                    mket->info->vacuum, old_wfns, mket->weights, forward, noise,
-                    noise_type, weights[0]);
-                MovingEnvironment<S>::density_matrix_add_matrix_groups(
+                dm = MovingEnvironment<S, FL, FLS>::
+                    density_matrix_with_multi_target(
+                        mket->info->vacuum, old_wfns, mket->weights, forward,
+                        noise, noise_type, weights[0]);
+                MovingEnvironment<S, FL, FLS>::density_matrix_add_matrix_groups(
                     dm, old_wfns, forward, pdpf, weights);
                 frame->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
                 frame->activate(0);
             } else
-                dm = MovingEnvironment<S>::density_matrix_with_multi_target(
-                    mket->info->vacuum, old_wfns, mket->weights, forward, noise,
-                    noise_type);
+                dm = MovingEnvironment<S, FL, FLS>::
+                    density_matrix_with_multi_target(
+                        mket->info->vacuum, old_wfns, mket->weights, forward,
+                        noise, noise_type);
             if ((this->trunc_pattern == TruncPatternTypes::TruncAfterOdd &&
                  i % 2 == 0) ||
                 (this->trunc_pattern == TruncPatternTypes::TruncAfterEven &&
                  i % 2 == 1))
                 bdim = -1;
-            error = MovingEnvironment<S>::multi_split_density_matrix(
+            error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                 dm, old_wfns, bdim, forward, false, mket->wfns,
                 forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
                 trunc_type);
@@ -1756,7 +1775,7 @@ template <typename S> struct TimeEvolution {
             if (forward) {
                 if (normalize_mps && mode == TETypes::RK4 &&
                     (i + 1 != me->n_sites - 1 || !advance))
-                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(mket->wfns);
                 info = me->ket->tensors[i]->info->extract_state_info(forward);
                 mmps = (int)info->n_states_total;
                 me->ket->info->bond_dim =
@@ -1768,7 +1787,7 @@ template <typename S> struct TimeEvolution {
             } else {
                 if (normalize_mps && mode == TETypes::RK4 &&
                     (i != 0 || !advance))
-                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(mket->wfns);
                 info =
                     me->ket->tensors[i + 1]->info->extract_state_info(forward);
                 mmps = (int)info->n_states_total;
@@ -1795,13 +1814,13 @@ template <typename S> struct TimeEvolution {
             dm->deallocate();
         } else {
             if (forward) {
-                me->ket->tensors[i] = make_shared<SparseMatrix<S>>();
+                me->ket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->ket->tensors[i + 1] = nullptr;
                 me->ket->canonical_form[i] = 'L';
                 me->ket->canonical_form[i + 1] = 'M';
             } else {
                 me->ket->tensors[i] = nullptr;
-                me->ket->tensors[i + 1] = make_shared<SparseMatrix<S>>();
+                me->ket->tensors[i + 1] = make_shared<SparseMatrix<S, FLS>>();
                 me->ket->canonical_form[i] = 'M';
                 me->ket->canonical_form[i + 1] = 'R';
             }
@@ -1816,14 +1835,14 @@ template <typename S> struct TimeEvolution {
             i + 1 != me->n_sites - 1) {
             me->move_to(i + 1, true);
             mket->load_wavefunction(i + 1);
-            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> k_eff =
+            shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                 me->multi_eff_ham(FuseTypes::FuseR, forward, true);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
-                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(mket->wfns);
                 mket->save_wavefunction(i + 1);
             }
             mket->unload_wavefunction(i + 1);
@@ -1832,14 +1851,14 @@ template <typename S> struct TimeEvolution {
         } else if (mode == TETypes::TangentSpace && !forward && i != 0) {
             me->move_to(i - 1, true);
             mket->load_wavefunction(i);
-            shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> k_eff =
+            shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                 me->multi_eff_ham(FuseTypes::FuseL, forward, true);
             auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
                                          me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
-                    SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                    SparseMatrixGroup<S, FLS>::normalize_all(mket->wfns);
                 mket->save_wavefunction(i);
             }
             mket->unload_wavefunction(i);
@@ -1847,7 +1866,7 @@ template <typename S> struct TimeEvolution {
             expok = get<2>(pdk);
         }
         if (me->para_rule == nullptr || me->para_rule->is_root())
-            MovingEnvironment<S>::propagate_multi_wfn(
+            MovingEnvironment<S, FL, FLS>::propagate_multi_wfn(
                 i, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
         mket->save_data();
         if (me->para_rule != nullptr)
@@ -1856,8 +1875,8 @@ template <typename S> struct TimeEvolution {
                          get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
                          expok, get<3>(pdi), get<4>(pdi));
     }
-    Iteration blocking(int i, bool forward, bool advance, complex<double> beta,
-                       ubond_t bond_dim, double noise) {
+    Iteration blocking(int i, bool forward, bool advance, FCS beta,
+                       ubond_t bond_dim, FPS noise) {
         me->move_to(i);
         assert(me->dot == 2 || me->dot == 1);
         if (me->dot == 2) {
@@ -1868,6 +1887,7 @@ template <typename S> struct TimeEvolution {
                 return update_multi_two_dot(i, forward, advance, beta, bond_dim,
                                             noise);
             else {
+                // FIXME :: allow complex complex TE here
                 if (beta.imag() != 0)
                     throw runtime_error("Cannot do real TE for real MPS!");
                 return update_two_dot(i, forward, advance, beta.real(),
@@ -1880,6 +1900,7 @@ template <typename S> struct TimeEvolution {
                 return update_multi_one_dot(i, forward, advance, beta, bond_dim,
                                             noise);
             else {
+                // FIXME :: allow complex complex TE here
                 if (beta.imag() != 0)
                     throw runtime_error("Cannot do real TE for real MPS!");
                 return update_one_dot(i, forward, advance, beta.real(),
@@ -1887,14 +1908,13 @@ template <typename S> struct TimeEvolution {
             }
         }
     }
-    tuple<double, double, double> sweep(bool forward, bool advance,
-                                        complex<double> beta, ubond_t bond_dim,
-                                        double noise) {
+    tuple<FPS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
+                               ubond_t bond_dim, FPS noise) {
         me->prepare();
-        vector<double> energies, normsqs;
+        vector<FPS> energies, normsqs;
         sweep_cumulative_nflop = 0;
         vector<int> sweep_range;
-        double largest_error = 0.0;
+        FPS largest_error = 0.0;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
                 sweep_range.push_back(it);
@@ -1929,8 +1949,8 @@ template <typename S> struct TimeEvolution {
     }
     void normalize() {
         if (me->ket->get_type() & MPSTypes::MultiWfn) {
-            shared_ptr<MultiMPS<S>> mket =
-                dynamic_pointer_cast<MultiMPS<S>>(me->ket);
+            shared_ptr<MultiMPS<S, FLS>> mket =
+                dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
             size_t center = mket->canonical_form.find('M');
             if (center == string::npos)
                 center = mket->canonical_form.find('J');
@@ -1939,7 +1959,7 @@ template <typename S> struct TimeEvolution {
             assert(center != string::npos);
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 mket->load_wavefunction((int)center);
-                SparseMatrixGroup<S>::normalize_all(mket->wfns);
+                SparseMatrixGroup<S, FLS>::normalize_all(mket->wfns);
                 mket->save_wavefunction((int)center);
                 mket->unload_wavefunction((int)center);
             }
@@ -1962,8 +1982,7 @@ template <typename S> struct TimeEvolution {
                 me->para_rule->comm->barrier();
         }
     }
-    double solve(int n_sweeps, complex<double> beta, bool forward = true,
-                 double tol = 1E-6) {
+    FPS solve(int n_sweeps, FCS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
@@ -1992,7 +2011,7 @@ template <typename S> struct TimeEvolution {
                 auto r = sweep(forward, isw == n_sub_sweeps - 1, beta,
                                bond_dims[iw], noises[iw]);
                 forward = !forward;
-                double tswp = current.get_time();
+                FPS tswp = current.get_time();
                 if (iprint >= 1) {
                     cout << "Time elapsed = " << fixed << setw(10)
                          << setprecision(3) << current.current - start.current;

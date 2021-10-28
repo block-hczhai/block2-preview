@@ -22,3 +22,6 @@
 
 template void bind_parallel<SZK>(py::module &m);
 template void bind_parallel<SU2K>(py::module &m);
+
+template void bind_fl_parallel<SZK, double>(py::module &m);
+template void bind_fl_parallel<SU2K, double>(py::module &m);

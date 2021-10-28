@@ -10,20 +10,20 @@ class TestOperator : public ::testing::Test {
     vector<string> reprs;
     shared_ptr<OpExpr<SZ>> zero;
     void SetUp() override {
-        ops.push_back(
-            make_shared<OpElement<SZ>>(OpNames::H, SiteIndex(), SZ(0, 0, 0)));
+        ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::H, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("H");
-        ops.push_back(
-            make_shared<OpElement<SZ>>(OpNames::I, SiteIndex(), SZ(0, 0, 0)));
+        ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::I, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("I");
-        ops.push_back(
-            make_shared<OpElement<SZ>>(OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
+        ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
         reprs.push_back("C0");
-        ops.push_back(make_shared<OpElement<SZ>>(OpNames::Q, SiteIndex(1, 1, 0),
-                                                 SZ(0, 0, 0)));
+        ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::Q, SiteIndex(1, 1, 0), SZ(0, 0, 0)));
         reprs.push_back("Q[ 1 1 0 ]");
-        ops.push_back(make_shared<OpElement<SZ>>(OpNames::P, SiteIndex(1, 2, 1),
-                                                 SZ(2, 0, 0)));
+        ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::P, SiteIndex(1, 2, 1), SZ(2, 0, 0)));
         reprs.push_back("P[ 1 2 1 ]");
         zero = make_shared<OpExpr<SZ>>();
     }
@@ -42,21 +42,23 @@ TEST_F(TestOperator, TestSiteIndex) {
     EXPECT_EQ(SiteIndex(3, 4, 1)[1], 4);
     EXPECT_EQ(SiteIndex(3, 4, 1).s(), 1);
     EXPECT_EQ(SiteIndex(3, 4, 0).s(), 0);
-    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data, SiteIndex({4, 3}, {1, 0}).flip_spatial().data);
-    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data, SiteIndex({4, 3}, {0, 1}).flip().data);
+    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data,
+              SiteIndex({4, 3}, {1, 0}).flip_spatial().data);
+    EXPECT_EQ(SiteIndex({3, 4}, {1, 0}).data,
+              SiteIndex({4, 3}, {0, 1}).flip().data);
 }
 
 TEST_F(TestOperator, TestExpr) {
     for (size_t i = 0; i < ops.size(); i++) {
-        EXPECT_EQ(to_str(ops[i]), reprs[i]);
+        EXPECT_EQ(ops[i]->to_str(), reprs[i]);
         EXPECT_TRUE(ops[i] * (-5.0) == (-5.0) * ops[i]);
         EXPECT_TRUE(ops[i] * (-5.0) == 2.5 * ops[i] * (-2.0));
         EXPECT_TRUE((-5.0) * ops[i] == 2.5 * ops[i] * (-2.0));
-        EXPECT_EQ(to_str(ops[i] * 2.0), to_str(2.0 * ops[i]));
-        EXPECT_EQ(to_str((-1.0) * ops[i] * ops[i]),
-                  to_str(ops[i] * (-1.0) * ops[i]));
-        EXPECT_EQ(to_str((-1.0) * ops[i] * ops[i]),
-                  to_str(ops[i] * ops[i] * (-1.0)));
+        EXPECT_EQ((ops[i] * 2.0)->to_str(), (2.0 * ops[i])->to_str());
+        EXPECT_EQ(((-1.0) * ops[i] * ops[i])->to_str(),
+                  (ops[i] * (-1.0) * ops[i])->to_str());
+        EXPECT_EQ(((-1.0) * ops[i] * ops[i])->to_str(),
+                  (ops[i] * ops[i] * (-1.0))->to_str());
         EXPECT_EQ(hash_value(ops[i] * 2.0), hash_value(2.0 * ops[i]));
         EXPECT_NE(hash_value(ops[i] * 2.0), hash_value(2.01 * ops[i]));
         EXPECT_NE(hash_value(ops[i] * 2.0), hash<double>{}(2.0));
@@ -73,8 +75,8 @@ TEST_F(TestOperator, TestExpr) {
     shared_ptr<OpExpr<SZ>> a = ops[0], b = ops[1], c = ops[2];
     shared_ptr<OpExpr<SZ>> d = a * 0.5;
     shared_ptr<OpExpr<SZ>> e = b * 0.2;
-    EXPECT_NE(to_str(a * b), to_str(b * a));
-    EXPECT_NE(to_str(a + b), to_str(b + a));
+    EXPECT_NE((a * b)->to_str(), (b * a)->to_str());
+    EXPECT_NE((a + b)->to_str(), (b + a)->to_str());
     EXPECT_TRUE(a * b * 1.0 == a * b);
     EXPECT_TRUE(abs_value(a * b * 0.5) == a * b);
     EXPECT_TRUE(d * e * 0.5 == 0.5 * (d * e));
@@ -103,7 +105,7 @@ TEST_F(TestOperator, TestExpr) {
     EXPECT_FALSE(a * b == zero || zero == a * b || a * b == a);
     EXPECT_FALSE(a + b == zero || zero == a + b || a + b == a);
     EXPECT_TRUE(0.5 * (a + b) == 0.5 * a + 0.5 * b);
-    EXPECT_EQ(to_str(a + b + e), to_str(a + (b + e)));
+    EXPECT_EQ((a + b + e)->to_str(), (a + (b + e))->to_str());
     EXPECT_TRUE((a * b) + c * d + zero == zero + ((a * b) + c * d));
     EXPECT_TRUE((a * b) + c * d == zero + ((a * b) + c * d));
     EXPECT_TRUE(a * (c + d) == a * c + a * d);

@@ -20,8 +20,8 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::TDDMRG<block2::SZ>;
-template struct block2::TimeEvolution<block2::SZ>;
+template struct block2::TDDMRG<block2::SZ, double, double>;
+template struct block2::TimeEvolution<block2::SZ, double, double>;
 
-template struct block2::TDDMRG<block2::SU2>;
-template struct block2::TimeEvolution<block2::SU2>;
+template struct block2::TDDMRG<block2::SU2, double, double>;
+template struct block2::TimeEvolution<block2::SU2, double, double>;

@@ -22,3 +22,6 @@
 
 template void bind_state_info<SZ>(py::module &m, const string &name);
 template void bind_state_info<SU2>(py::module &m, const string &name);
+
+template void bind_fl_state_info<SZ, double>(py::module &m);
+template void bind_fl_state_info<SU2, double>(py::module &m);

@@ -20,5 +20,5 @@
 
 #include "../block2_core.hpp"
 
-template struct block2::ArchivedTensorFunctions<block2::SZK>;
-template struct block2::ArchivedTensorFunctions<block2::SU2K>;
+template struct block2::ArchivedTensorFunctions<block2::SZK, double>;
+template struct block2::ArchivedTensorFunctions<block2::SU2K, double>;

@@ -482,7 +482,7 @@ vector<tuple<int, int, double>> load_onenpc(int is_su2, int is_pure) {
 }
 
 TEST_F(TestNPDM, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
@@ -492,8 +492,8 @@ TEST_F(TestNPDM, TestSU2) {
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -519,49 +519,52 @@ TEST_F(TestNPDM, TestSU2) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SU2>> mpo =
-        make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SU2, double>> mpo =
+        make_shared<MPOQC<SU2, double>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<SU2>>(mpo, make_shared<RuleQC<SU2>>(), true);
+    mpo = make_shared<SimplifiedMPO<SU2, double>>(
+        mpo, make_shared<RuleQC<SU2, double>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1PDM MPO construction
     cout << "1PDM MPO start" << endl;
-    shared_ptr<MPO<SU2>> pmpo = make_shared<PDM1MPOQC<SU2>>(hamil);
+    shared_ptr<MPO<SU2, double>> pmpo =
+        make_shared<PDM1MPOQC<SU2, double>>(hamil);
     cout << "1PDM MPO end .. T = " << t.get_time() << endl;
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo = make_shared<SimplifiedMPO<SU2>>(
-        pmpo, make_shared<RuleQC<SU2>>(), true, true,
+    pmpo = make_shared<SimplifiedMPO<SU2, double>>(
+        pmpo, make_shared<RuleQC<SU2, double>>(), true, true,
         OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 2PDM MPO construction
     cout << "2PDM MPO start" << endl;
-    shared_ptr<MPO<SU2>> p2mpo = make_shared<PDM2MPOQC<SU2>>(hamil);
+    shared_ptr<MPO<SU2, double>> p2mpo =
+        make_shared<PDM2MPOQC<SU2, double>>(hamil);
     cout << "2PDM MPO end .. T = " << t.get_time() << endl;
 
     // 2PDM MPO simplification
     cout << "2PDM MPO simplification start" << endl;
-    p2mpo = make_shared<SimplifiedMPO<SU2>>(
-        p2mpo, make_shared<RuleQC<SU2>>(), true, true,
+    p2mpo = make_shared<SimplifiedMPO<SU2, double>>(
+        p2mpo, make_shared<RuleQC<SU2, double>>(), true, true,
         OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "2PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
     cout << "1NPC MPO start" << endl;
-    shared_ptr<MPO<SU2>> nmpo = make_shared<NPC1MPOQC<SU2>>(hamil);
+    shared_ptr<MPO<SU2, double>> nmpo =
+        make_shared<NPC1MPOQC<SU2, double>>(hamil);
     cout << "1NPC MPO end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO simplification
     cout << "1NPC MPO simplification start" << endl;
-    nmpo =
-        make_shared<SimplifiedMPO<SU2>>(nmpo, make_shared<Rule<SU2>>(), true);
+    nmpo = make_shared<SimplifiedMPO<SU2, double>>(
+        nmpo, make_shared<Rule<SU2, double>>(), true);
     cout << "1NPC MPO simplification end .. T = " << t.get_time() << endl;
     // cout << nmpo->get_blocking_formulas() << endl;
     // abort();
@@ -577,7 +580,8 @@ TEST_F(TestNPDM, TestSU2) {
 
         // MPS
         Random::rand_seed(0);
-        shared_ptr<MPS<SU2>> mps = make_shared<MPS<SU2>>(norb, 0, dot);
+        shared_ptr<MPS<SU2, double>> mps =
+            make_shared<MPS<SU2, double>>(norb, 0, dot);
         mps->initialize(mps_info);
         mps->random_canonicalize();
 
@@ -588,8 +592,9 @@ TEST_F(TestNPDM, TestSU2) {
         mps_info->deallocate_mutable();
 
         // ME
-        shared_ptr<MovingEnvironment<SU2>> me =
-            make_shared<MovingEnvironment<SU2>>(mpo, mps, mps, "DMRG");
+        shared_ptr<MovingEnvironment<SU2, double, double>> me =
+            make_shared<MovingEnvironment<SU2, double, double>>(mpo, mps, mps,
+                                                                "DMRG");
         t.get_time();
         cout << "INIT start" << endl;
         me->init_environments(false);
@@ -598,22 +603,24 @@ TEST_F(TestNPDM, TestSU2) {
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
         vector<double> noises = {1E-8, 0};
-        shared_ptr<DMRG<SU2>> dmrg = make_shared<DMRG<SU2>>(me, bdims, noises);
+        shared_ptr<DMRG<SU2, double, double>> dmrg =
+            make_shared<DMRG<SU2, double, double>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
         dmrg->solve(10, true, 1E-12);
 
         // 1PDM ME
-        shared_ptr<MovingEnvironment<SU2>> pme =
-            make_shared<MovingEnvironment<SU2>>(pmpo, mps, mps, "1PDM");
+        shared_ptr<MovingEnvironment<SU2, double, double>> pme =
+            make_shared<MovingEnvironment<SU2, double, double>>(pmpo, mps, mps,
+                                                                "1PDM");
         t.get_time();
         cout << "1PDM INIT start" << endl;
         pme->init_environments(false);
         cout << "1PDM INIT end .. T = " << t.get_time() << endl;
 
         // 1PDM
-        shared_ptr<Expect<SU2>> expect =
-            make_shared<Expect<SU2>>(pme, bond_dim, bond_dim);
+        shared_ptr<Expect<SU2, double, double>> expect =
+            make_shared<Expect<SU2, double, double>>(pme, bond_dim, bond_dim);
         expect->solve(true, dmrg->forward);
 
         MatrixRef dm = expect->get_1pdm_spatial();
@@ -668,15 +675,17 @@ TEST_F(TestNPDM, TestSU2) {
         dm.deallocate();
 
         // 2PDM ME
-        shared_ptr<MovingEnvironment<SU2>> p2me =
-            make_shared<MovingEnvironment<SU2>>(p2mpo, mps, mps, "2PDM");
+        shared_ptr<MovingEnvironment<SU2, double, double>> p2me =
+            make_shared<MovingEnvironment<SU2, double, double>>(p2mpo, mps, mps,
+                                                                "2PDM");
         t.get_time();
         cout << "2PDM INIT start" << endl;
         p2me->init_environments(false);
         cout << "2PDM INIT end .. T = " << t.get_time() << endl;
 
         // 2PDM
-        expect = make_shared<Expect<SU2>>(p2me, bond_dim, bond_dim);
+        expect =
+            make_shared<Expect<SU2, double, double>>(p2me, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
         int m[6] = {0, 0, 0, 0, 0, 0};
@@ -776,15 +785,17 @@ TEST_F(TestNPDM, TestSU2) {
              << max_error << endl;
 
         // 1NPC ME
-        shared_ptr<MovingEnvironment<SU2>> nme =
-            make_shared<MovingEnvironment<SU2>>(nmpo, mps, mps, "1NPC");
+        shared_ptr<MovingEnvironment<SU2, double, double>> nme =
+            make_shared<MovingEnvironment<SU2, double, double>>(nmpo, mps, mps,
+                                                                "1NPC");
         t.get_time();
         cout << "1NPC INIT start" << endl;
         nme->init_environments(false);
         cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
         // 1NPC
-        expect = make_shared<Expect<SU2>>(nme, bond_dim, bond_dim);
+        expect =
+            make_shared<Expect<SU2, double, double>>(nme, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
         MatrixRef dmx = expect->get_1npc_spatial(0);
@@ -845,7 +856,7 @@ TEST_F(TestNPDM, TestSU2) {
 }
 
 TEST_F(TestNPDM, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
@@ -855,8 +866,8 @@ TEST_F(TestNPDM, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil =
-        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
     // FCI results
     vector<tuple<int, int, double>> one_pdm = {
@@ -886,47 +897,52 @@ TEST_F(TestNPDM, TestSZ) {
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SZ>> mpo =
-        make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<SZ, double>> mpo =
+        make_shared<MPOQC<SZ, double>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true);
+    mpo = make_shared<SimplifiedMPO<SZ, double>>(
+        mpo, make_shared<RuleQC<SZ, double>>(), true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1PDM MPO construction
     cout << "1PDM MPO start" << endl;
-    shared_ptr<MPO<SZ>> pmpo = make_shared<PDM1MPOQC<SZ>>(hamil);
+    shared_ptr<MPO<SZ, double>> pmpo =
+        make_shared<PDM1MPOQC<SZ, double>>(hamil);
     cout << "1PDM MPO end .. T = " << t.get_time() << endl;
 
     // 1PDM MPO simplification
     cout << "1PDM MPO simplification start" << endl;
-    pmpo =
-        make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<RuleQC<SZ>>(), true);
+    pmpo = make_shared<SimplifiedMPO<SZ, double>>(
+        pmpo, make_shared<RuleQC<SZ, double>>(), true);
     cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
     // cout << pmpo->get_blocking_formulas() << endl;
     // abort();
 
     // 2PDM MPO construction
     cout << "2PDM MPO start" << endl;
-    shared_ptr<MPO<SZ>> p2mpo = make_shared<PDM2MPOQC<SZ>>(hamil);
+    shared_ptr<MPO<SZ, double>> p2mpo =
+        make_shared<PDM2MPOQC<SZ, double>>(hamil);
     cout << "2PDM MPO end .. T = " << t.get_time() << endl;
 
     // 2PDM MPO simplification
     cout << "2PDM MPO simplification start" << endl;
-    p2mpo =
-        make_shared<SimplifiedMPO<SZ>>(p2mpo, make_shared<RuleQC<SZ>>(), true);
+    p2mpo = make_shared<SimplifiedMPO<SZ, double>>(
+        p2mpo, make_shared<RuleQC<SZ, double>>(), true);
     cout << "2PDM MPO simplification end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO construction
     cout << "1NPC MPO start" << endl;
-    shared_ptr<MPO<SZ>> nmpo = make_shared<NPC1MPOQC<SZ>>(hamil);
+    shared_ptr<MPO<SZ, double>> nmpo =
+        make_shared<NPC1MPOQC<SZ, double>>(hamil);
     cout << "1NPC MPO end .. T = " << t.get_time() << endl;
 
     // 1NPC MPO simplification
     cout << "1NPC MPO simplification start" << endl;
-    nmpo = make_shared<SimplifiedMPO<SZ>>(nmpo, make_shared<Rule<SZ>>(), true);
+    nmpo = make_shared<SimplifiedMPO<SZ, double>>(
+        nmpo, make_shared<Rule<SZ, double>>(), true);
     cout << "1NPC MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -940,7 +956,8 @@ TEST_F(TestNPDM, TestSZ) {
 
         // MPS
         Random::rand_seed(0);
-        shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, dot);
+        shared_ptr<MPS<SZ, double>> mps =
+            make_shared<MPS<SZ, double>>(norb, 0, dot);
         mps->initialize(mps_info);
         mps->random_canonicalize();
 
@@ -951,8 +968,9 @@ TEST_F(TestNPDM, TestSZ) {
         mps_info->deallocate_mutable();
 
         // ME
-        shared_ptr<MovingEnvironment<SZ>> me =
-            make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
+        shared_ptr<MovingEnvironment<SZ, double, double>> me =
+            make_shared<MovingEnvironment<SZ, double, double>>(mpo, mps, mps,
+                                                               "DMRG");
         t.get_time();
         cout << "INIT start" << endl;
         me->init_environments(false);
@@ -961,22 +979,24 @@ TEST_F(TestNPDM, TestSZ) {
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
         vector<double> noises = {1E-8, 0};
-        shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+        shared_ptr<DMRG<SZ, double, double>> dmrg =
+            make_shared<DMRG<SZ, double, double>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
         dmrg->solve(10, true, 1E-12);
 
         // 1PDM ME
-        shared_ptr<MovingEnvironment<SZ>> pme =
-            make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
+        shared_ptr<MovingEnvironment<SZ, double, double>> pme =
+            make_shared<MovingEnvironment<SZ, double, double>>(pmpo, mps, mps,
+                                                               "1PDM");
         t.get_time();
         cout << "1PDM INIT start" << endl;
         pme->init_environments(false);
         cout << "1PDM INIT end .. T = " << t.get_time() << endl;
 
         // 1PDM
-        shared_ptr<Expect<SZ>> expect =
-            make_shared<Expect<SZ>>(pme, bond_dim, bond_dim);
+        shared_ptr<Expect<SZ, double, double>> expect =
+            make_shared<Expect<SZ, double, double>>(pme, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
         MatrixRef dm = expect->get_1pdm_spatial();
@@ -1031,15 +1051,17 @@ TEST_F(TestNPDM, TestSZ) {
         dm.deallocate();
 
         // 2PDM ME
-        shared_ptr<MovingEnvironment<SZ>> p2me =
-            make_shared<MovingEnvironment<SZ>>(p2mpo, mps, mps, "2PDM");
+        shared_ptr<MovingEnvironment<SZ, double, double>> p2me =
+            make_shared<MovingEnvironment<SZ, double, double>>(p2mpo, mps, mps,
+                                                               "2PDM");
         t.get_time();
         cout << "2PDM INIT start" << endl;
         p2me->init_environments(false);
         cout << "2PDM INIT end .. T = " << t.get_time() << endl;
 
         // 2PDM
-        expect = make_shared<Expect<SZ>>(p2me, bond_dim, bond_dim);
+        expect =
+            make_shared<Expect<SZ, double, double>>(p2me, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
         int m[6] = {0, 0, 0, 0, 0, 0};
@@ -1139,15 +1161,17 @@ TEST_F(TestNPDM, TestSZ) {
              << max_error << endl;
 
         // 1NPC ME
-        shared_ptr<MovingEnvironment<SZ>> nme =
-            make_shared<MovingEnvironment<SZ>>(nmpo, mps, mps, "1NPC");
+        shared_ptr<MovingEnvironment<SZ, double, double>> nme =
+            make_shared<MovingEnvironment<SZ, double, double>>(nmpo, mps, mps,
+                                                               "1NPC");
         t.get_time();
         cout << "1NPC INIT start" << endl;
         nme->init_environments(false);
         cout << "1NPC INIT end .. T = " << t.get_time() << endl;
 
         // 1NPC
-        expect = make_shared<Expect<SZ>>(nme, bond_dim, bond_dim);
+        expect =
+            make_shared<Expect<SZ, double, double>>(nme, bond_dim, bond_dim);
         expect->solve(true, mps->center == 0);
 
         MatrixRef dmx = expect->get_1npc(0);

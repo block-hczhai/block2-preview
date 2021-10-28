@@ -105,11 +105,270 @@ extern void zgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   complex<double> *b, const MKL_INT *ldb, complex<double> *work,
                   const MKL_INT *lwork, MKL_INT *info);
 
+// matrix copy
+// mat [b] = mat [a]
+extern void zlacpy(const char *uplo, const int *m, const int *n,
+                   const complex<double> *a, const int *lda, complex<double> *b,
+                   const int *ldb);
+
+// QR factorization
+extern void zgeqrf(const int *m, const int *n, complex<double> *a,
+                   const int *lda, complex<double> *tau, complex<double> *work,
+                   const int *lwork, int *info);
+extern void zungqr(const int *m, const int *n, const int *k, complex<double> *a,
+                   const int *lda, const complex<double> *tau,
+                   complex<double> *work, const int *lwork, int *info);
+
+// LQ factorization
+extern void zgelqf(const int *m, const int *n, complex<double> *a,
+                   const int *lda, complex<double> *tau, complex<double> *work,
+                   const int *lwork, int *info);
+extern void zunglq(const int *m, const int *n, const int *k, complex<double> *a,
+                   const int *lda, const complex<double> *tau,
+                   complex<double> *work, const int *lwork, int *info);
+
+// eigenvalue problem
+extern void zheev(const char *jobz, const char *uplo, const int *n,
+                  complex<double> *a, const int *lda, double *w,
+                  complex<double> *work, const int *lwork, double *rwork,
+                  int *info);
+
+// SVD
+// mat [a] = mat [u] * vector [sigma] * mat [vt]
+extern void zgesvd(const char *jobu, const char *jobvt, const int *m,
+                   const int *n, complex<double> *a, const int *lda, double *s,
+                   complex<double> *u, const int *ldu, complex<double> *vt,
+                   const int *ldvt, complex<double> *work, const int *lwork,
+                   double *rwork, int *info);
+
 #endif
 }
 
+template <typename FL>
+inline void xgemm(const char *transa, const char *transb, const int *m,
+                  const int *n, const int *k, const FL *alpha, const FL *a,
+                  const int *lda, const FL *b, const int *ldb, const FL *beta,
+                  FL *c, const int *ldc) noexcept;
+
+template <>
+inline void xgemm<double>(const char *transa, const char *transb, const int *m,
+                          const int *n, const int *k, const double *alpha,
+                          const double *a, const int *lda, const double *b,
+                          const int *ldb, const double *beta, double *c,
+                          const int *ldc) noexcept {
+    return dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <>
+inline void xgemm<complex<double>>(
+    const char *transa, const char *transb, const int *m, const int *n,
+    const int *k, const complex<double> *alpha, const complex<double> *a,
+    const int *lda, const complex<double> *b, const int *ldb,
+    const complex<double> *beta, complex<double> *c, const int *ldc) noexcept {
+    return zgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <typename FL>
+inline void xscal(const MKL_INT *n, const FL *sa, FL *sx,
+                  const MKL_INT *incx) noexcept;
+
+template <>
+inline void xscal<double>(const MKL_INT *n, const double *sa, double *sx,
+                          const MKL_INT *incx) noexcept {
+    dscal(n, sa, sx, incx);
+}
+
+template <>
+inline void xscal<complex<double>>(const MKL_INT *n, const complex<double> *sa,
+                                   complex<double> *sx,
+                                   const MKL_INT *incx) noexcept {
+    zscal(n, sa, sx, incx);
+}
+
+template <typename FL>
+inline double xnrm2(const MKL_INT *n, const FL *x,
+                    const MKL_INT *incx) noexcept;
+
+template <>
+inline double xnrm2<double>(const MKL_INT *n, const double *x,
+                            const MKL_INT *incx) noexcept {
+    return dnrm2(n, x, incx);
+}
+
+template <>
+inline double xnrm2<complex<double>>(const MKL_INT *n, const complex<double> *x,
+                                     const MKL_INT *incx) noexcept {
+    return dznrm2(n, x, incx);
+}
+
+template <typename FL>
+inline void xcopy(const int *n, const FL *dx, const int *incx, FL *dy,
+                  const int *incy) noexcept;
+
+template <>
+inline void xcopy<double>(const int *n, const double *dx, const int *incx,
+                          double *dy, const int *incy) noexcept {
+    dcopy(n, dx, incx, dy, incy);
+}
+
+template <>
+inline void xcopy<complex<double>>(const int *n, const complex<double> *dx,
+                                   const int *incx, complex<double> *dy,
+                                   const int *incy) noexcept {
+    zcopy(n, dx, incx, dy, incy);
+}
+
+template <typename FL>
+inline FL xdot(const MKL_INT *n, const FL *dx, const MKL_INT *incx,
+               const FL *dy, const MKL_INT *incy) noexcept;
+
+template <>
+inline double xdot<double>(const MKL_INT *n, const double *dx,
+                           const MKL_INT *incx, const double *dy,
+                           const MKL_INT *incy) noexcept {
+    return ddot(n, dx, incx, dy, incy);
+}
+
+template <>
+inline complex<double>
+xdot<complex<double>>(const MKL_INT *n, const complex<double> *dx,
+                      const MKL_INT *incx, const complex<double> *dy,
+                      const MKL_INT *incy) noexcept {
+    static const complex<double> x = 1.0, zz = 0.0;
+    MKL_INT inc = 1;
+    complex<double> r;
+    zgemm("n", "c", &inc, &inc, n, &x, dy, incy, dx, incx, &zz, &r, &inc);
+    return r;
+}
+
+template <typename FL>
+inline void xaxpy(const int *n, const FL *sa, const FL *sx, const int *incx,
+                  FL *sy, const int *incy) noexcept;
+
+template <>
+inline void xaxpy<double>(const int *n, const double *sa, const double *sx,
+                          const int *incx, double *sy,
+                          const int *incy) noexcept {
+    daxpy(n, sa, sx, incx, sy, incy);
+}
+
+template <>
+inline void xaxpy<complex<double>>(const int *n, const complex<double> *sa,
+                                   const complex<double> *sx, const int *incx,
+                                   complex<double> *sy,
+                                   const int *incy) noexcept {
+    zaxpy(n, sa, sx, incx, sy, incy);
+}
+
+template <typename FL>
+inline void xlacpy(const char *uplo, const int *m, const int *n, const FL *a,
+                   const int *lda, FL *b, const int *ldb);
+
+template <>
+inline void xlacpy(const char *uplo, const int *m, const int *n,
+                   const double *a, const int *lda, double *b, const int *ldb) {
+    dlacpy(uplo, m, n, a, lda, b, ldb);
+}
+template <>
+inline void xlacpy(const char *uplo, const int *m, const int *n,
+                   const complex<double> *a, const int *lda, complex<double> *b,
+                   const int *ldb) {
+    zlacpy(uplo, m, n, a, lda, b, ldb);
+}
+
+template <typename FL>
+inline void xgeqrf(const int *m, const int *n, FL *a, const int *lda, FL *tau,
+                   FL *work, const int *lwork, int *info);
+template <>
+inline void xgeqrf(const int *m, const int *n, double *a, const int *lda,
+                   double *tau, double *work, const int *lwork, int *info) {
+    dgeqrf(m, n, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xgeqrf(const int *m, const int *n, complex<double> *a,
+                   const int *lda, complex<double> *tau, complex<double> *work,
+                   const int *lwork, int *info) {
+    zgeqrf(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xungqr(const int *m, const int *n, const int *k, FL *a,
+                   const int *lda, const FL *tau, FL *work, const int *lwork,
+                   int *info);
+template <>
+inline void xungqr(const int *m, const int *n, const int *k, double *a,
+                   const int *lda, const double *tau, double *work,
+                   const int *lwork, int *info) {
+    dorgqr(m, n, k, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xungqr(const int *m, const int *n, const int *k, complex<double> *a,
+                   const int *lda, const complex<double> *tau,
+                   complex<double> *work, const int *lwork, int *info) {
+    zungqr(m, n, k, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgelqf(const int *m, const int *n, FL *a, const int *lda, FL *tau,
+                   FL *work, const int *lwork, int *info);
+template <>
+inline void xgelqf(const int *m, const int *n, double *a, const int *lda,
+                   double *tau, double *work, const int *lwork, int *info) {
+    dgelqf(m, n, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xgelqf(const int *m, const int *n, complex<double> *a,
+                   const int *lda, complex<double> *tau, complex<double> *work,
+                   const int *lwork, int *info) {
+    zgelqf(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xunglq(const int *m, const int *n, const int *k, FL *a,
+                   const int *lda, const FL *tau, FL *work, const int *lwork,
+                   int *info);
+template <>
+inline void xunglq(const int *m, const int *n, const int *k, double *a,
+                   const int *lda, const double *tau, double *work,
+                   const int *lwork, int *info) {
+    dorglq(m, n, k, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xunglq(const int *m, const int *n, const int *k, complex<double> *a,
+                   const int *lda, const complex<double> *tau,
+                   complex<double> *work, const int *lwork, int *info) {
+    zunglq(m, n, k, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
+                   const int *n, FL *a, const int *lda, double *s, FL *u,
+                   const int *ldu, FL *vt, const int *ldvt, FL *work,
+                   const int *lwork, int *info);
+template <>
+inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
+                   const int *n, double *a, const int *lda, double *s,
+                   double *u, const int *ldu, double *vt, const int *ldvt,
+                   double *work, const int *lwork, int *info) {
+    dgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+}
+template <>
+inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
+                   const int *n, complex<double> *a, const int *lda, double *s,
+                   complex<double> *u, const int *ldu, complex<double> *vt,
+                   const int *ldvt, complex<double> *work, const int *lwork,
+                   int *info) {
+    vector<double> rwork;
+    rwork.reserve(5 * min(*m, *n));
+    zgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork,
+           rwork.data(), info);
+}
+
+// General matrix operations
+template <typename FL> struct GMatrixFunctions;
+
 // Dense complex number matrix operations
-struct ComplexMatrixFunctions {
+template <> struct GMatrixFunctions<complex<double>> {
     // a = re + im i
     static void fill_complex(const ComplexMatrixRef &a, const MatrixRef &re,
                              const MatrixRef &im) {
@@ -172,7 +431,8 @@ struct ComplexMatrixFunctions {
         return dznrm2(&n, a.data, &inc);
     }
     // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
-    static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
+    static void eig(const ComplexMatrixRef &a,
+                    const ComplexDiagonalMatrixRef &w) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         assert(a.m == a.n && w.n == a.n);
@@ -230,7 +490,7 @@ struct ComplexMatrixFunctions {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         assert(a.m == a.n);
-        ComplexDiagonalMatrix w(nullptr, a.m);
+        ComplexDiagonalMatrixRef w(nullptr, a.m);
         w.data = (complex<double> *)d_alloc->allocate(a.m * 2);
         ComplexMatrixRef wa(nullptr, a.m, a.n);
         wa.data = (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
@@ -668,16 +928,16 @@ struct ComplexMatrixFunctions {
         anorm = (anorm + abs(consta) * n) * abs(tt);
         if (anorm < 1E-10)
             anorm = 1.0;
-        MKL_INT nmult = ComplexMatrixFunctions::expo_krylov(
-            lop, n, m, abst, v.data, w.data(), conv_thrd, anorm, work.data(),
-            lwork, iprint, (PComm)pcomm);
+        MKL_INT nmult =
+            expo_krylov(lop, n, m, abst, v.data, w.data(), conv_thrd, anorm,
+                        work.data(), lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(complex<double>) * w.size());
         return (int)nmult;
     }
     // z = r / aa
     static void cg_precondition(const ComplexMatrixRef &z,
                                 const ComplexMatrixRef &r,
-                                const ComplexDiagonalMatrix &aa) {
+                                const ComplexDiagonalMatrixRef &aa) {
         copy(z, r);
         if (aa.size() != 0) {
             assert(aa.size() == r.size() && r.size() == z.size());
@@ -689,7 +949,7 @@ struct ComplexMatrixFunctions {
     // GCROT(m, k) method for solving x in linear equation H x = b
     template <typename MatMul, typename PComm>
     static complex<double>
-    gcrotmk(MatMul &op, const ComplexDiagonalMatrix &aa, ComplexMatrixRef x,
+    gcrotmk(MatMul &op, const ComplexDiagonalMatrixRef &aa, ComplexMatrixRef x,
             ComplexMatrixRef b, int &nmult, int &niter, int m = 20, int k = -1,
             bool iprint = false, const PComm &pcomm = nullptr,
             double conv_thrd = 5E-6, int max_iter = 5000,
@@ -833,5 +1093,7 @@ struct ComplexMatrixFunctions {
         return func;
     }
 };
+
+typedef GMatrixFunctions<complex<double>> ComplexMatrixFunctions;
 
 } // namespace block2

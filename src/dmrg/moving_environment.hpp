@@ -75,13 +75,74 @@ inline ubond_t operator&(TruncationTypes a, TruncationTypes b) {
     return (ubond_t)a & (ubond_t)b;
 }
 
+template <typename, typename, typename> struct ComplexMixture;
+
+template <typename S, typename FL> struct ComplexMixture<S, FL, FL> {
+    static shared_ptr<SparseMatrix<S, FL>>
+    forward(shared_ptr<SparseMatrix<S, FL>> mat) {
+        return mat;
+    }
+    static shared_ptr<SparseMatrixGroup<S, FL>>
+    forward(shared_ptr<SparseMatrixGroup<S, FL>> wfn) {
+        return wfn;
+    }
+    static vector<shared_ptr<SparseMatrixGroup<S, FL>>>
+    forward(const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &wfns) {
+        return wfns;
+    }
+};
+
+template <typename S, typename FP>
+struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
+    typedef complex<FP> FL;
+    static shared_ptr<SparseMatrix<S, FL>>
+    forward(shared_ptr<SparseMatrix<S, FP>> mat) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        assert(mat->get_tpye() == SparseMatrixTypes::Normal);
+        shared_ptr<SparseMatrix<S, FL>> cmat =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
+        cmat->allocate(mat->info);
+        cmat->factor = mat->factor;
+        GMatrixFunctions<FL>::fill_complex(
+            GMatrix<FL>(cmat->data, cmat->total_memory, 1),
+            GMatrix<FP>(mat->data, mat->total_memory, 1),
+            GMatrix<FP>(nullptr, mat->total_memory, 1));
+        return cmat;
+    }
+    static shared_ptr<SparseMatrixGroup<S, FL>>
+    forward(shared_ptr<SparseMatrixGroup<S, FP>> wfn) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrixGroup<S, FL>> cwfn =
+            make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
+        wfn->allocate(wfn->infos);
+        GMatrixFunctions<FL>::fill_complex(
+            GMatrix<FL>(cwfn->data, cwfn->total_memory, 1),
+            GMatrix<FP>(wfn->data, wfn->total_memory, 1),
+            GMatrix<FP>(nullptr, wfn->total_memory, 1));
+        return cwfn;
+    }
+    static vector<shared_ptr<SparseMatrixGroup<S, FL>>>
+    forward(const vector<shared_ptr<SparseMatrixGroup<S, FP>>> wfns) {
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> cwfns(wfns.size(),
+                                                           nullptr);
+        for (size_t i = 0; i < wfns.size(); i++)
+            cwfns[i] = forward(wfns[i]);
+        return cwfns;
+    }
+};
+
 // A tensor network < bra | mpo | ket >
-template <typename S> struct MovingEnvironment {
+template <typename S, typename FL, typename FLS> struct MovingEnvironment {
+    typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FLS>::FP FPS;
+    typedef typename GMatrix<FLS>::FC FCS;
     int n_sites, center, dot;
-    shared_ptr<MPO<S>> mpo;
-    shared_ptr<MPS<S>> bra, ket;
+    shared_ptr<MPO<S, FL>> mpo;
+    shared_ptr<MPS<S, FLS>> bra, ket;
     // Represent the environments contracted around different center sites
-    vector<shared_ptr<Partition<S>>> envs;
+    vector<shared_ptr<Partition<S, FL>>> envs;
     // Symbol of the whole-block operator the MPO represents
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Tag is used to generate filename for disk storage
@@ -89,7 +150,7 @@ template <typename S> struct MovingEnvironment {
     // Parallel execution control
     shared_ptr<ParallelRule<S>> para_rule;
     // cached contracted opt for reuse in rotation
-    shared_ptr<OperatorTensor<S>> cached_opt = nullptr;
+    shared_ptr<OperatorTensor<S, FL>> cached_opt = nullptr;
     // info for cached opt
     pair<OpCachingTypes, int> cached_info = make_pair(OpCachingTypes::None, -1);
     // whether caching contracted opt (only available when
@@ -102,9 +163,10 @@ template <typename S> struct MovingEnvironment {
     bool save_partition_info = false;
     OpNamesSet delayed_contraction = OpNamesSet();
     int fuse_center;
-    MovingEnvironment(const shared_ptr<MPO<S>> &mpo,
-                      const shared_ptr<MPS<S>> &bra,
-                      const shared_ptr<MPS<S>> &ket, const string &tag = "DMRG")
+    MovingEnvironment(const shared_ptr<MPO<S, FL>> &mpo,
+                      const shared_ptr<MPS<S, FLS>> &bra,
+                      const shared_ptr<MPS<S, FLS>> &ket,
+                      const string &tag = "DMRG")
         : n_sites(ket->n_sites), center(ket->center), dot(ket->dot), mpo(mpo),
           bra(bra), ket(ket), tag(tag), para_rule(nullptr) {
         assert(bra->n_sites == ket->n_sites && mpo->n_sites == ket->n_sites);
@@ -115,19 +177,20 @@ template <typename S> struct MovingEnvironment {
                                               : mpo->schemer->left_trans_site;
         if (mpo->get_parallel_type() & ParallelTypes::Distributed) {
             if (mpo->get_parallel_type() & ParallelTypes::NewScheme)
-                para_rule = dynamic_pointer_cast<ParallelMPO<S>>(mpo)->rule;
+                para_rule = dynamic_pointer_cast<ParallelMPO<S, FL>>(mpo)->rule;
             else
                 para_rule =
-                    dynamic_pointer_cast<ClassicParallelMPO<S>>(mpo)->rule;
+                    dynamic_pointer_cast<ClassicParallelMPO<S, FL>>(mpo)->rule;
             para_rule->comm->barrier();
         }
         if (ket->get_type() & MPSTypes::MultiCenter) {
             save_partition_info = true;
-            if (dynamic_pointer_cast<ParallelMPS<S>>(ket)->rule != nullptr)
-                dynamic_pointer_cast<ParallelMPS<S>>(ket)
+            if (dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket)->rule != nullptr)
+                dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket)
                     ->rule->comm->barrier();
         }
     }
+    virtual ~MovingEnvironment() = default;
     // Contract and renormalize left block by one site
     // new site = i - 1
     void left_contract_rotate(int i, bool preserve_data = false) {
@@ -141,7 +204,7 @@ template <typename S> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> sl = Partition<S>::get_uniq_labels(mats);
+        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
         shared_ptr<Symbolic<S>> exprs =
             envs[i - 1]->left == nullptr
                 ? nullptr
@@ -149,29 +212,29 @@ template <typename S> struct MovingEnvironment {
                        ? mpo->left_operator_exprs[i - 1]
                        : envs[i - 1]->left->lmat * mpo->tensors[i - 1]->lmat);
         vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S>::get_uniq_sub_labels(
+            Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->left_operator_names[i - 1], sl);
-        Partition<S>::init_left_op_infos_notrunc(
+        Partition<S, FL>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
             mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
-        shared_ptr<OperatorTensor<S>> new_left;
+        shared_ptr<OperatorTensor<S, FL>> new_left;
         if (cached_info.first == OpCachingTypes::Left &&
             cached_info.second == i - 1) {
             new_left = cached_opt;
             for (auto &p : new_left->ops)
-                p.second->info = Partition<S>::find_op_info(
+                p.second->info = Partition<S, FL>::find_op_info(
                     left_op_infos_notrunc, p.second->info->delta_quantum);
         } else
-            new_left = Partition<S>::build_left(
+            new_left = Partition<S, FL>::build_left(
                 {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
                 mpo->sparse_form[i - 1] == 'S');
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
         // cached_opt might be partially delayed,
         // so further contraction is still needed
@@ -186,19 +249,22 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->load_tensor(i - 1);
         frame->reset(1);
-        Partition<S>::init_left_op_infos(i - 1, bra->info, ket->info, sl,
-                                         envs[i]->left_op_infos);
+        Partition<S, FL>::init_left_op_infos(i - 1, bra->info, ket->info, sl,
+                                             envs[i]->left_op_infos);
         frame->activate(1);
-        envs[i]->left = Partition<S>::build_left(mats, envs[i]->left_op_infos);
+        envs[i]->left =
+            Partition<S, FL>::build_left(mats, envs[i]->left_op_infos);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_left_archive_filename(i);
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
-        mpo->tf->left_rotate(new_left, bra->tensors[i - 1], ket->tensors[i - 1],
-                             envs[i]->left);
+        mpo->tf->left_rotate(
+            new_left, ComplexMixture<S, FL, FLS>::forward(bra->tensors[i - 1]),
+            ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]),
+            envs[i]->left);
         if (!frame->use_main_stack)
             new_left->deallocate();
         trot += _t.get_time();
@@ -229,7 +295,7 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i - 1);
         if (frame->use_main_stack)
             new_left->deallocate();
-        Partition<S>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
+        Partition<S, FL>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         frame->save_data(1, get_left_partition_filename(i));
         if (save_partition_info) {
             frame->activate(1);
@@ -251,7 +317,7 @@ template <typename S> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->right_new_operator_names);
         }
-        vector<S> sl = Partition<S>::get_uniq_labels(mats);
+        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
         shared_ptr<Symbolic<S>> exprs =
             envs[i + 1]->right == nullptr
                 ? nullptr
@@ -260,30 +326,30 @@ template <typename S> struct MovingEnvironment {
                        : mpo->tensors[i + dot]->rmat *
                              envs[i + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S>::get_uniq_sub_labels(
+            Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->right_operator_names[i + dot], sl);
-        Partition<S>::init_right_op_infos_notrunc(
+        Partition<S, FL>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
             right_op_infos_notrunc, mpo->tf->opf->cg);
         frame->activate(0);
-        shared_ptr<OperatorTensor<S>> new_right;
+        shared_ptr<OperatorTensor<S, FL>> new_right;
         if (cached_info.first == OpCachingTypes::Right &&
             cached_info.second == i + dot) {
             new_right = cached_opt;
             for (auto &p : new_right->ops)
-                p.second->info = Partition<S>::find_op_info(
+                p.second->info = Partition<S, FL>::find_op_info(
                     right_op_infos_notrunc, p.second->info->delta_quantum);
         } else
-            new_right = Partition<S>::build_right(
+            new_right = Partition<S, FL>::build_right(
                 {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
                 mpo->sparse_form[i + dot] == 'S');
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
         // cached_opt might be partially delayed,
         // so further contraction is still needed
@@ -299,20 +365,23 @@ template <typename S> struct MovingEnvironment {
         if (bra != ket)
             ket->load_tensor(i + dot);
         frame->reset(1);
-        Partition<S>::init_right_op_infos(i + dot, bra->info, ket->info, sl,
-                                          envs[i]->right_op_infos);
+        Partition<S, FL>::init_right_op_infos(i + dot, bra->info, ket->info, sl,
+                                              envs[i]->right_op_infos);
         frame->activate(1);
         envs[i]->right =
-            Partition<S>::build_right(mats, envs[i]->right_op_infos);
+            Partition<S, FL>::build_right(mats, envs[i]->right_op_infos);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_right_archive_filename(i);
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
-        mpo->tf->right_rotate(new_right, bra->tensors[i + dot],
-                              ket->tensors[i + dot], envs[i]->right);
+        mpo->tf->right_rotate(
+            new_right,
+            ComplexMixture<S, FL, FLS>::forward(bra->tensors[i + dot]),
+            ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]),
+            envs[i]->right);
         if (!frame->use_main_stack)
             new_right->deallocate();
         trot += _t.get_time();
@@ -346,7 +415,7 @@ template <typename S> struct MovingEnvironment {
         bra->unload_tensor(i + dot);
         if (frame->use_main_stack)
             new_right->deallocate();
-        Partition<S>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
+        Partition<S, FL>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         frame->save_data(1, get_right_partition_filename(i));
         if (save_partition_info) {
             frame->activate(1);
@@ -401,8 +470,8 @@ template <typename S> struct MovingEnvironment {
     // change from standard single-center MPS to multi-center MPS
     void parallelize_mps() {
         assert(ket->get_type() & MPSTypes::MultiCenter);
-        shared_ptr<ParallelMPS<S>> para_mps =
-            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<ParallelMPS<S, FLS>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
         shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
         if (para_mps->ncenter != 0)
             return;
@@ -461,8 +530,8 @@ template <typename S> struct MovingEnvironment {
     // change from multi-center MPS to standard single-center MPS
     void serialize_mps() {
         assert(ket->get_type() & MPSTypes::MultiCenter);
-        shared_ptr<ParallelMPS<S>> para_mps =
-            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<ParallelMPS<S, FLS>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
         shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
         assert(para_mps->conn_matrices.size() != 0);
         if (para_mps->rule != nullptr)
@@ -538,9 +607,9 @@ template <typename S> struct MovingEnvironment {
            << Parsing::to_string(i);
         return ss.str();
     }
-    void shallow_copy_to(const shared_ptr<MovingEnvironment<S>> &me) const {
+    void shallow_copy_to(const shared_ptr<MovingEnvironment> &me) const {
         for (int i = 0; i < n_sites; i++) {
-            me->envs[i] = make_shared<Partition<S>>(*envs[i]);
+            me->envs[i] = make_shared<Partition<S, FL>>(*envs[i]);
             me->envs[i]->left_op_infos = envs[i]->left_op_infos;
             me->envs[i]->right_op_infos = envs[i]->right_op_infos;
             if (envs[i]->left != nullptr)
@@ -551,10 +620,10 @@ template <typename S> struct MovingEnvironment {
                                    me->get_right_partition_filename(i));
         }
     }
-    virtual shared_ptr<MovingEnvironment<S>>
+    virtual shared_ptr<MovingEnvironment>
     shallow_copy(const string &new_tag) const {
-        shared_ptr<MovingEnvironment<S>> me =
-            make_shared<MovingEnvironment<S>>(*this);
+        shared_ptr<MovingEnvironment> me =
+            make_shared<MovingEnvironment>(*this);
         me->tag = new_tag;
         shallow_copy_to(me);
         return me;
@@ -562,8 +631,8 @@ template <typename S> struct MovingEnvironment {
     virtual void finalize_environments(bool renormalize_ops = true) {
         if (!(ket->get_type() & MPSTypes::MultiCenter))
             return;
-        shared_ptr<ParallelMPS<S>> para_mps =
-            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<ParallelMPS<S, FLS>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
         shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
         assert(para_mps->conn_matrices.size() != 0);
         para_mps->enable_parallel_writing();
@@ -727,8 +796,8 @@ template <typename S> struct MovingEnvironment {
         bool init = false) {
         assert(pj >= pi + 2 && pi % 2 == 0);
         assert(ket->get_type() & MPSTypes::MultiCenter);
-        shared_ptr<ParallelMPS<S>> para_mps =
-            dynamic_pointer_cast<ParallelMPS<S>>(ket);
+        shared_ptr<ParallelMPS<S, FLS>> para_mps =
+            dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
         shared_ptr<CG<S>> cg = mpo->tf->opf->cg;
         int pm = (pi + pj) / 2;
         if (pm % 2 != 0 && !(pj == pi + 2))
@@ -792,7 +861,7 @@ template <typename S> struct MovingEnvironment {
                                               : para_mps->conn_centers[pj - 1]);
              i++) {
             if (para_mps->tensors[i] == nullptr)
-                para_mps->tensors[i] = make_shared<SparseMatrix<S>>();
+                para_mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
             if (i == para_mps->conn_centers[pm - 1])
                 para_mps->canonical_form[i] = 'S';
             else if (i < para_mps->conn_centers[pm - 1])
@@ -873,19 +942,19 @@ template <typename S> struct MovingEnvironment {
         envs.clear();
         envs.resize(n_sites);
         for (int i = 0; i < n_sites; i++) {
-            envs[i] =
-                make_shared<Partition<S>>(nullptr, nullptr, mpo->tensors[i]);
+            envs[i] = make_shared<Partition<S, FL>>(nullptr, nullptr,
+                                                    mpo->tensors[i]);
             if (i != n_sites - 1 && dot == 2)
                 envs[i]->middle.push_back(mpo->tensors[i + 1]);
         }
         // singlet embedding
         if (bra->info->vacuum != bra->info->left_dims_fci[0]->quanta[0] ||
             ket->info->vacuum != ket->info->left_dims_fci[0]->quanta[0]) {
-            envs[0]->left = make_shared<OperatorTensor<S>>();
+            envs[0]->left = make_shared<OperatorTensor<S, FL>>();
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
             shared_ptr<SparseMatrixInfo<S>> xinfo =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             S dq = (bra->info->left_dims_fci[0]->quanta[0] -
@@ -893,16 +962,16 @@ template <typename S> struct MovingEnvironment {
             assert(dq == S(0));
             xinfo->initialize(*bra->info->left_dims_fci[0],
                               *ket->info->left_dims_fci[0], dq, false, false);
-            shared_ptr<SparseMatrix<S>> xmat =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> xmat =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             xmat->allocate(xinfo);
             xmat->data[0] = 1.0;
             envs[0]->left->ops[make_shared<OpExpr<S>>()] = xmat;
             envs[0]->left_op_infos.push_back(make_pair(dq, xinfo));
         }
         if (ket->get_type() & MPSTypes::MultiCenter) {
-            shared_ptr<ParallelMPS<S>> para_mps =
-                dynamic_pointer_cast<ParallelMPS<S>>(ket);
+            shared_ptr<ParallelMPS<S, FLS>> para_mps =
+                dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
             para_mps->enable_parallel_writing();
             if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) {
                 frame->activate(1);
@@ -929,7 +998,8 @@ template <typename S> struct MovingEnvironment {
             para_mps->ncenter = (int)para_mps->conn_centers.size();
             para_mps->conn_matrices.resize(para_mps->ncenter);
             for (int i = 0; i < para_mps->ncenter; i++)
-                para_mps->conn_matrices[i] = make_shared<SparseMatrix<S>>();
+                para_mps->conn_matrices[i] =
+                    make_shared<SparseMatrix<S, FLS>>();
             init_parallel_environments(
                 0, para_mps->ncenter + 1,
                 para_mps->rule == nullptr ? nullptr : para_mps->rule->comm,
@@ -1104,9 +1174,9 @@ template <typename S> struct MovingEnvironment {
             ket->info->get_warm_up_type() != WarmUpTypes::None) {
             frame->reset(1);
             frame->activate(0);
-            vector<shared_ptr<MPS<S>>> mpss =
-                bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
-                           : vector<shared_ptr<MPS<S>>>{bra, ket};
+            vector<shared_ptr<MPS<S, FLS>>> mpss =
+                bra == ket ? vector<shared_ptr<MPS<S, FLS>>>{bra}
+                           : vector<shared_ptr<MPS<S, FLS>>>{bra, ket};
             for (auto &mps : mpss) {
                 if (mps->info->get_warm_up_type() == WarmUpTypes::Local) {
                     mps->info->load_mutable_left();
@@ -1129,8 +1199,9 @@ template <typename S> struct MovingEnvironment {
                     }
                 } else if (mps->info->get_warm_up_type() ==
                            WarmUpTypes::Determinant) {
-                    shared_ptr<DeterminantMPSInfo<S>> mps_info =
-                        dynamic_pointer_cast<DeterminantMPSInfo<S>>(mps->info);
+                    shared_ptr<DeterminantMPSInfo<S, FL>> mps_info =
+                        dynamic_pointer_cast<DeterminantMPSInfo<S, FL>>(
+                            mps->info);
                     bool ctrd_two_dot =
                         mps->tensors[i + 1] == nullptr || dot == 1;
                     StateInfo<S> st = mps_info->get_complementary_right_dims(
@@ -1178,9 +1249,9 @@ template <typename S> struct MovingEnvironment {
             ket->info->get_warm_up_type() != WarmUpTypes::None) {
             frame->reset(1);
             frame->activate(0);
-            vector<shared_ptr<MPS<S>>> mpss =
-                bra == ket ? vector<shared_ptr<MPS<S>>>{bra}
-                           : vector<shared_ptr<MPS<S>>>{bra, ket};
+            vector<shared_ptr<MPS<S, FLS>>> mpss =
+                bra == ket ? vector<shared_ptr<MPS<S, FLS>>>{bra}
+                           : vector<shared_ptr<MPS<S, FLS>>>{bra, ket};
             for (auto &mps : mpss) {
                 if (mps->info->get_warm_up_type() == WarmUpTypes::Local) {
                     shared_ptr<DynamicMPSInfo<S>> mps_info =
@@ -1202,8 +1273,9 @@ template <typename S> struct MovingEnvironment {
                         mps->random_canonicalize_tensor(j);
                 } else if (mps->info->get_warm_up_type() ==
                            WarmUpTypes::Determinant) {
-                    shared_ptr<DeterminantMPSInfo<S>> mps_info =
-                        dynamic_pointer_cast<DeterminantMPSInfo<S>>(mps->info);
+                    shared_ptr<DeterminantMPSInfo<S, FL>> mps_info =
+                        dynamic_pointer_cast<DeterminantMPSInfo<S, FL>>(
+                            mps->info);
                     bool ctrd_two_dot =
                         mps->tensors[i + 1] == nullptr || dot == 1;
                     StateInfo<S> st = mps_info->get_complementary_left_dims(
@@ -1249,7 +1321,7 @@ template <typename S> struct MovingEnvironment {
     // site iL is the new site
     void left_contract(
         int iL, vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-        shared_ptr<OperatorTensor<S>> &new_left, bool delayed) {
+        shared_ptr<OperatorTensor<S, FL>> &new_left, bool delayed) {
         mpo->load_left_operators(iL);
         mpo->load_tensor(iL);
         // left contract infos
@@ -1260,7 +1332,7 @@ template <typename S> struct MovingEnvironment {
             mpo->load_schemer();
             lmats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> lsl = Partition<S>::get_uniq_labels(lmats);
+        vector<S> lsl = Partition<S, FL>::get_uniq_labels(lmats);
         shared_ptr<Symbolic<S>> lexprs =
             envs[iL]->left == nullptr
                 ? nullptr
@@ -1268,11 +1340,11 @@ template <typename S> struct MovingEnvironment {
                        ? mpo->left_operator_exprs[iL]
                        : envs[iL]->left->lmat * mpo->tensors[iL]->lmat);
         vector<vector<pair<uint8_t, S>>> lsubsl =
-            Partition<S>::get_uniq_sub_labels(
+            Partition<S, FL>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl);
         if (envs[iL]->left != nullptr && iL != 0)
             frame->load_data(1, get_left_partition_filename(iL));
-        Partition<S>::init_left_op_infos_notrunc(
+        Partition<S, FL>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
             mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
         // left contract
@@ -1281,11 +1353,11 @@ template <typename S> struct MovingEnvironment {
             cached_info.second == iL) {
             new_left = cached_opt;
             for (auto &p : new_left->ops)
-                p.second->info = Partition<S>::find_op_info(
+                p.second->info = Partition<S, FL>::find_op_info(
                     left_op_infos, p.second->info->delta_quantum);
         } else {
-            new_left = Partition<S>::build_left(lmats, left_op_infos,
-                                                mpo->sparse_form[iL] == 'S');
+            new_left = Partition<S, FL>::build_left(
+                lmats, left_op_infos, mpo->sparse_form[iL] == 'S');
             mpo->tf->left_contract(envs[iL]->left, mpo->tensors[iL], new_left,
                                    mpo->left_operator_exprs.size() != 0
                                        ? mpo->left_operator_exprs[iL]
@@ -1307,7 +1379,7 @@ template <typename S> struct MovingEnvironment {
         mpo->unload_left_operators(iL);
     }
     void delayed_left_contract(int iL,
-                               shared_ptr<OperatorTensor<S>> &new_left) {
+                               shared_ptr<OperatorTensor<S, FL>> &new_left) {
         if (envs[iL]->left != nullptr && iL != 0)
             frame->load_data(1, get_left_partition_filename(iL));
         frame->activate(0);
@@ -1325,12 +1397,12 @@ template <typename S> struct MovingEnvironment {
     void right_contract(
         int iR,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        shared_ptr<OperatorTensor<S>> &new_right, bool delayed) {
+        shared_ptr<OperatorTensor<S, FL>> &new_right, bool delayed) {
         mpo->load_right_operators(iR);
         mpo->load_tensor(iR);
         // right contract infos
         vector<shared_ptr<Symbolic<S>>> rmats = {mpo->right_operator_names[iR]};
-        vector<S> rsl = Partition<S>::get_uniq_labels(rmats);
+        vector<S> rsl = Partition<S, FL>::get_uniq_labels(rmats);
         shared_ptr<Symbolic<S>> rexprs =
             envs[iR - dot + 1]->right == nullptr
                 ? nullptr
@@ -1339,11 +1411,11 @@ template <typename S> struct MovingEnvironment {
                        : mpo->tensors[iR]->rmat *
                              envs[iR - dot + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> rsubsl =
-            Partition<S>::get_uniq_sub_labels(
+            Partition<S, FL>::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[iR], rsl);
         if (envs[iR - dot + 1]->right != nullptr)
             frame->load_data(1, get_right_partition_filename(iR - dot + 1));
-        Partition<S>::init_right_op_infos_notrunc(
+        Partition<S, FL>::init_right_op_infos_notrunc(
             iR, bra->info, ket->info, rsl, rsubsl,
             envs[iR - dot + 1]->right_op_infos, mpo->site_op_infos[iR],
             right_op_infos, mpo->tf->opf->cg);
@@ -1353,11 +1425,11 @@ template <typename S> struct MovingEnvironment {
             cached_info.second == iR) {
             new_right = cached_opt;
             for (auto &p : new_right->ops)
-                p.second->info = Partition<S>::find_op_info(
+                p.second->info = Partition<S, FL>::find_op_info(
                     right_op_infos, p.second->info->delta_quantum);
         } else {
-            new_right = Partition<S>::build_right(rmats, right_op_infos,
-                                                  mpo->sparse_form[iR] == 'S');
+            new_right = Partition<S, FL>::build_right(
+                rmats, right_op_infos, mpo->sparse_form[iR] == 'S');
             mpo->tf->right_contract(
                 envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
                 mpo->right_operator_exprs.size() != 0
@@ -1369,7 +1441,7 @@ template <typename S> struct MovingEnvironment {
         mpo->unload_right_operators(iR);
     }
     void delayed_right_contract(int iR,
-                                shared_ptr<OperatorTensor<S>> &new_right) {
+                                shared_ptr<OperatorTensor<S, FL>> &new_right) {
         if (envs[iR - dot + 1]->right != nullptr)
             frame->load_data(1, get_right_partition_filename(iR - dot + 1));
         frame->activate(0);
@@ -1388,20 +1460,20 @@ template <typename S> struct MovingEnvironment {
     void
     left_copy(int iL,
               vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-              shared_ptr<OperatorTensor<S>> &new_left) {
+              shared_ptr<OperatorTensor<S, FL>> &new_left) {
         assert(envs[iL]->left != nullptr);
         frame->load_data(1, get_left_partition_filename(iL));
         frame->activate(0);
-        Partition<S>::copy_op_infos(envs[iL]->left_op_infos, left_op_infos);
+        Partition<S, FL>::copy_op_infos(envs[iL]->left_op_infos, left_op_infos);
         if (cached_info.first == OpCachingTypes::LeftCopy &&
             cached_info.second == iL)
             new_left = cached_opt;
         else
             new_left = envs[iL]->left->deep_copy(
                 frame->use_main_stack ? nullptr
-                                      : make_shared<VectorAllocator<double>>());
+                                      : make_shared<VectorAllocator<FP>>());
         for (auto &p : new_left->ops)
-            p.second->info = Partition<S>::find_op_info(
+            p.second->info = Partition<S, FL>::find_op_info(
                 left_op_infos, p.second->info->delta_quantum);
     }
     // Copy right-most right block for constructing effective Hamiltonian
@@ -1409,34 +1481,34 @@ template <typename S> struct MovingEnvironment {
     void
     right_copy(int iR,
                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-               shared_ptr<OperatorTensor<S>> &new_right) {
+               shared_ptr<OperatorTensor<S, FL>> &new_right) {
         assert(envs[iR - dot + 1]->right != nullptr);
         frame->load_data(1, get_right_partition_filename(iR - dot + 1));
         frame->activate(0);
-        Partition<S>::copy_op_infos(envs[iR - dot + 1]->right_op_infos,
-                                    right_op_infos);
+        Partition<S, FL>::copy_op_infos(envs[iR - dot + 1]->right_op_infos,
+                                        right_op_infos);
         if (cached_info.first == OpCachingTypes::RightCopy &&
             cached_info.second == iR)
             new_right = cached_opt;
         else
             new_right = envs[iR - dot + 1]->right->deep_copy(
                 frame->use_main_stack ? nullptr
-                                      : make_shared<VectorAllocator<double>>());
+                                      : make_shared<VectorAllocator<FP>>());
         for (auto &p : new_right->ops)
-            p.second->info = Partition<S>::find_op_info(
+            p.second->info = Partition<S, FL>::find_op_info(
                 right_op_infos, p.second->info->delta_quantum);
     }
     // Generate effective hamiltonian at current center site
-    shared_ptr<EffectiveHamiltonian<S>>
+    shared_ptr<EffectiveHamiltonian<S, FL>>
     eff_ham(FuseTypes fuse_type, bool forward, bool compute_diag,
-            const shared_ptr<SparseMatrix<S>> &bra_wfn,
-            const shared_ptr<SparseMatrix<S>> &ket_wfn) {
+            const shared_ptr<SparseMatrix<S, FLS>> &bra_wfn,
+            const shared_ptr<SparseMatrix<S, FLS>> &ket_wfn) {
         assert(!(bra->get_type() & MPSTypes::MultiWfn));
         assert(!(ket->get_type() & MPSTypes::MultiWfn));
         const bool delay_left = center <= fuse_center;
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
             right_op_infos;
-        shared_ptr<OperatorTensor<S>> new_left, new_right;
+        shared_ptr<OperatorTensor<S, FL>> new_left, new_right;
         int iL = -1, iR = -1, iM = -1;
         if (dot == 2) {
             if (fuse_type == FuseTypes::FuseLR)
@@ -1461,10 +1533,10 @@ template <typename S> struct MovingEnvironment {
         } else
             assert(false);
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
         // avoid keeping too many large objects in memory simultaneously
         if (cached_opt != nullptr && cached_info.second != iL &&
@@ -1523,7 +1595,7 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->load_middle_operators(iM);
         // delayed left-right contract
-        shared_ptr<DelayedOperatorTensor<S>> op =
+        shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
@@ -1538,26 +1610,30 @@ template <typename S> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
-        shared_ptr<EffectiveHamiltonian<S>> efh =
-            make_shared<EffectiveHamiltonian<S>>(left_op_infos, right_op_infos,
-                                                 op, bra_wfn, ket_wfn, mpo->op,
-                                                 hops, mpo->tf, compute_diag);
+        shared_ptr<EffectiveHamiltonian<S, FL>> efh =
+            make_shared<EffectiveHamiltonian<S, FL>>(
+                left_op_infos, right_op_infos, op,
+                ComplexMixture<S, FL, FLS>::forward(bra_wfn),
+                ComplexMixture<S, FL, FLS>::forward(ket_wfn), mpo->op, hops,
+                mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame->update_peak_used_memory();
         return efh;
     }
     // Generate effective hamiltonian at current center site
     // for MultiMPS case
-    shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>>
+    shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>
     multi_eff_ham(FuseTypes fuse_type, bool forward, bool compute_diag) {
         assert(bra->get_type() & MPSTypes::MultiWfn);
         assert(ket->get_type() & MPSTypes::MultiWfn);
         const bool delay_left = center <= fuse_center;
-        shared_ptr<MultiMPS<S>> mbra = dynamic_pointer_cast<MultiMPS<S>>(bra);
-        shared_ptr<MultiMPS<S>> mket = dynamic_pointer_cast<MultiMPS<S>>(ket);
+        shared_ptr<MultiMPS<S, FLS>> mbra =
+            dynamic_pointer_cast<MultiMPS<S, FLS>>(bra);
+        shared_ptr<MultiMPS<S, FLS>> mket =
+            dynamic_pointer_cast<MultiMPS<S, FLS>>(ket);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
             right_op_infos;
-        shared_ptr<OperatorTensor<S>> new_left, new_right;
+        shared_ptr<OperatorTensor<S, FL>> new_left, new_right;
         int iL = -1, iR = -1, iM = -1;
         if (dot == 2) {
             if (fuse_type == FuseTypes::FuseLR)
@@ -1582,10 +1658,10 @@ template <typename S> struct MovingEnvironment {
         } else
             assert(false);
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->filename = get_middle_archive_filename();
-            dynamic_pointer_cast<ArchivedTensorFunctions<S>>(mpo->tf)->offset =
-                0;
+            dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
+                ->offset = 0;
         }
         // avoid keeping too many large objects in memory simultaneously
         if (cached_opt != nullptr && cached_info.second != iL &&
@@ -1644,7 +1720,7 @@ template <typename S> struct MovingEnvironment {
         }
         mpo->load_middle_operators(iM);
         // delayed left-right contract
-        shared_ptr<DelayedOperatorTensor<S>> op =
+        shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
@@ -1659,19 +1735,23 @@ template <typename S> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
-        shared_ptr<EffectiveHamiltonian<S, MultiMPS<S>>> efh =
-            make_shared<EffectiveHamiltonian<S, MultiMPS<S>>>(
-                left_op_infos, right_op_infos, op, mbra->wfns, mket->wfns,
-                mpo->op, hops, mpo->tf, compute_diag);
+        shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> efh =
+            make_shared<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>(
+                left_op_infos, right_op_infos, op,
+                ComplexMixture<S, FL, FLS>::forward(mbra->wfns),
+                ComplexMixture<S, FL, FLS>::forward(mket->wfns), mpo->op, hops,
+                mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame->update_peak_used_memory();
         return efh;
     }
     // Absorb wfn matrix into adjacent MPS tensor in one-site algorithm
-    static void contract_one_dot(int i, const shared_ptr<SparseMatrix<S>> &wfn,
-                                 const shared_ptr<MPS<S>> &mps, bool forward,
-                                 bool reduced = false) {
-        shared_ptr<SparseMatrix<S>> old_wfn = make_shared<SparseMatrix<S>>();
+    static void contract_one_dot(int i,
+                                 const shared_ptr<SparseMatrix<S, FLS>> &wfn,
+                                 const shared_ptr<MPS<S, FLS>> &mps,
+                                 bool forward, bool reduced = false) {
+        shared_ptr<SparseMatrix<S, FLS>> old_wfn =
+            make_shared<SparseMatrix<S, FLS>>();
         shared_ptr<SparseMatrixInfo<S>> old_wfn_info =
             make_shared<SparseMatrixInfo<S>>();
         frame->activate(1);
@@ -1721,9 +1801,10 @@ template <typename S> struct MovingEnvironment {
         mps->tensors[i] = old_wfn;
     }
     // Contract two adjcent MPS tensors to one two-site MPS tensor
-    static void contract_two_dot(int i, const shared_ptr<MPS<S>> &mps,
+    static void contract_two_dot(int i, const shared_ptr<MPS<S, FLS>> &mps,
                                  bool reduced = false) {
-        shared_ptr<SparseMatrix<S>> old_wfn = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, FLS>> old_wfn =
+            make_shared<SparseMatrix<S, FLS>>();
         shared_ptr<SparseMatrixInfo<S>> old_wfn_info =
             make_shared<SparseMatrixInfo<S>>();
         frame->activate(1);
@@ -1765,12 +1846,11 @@ template <typename S> struct MovingEnvironment {
         mps->tensors[i + 1] = nullptr;
     }
     // Absorb wfn matrices into adjacent MultiMPS tensor in one-site algorithm
-    static void
-    contract_multi_one_dot(int i,
-                           const vector<shared_ptr<SparseMatrixGroup<S>>> &wfns,
-                           const shared_ptr<MultiMPS<S>> &mps, bool forward,
-                           bool reduced = false) {
-        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns;
+    static void contract_multi_one_dot(
+        int i, const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &wfns,
+        const shared_ptr<MultiMPS<S, FLS>> &mps, bool forward,
+        bool reduced = false) {
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns;
         vector<shared_ptr<SparseMatrixInfo<S>>> old_wfn_infos;
         frame->activate(1);
         mps->load_tensor(i);
@@ -1819,7 +1899,7 @@ template <typename S> struct MovingEnvironment {
         }
         frame->activate(0);
         for (int k = 0; k < mps->nroots; k++) {
-            old_wfns[k] = make_shared<SparseMatrixGroup<S>>();
+            old_wfns[k] = make_shared<SparseMatrixGroup<S, FLS>>();
             old_wfns[k]->allocate(old_wfn_infos);
             if (forward)
                 for (int j = 0; j < old_wfns[k]->n; j++)
@@ -1836,9 +1916,9 @@ template <typename S> struct MovingEnvironment {
     }
     // Contract two adjcent MultiMPS tensors to one two-site MultiMPS tensor
     static void contract_multi_two_dot(int i,
-                                       const shared_ptr<MultiMPS<S>> &mps,
+                                       const shared_ptr<MultiMPS<S, FLS>> &mps,
                                        bool reduced = false) {
-        vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns;
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns;
         vector<shared_ptr<SparseMatrixInfo<S>>> old_wfn_infos;
         frame->activate(1);
         assert(mps->tensors[i] == nullptr || mps->tensors[i + 1] == nullptr);
@@ -1890,7 +1970,7 @@ template <typename S> struct MovingEnvironment {
         }
         frame->activate(0);
         for (int k = 0; k < mps->nroots; k++) {
-            old_wfns[k] = make_shared<SparseMatrixGroup<S>>();
+            old_wfns[k] = make_shared<SparseMatrixGroup<S, FLS>>();
             old_wfns[k]->allocate(old_wfn_infos);
             if (left_wfn)
                 for (int j = 0; j < old_wfns[k]->n; j++)
@@ -1914,171 +1994,178 @@ template <typename S> struct MovingEnvironment {
         mps->wfns = old_wfns;
     }
     // Density matrix of a MPS tensor
-    static shared_ptr<SparseMatrix<S>>
-    density_matrix(S vacuum, const shared_ptr<SparseMatrix<S>> &psi,
-                   bool trace_right, double noise, NoiseTypes noise_type,
-                   double scale = 1.0,
-                   const shared_ptr<SparseMatrixGroup<S>> &pkets = nullptr) {
+    static shared_ptr<SparseMatrix<S, FLS>> density_matrix(
+        S vacuum, const shared_ptr<SparseMatrix<S, FLS>> &psi, bool trace_right,
+        FPS noise, NoiseTypes noise_type, FPS scale = 1.0,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &pkets = nullptr) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(
             vector<shared_ptr<SparseMatrixInfo<S>>>{psi->info}, vacuum,
             trace_right);
-        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, FLS>> dm =
+            make_shared<SparseMatrix<S, FLS>>();
         dm->allocate(dm_info);
-        assert(psi->factor == 1);
+        assert(psi->factor == 1.0);
         psi->factor = sqrt(scale);
-        OperatorFunctions<S>::trans_product(psi, dm, trace_right, sqrt(noise),
-                                            noise_type);
+        OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right,
+                                                 sqrt(noise), noise_type);
         psi->factor = 1;
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
             assert(pkets != nullptr);
             scale_perturbative_noise(noise, noise_type, pkets);
             for (int i = 1; i < pkets->n; i++)
-                OperatorFunctions<S>::trans_product(
+                OperatorFunctions<S, FLS>::trans_product(
                     (*pkets)[i], dm, trace_right, 0.0, NoiseTypes::None);
         }
         return dm;
     }
     // Density matrix of a MultiMPS tensor
     // noise will be added several times (for each wfn)
-    static shared_ptr<SparseMatrix<S>> density_matrix_with_multi_target(
-        S vacuum, const vector<shared_ptr<SparseMatrixGroup<S>>> &psi,
-        const vector<double> weights, bool trace_right, double noise,
-        NoiseTypes noise_type, double scale = 1.0,
-        const shared_ptr<SparseMatrixGroup<S>> &pkets = nullptr) {
+    static shared_ptr<SparseMatrix<S, FLS>> density_matrix_with_multi_target(
+        S vacuum, const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &psi,
+        const vector<FPS> weights, bool trace_right, FPS noise,
+        NoiseTypes noise_type, FP scale = 1.0,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &pkets = nullptr) {
         shared_ptr<SparseMatrixInfo<S>> dm_info =
             make_shared<SparseMatrixInfo<S>>();
         dm_info->initialize_dm(psi[0]->infos, vacuum, trace_right);
-        shared_ptr<SparseMatrix<S>> dm = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, FLS>> dm =
+            make_shared<SparseMatrix<S, FLS>>();
         dm->allocate(dm_info);
         assert(weights.size() == psi.size());
         for (size_t i = 0; i < psi.size(); i++)
             for (int j = 0; j < psi[i]->n; j++) {
-                shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
+                shared_ptr<SparseMatrix<S, FLS>> wfn = (*psi[i])[j];
                 wfn->factor = sqrt(weights[i] * scale);
-                OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
-                                                    sqrt(noise), noise_type);
+                OperatorFunctions<S, FLS>::trans_product(
+                    wfn, dm, trace_right, sqrt(noise), noise_type);
             }
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
             assert(pkets != nullptr);
             scale_perturbative_noise(noise, noise_type, pkets);
             for (int i = 1; i < pkets->n; i++)
-                OperatorFunctions<S>::trans_product(
+                OperatorFunctions<S, FLS>::trans_product(
                     (*pkets)[i], dm, trace_right, 0.0, NoiseTypes::None);
         }
         return dm;
     }
     // Add wavefunction to density matrix
-    static void density_matrix_add_wfn(const shared_ptr<SparseMatrix<S>> &dm,
-                                       const shared_ptr<SparseMatrix<S>> &psi,
-                                       bool trace_right, double scale = 1.0) {
+    static void
+    density_matrix_add_wfn(const shared_ptr<SparseMatrix<S, FLS>> &dm,
+                           const shared_ptr<SparseMatrix<S, FLS>> &psi,
+                           bool trace_right, FPS scale = 1.0) {
         assert(psi->factor == 1);
         psi->factor = sqrt(scale);
-        OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0,
-                                            NoiseTypes::None);
+        OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right, 0.0,
+                                                 NoiseTypes::None);
         psi->factor = 1;
     }
     // Density matrix with perturbed wavefunctions as noise
     static void density_matrix_add_perturbative_noise(
-        const shared_ptr<SparseMatrix<S>> &dm, bool trace_right, double noise,
-        NoiseTypes noise_type, const shared_ptr<SparseMatrixGroup<S>> &mats) {
+        const shared_ptr<SparseMatrix<S, FLS>> &dm, bool trace_right, FPS noise,
+        NoiseTypes noise_type,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &mats) {
         scale_perturbative_noise(noise, noise_type, mats);
         for (int i = 1; i < mats->n; i++)
-            OperatorFunctions<S>::trans_product((*mats)[i], dm, trace_right,
-                                                0.0, NoiseTypes::None);
+            OperatorFunctions<S, FLS>::trans_product(
+                (*mats)[i], dm, trace_right, 0.0, NoiseTypes::None);
     }
     // Density matrix of several MPS tensors summed with weights
-    static void
-    density_matrix_add_matrices(const shared_ptr<SparseMatrix<S>> &dm,
-                                const shared_ptr<SparseMatrix<S>> &psi,
-                                bool trace_right, const vector<MatrixRef> &mats,
-                                const vector<double> &weights) {
-        double *ptr = psi->data;
+    static void density_matrix_add_matrices(
+        const shared_ptr<SparseMatrix<S, FLS>> &dm,
+        const shared_ptr<SparseMatrix<S, FLS>> &psi, bool trace_right,
+        const vector<GMatrix<FLS>> &mats, const vector<FPS> &weights) {
+        FLS *ptr = psi->data;
         assert(psi->factor == 1.0);
         assert(mats.size() == weights.size() - 1);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
             psi->factor = sqrt(weights[i]);
-            OperatorFunctions<S>::trans_product(psi, dm, trace_right, 0.0);
+            OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right, 0.0);
         }
         psi->data = ptr, psi->factor = 1.0;
     }
     // Density matrix of several MPS tensors summed with weights
     static void density_matrix_add_matrix_groups(
-        const shared_ptr<SparseMatrix<S>> &dm,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &psi, bool trace_right,
-        const vector<MatrixRef> &mats, const vector<double> &weights) {
+        const shared_ptr<SparseMatrix<S, FLS>> &dm,
+        const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &psi,
+        bool trace_right, const vector<GMatrix<FLS>> &mats,
+        const vector<FPS> &weights) {
         int p = 0, np = psi.size() * psi[0]->n;
         assert(mats.size() == (weights.size() - 1) * np);
         for (size_t k = 1; k < weights.size(); k++)
             for (size_t i = 0; i < psi.size(); i++)
                 for (int j = 0; j < psi[i]->n; j++) {
-                    shared_ptr<SparseMatrix<S>> wfn = (*psi[i])[j];
+                    shared_ptr<SparseMatrix<S, FLS>> wfn = (*psi[i])[j];
                     wfn->data = mats[p++].data;
                     wfn->factor = sqrt(weights[k] / np);
-                    OperatorFunctions<S>::trans_product(wfn, dm, trace_right,
-                                                        0.0);
+                    OperatorFunctions<S, FLS>::trans_product(wfn, dm,
+                                                             trace_right, 0.0);
                 }
         assert((size_t)p == mats.size());
     }
     // Direct add noise to wavefunction (before svd)
-    static void wavefunction_add_noise(const shared_ptr<SparseMatrix<S>> &psi,
-                                       double noise) {
+    static void
+    wavefunction_add_noise(const shared_ptr<SparseMatrix<S, FLS>> &psi,
+                           FPS noise) {
         assert(psi->factor == 1.0);
         if (abs(noise) < TINY && noise == 0.0)
             return;
-        shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, FLS>> tmp =
+            make_shared<SparseMatrix<S, FLS>>();
         tmp->allocate(psi->info);
         tmp->randomize(-0.5, 0.5);
-        double noise_scale = sqrt(noise) / tmp->norm();
-        MatrixFunctions::iadd(
-            MatrixRef(psi->data, (MKL_INT)psi->total_memory, 1),
-            MatrixRef(tmp->data, (MKL_INT)tmp->total_memory, 1), noise_scale);
+        FPS noise_scale = sqrt(noise) / tmp->norm();
+        GMatrixFunctions<FLS>::iadd(
+            GMatrix<FLS>(psi->data, (MKL_INT)psi->total_memory, 1),
+            GMatrix<FLS>(tmp->data, (MKL_INT)tmp->total_memory, 1),
+            noise_scale);
         tmp->deallocate();
     }
     // Scale perturbative noise (before svd)
-    static void
-    scale_perturbative_noise(double noise, NoiseTypes noise_type,
-                             const shared_ptr<SparseMatrixGroup<S>> &mats) {
+    static void scale_perturbative_noise(
+        FPS noise, NoiseTypes noise_type,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &mats) {
         if (abs(noise) < TINY && noise == 0.0)
             return;
         if (!(noise_type & NoiseTypes::Unscaled)) {
             for (int i = 0; i < mats->n; i++) {
-                double mat_norm = (*mats)[i]->norm();
+                FPS mat_norm = (*mats)[i]->norm();
                 if (abs(mat_norm) > TINY)
                     (*mats)[i]->iscale(1 / mat_norm);
             }
         }
-        double norm = mats->norm();
+        FPS norm = mats->norm();
         if (abs(norm) > TINY)
             mats->iscale(sqrt(noise) / norm);
     }
     // Diagonalize density matrix and truncate to k eigenvalues
-    static double truncate_density_matrix(const shared_ptr<SparseMatrix<S>> &dm,
-                                          vector<pair<int, int>> &ss, int k,
-                                          double cutoff,
-                                          TruncationTypes trunc_type) {
-        vector<shared_ptr<VectorAllocator<double>>> d_allocs(dm->info->n);
-        vector<DiagonalMatrix> eigen_values(dm->info->n,
-                                            DiagonalMatrix(nullptr, 0));
-        vector<MatrixRef> eigen_values_reduced(dm->info->n,
-                                               MatrixRef(nullptr, 0, 0));
+    static FPS
+    truncate_density_matrix(const shared_ptr<SparseMatrix<S, FLS>> &dm,
+                            vector<pair<int, int>> &ss, int k, FPS cutoff,
+                            TruncationTypes trunc_type) {
+        vector<shared_ptr<VectorAllocator<FPS>>> d_allocs(dm->info->n);
+        vector<GDiagonalMatrix<FPS>> eigen_values(
+            dm->info->n, GDiagonalMatrix<FPS>(nullptr, 0));
+        vector<GMatrix<FPS>> eigen_values_reduced(dm->info->n,
+                                                  GMatrix<FPS>(nullptr, 0, 0));
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int i = 0; i < dm->info->n; i++) {
-            d_allocs[i] = make_shared<VectorAllocator<double>>();
-            DiagonalMatrix w(nullptr, dm->info->n_states_bra[i]);
+            d_allocs[i] = make_shared<VectorAllocator<FPS>>();
+            GDiagonalMatrix<FPS> w(nullptr, dm->info->n_states_bra[i]);
             w.allocate(d_allocs[i]);
-            MatrixFunctions::eigs((*dm)[i], w);
-            MatrixRef wr(nullptr, w.n, 1);
+            GMatrixFunctions<FLS>::eigs((*dm)[i], w);
+            GMatrix<FPS> wr(nullptr, w.n, 1);
             wr.allocate(d_allocs[i]);
-            MatrixFunctions::copy(wr, MatrixRef(w.data, w.n, 1));
+            GMatrixFunctions<FPS>::copy(wr, GMatrix<FPS>(w.data, w.n, 1));
             if (trunc_type & TruncationTypes::Reduced)
-                MatrixFunctions::iscale(
+                GMatrixFunctions<FPS>::iscale(
                     wr, 1.0 / dm->info->quanta[i].multiplicity());
             else if (trunc_type & TruncationTypes::ReducedInversed)
-                MatrixFunctions::iscale(wr, dm->info->quanta[i].multiplicity());
+                GMatrixFunctions<FPS>::iscale(
+                    wr, dm->info->quanta[i].multiplicity());
             eigen_values[i] = w;
             eigen_values_reduced[i] = wr;
         }
@@ -2086,7 +2173,7 @@ template <typename S> struct MovingEnvironment {
         int k_total = 0;
         for (int i = 0; i < dm->info->n; i++)
             k_total += eigen_values[i].n;
-        double error = 0.0;
+        FPS error = 0.0;
         ss.reserve(k_total);
         for (int i = 0; i < (int)eigen_values.size(); i++)
             for (int j = 0; j < eigen_values[i].n; j++)
@@ -2101,7 +2188,7 @@ template <typename S> struct MovingEnvironment {
                  });
             if (((ubond_t)trunc_type >> 2) == 0) {
                 for (int i = k; i < k_total; i++) {
-                    double x = eigen_values[ss[i].first].data[ss[i].second];
+                    FPS x = eigen_values[ss[i].first].data[ss[i].second];
                     if (x > 0)
                         error += x;
                 }
@@ -2109,7 +2196,7 @@ template <typename S> struct MovingEnvironment {
                      k > 1 && eigen_values_reduced[ss[k - 1].first]
                                       .data[ss[k - 1].second] < cutoff;
                      k--) {
-                    double x =
+                    FPS x =
                         eigen_values[ss[k - 1].first].data[ss[k - 1].second];
                     if (x > 0)
                         error += x;
@@ -2124,7 +2211,7 @@ template <typename S> struct MovingEnvironment {
                     smask[i] = mask[ss[i].first] > (int)keep;
                 }
                 for (int i = k; i < k_total; i++) {
-                    double x = eigen_values[ss[i].first].data[ss[i].second];
+                    FPS x = eigen_values[ss[i].first].data[ss[i].second];
                     if (x > 0 && smask[i])
                         error += x;
                 }
@@ -2132,7 +2219,7 @@ template <typename S> struct MovingEnvironment {
                      k > 1 && eigen_values_reduced[ss[k - 1].first]
                                       .data[ss[k - 1].second] < cutoff;
                      k--) {
-                    double x =
+                    FPS x =
                         eigen_values[ss[k - 1].first].data[ss[k - 1].second];
                     if (x > 0 && smask[k - 1])
                         error += x;
@@ -2158,26 +2245,28 @@ template <typename S> struct MovingEnvironment {
         return error;
     }
     // Truncate and keep k singular values
-    static double truncate_singular_values(const vector<S> &qs,
-                                           const vector<shared_ptr<Tensor>> &s,
-                                           vector<pair<int, int>> &ss, int k,
-                                           double cutoff,
-                                           TruncationTypes trunc_type) {
-        vector<shared_ptr<Tensor>> s_reduced;
+    static FPS
+    truncate_singular_values(const vector<S> &qs,
+                             const vector<shared_ptr<GTensor<FPS>>> &s,
+                             vector<pair<int, int>> &ss, int k, FPS cutoff,
+                             TruncationTypes trunc_type) {
+        vector<shared_ptr<GTensor<FPS>>> s_reduced;
         cutoff = sqrt(cutoff);
         int k_total = 0;
         for (int i = 0; i < (int)s.size(); i++) {
-            shared_ptr<Tensor> wr = make_shared<Tensor>(s[i]->shape);
-            MatrixFunctions::copy(wr->ref(), s[i]->ref());
+            shared_ptr<GTensor<FPS>> wr =
+                make_shared<GTensor<FPS>>(s[i]->shape);
+            GMatrixFunctions<FPS>::copy(wr->ref(), s[i]->ref());
             if (trunc_type & TruncationTypes::Reduced)
-                MatrixFunctions::iscale(wr->ref(),
-                                        sqrt(1.0 / qs[i].multiplicity()));
+                GMatrixFunctions<FPS>::iscale(wr->ref(),
+                                              sqrt(1.0 / qs[i].multiplicity()));
             else if (trunc_type & TruncationTypes::ReducedInversed)
-                MatrixFunctions::iscale(wr->ref(), sqrt(qs[i].multiplicity()));
+                GMatrixFunctions<FPS>::iscale(wr->ref(),
+                                              sqrt(qs[i].multiplicity()));
             s_reduced.push_back(wr);
             k_total += wr->shape[0];
         }
-        double error = 0.0;
+        FPS error = 0.0;
         ss.reserve(k_total);
         for (int i = 0; i < (int)s.size(); i++)
             for (int j = 0; j < s[i]->shape[0]; j++)
@@ -2192,7 +2281,7 @@ template <typename S> struct MovingEnvironment {
                 });
             if (((ubond_t)trunc_type >> 2) == 0) {
                 for (int i = k; i < k_total; i++) {
-                    double x = s[ss[i].first]->data[ss[i].second];
+                    FPS x = s[ss[i].first]->data[ss[i].second];
                     if (x > 0)
                         error += x * x;
                 }
@@ -2201,7 +2290,7 @@ template <typename S> struct MovingEnvironment {
                      s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
                          cutoff;
                      k--) {
-                    double x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    FPS x = s[ss[k - 1].first]->data[ss[k - 1].second];
                     if (x > 0)
                         error += x * x;
                 }
@@ -2215,7 +2304,7 @@ template <typename S> struct MovingEnvironment {
                     smask[i] = mask[ss[i].first] > (int)keep;
                 }
                 for (int i = k; i < k_total; i++) {
-                    double x = s[ss[i].first]->data[ss[i].second];
+                    FPS x = s[ss[i].first]->data[ss[i].second];
                     if (x > 0 && smask[i])
                         error += x * x;
                 }
@@ -2224,7 +2313,7 @@ template <typename S> struct MovingEnvironment {
                      s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
                          cutoff;
                      k--) {
-                    double x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    FPS x = s[ss[k - 1].first]->data[ss[k - 1].second];
                     if (x > 0 && smask[k - 1])
                         error += x * x;
                 }
@@ -2246,7 +2335,7 @@ template <typename S> struct MovingEnvironment {
     }
     // Get rotation matrix info from svd info
     static shared_ptr<SparseMatrixInfo<S>> rotation_matrix_info_from_svd(
-        S opdq, const vector<S> &qs, const vector<shared_ptr<Tensor>> &ts,
+        S opdq, const vector<S> &qs, const vector<shared_ptr<GTensor<FPS>>> &ts,
         bool trace_right, const vector<int> &ilr, const vector<ubond_t> &im) {
         shared_ptr<SparseMatrixInfo<S>> rinfo =
             make_shared<SparseMatrixInfo<S>>();
@@ -2384,22 +2473,24 @@ template <typename S> struct MovingEnvironment {
         return winfo;
     }
     // Split wavefunction to two MPS tensors using svd
-    static double split_wavefunction_svd(
-        S opdq, const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
-        bool normalize, shared_ptr<SparseMatrix<S>> &left,
-        shared_ptr<SparseMatrix<S>> &right, double cutoff,
+    static FPS split_wavefunction_svd(
+        S opdq, const shared_ptr<SparseMatrix<S, FLS>> &wfn, int k,
+        bool trace_right, bool normalize,
+        shared_ptr<SparseMatrix<S, FLS>> &left,
+        shared_ptr<SparseMatrix<S, FLS>> &right, FPS cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical,
         DecompositionTypes decomp_type = DecompositionTypes::SVD,
-        const shared_ptr<SparseMatrixGroup<S>> &mwfn = nullptr,
-        const vector<shared_ptr<SparseMatrix<S>>> &xwfns =
-            vector<shared_ptr<SparseMatrix<S>>>(),
-        const vector<double> &weights = vector<double>()) {
-        vector<shared_ptr<Tensor>> l, s, r;
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &mwfn = nullptr,
+        const vector<shared_ptr<SparseMatrix<S, FLS>>> &xwfns =
+            vector<shared_ptr<SparseMatrix<S, FLS>>>(),
+        const vector<FPS> &weights = vector<FPS>()) {
+        vector<shared_ptr<GTensor<FLS>>> l, r;
+        vector<shared_ptr<GTensor<FPS>>> s;
         vector<S> qs;
         // for perturbative SVD
         if (mwfn != nullptr) {
-            vector<vector<shared_ptr<Tensor>>> xlr;
-            vector<shared_ptr<SparseMatrix<S>>> xxwfns = {wfn};
+            vector<vector<shared_ptr<GTensor<FLS>>>> xlr;
+            vector<shared_ptr<SparseMatrix<S, FLS>>> xxwfns = {wfn};
             if (xwfns.size() != 0)
                 xxwfns.insert(xxwfns.end(), xwfns.begin(), xwfns.end());
             if (trace_right) {
@@ -2410,11 +2501,11 @@ template <typename S> struct MovingEnvironment {
                 l = xlr.back();
             }
         } else if (xwfns.size() != 0) {
-            vector<vector<shared_ptr<Tensor>>> xlr;
-            shared_ptr<SparseMatrixGroup<S>> xmwfn =
-                make_shared<SparseMatrixGroup<S>>();
+            vector<vector<shared_ptr<GTensor<FLS>>>> xlr;
+            shared_ptr<SparseMatrixGroup<S, FLS>> xmwfn =
+                make_shared<SparseMatrixGroup<S, FLS>>();
             xmwfn->allocate(vector<shared_ptr<SparseMatrixInfo<S>>>());
-            vector<shared_ptr<SparseMatrix<S>>> xxwfns = {wfn};
+            vector<shared_ptr<SparseMatrix<S, FLS>>> xxwfns = {wfn};
             xxwfns.insert(xxwfns.end(), xwfns.begin(), xwfns.end());
             if (trace_right) {
                 xmwfn->right_svd(qs, l, s, xlr, xxwfns, weights);
@@ -2431,8 +2522,7 @@ template <typename S> struct MovingEnvironment {
         }
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        double error = MovingEnvironment<S>::truncate_singular_values(
-            qs, s, ss, k, cutoff, trunc_type);
+        FPS error = truncate_singular_values(qs, s, ss, k, cutoff, trunc_type);
         // ilr: row index in singular values list
         // im: number of states
         vector<int> ilr;
@@ -2449,29 +2539,27 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<SparseMatrixInfo<S>> linfo, rinfo;
         vector<vector<int>> idx_dm_to_wfn;
         if (trace_right) {
-            linfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
-                opdq, qs, l, true, ilr, im);
-            rinfo = MovingEnvironment<S>::wavefunction_info_from_svd(
-                qs, wfn->info, true, ilr, im, idx_dm_to_wfn);
+            linfo = rotation_matrix_info_from_svd(opdq, qs, l, true, ilr, im);
+            rinfo = wavefunction_info_from_svd(qs, wfn->info, true, ilr, im,
+                                               idx_dm_to_wfn);
         } else {
-            linfo = MovingEnvironment<S>::wavefunction_info_from_svd(
-                qs, wfn->info, false, ilr, im, idx_dm_to_wfn);
-            rinfo = MovingEnvironment<S>::rotation_matrix_info_from_svd(
-                opdq, qs, r, false, ilr, im);
+            linfo = wavefunction_info_from_svd(qs, wfn->info, false, ilr, im,
+                                               idx_dm_to_wfn);
+            rinfo = rotation_matrix_info_from_svd(opdq, qs, r, false, ilr, im);
         }
         int kk = (int)ilr.size();
-        left = make_shared<SparseMatrix<S>>();
-        right = make_shared<SparseMatrix<S>>();
+        left = make_shared<SparseMatrix<S, FLS>>();
+        right = make_shared<SparseMatrix<S, FLS>>();
         left->allocate(linfo);
         right->allocate(rinfo);
         int iss = 0;
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(left->data + linfo->n_states_total[i] + j,
-                                  linfo->n_states_bra[i], 1),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(left->data + linfo->n_states_total[i] + j,
+                                     linfo->n_states_bra[i], 1),
+                        GMatrix<FLS>(
                             &l[ss[iss + j].first]->ref()(0, ss[iss + j].second),
                             linfo->n_states_bra[i], 1),
                         linfo->n_states_ket[i], l[ss[iss + j].first]->shape[1]);
@@ -2482,24 +2570,25 @@ template <typename S> struct MovingEnvironment {
                     assert(ir != -1);
                     if (decomp_type == DecompositionTypes::PureSVD) {
                         for (ubond_t j = 0; j < im[i]; j++) {
-                            MatrixFunctions::copy(
-                                MatrixRef(right->data +
-                                              rinfo->n_states_total[ir] +
-                                              j * r[iw]->shape[1],
-                                          1, r[iw]->shape[1]),
-                                MatrixRef(&r[iw]->ref()(ss[iss + j].second, 0),
-                                          1, r[iw]->shape[1]));
-                            MatrixFunctions::iscale(
-                                MatrixRef(right->data +
-                                              rinfo->n_states_total[ir] +
-                                              j * r[iw]->shape[1],
-                                          1, r[iw]->shape[1]),
+                            GMatrixFunctions<FLS>::copy(
+                                GMatrix<FLS>(right->data +
+                                                 rinfo->n_states_total[ir] +
+                                                 j * r[iw]->shape[1],
+                                             1, r[iw]->shape[1]),
+                                GMatrix<FLS>(
+                                    &r[iw]->ref()(ss[iss + j].second, 0), 1,
+                                    r[iw]->shape[1]));
+                            GMatrixFunctions<FLS>::iscale(
+                                GMatrix<FLS>(right->data +
+                                                 rinfo->n_states_total[ir] +
+                                                 j * r[iw]->shape[1],
+                                             1, r[iw]->shape[1]),
                                 s[ss[iss + j].first]->data[ss[iss + j].second]);
                         }
                     } else
-                        MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw],
-                                                  false, (*right)[ir], 1.0,
-                                                  0.0);
+                        GMatrixFunctions<FLS>::multiply((*left)[i], true,
+                                                        (*wfn)[iw], false,
+                                                        (*right)[ir], 1.0, 0.0);
                 }
                 iss += im[i];
             }
@@ -2508,11 +2597,11 @@ template <typename S> struct MovingEnvironment {
         } else {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(right->data + rinfo->n_states_total[i] +
-                                      j * r[ss[iss + j].first]->shape[1],
-                                  1, r[ss[iss + j].first]->shape[1]),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(right->data + rinfo->n_states_total[i] +
+                                         j * r[ss[iss + j].first]->shape[1],
+                                     1, r[ss[iss + j].first]->shape[1]),
+                        GMatrix<FLS>(
                             &r[ss[iss + j].first]->ref()(ss[iss + j].second, 0),
                             1, r[ss[iss + j].first]->shape[1]));
                 for (int iww = 0;
@@ -2522,24 +2611,25 @@ template <typename S> struct MovingEnvironment {
                     assert(il != -1);
                     if (decomp_type == DecompositionTypes::PureSVD) {
                         for (ubond_t j = 0; j < im[i]; j++) {
-                            MatrixFunctions::copy(
-                                MatrixRef(left->data +
-                                              linfo->n_states_total[il] + j,
-                                          linfo->n_states_bra[il], 1),
-                                MatrixRef(&l[iw]->ref()(0, ss[iss + j].second),
-                                          linfo->n_states_bra[il], 1),
+                            GMatrixFunctions<FLS>::copy(
+                                GMatrix<FLS>(left->data +
+                                                 linfo->n_states_total[il] + j,
+                                             linfo->n_states_bra[il], 1),
+                                GMatrix<FLS>(
+                                    &l[iw]->ref()(0, ss[iss + j].second),
+                                    linfo->n_states_bra[il], 1),
                                 linfo->n_states_ket[il], l[iw]->shape[1]);
-                            MatrixFunctions::iscale(
-                                MatrixRef(left->data +
-                                              linfo->n_states_total[il] + j,
-                                          linfo->n_states_bra[il], 1),
+                            GMatrixFunctions<FLS>::iscale(
+                                GMatrix<FLS>(left->data +
+                                                 linfo->n_states_total[il] + j,
+                                             linfo->n_states_bra[il], 1),
                                 s[ss[iss + j].first]->data[ss[iss + j].second],
                                 linfo->n_states_ket[il]);
                         }
                     } else
-                        MatrixFunctions::multiply((*wfn)[iw], false,
-                                                  (*right)[i], true,
-                                                  (*left)[il], 1.0, 0.0);
+                        GMatrixFunctions<FLS>::multiply((*wfn)[iw], false,
+                                                        (*right)[i], true,
+                                                        (*left)[il], 1.0, 0.0);
                 }
                 iss += im[i];
             }
@@ -2550,16 +2640,15 @@ template <typename S> struct MovingEnvironment {
         return error;
     }
     // Split wavefunction to two MPS tensors by solving eigenvalue problem
-    static double split_density_matrix(
-        const shared_ptr<SparseMatrix<S>> &dm,
-        const shared_ptr<SparseMatrix<S>> &wfn, int k, bool trace_right,
-        bool normalize, shared_ptr<SparseMatrix<S>> &left,
-        shared_ptr<SparseMatrix<S>> &right, double cutoff,
+    static FPS split_density_matrix(
+        const shared_ptr<SparseMatrix<S, FLS>> &dm,
+        const shared_ptr<SparseMatrix<S, FLS>> &wfn, int k, bool trace_right,
+        bool normalize, shared_ptr<SparseMatrix<S, FLS>> &left,
+        shared_ptr<SparseMatrix<S, FLS>> &right, FPS cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical) {
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        double error = MovingEnvironment<S>::truncate_density_matrix(
-            dm, ss, k, cutoff, trunc_type);
+        FPS error = truncate_density_matrix(dm, ss, k, cutoff, trunc_type);
         // ilr: row index in dm
         // im: number of states
         vector<int> ilr;
@@ -2576,31 +2665,29 @@ template <typename S> struct MovingEnvironment {
         shared_ptr<SparseMatrixInfo<S>> linfo, rinfo;
         vector<vector<int>> idx_dm_to_wfn;
         if (trace_right) {
-            linfo =
-                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                    dm->info, true, ilr, im);
-            rinfo = MovingEnvironment<S>::wavefunction_info_from_density_matrix(
+            linfo = rotation_matrix_info_from_density_matrix(dm->info, true,
+                                                             ilr, im);
+            rinfo = wavefunction_info_from_density_matrix(
                 dm->info, wfn->info, true, ilr, im, idx_dm_to_wfn);
         } else {
-            linfo = MovingEnvironment<S>::wavefunction_info_from_density_matrix(
+            linfo = wavefunction_info_from_density_matrix(
                 dm->info, wfn->info, false, ilr, im, idx_dm_to_wfn);
-            rinfo =
-                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                    dm->info, false, ilr, im);
+            rinfo = rotation_matrix_info_from_density_matrix(dm->info, false,
+                                                             ilr, im);
         }
         int kk = (int)ilr.size();
-        left = make_shared<SparseMatrix<S>>();
-        right = make_shared<SparseMatrix<S>>();
+        left = make_shared<SparseMatrix<S, FLS>>();
+        right = make_shared<SparseMatrix<S, FLS>>();
         left->allocate(linfo);
         right->allocate(rinfo);
         int iss = 0;
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(left->data + linfo->n_states_total[i] + j,
-                                  linfo->n_states_bra[i], 1),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(left->data + linfo->n_states_total[i] + j,
+                                     linfo->n_states_bra[i], 1),
+                        GMatrix<FLS>(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
                             linfo->n_states_bra[i], 1),
                         linfo->n_states_ket[i], 1);
@@ -2609,8 +2696,9 @@ template <typename S> struct MovingEnvironment {
                     int iw = idx_dm_to_wfn[ss[iss].first][iww];
                     int ir = right->info->find_state(wfn->info->quanta[iw]);
                     assert(ir != -1);
-                    MatrixFunctions::multiply((*left)[i], true, (*wfn)[iw],
-                                              false, (*right)[ir], 1.0, 0.0);
+                    GMatrixFunctions<FLS>::multiply((*left)[i], true,
+                                                    (*wfn)[iw], false,
+                                                    (*right)[ir], 1.0, 0.0);
                 }
                 iss += im[i];
             }
@@ -2619,11 +2707,11 @@ template <typename S> struct MovingEnvironment {
         } else {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(right->data + rinfo->n_states_total[i] +
-                                      j * (*right)[i].n,
-                                  1, (*right)[i].n),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(right->data + rinfo->n_states_total[i] +
+                                         j * (*right)[i].n,
+                                     1, (*right)[i].n),
+                        GMatrix<FLS>(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0), 1,
                             (*right)[i].n));
                 for (int iww = 0;
@@ -2631,8 +2719,9 @@ template <typename S> struct MovingEnvironment {
                     int iw = idx_dm_to_wfn[ss[iss].first][iww];
                     int il = left->info->find_state(wfn->info->quanta[iw]);
                     assert(il != -1);
-                    MatrixFunctions::multiply((*wfn)[iw], false, (*right)[i],
-                                              true, (*left)[il], 1.0, 0.0);
+                    GMatrixFunctions<FLS>::multiply((*wfn)[iw], false,
+                                                    (*right)[i], true,
+                                                    (*left)[il], 1.0, 0.0);
                 }
                 iss += im[i];
             }
@@ -2644,17 +2733,16 @@ template <typename S> struct MovingEnvironment {
     }
     // Split density matrix to two MultiMPS tensors by solving eigenvalue
     // problem
-    static double multi_split_density_matrix(
-        const shared_ptr<SparseMatrix<S>> &dm,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &wfns, int k,
+    static FPS multi_split_density_matrix(
+        const shared_ptr<SparseMatrix<S, FLS>> &dm,
+        const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &wfns, int k,
         bool trace_right, bool normalize,
-        vector<shared_ptr<SparseMatrixGroup<S>>> &new_wfns,
-        shared_ptr<SparseMatrix<S>> &rot_mat, double cutoff,
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &new_wfns,
+        shared_ptr<SparseMatrix<S, FLS>> &rot_mat, FPS cutoff,
         TruncationTypes trunc_type = TruncationTypes::Physical) {
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        double error = MovingEnvironment<S>::truncate_density_matrix(
-            dm, ss, k, cutoff, trunc_type);
+        FPS error = truncate_density_matrix(dm, ss, k, cutoff, trunc_type);
         // ilr: row index in dm
         // im: number of states
         vector<int> ilr;
@@ -2673,28 +2761,25 @@ template <typename S> struct MovingEnvironment {
         vector<vector<vector<int>>> idx_dm_to_wfns;
         idx_dm_to_wfns.resize(wfns[0]->n);
         if (trace_right)
-            rinfo =
-                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                    dm->info, trace_right, ilr, im);
+            rinfo = rotation_matrix_info_from_density_matrix(
+                dm->info, trace_right, ilr, im);
         winfos.resize(wfns[0]->n);
         for (size_t j = 0; j < wfns[0]->n; j++) {
-            winfos[j] =
-                MovingEnvironment<S>::wavefunction_info_from_density_matrix(
-                    dm->info, wfns[0]->infos[j], trace_right, ilr, im,
-                    idx_dm_to_wfns[j]);
+            winfos[j] = wavefunction_info_from_density_matrix(
+                dm->info, wfns[0]->infos[j], trace_right, ilr, im,
+                idx_dm_to_wfns[j]);
         }
         if (!trace_right)
-            rinfo =
-                MovingEnvironment<S>::rotation_matrix_info_from_density_matrix(
-                    dm->info, trace_right, ilr, im);
+            rinfo = rotation_matrix_info_from_density_matrix(
+                dm->info, trace_right, ilr, im);
         int kk = (int)ilr.size();
-        rot_mat = make_shared<SparseMatrix<S>>();
+        rot_mat = make_shared<SparseMatrix<S, FLS>>();
         new_wfns =
-            vector<shared_ptr<SparseMatrixGroup<S>>>(wfns.size(), nullptr);
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>>(wfns.size(), nullptr);
         if (trace_right)
             rot_mat->allocate(rinfo);
         for (size_t k = 0; k < wfns.size(); k++) {
-            new_wfns[k] = make_shared<SparseMatrixGroup<S>>();
+            new_wfns[k] = make_shared<SparseMatrixGroup<S, FLS>>();
             new_wfns[k]->allocate(winfos);
         }
         if (!trace_right)
@@ -2703,10 +2788,11 @@ template <typename S> struct MovingEnvironment {
         if (trace_right) {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(rot_mat->data + rinfo->n_states_total[i] + j,
-                                  rinfo->n_states_bra[i], 1),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(rot_mat->data + rinfo->n_states_total[i] +
+                                         j,
+                                     rinfo->n_states_bra[i], 1),
+                        GMatrix<FLS>(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
                             rinfo->n_states_bra[i], 1),
                         rinfo->n_states_ket[i], 1);
@@ -2719,7 +2805,7 @@ template <typename S> struct MovingEnvironment {
                             int ir = winfos[j]->find_state(
                                 wfns[k]->infos[j]->quanta[iw]);
                             assert(ir != -1);
-                            MatrixFunctions::multiply(
+                            GMatrixFunctions<FLS>::multiply(
                                 (*rot_mat)[i], true, (*(*wfns[k])[j])[iw],
                                 false, (*(*new_wfns[k])[j])[ir], 1.0, 0.0);
                         }
@@ -2731,11 +2817,11 @@ template <typename S> struct MovingEnvironment {
         } else {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
-                    MatrixFunctions::copy(
-                        MatrixRef(rot_mat->data + rinfo->n_states_total[i] +
-                                      j * (*rot_mat)[i].n,
-                                  1, (*rot_mat)[i].n),
-                        MatrixRef(
+                    GMatrixFunctions<FLS>::copy(
+                        GMatrix<FLS>(rot_mat->data + rinfo->n_states_total[i] +
+                                         j * (*rot_mat)[i].n,
+                                     1, (*rot_mat)[i].n),
+                        GMatrix<FLS>(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0), 1,
                             (*rot_mat)[i].n));
                 for (size_t k = 0; k < wfns.size(); k++)
@@ -2747,7 +2833,7 @@ template <typename S> struct MovingEnvironment {
                             int il = winfos[j]->find_state(
                                 wfns[k]->infos[j]->quanta[iw]);
                             assert(il != -1);
-                            MatrixFunctions::multiply(
+                            GMatrixFunctions<FLS>::multiply(
                                 (*(*wfns[k])[j])[iw], false, (*rot_mat)[i],
                                 true, (*(*new_wfns[k])[j])[il], 1.0, 0.0);
                         }
@@ -2760,40 +2846,41 @@ template <typename S> struct MovingEnvironment {
         assert(iss == ss.size());
         return error;
     }
-    static shared_ptr<SparseMatrix<S>>
+    static shared_ptr<SparseMatrix<S, FLS>>
     swap_wfn_to_fused_left(int i, const shared_ptr<MPSInfo<S>> &mps_info,
-                           const shared_ptr<SparseMatrix<S>> &old_wfn,
+                           const shared_ptr<SparseMatrix<S, FLS>> &old_wfn,
                            const shared_ptr<CG<S>> &cg) {
         return mps_info->swap_wfn_to_fused_left(i, old_wfn, cg);
     }
-    static shared_ptr<SparseMatrix<S>>
+    static shared_ptr<SparseMatrix<S, FLS>>
     swap_wfn_to_fused_right(int i, const shared_ptr<MPSInfo<S>> &mps_info,
-                            const shared_ptr<SparseMatrix<S>> &old_wfn,
+                            const shared_ptr<SparseMatrix<S, FLS>> &old_wfn,
                             const shared_ptr<CG<S>> &cg) {
         return mps_info->swap_wfn_to_fused_right(i, old_wfn, cg);
     }
-    static vector<shared_ptr<SparseMatrixGroup<S>>>
+    static vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
     swap_multi_wfn_to_fused_left(
         int i, const shared_ptr<MPSInfo<S>> &mps_info,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+        const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
-            return mps_info->swap_multi_wfn_to_fused_left(i, old_wfns, cg);
+        return mps_info->swap_multi_wfn_to_fused_left(i, old_wfns, cg);
     }
-    static vector<shared_ptr<SparseMatrixGroup<S>>>
+    static vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
     swap_multi_wfn_to_fused_right(
         int i, const shared_ptr<MPSInfo<S>> &mps_info,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+        const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
         return mps_info->swap_multi_wfn_to_fused_right(i, old_wfns, cg);
     }
     // Change the fusing type of MPS tensor so that it can be used in next sweep
     // iteration
-    static void propagate_wfn(int i, int n_sites, const shared_ptr<MPS<S>> &mps,
-                              bool forward, const shared_ptr<CG<S>> &cg) {
+    static void propagate_wfn(int i, int n_sites,
+                              const shared_ptr<MPS<S, FLS>> &mps, bool forward,
+                              const shared_ptr<CG<S>> &cg) {
         if (forward) {
             if (i + 1 != n_sites - 1) {
                 mps->load_tensor(i + 1);
-                shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i + 1];
+                shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i + 1];
                 mps->tensors[i + 1] =
                     swap_wfn_to_fused_left(i + 1, mps->info, old_wfn, cg);
                 mps->save_tensor(i + 1);
@@ -2804,7 +2891,7 @@ template <typename S> struct MovingEnvironment {
         } else {
             if (i != 0) {
                 mps->load_tensor(i);
-                shared_ptr<SparseMatrix<S>> old_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
                 mps->tensors[i] =
                     swap_wfn_to_fused_right(i, mps->info, old_wfn, cg);
                 mps->save_tensor(i);
@@ -2817,12 +2904,13 @@ template <typename S> struct MovingEnvironment {
     // Change the fusing type of MultiMPS tensor so that it can be used in next
     // sweep iteration
     static void propagate_multi_wfn(int i, int n_sites,
-                                    const shared_ptr<MultiMPS<S>> &mps,
+                                    const shared_ptr<MultiMPS<S, FLS>> &mps,
                                     bool forward, const shared_ptr<CG<S>> &cg) {
         if (forward) {
             if (i + 1 != n_sites - 1) {
                 mps->load_wavefunction(i + 1);
-                vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mps->wfns;
+                vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns =
+                    mps->wfns;
                 mps->wfns = swap_multi_wfn_to_fused_left(i + 1, mps->info,
                                                          old_wfns, cg);
                 mps->save_wavefunction(i + 1);
@@ -2835,7 +2923,8 @@ template <typename S> struct MovingEnvironment {
         } else {
             if (i != 0) {
                 mps->load_wavefunction(i);
-                vector<shared_ptr<SparseMatrixGroup<S>>> old_wfns = mps->wfns;
+                vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns =
+                    mps->wfns;
                 mps->wfns =
                     swap_multi_wfn_to_fused_right(i, mps->info, old_wfns, cg);
                 mps->save_wavefunction(i);

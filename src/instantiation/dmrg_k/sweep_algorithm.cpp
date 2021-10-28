@@ -20,10 +20,12 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::DMRG<block2::SZK>;
-template struct block2::Linear<block2::SZK>;
-template struct block2::Expect<block2::SZK>;
+template struct block2::DMRG<block2::SZK, double, double>;
+template struct block2::Linear<block2::SZK, double, double>;
+template struct block2::Expect<block2::SZK, double, double, double>;
+template struct block2::Expect<block2::SZK, double, double, complex<double>>;
 
-template struct block2::DMRG<block2::SU2K>;
-template struct block2::Linear<block2::SU2K>;
-template struct block2::Expect<block2::SU2K>;
+template struct block2::DMRG<block2::SU2K, double, double>;
+template struct block2::Linear<block2::SU2K, double, double>;
+template struct block2::Expect<block2::SU2K, double, double, double>;
+template struct block2::Expect<block2::SU2K, double, double, complex<double>>;

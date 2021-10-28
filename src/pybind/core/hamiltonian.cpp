@@ -20,5 +20,5 @@
 
 #include "../pybind_core.hpp"
 
-template void bind_hamiltonian<SZ>(py::module &m);
-template void bind_hamiltonian<SU2>(py::module &m);
+template void bind_fl_hamiltonian<SZ, double>(py::module &m);
+template void bind_fl_hamiltonian<SU2, double>(py::module &m);

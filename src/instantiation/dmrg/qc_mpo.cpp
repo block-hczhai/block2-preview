@@ -20,10 +20,10 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::IdentityMPO<block2::SZ>;
-template struct block2::SiteMPO<block2::SZ>;
-template struct block2::MPOQC<block2::SZ>;
+template struct block2::IdentityMPO<block2::SZ, double>;
+template struct block2::SiteMPO<block2::SZ, double>;
+template struct block2::MPOQC<block2::SZ, double>;
 
-template struct block2::IdentityMPO<block2::SU2>;
-template struct block2::SiteMPO<block2::SU2>;
-template struct block2::MPOQC<block2::SU2>;
+template struct block2::IdentityMPO<block2::SU2, double>;
+template struct block2::SiteMPO<block2::SU2, double>;
+template struct block2::MPOQC<block2::SU2, double>;

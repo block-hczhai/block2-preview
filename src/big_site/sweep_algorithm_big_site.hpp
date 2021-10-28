@@ -29,21 +29,23 @@ using namespace std;
 namespace block2 {
 
 // Density Matrix Renormalization Group with big site
-template <typename S> struct DMRGBigSite : DMRG<S> {
-    using DMRG<S>::iprint;
-    using DMRG<S>::me;
-    using DMRG<S>::ext_mes;
-    using DMRG<S>::davidson_soft_max_iter;
-    using DMRG<S>::noise_type;
-    using DMRG<S>::decomp_type;
-    using typename DMRG<S>::Iteration;
+template <typename S, typename FL, typename FLS>
+struct DMRGBigSite : DMRG<S, FL, FLS> {
+    typedef typename DMRG<S, FL, FLS>::FPS FPS;
+    using DMRG<S, FL, FLS>::iprint;
+    using DMRG<S, FL, FLS>::me;
+    using DMRG<S, FL, FLS>::ext_mes;
+    using DMRG<S, FL, FLS>::davidson_soft_max_iter;
+    using DMRG<S, FL, FLS>::noise_type;
+    using DMRG<S, FL, FLS>::decomp_type;
+    using typename DMRG<S, FL, FLS>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
-    DMRGBigSite(const shared_ptr<MovingEnvironment<S>> &me,
-                const vector<ubond_t> &bond_dims, const vector<double> &noises)
-        : DMRG<S>(me, bond_dims, noises) {}
-    Iteration blocking(int i, bool forward, ubond_t bond_dim, double noise,
-                       double davidson_conv_thrd) override {
+    DMRGBigSite(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
+                const vector<ubond_t> &bond_dims, const vector<FPS> &noises)
+        : DMRG<S, FL, FLS>(me, bond_dims, noises) {}
+    Iteration blocking(int i, bool forward, ubond_t bond_dim, FPS noise,
+                       FPS davidson_conv_thrd) override {
         const int dsmi =
             davidson_soft_max_iter; // Save it as it may be changed here
         const NoiseTypes nt = noise_type;
@@ -64,7 +66,8 @@ template <typename S> struct DMRGBigSite : DMRG<S> {
             me->ket->canonical_form[i] = 'K';
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S>::blocking(i, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, FL, FLS>::blocking(i, forward, bond_dim, 0,
+                                       davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             i++;
             if (iprint >= 2) {
@@ -92,8 +95,8 @@ template <typename S> struct DMRGBigSite : DMRG<S> {
                                         (uint8_t)NoiseTypes::Collected);
             decomp_type = DecompositionTypes::SVD;
         }
-        Iteration r =
-            DMRG<S>::blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
+        Iteration r = DMRG<S, FL, FLS>::blocking(i, forward, bond_dim, noise,
+                                                 davidson_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             r.energies[0] = 0;
             davidson_soft_max_iter = dsmi;
@@ -111,7 +114,8 @@ template <typename S> struct DMRGBigSite : DMRG<S> {
             assert(me->dot = 1);
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S>::blocking(i - 1, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, FL, FLS>::blocking(i - 1, forward, bond_dim, 0,
+                                       davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -128,40 +132,43 @@ template <typename S> struct DMRGBigSite : DMRG<S> {
 };
 
 // Linear equation with big site
-template <typename S> struct LinearBigSite : Linear<S> {
-    using Linear<S>::iprint;
-    using Linear<S>::lme;
-    using Linear<S>::rme;
-    using Linear<S>::tme;
-    using Linear<S>::minres_soft_max_iter;
-    using Linear<S>::noise_type;
-    using Linear<S>::decomp_type;
-    using Linear<S>::targets;
-    using typename Linear<S>::Iteration;
+template <typename S, typename FL, typename FLS>
+struct LinearBigSite : Linear<S, FL, FLS> {
+    typedef typename Linear<S, FL, FLS>::FPS FPS;
+    using Linear<S, FL, FLS>::iprint;
+    using Linear<S, FL, FLS>::lme;
+    using Linear<S, FL, FLS>::rme;
+    using Linear<S, FL, FLS>::tme;
+    using Linear<S, FL, FLS>::minres_soft_max_iter;
+    using Linear<S, FL, FLS>::noise_type;
+    using Linear<S, FL, FLS>::decomp_type;
+    using Linear<S, FL, FLS>::targets;
+    using typename Linear<S, FL, FLS>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
-    LinearBigSite(const shared_ptr<MovingEnvironment<S>> &rme,
+    LinearBigSite(const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
                   const vector<ubond_t> &bra_bond_dims,
                   const vector<ubond_t> &ket_bond_dims,
-                  const vector<double> &noises = vector<double>())
-        : Linear<S>(rme, bra_bond_dims, ket_bond_dims, noises) {}
-    LinearBigSite(const shared_ptr<MovingEnvironment<S>> &lme,
-                  const shared_ptr<MovingEnvironment<S>> &rme,
+                  const vector<FPS> &noises = vector<FPS>())
+        : Linear<S, FL, FLS>(rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearBigSite(const shared_ptr<MovingEnvironment<S, FL, FLS>> &lme,
+                  const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
                   const vector<ubond_t> &bra_bond_dims,
                   const vector<ubond_t> &ket_bond_dims,
-                  const vector<double> &noises = vector<double>())
-        : Linear<S>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
-    LinearBigSite(const shared_ptr<MovingEnvironment<S>> &lme,
-                  const shared_ptr<MovingEnvironment<S>> &rme,
-                  const shared_ptr<MovingEnvironment<S>> &tme,
+                  const vector<FPS> &noises = vector<FPS>())
+        : Linear<S, FL, FLS>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearBigSite(const shared_ptr<MovingEnvironment<S, FL, FLS>> &lme,
+                  const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
+                  const shared_ptr<MovingEnvironment<S, FL, FLS>> &tme,
                   const vector<ubond_t> &bra_bond_dims,
                   const vector<ubond_t> &ket_bond_dims,
-                  const vector<double> &noises = vector<double>())
-        : Linear<S>(lme, rme, tme, bra_bond_dims, ket_bond_dims, noises) {}
+                  const vector<FPS> &noises = vector<FPS>())
+        : Linear<S, FL, FLS>(lme, rme, tme, bra_bond_dims, ket_bond_dims,
+                             noises) {}
     Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
-                       ubond_t ket_bond_dim, double noise,
-                       double minres_conv_thrd) override {
-        const shared_ptr<MovingEnvironment<S>> &me = rme;
+                       ubond_t ket_bond_dim, FPS noise,
+                       FPS minres_conv_thrd) override {
+        const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         const int dsmi =
             minres_soft_max_iter; // Save it as it may be changed here
         const NoiseTypes nt = noise_type;
@@ -232,7 +239,7 @@ template <typename S> struct LinearBigSite : Linear<S> {
                                         (uint8_t)NoiseTypes::Collected);
             decomp_type = DecompositionTypes::SVD;
         }
-        Iteration r = Linear<S>::blocking(
+        Iteration r = Linear<S, FL, FLS>::blocking(
             i, forward, bra_bond_dim, ket_bond_dim, noise, minres_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             if (targets.size() != 0)
@@ -256,8 +263,8 @@ template <typename S> struct LinearBigSite : Linear<S> {
             assert(me->dot = 1);
             minres_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            Linear<S>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
-                                minres_conv_thrd);
+            Linear<S, FL, FLS>::blocking(i - 1, forward, bra_bond_dim,
+                                         ket_bond_dim, 0, minres_conv_thrd);
             minres_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -280,44 +287,47 @@ template <typename S> struct LinearBigSite : Linear<S> {
     }
 };
 
-template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
-    using DMRGBigSite<S>::iprint;
-    using DMRGBigSite<S>::me;
-    using DMRGBigSite<S>::ext_mes;
-    using DMRGBigSite<S>::davidson_soft_max_iter;
-    using DMRGBigSite<S>::davidson_max_iter;
-    using DMRGBigSite<S>::noise_type;
-    using DMRGBigSite<S>::decomp_type;
-    using DMRGBigSite<S>::energies;
-    using DMRGBigSite<S>::sweep_energies;
-    using DMRGBigSite<S>::last_site_svd;
-    using DMRGBigSite<S>::last_site_1site;
-    using DMRGBigSite<S>::_t;
-    using DMRGBigSite<S>::teff;
-    using DMRGBigSite<S>::teig;
-    using DMRGBigSite<S>::tprt;
-    using DMRGBigSite<S>::sweep_max_eff_ham_size;
+template <typename S, typename FL, typename FLS>
+struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
+    typedef typename DMRGBigSite<S, FL, FLS>::FPS FPS;
+    using DMRGBigSite<S, FL, FLS>::iprint;
+    using DMRGBigSite<S, FL, FLS>::me;
+    using DMRGBigSite<S, FL, FLS>::ext_mes;
+    using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::noise_type;
+    using DMRGBigSite<S, FL, FLS>::decomp_type;
+    using DMRGBigSite<S, FL, FLS>::energies;
+    using DMRGBigSite<S, FL, FLS>::sweep_energies;
+    using DMRGBigSite<S, FL, FLS>::last_site_svd;
+    using DMRGBigSite<S, FL, FLS>::last_site_1site;
+    using DMRGBigSite<S, FL, FLS>::_t;
+    using DMRGBigSite<S, FL, FLS>::teff;
+    using DMRGBigSite<S, FL, FLS>::teig;
+    using DMRGBigSite<S, FL, FLS>::tprt;
+    using DMRGBigSite<S, FL, FLS>::sweep_max_eff_ham_size;
 
-    double g_factor = 1.0;  // G in +Q formula
-    double g_factor2 = 0.0; // G2 in ACPF2
+    FL g_factor = 1.0;  // G in +Q formula
+    FL g_factor2 = 0.0; // G2 in ACPF2
     bool ACPF2_mode = false;
-    bool RAS_mode = false;   // 2 sites at both ends: Thawed orbitals
-    double ref_energy = 1.0; // Typically CAS-SCF/Reference energy of CAS
-    double delta_e =
+    bool RAS_mode = false; // 2 sites at both ends: Thawed orbitals
+    FPS ref_energy = 1.0;  // Typically CAS-SCF/Reference energy of CAS
+    FPS delta_e =
         0.0; // energy - ref_energy => will be modified during the sweep
     int max_aqcc_iter = 5; // Max iter spent on last site. Convergence depends
                            // on davidson conv. Note that this does not need to
                            // be fully converged as we do sweeps anyways.
-    double smallest_energy =
-        numeric_limits<double>::max(); // Smallest energy during sweep
+    FPS smallest_energy =
+        numeric_limits<FPS>::max(); // Smallest energy during sweep
 
     /** Frozen/CAS mode: Only one big site at the end
      * => ME + S * SME  **/
-    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                    const shared_ptr<MovingEnvironment<S>> &sme,
-                    const vector<ubond_t> &bond_dims,
-                    const vector<double> &noises, double ref_energy)
-        : DMRGBigSite<S>(me, bond_dims, noises),
+    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
+                    FL g_factor,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme,
+                    const vector<ubond_t> &bond_dims, const vector<FPS> &noises,
+                    FPS ref_energy)
+        : DMRGBigSite<S, FL, FLS>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
           //     last_site_svd{true}, last_site_1site{true},
           g_factor{g_factor}, ref_energy{ref_energy} {
@@ -329,13 +339,14 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
 
     /** Frozen/CAS mode ACPF2: Only one big site at the end
      * => ME + S * SME + S2 * SME2 **/
-    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                    const shared_ptr<MovingEnvironment<S>> &sme,
-                    double g_factor2,
-                    const shared_ptr<MovingEnvironment<S>> &sme2,
-                    const vector<ubond_t> &bond_dims,
-                    const vector<double> &noises, double ref_energy)
-        : DMRGBigSite<S>(me, bond_dims, noises),
+    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
+                    FL g_factor,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme,
+                    FL g_factor2,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme2,
+                    const vector<ubond_t> &bond_dims, const vector<FPS> &noises,
+                    FPS ref_energy)
+        : DMRGBigSite<S, FL, FLS>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
           //     last_site_svd{true}, last_site_1site{true},
           g_factor{g_factor}, g_factor2{g_factor2}, ACPF2_mode{true},
@@ -349,12 +360,13 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
 
     /** RAS mode: Big sites on both ends
      * => ME + S * (SME1 - SME2)  **/
-    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                    const shared_ptr<MovingEnvironment<S>> &sme1,
-                    const shared_ptr<MovingEnvironment<S>> &sme2,
-                    const vector<ubond_t> &bond_dims,
-                    const vector<double> &noises, double ref_energy)
-        : DMRGBigSite<S>(me, bond_dims, noises),
+    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
+                    FL g_factor,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme1,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme2,
+                    const vector<ubond_t> &bond_dims, const vector<FPS> &noises,
+                    FPS ref_energy)
+        : DMRGBigSite<S, FL, FLS>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
           //     last_site_svd{true}, last_site_1site{true},
           g_factor{g_factor}, ref_energy{ref_energy}, RAS_mode{true} {
@@ -367,15 +379,16 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
 
     /** RAS ACPF2 mode: Big sites on both ends
      * => ME + S * (SME1 - SME2) + S2 * (SME3-SME4)  **/
-    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                    const shared_ptr<MovingEnvironment<S>> &sme1,
-                    const shared_ptr<MovingEnvironment<S>> &sme2,
-                    double g_factor2,
-                    const shared_ptr<MovingEnvironment<S>> &sme3,
-                    const shared_ptr<MovingEnvironment<S>> &sme4,
-                    const vector<ubond_t> &bond_dims,
-                    const vector<double> &noises, double ref_energy)
-        : DMRGBigSite<S>(me, bond_dims, noises),
+    DMRGBigSiteAQCC(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
+                    FL g_factor,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme1,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme2,
+                    FL g_factor2,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme3,
+                    const shared_ptr<MovingEnvironment<S, FL, FLS>> &sme4,
+                    const vector<ubond_t> &bond_dims, const vector<FPS> &noises,
+                    FPS ref_energy)
+        : DMRGBigSite<S, FL, FLS>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
           //     last_site_svd{true}, last_site_1site{true},
           g_factor{g_factor}, g_factor2{g_factor2}, ACPF2_mode{true},
@@ -389,15 +402,15 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
         ext_mes.push_back(sme4);
     }
 
-    shared_ptr<LinearEffectiveHamiltonian<S>>
-    get_aqcc_eff(shared_ptr<EffectiveHamiltonian<S>> h_eff,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff1,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff2,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff3,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff4) {
+    shared_ptr<LinearEffectiveHamiltonian<S, FL>>
+    get_aqcc_eff(shared_ptr<EffectiveHamiltonian<S, FL>> h_eff,
+                 shared_ptr<EffectiveHamiltonian<S, FL>> d_eff1,
+                 shared_ptr<EffectiveHamiltonian<S, FL>> d_eff2,
+                 shared_ptr<EffectiveHamiltonian<S, FL>> d_eff3,
+                 shared_ptr<EffectiveHamiltonian<S, FL>> d_eff4) {
         const auto shift = (1. - g_factor) * delta_e;
         const auto shift2 = (1. - g_factor2) * delta_e;
-        shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff;
+        shared_ptr<LinearEffectiveHamiltonian<S, FL>> aqcc_eff;
         if (not RAS_mode) {
             aqcc_eff = h_eff + shift * d_eff1;
             if (ACPF2_mode) {
@@ -418,12 +431,12 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
         return aqcc_eff;
     }
 
-    tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
-        const bool forward, const int i, const double davidson_conv_thrd,
-        const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) override {
-        tuple<double, int, size_t, double> pdi;
+    tuple<FPS, int, size_t, double> two_dot_eigs_and_perturb(
+        const bool forward, const int i, const FPS davidson_conv_thrd,
+        const FPS noise, shared_ptr<SparseMatrixGroup<S, FLS>> &pket) override {
+        tuple<FPS, int, size_t, double> pdi;
         _t.get_time();
-        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, FL>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 =
             ext_mes.at(0)->eff_ham(FuseTypes::FuseLR, forward, true,
                                    me->bra->tensors[i], me->ket->tensors[i]);
@@ -441,7 +454,7 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
                                             me->ket->tensors[i]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+        shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
         auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
@@ -468,17 +481,16 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
         delta_e = smallest_energy - ref_energy;
         return pdi;
     }
-    tuple<double, int, size_t, double>
-    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
-                             const int i_site, const double davidson_conv_thrd,
-                             const double noise,
-                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
-        tuple<double, int, size_t, double> pdi{0., 0, 0,
-                                               0.}; // energy, ndav, nflop, tdav
+    tuple<FPS, int, size_t, double> one_dot_eigs_and_perturb(
+        const bool forward, const bool fuse_left, const int i_site,
+        const FPS davidson_conv_thrd, const FPS noise,
+        shared_ptr<SparseMatrixGroup<S, FL>> &pket) override {
+        tuple<FPS, int, size_t, double> pdi{0., 0, 0,
+                                            0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0) and
                             abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, FL>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -496,7 +508,7 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
         teff += _t.get_time();
@@ -507,17 +519,16 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
             if (sweep_energies.size() > 0) {
                 // vv taken from DRMG::sweep
                 size_t idx =
-                    min_element(
-                        sweep_energies.begin(), sweep_energies.end(),
-                        [](const vector<double> &x, const vector<double> &y) {
-                            return x[0] < y[0];
-                        }) -
+                    min_element(sweep_energies.begin(), sweep_energies.end(),
+                                [](const vector<FPS> &x, const vector<FPS> &y) {
+                                    return x[0] < y[0];
+                                }) -
                     sweep_energies.begin();
                 smallest_energy =
                     min(sweep_energies[idx].at(0), smallest_energy);
                 delta_e = smallest_energy - ref_energy;
             }
-            double last_delta_e = delta_e;
+            FPS last_delta_e = delta_e;
             if (iprint >= 2) {
                 cout << endl;
             }
@@ -607,35 +618,37 @@ template <typename S> struct DMRGBigSiteAQCC : DMRGBigSite<S> {
 };
 
 // hrl: DMRG-CI-AQCC and related methods
-template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
-    using DMRGBigSite<S>::iprint;
-    using DMRGBigSite<S>::me;
-    using DMRGBigSite<S>::davidson_soft_max_iter;
-    using DMRGBigSite<S>::davidson_max_iter;
-    using DMRGBigSite<S>::noise_type;
-    using DMRGBigSite<S>::decomp_type;
-    using DMRGBigSite<S>::energies;
-    using DMRGBigSite<S>::sweep_energies;
-    using DMRGBigSite<S>::last_site_svd;
-    using DMRGBigSite<S>::last_site_1site;
-    using DMRGBigSite<S>::_t;
-    using DMRGBigSite<S>::teff;
-    using DMRGBigSite<S>::teig;
-    using DMRGBigSite<S>::tprt;
+template <typename S, typename FL, typename FLS>
+struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
+    typedef typename DMRGBigSite<S, FL, FLS>::FPS FPS;
+    using DMRGBigSite<S, FL, FLS>::iprint;
+    using DMRGBigSite<S, FL, FLS>::me;
+    using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::noise_type;
+    using DMRGBigSite<S, FL, FLS>::decomp_type;
+    using DMRGBigSite<S, FL, FLS>::energies;
+    using DMRGBigSite<S, FL, FLS>::sweep_energies;
+    using DMRGBigSite<S, FL, FLS>::last_site_svd;
+    using DMRGBigSite<S, FL, FLS>::last_site_1site;
+    using DMRGBigSite<S, FL, FLS>::_t;
+    using DMRGBigSite<S, FL, FLS>::teff;
+    using DMRGBigSite<S, FL, FLS>::teig;
+    using DMRGBigSite<S, FL, FLS>::tprt;
 
-    double g_factor = 1.0;   // G in +Q formula
-    double ref_energy = 1.0; // typically CAS-SCF/Reference energy of CAS
-    double delta_e =
+    FL g_factor = 1.0;   // G in +Q formula
+    FL ref_energy = 1.0; // typically CAS-SCF/Reference energy of CAS
+    FPS delta_e =
         0.0; // energy - ref_energy => will be modified during the sweep
     std::vector<S> mod_qns; // Quantum numbers to be modified
     int max_aqcc_iter = 5;  // Max iter spent on last site. Convergence depends
                             // on davidson conv. Note that this does not need to
                             // be fully converged as we do sweeps anyways.
-    DMRGBigSiteAQCCOLD(const shared_ptr<MovingEnvironment<S>> &me,
+    DMRGBigSiteAQCCOLD(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
                        const vector<ubond_t> &bond_dims,
-                       const vector<double> &noises, double g_factor,
-                       double ref_energy, const std::vector<S> &mod_qns)
-        : DMRGBigSite<S>(me, bond_dims, noises),
+                       const vector<FPS> &noises, FL g_factor, FPS ref_energy,
+                       const std::vector<S> &mod_qns)
+        : DMRGBigSite<S, FL, FLS>(me, bond_dims, noises),
           // vv weird compile error -> cannot find member types -.-
           //     last_site_svd{true}, last_site_1site{true},
           g_factor{g_factor}, ref_energy{ref_energy}, mod_qns{mod_qns} {
@@ -644,17 +657,16 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
         modify_mpo_mats(true, 0.0); // Save diagonals
     }
 
-    tuple<double, int, size_t, double>
-    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
-                             const int i_site, const double davidson_conv_thrd,
-                             const double noise,
-                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
-        tuple<double, int, size_t, double> pdi{0., 0, 0,
-                                               0.}; // energy, ndav, nflop, tdav
+    tuple<FPS, int, size_t, double> one_dot_eigs_and_perturb(
+        const bool forward, const bool fuse_left, const int i_site,
+        const double davidson_conv_thrd, const double noise,
+        shared_ptr<SparseMatrixGroup<S, FL>> &pket) override {
+        tuple<FPS, int, size_t, double> pdi{0., 0, 0,
+                                            0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC =
             i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
             // vv diag will be computed in aqcc loop
             not doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -667,15 +679,14 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
             if (sweep_energies.size() > 0) {
                 // vv taken from DRMG::sweep
                 size_t idx =
-                    min_element(
-                        sweep_energies.begin(), sweep_energies.end(),
-                        [](const vector<double> &x, const vector<double> &y) {
-                            return x[0] < y[0];
-                        }) -
+                    min_element(sweep_energies.begin(), sweep_energies.end(),
+                                [](const vector<FPS> &x, const vector<FPS> &y) {
+                                    return x[0] < y[0];
+                                }) -
                     sweep_energies.begin();
                 delta_e = sweep_energies[idx].at(0) - ref_energy;
             }
-            double last_delta_e = delta_e;
+            FPS last_delta_e = delta_e;
             if (iprint >= 2) {
                 cout << endl;
             }
@@ -688,23 +699,23 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
                     SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "DMRGBigSiteAQCCOLD: No CSRSparseMatrix is used?");
-                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(
+                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(
                     h_eff->op->ropt->ops[me->mpo->op]);
                 modify_H_mats(Hop, false, shift);
                 //
                 // Compute diagonal
                 //
                 if (itAQCC == 0) {
-                    h_eff->diag = make_shared<SparseMatrix<S>>();
+                    h_eff->diag = make_shared<SparseMatrix<S, FL>>();
                     h_eff->diag->allocate(h_eff->ket->info);
                     diag_info = make_shared<
                         typename SparseMatrixInfo<S>::ConnectionInfo>();
                     S cdq = h_eff->ket->info->delta_quantum;
                     vector<S> msl =
-                        Partition<S>::get_uniq_labels({h_eff->hop_mat});
+                        Partition<S, FL>::get_uniq_labels({h_eff->hop_mat});
                     vector<vector<pair<uint8_t, S>>> msubsl =
-                        Partition<S>::get_uniq_sub_labels(h_eff->op->mat,
-                                                          h_eff->hop_mat, msl);
+                        Partition<S, FL>::get_uniq_sub_labels(
+                            h_eff->op->mat, h_eff->hop_mat, msl);
                     diag_info->initialize_diag(
                         cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
                         h_eff->right_op_infos, h_eff->diag->info,
@@ -802,37 +813,39 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
     }
 
   private:
-    std::vector<pair<S, vector<double>>>
+    std::vector<pair<S, vector<FL>>>
         mpo_diag_elements; // Save diagonal elements of all operators for
                            // adjusting shift
     // save == true: fill mpo_diag_elements (ONLY in ctor); diag_shift will not
     // be used then
-    void modify_mpo_mats(const bool save, const double diag_shift) {
+    void modify_mpo_mats(const bool save, const FL diag_shift) {
         if (save) {
             assert(mpo_diag_elements.size() ==
                    0); // should only be called in C'tor
         }
         auto &ops = me->mpo->tensors.at(me->mpo->n_sites - 1)->ops;
         for (auto &p : ops) {
-            OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+            OpElement<S, FL> &op =
+                *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             if (op.name == OpNames::H) {
                 if (p.second->get_type() != SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "DMRGBigSiteAQCCOLD: No CSRSparseMatrix is used?");
-                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
+                auto Hop =
+                    dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(p.second);
                 modify_H_mats(Hop, save, diag_shift);
                 break;
             }
         }
     }
-    void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S>> &Hop,
-                       const bool save, const double diag_shift) {
+    void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S, FL>> &Hop,
+                       const bool save, const FL diag_shift) {
         if (save) {
             for (const auto &qn : mod_qns) {
                 const auto idx = Hop->info->find_state(qn);
                 if (idx < 0)
                     continue;
-                mpo_diag_elements.push_back(make_pair(qn, vector<double>()));
+                mpo_diag_elements.push_back(make_pair(qn, vector<FL>()));
             }
         }
         for (auto &pqn : mpo_diag_elements) {
@@ -841,7 +854,7 @@ template <typename S> struct DMRGBigSiteAQCCOLD : DMRGBigSite<S> {
                 // Not all QNs make sense for H!
                 continue;
             }
-            CSRMatrixRef mat = (*Hop)[idx];
+            GCSRMatrix<FL> mat = (*Hop)[idx];
             assert(mat.m == mat.n);
             if (!save)
                 assert(mat.m == (MKL_INT)pqn.second.size());

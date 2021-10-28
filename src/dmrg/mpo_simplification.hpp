@@ -38,72 +38,72 @@ using namespace std;
 namespace block2 {
 
 // Simplify MPO expression according to symmetry rules
-template <typename S> struct SimplifiedMPO : MPO<S> {
+template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
     // Original MPO
-    shared_ptr<MPO<S>> prim_mpo;
-    shared_ptr<Rule<S>> rule;
+    shared_ptr<MPO<S, FL>> prim_mpo;
+    shared_ptr<Rule<S, FL>> rule;
     // Collect terms means that sum of products will be changed to
     // product of one symbol times a sum of symbols
     // (if there are common factors)
     // A x B + A x C + A x D => A x (B + C + D)
     bool collect_terms, use_intermediate;
     OpNamesSet intermediate_ops;
-    SimplifiedMPO(const shared_ptr<MPO<S>> &mpo,
-                  const shared_ptr<Rule<S>> &rule, bool collect_terms = true,
-                  bool use_intermediate = false,
+    SimplifiedMPO(const shared_ptr<MPO<S, FL>> &mpo,
+                  const shared_ptr<Rule<S, FL>> &rule,
+                  bool collect_terms = true, bool use_intermediate = false,
                   OpNamesSet intermediate_ops = OpNamesSet::all_ops())
-        : prim_mpo(mpo), rule(rule), MPO<S>(mpo->n_sites),
+        : prim_mpo(mpo), rule(rule), MPO<S, FL>(mpo->n_sites),
           collect_terms(collect_terms), use_intermediate(use_intermediate),
           intermediate_ops(intermediate_ops) {
         if (!collect_terms)
             use_intermediate = false;
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
-        MPO<S>::const_e = mpo->const_e;
-        MPO<S>::tensors = mpo->tensors;
-        MPO<S>::basis = mpo->basis;
-        MPO<S>::op = mpo->op;
-        MPO<S>::schemer = mpo->schemer;
-        MPO<S>::tf = mpo->tf;
-        MPO<S>::site_op_infos = mpo->site_op_infos;
-        MPO<S>::left_operator_names = mpo->left_operator_names;
-        MPO<S>::sparse_form = mpo->sparse_form;
-        for (auto &x : MPO<S>::left_operator_names)
+        MPO<S, FL>::const_e = mpo->const_e;
+        MPO<S, FL>::tensors = mpo->tensors;
+        MPO<S, FL>::basis = mpo->basis;
+        MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::schemer = mpo->schemer;
+        MPO<S, FL>::tf = mpo->tf;
+        MPO<S, FL>::site_op_infos = mpo->site_op_infos;
+        MPO<S, FL>::left_operator_names = mpo->left_operator_names;
+        MPO<S, FL>::sparse_form = mpo->sparse_form;
+        for (auto &x : MPO<S, FL>::left_operator_names)
             x = x->copy();
-        MPO<S>::right_operator_names = mpo->right_operator_names;
-        for (auto &x : MPO<S>::right_operator_names)
+        MPO<S, FL>::right_operator_names = mpo->right_operator_names;
+        for (auto &x : MPO<S, FL>::right_operator_names)
             x = x->copy();
-        MPO<S>::left_operator_exprs.resize(MPO<S>::n_sites);
-        MPO<S>::right_operator_exprs.resize(MPO<S>::n_sites);
+        MPO<S, FL>::left_operator_exprs.resize(MPO<S, FL>::n_sites);
+        MPO<S, FL>::right_operator_exprs.resize(MPO<S, FL>::n_sites);
         // for comp operators created in the middle site,
         // if all integrals related to the comp operators are zero,
         // label this comp operator as zero
-        if (MPO<S>::schemer != nullptr) {
-            MPO<S>::schemer = mpo->schemer->copy();
-            int i = MPO<S>::schemer->left_trans_site;
+        if (MPO<S, FL>::schemer != nullptr) {
+            MPO<S, FL>::schemer = mpo->schemer->copy();
+            int i = MPO<S, FL>::schemer->left_trans_site;
             for (size_t j = 0;
-                 j < MPO<S>::schemer->left_new_operator_names->data.size();
+                 j < MPO<S, FL>::schemer->left_new_operator_names->data.size();
                  j++) {
-                if (j < MPO<S>::left_operator_names[i]->data.size() &&
-                    MPO<S>::left_operator_names[i]->data[j] ==
-                        MPO<S>::schemer->left_new_operator_names->data[j])
+                if (j < MPO<S, FL>::left_operator_names[i]->data.size() &&
+                    MPO<S, FL>::left_operator_names[i]->data[j] ==
+                        MPO<S, FL>::schemer->left_new_operator_names->data[j])
                     continue;
-                else if (MPO<S>::schemer->left_new_operator_exprs->data[j]
+                else if (MPO<S, FL>::schemer->left_new_operator_exprs->data[j]
                              ->get_type() == OpTypes::Zero)
-                    MPO<S>::schemer->left_new_operator_names->data[j] =
-                        MPO<S>::schemer->left_new_operator_exprs->data[j];
+                    MPO<S, FL>::schemer->left_new_operator_names->data[j] =
+                        MPO<S, FL>::schemer->left_new_operator_exprs->data[j];
             }
-            i = MPO<S>::schemer->right_trans_site;
+            i = MPO<S, FL>::schemer->right_trans_site;
             for (size_t j = 0;
-                 j < MPO<S>::schemer->right_new_operator_names->data.size();
+                 j < MPO<S, FL>::schemer->right_new_operator_names->data.size();
                  j++) {
-                if (j < MPO<S>::right_operator_names[i]->data.size() &&
-                    MPO<S>::right_operator_names[i]->data[j] ==
-                        MPO<S>::schemer->right_new_operator_names->data[j])
+                if (j < MPO<S, FL>::right_operator_names[i]->data.size() &&
+                    MPO<S, FL>::right_operator_names[i]->data[j] ==
+                        MPO<S, FL>::schemer->right_new_operator_names->data[j])
                     continue;
-                else if (MPO<S>::schemer->right_new_operator_exprs->data[j]
+                else if (MPO<S, FL>::schemer->right_new_operator_exprs->data[j]
                              ->get_type() == OpTypes::Zero)
-                    MPO<S>::schemer->right_new_operator_names->data[j] =
-                        MPO<S>::schemer->right_new_operator_exprs->data[j];
+                    MPO<S, FL>::schemer->right_new_operator_names->data[j] =
+                        MPO<S, FL>::schemer->right_new_operator_exprs->data[j];
             }
         }
         // construct blocking formulas by contration of op name (vector) and mpo
@@ -112,143 +112,165 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         // if contracted expr is zero, label the blocked operator as zero
         int ntg = threading->activate_global();
         // left blocking
-        for (int i = 0; i < MPO<S>::n_sites; i++) {
+        for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
             if (i == 0) {
-                MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
-                if (MPO<S>::tensors[i]->lmat == MPO<S>::tensors[i]->rmat)
-                    MPO<S>::tensors[i]->lmat = MPO<S>::tensors[i]->rmat =
-                        MPO<S>::tensors[i]->rmat->copy();
+                MPO<S, FL>::tensors[i] = MPO<S, FL>::tensors[i]->copy();
+                if (MPO<S, FL>::tensors[i]->lmat ==
+                    MPO<S, FL>::tensors[i]->rmat)
+                    MPO<S, FL>::tensors[i]->lmat =
+                        MPO<S, FL>::tensors[i]->rmat =
+                            MPO<S, FL>::tensors[i]->rmat->copy();
                 else
-                    MPO<S>::tensors[i]->lmat = MPO<S>::tensors[i]->lmat->copy();
-                MPO<S>::left_operator_exprs[i] = MPO<S>::tensors[i]->lmat;
-            } else if (MPO<S>::schemer == nullptr ||
-                       i - 1 != MPO<S>::schemer->left_trans_site)
-                MPO<S>::left_operator_exprs[i] =
-                    MPO<S>::left_operator_names[i - 1] *
-                    MPO<S>::tensors[i]->lmat;
+                    MPO<S, FL>::tensors[i]->lmat =
+                        MPO<S, FL>::tensors[i]->lmat->copy();
+                MPO<S, FL>::left_operator_exprs[i] =
+                    MPO<S, FL>::tensors[i]->lmat;
+            } else if (MPO<S, FL>::schemer == nullptr ||
+                       i - 1 != MPO<S, FL>::schemer->left_trans_site)
+                MPO<S, FL>::left_operator_exprs[i] =
+                    MPO<S, FL>::left_operator_names[i - 1] *
+                    MPO<S, FL>::tensors[i]->lmat;
             else
-                MPO<S>::left_operator_exprs[i] =
+                MPO<S, FL>::left_operator_exprs[i] =
                     (shared_ptr<Symbolic<S>>)
-                        MPO<S>::schemer->left_new_operator_names *
-                    MPO<S>::tensors[i]->lmat;
-            if (MPO<S>::schemer != nullptr &&
-                i == MPO<S>::schemer->left_trans_site) {
+                        MPO<S, FL>::schemer->left_new_operator_names *
+                    MPO<S, FL>::tensors[i]->lmat;
+            if (MPO<S, FL>::schemer != nullptr &&
+                i == MPO<S, FL>::schemer->left_trans_site) {
                 for (size_t j = 0;
-                     j < MPO<S>::left_operator_exprs[i]->data.size(); j++)
-                    if (MPO<S>::left_operator_exprs[i]->data[j]->get_type() ==
-                        OpTypes::Zero) {
-                        if (j < MPO<S>::schemer->left_new_operator_names->data
-                                    .size() &&
-                            MPO<S>::left_operator_names[i]->data[j] ==
-                                MPO<S>::schemer->left_new_operator_names
+                     j < MPO<S, FL>::left_operator_exprs[i]->data.size(); j++)
+                    if (MPO<S, FL>::left_operator_exprs[i]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero) {
+                        if (j < MPO<S, FL>::schemer->left_new_operator_names
+                                    ->data.size() &&
+                            MPO<S, FL>::left_operator_names[i]->data[j] ==
+                                MPO<S, FL>::schemer->left_new_operator_names
                                     ->data[j])
-                            MPO<S>::schemer->left_new_operator_names->data[j] =
-                                MPO<S>::left_operator_exprs[i]->data[j];
-                        MPO<S>::left_operator_names[i]->data[j] =
-                            MPO<S>::left_operator_exprs[i]->data[j];
+                            MPO<S, FL>::schemer->left_new_operator_names
+                                ->data[j] =
+                                MPO<S, FL>::left_operator_exprs[i]->data[j];
+                        MPO<S, FL>::left_operator_names[i]->data[j] =
+                            MPO<S, FL>::left_operator_exprs[i]->data[j];
                     }
             } else {
                 for (size_t j = 0;
-                     j < MPO<S>::left_operator_exprs[i]->data.size(); j++)
-                    if (MPO<S>::left_operator_exprs[i]->data[j]->get_type() ==
-                        OpTypes::Zero)
-                        MPO<S>::left_operator_names[i]->data[j] =
-                            MPO<S>::left_operator_exprs[i]->data[j];
+                     j < MPO<S, FL>::left_operator_exprs[i]->data.size(); j++)
+                    if (MPO<S, FL>::left_operator_exprs[i]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero)
+                        MPO<S, FL>::left_operator_names[i]->data[j] =
+                            MPO<S, FL>::left_operator_exprs[i]->data[j];
             }
         }
         // right blocking
-        for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {
-            if (i == MPO<S>::n_sites - 1) {
-                MPO<S>::tensors[i] = MPO<S>::tensors[i]->copy();
-                if (MPO<S>::tensors[i]->lmat == MPO<S>::tensors[i]->rmat)
-                    MPO<S>::tensors[i]->rmat = MPO<S>::tensors[i]->lmat =
-                        MPO<S>::tensors[i]->lmat->copy();
+        for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
+            if (i == MPO<S, FL>::n_sites - 1) {
+                MPO<S, FL>::tensors[i] = MPO<S, FL>::tensors[i]->copy();
+                if (MPO<S, FL>::tensors[i]->lmat ==
+                    MPO<S, FL>::tensors[i]->rmat)
+                    MPO<S, FL>::tensors[i]->rmat =
+                        MPO<S, FL>::tensors[i]->lmat =
+                            MPO<S, FL>::tensors[i]->lmat->copy();
                 else
-                    MPO<S>::tensors[i]->rmat = MPO<S>::tensors[i]->rmat->copy();
-                MPO<S>::right_operator_exprs[i] = MPO<S>::tensors[i]->rmat;
-            } else if (MPO<S>::schemer == nullptr ||
-                       i + 1 != MPO<S>::schemer->right_trans_site)
-                MPO<S>::right_operator_exprs[i] =
-                    MPO<S>::tensors[i]->rmat *
-                    MPO<S>::right_operator_names[i + 1];
+                    MPO<S, FL>::tensors[i]->rmat =
+                        MPO<S, FL>::tensors[i]->rmat->copy();
+                MPO<S, FL>::right_operator_exprs[i] =
+                    MPO<S, FL>::tensors[i]->rmat;
+            } else if (MPO<S, FL>::schemer == nullptr ||
+                       i + 1 != MPO<S, FL>::schemer->right_trans_site)
+                MPO<S, FL>::right_operator_exprs[i] =
+                    MPO<S, FL>::tensors[i]->rmat *
+                    MPO<S, FL>::right_operator_names[i + 1];
             else
-                MPO<S>::right_operator_exprs[i] =
-                    MPO<S>::tensors[i]->rmat *
+                MPO<S, FL>::right_operator_exprs[i] =
+                    MPO<S, FL>::tensors[i]->rmat *
                     (shared_ptr<Symbolic<S>>)
-                        MPO<S>::schemer->right_new_operator_names;
-            if (MPO<S>::schemer != nullptr &&
-                i == MPO<S>::schemer->right_trans_site) {
+                        MPO<S, FL>::schemer->right_new_operator_names;
+            if (MPO<S, FL>::schemer != nullptr &&
+                i == MPO<S, FL>::schemer->right_trans_site) {
                 for (size_t j = 0;
-                     j < MPO<S>::right_operator_exprs[i]->data.size(); j++)
-                    if (MPO<S>::right_operator_exprs[i]->data[j]->get_type() ==
-                        OpTypes::Zero) {
-                        if (j < MPO<S>::schemer->right_new_operator_names->data
-                                    .size() &&
-                            MPO<S>::right_operator_names[i]->data[j] ==
-                                MPO<S>::schemer->right_new_operator_names
+                     j < MPO<S, FL>::right_operator_exprs[i]->data.size(); j++)
+                    if (MPO<S, FL>::right_operator_exprs[i]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero) {
+                        if (j < MPO<S, FL>::schemer->right_new_operator_names
+                                    ->data.size() &&
+                            MPO<S, FL>::right_operator_names[i]->data[j] ==
+                                MPO<S, FL>::schemer->right_new_operator_names
                                     ->data[j])
-                            MPO<S>::schemer->right_new_operator_names->data[j] =
-                                MPO<S>::right_operator_exprs[i]->data[j];
-                        MPO<S>::right_operator_names[i]->data[j] =
-                            MPO<S>::right_operator_exprs[i]->data[j];
+                            MPO<S, FL>::schemer->right_new_operator_names
+                                ->data[j] =
+                                MPO<S, FL>::right_operator_exprs[i]->data[j];
+                        MPO<S, FL>::right_operator_names[i]->data[j] =
+                            MPO<S, FL>::right_operator_exprs[i]->data[j];
                     }
             } else {
                 for (size_t j = 0;
-                     j < MPO<S>::right_operator_exprs[i]->data.size(); j++)
-                    if (MPO<S>::right_operator_exprs[i]->data[j]->get_type() ==
-                        OpTypes::Zero)
-                        MPO<S>::right_operator_names[i]->data[j] =
-                            MPO<S>::right_operator_exprs[i]->data[j];
+                     j < MPO<S, FL>::right_operator_exprs[i]->data.size(); j++)
+                    if (MPO<S, FL>::right_operator_exprs[i]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero)
+                        MPO<S, FL>::right_operator_names[i]->data[j] =
+                            MPO<S, FL>::right_operator_exprs[i]->data[j];
             }
         }
         // construct super blocking contraction formula
         // first case is that the blocking formula is already given
         // for example in the npdm code
         if (mpo->middle_operator_exprs.size() != 0) {
-            MPO<S>::middle_operator_names = mpo->middle_operator_names;
-            MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
-            assert(MPO<S>::schemer == nullptr);
+            MPO<S, FL>::middle_operator_names = mpo->middle_operator_names;
+            MPO<S, FL>::middle_operator_exprs = mpo->middle_operator_exprs;
+            using MSF = MPO<S, FL>;
+            assert(MSF::schemer == nullptr);
             // if some operators are erased in left/right operator names
             // they should not appear in middle operator exprs
             // and the expr should be zero
-            for (size_t i = 0; i < MPO<S>::middle_operator_names.size(); i++) {
+            for (size_t i = 0; i < MPO<S, FL>::middle_operator_names.size();
+                 i++) {
                 set<shared_ptr<OpExpr<S>>, op_expr_less<S>> left_zero_ops,
                     right_zero_ops;
                 for (size_t j = 0;
-                     j < MPO<S>::left_operator_names[i]->data.size(); j++)
-                    if (MPO<S>::left_operator_names[i]->data[j]->get_type() ==
-                        OpTypes::Zero)
+                     j < MPO<S, FL>::left_operator_names[i]->data.size(); j++)
+                    if (MPO<S, FL>::left_operator_names[i]
+                            ->data[j]
+                            ->get_type() == OpTypes::Zero)
                         left_zero_ops.insert(
                             mpo->left_operator_names[i]->data[j]);
                 for (size_t j = 0;
-                     j < MPO<S>::right_operator_names[i + 1]->data.size(); j++)
-                    if (MPO<S>::right_operator_names[i + 1]
+                     j < MPO<S, FL>::right_operator_names[i + 1]->data.size();
+                     j++)
+                    if (MPO<S, FL>::right_operator_names[i + 1]
                             ->data[j]
                             ->get_type() == OpTypes::Zero)
                         right_zero_ops.insert(
                             mpo->right_operator_names[i + 1]->data[j]);
                 for (size_t j = 0;
-                     j < MPO<S>::middle_operator_exprs[i]->data.size(); j++) {
+                     j < MPO<S, FL>::middle_operator_exprs[i]->data.size();
+                     j++) {
                     shared_ptr<OpExpr<S>> &x =
-                        MPO<S>::middle_operator_exprs[i]->data[j];
+                        MPO<S, FL>::middle_operator_exprs[i]->data[j];
                     switch (x->get_type()) {
                     case OpTypes::Zero:
                         break;
                     case OpTypes::Prod:
                         if (left_zero_ops.count(
-                                dynamic_pointer_cast<OpProduct<S>>(x)->a) ||
+                                dynamic_pointer_cast<OpProduct<S, FL>>(x)->a) ||
                             right_zero_ops.count(
-                                dynamic_pointer_cast<OpProduct<S>>(x)->b))
-                            MPO<S>::middle_operator_exprs[i]->data[j] = zero;
+                                dynamic_pointer_cast<OpProduct<S, FL>>(x)->b))
+                            MPO<S, FL>::middle_operator_exprs[i]->data[j] =
+                                zero;
                         break;
                     case OpTypes::Sum:
                         for (auto &r :
-                             dynamic_pointer_cast<OpSum<S>>(x)->strings)
+                             dynamic_pointer_cast<OpSum<S, FL>>(x)->strings)
                             if (left_zero_ops.count(
-                                    dynamic_pointer_cast<OpProduct<S>>(r)->a) ||
+                                    dynamic_pointer_cast<OpProduct<S, FL>>(r)
+                                        ->a) ||
                                 right_zero_ops.count(
-                                    dynamic_pointer_cast<OpProduct<S>>(r)->b)) {
-                                MPO<S>::middle_operator_exprs[i]->data[j] =
+                                    dynamic_pointer_cast<OpProduct<S, FL>>(r)
+                                        ->b)) {
+                                MPO<S, FL>::middle_operator_exprs[i]->data[j] =
                                     zero;
                                 break;
                             }
@@ -262,94 +284,97 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             vector<uint8_t> px[2];
             // figure out the mutual dependence of from right to left
             // px[.][j] is 1 if left operator is useful in next blocking
-            for (int i = MPO<S>::n_sites - 1; i >= 0; i--) {
-                if (i != MPO<S>::n_sites - 1) {
+            for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
+                if (i != MPO<S, FL>::n_sites - 1) {
                     // if a left operator is not useful in next blocking
                     // and not useful in super block
                     // then it is labelled as not useful
                     // when it is not useful, set it to zero
-                    if (MPO<S>::schemer == nullptr ||
-                        i != MPO<S>::schemer->left_trans_site) {
+                    if (MPO<S, FL>::schemer == nullptr ||
+                        i != MPO<S, FL>::schemer->left_trans_site) {
                         for (size_t j = 0;
-                             j < MPO<S>::left_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::left_operator_names[i]->data.size();
                              j++)
-                            if (MPO<S>::right_operator_names[i + 1]
+                            if (MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
                                 !px[i & 1][j])
-                                MPO<S>::left_operator_names[i]->data[j] =
-                                    MPO<S>::right_operator_names[i + 1]
+                                MPO<S, FL>::left_operator_names[i]->data[j] =
+                                    MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j];
-                            else if (MPO<S>::left_operator_names[i]
+                            else if (MPO<S, FL>::left_operator_names[i]
                                          ->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
-                    } else if (MPO<S>::schemer->right_trans_site -
-                                   MPO<S>::schemer->left_trans_site >
+                    } else if (MPO<S, FL>::schemer->right_trans_site -
+                                   MPO<S, FL>::schemer->left_trans_site >
                                1) {
                         for (size_t j = 0;
-                             j < MPO<S>::schemer->left_new_operator_names->data
-                                     .size();
+                             j < MPO<S, FL>::schemer->left_new_operator_names
+                                     ->data.size();
                              j++)
-                            if (MPO<S>::schemer->left_new_operator_names
+                            if (MPO<S, FL>::schemer->left_new_operator_names
                                     ->data[j]
                                     ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
                     } else {
                         for (size_t j = 0;
-                             j < MPO<S>::schemer->left_new_operator_names->data
-                                     .size();
+                             j < MPO<S, FL>::schemer->left_new_operator_names
+                                     ->data.size();
                              j++)
-                            if (MPO<S>::right_operator_names[i + 1]
+                            if (MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
                                 !px[i & 1][j])
-                                MPO<S>::schemer->left_new_operator_names
+                                MPO<S, FL>::schemer->left_new_operator_names
                                     ->data[j] =
-                                    MPO<S>::right_operator_names[i + 1]
+                                    MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j];
-                            else if (MPO<S>::schemer->left_new_operator_names
-                                         ->data[j]
+                            else if (MPO<S, FL>::schemer
+                                         ->left_new_operator_names->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
                     }
-                    if (MPO<S>::schemer != nullptr &&
-                        i == MPO<S>::schemer->left_trans_site) {
+                    if (MPO<S, FL>::schemer != nullptr &&
+                        i == MPO<S, FL>::schemer->left_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
                         memcpy(px[!(i & 1)].data(), px[i & 1].data(),
                                sizeof(uint8_t) * px[!(i & 1)].size());
                         px[i & 1].resize(
-                            MPO<S>::left_operator_names[i]->data.size());
+                            MPO<S, FL>::left_operator_names[i]->data.size());
                         memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
                         unordered_map<shared_ptr<OpExpr<S>>, int> mp;
-                        mp.reserve(MPO<S>::left_operator_names[i]->data.size());
+                        mp.reserve(
+                            MPO<S, FL>::left_operator_names[i]->data.size());
                         for (size_t j = 0;
-                             j < MPO<S>::left_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::left_operator_names[i]->data.size();
                              j++)
-                            if (MPO<S>::left_operator_names[i]
+                            if (MPO<S, FL>::left_operator_names[i]
                                     ->data[j]
                                     ->get_type() != OpTypes::Zero)
-                                mp[abs_value(
-                                    MPO<S>::left_operator_names[i]->data[j])] =
-                                    (int)j;
+                                mp[abs_value(MPO<S, FL>::left_operator_names[i]
+                                                 ->data[j])] = (int)j;
                         shared_ptr<SymbolicRowVector<S>> &exprs =
-                            MPO<S>::schemer->left_new_operator_exprs;
+                            MPO<S, FL>::schemer->left_new_operator_exprs;
                         for (size_t j = 0; j < exprs->data.size(); j++) {
                             if (px[!(i & 1)][j] &&
-                                j < MPO<S>::left_operator_names[i]
+                                j < MPO<S, FL>::left_operator_names[i]
                                         ->data.size() &&
-                                MPO<S>::left_operator_names[i]->data[j] ==
-                                    MPO<S>::schemer->left_new_operator_names
+                                MPO<S, FL>::left_operator_names[i]->data[j] ==
+                                    MPO<S, FL>::schemer->left_new_operator_names
                                         ->data[j])
                                 px[i & 1][j] = 1;
                             else if (px[!(i & 1)][j] &&
                                      exprs->data[j]->get_type() !=
                                          OpTypes::Zero) {
-                                shared_ptr<OpSum<S>> op = make_shared<OpSum<S>>(
-                                    dynamic_pointer_cast<OpSum<S>>(
-                                        exprs->data[j])
-                                        ->strings);
+                                shared_ptr<OpSum<S, FL>> op =
+                                    make_shared<OpSum<S, FL>>(
+                                        dynamic_pointer_cast<OpSum<S, FL>>(
+                                            exprs->data[j])
+                                            ->strings);
                                 for (size_t k = 0; k < op->strings.size();
                                      k++) {
                                     shared_ptr<OpExpr<S>> expr = abs_value(
@@ -357,7 +382,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                             ->a);
                                     if (mp.count(expr) == 0)
                                         op->strings[k] =
-                                            make_shared<OpProduct<S>>(
+                                            make_shared<OpProduct<S, FL>>(
                                                 *op->strings[k] * 0.0);
                                     else
                                         px[i & 1][mp[expr]] = 1;
@@ -367,30 +392,34 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             }
                         }
                         for (size_t j = 0;
-                             j < MPO<S>::left_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::left_operator_names[i]->data.size();
                              j++)
                             if (!px[i & 1][j])
-                                MPO<S>::left_operator_names[i]->data[j] = zero;
+                                MPO<S, FL>::left_operator_names[i]->data[j] =
+                                    zero;
                     }
                 }
                 // at the beginning, all px values are zero
                 // then, set the required op px = 1 based on mpo matrix
                 if (i != 0) {
-                    if (MPO<S>::schemer == nullptr ||
-                        i - 1 != MPO<S>::schemer->left_trans_site)
+                    if (MPO<S, FL>::schemer == nullptr ||
+                        i - 1 != MPO<S, FL>::schemer->left_trans_site)
                         px[!(i & 1)].resize(
-                            MPO<S>::left_operator_names[i - 1]->data.size());
+                            MPO<S, FL>::left_operator_names[i - 1]
+                                ->data.size());
                     else
                         px[!(i & 1)].resize(
-                            MPO<S>::schemer->left_new_operator_names->data
+                            MPO<S, FL>::schemer->left_new_operator_names->data
                                 .size());
                     memset(&px[!(i & 1)][0], 0,
                            sizeof(uint8_t) * px[!(i & 1)].size());
-                    if (MPO<S>::tensors[i]->lmat->get_type() == SymTypes::Mat) {
+                    if (MPO<S, FL>::tensors[i]->lmat->get_type() ==
+                        SymTypes::Mat) {
                         assert(px[i & 1].size() != 0);
                         shared_ptr<SymbolicMatrix<S>> mat =
                             dynamic_pointer_cast<SymbolicMatrix<S>>(
-                                MPO<S>::tensors[i]->lmat);
+                                MPO<S, FL>::tensors[i]->lmat);
                         for (size_t j = 0; j < mat->data.size(); j++)
                             if (px[i & 1][mat->indices[j].second] &&
                                 mat->data[j]->get_type() != OpTypes::Zero)
@@ -399,89 +428,93 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                 }
             }
             // figure out the mutual dependence of from left to right
-            for (int i = 0; i < MPO<S>::n_sites; i++) {
+            for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
                 if (i != 0) {
-                    if (MPO<S>::schemer == nullptr ||
-                        i != MPO<S>::schemer->right_trans_site) {
+                    if (MPO<S, FL>::schemer == nullptr ||
+                        i != MPO<S, FL>::schemer->right_trans_site) {
                         for (size_t j = 0;
-                             j < MPO<S>::right_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::right_operator_names[i]->data.size();
                              j++)
-                            if (MPO<S>::left_operator_names[i - 1]
+                            if (MPO<S, FL>::left_operator_names[i - 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
                                 !px[i & 1][j])
-                                MPO<S>::right_operator_names[i]->data[j] =
-                                    MPO<S>::left_operator_names[i - 1]->data[j];
-                            else if (MPO<S>::right_operator_names[i]
+                                MPO<S, FL>::right_operator_names[i]->data[j] =
+                                    MPO<S, FL>::left_operator_names[i - 1]
+                                        ->data[j];
+                            else if (MPO<S, FL>::right_operator_names[i]
                                          ->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
-                    } else if (MPO<S>::schemer->right_trans_site -
-                                   MPO<S>::schemer->left_trans_site >
+                    } else if (MPO<S, FL>::schemer->right_trans_site -
+                                   MPO<S, FL>::schemer->left_trans_site >
                                1) {
                         for (size_t j = 0;
-                             j < MPO<S>::schemer->right_new_operator_names->data
-                                     .size();
+                             j < MPO<S, FL>::schemer->right_new_operator_names
+                                     ->data.size();
                              j++)
-                            if (MPO<S>::schemer->right_new_operator_names
+                            if (MPO<S, FL>::schemer->right_new_operator_names
                                     ->data[j]
                                     ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
                     } else {
                         for (size_t j = 0;
-                             j < MPO<S>::schemer->right_new_operator_names->data
-                                     .size();
+                             j < MPO<S, FL>::schemer->right_new_operator_names
+                                     ->data.size();
                              j++)
-                            if (MPO<S>::left_operator_names[i - 1]
+                            if (MPO<S, FL>::left_operator_names[i - 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
                                 !px[i & 1][j])
-                                MPO<S>::schemer->right_new_operator_names
+                                MPO<S, FL>::schemer->right_new_operator_names
                                     ->data[j] =
-                                    MPO<S>::left_operator_names[i - 1]->data[j];
-                            else if (MPO<S>::schemer->right_new_operator_names
-                                         ->data[j]
+                                    MPO<S, FL>::left_operator_names[i - 1]
+                                        ->data[j];
+                            else if (MPO<S, FL>::schemer
+                                         ->right_new_operator_names->data[j]
                                          ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
                     }
-                    if (MPO<S>::schemer != nullptr &&
-                        i == MPO<S>::schemer->right_trans_site) {
+                    if (MPO<S, FL>::schemer != nullptr &&
+                        i == MPO<S, FL>::schemer->right_trans_site) {
                         px[!(i & 1)].resize(px[i & 1].size());
                         memcpy(px[!(i & 1)].data(), px[i & 1].data(),
                                sizeof(uint8_t) * px[!(i & 1)].size());
                         px[i & 1].resize(
-                            MPO<S>::right_operator_names[i]->data.size());
+                            MPO<S, FL>::right_operator_names[i]->data.size());
                         memset(px[i & 1].data(), 0,
                                sizeof(uint8_t) * px[i & 1].size());
                         unordered_map<shared_ptr<OpExpr<S>>, int> mp;
                         mp.reserve(
-                            MPO<S>::right_operator_names[i]->data.size());
+                            MPO<S, FL>::right_operator_names[i]->data.size());
                         for (size_t j = 0;
-                             j < MPO<S>::right_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::right_operator_names[i]->data.size();
                              j++)
-                            if (MPO<S>::right_operator_names[i]
+                            if (MPO<S, FL>::right_operator_names[i]
                                     ->data[j]
                                     ->get_type() != OpTypes::Zero)
-                                mp[abs_value(
-                                    MPO<S>::right_operator_names[i]->data[j])] =
-                                    (int)j;
+                                mp[abs_value(MPO<S, FL>::right_operator_names[i]
+                                                 ->data[j])] = (int)j;
                         shared_ptr<SymbolicColumnVector<S>> &exprs =
-                            MPO<S>::schemer->right_new_operator_exprs;
+                            MPO<S, FL>::schemer->right_new_operator_exprs;
                         for (size_t j = 0; j < exprs->data.size(); j++) {
                             if (px[!(i & 1)][j] &&
-                                j < MPO<S>::right_operator_names[i]
+                                j < MPO<S, FL>::right_operator_names[i]
                                         ->data.size() &&
-                                MPO<S>::right_operator_names[i]->data[j] ==
-                                    MPO<S>::schemer->right_new_operator_names
-                                        ->data[j])
+                                MPO<S, FL>::right_operator_names[i]->data[j] ==
+                                    MPO<S, FL>::schemer
+                                        ->right_new_operator_names->data[j])
                                 px[i & 1][j] = 1;
                             else if (px[!(i & 1)][j] &&
                                      exprs->data[j]->get_type() !=
                                          OpTypes::Zero) {
-                                shared_ptr<OpSum<S>> op = make_shared<OpSum<S>>(
-                                    dynamic_pointer_cast<OpSum<S>>(
-                                        exprs->data[j])
-                                        ->strings);
+                                shared_ptr<OpSum<S, FL>> op =
+                                    make_shared<OpSum<S, FL>>(
+                                        dynamic_pointer_cast<OpSum<S, FL>>(
+                                            exprs->data[j])
+                                            ->strings);
                                 for (size_t k = 0; k < op->strings.size();
                                      k++) {
                                     shared_ptr<OpExpr<S>> expr = abs_value(
@@ -489,7 +522,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                             ->a);
                                     if (mp.count(expr) == 0)
                                         op->strings[k] =
-                                            make_shared<OpProduct<S>>(
+                                            make_shared<OpProduct<S, FL>>(
                                                 *op->strings[k] * 0.0);
                                     else
                                         px[i & 1][mp[expr]] = 1;
@@ -499,27 +532,31 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                             }
                         }
                         for (size_t j = 0;
-                             j < MPO<S>::right_operator_names[i]->data.size();
+                             j <
+                             MPO<S, FL>::right_operator_names[i]->data.size();
                              j++)
                             if (!px[i & 1][j])
-                                MPO<S>::right_operator_names[i]->data[j] = zero;
+                                MPO<S, FL>::right_operator_names[i]->data[j] =
+                                    zero;
                     }
                 }
-                if (i != MPO<S>::n_sites - 1) {
-                    if (MPO<S>::schemer == nullptr ||
-                        i + 1 != MPO<S>::schemer->right_trans_site)
+                if (i != MPO<S, FL>::n_sites - 1) {
+                    if (MPO<S, FL>::schemer == nullptr ||
+                        i + 1 != MPO<S, FL>::schemer->right_trans_site)
                         px[!(i & 1)].resize(
-                            MPO<S>::right_operator_names[i + 1]->data.size());
+                            MPO<S, FL>::right_operator_names[i + 1]
+                                ->data.size());
                     else
                         px[!(i & 1)].resize(
-                            MPO<S>::schemer->right_new_operator_names->data
+                            MPO<S, FL>::schemer->right_new_operator_names->data
                                 .size());
                     memset(px[!(i & 1)].data(), 0,
                            sizeof(uint8_t) * px[!(i & 1)].size());
-                    if (MPO<S>::tensors[i]->rmat->get_type() == SymTypes::Mat) {
+                    if (MPO<S, FL>::tensors[i]->rmat->get_type() ==
+                        SymTypes::Mat) {
                         shared_ptr<SymbolicMatrix<S>> mat =
                             dynamic_pointer_cast<SymbolicMatrix<S>>(
-                                MPO<S>::tensors[i]->rmat);
+                                MPO<S, FL>::tensors[i]->rmat);
                         for (size_t j = 0; j < mat->data.size(); j++)
                             if (px[i & 1][mat->indices[j].first] &&
                                 mat->data[j]->get_type() != OpTypes::Zero)
@@ -527,26 +564,26 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                     }
                 }
             }
-            MPO<S>::middle_operator_names.resize(MPO<S>::n_sites - 1);
-            MPO<S>::middle_operator_exprs.resize(MPO<S>::n_sites - 1);
+            MPO<S, FL>::middle_operator_names.resize(MPO<S, FL>::n_sites - 1);
+            MPO<S, FL>::middle_operator_exprs.resize(MPO<S, FL>::n_sites - 1);
             shared_ptr<SymbolicColumnVector<S>> mpo_op =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*mpo_op)[0] = mpo->op;
-            for (int i = 0; i < MPO<S>::n_sites - 1; i++) {
-                MPO<S>::middle_operator_names[i] = mpo_op;
-                if (MPO<S>::schemer == nullptr ||
-                    i != MPO<S>::schemer->left_trans_site ||
-                    MPO<S>::schemer->right_trans_site -
-                            MPO<S>::schemer->left_trans_site >
+            for (int i = 0; i < MPO<S, FL>::n_sites - 1; i++) {
+                MPO<S, FL>::middle_operator_names[i] = mpo_op;
+                if (MPO<S, FL>::schemer == nullptr ||
+                    i != MPO<S, FL>::schemer->left_trans_site ||
+                    MPO<S, FL>::schemer->right_trans_site -
+                            MPO<S, FL>::schemer->left_trans_site >
                         1)
-                    MPO<S>::middle_operator_exprs[i] =
-                        MPO<S>::left_operator_names[i] *
-                        MPO<S>::right_operator_names[i + 1];
+                    MPO<S, FL>::middle_operator_exprs[i] =
+                        MPO<S, FL>::left_operator_names[i] *
+                        MPO<S, FL>::right_operator_names[i + 1];
                 else
-                    MPO<S>::middle_operator_exprs[i] =
+                    MPO<S, FL>::middle_operator_exprs[i] =
                         (shared_ptr<Symbolic<S>>)
-                            MPO<S>::schemer->left_new_operator_names *
-                        MPO<S>::right_operator_names[i + 1];
+                            MPO<S, FL>::schemer->left_new_operator_names *
+                        MPO<S, FL>::right_operator_names[i + 1];
             }
         }
         simplify();
@@ -557,42 +594,45 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
         switch (expr->get_type()) {
         case OpTypes::Prod: {
-            shared_ptr<OpProduct<S>> op =
-                dynamic_pointer_cast<OpProduct<S>>(expr);
+            shared_ptr<OpProduct<S, FL>> op =
+                dynamic_pointer_cast<OpProduct<S, FL>>(expr);
             assert(op->b != nullptr);
-            shared_ptr<OpElementRef<S>> opl = rule->operator()(op->a);
-            shared_ptr<OpElementRef<S>> opr = rule->operator()(op->b);
-            shared_ptr<OpElement<S>> a = opl == nullptr ? op->a : opl->op;
-            shared_ptr<OpElement<S>> b = opr == nullptr ? op->b : opr->op;
+            shared_ptr<OpElementRef<S, FL>> opl = rule->operator()(op->a);
+            shared_ptr<OpElementRef<S, FL>> opr = rule->operator()(op->b);
+            shared_ptr<OpElement<S, FL>> a = opl == nullptr ? op->a : opl->op;
+            shared_ptr<OpElement<S, FL>> b = opr == nullptr ? op->b : opr->op;
             uint8_t conj = (opl != nullptr && opl->trans) |
                            ((opr != nullptr && opr->trans) << 1);
-            double factor = (opl != nullptr ? opl->factor : 1.0) *
+            FL factor = (opl != nullptr ? opl->factor : 1.0) *
                             (opr != nullptr ? opr->factor : 1.0) * op->factor;
-            return make_shared<OpProduct<S>>(a, b, factor, conj);
+            return make_shared<OpProduct<S, FL>>(a, b, factor, conj);
         } break;
         case OpTypes::Sum: {
-            shared_ptr<OpSum<S>> ops = dynamic_pointer_cast<OpSum<S>>(expr);
+            shared_ptr<OpSum<S, FL>> ops =
+                dynamic_pointer_cast<OpSum<S, FL>>(expr);
             // merge terms that differ only by coefficients
             unordered_map<shared_ptr<OpExpr<S>>,
-                          vector<shared_ptr<OpProduct<S>>>>
+                          vector<shared_ptr<OpProduct<S, FL>>>>
                 mp;
             mp.reserve(ops->strings.size());
             for (auto &x : ops->strings) {
                 if (x->factor == 0)
                     continue;
-                shared_ptr<OpElementRef<S>> opl = rule->operator()(x->a);
-                shared_ptr<OpElementRef<S>> opr =
+                shared_ptr<OpElementRef<S, FL>> opl = rule->operator()(x->a);
+                shared_ptr<OpElementRef<S, FL>> opr =
                     x->b == nullptr ? nullptr : rule->operator()(x->b);
-                shared_ptr<OpElement<S>> a = opl == nullptr ? x->a : opl->op;
-                shared_ptr<OpElement<S>> b = opr == nullptr ? x->b : opr->op;
+                shared_ptr<OpElement<S, FL>> a =
+                    opl == nullptr ? x->a : opl->op;
+                shared_ptr<OpElement<S, FL>> b =
+                    opr == nullptr ? x->b : opr->op;
                 uint8_t conj = (opl != nullptr && opl->trans) |
                                ((opr != nullptr && opr->trans) << 1);
-                double factor = (opl != nullptr ? opl->factor : 1.0) *
+                FL factor = (opl != nullptr ? opl->factor : 1.0) *
                                 (opr != nullptr ? opr->factor : 1.0) *
                                 x->factor;
                 if (!mp.count(a))
-                    mp[a] = vector<shared_ptr<OpProduct<S>>>();
-                vector<shared_ptr<OpProduct<S>>> &px = mp.at(a);
+                    mp[a] = vector<shared_ptr<OpProduct<S, FL>>>();
+                vector<shared_ptr<OpProduct<S, FL>>> &px = mp.at(a);
                 int g = -1;
                 for (size_t k = 0; k < px.size(); k++)
                     if (px[k]->b == b && px[k]->conj == conj) {
@@ -600,25 +640,26 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         break;
                     }
                 if (g == -1)
-                    px.push_back(make_shared<OpProduct<S>>(a, b, factor, conj));
+                    px.push_back(
+                        make_shared<OpProduct<S, FL>>(a, b, factor, conj));
                 else {
                     px[g]->factor += factor;
                     if (abs(px[g]->factor) < TINY)
                         px.erase(px.begin() + g);
                 }
             }
-            vector<shared_ptr<OpProduct<S>>> terms;
+            vector<shared_ptr<OpProduct<S, FL>>> terms;
             terms.reserve(mp.size());
             for (auto &r : mp)
                 terms.insert(terms.end(), r.second.begin(), r.second.end());
             if (terms.size() == 0)
                 return zero;
             else if (terms[0]->b == nullptr || terms.size() <= 2)
-                return make_shared<OpSum<S>>(terms);
+                return make_shared<OpSum<S, FL>>(terms);
             else if (collect_terms && op != S(S::invalid)) {
                 // extract common factors from terms
                 unordered_map<shared_ptr<OpExpr<S>>,
-                              map<int, vector<shared_ptr<OpProduct<S>>>>>
+                              map<int, vector<shared_ptr<OpProduct<S, FL>>>>>
                     mpa[2], mpb[2];
                 for (int i = 0; i < 2; i++) {
                     mpa[i].reserve(terms.size());
@@ -643,7 +684,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         for (auto &r : mpa[i]) {
                             // pgb = op.pg - pga
                             int pga =
-                                dynamic_pointer_cast<OpElement<S>>(r.first)
+                                dynamic_pointer_cast<OpElement<S, FL>>(r.first)
                                     ->q_label.pg();
                             int pg =
                                 S::pg_mul(i ? pga : S::pg_inv(pga), op.pg());
@@ -652,7 +693,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     terms.push_back(rr.second[0]);
                                 else {
                                     vector<bool> conjs;
-                                    vector<shared_ptr<OpElement<S>>> ops;
+                                    vector<shared_ptr<OpElement<S, FL>>> ops;
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
@@ -663,7 +704,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                             continue;
                                         bool cj = (s->conj & 2) != 0,
                                              found = false;
-                                        OpElement<S> op = s->b->abs();
+                                        OpElement<S, FL> op = s->b->abs();
                                         for (size_t j = 0; j < ops.size(); j++)
                                             if (conjs[j] == cj &&
                                                 op == ops[j]->abs()) {
@@ -675,7 +716,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         if (!found) {
                                             conjs.push_back((s->conj & 2) != 0);
                                             ops.push_back(dynamic_pointer_cast<
-                                                          OpElement<S>>(
+                                                          OpElement<S, FL>>(
                                                 (shared_ptr<OpExpr<S>>)s->b *
                                                 s->factor));
                                         }
@@ -685,15 +726,15 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         conjs.flip(), cjx |= 1 << 1;
                                     if (ops.size() == 1)
                                         terms.push_back(
-                                            make_shared<OpProduct<S>>(
+                                            make_shared<OpProduct<S, FL>>(
                                                 dynamic_pointer_cast<
-                                                    OpElement<S>>(r.first),
+                                                    OpElement<S, FL>>(r.first),
                                                 ops[0], 1.0, cjx));
                                     else if (ops.size() != 0)
                                         terms.push_back(
-                                            make_shared<OpSumProd<S>>(
+                                            make_shared<OpSumProd<S, FL>>(
                                                 dynamic_pointer_cast<
-                                                    OpElement<S>>(r.first),
+                                                    OpElement<S, FL>>(r.first),
                                                 ops, conjs, 1.0, cjx));
                                 }
                             }
@@ -704,7 +745,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                         for (auto &r : mpb[i]) {
                             // pga = op.pg - pgb
                             int pgb =
-                                dynamic_pointer_cast<OpElement<S>>(r.first)
+                                dynamic_pointer_cast<OpElement<S, FL>>(r.first)
                                     ->q_label.pg();
                             int pg =
                                 S::pg_mul(i ? pgb : S::pg_inv(pgb), op.pg());
@@ -713,7 +754,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                     terms.push_back(rr.second[0]);
                                 else {
                                     vector<bool> conjs;
-                                    vector<shared_ptr<OpElement<S>>> ops;
+                                    vector<shared_ptr<OpElement<S, FL>>> ops;
                                     conjs.reserve(rr.second.size());
                                     ops.reserve(rr.second.size());
                                     for (auto &s : rr.second) {
@@ -724,7 +765,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                             continue;
                                         bool cj = (s->conj & 1) != 0,
                                              found = false;
-                                        OpElement<S> op = s->a->abs();
+                                        OpElement<S, FL> op = s->a->abs();
                                         for (size_t j = 0; j < ops.size(); j++)
                                             if (conjs[j] == cj &&
                                                 op == ops[j]->abs()) {
@@ -736,7 +777,7 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         if (!found) {
                                             conjs.push_back((s->conj & 1) != 0);
                                             ops.push_back(dynamic_pointer_cast<
-                                                          OpElement<S>>(
+                                                          OpElement<S, FL>>(
                                                 (shared_ptr<OpExpr<S>>)s->a *
                                                 s->factor));
                                         }
@@ -746,25 +787,25 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                                         conjs.flip(), cjx |= 1;
                                     if (ops.size() == 1)
                                         terms.push_back(
-                                            make_shared<OpProduct<S>>(
+                                            make_shared<OpProduct<S, FL>>(
                                                 ops[0],
                                                 dynamic_pointer_cast<
-                                                    OpElement<S>>(r.first),
+                                                    OpElement<S, FL>>(r.first),
                                                 1.0, cjx));
                                     else if (ops.size() != 0)
                                         terms.push_back(
-                                            make_shared<OpSumProd<S>>(
+                                            make_shared<OpSumProd<S, FL>>(
                                                 ops,
                                                 dynamic_pointer_cast<
-                                                    OpElement<S>>(r.first),
+                                                    OpElement<S, FL>>(r.first),
                                                 conjs, 1.0, cjx));
                                 }
                             }
                         }
                 }
-                return make_shared<OpSum<S>>(terms);
+                return make_shared<OpSum<S, FL>>(terms);
             } else
-                return make_shared<OpSum<S>>(terms);
+                return make_shared<OpSum<S, FL>>(terms);
         } break;
         case OpTypes::Zero:
         case OpTypes::Elem:
@@ -787,8 +828,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                      (ref == nullptr || j >= ref->data.size() ||
                       ref->data[j] != name->data[j]))
                 continue;
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(name->data[j]);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
             if (rule->operator()(op) != nullptr)
                 continue;
             name->data[k] = name->data[j];
@@ -800,8 +841,8 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         int ntg = ref != nullptr ? threading->activate_global() : 1;
 #pragma omp parallel for schedule(static, 20) num_threads(ntg)
         for (int j = 0; j < (int)name->data.size(); j++) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(name->data[j]);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
             name->data[j] = abs_value(name->data[j]);
             expr->data[j] =
                 simplify_expr(expr->data[j], op->q_label) * (1 / op->factor);
@@ -809,19 +850,19 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
         if (use_intermediate) {
             uint16_t idxi = 0, idxj = 0;
             for (size_t j = 0; j < expr->data.size(); j++) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(name->data[j]);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
                 if (expr->data[j]->get_type() == OpTypes::Sum &&
                     intermediate_ops(op->name)) {
-                    shared_ptr<OpSum<S>> ex =
-                        dynamic_pointer_cast<OpSum<S>>(expr->data[j]);
+                    shared_ptr<OpSum<S, FL>> ex =
+                        dynamic_pointer_cast<OpSum<S, FL>>(expr->data[j]);
                     for (size_t k = 0; k < ex->strings.size(); k++)
                         if (ex->strings[k]->get_type() == OpTypes::SumProd) {
-                            shared_ptr<OpSumProd<S>> op =
-                                dynamic_pointer_cast<OpSumProd<S>>(
+                            shared_ptr<OpSumProd<S, FL>> op =
+                                dynamic_pointer_cast<OpSumProd<S, FL>>(
                                     ex->strings[k]);
                             assert(op->ops.size() != 0);
-                            op->c = make_shared<OpElement<S>>(
+                            op->c = make_shared<OpElement<S, FL>>(
                                 OpNames::TEMP, SiteIndex({idxj, idxi}, {}),
                                 op->ops[0]->q_label);
                             idxi++;
@@ -837,20 +878,21 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
             name->m = expr->m = (int)name->data.size();
     }
     void simplify() {
-        if (MPO<S>::schemer != nullptr) {
+        if (MPO<S, FL>::schemer != nullptr) {
             simplify_symbolic(
-                MPO<S>::schemer->left_new_operator_names,
-                MPO<S>::schemer->left_new_operator_exprs,
-                MPO<S>::left_operator_names[MPO<S>::schemer->left_trans_site]);
+                MPO<S, FL>::schemer->left_new_operator_names,
+                MPO<S, FL>::schemer->left_new_operator_exprs,
+                MPO<S, FL>::left_operator_names[MPO<S, FL>::schemer
+                                                    ->left_trans_site]);
             simplify_symbolic(
-                MPO<S>::schemer->right_new_operator_names,
-                MPO<S>::schemer->right_new_operator_exprs,
-                MPO<S>::right_operator_names[MPO<S>::schemer
-                                                 ->right_trans_site]);
+                MPO<S, FL>::schemer->right_new_operator_names,
+                MPO<S, FL>::schemer->right_new_operator_exprs,
+                MPO<S, FL>::right_operator_names[MPO<S, FL>::schemer
+                                                     ->right_trans_site]);
         }
         int ntg = threading->activate_global();
-        vector<int> gidx(MPO<S>::n_sites);
-        for (int i = 0; i < MPO<S>::n_sites; i++)
+        vector<int> gidx(MPO<S, FL>::n_sites);
+        for (int i = 0; i < MPO<S, FL>::n_sites; i++)
             gidx[i] = i;
         if (ntg != 1)
             sort(gidx.begin(), gidx.end(), [this](int i, int j) {
@@ -858,15 +900,15 @@ template <typename S> struct SimplifiedMPO : MPO<S> {
                        this->left_operator_names[j]->data.size();
             });
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (int ii = 0; ii < MPO<S>::n_sites; ii++) {
+        for (int ii = 0; ii < MPO<S, FL>::n_sites; ii++) {
             int i = gidx[ii];
-            simplify_symbolic(MPO<S>::left_operator_names[i],
-                              MPO<S>::left_operator_exprs[i]);
-            simplify_symbolic(MPO<S>::right_operator_names[i],
-                              MPO<S>::right_operator_exprs[i]);
-            if (i < MPO<S>::n_sites - 1) {
+            simplify_symbolic(MPO<S, FL>::left_operator_names[i],
+                              MPO<S, FL>::left_operator_exprs[i]);
+            simplify_symbolic(MPO<S, FL>::right_operator_names[i],
+                              MPO<S, FL>::right_operator_exprs[i]);
+            if (i < MPO<S, FL>::n_sites - 1) {
                 shared_ptr<Symbolic<S>> mexpr =
-                    MPO<S>::middle_operator_exprs[i];
+                    MPO<S, FL>::middle_operator_exprs[i];
                 for (size_t j = 0; j < mexpr->data.size(); j++)
                     mexpr->data[j] = simplify_expr(mexpr->data[j]);
             }

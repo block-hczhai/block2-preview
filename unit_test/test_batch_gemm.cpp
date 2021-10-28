@@ -13,8 +13,8 @@ class TestBatchGEMM : public ::testing::Test {
         Random::rand_seed(1969);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 1,
-            1, 4);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 1, 1,
+            4);
     }
     void TearDown() override {
         frame_()->activate(0);
@@ -24,7 +24,8 @@ class TestBatchGEMM : public ::testing::Test {
 };
 
 TEST_F(TestBatchGEMM, TestRotate) {
-    shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>(1 << 24);
+    shared_ptr<BatchGEMMSeq<double>> seq =
+        make_shared<BatchGEMMSeq<double>>(1 << 24);
     seq->mode = SeqTypes::Auto;
     for (int i = 0; i < n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
@@ -36,10 +37,10 @@ TEST_F(TestBatchGEMM, TestRotate) {
         MatrixRef d(dalloc_()->allocate(ncbatch), ncbatch, 1);
         MatrixRef l(dalloc_()->allocate(ma * mc), mc, ma);
         MatrixRef r(dalloc_()->allocate(na * nc), na, nc);
-        Random::fill_rand_double(l.data, l.size());
-        Random::fill_rand_double(r.data, r.size());
-        Random::fill_rand_double(a.data, a.size() * nbatch);
-        Random::fill_rand_double(d.data, d.size());
+        Random::fill<double>(l.data, l.size());
+        Random::fill<double>(r.data, r.size());
+        Random::fill<double>(a.data, a.size() * nbatch);
+        Random::fill<double>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         bool conjl = Random::rand_int(0, 2);
@@ -74,7 +75,7 @@ TEST_F(TestBatchGEMM, TestRotate) {
 }
 
 TEST_F(TestBatchGEMM, TestTensorProduct) {
-    shared_ptr<BatchGEMMSeq> seq = make_shared<BatchGEMMSeq>();
+    shared_ptr<BatchGEMMSeq<double>> seq = make_shared<BatchGEMMSeq<double>>();
     seq->mode = SeqTypes::Auto;
     for (int i = 0; i < n_tests; i++) {
         int ii = Random::rand_int(0, 4), jj = Random::rand_int(0, 2);
@@ -98,9 +99,9 @@ TEST_F(TestBatchGEMM, TestTensorProduct) {
         MatrixRef b(dalloc_()->allocate(mb * nb * nbatch), mb, nb);
         MatrixRef c(dalloc_()->allocate(mc * nc * ncbatch), mc, nc);
         MatrixRef d(dalloc_()->allocate(ncbatch), ncbatch, 1);
-        Random::fill_rand_double(a.data, a.size() * nbatch);
-        Random::fill_rand_double(b.data, b.size() * nbatch);
-        Random::fill_rand_double(d.data, d.size());
+        Random::fill<double>(a.data, a.size() * nbatch);
+        Random::fill<double>(b.data, b.size() * nbatch);
+        Random::fill<double>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         bool conja = Random::rand_int(0, 2);

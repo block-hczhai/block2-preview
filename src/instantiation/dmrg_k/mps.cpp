@@ -25,14 +25,14 @@ template struct block2::DynamicMPSInfo<block2::SZK>;
 template struct block2::CASCIMPSInfo<block2::SZK>;
 template struct block2::MRCIMPSInfo<block2::SZK>;
 template struct block2::AncillaMPSInfo<block2::SZK>;
-template struct block2::MPS<block2::SZK>;
+template struct block2::MPS<block2::SZK, double>;
 
 template struct block2::MPSInfo<block2::SU2K>;
 template struct block2::DynamicMPSInfo<block2::SU2K>;
 template struct block2::CASCIMPSInfo<block2::SU2K>;
 template struct block2::MRCIMPSInfo<block2::SU2K>;
 template struct block2::AncillaMPSInfo<block2::SU2K>;
-template struct block2::MPS<block2::SU2K>;
+template struct block2::MPS<block2::SU2K, double>;
 
 template struct block2::TransMPSInfo<block2::SZK, block2::SU2K>;
 template struct block2::TransMPSInfo<block2::SU2K, block2::SZK>;
