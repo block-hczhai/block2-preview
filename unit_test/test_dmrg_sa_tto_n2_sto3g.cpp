@@ -55,7 +55,7 @@ void TestTTODMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector< FL> noises = {1E-8, 1E-9, 0.0};
+    vector< FL> noises = {1E-5, 1E-7, 1E-8, 0.0};
 
     t.get_time();
 
@@ -89,6 +89,7 @@ void TestTTODMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     shared_ptr<DMRG<S, FL, FL>> dmrg = make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
+    dmrg->cutoff = 1E-20;
     dmrg->solve(tto, mps->center == 0, 0);
 
     me->dot = 1;
