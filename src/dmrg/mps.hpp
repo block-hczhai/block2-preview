@@ -93,7 +93,8 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;
     S target;
-    mutable ubond_t bond_dim;
+    ubond_t bond_dim; // hrl: ATTENTION: This has different meanings in different contexts.
+                      //  Use with care. It is not always the max. bond dimension.
     // States in each site
     vector<shared_ptr<StateInfo<S>>> basis;
     // Maximal possible states for left/right block (may be equal to/smaller
@@ -799,34 +800,16 @@ template <typename S> struct MPSInfo {
             }
     }
     void load_mutable_left() const {
-        bool update_bond_dim = bond_dim == 0;
-        for (int i = 0; i <= n_sites; i++){
+        for (int i = 0; i <= n_sites; i++)
             left_dims[i]->load_data(get_filename(true, i));
-            if(update_bond_dim){
-                bond_dim = max(bond_dim, 
-                     static_cast<ubond_t>(left_dims[i]->n_states_total));
-            }
-        }
     }
     void load_mutable_right() const {
-        bool update_bond_dim = bond_dim == 0;
-        for (int i = n_sites; i >= 0; i--){
+        for (int i = n_sites; i >= 0; i--)
             right_dims[i]->load_data(get_filename(false, i));
-            if(update_bond_dim){
-                bond_dim = max(bond_dim, 
-                     static_cast<ubond_t>(right_dims[i]->n_states_total));
-            }
-        }
     }
     void load_mutable() const {
-        bool update_bond_dim = bond_dim == 0;
         load_mutable_left();
-        auto bond_dim_save = bond_dim;
-        if(update_bond_dim){
-            bond_dim = 0; 
-        }
         load_mutable_right();
-        bond_dim = max(bond_dim,bond_dim_save);
     }
     void deallocate_mutable() {
         for (int i = 0; i <= n_sites; i++)
