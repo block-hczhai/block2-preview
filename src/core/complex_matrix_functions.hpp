@@ -854,6 +854,19 @@ struct ComplexMatrixFunctions {
      *      ACM Trans. Math. Softw. 2011, 38 (1), 1–19. https://doi.org/10.1145/2049662.2049667.
      *      (Fig. 2)
      *
+     * Note: There is also a STAB(L) variant, which may be faster. See, e.g.,
+     *          1.  Gerard L. G. Sleijpen and Martin B. van Gijzen,
+     *              Exploiting BiCGstab($\ell$) Strategies to Induce Dimension Reduction,
+     *              SIAM J. Sci. Comput., 32(5), 2687–2709.
+     *              https://doi.org/10.1137/090752341
+     *          2. Aihara, K., Abe, K., & Ishiwata, E. (2014). A variant of IDRstab with
+     *              reliable update strategies for solving sparse linear systems. Journal of
+     *                  Computational and Applied Mathematics, 259, 244-258.
+     *                     doi:10.1016/j.cam.2013.08.028
+     *          3. Aihara, K., Abe, K., & Ishiwata, E. (2015). Preconditioned
+     *                   IDRSTABL Algorithms for Solving Nonsymmetric Linear Systems. International
+     *                 Journal of Applied Mathematics, 45(3).
+     *
      * @author: Henrik R. Larsson, based on versions by Reinaldo Astudillo and Martin B. van Gijzen
      *
      * @param op Computes op(x) = A x
