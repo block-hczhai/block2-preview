@@ -99,7 +99,8 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(
              << " error = " << scientific << setprecision(3) << setw(10)
              << (dmrg->energies.back()[i] - energies[i]) << endl;
 
-        EXPECT_LT(abs(dmrg->energies.back()[i] - energies[i]), 1E-6);
+        if (i < dmrg->energies.back().size() / 2)
+            EXPECT_LT(abs(dmrg->energies.back()[i] - energies[i]), 1E-6);
     }
 
     mpo->deallocate();
