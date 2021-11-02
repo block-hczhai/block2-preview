@@ -455,15 +455,45 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         // solve bra
         complex<double> gf;
         if(gcrotmk_size.first < 0){
-            // hrl: Use IDR(S).
-            //      Currently, solver type is not a parameter so use this dirty(?) trick.
-            const auto idrs_tol = sqrt(conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
-            const double idrs_atol = 0.;
-            const double precond_reg = 1e-8;
-            gf = ComplexMatrixFunctions::idrs(
-                    op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
-                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                    precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            if(gcrotmk_size.second == 8){
+                const auto tol = sqrt(
+                        conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
+                // hrl NOTE: I assume that H is Hermitian. So the only difference of rop cmp to op is the "-eta".
+                const auto rop = [omega, eta, const_e, &f, &bre, &cre,
+                        &nmult](const ComplexMatrixRef &b,
+                                const ComplexMatrixRef &c) -> void {
+                    ComplexMatrixFunctions::extract_complex(
+                            b, bre, MatrixRef(nullptr, bre.m, bre.n));
+                    cre.clear();
+                    f(bre, cre);
+                    ComplexMatrixFunctions::fill_complex(
+                            c, cre, MatrixRef(nullptr, cre.m, cre.n));
+                    ComplexMatrixFunctions::extract_complex(
+                            b, MatrixRef(nullptr, bre.m, bre.n), bre);
+                    cre.clear();
+                    f(bre, cre);
+                    ComplexMatrixFunctions::fill_complex(
+                            c, MatrixRef(nullptr, cre.m, cre.n), cre);
+                    ComplexMatrixFunctions::iadd(c, b,
+                                                 complex<double>(const_e + omega, -eta));
+                    nmult += 2;
+                };
+                gf = ComplexMatrixFunctions::lsqr(
+                        op, rop, cbra, cket, nmultx, niter,
+                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                        tol, tol, max_iter, soft_max_iter);
+            }else {
+                // hrl: Use IDR(S).
+                //      Currently, solver type is not a parameter so use this dirty(?) trick.
+                const auto idrs_tol = sqrt(
+                        conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
+                const double idrs_atol = 0.;
+                const double precond_reg = 1e-8;
+                gf = ComplexMatrixFunctions::idrs(
+                        op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
+                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                        precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            }
 
         }else{
             gf = ComplexMatrixFunctions::gcrotmk(
