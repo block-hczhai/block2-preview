@@ -460,10 +460,94 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             const auto idrs_tol = sqrt(conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
             const double idrs_atol = 0.;
             const double precond_reg = 1e-8;
-            gf = ComplexMatrixFunctions::idrs(
-                    op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
-                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                    precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            if(gcrotmk_size.second == 0) {
+                gf = ComplexMatrixFunctions::idrs(
+                        op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
+                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                        precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            }else{
+                int nCompute = abs(gcrotmk_size.second);
+                // Compute nCompute smallest, nCompute largest and nCompute zero values
+                vector<MatrixRef> uvs;
+                vector<MatrixRef> uvSmall, uvLarge, uvZero;
+                Random rgen;
+                rgen.rand_seed(-1);
+                const MKL_INT Nsize = ket->total_memory;
+                int a = 0;
+                for(a = 0; a < 3*nCompute; ++a){
+                    uvs.emplace_back(MatrixRef(nullptr,  Nsize, 1));
+                    uvs[a].allocate();
+                }
+                for(int x = 0, a=0; x < nCompute; ++x){
+                    uvSmall.emplace_back(MatrixRef(uvs.at(a++).data,  Nsize, 1));
+                    uvLarge.emplace_back(MatrixRef(uvs.at(a++).data,  Nsize, 1));
+                    uvZero.emplace_back(MatrixRef(uvs.at(a++).data,  Nsize, 1));
+                    for (MKL_INT i = 0; i < aa.size(); i++){
+                        uvSmall[x].data[i] = rgen.rand_double(-1,1);
+                        uvLarge[x].data[i] = rgen.rand_double(-1,1);
+                        uvZero[x].data[i] = rgen.rand_double(-1,1);
+                    }
+                    MatrixFunctions::iscale(uvSmall[x], 1. / MatrixFunctions::norm(uvSmall[x]));
+                    MatrixFunctions::iscale(uvLarge[x], 1. / MatrixFunctions::norm(uvLarge[x]));
+                    MatrixFunctions::iscale(uvZero[x], 1. / MatrixFunctions::norm(uvZero[x]));
+                }
+                DiagonalMatrix adiag(diag->data, (MKL_INT)diag->total_memory);
+                int ndav = 0;
+                const int maxIter{20};
+                const auto shift = complex<double>(const_e + omega, eta);
+                const auto evSmall = MatrixFunctions::davidson(f, adiag, uvSmall, 0.0, DavidsonTypes::Normal, ndav, false,
+                                                         para_rule == nullptr ? nullptr : para_rule->comm,
+                                                         1e-4, maxIter+300, maxIter);
+                const auto evLarge = MatrixFunctions::davidson(f, adiag, uvSmall, 1e9, DavidsonTypes::CloseTo, ndav, false,
+                                                         para_rule == nullptr ? nullptr : para_rule->comm,
+                                                         1e-4, maxIter+300, maxIter);
+                const auto evZero = MatrixFunctions::harmonic_davidson(f, adiag, uvSmall, -(const_e+omega),
+                                                                 DavidsonTypes::CloseTo, ndav, false,
+                                                                 para_rule == nullptr ? nullptr : para_rule->comm,
+                                                                 1e-4, maxIter+300, maxIter);
+                // get omegas for IDR(S)
+                vector<complex<double>> omegas;
+                vector<double> omegasReal;
+                vector<int> permutations;
+                for(int x = 0; x < nCompute; ++x)
+                    omegasReal.emplace_back(evSmall.at(x) + real(shift));
+                for(int x = 0; x < nCompute; ++x)
+                    omegasReal.emplace_back(evLarge.at(x) + real(shift));
+                for(int x = 0; x < nCompute; ++x)
+                    omegasReal.emplace_back(evZero.at(x) + real(shift));
+                ComplexMatrixFunctions::leja_order(omegasReal, permutations);
+                for(int a = 0; a < 3*nCompute; ++a){
+                    omegas.emplace_back(omegasReal.at(permutations.at(a)) + complex<double>(0.,eta));
+                }
+                // Set initial space for IDRs
+                vector<ComplexMatrixRef> init_basis_unpermute;
+                if(gcrotmk_size.second > 0){
+                    for(int a = 0; a < 3*nCompute; ++a){
+                        init_basis_unpermute.emplace_back(ComplexMatrixRef(nullptr, Nsize, 1));
+                        init_basis_unpermute.back().allocate();
+                        for(MKL_INT i = 0; i < Nsize; ++i)
+                            init_basis_unpermute.back()(i,0) = uvs.at(a)(i,0);
+                    }
+                }
+                for(int a = 3*nCompute-1; a >= 0; --a){
+                    uvs.at(a).deallocate();
+                }
+                vector<ComplexMatrixRef> init_basis;
+                if(gcrotmk_size.second > 0){
+                    for(int a = 0; a < 3*nCompute; ++a){
+                        init_basis.emplace_back(ComplexMatrixRef(
+                                    init_basis_unpermute[permutations.at(a)].data, Nsize, 1));
+                    }
+                }
+                gf = ComplexMatrixFunctions::idrs(
+                        op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
+                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                        precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter,
+                        init_basis, omegas);
+                for(int x = init_basis_unpermute.size()-1; x >= 0; --x){
+                    init_basis_unpermute.at(x).deallocate();
+                }
+            }
 
         }else{
             gf = ComplexMatrixFunctions::gcrotmk(

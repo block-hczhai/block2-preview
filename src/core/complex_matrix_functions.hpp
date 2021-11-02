@@ -843,6 +843,52 @@ struct ComplexMatrixFunctions {
         return func;
     }
 
+    /** Leja ordering of x.
+     *
+     * Not that this only works for nondegenerate x and the ordering is not unique
+     *
+     * @see L, Reichel, The application of Leja points to Richardson iteration and polynomial preconditioning,
+     *      Linear Algebra and its Applications, 154, 389 (1991)
+     *      https://doi.org/10.1016/0024-3795(91)90386-B.
+     *
+     * @param x Input/Output vector (leja ordered)
+     * @param permutation Permutation order
+     */
+    template<typename Scalar>
+    static void leja_order(vector<Scalar> &x, vector<int> & permutation){
+        const auto n = x.size();
+        permutation.resize(n);
+        iota(permutation.begin(),permutation.end(),0);
+        int argmax = 0;
+        auto m = x[0];
+        for(int i = 1; i < n; ++i) {
+            if(abs(x[i]) > m) {
+                argmax = i;
+                m = abs(x[i]);
+            }
+        }
+        swap(x[0],x[argmax]);
+        swap(permutation[0],permutation[argmax]);
+
+        vector<Scalar> p(n,1); // product vector
+        for(int k = 1; k < n - 1; ++k) {
+            for(int i = k; i < n; ++i) {
+                p[i] *= x[i] - x[k - 1];
+            }
+            argmax = k;
+            m = p[k];
+            for(int i = k + 1; i < n; ++i) {
+                if(abs(p[i]) > m) {
+                    argmax = i;
+                    m = p[i];
+                }
+            }
+            swap(x[k],x[argmax]);
+            swap(p[k],p[argmax]);
+            swap(permutation[k],permutation[argmax]);
+        }
+    }
+
     /** Use Induced Dimension Reduction method [IDR(s)] to solve A x = b
      *  IDR(1) is identical to BI-CGSTAB.
      *
@@ -886,6 +932,8 @@ struct ComplexMatrixFunctions {
      * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
+     * @param init_basis Optional initial basis for the search direction. Defaults to zero
+     * @param omega_used Optional values of used direction magnitudes. Defaults to GMRES strategy.
      * @param orthogonalize_P Orthogonalize the random space P matrix of size ( N x S).
      *                                      May be good for numerical stability.
      * @param random_seed Random seed for setting up P. Defaults to day-time-convolution
@@ -903,6 +951,8 @@ struct ComplexMatrixFunctions {
          const double atol = 0.0,
          const int max_iter = 5000,
          const int soft_max_iter = -1,
+         const vector<ComplexMatrixRef>& init_basis = {},
+         const vector<complex<double>>& omega_used = {},
          const bool orthogonalize_P = true,
          const int random_seed = -1) {
         assert(b.m == x.m);
@@ -910,7 +960,7 @@ struct ComplexMatrixFunctions {
         const auto N = b.m; // vector size
         S = min(S,N); // Gracefully change S to sth reasonable.
                       // This should only affect tiny linear problems.
-        assert(b.n == 1 && "IDRS currently only implemented for rhs being a vector.");
+        assert(b.n == 1 && "IDRS currently is only implemented for rhs being a vector.");
         using cmplx = complex<double>;
         // Allocations
         ComplexMatrixRef r(nullptr, N, 1); // Residual
@@ -977,6 +1027,10 @@ struct ComplexMatrixFunctions {
         const double angle = 0.7071067811865476; // To avoid too small residuals
                                                  //  see (1) on page 4; same as Bi-CGSTAB; sqrt(2)/2
         cmplx omega(1.,0.);
+        int iOmega{0};
+        if(omega_used.size() > 0){
+            omega = omega_used[0];
+        }
         // do it
         const auto doContinue = [max_iter, soft_max_iter, used_tol](int iter, double rnorm){
             if(rnorm <= used_tol){
@@ -984,6 +1038,15 @@ struct ComplexMatrixFunctions {
             }
             return iter < max_iter &&
                    (soft_max_iter == -1 || iter < soft_max_iter);
+        };
+        const auto precondition = [&a_diagonal, precond_reg, N](ComplexMatrixRef in){
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    in(i, 0) /= a_diagonal(i, i);
+                } else {
+                    in(i, 0) /= precond_reg;
+                }
+            }
         };
         niter = 0;
         if(iprint){
@@ -999,6 +1062,7 @@ struct ComplexMatrixFunctions {
                  << scientific << setw(13) << setprecision(2) << norm_r
                  << endl;
         }
+        int outeriter = 0;
         while (doContinue(niter, norm_r)){
             // vvv I need P.conj() @ r ...; on the other hand, P is random anyways. so it should not matter?
             //multiply(P,false, r,false, f, cmplx(1.0,0.0), cmplx(0.0,0.0));
@@ -1008,44 +1072,47 @@ struct ComplexMatrixFunctions {
             for(size_t k = 0; k < S; ++k){ // Krylov space setup
                 // solve Mc = f
                 const auto size = S - k;
-                ComplexMatrixRef c(cStorage.data, size, 1);
-                {
-                    // c = la.solve(M[k:S, k:S], f[k:S])
-                    // TODO: avoid copy&paste; would it work by changing lda?
-                    ComplexMatrixRef M2(MM.data, size, size);
-                    ComplexMatrixRef ff(&f(k,0), size, 1);
-                    for(size_t i = k; i < S; ++i){
-                        for(size_t j = k; j < S; ++j) {
-                            M2(i-k,j-k) = M(i,j);
-                        }
-                    }
-                    least_squares(M2, ff, c); // zgels may be a bit overkill but I guess it can't hurt and S is small
-                }
-                // v = r - G[k:S,:].T @ c
-                copy(v, r);
-                //       vv this should work as I assume that G is row-major
-                //                          ATTENTION:      vvv is transpose, not adjoint (I do want transpose here)
-                multiply(ComplexMatrixRef(&G(k, 0), size, N), true, c, false, v,
-                         cmplx(-1.0, 0.0), cmplx(1.0, 0.0));
-                // Precondition
-                for (size_t i = 0; i < N; ++i){
-                    if (abs(a_diagonal(i,i)) > precond_reg){
-                        v(i,0) /= a_diagonal(i,i);
-                    }else{
-                        v(i,0) /= precond_reg;
-                    }
-                }
-                // Compute new U[:,k] and G[:,k]; G[:,k] is in space G_j
-                // ATTENTION: vv Need to be N x 1 and not 1 x N.
-                //  Otherwise an assertion explodes somewhere deep in the code when cllaed op
                 ComplexMatrixRef uk(&U(k, 0), N, 1);
                 ComplexMatrixRef gk(&G(k, 0), N, 1);
-                //       uk = U c + omega v
-                // tmp = U[k:S,:].T @ cc
-                copy(tmp, v);
-                multiply(ComplexMatrixRef(&U(k, 0), size, N), true, c, false, tmp,
-                         cmplx(1.0, 0.0), omega);
-                copy(uk, tmp);
+                if(outeriter > 0) {
+                    ComplexMatrixRef c(cStorage.data, size, 1);
+                    {
+                        // c = la.solve(M[k:S, k:S], f[k:S])
+                        // TODO: avoid copy&paste; would it work by changing lda?
+                        ComplexMatrixRef M2(MM.data, size, size);
+                        ComplexMatrixRef ff(&f(k, 0), size, 1);
+                        for (size_t i = k; i < S; ++i) {
+                            for (size_t j = k; j < S; ++j) {
+                                M2(i - k, j - k) = M(i, j);
+                            }
+                        }
+                        least_squares(M2, ff,
+                                      c); // zgels may be a bit overkill but I guess it can't hurt and S is small
+                    }
+                    // v = r - G[k:S,:].T @ c
+                    copy(v, r);
+                    //       vv this should work as I assume that G is row-major
+                    //                          ATTENTION:      vvv is transpose, not adjoint (I do want transpose here)
+                    multiply(ComplexMatrixRef(&G(k, 0), size, N), true, c, false, v,
+                             cmplx(-1.0, 0.0), cmplx(1.0, 0.0));
+
+                    precondition(v);
+                    // Compute new U[:,k] and G[:,k]; G[:,k] is in space G_j
+                    // ATTENTION: vv Need to be N x 1 and not 1 x N.
+                    //  Otherwise an assertion explodes somewhere deep in the code when cllaed op
+                    //       uk = U c + omega v
+                    // tmp = U[k:S,:].T @ cc
+                    copy(tmp, v);
+                    multiply(ComplexMatrixRef(&U(k, 0), size, N), true, c, false, tmp,
+                             cmplx(1.0, 0.0), omega);
+                    copy(uk, tmp);
+                }else if (k < init_basis.size() ){
+                    assert(init_basis[k].m == N && init_basis[k].n == 1);
+                    copy(uk, init_basis[k]);
+                }else{
+                    copy(uk, r);
+                    precondition(uk);
+                }
                 // G = A @ U[:,k]
                 op(uk, gk);
                 // Bi-Orthogonalize the new basis vectors
@@ -1094,30 +1161,31 @@ struct ComplexMatrixFunctions {
                     }
                 }
             } // Krylov space setup
+            ++outeriter;
 
             if(not doContinue(niter, norm_r)){
                 break;
             }
             // Precondition v = Minv r; TODO avoid copy&paste
-            for (size_t i = 0; i < N; i++) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    v(i, 0) = r(i, 0) / a_diagonal(i, i);
-                } else {
-                    v(i, 0) = r(i, 0) / precond_reg;
-                }
-            }
+            copy(v, r);
+            precondition(v);
 
             op(v,tmp); // tmp = A v
-            const auto norm_Av = norm(tmp);
-            const auto tr = complex_dot(tmp, r);
-            omega = tr / complex_dot(tmp,tmp);
-            auto abs_rho = abs(tr / (norm_Av * norm_r));
-            if (pcomm != nullptr) {
-                pcomm->broadcast(&abs_rho, 1, pcomm->root);
-                pcomm->broadcast(&omega, 1, pcomm->root);
-            }
-            if (abs_rho < angle){
-                omega *= angle / abs_rho;
+            if(omega_used.size() == 0) {
+                const auto norm_Av = norm(tmp);
+                const auto tr = complex_dot(tmp, r);
+                omega = tr / complex_dot(tmp, tmp);
+                auto abs_rho = abs(tr / (norm_Av * norm_r));
+                if (pcomm != nullptr) {
+                    pcomm->broadcast(&abs_rho, 1, pcomm->root);
+                    pcomm->broadcast(&omega, 1, pcomm->root);
+                }
+                if (abs_rho < angle) {
+                    omega *= angle / abs_rho;
+                }
+            }else{
+                omega = omega_used[iOmega++];
+                iOmega = iOmega > omega_used.size() ? 0 : iOmega;
             }
             // r -= omega t; x += omega v
             iadd(r, tmp, -omega);
@@ -1132,7 +1200,7 @@ struct ComplexMatrixFunctions {
             ++niter;
             if (iprint) {
                 auto xdb = complex_dot(x,b);
-                cout << setw(6) << niter << " outer " << fixed
+                cout << setw(6) << niter << " outer " << outeriter << fixed
                      << setw(17) << setprecision(8) << real(xdb) << "+"
                      << setw(17) << setprecision(8) << imag(xdb) << "i"
                      << scientific << setw(13) << setprecision(2) << norm_r
