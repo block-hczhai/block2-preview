@@ -1420,11 +1420,12 @@ struct ComplexMatrixFunctions {
         test1 = one;
         test2 = alpha / beta;
         if (iprint){
-            cout << endl << "   Itn     x[0]                             r1norm     " <<
+            cout << endl << "   Itn    <x|b>                             r1norm     " <<
                  "      Compatible       LS               Norm A           Cond A" << endl;
+            auto out = complex_dot(x,b);
             cout << setw(6) << niter
-                    << scientific << setw(17) << setprecision(8) << real(x(0,0)) << "+"
-                    << scientific << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
+                    << scientific << setw(17) << setprecision(8) << real(out) << "+"
+                    << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
                     << scientific << setw(9) << setprecision(8) << r1norm  << "   "
                     << scientific << setw(9) << setprecision(8) << test1  << "   "
                     << scientific << setw(9) << setprecision(8) << test2 << endl;
@@ -1568,9 +1569,10 @@ struct ComplexMatrixFunctions {
             }
 
             if (iprint){
+                auto out = complex_dot(x,b);
                 cout << setw(6) << niter
-                     << scientific << setw(17) << setprecision(8) << real(x(0,0)) << "+"
-                     << scientific << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
+                     << scientific << setw(17) << setprecision(8) << real(out) << "+"
+                     << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
                      << scientific << setw(9) << setprecision(8) << r1norm << "   "
                      << scientific << scientific << setw(9) << setprecision(8) << test1  << "   "
                      << scientific << setw(9) << setprecision(8) << test2  << "   "
