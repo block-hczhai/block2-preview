@@ -1322,6 +1322,10 @@ struct ComplexMatrixFunctions {
      * @param btol, atol Stopping tolerances. If both are 1.0e-9 (say),
      *          the final residual norm should be accurate to about 9 digits.
      *         (The final x will usually have fewer correct digits, depending on cond(A))
+     *         atol (btol) defines relative error estimate in A (b)
+     *         The stopping criteria are:
+     *         1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x||
+     *         2: ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
      * @return <x,b>
@@ -1339,6 +1343,7 @@ struct ComplexMatrixFunctions {
          const int soft_max_iter = -1) {
         assert(b.m == x.m);
         assert(b.n == x.n);
+        constexpr double one{1.};
         const auto N = b.m; // vector size
 
         ComplexMatrixRef u(nullptr, N, 1);
@@ -1363,6 +1368,7 @@ struct ComplexMatrixFunctions {
         double z = 0.;
         double cs2 = -1.;
         double sn2 = 0.;
+        double test1, test2, test3, rtol;
         constexpr double eps = std::numeric_limits<double>::epsilon();
         // Set up the first vectors u and v for the bidiagonalization.
         //        These satisfy  beta*u = b - A*x,  alfa*v = A'*u.
@@ -1411,17 +1417,17 @@ struct ComplexMatrixFunctions {
                            "Cond(Abar) seems to be too large for this machine         ",
                            "The iteration limit has been reached                      "};
         assert(arnorm != 0 && "The exact solution is x = 0");
-        double test1 = 1.;
-        auto test2 = alpha / beta;
+        test1 = one;
+        test2 = alpha / beta;
         if (iprint){
-            cout << endl << "   Itn       x[0]                              r1norm     " <<
-                 " Compatible        LS              Norm A            Cond A" << endl;
+            cout << endl << "   Itn     x[0]                             r1norm     " <<
+                 "      Compatible       LS               Norm A           Cond A" << endl;
             cout << setw(6) << niter
-                    << setw(17) << setprecision(8) << real(x(0,0)) << "+"
-                    << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
-                    << setw(9) << setprecision(8) << r1norm  << "   "
-                    << setw(9) << setprecision(8) << test1  << "   "
-                    << setw(9) << setprecision(8) << test2 << endl;
+                    << scientific << setw(17) << setprecision(8) << real(x(0,0)) << "+"
+                    << scientific << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
+                    << scientific << setw(9) << setprecision(8) << r1norm  << "   "
+                    << scientific << setw(9) << setprecision(8) << test1  << "   "
+                    << scientific << setw(9) << setprecision(8) << test2 << endl;
         }
         // Main iteration loop
         while (niter < max_iter && (soft_max_iter == -1 || niter < soft_max_iter)){
@@ -1528,26 +1534,26 @@ struct ComplexMatrixFunctions {
             arnorm = alpha * abs(tau);
 
 
-        // Now use these norms to estimate certain other quantities,
-    // some of which will be small near a solution.
-            auto test1 = rnorm / bnorm;
-            auto test2 = arnorm / (anorm * rnorm + eps);
-            auto test3 = 1. / (acond + eps);
-            t1 = test1 / (1. + anorm * xnorm / bnorm);
-            auto rtol = btol + atol * anorm * xnorm / bnorm;
+            // Now use these norms to estimate certain other quantities,
+            // some of which will be small near a solution.
+            test1 = rnorm / bnorm;
+            test2 = arnorm / (anorm * rnorm + eps);
+            test3 = one / (acond + eps);
+            t1 = test1 / (one + anorm * xnorm / bnorm);
+            rtol = btol + atol * anorm * xnorm / bnorm;
 
-    // The following tests guard against extremely small values of
-    // atol, btol  or   (The user may have set any or all of
-    // the parameters  atol, btol, conlim  to 0.)
-    // The effect is equivalent to the normal tests using
-    // atol = eps, btol = eps, conlim = 1/eps.
-            if (1. + test3 <= 1.){
+            // The following tests guard against extremely small values of
+            // atol, btol  or   (The user may have set any or all of
+            // the parameters  atol, btol, conlim  to 0.)
+            // The effect is equivalent to the normal tests using
+            // atol = eps, btol = eps, conlim = 1/eps.
+            if (one + test3 <= one){
                 istop = 6;
             }
-            if (1. + test2 <= 1.){
+            if (one + test2 <= one){
                 istop = 5;
             }
-            if (1. + t1 <= 1.) {
+            if (one + t1 <= one) {
                 istop = 4;
             }
             // Allow for tolerances set by the user.
@@ -1563,13 +1569,13 @@ struct ComplexMatrixFunctions {
 
             if (iprint){
                 cout << setw(6) << niter
-                     << setw(17) << setprecision(8) << real(x(0,0)) << "+"
-                     << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
-                     << setw(9) << setprecision(8) << r1norm << "   "
-                     << setw(9) << setprecision(8) << test1  << "   "
-                     << setw(9) << setprecision(8) << test2  << "   "
-                     << setw(9) << setprecision(8) << acond  << "   "
-                     << setw(9) << setprecision(8) << xnorm << endl;
+                     << scientific << setw(17) << setprecision(8) << real(x(0,0)) << "+"
+                     << scientific << setw(17) << setprecision(8) << imag(x(0,0)) << "i  "
+                     << scientific << setw(9) << setprecision(8) << r1norm << "   "
+                     << scientific << scientific << setw(9) << setprecision(8) << test1  << "   "
+                     << scientific << setw(9) << setprecision(8) << test2  << "   "
+                     << scientific << setw(9) << setprecision(8) << anorm  << "   "
+                     << scientific << setw(9) << setprecision(8) << acond << endl;
             }
             if (istop != 0) {
                 break;
