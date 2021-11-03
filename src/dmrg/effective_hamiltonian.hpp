@@ -478,9 +478,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                                                  complex<double>(const_e + omega, -eta));
                     nmult += 2;
                 };
+                const double precond_reg = 1e-8;
                 gf = ComplexMatrixFunctions::lsqr(
-                        op, rop, cbra, cket, nmultx, niter,
+                        op, rop, aa, cbra, cket, nmultx, niter,
                         iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                        precond_reg,
                         tol, tol, max_iter, soft_max_iter);
             }else {
                 // hrl: Use IDR(S).

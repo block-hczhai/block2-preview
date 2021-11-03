@@ -1313,12 +1313,15 @@ struct ComplexMatrixFunctions {
      * @author  Henrik R. Larsson, based on scipy's implementation
      * @param op Computes op(x) = A x
      * @param rop Computes rop(x) = A' x
+     * @param a_diagonal Diagonal of A; used for preconditioning. Can point to nullptr if it should not be used
+     *          Here, preconditioning solves [A inv(M)] [M x] = b
      * @param x Input guess/ output solution
      * @param b Right-hand side
      * @param nmult Used number of matrix-vector products (same as niter)
      * @param niter Used total number of iterations
      * @param iprint Whether to print output during the iterations
      * @param pcomm MPI communicator
+     * @param precond_reg Preconditioning regularizer. Fix the inverse of a_diagonal to be at max. the inverse of this.
      * @param btol, atol Stopping tolerances. If both are 1.0e-9 (say),
      *          the final residual norm should be accurate to about 9 digits.
      *         (The final x will usually have fewer correct digits, depending on cond(A))
@@ -1333,10 +1336,12 @@ struct ComplexMatrixFunctions {
     template <typename MatMul, typename MatMul2, typename PComm>
     static cmplx
     lsqr(MatMul &op, MatMul2 &rop,
+         const ComplexDiagonalMatrix &a_diagonal,
          ComplexMatrixRef x,
          ComplexMatrixRef b,
          int &nmult, int &niter,
          const bool iprint = false, const PComm &pcomm = nullptr,
+         const double precond_reg = 1e-8,
          const double btol = 1E-3,
          const double atol = 1E-3,
          const int max_iter = 5000,
@@ -1345,6 +1350,51 @@ struct ComplexMatrixFunctions {
         assert(b.n == x.n);
         constexpr double one{1.};
         const auto N = b.m; // vector size
+        const auto precondition = [&a_diagonal, precond_reg, N](const ComplexMatrixRef& in,
+                const ComplexMatrixRef& out){
+            assert(a_diagonal.data != nullptr);
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    out(i, 0) = in(i,0) / a_diagonal(i, i);
+                } else {
+                    out(i, 0) = in(1,0) / precond_reg;
+                }
+            }
+        };
+        ComplexMatrixRef tmpP(nullptr, N, 1);
+        if(a_diagonal.data != nullptr){
+            tmpP.allocate();
+        }
+        const auto opM = [&op, &a_diagonal, &tmpP, precond_reg, N](const ComplexMatrixRef &in,
+                               const ComplexMatrixRef &out){
+            if(a_diagonal.data == nullptr){
+                op(in,out);
+            }
+            // out = A M in
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    tmpP(i, 0) = in(i,0) / a_diagonal(i, i);
+                } else {
+                    tmpP(i, 0) = in(1,0) / precond_reg;
+                }
+            }
+            op(tmpP,out);
+        };
+        const auto ropM = [&rop, &a_diagonal, precond_reg, N](const ComplexMatrixRef &in,
+                               const ComplexMatrixRef &out){
+            rop(in,out);
+            if(a_diagonal.data == nullptr){
+                return;
+            }
+            // out = M' A' in
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    out(i, 0) /= conj(a_diagonal(i, i));
+                } else {
+                    out(i, 0) /= precond_reg;
+                }
+            }
+        };
 
         ComplexMatrixRef u(nullptr, N, 1);
         ComplexMatrixRef tmp(nullptr, N, 1);
@@ -1383,14 +1433,14 @@ struct ComplexMatrixFunctions {
             iscale(x, 0.);
             beta = bnorm;
         }else{
-            op(x,v);
+            opM(x,v);
             ++nmult;
             iadd(u,v,-1.);
             beta = norm(u);
         }
         if(beta > 0.){
             iscale(u, 1./beta);
-            rop(u,v);
+            ropM(u,v);
             ++nmult;
             alpha = norm(v);
             if (pcomm != nullptr) {
@@ -1440,7 +1490,7 @@ struct ComplexMatrixFunctions {
              *     alpha*v  =  A'*u  -  beta*v.
              */
             // u = A @ v - alpha u
-            op(v,tmp);
+            opM(v,tmp);
             ++nmult;
             iscale(u, -alpha);
             iadd(u,tmp, 1.);
@@ -1453,7 +1503,7 @@ struct ComplexMatrixFunctions {
                 iscale(u, 1./beta);
                 anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
                 //v = A' @ u - beta * v
-                rop(u,tmp);
+                ropM(u,tmp);
                 ++nmult;
                 iscale(v, -beta);
                 iadd(v,tmp, 1.);
@@ -1600,6 +1650,17 @@ struct ComplexMatrixFunctions {
         v.deallocate();
         tmp.deallocate();
         u.deallocate();
+        if(a_diagonal.data != nullptr){
+            tmpP.deallocate();
+            // M x = z
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    x(i, 0) /= a_diagonal(i, i);
+                } else {
+                    x(i, 0) /= precond_reg;
+                }
+            }
+        }
         nmult = niter;
         auto out = complex_dot(x,b);
         if (pcomm != nullptr) {
