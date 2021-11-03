@@ -29,6 +29,8 @@ from block2 import init_memory, release_memory, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
 from block2 import OrbitalOrdering, VectorUInt16
+from block2 import LinearSolverTypes, PreconditionerTypes
+
 import time
 
 # Set spin-adapted or non-spin-adapted here
@@ -339,10 +341,11 @@ class GFDMRG(FTDMRG):
             linear.gf_eta = eta
             linear.minres_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
-            # NOTE: This pair (m,k) specifies the gcrot(m,k) sizes.
-            #       (-S,k) (negative first entry activates NOT gcrot but IDR(S) 
-            #               The second number is then ignored
-            linear.gcrotmk_size = (80,-1) 
+            linear.gcrotmk_size = (80,-1)  # first entry also used for IDR(S)
+            linear.solver_type = LinearSolverTypes.GCROT # supported: GCROT; IDRS; LSQR
+            #  diagonal preconditioner may be evil, so be careful
+            linear.preconditioner_type = PreconditionerTypes.Nothing 
+
 
             # TZ: Not raising error even if CG is not converged
             linear.minres_soft_max_iter = max_solver_iter

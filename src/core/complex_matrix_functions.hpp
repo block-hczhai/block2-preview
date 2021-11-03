@@ -697,6 +697,7 @@ struct ComplexMatrixFunctions {
         }
     }
     // GCROT(m, k) method for solving x in linear equation H x = b
+    //  aa can point to nullptr if it should not be used
     template <typename MatMul, typename PComm>
     static complex<double>
     gcrotmk(MatMul &op, const ComplexDiagonalMatrix &aa, ComplexMatrixRef x,
@@ -916,7 +917,8 @@ struct ComplexMatrixFunctions {
      * @author: Henrik R. Larsson, based on versions by Reinaldo Astudillo and Martin B. van Gijzen
      *
      * @param op Computes op(x) = A x
-     * @param a_diagonal Diagonal of A; used for preconditioning
+     * @param a_diagonal Diagonal of A; used for preconditioning.
+     *                           Can point to nullptr if it should not be used
      * @param x Input guess/ output solution
      * @param b Right-hand side
      * @param nmult Used number of matrix-vector products (same as niter)
@@ -1040,6 +1042,9 @@ struct ComplexMatrixFunctions {
                    (soft_max_iter == -1 || iter < soft_max_iter);
         };
         const auto precondition = [&a_diagonal, precond_reg, N](ComplexMatrixRef in){
+            if(a_diagonal.data == nullptr){
+                return;
+            }
             for (size_t i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     in(i, 0) /= a_diagonal(i, i);
@@ -1369,6 +1374,7 @@ struct ComplexMatrixFunctions {
                                const ComplexMatrixRef &out){
             if(a_diagonal.data == nullptr){
                 op(in,out);
+                return;
             }
             // out = A M in
             for (size_t i = 0; i < N; ++i) {

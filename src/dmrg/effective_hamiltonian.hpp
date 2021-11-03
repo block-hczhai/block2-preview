@@ -50,7 +50,10 @@ enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
-enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT, IDRS };
+enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT, IDRS, LSQR };
+
+/** Currently only used for Complex Green's Functions */
+enum struct PreconditionerTypes : uint8_t { Diagonal, None };
 
 template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
 
@@ -388,6 +391,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     tuple<pair<double, double>, pair<int, int>, size_t, double>
     greens_function(double const_e, double omega, double eta,
                     const shared_ptr<SparseMatrix<S>> &real_bra,
+                    const LinearSolverTypes solver_type,
+                    const PreconditionerTypes preconditioner_type,
                     pair<int, int> gcrotmk_size, bool iprint = false,
                     double conv_thrd = 5E-6, int max_iter = 5000,
                     int soft_max_iter = -1,
@@ -408,12 +413,12 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         cbra.allocate();
         cket.allocate();
         ComplexDiagonalMatrix aa(nullptr, 0);
-        if (compute_diag) {
+        if (compute_diag and preconditioner_type == PreconditionerTypes::Diagonal) {
             aa = ComplexDiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++)
                 aa.data[i] =
-                    complex<double>(diag->data[i] + const_e + omega, eta);
+                        complex<double>(diag->data[i] + const_e + omega, eta);
         }
         precompute();
         const function<void(const MatrixRef &, const MatrixRef &)> &f =
@@ -454,59 +459,60 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             cket, mket, MatrixRef(nullptr, mket.m, mket.n));
         // solve bra
         complex<double> gf;
-        if(gcrotmk_size.first < 0){
-            if(gcrotmk_size.second == 8){
-                const auto tol = sqrt(
-                        conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
-                // hrl NOTE: I assume that H is Hermitian. So the only difference of rop cmp to op is the "-eta".
-                const auto rop = [omega, eta, const_e, &f, &bre, &cre,
-                        &nmult](const ComplexMatrixRef &b,
-                                const ComplexMatrixRef &c) -> void {
-                    ComplexMatrixFunctions::extract_complex(
-                            b, bre, MatrixRef(nullptr, bre.m, bre.n));
-                    cre.clear();
-                    f(bre, cre);
-                    ComplexMatrixFunctions::fill_complex(
-                            c, cre, MatrixRef(nullptr, cre.m, cre.n));
-                    ComplexMatrixFunctions::extract_complex(
-                            b, MatrixRef(nullptr, bre.m, bre.n), bre);
-                    cre.clear();
-                    f(bre, cre);
-                    ComplexMatrixFunctions::fill_complex(
-                            c, MatrixRef(nullptr, cre.m, cre.n), cre);
-                    ComplexMatrixFunctions::iadd(c, b,
-                                                 complex<double>(const_e + omega, -eta));
-                    nmult += 2;
-                };
-                const double precond_reg = 1e-8;
-                gf = ComplexMatrixFunctions::lsqr(
-                        op, rop, aa, cbra, cket, nmultx, niter,
-                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                        precond_reg,
-                        tol, tol, max_iter, soft_max_iter);
-            }else {
-                // hrl: Use IDR(S).
-                //      Currently, solver type is not a parameter so use this dirty(?) trick.
-                const auto idrs_tol = sqrt(
-                        conv_thrd); // Implementation uses conventional tolerance of ||r|| instead of ||r||²
-                const double idrs_atol = 0.;
-                const double precond_reg = 1e-8;
-                gf = ComplexMatrixFunctions::idrs(
-                        op, aa, cbra, cket, nmultx, niter, -gcrotmk_size.first,
-                        iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                        precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
-            }
-
-        }else{
+        if(solver_type == LinearSolverTypes::LSQR) {
+            // Implementation uses conventional tolerance of ||r|| instead of ||r||²
+            const auto tol = sqrt(conv_thrd);
+            // hrl NOTE: I assume that H is Hermitian. So the only difference of rop cmp to op is the "-eta".
+            const auto rop = [omega, eta, const_e, &f, &bre, &cre,
+                    &nmult](const ComplexMatrixRef &b,
+                            const ComplexMatrixRef &c) -> void {
+                ComplexMatrixFunctions::extract_complex(
+                        b, bre, MatrixRef(nullptr, bre.m, bre.n));
+                cre.clear();
+                f(bre, cre);
+                ComplexMatrixFunctions::fill_complex(
+                        c, cre, MatrixRef(nullptr, cre.m, cre.n));
+                ComplexMatrixFunctions::extract_complex(
+                        b, MatrixRef(nullptr, bre.m, bre.n), bre);
+                cre.clear();
+                f(bre, cre);
+                ComplexMatrixFunctions::fill_complex(
+                        c, MatrixRef(nullptr, cre.m, cre.n), cre);
+                ComplexMatrixFunctions::iadd(c, b,
+                                             complex<double>(const_e + omega, -eta));
+                nmult += 2;
+            };
+            const double precond_reg = 1e-8;
+            gf = ComplexMatrixFunctions::lsqr(
+                    op, rop, aa, cbra, cket, nmultx, niter,
+                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                    precond_reg,
+                    tol, tol, max_iter, soft_max_iter);
+        }else if(solver_type == LinearSolverTypes::IDRS){
+            // Use gcrotmk_size.first as "S" value in IDR(S)
+            // Implementation uses conventional tolerance of ||r|| instead of ||r||²
+            const auto idrs_tol = sqrt(conv_thrd);
+            const double idrs_atol = 0.;
+            const double precond_reg = 1e-8;
+            assert(gcrotmk_size.first > 0);
+            gf = ComplexMatrixFunctions::idrs(
+                    op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
+                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                    precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+        }else if (solver_type == LinearSolverTypes::GCROT){
             gf = ComplexMatrixFunctions::gcrotmk(
                     op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
                     gcrotmk_size.second, iprint,
                     para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
                     max_iter, soft_max_iter);
+        }else{
+            cerr << "Greens_function: invalid solver type" << static_cast<int>(solver_type) << endl;
+            throw runtime_error("Invalid solver type of Green's function. "
+                                "LSQR, IDRS, and GCROT are supported");
         }
         gf = conj(gf);
         ComplexMatrixFunctions::extract_complex(cbra, rbra, ibra);
-        if (compute_diag)
+        if (compute_diag and preconditioner_type == PreconditionerTypes::Diagonal)
             aa.deallocate();
         cket.deallocate();
         cbra.deallocate();
@@ -670,7 +676,9 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                     return (*this)(a, b);
             };
         assert( solver_type != LinearSolverTypes::IDRS &&
-                "Currently IDR(S) is only implemented for complex-valued data");
+                "Currently IDR(S) is only implemented for complex-valued data.");
+        assert( solver_type != LinearSolverTypes::LSQR &&
+                "Currently LSQR is only implemented for complex-valued data.");
         double r =
             solver_type == LinearSolverTypes::CG
                 ? MatrixFunctions::conjugate_gradient(

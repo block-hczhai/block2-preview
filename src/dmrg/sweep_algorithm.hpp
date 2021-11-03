@@ -1836,9 +1836,9 @@ template <typename S> struct Linear {
     vector<double> discarded_weights;
     vector<vector<double>> sweep_targets;
     vector<double> sweep_discarded_weights;
-    vector<double> minres_conv_thrds;
-    int minres_max_iter = 5000;
-    int minres_soft_max_iter = -1;
+    vector<double> minres_conv_thrds; // Used for all solvers, not only minres
+    int minres_max_iter = 5000; // Used for all solvers, not only minres
+    int minres_soft_max_iter = -1; // Used for all solvers, not only minres
     int conv_required_sweeps = 3;
     ConvergenceTypes conv_type = ConvergenceTypes::LastMinimal;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -1847,6 +1847,8 @@ template <typename S> struct Linear {
     EquationTypes eq_type = EquationTypes::NormalMinRes;
     ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Normal;
     ExpectationTypes ex_type = ExpectationTypes::Real;
+    LinearSolverTypes solver_type = LinearSolverTypes::GCROT; // Currently only used for complex Green's function
+    PreconditionerTypes preconditioner_type = PreconditionerTypes::Diagonal; // Currently only used for complex Green's function
     bool forward;
     uint8_t iprint = 2;
     double cutoff = 1E-14;
@@ -1861,8 +1863,7 @@ template <typename S> struct Linear {
     // number of eigenvalues solved using harmonic Davidson
     // for deflated CG; 0 means normal CG
     int cg_n_harmonic_projection = 0;
-    // ATTENTION: If gcrotmk_site[0] == -S: use IDR(S)
-    //      the second parameter will then be ignored
+    // First entry also used for "S" in IDR(S). Second entry will then be ignored
     pair<int, int> gcrotmk_size = make_pair(40, -1);
     // weight for mixing rhs wavefunction in density matrix/svd
     double right_weight = 0.0;
@@ -2112,7 +2113,9 @@ template <typename S> struct Linear {
                             lpdi = l_eff->greens_function(
                                 lme->mpo->const_e, gf_extra_omegas[j],
                                 gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
-                                real_bra, gcrotmk_size, iprint >= 3,
+                                real_bra,
+                                solver_type, preconditioner_type,
+                                gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
@@ -2144,6 +2147,7 @@ template <typename S> struct Linear {
                 else
                     lpdi = l_eff->greens_function(
                         lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        solver_type, preconditioner_type,
                         gcrotmk_size, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
@@ -2799,7 +2803,9 @@ template <typename S> struct Linear {
                             lpdi = l_eff->greens_function(
                                 lme->mpo->const_e, gf_extra_omegas[j],
                                 gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
-                                real_bra, gcrotmk_size, iprint >= 3,
+                                real_bra,
+                                solver_type, preconditioner_type,
+                                gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
@@ -2831,6 +2837,7 @@ template <typename S> struct Linear {
                 else
                     lpdi = l_eff->greens_function(
                         lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                        solver_type, preconditioner_type,
                         gcrotmk_size, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets =
