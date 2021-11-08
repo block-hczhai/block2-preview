@@ -391,8 +391,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     tuple<pair<double, double>, pair<int, int>, size_t, double>
     greens_function(double const_e, double omega, double eta,
                     const shared_ptr<SparseMatrix<S>> &real_bra,
-                    const LinearSolverTypes solver_type,
-                    const PreconditionerTypes preconditioner_type,
+                    const LinearSolverTypes solver_type = LinearSolverTypes::GCROT,
+                    const PreconditionerTypes preconditioner_type = PreconditionerTypes::Diagonal,
                     pair<int, int> gcrotmk_size, bool iprint = false,
                     double conv_thrd = 5E-6, int max_iter = 5000,
                     int soft_max_iter = -1,
