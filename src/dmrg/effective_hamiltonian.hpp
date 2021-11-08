@@ -393,7 +393,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                     const shared_ptr<SparseMatrix<S>> &real_bra,
                     const LinearSolverTypes solver_type = LinearSolverTypes::GCROT,
                     const PreconditionerTypes preconditioner_type = PreconditionerTypes::Diagonal,
-                    pair<int, int> gcrotmk_size, bool iprint = false,
+                    pair<int, int> gcrotmk_size = {40,-1}, bool iprint = false,
                     double conv_thrd = 5E-6, int max_iter = 5000,
                     int soft_max_iter = -1,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
