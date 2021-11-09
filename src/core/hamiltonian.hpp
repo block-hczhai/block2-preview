@@ -63,6 +63,35 @@ inline uint32_t operator&(DelayedOpNames a, DelayedOpNames b) {
     return (uint32_t)a & (uint32_t)b;
 }
 
+template <typename S, typename = void> struct SiteBasis;
+
+template <typename S> struct SiteBasis<S, typename S::is_sz_t> {
+    static shared_ptr<StateInfo<S>> get(int isym) {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        b->allocate(4);
+        b->quanta[0] = S(0, 0, 0);
+        b->quanta[1] = S(1, 1, isym);
+        b->quanta[2] = S(1, -1, isym);
+        b->quanta[3] = S(2, 0, S::pg_mul(isym, isym));
+        b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] = 1;
+        b->sort_states();
+        return b;
+    }
+};
+
+template <typename S> struct SiteBasis<S, typename S::is_su2_t> {
+    static shared_ptr<StateInfo<S>> get(int isym) {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        b->allocate(3);
+        b->quanta[0] = S(0, 0, 0);
+        b->quanta[1] = S(1, 1, isym);
+        b->quanta[2] = S(2, 0, S::pg_mul(isym, isym));
+        b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
+        b->sort_states();
+        return b;
+    }
+};
+
 // Hamiltonian includes sparse matrix info and matrix representations
 // of site operators
 template <typename S, typename FL> struct Hamiltonian {

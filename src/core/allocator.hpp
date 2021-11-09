@@ -33,6 +33,7 @@
 #include <execinfo.h>
 #endif
 #include <cassert>
+#include <complex>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -75,6 +76,13 @@ template <typename T> struct Allocator {
      * @return The allocated pointer.
      */
     virtual T *allocate(size_t n) { return nullptr; }
+    /** Allocate a length n complex array.
+     * @param n Number of elements in the array.
+     * @return The allocated pointer.
+     */
+    virtual complex<T> *complex_allocate(size_t n) {
+        return (complex<T> *)allocate(n + n);
+    }
     /** Deallocate a length n array.
      * @param ptr The pointer to be deallocated.
      * @param n Number of elements in the array.
@@ -86,6 +94,9 @@ template <typename T> struct Allocator {
      * @param new_n Number of elements in the new allocation.
      * @return The new pointer.
      */
+    virtual void complex_deallocate(void *ptr, size_t n) {
+        deallocate(ptr, n + n);
+    }
     virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
     /** Return a copy of the allocator.
      * @return ptr The copy of this allocator.

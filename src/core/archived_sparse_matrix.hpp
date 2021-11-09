@@ -46,6 +46,7 @@ struct ArchivedSparseMatrix : SparseMatrix<S, FL> {
     using SparseMatrix<S, FL>::factor;
     using SparseMatrix<S, FL>::total_memory;
     using SparseMatrix<S, FL>::allocate;
+    using SparseMatrix<S, FL>::cpx_sz;
     using typename SparseMatrix<S, FL>::FP;
     string filename;    //!< The name of the associated disk file.
     int64_t offset = 0; //!< Byte offset in the file.
@@ -93,7 +94,7 @@ struct ArchivedSparseMatrix : SparseMatrix<S, FL> {
             total_memory = mat->total_memory;
             mat->factor = factor;
             if (total_memory != 0) {
-                mat->data = alloc->allocate(mat->total_memory);
+                mat->data = (FL *)alloc->allocate(mat->total_memory * cpx_sz);
                 ifstream ifs(filename.c_str(), ios::binary);
                 ifs.seekg(sizeof(FL) * offset);
                 ifs.read((char *)mat->data, sizeof(FL) * mat->total_memory);

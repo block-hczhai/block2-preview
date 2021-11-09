@@ -21,9 +21,9 @@
 #pragma once
 
 #include "allocator.hpp"
+#include "complex_matrix_functions.hpp"
 #include "matrix.hpp"
 #include "matrix_functions.hpp"
-#include "complex_matrix_functions.hpp"
 #include <algorithm>
 #include <cstring>
 #include <iomanip>
@@ -52,7 +52,7 @@ template <typename FL> struct GCSRMatrix {
             memset(rows, 0, (m + 1) * sizeof(MKL_INT));
     }
     GCSRMatrix(MKL_INT m, MKL_INT n, MKL_INT nnz, FL *data, MKL_INT *rows,
-                 MKL_INT *cols)
+               MKL_INT *cols)
         : m(m), n(n), nnz(nnz), data(data), rows(rows), cols(cols) {}
     size_t size() const { return (size_t)m * n; }
     MKL_INT memory_size() const {
@@ -92,6 +92,7 @@ template <typename FL> struct GCSRMatrix {
             ofs.write((char *)&nnz, sizeof(MKL_INT));
         }
     }
+    // conj transpose
     GCSRMatrix
     transpose(const shared_ptr<Allocator<FP>> &alloc = nullptr) const {
         GCSRMatrix r(n, m, nnz, nullptr, nullptr, nullptr);
@@ -107,15 +108,15 @@ template <typename FL> struct GCSRMatrix {
                 MKL_INT jap = rows[ia], jar = ia == m - 1 ? nnz : rows[ia + 1];
                 for (MKL_INT ja = jap; ja < jar; ja++) {
                     r.cols[r.rows[cols[ja]]] = ia;
-                    r.data[r.rows[cols[ja]]] = data[ja];
+                    r.data[r.rows[cols[ja]]] = xconj<FL>(data[ja]);
                     r.rows[cols[ja]]++;
                 }
             }
             for (MKL_INT ia = n - 1; ia >= 0; ia--)
                 r.rows[ia] -= r.rows[ia] - (ia == 0 ? 0 : r.rows[ia - 1]);
         } else
-            for (MKL_INT i = 0, inc = 1; i < n; i++)
-                xcopy<FL>(&m, data + i, &n, r.data + i * m, &inc);
+            GMatrixFunctions<FL>::iadd(GMatrix<FL>(r.data, n, m),
+                                       GMatrix<FL>(data, m, n), 1.0, true, 0.0);
         return r;
     }
     FP sparsity() const { return 1.0 - (FP)nnz / (m * n); }
@@ -198,7 +199,7 @@ template <typename FL> struct GCSRMatrix {
             rows[m] = nnz;
         }
     }
-    void to_dense( GMatrix<FL> mat) const {
+    void to_dense(GMatrix<FL> mat) const {
         if (nnz == size())
             memcpy(mat.data, data, sizeof(FL) * size());
         else {

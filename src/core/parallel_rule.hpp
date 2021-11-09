@@ -290,7 +290,7 @@ struct ParallelRule<S, FL> : ParallelRule<S> {
                 dynamic_pointer_cast<OpElement<S, FL>>(ops[i]);
             shared_ptr<OpElement<S, FL>> op =
                 dynamic_pointer_cast<OpElement<S, FL>>(abs_value(ops[i]));
-            shared_ptr<OpExpr<S>> expr = exprs[i] * (1 / cop->factor);
+            shared_ptr<OpExpr<S>> expr = exprs[i] * (1.0 / cop->factor);
             if (get_parallel_type() & ParallelTypes::NewScheme)
                 assert(expr->get_type() == OpTypes::ExprRef);
             if (expr->get_type() != OpTypes::ExprRef) {

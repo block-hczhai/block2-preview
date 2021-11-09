@@ -197,8 +197,8 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ts->data[ibbb].push_back(make_pair(
                     make_pair(l.quanta[ibba],
                               wfn ? mps->info->target - ket : ket),
-                    make_shared<Tensor>(l.n_states[ibba], m.n_states[ibbb],
-                                        mat->info->n_states_ket[i])));
+                    make_shared<GTensor<FL>>(l.n_states[ibba], m.n_states[ibbb],
+                                             mat->info->n_states_ket[i])));
                 memcpy(ts->data[ibbb].back().second->data.data(), mat->data + p,
                        lp * sizeof(FL));
                 p += lp;
@@ -239,8 +239,9 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ts->data[ikka].push_back(make_pair(
                     make_pair(wfn ? bra : mps->info->target - bra,
                               mps->info->target - r.quanta[ikkb]),
-                    make_shared<Tensor>(mat->info->n_states_bra[i],
-                                        m.n_states[ikka], r.n_states[ikkb])));
+                    make_shared<GTensor<FL>>(mat->info->n_states_bra[i],
+                                             m.n_states[ikka],
+                                             r.n_states[ikkb])));
                 for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
                     memcpy(&ts->data[ikka].back().second->data[ip * lp],
                            mat->data + p + ip * mat->info->n_states_ket[i],

@@ -47,6 +47,7 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
     using SparseMatrix<S, FL>::info;
     using SparseMatrix<S, FL>::data;
     using SparseMatrix<S, FL>::total_memory;
+    using SparseMatrix<S, FL>::cpx_sz;
     vector<shared_ptr<GCSRMatrix<FL>>> csr_data;
     CSRSparseMatrix(const shared_ptr<Allocator<FP>> &alloc = nullptr)
         : SparseMatrix<S, FL>(alloc) {}
@@ -83,7 +84,7 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
             if (total_memory == 0)
                 assert(data == nullptr);
             else
-                alloc->deallocate(data, total_memory);
+                alloc->deallocate(data, total_memory * cpx_sz);
             alloc = nullptr;
         }
         total_memory = 0;

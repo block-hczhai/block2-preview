@@ -79,15 +79,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     }
     virtual void set_mu(FL mu) { this->mu = mu; }
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
-        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
-        b->allocate(4);
-        b->quanta[0] = vacuum;
-        b->quanta[1] = S(1, 1, orb_sym[m]);
-        b->quanta[2] = S(1, -1, orb_sym[m]);
-        b->quanta[3] = S(2, 0, S::pg_mul(orb_sym[m], orb_sym[m]));
-        b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] = 1;
-        b->sort_states();
-        return b;
+        return SiteBasis<S>::get(orb_sym[m]);
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -679,14 +671,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
     }
     virtual void set_mu(FL mu) { this->mu = mu; }
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
-        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
-        b->allocate(3);
-        b->quanta[0] = vacuum;
-        b->quanta[1] = S(1, 1, orb_sym[m]);
-        b->quanta[2] = S(2, 0, S::pg_mul(orb_sym[m], orb_sym[m]));
-        b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
-        b->sort_states();
-        return b;
+        return SiteBasis<S>::get(orb_sym[m]);
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -945,7 +930,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     (*p.second)[S(0, 0, 0, 0)](0, 0) = 0.0;
                     (*p.second)[S(1, 1, 1, orb_sym[m])](0, 0) = t(m, m);
                     (*p.second)[S(2, 0, 0, S::pg_mul(orb_sym[m], orb_sym[m]))](
-                        0, 0) = t(m, m) * 2 + v(m, m, m, m);
+                        0, 0) = t(m, m) * 2.0 + v(m, m, m, m);
                 }
                 break;
             case OpNames::R:
@@ -958,7 +943,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::D));
-                    p.second->factor *= t(i, m) * sqrt(2) / 4;
+                    p.second->factor *= t(i, m) * sqrt(2) / 4.0;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::R));
@@ -979,7 +964,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::C));
-                    p.second->factor *= t(m, i) * sqrt(2) / 4;
+                    p.second->factor *= t(m, i) * sqrt(2) / 4.0;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::RD));
@@ -1020,13 +1005,13 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 s = op.site_index.s();
                 switch (s) {
                 case 0U:
-                    if (abs(2 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
+                    if (abs(2.0 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
                         p.second = zero;
                     else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S, FL>>(nullptr);
                         p.second->allocate(info,
                                            op_prims[0].at(OpNames::B)->data);
-                        p.second->factor *= 2 * v(i, j, m, m) - v(i, m, m, j);
+                        p.second->factor *= 2.0 * v(i, j, m, m) - v(i, m, m, j);
                     }
                     break;
                 case 1U:

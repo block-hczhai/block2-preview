@@ -735,8 +735,9 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
                 shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
                 shared_ptr<OpExpr<S>> expr =
                     exprs->data[k] *
-                    (1 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
-                             ->factor);
+                    (1.0 /
+                     dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
+                         ->factor);
                 assert(a->ops.count(nop) != 0);
                 switch (expr->get_type()) {
                 case OpTypes::Sum: {
@@ -804,7 +805,8 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
                 shared_ptr<OpElement<S, FL>> cop =
                     dynamic_pointer_cast<OpElement<S, FL>>(c->lmat->data[i]);
                 shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
-                shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
+                shared_ptr<OpExpr<S>> expr =
+                    exprs->data[i] * (1.0 / cop->factor);
                 if (!delayed(cop->name)) {
                     c->ops.at(op)->allocate(c->ops.at(op)->info);
                     tensor_product(expr, a->ops, b->ops, c->ops.at(op));
@@ -847,7 +849,8 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
                 shared_ptr<OpElement<S, FL>> cop =
                     dynamic_pointer_cast<OpElement<S, FL>>(c->rmat->data[i]);
                 shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
-                shared_ptr<OpExpr<S>> expr = exprs->data[i] * (1 / cop->factor);
+                shared_ptr<OpExpr<S>> expr =
+                    exprs->data[i] * (1.0 / cop->factor);
                 if (!delayed(cop->name)) {
                     c->ops.at(op)->allocate(c->ops.at(op)->info);
                     tensor_product(expr, b->ops, a->ops, c->ops.at(op));

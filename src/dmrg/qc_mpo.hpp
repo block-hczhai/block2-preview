@@ -2617,7 +2617,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     ad_op[g][h][s]);
                     lop[p] = su2_factor_p[s] * p_op[j][k][s];
                     lexpr[p] = sum(exprs);
@@ -2628,7 +2628,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     a_op[g][h][s]);
                     lop[p] = su2_factor_p[s] * pd_op[j][k][s];
                     lexpr[p] = sum(exprs);
@@ -2637,12 +2637,13 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     if (s == 0) {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(2 * hamil->v(j, k, g, h) -
+                                if (abs(2.0 * hamil->v(j, k, g, h) -
                                         hamil->v(j, h, g, k)) > TINY)
-                                    exprs.push_back((su2_factor_q[0] *
-                                                     (2 * hamil->v(j, k, g, h) -
-                                                      hamil->v(j, h, g, k))) *
-                                                    b_op[g][h][0]);
+                                    exprs.push_back(
+                                        (su2_factor_q[0] *
+                                         (2.0 * hamil->v(j, k, g, h) -
+                                          hamil->v(j, h, g, k))) *
+                                        b_op[g][h][0]);
                     } else {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
@@ -2690,7 +2691,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     ad_op[g][h][s]);
                     rop[p] = su2_factor_p[s] * p_op[j][k][s];
                     rexpr[p] = sum(exprs);
@@ -2701,7 +2702,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     a_op[g][h][s]);
                     rop[p] = su2_factor_p[s] * pd_op[j][k][s];
                     rexpr[p] = sum(exprs);
@@ -2710,12 +2711,13 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     if (s == 0) {
                         for (uint16_t g = m + 1; g < n_orbs; g++)
                             for (uint16_t h = m + 1; h < n_orbs; h++)
-                                if (abs(2 * hamil->v(j, k, g, h) -
+                                if (abs(2.0 * hamil->v(j, k, g, h) -
                                         hamil->v(j, h, g, k)) > TINY)
-                                    exprs.push_back((su2_factor_q[0] *
-                                                     (2 * hamil->v(j, k, g, h) -
-                                                      hamil->v(j, h, g, k))) *
-                                                    b_op[g][h][0]);
+                                    exprs.push_back(
+                                        (su2_factor_q[0] *
+                                         (2.0 * hamil->v(j, k, g, h) -
+                                          hamil->v(j, h, g, k))) *
+                                        b_op[g][h][0]);
                     } else {
                         for (uint16_t g = m + 1; g < n_orbs; g++)
                             for (uint16_t h = m + 1; h < n_orbs; h++)

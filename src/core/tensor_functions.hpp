@@ -572,8 +572,6 @@ template <typename S, typename FL> struct TensorFunctions {
             partials;
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        shared_ptr<SparseMatrix<S, FL>> tmp =
-            make_shared<SparseMatrix<S, FL>>(d_alloc);
         assert(names.size() == exprs.size());
         S ket_dq = cmat->info->delta_quantum;
         S bra_dq = vmat->info->delta_quantum;
@@ -682,8 +680,8 @@ template <typename S, typename FL> struct TensorFunctions {
                 shared_ptr<OpSum<S, FL>> sop =
                     dynamic_pointer_cast<OpSum<S, FL>>(expr);
                 int ntop = threading->activate_operator();
-                FL r = 0;
-#pragma omp parallel for schedule(dynamic) num_threads(ntop) reduction(+ : r)
+                vector<FL> rs(ntop, 0.0);
+#pragma omp parallel for schedule(dynamic) num_threads(ntop)
                 for (int j = 0; j < (int)sop->strings.size(); j++) {
                     shared_ptr<OpProduct<S, FL>> op = sop->strings[j];
                     shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(op->b);
@@ -692,8 +690,10 @@ template <typename S, typename FL> struct TensorFunctions {
                             .at(make_tuple(op->conj, rmat->info->delta_quantum,
                                            opdq))
                             .at(op->a);
-                    r += opf->dot_product(lmat, rmat, op->factor);
+                    int tid = threading->get_thread_id();
+                    rs[tid] += opf->dot_product(lmat, rmat, op->factor);
                 }
+                FL r = accumulate(rs.begin(), rs.end(), (FL)0.0);
                 threading->activate_normal();
                 expectations[k] = make_pair(names[k], r);
             } break;
@@ -1077,8 +1077,8 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
             shared_ptr<OpExpr<S>> expr =
                 exprs->data[k] *
-                (1 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
-                         ->factor);
+                (1.0 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
+                           ->factor);
             assert(a->ops.count(nop) != 0);
             shared_ptr<SparseMatrix<S, FL>> anop = a->ops.at(nop);
             switch (expr->get_type()) {
@@ -1171,7 +1171,7 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpElement<S, FL>> aop =
                 dynamic_pointer_cast<OpElement<S, FL>>(amat->data[i]);
             shared_ptr<OpExpr<S>> op = abs_value(amat->data[i]);
-            shared_ptr<OpExpr<S>> expr = a->mat->data[i] * (1 / aop->factor);
+            shared_ptr<OpExpr<S>> expr = a->mat->data[i] * (1.0 / aop->factor);
             aops[op] = expr;
         }
         vector<shared_ptr<OpExpr<S>>> rexpr(exprs->data.size());
@@ -1443,14 +1443,14 @@ template <typename S, typename FL> struct TensorFunctions {
                             c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
-                        exprs->data[i] * (1 / cop->factor);
+                        exprs->data[i] * (1.0 / cop->factor);
                     if (!delayed(cop->name)) {
                         if (!frame->use_main_stack) {
                             // skip cached part
                             if (c->ops.at(op)->alloc != nullptr)
                                 return;
                             c->ops.at(op)->alloc =
-                                make_shared<VectorAllocator<FL>>();
+                                make_shared<VectorAllocator<FP>>();
                             c->ops.at(op)->allocate(c->ops.at(op)->info);
                         }
                         tf->tensor_product(expr, a->ops, b->ops, c->ops.at(op));
@@ -1488,14 +1488,14 @@ template <typename S, typename FL> struct TensorFunctions {
                             c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
-                        exprs->data[i] * (1 / cop->factor);
+                        exprs->data[i] * (1.0 / cop->factor);
                     if (!delayed(cop->name)) {
                         if (!frame->use_main_stack) {
                             // skip cached part
                             if (c->ops.at(op)->alloc != nullptr)
                                 return;
                             c->ops.at(op)->alloc =
-                                make_shared<VectorAllocator<FL>>();
+                                make_shared<VectorAllocator<FP>>();
                             c->ops.at(op)->allocate(c->ops.at(op)->info);
                         }
                         tf->tensor_product(expr, b->ops, a->ops, c->ops.at(op));

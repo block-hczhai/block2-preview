@@ -23,6 +23,7 @@
 #include "../core/expr.hpp"
 #include "../core/matrix.hpp"
 #include "../core/sparse_matrix.hpp"
+#include "effective_functions.hpp"
 #include "moving_environment.hpp"
 #include <cassert>
 #include <cstdint>
@@ -64,7 +65,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
     shared_ptr<MovingEnvironment<S, FL, FLS>> lme, rme;
     vector<ubond_t> bond_dims;
     vector<FPS> noises;
-    vector<FPS> energies;
+    vector<FLS> energies;
     vector<FPS> normsqs;
     vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -84,11 +85,12 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
            const vector<FPS> &noises = vector<FPS>())
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
-        FPS energy, normsq, error;
+        FLS energy;
+        FPS normsq, error;
         int nmult, mmps;
         double tmult;
         size_t nflop;
-        Iteration(FPS energy, FPS normsq, FPS error, int mmps, int nmult,
+        Iteration(FLS energy, FPS normsq, FPS error, int mmps, int nmult,
                   size_t nflop = 0, double tmult = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nmult(nmult), nflop(nflop), tmult(tmult) {}
@@ -141,7 +143,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
             }
         }
         shared_ptr<SparseMatrixGroup<S, FLS>> pbra = nullptr;
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         bool last_site =
             (forward && i == me->n_sites - 1) || (!forward && i == 0);
         vector<shared_ptr<SparseMatrix<S, FLS>>> mrk4;
@@ -165,8 +167,9 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
-            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                l_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(
                 forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -427,7 +430,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
             }
         }
         shared_ptr<SparseMatrixGroup<S, FLS>> pbra = nullptr;
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         bool last_site =
             (forward && i + 1 == me->n_sites - 1) || (!forward && i == 0);
         vector<shared_ptr<SparseMatrix<S, FLS>>> mrk4;
@@ -450,8 +453,9 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
-            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                l_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, lme->bra->info,
@@ -611,11 +615,12 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         else
             return update_one_dot(i, forward, advance, beta, bond_dim, noise);
     }
-    tuple<FPS, FPS, FPS> sweep(bool forward, bool advance, FPS beta,
+    tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FPS beta,
                                ubond_t bond_dim, FPS noise) {
         lme->prepare();
         rme->prepare();
-        vector<FPS> energies, normsqs;
+        vector<FLS> energies;
+        vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
@@ -684,7 +689,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         rme->bra = me->ket->shallow_copy(avail_mps_tag);
         lme->bra = lme->ket = rme->bra;
     }
-    FPS solve(int n_sweeps, FPS beta, bool forward = true, FPS tol = 1E-6) {
+    FLS solve(int n_sweeps, FPS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
@@ -771,7 +776,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<ubond_t> bond_dims;
     vector<FPS> noises;
-    vector<FPS> energies;
+    vector<FLS> energies;
     vector<FPS> normsqs;
     vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -793,11 +798,12 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         : me(me), bond_dims(bond_dims), noises(vector<FPS>{0.0}),
           forward(false), mode(mode), n_sub_sweeps(n_sub_sweeps) {}
     struct Iteration {
-        FPS energy, normsq, error;
+        FLS energy;
+        FPS normsq, error;
         int nexpo, nexpok, mmps;
         double texpo;
         size_t nflop;
-        Iteration(FPS energy, FPS normsq, FPS error, int mmps, int nexpo,
+        Iteration(FLS energy, FPS normsq, FPS error, int mmps, int nexpo,
                   int nexpok, size_t nflop = 0, double texpo = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nexpo(nexpo), nexpok(nexpok), nflop(nflop), texpo(texpo) {}
@@ -849,8 +855,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         if (mode == TETypes::RK4 &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
-        vector<MatrixRef> pdpf;
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        vector<GMatrix<FL>> pdpf;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
@@ -861,12 +867,13 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
+            GMatrix<FL> tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
@@ -874,8 +881,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1014,8 +1022,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->move_to(i + 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
-                                             iprint >= 3, me->para_rule);
+                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                    k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
+                    me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1032,8 +1041,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->move_to(i - 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
-                                             iprint >= 3, me->para_rule);
+                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                    k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
+                    me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1125,13 +1135,13 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             me->ket->load_tensor(i);
             me->ket->tensors[i + 1] = nullptr;
         }
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         shared_ptr<SparseMatrix<S, FLS>> old_wfn = me->ket->tensors[i];
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
-        vector<MatrixRef> pdpf;
+        vector<GMatrix<FL>> pdpf;
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
@@ -1141,12 +1151,13 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
+            GMatrix<FL> tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
@@ -1154,8 +1165,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1255,8 +1267,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
                             me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
-                                         iprint >= 3, me->para_rule);
+            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1272,8 +1285,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,
                             me->bra->tensors[i], me->ket->tensors[i]);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
-                                         iprint >= 3, me->para_rule);
+            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
+                me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1336,8 +1350,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         if (mode == TETypes::RK4 &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
-        vector<MatrixRef> pdpf;
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        vector<GMatrix<FL>> pdpf;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -1348,16 +1362,18 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp_re(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
-            MatrixRef tmp_im(nullptr, (MKL_INT)h_eff->ket[1]->total_memory, 1);
+            GMatrix<FLS> tmp_re(nullptr, (MKL_INT)h_eff->ket[0]->total_memory,
+                                1);
+            GMatrix<FLS> tmp_im(nullptr, (MKL_INT)h_eff->ket[1]->total_memory,
+                                1);
             tmp_re.allocate();
             tmp_im.allocate();
             memcpy(tmp_re.data, h_eff->ket[0]->data,
                    h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
                    h_eff->ket[1]->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, iprint >= 3, me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
                    h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(h_eff->ket[1]->data, tmp_im.data,
@@ -1368,8 +1384,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1540,8 +1556,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 mket->wfns = new_wfns;
                 shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                     me->multi_eff_ham(FuseTypes::NoFuseL, forward, true);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
-                                             iprint >= 3, me->para_rule);
+                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                    k_eff, beta, me->mpo->const_e, iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1561,8 +1577,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 mket->wfns = new_wfns;
                 shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                     me->multi_eff_ham(FuseTypes::NoFuseR, forward, true);
-                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e,
-                                             iprint >= 3, me->para_rule);
+                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                    k_eff, beta, me->mpo->const_e, iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 mket->wfns = kwfns;
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1688,13 +1704,13 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             mket->load_tensor(i);
             mket->tensors[i] = mket->tensors[i + 1] = nullptr;
         }
-        tuple<FPS, FPS, int, size_t, double> pdi;
+        tuple<FLS, FPS, int, size_t, double> pdi;
         vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns = mket->wfns;
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
-        vector<MatrixRef> pdpf;
+        vector<GMatrix<FLS>> pdpf;
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
         if (!advance &&
@@ -1703,16 +1719,18 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             // TangentSpace method does not allow multiple sweeps for one time
             // step
             assert(mode == TETypes::RK4);
-            MatrixRef tmp_re(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
-            MatrixRef tmp_im(nullptr, (MKL_INT)h_eff->ket[1]->total_memory, 1);
+            GMatrix<FLS> tmp_re(nullptr, (MKL_INT)h_eff->ket[0]->total_memory,
+                                1);
+            GMatrix<FLS> tmp_im(nullptr, (MKL_INT)h_eff->ket[1]->total_memory,
+                                1);
             tmp_re.allocate();
             tmp_im.allocate();
             memcpy(tmp_re.data, h_eff->ket[0]->data,
                    h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(tmp_im.data, h_eff->ket[1]->data,
                    h_eff->ket[1]->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, iprint >= 3, me->para_rule);
             memcpy(h_eff->ket[0]->data, tmp_re.data,
                    h_eff->ket[0]->total_memory * sizeof(FLS));
             memcpy(h_eff->ket[1]->data, tmp_im.data,
@@ -1723,8 +1741,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, iprint >= 3,
-                                    me->para_rule);
+            pdi = EffectiveFunctions<S, FL>::expo_apply(
+                h_eff, -beta, me->mpo->const_e, iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1837,8 +1855,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             mket->load_wavefunction(i + 1);
             shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                 me->multi_eff_ham(FuseTypes::FuseR, forward, true);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
-                                         me->para_rule);
+            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                k_eff, beta, me->mpo->const_e, iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1853,8 +1871,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             mket->load_wavefunction(i);
             shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> k_eff =
                 me->multi_eff_ham(FuseTypes::FuseL, forward, true);
-            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, iprint >= 3,
-                                         me->para_rule);
+            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
+                k_eff, beta, me->mpo->const_e, iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1908,10 +1926,11 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             }
         }
     }
-    tuple<FPS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
+    tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
                                ubond_t bond_dim, FPS noise) {
         me->prepare();
-        vector<FPS> energies, normsqs;
+        vector<FLS> energies;
+        vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;
         vector<int> sweep_range;
         FPS largest_error = 0.0;
@@ -1982,7 +2001,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->para_rule->comm->barrier();
         }
     }
-    FPS solve(int n_sweeps, FCS beta, bool forward = true, FPS tol = 1E-6) {
+    FLS solve(int n_sweeps, FCS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)

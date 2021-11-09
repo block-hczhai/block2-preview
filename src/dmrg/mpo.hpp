@@ -721,16 +721,16 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                     mat->factor = p.second->factor;
                     if (p.second->info->n == p.second->total_memory) {
                         GMatrix<FL> mmat(mat->data, (MKL_INT)mat->total_memory,
-                                         1),
-                            pmat(p.second->data,
-                                 (MKL_INT)p.second->total_memory, 1);
-                        MatrixFunctions::copy(mmat, pmat);
+                                         1);
+                        GMatrix<FL> pmat(p.second->data,
+                                         (MKL_INT)p.second->total_memory, 1);
+                        GMatrixFunctions<FL>::copy(mmat, pmat);
                     } else {
                         for (int i = 0; i < mat->info->n; i++) {
                             GMatrix<FL> mmat = (*mat)[i], pmat = (*p.second)[i];
                             mmat.n = pmat.n = 1;
-                            MatrixFunctions::copy(mmat, pmat, mmat.m + 1,
-                                                  pmat.m + 1);
+                            GMatrixFunctions<FL>::copy(mmat, pmat, mmat.m + 1,
+                                                       pmat.m + 1);
                         }
                     }
                     p.second = mat;
@@ -771,7 +771,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                         if (rop != nullptr) {
                             auto ref_op = rop->op;
                             if (r->ops.count(ref_op) &&
-                                (r->ops.at(ref_op)->factor == 0 ||
+                                (r->ops.at(ref_op)->factor == 0.0 ||
                                  r->ops.at(ref_op)->info->n == 0 ||
                                  r->ops.at(ref_op)->norm() < TINY))
                                 p.second = zmat;

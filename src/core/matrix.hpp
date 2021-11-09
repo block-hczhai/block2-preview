@@ -158,7 +158,7 @@ template <> struct GMatrix<complex<double>> {
             ->deallocate((double *)data, size() * 2);
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
+    void clear() const { memset(data, 0, size() * sizeof(complex<double>)); }
     GMatrix flip_dims() const { return GMatrix(data, n, m); }
     GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
     friend ostream &operator<<(ostream &os, const GMatrix &mat) {
@@ -212,7 +212,7 @@ template <> struct GDiagonalMatrix<complex<double>> : GMatrix<complex<double>> {
     }
 };
 
-typedef GDiagonalMatrix<complex<double>> ComplexDiagonalMatrixRef;
+typedef GDiagonalMatrix<complex<double>> ComplexDiagonalMatrix;
 
 // General rank-n dense tensor
 template <typename FL> struct GTensor {

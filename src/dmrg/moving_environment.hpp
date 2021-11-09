@@ -2055,7 +2055,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     density_matrix_add_wfn(const shared_ptr<SparseMatrix<S, FLS>> &dm,
                            const shared_ptr<SparseMatrix<S, FLS>> &psi,
                            bool trace_right, FPS scale = 1.0) {
-        assert(psi->factor == 1);
+        assert(psi->factor == 1.0);
         psi->factor = sqrt(scale);
         OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right, 0.0,
                                                  NoiseTypes::None);
@@ -2335,7 +2335,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     // Get rotation matrix info from svd info
     static shared_ptr<SparseMatrixInfo<S>> rotation_matrix_info_from_svd(
-        S opdq, const vector<S> &qs, const vector<shared_ptr<GTensor<FPS>>> &ts,
+        S opdq, const vector<S> &qs, const vector<shared_ptr<GTensor<FLS>>> &ts,
         bool trace_right, const vector<int> &ilr, const vector<ubond_t> &im) {
         shared_ptr<SparseMatrixInfo<S>> rinfo =
             make_shared<SparseMatrixInfo<S>>();
@@ -2586,7 +2586,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 s[ss[iss + j].first]->data[ss[iss + j].second]);
                         }
                     } else
-                        GMatrixFunctions<FLS>::multiply((*left)[i], true,
+                        GMatrixFunctions<FLS>::multiply((*left)[i], 3,
                                                         (*wfn)[iw], false,
                                                         (*right)[ir], 1.0, 0.0);
                 }
@@ -2627,7 +2627,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 linfo->n_states_ket[il]);
                         }
                     } else
-                        GMatrixFunctions<FLS>::multiply((*wfn)[iw], false,
+                        GMatrixFunctions<FLS>::multiply((*wfn)[iw], 3,
                                                         (*right)[i], true,
                                                         (*left)[il], 1.0, 0.0);
                 }
@@ -2696,9 +2696,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     int iw = idx_dm_to_wfn[ss[iss].first][iww];
                     int ir = right->info->find_state(wfn->info->quanta[iw]);
                     assert(ir != -1);
-                    GMatrixFunctions<FLS>::multiply((*left)[i], true,
-                                                    (*wfn)[iw], false,
-                                                    (*right)[ir], 1.0, 0.0);
+                    GMatrixFunctions<FLS>::multiply((*left)[i], 3, (*wfn)[iw],
+                                                    false, (*right)[ir], 1.0,
+                                                    0.0);
                 }
                 iss += im[i];
             }
@@ -2720,8 +2720,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     int il = left->info->find_state(wfn->info->quanta[iw]);
                     assert(il != -1);
                     GMatrixFunctions<FLS>::multiply((*wfn)[iw], false,
-                                                    (*right)[i], true,
-                                                    (*left)[il], 1.0, 0.0);
+                                                    (*right)[i], 3, (*left)[il],
+                                                    1.0, 0.0);
                 }
                 iss += im[i];
             }
@@ -2806,8 +2806,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 wfns[k]->infos[j]->quanta[iw]);
                             assert(ir != -1);
                             GMatrixFunctions<FLS>::multiply(
-                                (*rot_mat)[i], true, (*(*wfns[k])[j])[iw],
-                                false, (*(*new_wfns[k])[j])[ir], 1.0, 0.0);
+                                (*rot_mat)[i], 3, (*(*wfns[k])[j])[iw], false,
+                                (*(*new_wfns[k])[j])[ir], 1.0, 0.0);
                         }
                 iss += im[i];
             }
@@ -2834,8 +2834,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 wfns[k]->infos[j]->quanta[iw]);
                             assert(il != -1);
                             GMatrixFunctions<FLS>::multiply(
-                                (*(*wfns[k])[j])[iw], false, (*rot_mat)[i],
-                                true, (*(*new_wfns[k])[j])[il], 1.0, 0.0);
+                                (*(*wfns[k])[j])[iw], false, (*rot_mat)[i], 3,
+                                (*(*new_wfns[k])[j])[il], 1.0, 0.0);
                         }
                 iss += im[i];
             }

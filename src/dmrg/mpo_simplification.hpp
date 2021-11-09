@@ -604,7 +604,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             uint8_t conj = (opl != nullptr && opl->trans) |
                            ((opr != nullptr && opr->trans) << 1);
             FL factor = (opl != nullptr ? opl->factor : 1.0) *
-                            (opr != nullptr ? opr->factor : 1.0) * op->factor;
+                        (opr != nullptr ? opr->factor : 1.0) * op->factor;
             return make_shared<OpProduct<S, FL>>(a, b, factor, conj);
         } break;
         case OpTypes::Sum: {
@@ -616,7 +616,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 mp;
             mp.reserve(ops->strings.size());
             for (auto &x : ops->strings) {
-                if (x->factor == 0)
+                if (x->factor == 0.0)
                     continue;
                 shared_ptr<OpElementRef<S, FL>> opl = rule->operator()(x->a);
                 shared_ptr<OpElementRef<S, FL>> opr =
@@ -628,8 +628,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 uint8_t conj = (opl != nullptr && opl->trans) |
                                ((opr != nullptr && opr->trans) << 1);
                 FL factor = (opl != nullptr ? opl->factor : 1.0) *
-                                (opr != nullptr ? opr->factor : 1.0) *
-                                x->factor;
+                            (opr != nullptr ? opr->factor : 1.0) * x->factor;
                 if (!mp.count(a))
                     mp[a] = vector<shared_ptr<OpProduct<S, FL>>>();
                 vector<shared_ptr<OpProduct<S, FL>>> &px = mp.at(a);
@@ -845,7 +844,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
             name->data[j] = abs_value(name->data[j]);
             expr->data[j] =
-                simplify_expr(expr->data[j], op->q_label) * (1 / op->factor);
+                simplify_expr(expr->data[j], op->q_label) * (1.0 / op->factor);
         }
         if (use_intermediate) {
             uint16_t idxi = 0, idxj = 0;

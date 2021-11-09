@@ -379,6 +379,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             }
         }
     }
+    // dot product with no complex conj
     FL dot_product(const shared_ptr<SparseMatrix<S, FL>> &a,
                    const shared_ptr<SparseMatrix<S, FL>> &b,
                    FL scale = 1.0) override {

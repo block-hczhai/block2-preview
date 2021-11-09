@@ -32,6 +32,9 @@
 #include "../core/fft.hpp"
 #include "../core/fp_codec.hpp"
 #include "../core/hamiltonian.hpp"
+#include "../core/integral.hpp"
+#include "../core/iterative_matrix_functions.hpp"
+#include "../core/matrix_functions.hpp"
 #include "../core/operator_functions.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/parallel_mpi.hpp"
@@ -118,6 +121,17 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SZ, double, block2::Hamiltonian<block2::SZ, double>>;
 extern template struct block2::DelayedSparseMatrix<
     block2::SU2, double, block2::Hamiltonian<block2::SU2, double>>;
+
+// integral.hpp
+extern template struct block2::FCIDUMP<double>;
+
+// iterative_matrix_functions.hpp
+extern template struct block2::IterativeMatrixFunctions<double>;
+extern template struct block2::IterativeMatrixFunctions<complex<double>>;
+
+// matrix_functions.hpp
+extern template struct block2::GMatrixFunctions<double>;
+extern template struct block2::GMatrixFunctions<complex<double>>;
 
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, double>;
@@ -321,5 +335,235 @@ extern template struct block2::SymbolicMatrix<block2::SU2K>;
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZK, double>;
 extern template struct block2::TensorFunctions<block2::SU2K, double>;
+
+#endif
+
+#ifdef _USE_COMPLEX
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SZ,
+                                                    complex<double>>;
+extern template struct block2::ArchivedSparseMatrix<block2::SU2,
+                                                    complex<double>>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SZ,
+                                                       complex<double>>;
+extern template struct block2::ArchivedTensorFunctions<block2::SU2,
+                                                       complex<double>>;
+
+// csr_operator_functions.hpp
+extern template struct block2::CSROperatorFunctions<block2::SZ,
+                                                    complex<double>>;
+extern template struct block2::CSROperatorFunctions<block2::SU2,
+                                                    complex<double>>;
+
+// csr_sparse_matrix.hpp
+extern template struct block2::CSRSparseMatrix<block2::SZ, complex<double>>;
+extern template struct block2::CSRSparseMatrix<block2::SU2, complex<double>>;
+
+// delayed_sparse_matrix.hpp
+extern template struct block2::DelayedSparseMatrix<block2::SZ, complex<double>>;
+extern template struct block2::DelayedSparseMatrix<block2::SU2,
+                                                   complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, complex<double>,
+    block2::SparseMatrix<block2::SZ, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, complex<double>,
+    block2::SparseMatrix<block2::SU2, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, complex<double>,
+    block2::CSRSparseMatrix<block2::SZ, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, complex<double>,
+    block2::CSRSparseMatrix<block2::SU2, complex<double>>>;
+
+// delayed_tensor_functions.hpp
+extern template struct block2::DelayedTensorFunctions<block2::SZ,
+                                                      complex<double>>;
+extern template struct block2::DelayedTensorFunctions<block2::SU2,
+                                                      complex<double>>;
+
+// expr.hpp
+extern template struct block2::OpElement<block2::SZ, complex<double>>;
+extern template struct block2::OpElementRef<block2::SZ, complex<double>>;
+extern template struct block2::OpProduct<block2::SZ, complex<double>>;
+extern template struct block2::OpSumProd<block2::SZ, complex<double>>;
+extern template struct block2::OpSum<block2::SZ, complex<double>>;
+
+extern template struct block2::OpElement<block2::SU2, complex<double>>;
+extern template struct block2::OpElementRef<block2::SU2, complex<double>>;
+extern template struct block2::OpProduct<block2::SU2, complex<double>>;
+extern template struct block2::OpSumProd<block2::SU2, complex<double>>;
+extern template struct block2::OpSum<block2::SU2, complex<double>>;
+
+// hamiltonian.hpp
+extern template struct block2::Hamiltonian<block2::SZ, complex<double>>;
+extern template struct block2::Hamiltonian<block2::SU2, complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZ, complex<double>,
+    block2::Hamiltonian<block2::SZ, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2, complex<double>,
+    block2::Hamiltonian<block2::SU2, complex<double>>>;
+
+// integral.hpp
+extern template struct block2::FCIDUMP<complex<double>>;
+
+// operator_functions.hpp
+extern template struct block2::OperatorFunctions<block2::SZ, complex<double>>;
+extern template struct block2::OperatorFunctions<block2::SU2, complex<double>>;
+
+// operator_tensor.hpp
+extern template struct block2::OperatorTensor<block2::SZ, complex<double>>;
+extern template struct block2::DelayedOperatorTensor<block2::SZ,
+                                                     complex<double>>;
+
+extern template struct block2::OperatorTensor<block2::SU2, complex<double>>;
+extern template struct block2::DelayedOperatorTensor<block2::SU2,
+                                                     complex<double>>;
+
+// parallel_rule.hpp
+extern template struct block2::ParallelRule<block2::SZ, complex<double>>;
+extern template struct block2::ParallelRule<block2::SU2, complex<double>>;
+
+// parallel_tensor_functions.hpp
+extern template struct block2::ParallelTensorFunctions<block2::SZ,
+                                                       complex<double>>;
+extern template struct block2::ParallelTensorFunctions<block2::SU2,
+                                                       complex<double>>;
+
+// rule.hpp
+extern template struct block2::Rule<block2::SZ, complex<double>>;
+extern template struct block2::NoTransposeRule<block2::SZ, complex<double>>;
+
+extern template struct block2::Rule<block2::SU2, complex<double>>;
+extern template struct block2::NoTransposeRule<block2::SU2, complex<double>>;
+
+// sparse_matrix.hpp
+extern template struct block2::SparseMatrix<block2::SZ, complex<double>>;
+extern template struct block2::SparseMatrixGroup<block2::SZ, complex<double>>;
+
+extern template struct block2::SparseMatrix<block2::SU2, complex<double>>;
+extern template struct block2::SparseMatrixGroup<block2::SU2, complex<double>>;
+
+// tensor_functions.hpp
+extern template struct block2::TensorFunctions<block2::SZ, complex<double>>;
+extern template struct block2::TensorFunctions<block2::SU2, complex<double>>;
+
+#ifdef _USE_KSYMM
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SZK,
+                                                    complex<double>>;
+extern template struct block2::ArchivedSparseMatrix<block2::SU2K,
+                                                    complex<double>>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SZK,
+                                                       complex<double>>;
+extern template struct block2::ArchivedTensorFunctions<block2::SU2K,
+                                                       complex<double>>;
+
+// csr_operator_functions.hpp
+extern template struct block2::CSROperatorFunctions<block2::SZK,
+                                                    complex<double>>;
+extern template struct block2::CSROperatorFunctions<block2::SU2K,
+                                                    complex<double>>;
+
+// csr_sparse_matrix.hpp
+extern template struct block2::CSRSparseMatrix<block2::SZK, complex<double>>;
+extern template struct block2::CSRSparseMatrix<block2::SU2K, complex<double>>;
+
+// delayed_sparse_matrix.hpp
+extern template struct block2::DelayedSparseMatrix<block2::SZK,
+                                                   complex<double>>;
+extern template struct block2::DelayedSparseMatrix<block2::SU2K,
+                                                   complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZK, complex<double>,
+    block2::SparseMatrix<block2::SZK, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2K, complex<double>,
+    block2::SparseMatrix<block2::SU2K, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZK, complex<double>,
+    block2::CSRSparseMatrix<block2::SZK, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2K, complex<double>,
+    block2::CSRSparseMatrix<block2::SU2K, complex<double>>>;
+
+// delayed_tensor_functions.hpp
+extern template struct block2::DelayedTensorFunctions<block2::SZK,
+                                                      complex<double>>;
+extern template struct block2::DelayedTensorFunctions<block2::SU2K,
+                                                      complex<double>>;
+
+// expr.hpp
+extern template struct block2::OpElement<block2::SZK, complex<double>>;
+extern template struct block2::OpElementRef<block2::SZK, complex<double>>;
+extern template struct block2::OpProduct<block2::SZK, complex<double>>;
+extern template struct block2::OpSumProd<block2::SZK, complex<double>>;
+extern template struct block2::OpSum<block2::SZK, complex<double>>;
+
+extern template struct block2::OpElement<block2::SU2K, complex<double>>;
+extern template struct block2::OpElementRef<block2::SU2K, complex<double>>;
+extern template struct block2::OpProduct<block2::SU2K, complex<double>>;
+extern template struct block2::OpSumProd<block2::SU2K, complex<double>>;
+extern template struct block2::OpSum<block2::SU2K, complex<double>>;
+
+// hamiltonian.hpp
+extern template struct block2::Hamiltonian<block2::SZK, complex<double>>;
+extern template struct block2::Hamiltonian<block2::SU2K, complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SZK, complex<double>,
+    block2::Hamiltonian<block2::SZK, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SU2K, complex<double>,
+    block2::Hamiltonian<block2::SU2K, complex<double>>>;
+
+// operator_functions.hpp
+extern template struct block2::OperatorFunctions<block2::SZK, complex<double>>;
+extern template struct block2::OperatorFunctions<block2::SU2K, complex<double>>;
+
+// operator_tensor.hpp
+extern template struct block2::OperatorTensor<block2::SZK, complex<double>>;
+extern template struct block2::DelayedOperatorTensor<block2::SZK,
+                                                     complex<double>>;
+
+extern template struct block2::OperatorTensor<block2::SU2K, complex<double>>;
+extern template struct block2::DelayedOperatorTensor<block2::SU2K,
+                                                     complex<double>>;
+
+// parallel_rule.hpp
+extern template struct block2::ParallelRule<block2::SZK, complex<double>>;
+extern template struct block2::ParallelRule<block2::SU2K, complex<double>>;
+
+// parallel_tensor_functions.hpp
+extern template struct block2::ParallelTensorFunctions<block2::SZK,
+                                                       complex<double>>;
+extern template struct block2::ParallelTensorFunctions<block2::SU2K,
+                                                       complex<double>>;
+
+// rule.hpp
+extern template struct block2::Rule<block2::SZK, complex<double>>;
+extern template struct block2::NoTransposeRule<block2::SZK, complex<double>>;
+
+extern template struct block2::Rule<block2::SU2K, complex<double>>;
+extern template struct block2::NoTransposeRule<block2::SU2K, complex<double>>;
+
+// sparse_matrix.hpp
+extern template struct block2::SparseMatrix<block2::SZK, complex<double>>;
+extern template struct block2::SparseMatrixGroup<block2::SZK, complex<double>>;
+
+extern template struct block2::SparseMatrix<block2::SU2K, complex<double>>;
+extern template struct block2::SparseMatrixGroup<block2::SU2K, complex<double>>;
+
+// tensor_functions.hpp
+extern template struct block2::TensorFunctions<block2::SZK, complex<double>>;
+extern template struct block2::TensorFunctions<block2::SU2K, complex<double>>;
+
+#endif
 
 #endif

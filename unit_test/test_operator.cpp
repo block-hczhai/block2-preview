@@ -11,8 +11,8 @@ class TestOperator : public ::testing::Test {
     shared_ptr<OpExpr<SZ>> zero;
     void SetUp() override {
         ops.push_back(make_shared<OpElement<SZ, double>>(
-            OpNames::H, SiteIndex(), SZ(0, 0, 0)));
-        reprs.push_back("H");
+            OpNames::H, SiteIndex(), SZ(0, 0, 0), 2.0));
+        reprs.push_back("(2 H)");
         ops.push_back(make_shared<OpElement<SZ, double>>(
             OpNames::I, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("I");
@@ -23,6 +23,21 @@ class TestOperator : public ::testing::Test {
             OpNames::Q, SiteIndex(1, 1, 0), SZ(0, 0, 0)));
         reprs.push_back("Q[ 1 1 0 ]");
         ops.push_back(make_shared<OpElement<SZ, double>>(
+            OpNames::P, SiteIndex(1, 2, 1), SZ(2, 0, 0)));
+        reprs.push_back("P[ 1 2 1 ]");
+        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+            OpNames::H, SiteIndex(), SZ(0, 0, 0), complex<double>(2.0, -1.0)));
+        reprs.push_back("((2,-1) H)");
+        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+            OpNames::I, SiteIndex(), SZ(0, 0, 0)));
+        reprs.push_back("I");
+        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+            OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
+        reprs.push_back("C0");
+        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+            OpNames::Q, SiteIndex(1, 1, 0), SZ(0, 0, 0)));
+        reprs.push_back("Q[ 1 1 0 ]");
+        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
             OpNames::P, SiteIndex(1, 2, 1), SZ(2, 0, 0)));
         reprs.push_back("P[ 1 2 1 ]");
         zero = make_shared<OpExpr<SZ>>();
@@ -72,47 +87,54 @@ TEST_F(TestOperator, TestExpr) {
         EXPECT_TRUE(ops[i] + zero == ops[i]);
         EXPECT_TRUE(zero + ops[i] == ops[i]);
     }
-    shared_ptr<OpExpr<SZ>> a = ops[0], b = ops[1], c = ops[2];
-    shared_ptr<OpExpr<SZ>> d = a * 0.5;
-    shared_ptr<OpExpr<SZ>> e = b * 0.2;
-    EXPECT_NE((a * b)->to_str(), (b * a)->to_str());
-    EXPECT_NE((a + b)->to_str(), (b + a)->to_str());
-    EXPECT_TRUE(a * b * 1.0 == a * b);
-    EXPECT_TRUE(abs_value(a * b * 0.5) == a * b);
-    EXPECT_TRUE(d * e * 0.5 == 0.5 * (d * e));
-    EXPECT_TRUE(d * e * zero == zero);
-    EXPECT_TRUE(zero * d * e == zero);
-    EXPECT_TRUE(zero * (d * e) == zero);
-    EXPECT_TRUE(d * e * 0.0 == zero);
-    EXPECT_TRUE(0.0 * d * e == zero);
-    EXPECT_TRUE(0.0 * (d * e) == zero);
-    EXPECT_TRUE(c * d + zero == zero + c * d);
-    EXPECT_TRUE(c * d + a * b + e * a == c * d + (a * b + e * a));
-    EXPECT_TRUE((c * d + a * b) + e * a == c * d + (a * b + e * a));
-    EXPECT_TRUE(a + b + c == (a + b) + c);
-    EXPECT_TRUE(a + (b + c) == (a + b) + c);
-    EXPECT_FALSE(a + (c + b) == (a + b) + c);
-    EXPECT_TRUE(a + b + c + d + e == (a + b + c) + (d + e));
-    EXPECT_TRUE((a + b) + c + (d + e) == (a + b + c) + (d + e));
-    // EXPECT_TRUE(a * b * c * d * e == (a * b * c) * (d * e));
-    // EXPECT_TRUE((a * b) * c * (d * e) == (a * b * c) * (d * e));
-    // EXPECT_TRUE(a * b * c == (a * b) * c);
-    // EXPECT_TRUE(a * (b * c) == (a * b) * c);
-    EXPECT_FALSE(a + b == a + b + c);
-    // EXPECT_FALSE(a * b == a * b * c);
-    EXPECT_FALSE(a * b == b * a);
-    EXPECT_FALSE(a == zero || b == zero || c == zero);
-    EXPECT_FALSE(a * b == zero || zero == a * b || a * b == a);
-    EXPECT_FALSE(a + b == zero || zero == a + b || a + b == a);
-    EXPECT_TRUE(0.5 * (a + b) == 0.5 * a + 0.5 * b);
-    EXPECT_EQ((a + b + e)->to_str(), (a + (b + e))->to_str());
-    EXPECT_TRUE((a * b) + c * d + zero == zero + ((a * b) + c * d));
-    EXPECT_TRUE((a * b) + c * d == zero + ((a * b) + c * d));
-    EXPECT_TRUE(a * (c + d) == a * c + a * d);
-    EXPECT_TRUE((a + c + e) * d == a * d + c * d + e * d);
-    EXPECT_TRUE((a + c + e) * zero == zero * (a + c + e));
-    EXPECT_TRUE(zero == zero * (a + c + e));
-    EXPECT_TRUE((a + c + e) * 0.0 == 0.0 * (a + c + e));
-    EXPECT_TRUE(zero == 0.0 * (a + c + e));
-    EXPECT_TRUE((a + c + e) * (-0.5) == (-0.5) * (a + c + e));
+    for (int ix = 0; ix < 2; ix++) {
+        shared_ptr<OpExpr<SZ>> a = ops[0 + ix * 5], b = ops[1 + ix * 5],
+                               c = ops[2 + ix * 5];
+        shared_ptr<OpExpr<SZ>> d = a * 0.5;
+        shared_ptr<OpExpr<SZ>> e = b * 0.2;
+        EXPECT_NE((a * b)->to_str(), (b * a)->to_str());
+        EXPECT_NE((a + b)->to_str(), (b + a)->to_str());
+        EXPECT_TRUE(a * b * 1.0 == a * b);
+        EXPECT_TRUE(!(a * b * 1.0 != a * b));
+        EXPECT_TRUE(abs_value(a * b * 0.5) ==
+                    abs_value(0.4 * a) * abs_value(b));
+        EXPECT_TRUE(d * e * 0.5 == 0.5 * (d * e));
+        EXPECT_TRUE(d * e * 0.5 != 0.6 * (d * e));
+        EXPECT_TRUE(!(d * e * 0.5 == 0.6 * (d * e)));
+        EXPECT_TRUE(d * e * zero == zero);
+        EXPECT_TRUE(zero * d * e == zero);
+        EXPECT_TRUE(zero * (d * e) == zero);
+        EXPECT_TRUE(d * e * 0.0 == zero);
+        EXPECT_TRUE(0.0 * d * e == zero);
+        EXPECT_TRUE(0.0 * (d * e) == zero);
+        EXPECT_TRUE(c * d + zero == zero + c * d);
+        EXPECT_TRUE(c * d + a * b + e * a == c * d + (a * b + e * a));
+        EXPECT_TRUE((c * d + a * b) + e * a == c * d + (a * b + e * a));
+        EXPECT_TRUE(a + b + c == (a + b) + c);
+        EXPECT_TRUE(a + (b + c) == (a + b) + c);
+        EXPECT_FALSE(a + (c + b) == (a + b) + c);
+        EXPECT_TRUE(a + b + c + d + e == (a + b + c) + (d + e));
+        EXPECT_TRUE((a + b) + c + (d + e) == (a + b + c) + (d + e));
+        // EXPECT_TRUE(a * b * c * d * e == (a * b * c) * (d * e));
+        // EXPECT_TRUE((a * b) * c * (d * e) == (a * b * c) * (d * e));
+        // EXPECT_TRUE(a * b * c == (a * b) * c);
+        // EXPECT_TRUE(a * (b * c) == (a * b) * c);
+        EXPECT_FALSE(a + b == a + b + c);
+        // EXPECT_FALSE(a * b == a * b * c);
+        EXPECT_FALSE(a * b == b * a);
+        EXPECT_FALSE(a == zero || b == zero || c == zero);
+        EXPECT_FALSE(a * b == zero || zero == a * b || a * b == a);
+        EXPECT_FALSE(a + b == zero || zero == a + b || a + b == a);
+        EXPECT_TRUE(0.5 * (a + b) == 0.5 * a + 0.5 * b);
+        EXPECT_EQ((a + b + e)->to_str(), (a + (b + e))->to_str());
+        EXPECT_TRUE((a * b) + c * d + zero == zero + ((a * b) + c * d));
+        EXPECT_TRUE((a * b) + c * d == zero + ((a * b) + c * d));
+        EXPECT_TRUE(a * (c + d) == a * c + a * d);
+        EXPECT_TRUE((a + c + e) * d == a * d + c * d + e * d);
+        EXPECT_TRUE((a + c + e) * zero == zero * (a + c + e));
+        EXPECT_TRUE(zero == zero * (a + c + e));
+        EXPECT_TRUE((a + c + e) * 0.0 == 0.0 * (a + c + e));
+        EXPECT_TRUE(zero == 0.0 * (a + c + e));
+        EXPECT_TRUE((a + c + e) * (-0.5) == (-0.5) * (a + c + e));
+    }
 }

@@ -30,6 +30,7 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
+#include <type_traits>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -85,6 +86,10 @@ template <typename FL> inline decltype(abs((FL)0.0)) xreal(FL x) {
 template <> inline double xreal<complex<double>>(complex<double> x) {
     return real(x);
 }
+
+template <typename T> struct is_complex : integral_constant<bool, false> {};
+
+template <typename T> struct is_complex<complex<T>> : is_floating_point<T> {};
 
 // Wall time recorder
 struct Timer {
@@ -151,6 +156,12 @@ struct Random {
         uniform_real_distribution<FL> distr(a, b);
         for (size_t i = 0; i < n; i++)
             data[i] = distr(rng());
+    }
+    template <typename FL>
+    static void complex_fill(complex<FL> *data, size_t n, FL a = 0, FL b = 1) {
+        uniform_real_distribution<FL> distr(a, b);
+        for (size_t i = 0; i < n * 2; i++)
+            ((FL *)data)[i] = distr(rng());
     }
 };
 

@@ -65,7 +65,7 @@ struct DelayedSparseMatrix<S, FL> : SparseMatrix<S, FL> {
         return SparseMatrixTypes::Delayed;
     }
     void allocate(const shared_ptr<SparseMatrixInfo<S>> &info,
-                  double *ptr = 0) override {
+                  FL *ptr = 0) override {
         assert(false);
     }
     virtual void deallocate() override {}

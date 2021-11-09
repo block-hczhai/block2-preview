@@ -48,7 +48,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
     TensorFunctionsTypes get_type() const override {
         return TensorFunctionsTypes::Parallel;
     }
-    void operator()(const MatrixRef &b, const MatrixRef &c,
+    void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c,
                     FL scale = 1.0) override {
         opf->seq->operator()(b, c, scale);
         rule->comm->allreduce_sum(c.data, c.size());
@@ -442,7 +442,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
             shared_ptr<OpExpr<S>> expr =
                 exprs->data[k] *
-                (1 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
+                (1.0 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
                          ->factor);
             shared_ptr<OpExprRef<S>> lexpr;
             int ip = rule->owner(nop);

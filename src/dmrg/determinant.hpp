@@ -531,8 +531,9 @@ template <typename S, typename FL> struct DeterminantQC {
         for (int i = 0; i < n_block_sites; i++)
             idx[i] = i_begin + i;
         sort(idx.begin(), idx.end(), [this](int i, int j) {
-            return hf_occ[i] != hf_occ[j] ? (hf_occ[i] > hf_occ[j])
-                                          : (h1e_energy[i] < h1e_energy[j]);
+            return hf_occ[i] != hf_occ[j]
+                       ? (hf_occ[i] > hf_occ[j])
+                       : (xreal<FL>(h1e_energy[i]) < xreal<FL>(h1e_energy[j]));
         });
         int n_alpha = (q.n() + q.twos()) >> 1, n_beta = (q.n() - q.twos()) >> 1;
         int n_docc = min(n_alpha, n_beta);

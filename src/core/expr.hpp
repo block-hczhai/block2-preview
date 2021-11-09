@@ -527,7 +527,7 @@ template <typename S, typename FL> struct OpProduct : OpExpr<S> {
         return *a == *other.a &&
                (b == nullptr ? other.b == nullptr
                              : (other.b != nullptr && *b == *other.b)) &&
-               factor == other.factor && conj == other.conj;
+               ::abs(factor - other.factor) < 1E-12 && conj == other.conj;
     }
     shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
                                const shared_ptr<OpExpr<S>> &b) const override {
@@ -674,7 +674,7 @@ template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
             return false;
         else if (conjs != other.conjs)
             return false;
-        else if (OpProduct<S, FL>::factor != other.factor)
+        else if (::abs(OpProduct<S, FL>::factor - other.factor) >= 1E-12)
             return false;
         else
             for (size_t i = 0; i < ops.size(); i++)
@@ -1111,7 +1111,8 @@ inline const shared_ptr<OpExpr<S>> operator+=(shared_ptr<OpExpr<S>> &a,
 
 // A symbolic expression multiply a scalar
 template <typename S, typename FL,
-          typename = typename enable_if<is_floating_point<FL>::value ||
+          typename = typename enable_if<is_complex<FL>::value ||
+                                        is_floating_point<FL>::value ||
                                         is_integral<FL>::value>::type>
 inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
                                              FL d) {
@@ -1127,7 +1128,8 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
 
 // A scalar multiply a symbolic expression
 template <typename S, typename FL,
-          typename = typename enable_if<is_floating_point<FL>::value ||
+          typename = typename enable_if<is_complex<FL>::value ||
+                                        is_floating_point<FL>::value ||
                                         is_integral<FL>::value>::type>
 inline const shared_ptr<OpExpr<S>> operator*(FL d,
                                              const shared_ptr<OpExpr<S>> &x) {
@@ -1269,6 +1271,14 @@ namespace std {
 
 template <> struct hash<block2::OpNames> {
     size_t operator()(block2::OpNames s) const noexcept { return (size_t)s; }
+};
+
+template <typename FL> struct hash<complex<FL>> {
+    size_t operator()(const complex<FL> &x) const noexcept {
+        size_t h = hash<FL>{}(real(x));
+        h ^= hash<FL>{}(imag(x)) + 0x9E3779B9 + (h << 6) + (h >> 2);
+        return h;
+    }
 };
 
 template <typename S, typename FL> struct hash<block2::OpElement<S, FL>> {

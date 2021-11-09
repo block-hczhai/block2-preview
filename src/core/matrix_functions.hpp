@@ -171,6 +171,8 @@ template <> struct GMatrixFunctions<double> {
         MKL_INT n = a.m * a.n;
         dscal(&n, &scale, a.data, &inc);
     }
+    static void keep_real(const MatrixRef &a) {}
+    static void conjugate(const MatrixRef &a) {}
     // a = a + scale * op(b)
     static void iadd(const MatrixRef &a, const MatrixRef &b, double scale,
                      bool conj = false, double cfactor = 1.0) {
@@ -181,13 +183,14 @@ template <> struct GMatrixFunctions<double> {
             if (cfactor == 1.0)
                 daxpy(&n, &scale, b.data, &inc, a.data, &inc);
             else
-                dgemm("N", "N", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
+                dgemm("n", "n", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
                       &cfactor, a.data, &inc);
         } else {
             assert(a.m == b.n && a.n == b.m);
-            assert(cfactor == 1.0);
-            for (MKL_INT i = 0, inc = 1; i < a.m; i++)
-                daxpy(&a.n, &scale, b.data + i, &a.m, a.data + i * a.n, &inc);
+            const double one = 1.0;
+            for (MKL_INT k = 0, inc = 1; k < b.n; k++)
+                dgemm("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,
+                      &inc, &cfactor, &a(k, 0), &a.n);
         }
     }
     static double norm(const MatrixRef &a) {
@@ -226,6 +229,11 @@ template <> struct GMatrixFunctions<double> {
         d_alloc->deallocate(work, lwork);
     }
     static double dot(const MatrixRef &a, const MatrixRef &b) {
+        assert(a.m == b.m && a.n == b.n);
+        MKL_INT n = a.m * a.n, inc = 1;
+        return ddot(&n, a.data, &inc, b.data, &inc);
+    }
+    static double complex_dot(const MatrixRef &a, const MatrixRef &b) {
         assert(a.m == b.m && a.n == b.n);
         MKL_INT n = a.m * a.n, inc = 1;
         return ddot(&n, a.data, &inc, b.data, &inc);
@@ -270,21 +278,21 @@ template <> struct GMatrixFunctions<double> {
         return nr > 0 ? dnrm2(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
     // c.n is used for ldc; a.n is used for lda
-    static void multiply(const MatrixRef &a, bool conja, const MatrixRef &b,
-                         bool conjb, const MatrixRef &c, double scale,
+    static void multiply(const MatrixRef &a, uint8_t conja, const MatrixRef &b,
+                         uint8_t conjb, const MatrixRef &c, double scale,
                          double cfactor) {
         // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
-        if (!conja && !conjb) {
+        if (!(conja & 1) && !(conjb & 1)) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             dgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (!conja && conjb) {
+        } else if (!(conja & 1) && (conjb & 1)) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
             dgemm("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (conja && !conjb) {
+        } else if ((conja & 1) && !(conjb & 1)) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
             dgemm("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
@@ -296,20 +304,22 @@ template <> struct GMatrixFunctions<double> {
     }
     // c = bra(.T) * a * ket(.T)
     // return nflop
+    // conj can be 0 (no conj no trans), 1 (trans), 2 (conj), 3 (conj trans)
+    // for real numbers we just need (& 1) to exclude conj
     static size_t rotate(const MatrixRef &a, const MatrixRef &c,
-                         const MatrixRef &bra, bool conj_bra,
-                         const MatrixRef &ket, bool conj_ket, double scale) {
+                         const MatrixRef &bra, uint8_t conj_bra,
+                         const MatrixRef &ket, uint8_t conj_ket, double scale) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
-        MatrixRef work(nullptr, a.m, conj_ket ? ket.m : ket.n);
+        MatrixRef work(nullptr, a.m, (conj_ket & 1) ? ket.m : ket.n);
         work.allocate(d_alloc);
-        multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
-        multiply(bra, conj_bra, work, false, c, scale, 1.0);
+        multiply(a, false, ket, conj_ket & 1, work, 1.0, 0.0);
+        multiply(bra, conj_bra & 1, work, false, c, scale, 1.0);
         work.deallocate(d_alloc);
         return (size_t)ket.m * ket.n * work.m + (size_t)work.m * work.n * c.m;
     }
     // c(.T) = bra.T * a(.T) * ket
-    // return nflop
+    // return nflop. (.T) is always transpose conjugate
     static size_t rotate(const MatrixRef &a, bool conj_a, const MatrixRef &c,
                          bool conj_c, const MatrixRef &bra,
                          const MatrixRef &ket, double scale) {
@@ -327,7 +337,8 @@ template <> struct GMatrixFunctions<double> {
     }
     // dleft == true : c = bra (= da x db) * a * ket
     // dleft == false: c = bra * a * ket (= da x db)
-    // return nflop
+    // return nflop.
+    // conj means conj and trans / none for bra, trans / conj for ket
     static size_t three_rotate(const MatrixRef &a, const MatrixRef &c,
                                const MatrixRef &bra, bool conj_bra,
                                const MatrixRef &ket, bool conj_ket,
@@ -753,10 +764,10 @@ template <> struct GMatrixFunctions<double> {
         d_alloc->deallocate(tau, k);
         d_alloc->deallocate(work, lwork);
     }
-    // b = a.T
-    static void transpose(const MatrixRef &a, const MatrixRef &b) {
-        b.clear();
-        iadd(b, a, 1.0, true);
+    // a += b.T
+    static void transpose(const MatrixRef &a, const MatrixRef &b,
+                          double scale = 1.0, double cfactor = 1.0) {
+        iadd(a, b, scale, true, cfactor);
     }
     // diagonalization for each symmetry block
     static void block_eigs(const MatrixRef &a, const DiagonalMatrix &w,
@@ -840,6 +851,7 @@ template <> struct GMatrixFunctions<double> {
         t.deallocate();
     }
     // Davidson algorithm
+    // E.R. Davidson, J. Comput. Phys. 17 (1), 87-94 (1975).
     // aa: diag elements of a (for precondition)
     // bs: input/output vector
     // ors: orthogonal states to be projected out
@@ -2861,7 +2873,7 @@ template <> struct GMatrixFunctions<double> {
                 break;
             int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                iadd(cvs[ivz % nn], r, 1 / beta, 0.0);
+                iadd(cvs[ivz % nn], r, 1 / beta, false, 0.0);
                 hmat.clear();
                 hys.clear();
                 hys.data[0] = beta;

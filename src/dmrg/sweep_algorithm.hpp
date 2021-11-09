@@ -23,6 +23,7 @@
 #include "../core/expr.hpp"
 #include "../core/matrix.hpp"
 #include "../core/sparse_matrix.hpp"
+#include "effective_functions.hpp"
 #include "moving_environment.hpp"
 #include "parallel_mps.hpp"
 #include "qc_ncorr.hpp"
@@ -452,8 +453,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(vector<FPS>{get<0>(pdi) + me->mpo->const_e}, error,
-                         mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+        return Iteration(
+            vector<FPS>{get<0>(pdi) + xreal<FLS>(me->mpo->const_e)}, error,
+            mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
     virtual tuple<FPS, int, size_t, double>
     one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
@@ -490,8 +492,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_type,
-                          davidson_shift - me->mpo->const_e, me->para_rule,
-                          ortho_bra);
+                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          me->para_rule, ortho_bra);
         teig += _t.get_time();
         if (state_specific)
             for (auto &wfn : ortho_bra)
@@ -675,8 +677,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(vector<FPS>{get<0>(pdi) + me->mpo->const_e}, error,
-                         mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+        return Iteration(
+            vector<FPS>{get<0>(pdi) + xreal<FLS>(me->mpo->const_e)}, error,
+            mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
     virtual tuple<FPS, int, size_t, double>
     two_dot_eigs_and_perturb(const bool forward, const int i,
@@ -711,8 +714,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_type,
-                          davidson_shift - me->mpo->const_e, me->para_rule,
-                          ortho_bra);
+                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          me->para_rule, ortho_bra);
         teig += _t.get_time();
         if (state_specific)
             for (auto &wfn : ortho_bra)
@@ -956,7 +959,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
-            x += me->mpo->const_e;
+            x += xreal<FLS>(me->mpo->const_e);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
@@ -978,9 +981,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_type, davidson_shift - me->mpo->const_e,
-                          me->para_rule);
+        pdi = h_eff->eigs(
+            iprint >= 3, davidson_conv_thrd, davidson_max_iter, davidson_type,
+            davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -1131,7 +1134,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
-            x += me->mpo->const_e;
+            x += xreal<FLS>(me->mpo->const_e);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
@@ -1139,7 +1142,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     }
     virtual tuple<vector<FPS>, int, size_t, double>
     multi_two_dot_eigs_and_perturb(const bool forward, const int i,
-                                   const double davidson_conv_thrd,
+                                   const FPS davidson_conv_thrd,
                                    const FPS noise,
                                    shared_ptr<SparseMatrixGroup<S, FLS>> &pket,
                                    vector<vector<pair<S, FPS>>> &mps_quanta) {
@@ -1152,9 +1155,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_type, davidson_shift - me->mpo->const_e,
-                          me->para_rule);
+        pdi = h_eff->eigs(
+            iprint >= 3, davidson_conv_thrd, davidson_max_iter, davidson_type,
+            davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -2122,16 +2125,19 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                            gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
                         if (eq_type == EquationTypes::GreensFunctionSquared)
-                            lpdi = l_eff->greens_function_squared(
-                                lme->mpo->const_e, gf_extra_omegas[j],
-                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
-                                real_bra, cg_n_harmonic_projection, iprint >= 3,
-                                minres_conv_thrd, minres_max_iter,
-                                minres_soft_max_iter, me->para_rule);
+                            lpdi = EffectiveFunctions<S, FL>::
+                                greens_function_squared(
+                                    l_eff, lme->mpo->const_e,
+                                    gf_extra_omegas[j],
+                                    gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                    real_bra, cg_n_harmonic_projection,
+                                    iprint >= 3, minres_conv_thrd,
+                                    minres_max_iter, minres_soft_max_iter,
+                                    me->para_rule);
                         else
-                            lpdi = l_eff->greens_function(
-                                lme->mpo->const_e, gf_extra_omegas[j],
-                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
+                            lpdi = EffectiveFunctions<S, FL>::greens_function(
+                                l_eff, lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
@@ -2157,13 +2163,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     tmp.deallocate();
                 }
                 if (eq_type == EquationTypes::GreensFunctionSquared)
-                    lpdi = l_eff->greens_function_squared(
-                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
+                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 else
-                    lpdi = l_eff->greens_function(
-                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    lpdi = EffectiveFunctions<S, FL>::greens_function(
+                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         gcrotmk_size, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
@@ -2808,16 +2814,19 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                            gf_extra_omegas.size() * 2);
                     for (size_t j = 0; j < gf_extra_omegas.size(); j++) {
                         if (eq_type == EquationTypes::GreensFunctionSquared)
-                            lpdi = l_eff->greens_function_squared(
-                                lme->mpo->const_e, gf_extra_omegas[j],
-                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
-                                real_bra, cg_n_harmonic_projection, iprint >= 3,
-                                minres_conv_thrd, minres_max_iter,
-                                minres_soft_max_iter, me->para_rule);
+                            lpdi = EffectiveFunctions<S, FL>::
+                                greens_function_squared(
+                                    l_eff, lme->mpo->const_e,
+                                    gf_extra_omegas[j],
+                                    gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                    real_bra, cg_n_harmonic_projection,
+                                    iprint >= 3, minres_conv_thrd,
+                                    minres_max_iter, minres_soft_max_iter,
+                                    me->para_rule);
                         else
-                            lpdi = l_eff->greens_function(
-                                lme->mpo->const_e, gf_extra_omegas[j],
-                                gf_extra_eta == 0 ? gf_eta : gf_extra_eta,
+                            lpdi = EffectiveFunctions<S, FL>::greens_function(
+                                l_eff, lme->mpo->const_e, gf_extra_omegas[j],
+                                gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
                                 minres_conv_thrd, minres_max_iter,
                                 minres_soft_max_iter, me->para_rule);
@@ -2843,13 +2852,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     tmp.deallocate();
                 }
                 if (eq_type == EquationTypes::GreensFunctionSquared)
-                    lpdi = l_eff->greens_function_squared(
-                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
+                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 else
-                    lpdi = l_eff->greens_function(
-                        lme->mpo->const_e, gf_omega, gf_eta, real_bra,
+                    lpdi = EffectiveFunctions<S, FL>::greens_function(
+                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         gcrotmk_size, iprint >= 3, minres_conv_thrd,
                         minres_max_iter, minres_soft_max_iter, me->para_rule);
                 targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
@@ -3309,7 +3318,12 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     midx = min_element(
                                sweep_targets.begin(), sweep_targets.end(),
                                [](const vector<FLS> &x, const vector<FLS> &y) {
-                                   return x.back() < y.back();
+                                   return ximag<FLS>(x.back()) !=
+                                                  ximag<FLS>(y.back())
+                                              ? ximag<FLS>(x.back()) <
+                                                    ximag<FLS>(y.back())
+                                              : xreal<FLS>(x.back()) <
+                                                    xreal<FLS>(y.back());
                                }) -
                            sweep_targets.begin();
                     break;
@@ -3317,25 +3331,38 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     midx = min_element(
                                sweep_targets.begin(), sweep_targets.end(),
                                [](const vector<FLS> &x, const vector<FLS> &y) {
-                                   return x.back() > y.back();
+                                   return ximag<FLS>(x.back()) !=
+                                                  ximag<FLS>(y.back())
+                                              ? ximag<FLS>(x.back()) >
+                                                    ximag<FLS>(y.back())
+                                              : xreal<FLS>(x.back()) >
+                                                    xreal<FLS>(y.back());
                                }) -
                            sweep_targets.begin();
                     break;
                 case ConvergenceTypes::FirstMinimal:
-                    midx = min_element(
-                               sweep_targets.begin(), sweep_targets.end(),
-                               [](const vector<FLS> &x, const vector<FLS> &y) {
-                                   return x[0] < y[0];
-                               }) -
-                           sweep_targets.begin();
+                    midx =
+                        min_element(
+                            sweep_targets.begin(), sweep_targets.end(),
+                            [](const vector<FLS> &x, const vector<FLS> &y) {
+                                return xreal<FLS>(x[0]) != xreal<FLS>(y[0])
+                                           ? xreal<FLS>(x[0]) < xreal<FLS>(y[0])
+                                           : ximag<FLS>(x[0]) <
+                                                 ximag<FLS>(y[0]);
+                            }) -
+                        sweep_targets.begin();
                     break;
                 case ConvergenceTypes::FirstMaximal:
-                    midx = min_element(
-                               sweep_targets.begin(), sweep_targets.end(),
-                               [](const vector<FLS> &x, const vector<FLS> &y) {
-                                   return x[0] > y[0];
-                               }) -
-                           sweep_targets.begin();
+                    midx =
+                        min_element(
+                            sweep_targets.begin(), sweep_targets.end(),
+                            [](const vector<FLS> &x, const vector<FLS> &y) {
+                                return xreal<FLS>(x[0]) != xreal<FLS>(y[0])
+                                           ? xreal<FLS>(x[0]) > xreal<FLS>(y[0])
+                                           : ximag<FLS>(x[0]) >
+                                                 ximag<FLS>(y[0]);
+                            }) -
+                        sweep_targets.begin();
                     break;
                 default:
                     assert(false);
@@ -3373,29 +3400,45 @@ template <typename S, typename FL, typename FLS> struct Linear {
         case ConvergenceTypes::LastMinimal:
             idx = min_element(sweep_targets.begin(), sweep_targets.end(),
                               [](const vector<FLS> &x, const vector<FLS> &y) {
-                                  return x.back() < y.back();
+                                  return ximag<FLS>(x.back()) !=
+                                                 ximag<FLS>(y.back())
+                                             ? ximag<FLS>(x.back()) <
+                                                   ximag<FLS>(y.back())
+                                             : xreal<FLS>(x.back()) <
+                                                   xreal<FLS>(y.back());
                               }) -
                   sweep_targets.begin();
             break;
         case ConvergenceTypes::LastMaximal:
             idx = min_element(sweep_targets.begin(), sweep_targets.end(),
                               [](const vector<FLS> &x, const vector<FLS> &y) {
-                                  return x.back() > y.back();
+                                  return ximag<FLS>(x.back()) !=
+                                                 ximag<FLS>(y.back())
+                                             ? ximag<FLS>(x.back()) >
+                                                   ximag<FLS>(y.back())
+                                             : xreal<FLS>(x.back()) >
+                                                   xreal<FLS>(y.back());
                               }) -
                   sweep_targets.begin();
             break;
         case ConvergenceTypes::FirstMinimal:
-            idx = min_element(sweep_targets.begin(), sweep_targets.end(),
-                              [](const vector<FLS> &x, const vector<FLS> &y) {
-                                  return x[0] < y[0];
-                              }) -
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<FLS> &x, const vector<FLS> &y) {
+                          return xreal<FLS>(x[0]) != xreal<FLS>(y[0])
+                                     ? xreal<FLS>(x[0]) < xreal<FLS>(y[0])
+                                     : ximag<FLS>(x[0]) < ximag<FLS>(y[0]);
+                      }) -
                   sweep_targets.begin();
             break;
         case ConvergenceTypes::FirstMaximal:
-            idx = min_element(sweep_targets.begin(), sweep_targets.end(),
-                              [](const vector<FLS> &x, const vector<FLS> &y) {
-                                  return x[0] > y[0];
-                              }) -
+            idx = min_element(
+                      sweep_targets.begin(), sweep_targets.end(),
+                      [](const vector<FLS> &x, const vector<FLS> &y) {
+                          return xreal<FLS>(x[0]) != xreal<FLS>(y[0])
+                                     ? xreal<FLS>(x[0]) > xreal<FLS>(y[0])
+                                     : ximag<FLS>(x[0]) > ximag<FLS>(y[0]);
+                      }) -
                   sweep_targets.begin();
             break;
         default:

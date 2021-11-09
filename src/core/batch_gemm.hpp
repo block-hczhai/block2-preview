@@ -231,11 +231,13 @@ template <typename FL> struct BatchGEMM {
                sizeof(const FL *) * batch->b.size());
         memcpy(c.data() + ii, batch->c.data(), sizeof(FL *) * batch->c.size());
     }
-    void xgemm_group(bool conja, bool conjb, MKL_INT m, MKL_INT n, MKL_INT k,
-                     FL alpha, MKL_INT lda, MKL_INT ldb, FL beta, MKL_INT ldc,
-                     MKL_INT gc) {
-        ta.push_back(conja ? CblasConjTrans : CblasNoTrans);
-        tb.push_back(conjb ? CblasConjTrans : CblasNoTrans);
+    void xgemm_group(uint8_t conja, uint8_t conjb, MKL_INT m, MKL_INT n,
+                     MKL_INT k, FL alpha, MKL_INT lda, MKL_INT ldb, FL beta,
+                     MKL_INT ldc, MKL_INT gc) {
+        ta.push_back(conja == 3 ? CblasConjTrans
+                                : (conja ? CblasTrans : CblasNoTrans));
+        tb.push_back(conjb == 3 ? CblasConjTrans
+                                : (conjb ? CblasTrans : CblasNoTrans));
         this->m.push_back(m), this->n.push_back(n), this->k.push_back(k);
         this->alpha.push_back(alpha), this->beta.push_back(beta);
         this->lda.push_back(lda), this->ldb.push_back(ldb),
@@ -246,7 +248,7 @@ template <typename FL> struct BatchGEMM {
     void xgemm_array(const FL *a, const FL *b, FL *c) {
         this->a.push_back(a), this->b.push_back(b), this->c.push_back(c);
     }
-    void xgemm(bool conja, bool conjb, MKL_INT m, MKL_INT n, MKL_INT k,
+    void xgemm(uint8_t conja, uint8_t conjb, MKL_INT m, MKL_INT n, MKL_INT k,
                FL alpha, const FL *a, MKL_INT lda, const FL *b, MKL_INT ldb,
                FL beta, FL *c, MKL_INT ldc) {
         xgemm_group(conja, conjb, m, n, k, alpha, lda, ldb, beta, ldc, 1);
@@ -262,83 +264,10 @@ template <typename FL> struct BatchGEMM {
         static FL x = 1.0;
         this->xgemm(false, false, n, 1, 1, 0.0, a, 1, &x, 1, scale, a, 1);
     }
-    // [c] = [a] * (scalar b) or [c] = (scalar a) * [b] or [c] = [a] \otimes [b]
-    void tensor_product(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,
-                        bool conjb, const GMatrix<FL> &c, FL scale,
-                        uint32_t stride, FL cfactor = 1.0) {
-        if (a.m == 1 && a.n == 1) {
-            if (!conjb && b.n == c.n)
-                this->xgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
-                            a.data, 1, cfactor, &c(0, stride), 1);
-            else if (!conjb) {
-                this->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
-                                  1, b.m);
-                for (MKL_INT k = 0; k < b.m; k++)
-                    this->xgemm_array(&b(k, 0), a.data, &c(k, stride));
-            } else {
-                this->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
-                                  cfactor, 1, b.n);
-                for (MKL_INT k = 0; k < b.n; k++)
-                    this->xgemm_array(&b(0, k), a.data, &c(k, stride));
-            }
-        } else if (b.m == 1 && b.n == 1) {
-            if (!conja && a.n == c.n)
-                this->xgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
-                            b.data, 1, cfactor, &c(0, stride), 1);
-            else if (!conja) {
-                this->xgemm_group(false, false, a.n, 1, 1, scale, 1, 1, cfactor,
-                                  1, a.m);
-                for (MKL_INT k = 0; k < a.m; k++)
-                    this->xgemm_array(&a(k, 0), b.data, &c(k, stride));
-            } else {
-                this->xgemm_group(false, false, a.m, 1, 1, scale, a.n, 1,
-                                  cfactor, 1, a.n);
-                for (MKL_INT k = 0; k < a.n; k++)
-                    this->xgemm_array(&a(0, k), b.data, &c(k, stride));
-            }
-        } else {
-            if (!conja && !conjb) {
-                this->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
-                                  1, b.m * a.m * a.n);
-                for (MKL_INT i = 0; i < a.m; i++)
-                    for (MKL_INT j = 0; j < a.n; j++)
-                        for (MKL_INT k = 0; k < b.m; k++)
-                            this->xgemm_array(
-                                &b(k, 0), &a(i, j),
-                                &c(i * b.m + k, j * b.n + stride));
-            } else if (conja && !conjb) {
-                this->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1, cfactor,
-                                  1, b.m * a.m * a.n);
-                for (MKL_INT i = 0; i < a.n; i++)
-                    for (MKL_INT j = 0; j < a.m; j++)
-                        for (MKL_INT k = 0; k < b.m; k++)
-                            this->xgemm_array(
-                                &b(k, 0), &a(j, i),
-                                &c(i * b.m + k, j * b.n + stride));
-            } else if (!conja && conjb) {
-                this->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
-                                  cfactor, 1, b.n * a.m * a.n);
-                for (MKL_INT i = 0; i < a.m; i++)
-                    for (MKL_INT j = 0; j < a.n; j++)
-                        for (MKL_INT k = 0; k < b.n; k++)
-                            this->xgemm_array(
-                                &b(0, k), &a(i, j),
-                                &c(i * b.n + k, j * b.m + stride));
-            } else {
-                this->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
-                                  cfactor, 1, b.n * a.m * a.n);
-                for (MKL_INT i = 0; i < a.n; i++)
-                    for (MKL_INT j = 0; j < a.m; j++)
-                        for (MKL_INT k = 0; k < b.n; k++)
-                            this->xgemm_array(
-                                &b(0, k), &a(j, i),
-                                &c(i * b.n + k, j * b.m + stride));
-            }
-        }
-    }
     // [c] = [a] x [b]
-    void multiply(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,
-                  bool conjb, const GMatrix<FL> &c, FL scale, FL cfactor) {
+    void multiply(const GMatrix<FL> &a, uint8_t conja, const GMatrix<FL> &b,
+                  uint8_t conjb, const GMatrix<FL> &c, FL scale, FL cfactor) {
+        assert(conja != 2 && conjb != 2);
         this->xgemm(conja, conjb, c.m, conjb ? b.m : b.n, conjb ? b.n : b.m,
                     scale, a.data, a.n, b.data, b.n, cfactor, c.data, c.n);
     }
@@ -347,57 +276,6 @@ template <typename FL> struct BatchGEMM {
                                  const GMatrix<FL> &c, FL scale) {
         this->xgemm(false, true, a.n, b.n, 1, scale, a.data, a.n + 1, b.data,
                     b.n + 1, 1.0, c.data, c.n);
-    }
-    //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
-    // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
-    void three_tensor_product_diagonal(const GMatrix<FL> &a,
-                                       const GMatrix<FL> &b,
-                                       const GMatrix<FL> &c,
-                                       const GMatrix<FL> &da, bool dconja,
-                                       const GMatrix<FL> &db, bool dconjb,
-                                       bool dleft, FL scale, uint32_t stride) {
-        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
-        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
-        if (dstrn != dstrm)
-            return;
-        assert(da.m == da.n && db.m == db.n);
-        const MKL_INT ddstr = 0;
-        if (da.m == 1 && da.n == 1) {
-            const FL *bdata =
-                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
-                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
-            if (db.n > abs(ddstr)) {
-                if (dleft)
-                    // (1 x db) x b
-                    this->xgemm(false, true, db.n - abs(ddstr), b.n, 1,
-                                scale * *da.data, bdata, db.n + 1, b.data,
-                                b.n + 1, 1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
-                                c.n);
-                else
-                    // a x (1 x db)
-                    this->xgemm(false, true, a.n, db.n - abs(ddstr), 1,
-                                scale * *da.data, a.data, a.n + 1, bdata,
-                                db.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
-            }
-        } else if (db.m == 1 && db.n == 1) {
-            const FL *adata =
-                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
-                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
-            if (da.n > abs(ddstr)) {
-                if (dleft)
-                    // (da x 1) x b
-                    this->xgemm(false, true, da.n - abs(ddstr), b.n, 1,
-                                scale * *db.data, adata, da.n + 1, b.data,
-                                b.n + 1, 1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
-                                c.n);
-                else
-                    // a x (da x 1)
-                    this->xgemm(false, true, a.n, da.n - abs(ddstr), 1,
-                                scale * *db.data, a.data, a.n + 1, adata,
-                                da.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
-            }
-        } else
-            assert(false);
     }
     // Execute DGEMM operation groups from index ii to ii + nn
     void perform(MKL_INT ii = 0, MKL_INT kk = 0, MKL_INT nn = 0) {
@@ -463,14 +341,378 @@ template <typename FL> struct BatchGEMMRef {
     }
 };
 
+template <typename FL, typename = void> struct AdvancedGEMM;
+
+template <typename FL>
+struct AdvancedGEMM<FL, typename enable_if<is_same<FL, double>::value>::type> {
+    // [c] = [a] x [b]
+    static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
+                         const GMatrix<FL> &a, uint8_t conja,
+                         const GMatrix<FL> &b, uint8_t conjb,
+                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+        batch->multiply(a, conja & 1, b, conjb & 1, c, scale, cfactor);
+    }
+    // [c] = [a] * (scalar b) or [c] = (scalar a) * [b] or [c] = [a] \otimes [b]
+    static void tensor_product(const shared_ptr<BatchGEMM<FL>> &batch,
+                               const GMatrix<FL> &a, bool conja,
+                               const GMatrix<FL> &b, bool conjb,
+                               const GMatrix<FL> &c, FL scale, uint32_t stride,
+                               FL cfactor = 1.0) {
+        if (a.m == 1 && a.n == 1) {
+            if (!conjb && b.n == c.n)
+                batch->xgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
+                             a.data, 1, cfactor, &c(0, stride), 1);
+            else if (!conjb) {
+                batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, b.m);
+                for (MKL_INT k = 0; k < b.m; k++)
+                    batch->xgemm_array(&b(k, 0), a.data, &c(k, stride));
+            } else {
+                batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                   cfactor, 1, b.n);
+                for (MKL_INT k = 0; k < b.n; k++)
+                    batch->xgemm_array(&b(0, k), a.data, &c(k, stride));
+            }
+        } else if (b.m == 1 && b.n == 1) {
+            if (!conja && a.n == c.n)
+                batch->xgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
+                             b.data, 1, cfactor, &c(0, stride), 1);
+            else if (!conja) {
+                batch->xgemm_group(false, false, a.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, a.m);
+                for (MKL_INT k = 0; k < a.m; k++)
+                    batch->xgemm_array(&a(k, 0), b.data, &c(k, stride));
+            } else {
+                batch->xgemm_group(false, false, a.m, 1, 1, scale, a.n, 1,
+                                   cfactor, 1, a.n);
+                for (MKL_INT k = 0; k < a.n; k++)
+                    batch->xgemm_array(&a(0, k), b.data, &c(k, stride));
+            }
+        } else {
+            if (!conja && !conjb) {
+                batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, b.m * a.m * a.n);
+                for (MKL_INT i = 0; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++)
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            batch->xgemm_array(
+                                &b(k, 0), &a(i, j),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (conja && !conjb) {
+                batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, b.m * a.m * a.n);
+                for (MKL_INT i = 0; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++)
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            batch->xgemm_array(
+                                &b(k, 0), &a(j, i),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (!conja && conjb) {
+                batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                   cfactor, 1, b.n * a.m * a.n);
+                for (MKL_INT i = 0; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++)
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            batch->xgemm_array(
+                                &b(0, k), &a(i, j),
+                                &c(i * b.n + k, j * b.m + stride));
+            } else {
+                batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
+                                   cfactor, 1, b.n * a.m * a.n);
+                for (MKL_INT i = 0; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++)
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            batch->xgemm_array(
+                                &b(0, k), &a(j, i),
+                                &c(i * b.n + k, j * b.m + stride));
+            }
+        }
+    }
+    //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
+    // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
+    static void three_tensor_product_diagonal(
+        const shared_ptr<BatchGEMM<FL>> &batch, const GMatrix<FL> &a,
+        const GMatrix<FL> &b, const GMatrix<FL> &c, const GMatrix<FL> &da,
+        bool dconja, const GMatrix<FL> &db, bool dconjb, bool dleft, FL scale,
+        uint32_t stride) {
+        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
+        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        assert(da.m == da.n && db.m == db.n);
+        const MKL_INT ddstr = 0;
+        if (da.m == 1 && da.n == 1) {
+            const FL *bdata =
+                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (db.n > abs(ddstr)) {
+                if (dleft)
+                    // (1 x db) x b
+                    batch->xgemm(false, true, db.n - abs(ddstr), b.n, 1,
+                                 scale * *da.data, bdata, db.n + 1, b.data,
+                                 b.n + 1, 1.0,
+                                 &c(max(dstrn, dstrm), (MKL_INT)0), c.n);
+                else
+                    // a x (1 x db)
+                    batch->xgemm(false, true, a.n, db.n - abs(ddstr), 1,
+                                 scale * *da.data, a.data, a.n + 1, bdata,
+                                 db.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            const FL *adata =
+                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (da.n > abs(ddstr)) {
+                if (dleft)
+                    // (da x 1) x b
+                    batch->xgemm(false, true, da.n - abs(ddstr), b.n, 1,
+                                 scale * *db.data, adata, da.n + 1, b.data,
+                                 b.n + 1, 1.0,
+                                 &c(max(dstrn, dstrm), (MKL_INT)0), c.n);
+                else
+                    // a x (da x 1)
+                    batch->xgemm(false, true, a.n, da.n - abs(ddstr), 1,
+                                 scale * *db.data, a.data, a.n + 1, adata,
+                                 da.n + 1, 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else
+            assert(false);
+    }
+    static size_t rotate(const vector<shared_ptr<BatchGEMM<FL>>> &batch,
+                         const GMatrix<FL> &a, const GMatrix<FL> &c,
+                         const GMatrix<FL> &bra, uint8_t conj_bra,
+                         const GMatrix<FL> &ket, uint8_t conj_ket, FL scale,
+                         vector<uint8_t> &cjc) {
+        GMatrix<FL> work((FL *)0 + batch[0]->work, a.m,
+                         conj_ket ? ket.m : ket.n);
+        AdvancedGEMM<FL>::multiply(batch[0], a, false, ket, conj_ket, work, 1.0,
+                                   0.0);
+        AdvancedGEMM<FL>::multiply(batch[1], bra, conj_bra, work, false, c,
+                                   scale, 1.0);
+        return work.size();
+    }
+};
+
+template <typename FL>
+struct AdvancedGEMM<
+    FL, typename enable_if<is_same<FL, complex<double>>::value>::type> {
+    // [c] = [a] x [b]
+    static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
+                         const GMatrix<FL> &a, uint8_t conja,
+                         const GMatrix<FL> &b, uint8_t conjb,
+                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+        if (conja != 2 && conjb != 2)
+            batch->multiply(a, conja, b, conjb, c, scale, cfactor);
+        else if (conja == 2 && conjb != 2) {
+            batch->xgemm_group(3, conjb, 1, (conjb & 1) ? b.m : b.n,
+                               (conjb & 1) ? b.n : b.m, scale, 1, b.n, cfactor,
+                               c.n, c.m);
+            for (MKL_INT k = 0; k < c.m; k++)
+                batch->xgemm_array(&a(k, 0), b.data, &c(k, 0));
+        } else if (conja != 3 && conjb == 2) {
+            batch->xgemm_group(3, conja ^ 1, b.n, 1, b.m, scale, b.n, a.n,
+                               cfactor, 1, c.m);
+            for (MKL_INT k = 0; k < c.m; k++)
+                batch->xgemm_array(b.data, (conja & 1) ? &a(0, k) : &a(k, 0),
+                                   &c(k, 0));
+        } else {
+            assert(false);
+        }
+    }
+    // [c] = [a] * (scalar b) or [c] = (scalar a) * [b] or [c] = [a] \otimes [b]
+    static void tensor_product(const shared_ptr<BatchGEMM<FL>> &batch,
+                               const GMatrix<FL> &a, bool conja,
+                               const GMatrix<FL> &b, bool conjb,
+                               const GMatrix<FL> &c, FL scale, uint32_t stride,
+                               FL cfactor = 1.0) {
+        if (a.m == 1 && a.n == 1) {
+            if (!conjb && b.n == c.n)
+                batch->xgemm(false, conja ? 3 : 0, b.m * b.n, 1, 1, scale,
+                             b.data, 1, a.data, 1, cfactor, &c(0, stride), 1);
+            else if (!conjb) {
+                batch->xgemm_group(false, conja ? 3 : 0, b.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, b.m);
+                for (MKL_INT k = 0; k < b.m; k++)
+                    batch->xgemm_array(&b(k, 0), a.data, &c(k, stride));
+            } else {
+                batch->xgemm_group(conja ? 3 : 0, 3, 1, b.m, 1, scale, 1, b.n,
+                                   cfactor, c.n, b.n);
+                for (MKL_INT k = 0; k < b.n; k++)
+                    batch->xgemm_array(a.data, &b(0, k), &c(k, stride));
+            }
+        } else if (b.m == 1 && b.n == 1) {
+            if (!conja && a.n == c.n)
+                batch->xgemm(false, conjb ? 3 : 0, a.m * a.n, 1, 1, scale,
+                             a.data, 1, b.data, 1, cfactor, &c(0, stride), 1);
+            else if (!conja) {
+                batch->xgemm_group(false, conjb ? 3 : 0, a.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, a.m);
+                for (MKL_INT k = 0; k < a.m; k++)
+                    batch->xgemm_array(&a(k, 0), b.data, &c(k, stride));
+            } else {
+                batch->xgemm_group(conjb ? 3 : 0, 3, 1, a.m, 1, scale, 1, a.n,
+                                   cfactor, c.n, a.n);
+                for (MKL_INT k = 0; k < a.n; k++)
+                    batch->xgemm_array(b.data, &a(0, k), &c(k, stride));
+            }
+        } else {
+            if (!conja && !conjb) {
+                batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
+                                   cfactor, 1, b.m * a.m * a.n);
+                for (MKL_INT i = 0; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++)
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            batch->xgemm_array(
+                                &b(k, 0), &a(i, j),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (conja && !conjb) {
+                batch->xgemm_group(false, 3, b.n, 1, 1, scale, 1, 1, cfactor, 1,
+                                   b.m * a.m * a.n);
+                for (MKL_INT i = 0; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++)
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            batch->xgemm_array(
+                                &b(k, 0), &a(j, i),
+                                &c(i * b.m + k, j * b.n + stride));
+            } else if (!conja && conjb) {
+                batch->xgemm_group(false, 3, 1, b.m, 1, scale, 1, b.n, cfactor,
+                                   c.n, b.n * a.m * a.n);
+                for (MKL_INT i = 0; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++)
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            batch->xgemm_array(
+                                &a(i, j), &b(0, k),
+                                &c(i * b.n + k, j * b.m + stride));
+            } else {
+                batch->xgemm_group(3, 3, 1, b.m, 1, scale, 1, b.n, cfactor, c.n,
+                                   b.n * a.m * a.n);
+                for (MKL_INT i = 0; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++)
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            batch->xgemm_array(
+                                &a(j, i), &b(0, k),
+                                &c(i * b.n + k, j * b.m + stride));
+            }
+        }
+    }
+    //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
+    // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
+    static void three_tensor_product_diagonal(
+        const shared_ptr<BatchGEMM<FL>> &batch, const GMatrix<FL> &a,
+        const GMatrix<FL> &b, const GMatrix<FL> &c, const GMatrix<FL> &da,
+        bool dconja, const GMatrix<FL> &db, bool dconjb, bool dleft, FL scale,
+        uint32_t stride) {
+        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
+        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        assert(da.m == da.n && db.m == db.n);
+        const MKL_INT ddstr = 0;
+        if (da.m == 1 && da.n == 1) {
+            scale *= dconja ? xconj<FL>(*da.data) : *da.data;
+            const FL *bdata =
+                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (db.n > abs(ddstr)) {
+                if (dleft)
+                    // (1 x db) x b
+                    if (!dconjb)
+                        batch->xgemm(false, true, db.n - abs(ddstr), b.n, 1,
+                                     scale, bdata, db.n + 1, b.data, b.n + 1,
+                                     1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
+                                     c.n);
+                    else {
+                        batch->xgemm_group(3, true, 1, b.n, 1, scale, 1,
+                                           b.n + 1, 1.0, c.n,
+                                           db.n - abs(ddstr));
+                        for (MKL_INT i = 0; i < db.n - abs(ddstr); i++)
+                            batch->xgemm_array(
+                                bdata + i * (db.n + 1), b.data,
+                                &c(max(dstrn, dstrm) + i, (MKL_INT)0));
+                    }
+                else
+                    // a x (1 x db)
+                    batch->xgemm(false, dconjb ? 3 : 1, a.n, db.n - abs(ddstr),
+                                 1, scale, a.data, a.n + 1, bdata, db.n + 1,
+                                 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            scale *= dconjb ? xconj<FL>(*db.data) : *db.data;
+            const FL *adata =
+                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (da.n > abs(ddstr)) {
+                if (dleft)
+                    // (da x 1) x b
+                    if (!dconja)
+                        batch->xgemm(false, true, da.n - abs(ddstr), b.n, 1,
+                                     scale, adata, da.n + 1, b.data, b.n + 1,
+                                     1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
+                                     c.n);
+                    else {
+                        batch->xgemm_group(3, true, 1, b.n, 1, scale, 1,
+                                           b.n + 1, 1.0, c.n,
+                                           da.n - abs(ddstr));
+                        for (MKL_INT i = 0; i < da.n - abs(ddstr); i++)
+                            batch->xgemm_array(
+                                adata + i * (da.n + 1), b.data,
+                                &c(max(dstrn, dstrm) + i, (MKL_INT)0));
+                    }
+                else
+                    // a x (da x 1)
+                    batch->xgemm(false, dconja ? 3 : 1, a.n, da.n - abs(ddstr),
+                                 1, scale, a.data, a.n + 1, adata, da.n + 1,
+                                 1.0, &c(0, max(dstrn, dstrm)), c.n);
+            }
+        } else
+            assert(false);
+    }
+    static size_t rotate(const vector<shared_ptr<BatchGEMM<FL>>> &batch,
+                         const GMatrix<FL> &a, const GMatrix<FL> &c,
+                         const GMatrix<FL> &bra, uint8_t conj_bra,
+                         const GMatrix<FL> &ket, uint8_t conj_ket, FL scale,
+                         vector<uint8_t> &cjc) {
+        if (conj_bra != 2 && conj_ket != 2) {
+            GMatrix<FL> work((FL *)0 + batch[0]->work, a.m,
+                             (conj_ket & 1) ? ket.m : ket.n);
+            AdvancedGEMM<FL>::multiply(batch[0], a, false, ket, conj_ket, work,
+                                       1.0, 0.0);
+            AdvancedGEMM<FL>::multiply(batch[1], bra, conj_bra, work, false, c,
+                                       scale, 1.0);
+            cjc.push_back(0);
+            return work.size();
+        } else if (conj_bra != 2) {
+            GMatrix<FL> work((FL *)0 + batch[0]->work, ket.n, a.m);
+            AdvancedGEMM<FL>::multiply(batch[0], ket, 3, a, true, work, 1.0,
+                                       0.0);
+            AdvancedGEMM<FL>::multiply(batch[1], bra, conj_bra, work, true, c,
+                                       scale, 1.0);
+            cjc.push_back(2);
+            return work.size();
+        } else if (conj_ket != 2) {
+            GMatrix<FL> work((FL *)0 + batch[0]->work, a.n, bra.m);
+            AdvancedGEMM<FL>::multiply(batch[0], a, true, bra, 3, work, 1.0,
+                                       0.0);
+            AdvancedGEMM<FL>::multiply(batch[1], work, true, ket, conj_ket, c,
+                                       scale, 1.0);
+            cjc.push_back(1);
+            return work.size();
+        } else {
+            assert(false);
+            return 0;
+        }
+    }
+};
+
 // Batched DGEMM analyzer
 template <typename FL> struct BatchGEMMSeq {
+    typedef typename GMatrix<FL>::FP FP;
     shared_ptr<vector<FL>> vdata;
     vector<shared_ptr<BatchGEMM<FL>>> batch;
     vector<shared_ptr<BatchGEMM<FL>>> post_batch;
     // conj_c for change work array position
     // for "rotate" for partial expectation
-    vector<bool> cjc;
+    vector<uint8_t> cjc;
     vector<BatchGEMMRef<FL>> refs;
     size_t cumulative_nflop = 0;
     size_t max_batch_flops = 1LU << 30;
@@ -495,43 +737,47 @@ template <typename FL> struct BatchGEMMSeq {
         return seq;
     }
     // [a] = cfactor * [a] + scale * [b]
+    // conj means conj trans
     void iadd(const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale = 1.0,
-              FL cfactor = 1.0, bool conj = false) {
+              bool conj = false, FL cfactor = 1.0) {
         static FL x = 1;
         if (!conj)
             batch[1]->iadd(a.data, b.data, a.m * a.n, scale, cfactor);
         else
-            batch[1]->tensor_product(b, conj, GMatrix<FL>(&x, 1, 1), false, a,
-                                     scale, 0, cfactor);
+            AdvancedGEMM<FL>::tensor_product(batch[1], b, conj,
+                                             GMatrix<FL>(&x, 1, 1), false, a,
+                                             scale, 0, cfactor);
     }
     // [c] = scale * [a] x [b] + cfactor * [c]
-    void multiply(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,
-                  bool conjb, const GMatrix<FL> &c, FL scale, FL cfactor) {
-        batch[1]->multiply(a, conja, b, conjb, c, scale, cfactor);
+    void multiply(const GMatrix<FL> &a, uint8_t conja, const GMatrix<FL> &b,
+                  uint8_t conjb, const GMatrix<FL> &c, FL scale, FL cfactor) {
+        AdvancedGEMM<FL>::multiply(batch[1], a, conja, b, conjb, c, scale,
+                                   cfactor);
     }
     // [c] = scale * [bra](.T) x [a] x [ket](.T)
     void rotate(const GMatrix<FL> &a, const GMatrix<FL> &c,
-                const GMatrix<FL> &bra, bool conj_bra, const GMatrix<FL> &ket,
-                bool conj_ket, FL scale) {
-        GMatrix<FL> work((FL *)0 + batch[0]->work, a.m,
-                         conj_ket ? ket.m : ket.n);
-        batch[0]->multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
-        batch[1]->multiply(bra, conj_bra, work, false, c, scale, 1.0);
+                const GMatrix<FL> &bra, uint8_t conj_bra,
+                const GMatrix<FL> &ket, uint8_t conj_ket, FL scale) {
+        size_t wsz = AdvancedGEMM<FL>::rotate(batch, a, c, bra, conj_bra, ket,
+                                              conj_ket, scale, cjc);
         if (mode & SeqTypes::Tasked)
-            max_work = max(max_work, work.size());
-        batch[0]->work += work.size();
-        batch[1]->work += work.size();
+            max_work = max(max_work, wsz);
+        batch[0]->work += wsz;
+        batch[1]->work += wsz;
     }
     // [c](.T) = scale * [bra].T x [a](.T) x [ket]
     void rotate(const GMatrix<FL> &a, bool conj_a, const GMatrix<FL> &c,
                 bool conj_c, const GMatrix<FL> &bra, const GMatrix<FL> &ket,
                 FL scale) {
         GMatrix<FL> work((FL *)0 + batch[0]->work, conj_a ? a.n : a.m, ket.n);
-        batch[0]->multiply(a, conj_a, ket, false, work, 1.0, 0.0);
+        AdvancedGEMM<FL>::multiply(batch[0], a, conj_a ? 3 : 0, ket, false,
+                                   work, 1.0, 0.0);
         if (!conj_c)
-            batch[1]->multiply(bra, true, work, false, c, scale, 1.0);
+            AdvancedGEMM<FL>::multiply(batch[1], bra, 3, work, false, c, scale,
+                                       1.0);
         else
-            batch[1]->multiply(work, true, bra, false, c, scale, 1.0);
+            AdvancedGEMM<FL>::multiply(batch[1], work, 3, bra, false, c,
+                                       xconj<FL>(scale), 1.0);
         cjc.push_back(conj_c);
         if (mode & SeqTypes::Tasked)
             max_work = max(max_work, work.size());
@@ -555,18 +801,21 @@ template <typename FL> struct BatchGEMMSeq {
             work = GMatrix<FL>((FL *)0 + batch[0]->work, am,
                                conj_ket ? ket.m : ket.n);
             // work = a * ket
-            batch[0]->multiply(GMatrix<FL>(&a(ast, 0), am, a.n), false, ket,
-                               conj_ket, work, scale, 0.0);
+            AdvancedGEMM<FL>::multiply(batch[0],
+                                       GMatrix<FL>(&a(ast, 0), am, a.n), false,
+                                       ket, conj_ket ? 1 : 2, work, scale, 0.0);
             if (da.m == 1 && da.n == 1)
                 // c = (1 x db) * work
-                batch[1]->multiply(db, dconjb, work, false,
-                                   GMatrix<FL>(&c(cst, 0), cm, c.n), *da.data,
-                                   1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], db, dconjb ? 3 : 0, work, false,
+                    GMatrix<FL>(&c(cst, 0), cm, c.n),
+                    dconja ? xconj<FL>(*da.data) : *da.data, 1.0);
             else if (db.m == 1 && db.n == 1)
                 // c = (da x 1) * work
-                batch[1]->multiply(da, dconja, work, false,
-                                   GMatrix<FL>(&c(cst, 0), cm, c.n), *db.data,
-                                   1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], da, dconja ? 3 : 0, work, false,
+                    GMatrix<FL>(&c(cst, 0), cm, c.n),
+                    dconjb ? xconj<FL>(*db.data) : *db.data, 1.0);
             else
                 assert(false);
         } else {
@@ -578,17 +827,22 @@ template <typename FL> struct BatchGEMMSeq {
             work = GMatrix<FL>((FL *)0 + batch[0]->work, a.m, kn);
             if (da.m == 1 && da.n == 1)
                 // work = a * (1 x db)
-                batch[0]->multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, db,
-                                   dconjb, work, *da.data, 0.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[0], GMatrix<FL>(&a(0, ast), a.m, a.n), false, db,
+                    dconjb ? 1 : 2, work,
+                    !dconja ? xconj<FL>(*da.data) : *da.data, 0.0);
             else if (db.m == 1 && db.n == 1)
                 // work = a * (da x 1)
-                batch[0]->multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, da,
-                                   dconja, work, *db.data, 0.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[0], GMatrix<FL>(&a(0, ast), a.m, a.n), false, da,
+                    dconja ? 1 : 2, work,
+                    !dconjb ? xconj<FL>(*db.data) : *db.data, 0.0);
             else
                 assert(false);
             // c = bra * work
-            batch[1]->multiply(bra, conj_bra, work, false,
-                               GMatrix<FL>(&c(0, cst), c.m, c.n), scale, 1.0);
+            AdvancedGEMM<FL>::multiply(batch[1], bra, conj_bra ? 3 : 0, work,
+                                       false, GMatrix<FL>(&c(0, cst), c.m, c.n),
+                                       scale, 1.0);
         }
         if (mode & SeqTypes::Tasked)
             max_work = max(max_work, work.size());
@@ -609,23 +863,25 @@ template <typename FL> struct BatchGEMMSeq {
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
             uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
-            batch[1]->multiply(GMatrix<FL>(&a(ast, 0), am, a.n), false, ket,
-                               conj_ket, GMatrix<FL>(&c(cst, 0), cm, c.n),
-                               scale, 1.0);
+            AdvancedGEMM<FL>::multiply(
+                batch[1], GMatrix<FL>(&a(ast, 0), am, a.n), false, ket,
+                conj_ket ? 1 : 2, GMatrix<FL>(&c(cst, 0), cm, c.n), scale, 1.0);
         } else {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
             uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
             if (da.m == 1 && da.n == 1)
                 // c = a * (1 x db)
-                batch[1]->multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, db,
-                                   dconjb, GMatrix<FL>(&c(0, cst), c.m, c.n),
-                                   *da.data * scale, 1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], GMatrix<FL>(&a(0, ast), a.m, a.n), false, db,
+                    dconjb ? 1 : 2, GMatrix<FL>(&c(0, cst), c.m, c.n),
+                    (!dconja ? xconj<FL>(*da.data) : *da.data) * scale, 1.0);
             else if (db.m == 1 && db.n == 1)
                 // c = a * (da x 1)
-                batch[1]->multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, da,
-                                   dconja, GMatrix<FL>(&c(0, cst), c.m, c.n),
-                                   *db.data * scale, 1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], GMatrix<FL>(&a(0, ast), a.m, a.n), false, da,
+                    dconja ? 1 : 2, GMatrix<FL>(&c(0, cst), c.m, c.n),
+                    (!dconjb ? xconj<FL>(*db.data) : *db.data) * scale, 1.0);
             else
                 assert(false);
         }
@@ -646,14 +902,18 @@ template <typename FL> struct BatchGEMMSeq {
             uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
             if (da.m == 1 && da.n == 1)
                 // c = (1 x db) * a
-                batch[1]->multiply(db, dconjb, GMatrix<FL>(&a(ast, 0), am, a.n),
-                                   false, GMatrix<FL>(&c(cst, 0), cm, c.n),
-                                   *da.data * scale, 1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], db, dconjb ? 3 : 0,
+                    GMatrix<FL>(&a(ast, 0), am, a.n), false,
+                    GMatrix<FL>(&c(cst, 0), cm, c.n),
+                    scale * (dconja ? xconj<FL>(*da.data) : *da.data), 1.0);
             else if (db.m == 1 && db.n == 1)
                 // c = (da x 1) * a
-                batch[1]->multiply(da, dconja, GMatrix<FL>(&a(ast, 0), am, a.n),
-                                   false, GMatrix<FL>(&c(cst, 0), cm, c.n),
-                                   *db.data * scale, 1.0);
+                AdvancedGEMM<FL>::multiply(
+                    batch[1], da, dconja ? 3 : 0,
+                    GMatrix<FL>(&a(ast, 0), am, a.n), false,
+                    GMatrix<FL>(&c(cst, 0), cm, c.n),
+                    scale * (dconjb ? xconj<FL>(*db.data) : *db.data), 1.0);
             else
                 assert(false);
         } else {
@@ -663,8 +923,9 @@ template <typename FL> struct BatchGEMMSeq {
             uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
             uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
             // c = bra * a
-            batch[1]->xgemm(conj_bra, false, c.m, kn, a.m, scale, bra.data,
-                            bra.n, &a(0, ast), a.n, 1.0, &c(0, cst), c.n);
+            batch[1]->xgemm(conj_bra ? 3 : 0, false, c.m, kn, a.m, scale,
+                            bra.data, bra.n, &a(0, ast), a.n, 1.0, &c(0, cst),
+                            c.n);
         }
     }
     // [c] = scale * diag(a) (out product) diag(b)
@@ -680,14 +941,15 @@ template <typename FL> struct BatchGEMMSeq {
                                        const GMatrix<FL> &da, bool dconja,
                                        const GMatrix<FL> &db, bool dconjb,
                                        bool dleft, FL scale, uint32_t stride) {
-        batch[1]->three_tensor_product_diagonal(a, b, c, da, dconja, db, dconjb,
-                                                dleft, scale, stride);
+        AdvancedGEMM<FL>::three_tensor_product_diagonal(
+            batch[1], a, b, c, da, dconja, db, dconjb, dleft, scale, stride);
     }
     // [c + stride] = [a] * (scalar b) or [c] = (scalar a) * [b]
     void tensor_product(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,
                         bool conjb, const GMatrix<FL> &c, FL scale,
                         uint32_t stride) {
-        batch[1]->tensor_product(a, conja, b, conjb, c, scale, stride);
+        AdvancedGEMM<FL>::tensor_product(batch[1], a, conja, b, conjb, c, scale,
+                                         stride);
     }
     // Divide batch to several batches
     // so that nflop of each batch is roughly max_batch_flops
@@ -919,7 +1181,7 @@ template <typename FL> struct BatchGEMMSeq {
                     batch[1]->b[i] += shift;
             else {
                 for (size_t i = 0; i < batch[1]->b.size(); i++)
-                    if (!cjc[i])
+                    if (!(cjc[i] & 1))
                         batch[1]->b[i] += shift;
                     else
                         batch[1]->a[i] += shift;
@@ -948,7 +1210,7 @@ template <typename FL> struct BatchGEMMSeq {
     }
     // Deallocate work arrays
     void deallocate() { vdata = nullptr; }
-    // Perform non-confliciting batched DGEMM
+    // Perform non-conflicting batched DGEMM
     void simple_perform() {
         divide_batch();
         if (!no_check)
@@ -959,7 +1221,7 @@ template <typename FL> struct BatchGEMMSeq {
         clear();
     }
     // SeqTypes::Auto:
-    //   Perform possibly confliciting batched DGEMM
+    //   Perform possibly conflicting batched DGEMM
     //   An analysis is performed to automatically resolve conflicts
     // SeqTypes::Tasked:
     //   Each thread write to thread-copied outputs
@@ -977,8 +1239,8 @@ template <typename FL> struct BatchGEMMSeq {
 #pragma omp parallel num_threads(ntop)
             {
                 int tid = threading->get_thread_id();
-                shared_ptr<VectorAllocator<double>> d_alloc =
-                    make_shared<VectorAllocator<double>>();
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
                 if (tid != 0)
                     vts[tid].allocate(d_alloc);
                 size_t t_vshift = vts[tid].data - v.data;
@@ -1047,7 +1309,7 @@ template <typename FL> struct BatchGEMMSeq {
         parallel_reduce(mats, m, j);
 #pragma omp taskwait
 #endif
-        MatrixFunctions::iadd(mats[i], mats[m], 1.0);
+        GMatrixFunctions<FL>::iadd(mats[i], mats[m], 1.0);
     }
     // Matrix multiply vector (c) => vector (v)
     // (in automatic mode)
@@ -1057,8 +1319,16 @@ template <typename FL> struct BatchGEMMSeq {
         size_t vshift = v.data - (FL *)0;
         if (mode == SeqTypes::Auto) {
             assert(scale == 1.0);
-            for (size_t i = 0; i < batch[0]->a.size(); i++)
-                batch[0]->a[i] += cshift;
+            if (cjc.size() == 0)
+                for (size_t i = 0; i < batch[0]->a.size(); i++)
+                    batch[0]->a[i] += cshift;
+            else {
+                for (size_t i = 0; i < batch[0]->a.size(); i++)
+                    if (!(cjc[i] & 2))
+                        batch[0]->a[i] += cshift;
+                    else
+                        batch[0]->b[i] += cshift;
+            }
             size_t ipost = 0;
             for (auto b : refs) {
                 if (b.ipost != 0)
@@ -1068,8 +1338,16 @@ template <typename FL> struct BatchGEMMSeq {
                 ipost += b.ipost;
             }
             perform();
-            for (size_t i = 0; i < batch[0]->a.size(); i++)
-                batch[0]->a[i] -= cshift;
+            if (cjc.size() == 0)
+                for (size_t i = 0; i < batch[0]->a.size(); i++)
+                    batch[0]->a[i] -= cshift;
+            else {
+                for (size_t i = 0; i < batch[0]->a.size(); i++)
+                    if (!(cjc[i] & 2))
+                        batch[0]->a[i] -= cshift;
+                    else
+                        batch[0]->b[i] -= cshift;
+            }
             ipost = 0;
             for (auto b : refs) {
                 if (b.ipost != 0)
@@ -1089,19 +1367,42 @@ template <typename FL> struct BatchGEMMSeq {
 #pragma omp parallel num_threads(ntop)
             {
                 int tid = threading->get_thread_id();
-                shared_ptr<VectorAllocator<double>> d_alloc =
-                    make_shared<VectorAllocator<double>>();
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
                 if (tid != 0)
                     vts[tid].allocate(d_alloc);
                 works[tid].allocate(d_alloc);
                 size_t t_vshift = vts[tid].data - (FL *)0;
+                if (cjc.size() == 0)
 #pragma omp for schedule(static)
-                for (int i = 0; i < (int)batch[0]->c.size(); i++) {
-                    batch[0]->perform_single(i, batch[0]->a[i] + cshift,
-                                             batch[0]->b[i], works[tid].data);
-                    batch[1]->perform_single(i, batch[1]->a[i], works[tid].data,
-                                             batch[1]->c[i] + t_vshift, scale);
-                }
+                    for (int i = 0; i < (int)batch[0]->c.size(); i++) {
+                        batch[0]->perform_single(i, batch[0]->a[i] + cshift,
+                                                 batch[0]->b[i],
+                                                 works[tid].data);
+                        batch[1]->perform_single(
+                            i, batch[1]->a[i], works[tid].data,
+                            batch[1]->c[i] + t_vshift, scale);
+                    }
+                else
+#pragma omp for schedule(static)
+                    for (int i = 0; i < (int)batch[0]->c.size(); i++) {
+                        if (!(cjc[i] & 2))
+                            batch[0]->perform_single(i, batch[0]->a[i] + cshift,
+                                                     batch[0]->b[i],
+                                                     works[tid].data);
+                        else
+                            batch[0]->perform_single(i, batch[0]->a[i],
+                                                     batch[0]->b[i] + cshift,
+                                                     works[tid].data);
+                        if (!(cjc[i] & 1))
+                            batch[1]->perform_single(
+                                i, batch[1]->a[i], works[tid].data,
+                                batch[1]->c[i] + t_vshift, scale);
+                        else
+                            batch[1]->perform_single(
+                                i, works[tid].data, batch[1]->b[i],
+                                batch[1]->c[i] + t_vshift, scale);
+                    }
 #pragma omp single
                 parallel_reduce(vts, 0, ntop);
                 works[tid].deallocate(d_alloc);

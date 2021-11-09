@@ -243,6 +243,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         const MKL_INT inc = 1;
         return xnrm2<FL>(&a.nnz, a.data, &inc);
     }
+    // normal dot with no conj
     static FL dot(const GCSRMatrix<FL> &a, const GCSRMatrix<FL> &b) {
         assert(a.m == b.m && a.n == b.n && a.nnz == b.nnz);
         const MKL_INT inc = 1;
@@ -282,7 +283,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             MKL_INT jb = brows[i], jbr = brows[i + 1];
             for (; ja < jar && jb < jbr; k++) {
                 if (acols[ja] == bcols[jb]) {
-                    r += xconj<FL>(adata[ja]) * bdata[jb];
+                    r += adata[ja] * bdata[jb];
                     ja++, jb++;
                 } else if (acols[ja] > bcols[jb])
                     jb++;
@@ -357,17 +358,25 @@ template <typename FL> struct GCSRMatrixFunctions {
             MKL_INT jb = brows[i], jbr = brows[i + 1];
             for (; ja < jar || jb < jbr; k++) {
                 if (ja >= jar)
-                    rcols[k] = bcols[jb], rdata[k] = bdata[jb] * scale, jb++;
+                    rcols[k] = bcols[jb],
+                    rdata[k] =
+                        (conj ? xconj<FL>(bdata[jb]) : bdata[jb]) * scale,
+                    jb++;
                 else if (jb >= jbr)
                     rcols[k] = acols[ja], rdata[k] = adata[ja], ja++;
                 else if (acols[ja] == bcols[jb]) {
                     rcols[k] = acols[ja];
-                    rdata[k] = adata[ja] + bdata[jb] * scale;
+                    rdata[k] =
+                        adata[ja] +
+                        (conj ? xconj<FL>(bdata[jb]) : bdata[jb]) * scale;
                     if (abs(rdata[k]) < TINY)
                         k--;
                     ja++, jb++;
                 } else if (acols[ja] > bcols[jb])
-                    rcols[k] = bcols[jb], rdata[k] = bdata[jb] * scale, jb++;
+                    rcols[k] = bcols[jb],
+                    rdata[k] =
+                        (conj ? xconj<FL>(bdata[jb]) : bdata[jb]) * scale,
+                    jb++;
                 else
                     rcols[k] = acols[ja], rdata[k] = adata[ja], ja++;
             }
@@ -390,9 +399,9 @@ template <typename FL> struct GCSRMatrixFunctions {
             tmp.deallocate();
 #endif
     }
-    static void multiply(const GCSRMatrix<FL> &a, bool conja,
-                         const GCSRMatrix<FL> &b, bool conjb, GCSRMatrix<FL> &c,
-                         FL scale, FL cfactor) {
+    static void multiply(const GCSRMatrix<FL> &a, uint8_t conja,
+                         const GCSRMatrix<FL> &b, uint8_t conjb,
+                         GCSRMatrix<FL> &c, FL scale, FL cfactor) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -440,17 +449,23 @@ template <typename FL> struct GCSRMatrixFunctions {
         MKL_INT *arows = a.rows, *acols = a.cols, *brows = b.rows,
                 *bcols = b.cols;
         FL *adata = a.data, *bdata = b.data;
-        const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
-        const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
+        const MKL_INT am = (conja & 1) ? a.n : a.m,
+                      an = (conja & 1) ? a.m : a.n;
+        const MKL_INT bm = (conjb & 1) ? b.n : b.m,
+                      bn = (conjb & 1) ? b.m : b.n;
         assert(am == c.m && bn == c.n && an == bm);
-        if (conja)
+        if (conja & 1)
             tmps.push_back(a.transpose(d_alloc)), arows = tmps.back().rows,
                                                   acols = tmps.back().cols,
                                                   adata = tmps.back().data;
-        if (conjb)
+        if (conjb & 1)
             tmps.push_back(b.transpose(d_alloc)), brows = tmps.back().rows,
                                                   bcols = tmps.back().cols,
                                                   bdata = tmps.back().data;
+        if (conja == 2 || conja == 1)
+            GMatrixFunctions<FL>::conjugate(GMatrix<FL>(adata, a.nnz, 1));
+        if (conjb == 2 || conjb == 1)
+            GMatrixFunctions<FL>::conjugate(GMatrix<FL>(bdata, b.nnz, 1));
         MKL_INT *r_idx = (MKL_INT *)i_alloc->allocate((c.m + 1) * _MINTSZ);
         vector<MKL_INT> tcols, rcols;
         vector<FL> tdata, rdata;
@@ -509,8 +524,8 @@ template <typename FL> struct GCSRMatrixFunctions {
         for (MKL_INT it = conja + conjb - 1; it >= 0; it--)
             tmps[it].deallocate();
     }
-    static void multiply(const GMatrix<FL> &a, bool conja,
-                         const GCSRMatrix<FL> &b, bool conjb,
+    static void multiply(const GMatrix<FL> &a, uint8_t conja,
+                         const GCSRMatrix<FL> &b, uint8_t conjb,
                          const GMatrix<FL> &c, FL scale, FL cfactor) {
         if (b.nnz == b.size())
             return GMatrixFunctions<FL>::multiply(a, conja, b.dense_ref(),
@@ -518,30 +533,41 @@ template <typename FL> struct GCSRMatrixFunctions {
 #ifdef _HAS_INTEL_MKL
         struct matrix_descr mt;
         mt.type = SPARSE_MATRIX_TYPE_GENERAL;
-        assert((conja ? a.n : a.m) == c.m);
-        assert((conjb ? b.m : b.n) == c.n);
-        assert((conja ? a.m : a.n) == (conjb ? b.n : b.m));
+        assert(((conja & 1) ? a.n : a.m) == c.m);
+        assert(((conjb & 1) ? b.m : b.n) == c.n);
+        assert(((conja & 1) ? a.m : a.n) == ((conjb & 1) ? b.n : b.m));
         shared_ptr<sparse_matrix_t> spb =
             MKLSparseAllocator<FL>::to_mkl_sparse_matrix(b);
+        // TODO: CSR conj not resolved
+        assert(conjb != 3);
         if (!conja) {
-            sparse_status_t st =
-                mkl_sparse_d_mm(!conjb ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
-                                       : SPARSE_OPERATION_NON_TRANSPOSE,
-                                scale, *spb, mt, SPARSE_LAYOUT_COLUMN_MAJOR,
-                                a.data, a.m, a.n, cfactor, c.data, c.n);
+            sparse_status_t st = mkl_sparse_x_mm<FL>(
+                conjb == 2 ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
+                           : (conjb == 0 ? SPARSE_OPERATION_TRANSPOSE
+                                         : SPARSE_OPERATION_NON_TRANSPOSE),
+                scale, *spb, mt, SPARSE_LAYOUT_COLUMN_MAJOR, a.data, a.m, a.n,
+                cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
         } else {
             shared_ptr<VectorAllocator<FP>> d_alloc =
                 make_shared<VectorAllocator<FP>>();
-            GMatrix<FL> at(nullptr, a.n, a.m);
+            GMatrix<FL> at(nullptr, (conja & 1) ? a.n : a.m,
+                           (conja & 1) ? a.m : a.n);
             at.allocate(d_alloc);
-            for (MKL_INT i = 0, inc = 1; i < at.m; i++)
-                dcopy(&at.n, a.data + i, &at.m, at.data + i * at.n, &inc);
-            sparse_status_t st =
-                mkl_sparse_d_mm(!conjb ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
-                                       : SPARSE_OPERATION_NON_TRANSPOSE,
-                                scale, *spb, mt, SPARSE_LAYOUT_COLUMN_MAJOR,
-                                at.data, at.m, at.n, cfactor, c.data, c.n);
+            if (conja == 3)
+                GMatrixFunctions<FL>::iadd(at, a, 1.0, true, 0.0);
+            else if (conja == 1)
+                GMatrixFunctions<FL>::transpose(at, a, 1.0, 0.0);
+            else {
+                GMatrixFunctions<FL>::copy(at, a);
+                GMatrixFunctions<FL>::conjugate(at);
+            }
+            sparse_status_t st = mkl_sparse_x_mm<FL>(
+                conjb == 2 ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
+                           : (conjb == 0 ? SPARSE_OPERATION_TRANSPOSE
+                                         : SPARSE_OPERATION_NON_TRANSPOSE),
+                scale, *spb, mt, SPARSE_LAYOUT_COLUMN_MAJOR, at.data, at.m,
+                at.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
             at.deallocate(d_alloc);
         }
@@ -592,9 +618,9 @@ template <typename FL> struct GCSRMatrixFunctions {
         }
 #endif
     }
-    static void multiply(const GCSRMatrix<FL> &a, bool conja,
-                         const GMatrix<FL> &b, bool conjb, const GMatrix<FL> &c,
-                         FL scale, FL cfactor) {
+    static void multiply(const GCSRMatrix<FL> &a, uint8_t conja,
+                         const GMatrix<FL> &b, uint8_t conjb,
+                         const GMatrix<FL> &c, FL scale, FL cfactor) {
         if (a.nnz == a.size())
             return GMatrixFunctions<FL>::multiply(a.dense_ref(), conja, b,
                                                   conjb, c, scale, cfactor);
@@ -607,23 +633,29 @@ template <typename FL> struct GCSRMatrixFunctions {
             MKLSparseAllocator<FL>::to_mkl_sparse_matrix(a);
         if (!conjb) {
             sparse_status_t st =
-                mkl_sparse_d_mm(conja ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
-                                      : SPARSE_OPERATION_NON_TRANSPOSE,
-                                scale, *spa, mt, SPARSE_LAYOUT_ROW_MAJOR,
-                                b.data, b.n, b.n, cfactor, c.data, c.n);
+                mkl_sparse_x_mm<FL>(conja ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
+                                          : SPARSE_OPERATION_NON_TRANSPOSE,
+                                    scale, *spa, mt, SPARSE_LAYOUT_ROW_MAJOR,
+                                    b.data, b.n, b.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
         } else {
             shared_ptr<VectorAllocator<FP>> d_alloc =
                 make_shared<VectorAllocator<FP>>();
             GMatrix<FL> bt(nullptr, b.n, b.m);
             bt.allocate(d_alloc);
-            for (MKL_INT i = 0, inc = 1; i < bt.m; i++)
-                dcopy(&bt.n, b.data + i, &bt.m, bt.data + i * bt.n, &inc);
+            if (conjb == 3)
+                GMatrixFunctions<FL>::iadd(bt, b, 1.0, true, 0.0);
+            else if (conjb == 1)
+                GMatrixFunctions<FL>::transpose(bt, b, 1.0, 0.0);
+            else {
+                GMatrixFunctions<FL>::copy(bt, b);
+                GMatrixFunctions<FL>::conjugate(bt);
+            }
             sparse_status_t st =
-                mkl_sparse_d_mm(conja ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
-                                      : SPARSE_OPERATION_NON_TRANSPOSE,
-                                scale, *spa, mt, SPARSE_LAYOUT_ROW_MAJOR,
-                                bt.data, bt.n, bt.n, cfactor, c.data, c.n);
+                mkl_sparse_x_mm<FL>(conja ? SPARSE_OPERATION_CONJUGATE_TRANSPOSE
+                                          : SPARSE_OPERATION_NON_TRANSPOSE,
+                                    scale, *spa, mt, SPARSE_LAYOUT_ROW_MAJOR,
+                                    bt.data, bt.n, bt.n, cfactor, c.data, c.n);
             assert(st == SPARSE_STATUS_SUCCESS);
             bt.deallocate(d_alloc);
         }
@@ -675,8 +707,8 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     // c = bra * a * ket(.T) for tensor product multiplication
     static void rotate(const GMatrix<FL> &a, const GMatrix<FL> &c,
-                       const GCSRMatrix<FL> &bra, bool conj_bra,
-                       const GCSRMatrix<FL> &ket, bool conj_ket, FL scale) {
+                       const GCSRMatrix<FL> &bra, uint8_t conj_bra,
+                       const GCSRMatrix<FL> &ket, uint8_t conj_ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, a.m, conj_ket ? ket.m : ket.n);
@@ -687,8 +719,8 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     // c = bra * a * ket(.T) for tensor product multiplication
     static void rotate(const GMatrix<FL> &a, const GMatrix<FL> &c,
-                       const GCSRMatrix<FL> &bra, bool conj_bra,
-                       const GMatrix<FL> &ket, bool conj_ket, FL scale) {
+                       const GCSRMatrix<FL> &bra, uint8_t conj_bra,
+                       const GMatrix<FL> &ket, uint8_t conj_ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, a.m, conj_ket ? ket.m : ket.n);
@@ -699,8 +731,8 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     // c = bra * a * ket(.T) for tensor product multiplication
     static void rotate(const GMatrix<FL> &a, const GMatrix<FL> &c,
-                       const GMatrix<FL> &bra, bool conj_bra,
-                       const GCSRMatrix<FL> &ket, bool conj_ket, FL scale) {
+                       const GMatrix<FL> &bra, uint8_t conj_bra,
+                       const GCSRMatrix<FL> &ket, uint8_t conj_ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, a.m, conj_ket ? ket.m : ket.n);
@@ -712,8 +744,8 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     // c = bra * a * ket(.T) for operator rotation
     static void rotate(const GCSRMatrix<FL> &a, const GMatrix<FL> &c,
-                       const GMatrix<FL> &bra, bool conj_bra,
-                       const GMatrix<FL> &ket, bool conj_ket, FL scale) {
+                       const GMatrix<FL> &bra, uint8_t conj_bra,
+                       const GMatrix<FL> &ket, uint8_t conj_ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, a.m, conj_ket ? ket.m : ket.n);
@@ -857,7 +889,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             c.deallocate();
             c = r;
         } else {
-            iadd(c, r, 1.0, false);
+            iadd(c, r, 1.0);
             r.deallocate();
         }
     }
@@ -936,7 +968,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             c.deallocate();
             c = r;
         } else {
-            iadd(c, r, 1.0, false);
+            iadd(c, r, 1.0);
             r.deallocate();
         }
     }
@@ -1016,7 +1048,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             c.deallocate();
             c = r;
         } else {
-            iadd(c, r, 1.0, false);
+            iadd(c, r, 1.0);
             r.deallocate();
         }
     }

@@ -107,64 +107,71 @@ extern void zgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
 
 // matrix copy
 // mat [b] = mat [a]
-extern void zlacpy(const char *uplo, const int *m, const int *n,
-                   const complex<double> *a, const int *lda, complex<double> *b,
-                   const int *ldb);
+extern void zlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const complex<double> *a, const MKL_INT *lda,
+                   complex<double> *b, const MKL_INT *ldb);
 
 // QR factorization
-extern void zgeqrf(const int *m, const int *n, complex<double> *a,
-                   const int *lda, complex<double> *tau, complex<double> *work,
-                   const int *lwork, int *info);
-extern void zungqr(const int *m, const int *n, const int *k, complex<double> *a,
-                   const int *lda, const complex<double> *tau,
-                   complex<double> *work, const int *lwork, int *info);
+extern void zgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info);
+extern void zungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void zgelqf(const int *m, const int *n, complex<double> *a,
-                   const int *lda, complex<double> *tau, complex<double> *work,
-                   const int *lwork, int *info);
-extern void zunglq(const int *m, const int *n, const int *k, complex<double> *a,
-                   const int *lda, const complex<double> *tau,
-                   complex<double> *work, const int *lwork, int *info);
+extern void zgelqf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info);
+extern void zunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
 
 // eigenvalue problem
-extern void zheev(const char *jobz, const char *uplo, const int *n,
-                  complex<double> *a, const int *lda, double *w,
-                  complex<double> *work, const int *lwork, double *rwork,
-                  int *info);
+extern void zheev(const char *jobz, const char *uplo, const MKL_INT *n,
+                  complex<double> *a, const MKL_INT *lda, double *w,
+                  complex<double> *work, const MKL_INT *lwork, double *rwork,
+                  MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void zgesvd(const char *jobu, const char *jobvt, const int *m,
-                   const int *n, complex<double> *a, const int *lda, double *s,
-                   complex<double> *u, const int *ldu, complex<double> *vt,
-                   const int *ldvt, complex<double> *work, const int *lwork,
-                   double *rwork, int *info);
+extern void zgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                   double *s, complex<double> *u, const MKL_INT *ldu,
+                   complex<double> *vt, const MKL_INT *ldvt,
+                   complex<double> *work, const MKL_INT *lwork, double *rwork,
+                   MKL_INT *info);
 
 #endif
 }
 
 template <typename FL>
-inline void xgemm(const char *transa, const char *transb, const int *m,
-                  const int *n, const int *k, const FL *alpha, const FL *a,
-                  const int *lda, const FL *b, const int *ldb, const FL *beta,
-                  FL *c, const int *ldc) noexcept;
+inline void xgemm(const char *transa, const char *transb, const MKL_INT *m,
+                  const MKL_INT *n, const MKL_INT *k, const FL *alpha,
+                  const FL *a, const MKL_INT *lda, const FL *b,
+                  const MKL_INT *ldb, const FL *beta, FL *c,
+                  const MKL_INT *ldc) noexcept;
 
 template <>
-inline void xgemm<double>(const char *transa, const char *transb, const int *m,
-                          const int *n, const int *k, const double *alpha,
-                          const double *a, const int *lda, const double *b,
-                          const int *ldb, const double *beta, double *c,
-                          const int *ldc) noexcept {
+inline void xgemm<double>(const char *transa, const char *transb,
+                          const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                          const double *alpha, const double *a,
+                          const MKL_INT *lda, const double *b,
+                          const MKL_INT *ldb, const double *beta, double *c,
+                          const MKL_INT *ldc) noexcept {
     return dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 
 template <>
-inline void xgemm<complex<double>>(
-    const char *transa, const char *transb, const int *m, const int *n,
-    const int *k, const complex<double> *alpha, const complex<double> *a,
-    const int *lda, const complex<double> *b, const int *ldb,
-    const complex<double> *beta, complex<double> *c, const int *ldc) noexcept {
+inline void
+xgemm<complex<double>>(const char *transa, const char *transb, const MKL_INT *m,
+                       const MKL_INT *n, const MKL_INT *k,
+                       const complex<double> *alpha, const complex<double> *a,
+                       const MKL_INT *lda, const complex<double> *b,
+                       const MKL_INT *ldb, const complex<double> *beta,
+                       complex<double> *c, const MKL_INT *ldc) noexcept {
     return zgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 }
 
@@ -186,6 +193,23 @@ inline void xscal<complex<double>>(const MKL_INT *n, const complex<double> *sa,
 }
 
 template <typename FL>
+inline void xdscal(const MKL_INT *n, const double *sa, FL *sx,
+                   const MKL_INT *incx) noexcept;
+
+template <>
+inline void xdscal<double>(const MKL_INT *n, const double *sa, double *sx,
+                           const MKL_INT *incx) noexcept {
+    dscal(n, sa, sx, incx);
+}
+
+template <>
+inline void xdscal<complex<double>>(const MKL_INT *n, const double *sa,
+                                    complex<double> *sx,
+                                    const MKL_INT *incx) noexcept {
+    zdscal(n, sa, sx, incx);
+}
+
+template <typename FL>
 inline double xnrm2(const MKL_INT *n, const FL *x,
                     const MKL_INT *incx) noexcept;
 
@@ -202,19 +226,20 @@ inline double xnrm2<complex<double>>(const MKL_INT *n, const complex<double> *x,
 }
 
 template <typename FL>
-inline void xcopy(const int *n, const FL *dx, const int *incx, FL *dy,
-                  const int *incy) noexcept;
+inline void xcopy(const MKL_INT *n, const FL *dx, const MKL_INT *incx, FL *dy,
+                  const MKL_INT *incy) noexcept;
 
 template <>
-inline void xcopy<double>(const int *n, const double *dx, const int *incx,
-                          double *dy, const int *incy) noexcept {
+inline void xcopy<double>(const MKL_INT *n, const double *dx,
+                          const MKL_INT *incx, double *dy,
+                          const MKL_INT *incy) noexcept {
     dcopy(n, dx, incx, dy, incy);
 }
 
 template <>
-inline void xcopy<complex<double>>(const int *n, const complex<double> *dx,
-                                   const int *incx, complex<double> *dy,
-                                   const int *incy) noexcept {
+inline void xcopy<complex<double>>(const MKL_INT *n, const complex<double> *dx,
+                                   const MKL_INT *incx, complex<double> *dy,
+                                   const MKL_INT *incy) noexcept {
     zcopy(n, dx, incx, dy, incy);
 }
 
@@ -237,127 +262,158 @@ xdot<complex<double>>(const MKL_INT *n, const complex<double> *dx,
     static const complex<double> x = 1.0, zz = 0.0;
     MKL_INT inc = 1;
     complex<double> r;
-    zgemm("n", "c", &inc, &inc, n, &x, dy, incy, dx, incx, &zz, &r, &inc);
+    zgemm("n", "t", &inc, &inc, n, &x, dy, incy, dx, incx, &zz, &r, &inc);
     return r;
 }
 
 template <typename FL>
-inline void xaxpy(const int *n, const FL *sa, const FL *sx, const int *incx,
-                  FL *sy, const int *incy) noexcept;
+inline void xaxpy(const MKL_INT *n, const FL *sa, const FL *sx,
+                  const MKL_INT *incx, FL *sy, const MKL_INT *incy) noexcept;
 
 template <>
-inline void xaxpy<double>(const int *n, const double *sa, const double *sx,
-                          const int *incx, double *sy,
-                          const int *incy) noexcept {
+inline void xaxpy<double>(const MKL_INT *n, const double *sa, const double *sx,
+                          const MKL_INT *incx, double *sy,
+                          const MKL_INT *incy) noexcept {
     daxpy(n, sa, sx, incx, sy, incy);
 }
 
 template <>
-inline void xaxpy<complex<double>>(const int *n, const complex<double> *sa,
-                                   const complex<double> *sx, const int *incx,
-                                   complex<double> *sy,
-                                   const int *incy) noexcept {
+inline void xaxpy<complex<double>>(const MKL_INT *n, const complex<double> *sa,
+                                   const complex<double> *sx,
+                                   const MKL_INT *incx, complex<double> *sy,
+                                   const MKL_INT *incy) noexcept {
     zaxpy(n, sa, sx, incx, sy, incy);
 }
 
 template <typename FL>
-inline void xlacpy(const char *uplo, const int *m, const int *n, const FL *a,
-                   const int *lda, FL *b, const int *ldb);
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const FL *a, const MKL_INT *lda, FL *b, const MKL_INT *ldb);
 
 template <>
-inline void xlacpy(const char *uplo, const int *m, const int *n,
-                   const double *a, const int *lda, double *b, const int *ldb) {
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const double *a, const MKL_INT *lda, double *b,
+                   const MKL_INT *ldb) {
     dlacpy(uplo, m, n, a, lda, b, ldb);
 }
 template <>
-inline void xlacpy(const char *uplo, const int *m, const int *n,
-                   const complex<double> *a, const int *lda, complex<double> *b,
-                   const int *ldb) {
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const complex<double> *a, const MKL_INT *lda,
+                   complex<double> *b, const MKL_INT *ldb) {
     zlacpy(uplo, m, n, a, lda, b, ldb);
 }
 
 template <typename FL>
-inline void xgeqrf(const int *m, const int *n, FL *a, const int *lda, FL *tau,
-                   FL *work, const int *lwork, int *info);
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const FL *alpha, const FL *a, const MKL_INT *lda, const FL *x,
+                  const MKL_INT *incx, const FL *beta, FL *y,
+                  const MKL_INT *incy);
+
 template <>
-inline void xgeqrf(const int *m, const int *n, double *a, const int *lda,
-                   double *tau, double *work, const int *lwork, int *info) {
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const double *alpha, const double *a, const MKL_INT *lda,
+                  const double *x, const MKL_INT *incx, const double *beta,
+                  double *y, const MKL_INT *incy) {
+    dgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+template <>
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const complex<double> *alpha, const complex<double> *a,
+                  const MKL_INT *lda, const complex<double> *x,
+                  const MKL_INT *incx, const complex<double> *beta,
+                  complex<double> *y, const MKL_INT *incy) {
+    zgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+template <typename FL>
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, FL *tau, FL *work, const MKL_INT *lwork,
+                   MKL_INT *info);
+template <>
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
     dgeqrf(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
-inline void xgeqrf(const int *m, const int *n, complex<double> *a,
-                   const int *lda, complex<double> *tau, complex<double> *work,
-                   const int *lwork, int *info) {
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
     zgeqrf(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
-inline void xungqr(const int *m, const int *n, const int *k, FL *a,
-                   const int *lda, const FL *tau, FL *work, const int *lwork,
-                   int *info);
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, FL *a,
+                   const MKL_INT *lda, const FL *tau, FL *work,
+                   const MKL_INT *lwork, MKL_INT *info);
 template <>
-inline void xungqr(const int *m, const int *n, const int *k, double *a,
-                   const int *lda, const double *tau, double *work,
-                   const int *lwork, int *info) {
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info) {
     dorgqr(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
-inline void xungqr(const int *m, const int *n, const int *k, complex<double> *a,
-                   const int *lda, const complex<double> *tau,
-                   complex<double> *work, const int *lwork, int *info) {
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
     zungqr(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
-inline void xgelqf(const int *m, const int *n, FL *a, const int *lda, FL *tau,
-                   FL *work, const int *lwork, int *info);
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, FL *tau, FL *work, const MKL_INT *lwork,
+                   MKL_INT *info);
 template <>
-inline void xgelqf(const int *m, const int *n, double *a, const int *lda,
-                   double *tau, double *work, const int *lwork, int *info) {
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
     dgelqf(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
-inline void xgelqf(const int *m, const int *n, complex<double> *a,
-                   const int *lda, complex<double> *tau, complex<double> *work,
-                   const int *lwork, int *info) {
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
     zgelqf(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
-inline void xunglq(const int *m, const int *n, const int *k, FL *a,
-                   const int *lda, const FL *tau, FL *work, const int *lwork,
-                   int *info);
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, FL *a,
+                   const MKL_INT *lda, const FL *tau, FL *work,
+                   const MKL_INT *lwork, MKL_INT *info);
 template <>
-inline void xunglq(const int *m, const int *n, const int *k, double *a,
-                   const int *lda, const double *tau, double *work,
-                   const int *lwork, int *info) {
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info) {
     dorglq(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
-inline void xunglq(const int *m, const int *n, const int *k, complex<double> *a,
-                   const int *lda, const complex<double> *tau,
-                   complex<double> *work, const int *lwork, int *info) {
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
     zunglq(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
-inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
-                   const int *n, FL *a, const int *lda, double *s, FL *u,
-                   const int *ldu, FL *vt, const int *ldvt, FL *work,
-                   const int *lwork, int *info);
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, FL *a, const MKL_INT *lda, double *s,
+                   FL *u, const MKL_INT *ldu, FL *vt, const MKL_INT *ldvt,
+                   FL *work, const MKL_INT *lwork, MKL_INT *info);
 template <>
-inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
-                   const int *n, double *a, const int *lda, double *s,
-                   double *u, const int *ldu, double *vt, const int *ldvt,
-                   double *work, const int *lwork, int *info) {
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, double *a, const MKL_INT *lda, double *s,
+                   double *u, const MKL_INT *ldu, double *vt,
+                   const MKL_INT *ldvt, double *work, const MKL_INT *lwork,
+                   MKL_INT *info) {
     dgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
 }
 template <>
-inline void xgesvd(const char *jobu, const char *jobvt, const int *m,
-                   const int *n, complex<double> *a, const int *lda, double *s,
-                   complex<double> *u, const int *ldu, complex<double> *vt,
-                   const int *ldvt, complex<double> *work, const int *lwork,
-                   int *info) {
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                   double *s, complex<double> *u, const MKL_INT *ldu,
+                   complex<double> *vt, const MKL_INT *ldvt,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
     vector<double> rwork;
     rwork.reserve(5 * min(*m, *n));
     zgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork,
@@ -401,17 +457,43 @@ template <> struct GMatrixFunctions<complex<double>> {
         MKL_INT n = a.m * a.n;
         zscal(&n, &scale, a.data, &inc);
     }
+    static void keep_real(const ComplexMatrixRef &a) {
+        const MKL_INT incx = 2;
+        const double scale = 0.0;
+        MKL_INT n = a.m * a.n;
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+    }
+    static void conjugate(const ComplexMatrixRef &a) {
+        const MKL_INT incx = 2;
+        const double scale = -1.0;
+        MKL_INT n = a.m * a.n;
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+    }
     // a = a + scale * op(b)
+    // conj means conj trans
     static void iadd(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
-                     complex<double> scale, complex<double> cfactor = 1.0) {
+                     complex<double> scale, bool conj = false,
+                     complex<double> cfactor = 1.0) {
         static const complex<double> x = 1.0;
-        assert(a.m == b.m && a.n == b.n);
+        if (!conj) {
+            assert(a.m == b.m && a.n == b.n);
+            MKL_INT n = a.m * a.n, inc = 1;
+            if (cfactor == 1.0)
+                zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
+            else
+                zgemm("n", "n", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
+                      &cfactor, a.data, &inc);
+        } else {
+            assert(a.m == b.n && a.n == b.m);
+            const complex<double> one = 1.0;
+            for (MKL_INT k = 0, inc = 1; k < b.n; k++)
+                zgemm("c", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,
+                      &inc, &cfactor, &a(k, 0), &a.n);
+        }
+    }
+    static double norm(const ComplexMatrixRef &a) {
         MKL_INT n = a.m * a.n, inc = 1;
-        if (cfactor == 1.0)
-            zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
-        else
-            zgemm("N", "N", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
-                  &cfactor, a.data, &inc);
+        return dznrm2(&n, a.data, &inc);
     }
     // dot product (a ^ H, b)
     static complex<double> complex_dot(const ComplexMatrixRef &a,
@@ -422,33 +504,30 @@ template <> struct GMatrixFunctions<complex<double>> {
         complex<double> r;
         // zdotc can sometimes return zero
         // zdotc(&r, &n, a.data, &inc, b.data, &inc);
-        zgemm("C", "N", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
+        zgemm("c", "n", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
               &inc);
         return r;
     }
-    static double norm(const ComplexMatrixRef &a) {
-        MKL_INT n = a.m * a.n, inc = 1;
-        return dznrm2(&n, a.data, &inc);
+    template <typename T1, typename T2>
+    static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
+                          double rtol = 1E-5, complex<double> scale = 1.0) {
+        assert(a.m == b.m && a.n == b.n);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
+                if (abs(a(i, j) - scale * b(i, j)) > atol + rtol * abs(b(i, j)))
+                    return false;
+        return true;
     }
-    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
-    static void eig(const ComplexMatrixRef &a,
-                    const ComplexDiagonalMatrixRef &w) {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        assert(a.m == a.n && w.n == a.n);
-        MKL_INT lwork = 34 * a.n, info;
-        complex<double> *work = (complex<double> *)d_alloc->allocate(lwork * 2);
-        double *rwork = d_alloc->allocate(a.m * 2);
-        complex<double> *vl =
-            (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
-        zgeev("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
-              work, &lwork, rwork, &info);
-        assert(info == 0);
-        for (size_t k = 0; k < a.m * a.n; k++)
-            a.data[k] = conj(vl[k]);
-        d_alloc->deallocate((double *)vl, a.m * a.n * 2);
-        d_alloc->deallocate(rwork, a.m * 2);
-        d_alloc->deallocate((double *)work, lwork * 2);
+    // dot product (a ^ T, b)
+    static complex<double> dot(const ComplexMatrixRef &a,
+                               const ComplexMatrixRef &b) {
+        static const complex<double> x = 1.0, zz = 0.0;
+        assert(a.m == b.m && a.n == b.n);
+        MKL_INT n = a.m * a.n, inc = 1;
+        complex<double> r;
+        zgemm("t", "n", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
+              &inc);
+        return r;
     }
     // matrix inverse
     static void inverse(const ComplexMatrixRef &a) {
@@ -485,12 +564,30 @@ template <> struct GMatrixFunctions<complex<double>> {
         zcopy(&x.m, xtr.data(), &nrhs, x.data, &nrhs);
         return nr > 0 ? dznrm2(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
+    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
+    static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n && w.n == a.n);
+        MKL_INT lwork = 34 * a.n, info;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(a.m * 2);
+        complex<double> *vl = d_alloc->complex_allocate(a.m * a.n);
+        zgeev("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
+              work, &lwork, rwork, &info);
+        assert(info == 0);
+        for (size_t k = 0; k < a.m * a.n; k++)
+            a.data[k] = conj(vl[k]);
+        d_alloc->complex_deallocate(vl, a.m * a.n);
+        d_alloc->deallocate(rwork, a.m * 2);
+        d_alloc->complex_deallocate(work, lwork);
+    }
     // matrix logarithm using diagonalization
     static void logarithm(const ComplexMatrixRef &a) {
         shared_ptr<VectorAllocator<double>> d_alloc =
             make_shared<VectorAllocator<double>>();
         assert(a.m == a.n);
-        ComplexDiagonalMatrixRef w(nullptr, a.m);
+        ComplexDiagonalMatrix w(nullptr, a.m);
         w.data = (complex<double> *)d_alloc->allocate(a.m * 2);
         ComplexMatrixRef wa(nullptr, a.m, a.n);
         wa.data = (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
@@ -516,10 +613,12 @@ template <> struct GMatrixFunctions<complex<double>> {
         ialloc->deallocate(work, a.n * _MINTSZ);
     }
     // c.n is used for ldc; a.n is used for lda
-    static void multiply(const ComplexMatrixRef &a, bool conja,
-                         const ComplexMatrixRef &b, bool conjb,
+    // conj can be 0 (no conj no trans), 1 (trans), 3 (conj trans)
+    static void multiply(const ComplexMatrixRef &a, uint8_t conja,
+                         const ComplexMatrixRef &b, uint8_t conjb,
                          const ComplexMatrixRef &c, complex<double> scale,
                          complex<double> cfactor) {
+        static const char ntxc[5] = "ntxc";
         // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
@@ -527,18 +626,633 @@ template <> struct GMatrixFunctions<complex<double>> {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             zgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (!conja && conjb) {
+        } else if (!conja && conjb != 2) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
-            zgemm("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
-        } else if (conja && !conjb) {
+            zgemm(ntxc + conjb, "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n,
+                  a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja != 2 && !conjb) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
-            zgemm("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
-        } else {
+            zgemm("n", ntxc + conja, &b.n, &c.m, &b.m, &scale, b.data, &b.n,
+                  a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja != 2 && conjb != 2) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
-            zgemm("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
+            zgemm(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale, b.data,
+                  &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja == 2 && conjb != 2) {
+            const MKL_INT one = 1;
+            for (MKL_INT k = 0; k < c.m; k++)
+                zgemm(ntxc + conjb, "c", (conjb & 1) ? &b.m : &b.n, &one,
+                      (conjb & 1) ? &b.n : &b.m, &scale, b.data, &b.n, &a(k, 0),
+                      &one, &cfactor, &c(k, 0), &c.n);
+        } else if (conja != 3 && conjb == 2) {
+            const MKL_INT one = 1;
+            for (MKL_INT k = 0; k < c.m; k++)
+                zgemm(ntxc + (conja ^ 1), "c", &one, &b.n, &b.m, &scale,
+                      (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &b.n,
+                      &cfactor, &c(k, 0), &one);
+        } else
+            assert(false);
+    }
+    // c = bra(.T) * a * ket(.T)
+    // return nflop
+    // conj can be 0 (no conj no trans), 1 (trans), 2 (conj), 3 (conj trans)
+    static size_t rotate(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                         const ComplexMatrixRef &bra, uint8_t conj_bra,
+                         const ComplexMatrixRef &ket, uint8_t conj_ket,
+                         complex<double> scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (conj_bra != 2 && conj_ket != 2) {
+            ComplexMatrixRef work(nullptr, a.m, (conj_ket & 1) ? ket.m : ket.n);
+            work.allocate(d_alloc);
+            multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
+            multiply(bra, conj_bra, work, false, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * c.m;
+        } else if (conj_bra != 2) {
+            ComplexMatrixRef work(nullptr, ket.n, a.m);
+            work.allocate(d_alloc);
+            multiply(ket, 3, a, true, work, 1.0, 0.0);
+            multiply(bra, conj_bra, work, true, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.n +
+                   (size_t)work.m * work.n * c.m;
+        } else if (conj_ket != 2) {
+            ComplexMatrixRef work(nullptr, a.n, bra.m);
+            work.allocate(d_alloc);
+            multiply(a, true, bra, 3, work, 1.0, 0.0);
+            multiply(work, true, ket, conj_ket, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)bra.m * bra.n * work.n +
+                   (size_t)work.m * work.n * ((conj_ket & 1) ? ket.m : ket.n);
+        } else {
+            ComplexMatrixRef work(nullptr, ket.n, a.m);
+            ComplexMatrixRef work2(nullptr, work.m, bra.m);
+            work.allocate(d_alloc);
+            work2.allocate(d_alloc);
+            multiply(ket, 3, a, true, work, 1.0, 0.0);
+            multiply(work, false, bra, 3, work2, 1.0, 0.0);
+            transpose(c, work2, scale);
+            work2.deallocate(d_alloc);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.n +
+                   (size_t)work.m * work.n * c.m + (size_t)work2.m * work2.n;
+        }
+        return 0;
+    }
+    // c(.T) = bra.T * a(.T) * ket
+    // return nflop. (.T) is always transpose conjugate
+    static size_t rotate(const ComplexMatrixRef &a, bool conj_a,
+                         const ComplexMatrixRef &c, bool conj_c,
+                         const ComplexMatrixRef &bra,
+                         const ComplexMatrixRef &ket, complex<double> scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        ComplexMatrixRef work(nullptr, conj_a ? a.n : a.m, ket.n);
+        work.allocate(d_alloc);
+        multiply(a, conj_a ? 3 : 0, ket, false, work, 1.0, 0.0);
+        if (!conj_c)
+            multiply(bra, 3, work, false, c, scale, 1.0);
+        else
+            multiply(work, 3, bra, false, c, conj(scale), 1.0);
+        work.deallocate(d_alloc);
+        return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * bra.n;
+    }
+    // dleft == true : c = bra (= da x db) * a * ket
+    // dleft == false: c = bra * a * ket (= da x db)
+    // return nflop. conj means conj and trans
+    // conj means conj and trans / none for bra, trans / conj for ket
+    static size_t three_rotate(const ComplexMatrixRef &a,
+                               const ComplexMatrixRef &c,
+                               const ComplexMatrixRef &bra, bool conj_bra,
+                               const ComplexMatrixRef &ket, bool conj_ket,
+                               const ComplexMatrixRef &da, bool dconja,
+                               const ComplexMatrixRef &db, bool dconjb,
+                               bool dleft, complex<double> scale,
+                               uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            ComplexMatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
+            work.allocate(d_alloc);
+            // work = a * ket
+            multiply(ComplexMatrixRef(&a(ast, 0), am, a.n), false, ket,
+                     conj_ket ? 1 : 2, work, 1.0, 0.0);
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * work
+                multiply(db, dconjb ? 3 : 0, work, false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconja ? conj(*da.data) : *da.data), 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * work
+                multiply(da, dconja ? 3 : 0, work, false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconjb ? conj(*db.data) : *db.data), 1.0);
+            else
+                assert(false);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            ComplexMatrixRef work(nullptr, a.m, kn);
+            work.allocate(d_alloc);
+            if (da.m == 1 && da.n == 1)
+                // work = a * (1 x db)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, db,
+                         dconjb ? 1 : 2, work,
+                         (!dconja ? conj(*da.data) : *da.data) * scale, 0.0);
+            else if (db.m == 1 && db.n == 1)
+                // work = a * (da x 1)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, da,
+                         dconja ? 1 : 2, work,
+                         (!dconjb ? conj(*db.data) : *db.data) * scale, 0.0);
+            else
+                assert(false);
+            // c = bra * work
+            multiply(bra, conj_bra ? 3 : 0, work, false,
+                     ComplexMatrixRef(&c(0, cst), c.m, c.n), 1.0, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)km * kn * work.m + (size_t)work.m * work.n * c.m;
+        }
+    }
+    // dleft == true : c = a * ket
+    // dleft == false: c = a * ket (= da x db)
+    // return nflop
+    static size_t
+    three_rotate_tr_left(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                         const ComplexMatrixRef &bra, bool conj_bra,
+                         const ComplexMatrixRef &ket, bool conj_ket,
+                         const ComplexMatrixRef &da, bool dconja,
+                         const ComplexMatrixRef &db, bool dconjb, bool dleft,
+                         complex<double> scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            multiply(ComplexMatrixRef(&a(ast, 0), am, a.n), false, ket,
+                     conj_ket ? 1 : 2, ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                     scale, 1.0);
+            return (size_t)ket.m * ket.n * am;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            if (da.m == 1 && da.n == 1)
+                // c = a * (1 x db)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, db,
+                         dconjb ? 1 : 2, ComplexMatrixRef(&c(0, cst), c.m, c.n),
+                         (!dconja ? conj(*da.data) : *da.data) * scale, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = a * (da x 1)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, da,
+                         dconja ? 1 : 2, ComplexMatrixRef(&c(0, cst), c.m, c.n),
+                         (!dconjb ? conj(*db.data) : *db.data) * scale, 1.0);
+            else
+                assert(false);
+            return (size_t)km * kn * c.m;
+        }
+    }
+    // dleft == true : c = bra (= da x db) * a
+    // dleft == false: c = bra * a
+    // return nflop
+    static size_t
+    three_rotate_tr_right(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                          const ComplexMatrixRef &bra, bool conj_bra,
+                          const ComplexMatrixRef &ket, bool conj_ket,
+                          const ComplexMatrixRef &da, bool dconja,
+                          const ComplexMatrixRef &db, bool dconjb, bool dleft,
+                          complex<double> scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * a
+                multiply(db, dconjb ? 3 : 0,
+                         ComplexMatrixRef(&a(ast, 0), am, a.n), false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconja ? conj(*da.data) : *da.data), 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * a
+                multiply(da, dconja ? 3 : 0,
+                         ComplexMatrixRef(&a(ast, 0), am, a.n), false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconjb ? conj(*db.data) : *db.data), 1.0);
+            else
+                assert(false);
+            return (size_t)am * a.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            const complex<double> cfactor = 1.0;
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            zgemm("n", conj_bra ? "c" : "n", &kn, &c.m, &a.m, &scale,
+                  &a(0, ast), &a.n, bra.data, &bra.n, &cfactor, &c(0, cst),
+                  &c.n);
+            return (size_t)a.m * a.n * c.m;
+        }
+    }
+    // only diagonal elements so no conj parameters
+    static void tensor_product_diagonal(const ComplexMatrixRef &a,
+                                        const ComplexMatrixRef &b,
+                                        const ComplexMatrixRef &c,
+                                        complex<double> scale) {
+        // TODO:: check whether conj is really needed
+        // here I assume a and b diag are all real
+        // but a and b may be complex conjugate to each other and c real
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        const complex<double> cfactor = 1.0;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
+        zgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
+              &cfactor, c.data, &c.n);
+    }
+    // diagonal element of three-matrix tensor product
+    static void three_tensor_product_diagonal(
+        const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+        const ComplexMatrixRef &c, const ComplexMatrixRef &da, bool dconja,
+        const ComplexMatrixRef &db, bool dconjb, bool dleft,
+        complex<double> scale, uint32_t stride) {
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        const complex<double> cfactor = 1.0;
+        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
+        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        assert(da.m == da.n && db.m == db.n);
+        const MKL_INT ddstr = 0;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const MKL_INT ldda = da.n + 1, lddb = db.n + 1;
+        if (da.m == 1 && da.n == 1) {
+            scale *= dconja ? conj(*da.data) : *da.data;
+            const MKL_INT dn = db.n - abs(ddstr);
+            const complex<double> *bdata =
+                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (dn > 0) {
+                if (dleft) {
+                    // (1 x db) x b
+                    if (!dconjb)
+                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
+                              bdata, &lddb, &cfactor,
+                              &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < dn; i++)
+                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
+                                  bdata + i * lddb, &k, &cfactor,
+                                  &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
+                } else
+                    // a x (1 x db)
+                    zgemm(dconjb ? "c" : "t", "n", &dn, &a.n, &k, &scale, bdata,
+                          &lddb, a.data, &lda, &cfactor,
+                          &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            scale *= dconjb ? conj(*db.data) : *db.data;
+            const MKL_INT dn = da.n - abs(ddstr);
+            const complex<double> *adata =
+                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (dn > 0) {
+                if (dleft) {
+                    // (da x 1) x b
+                    if (!dconja)
+                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
+                              adata, &ldda, &cfactor,
+                              &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < dn; i++)
+                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
+                                  adata + i * ldda, &k, &cfactor,
+                                  &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
+                } else
+                    // a x (da x 1)
+                    zgemm(dconja ? "c" : "t", "n", &dn, &a.n, &k, &scale, adata,
+                          &ldda, a.data, &lda, &cfactor,
+                          &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else
+            assert(false);
+    }
+    static void tensor_product(const ComplexMatrixRef &a, bool conja,
+                               const ComplexMatrixRef &b, bool conjb,
+                               const ComplexMatrixRef &c, complex<double> scale,
+                               uint32_t stride) {
+        const complex<double> cfactor = 1.0;
+        switch ((uint8_t)conja | (conjb << 1)) {
+        case 0:
+            if (a.m == 1 && a.n == 1) {
+                if (b.n == c.n) {
+                    const MKL_INT n = b.m * b.n;
+                    zgemm("n", "n", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
+                          &a.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(b.n < c.n);
+                    for (MKL_INT k = 0; k < b.m; k++)
+                        zgemm("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else if (b.m == 1 && b.n == 1) {
+                if (a.n == c.n) {
+                    const MKL_INT n = a.m * a.n;
+                    zgemm("n", "n", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
+                          &b.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(a.n < c.n);
+                    for (MKL_INT k = 0; k < a.m; k++)
+                        zgemm("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else {
+                for (MKL_INT i = 0, inc = 1; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++) {
+                        const complex<double> factor = scale * a(i, j);
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            zaxpy(&b.n, &factor, &b(k, 0), &inc,
+                                  &c(i * b.m + k, j * b.n + stride), &inc);
+                    }
+            }
+            break;
+        case 1:
+            if (a.m == 1 && a.n == 1) {
+                if (b.n == c.n) {
+                    const MKL_INT n = b.m * b.n;
+                    zgemm("n", "c", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
+                          &a.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(b.n < c.n);
+                    for (MKL_INT k = 0; k < b.m; k++)
+                        zgemm("n", "c", &b.n, &a.n, &a.n, &scale, &b(k, 0),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else if (b.m == 1 && b.n == 1) {
+                assert(a.m <= c.n);
+                for (MKL_INT k = 0; k < a.n; k++)
+                    zgemm("c", "n", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
+                          b.data, &b.n, &cfactor, &c(k, stride), &c.n);
+            } else {
+                for (MKL_INT i = 0, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
+                        const complex<double> factor = scale * conj(a(j, i));
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            zaxpy(&b.n, &factor, &b(k, 0), &inc,
+                                  &c(i * b.m + k, j * b.n + stride), &inc);
+                    }
+            }
+            break;
+        case 2:
+            if (a.m == 1 && a.n == 1) {
+                assert(b.m <= c.n);
+                for (MKL_INT k = 0; k < b.n; k++)
+                    zgemm("c", "n", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
+                          a.data, &a.n, &cfactor, &c(k, stride), &c.n);
+            } else if (b.m == 1 && b.n == 1) {
+                if (a.n == c.n) {
+                    const MKL_INT n = a.m * a.n;
+                    zgemm("n", "c", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
+                          &b.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(a.n < c.n);
+                    for (MKL_INT k = 0; k < a.m; k++)
+                        zgemm("n", "c", &a.n, &b.n, &b.n, &scale, &a(k, 0),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else {
+                for (MKL_INT i = 0, inca = 1, inc = b.m; i < b.n; i++)
+                    for (MKL_INT j = 0; j < b.m; j++) {
+                        const complex<double> factor = scale * conj(b(j, i));
+                        for (MKL_INT k = 0; k < a.m; k++)
+                            zaxpy(&a.n, &factor, &a(k, 0), &inca,
+                                  &c(k * b.n + i, j + stride), &inc);
+                    }
+            }
+            break;
+        case 1 | 2:
+            if (a.m == 1 && a.n == 1) {
+                for (MKL_INT k = 0; k < b.n; k++)
+                    zgemm("c", "c", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
+                          a.data, &a.n, &cfactor, &c(k, stride), &c.n);
+            } else if (b.m == 1 && b.n == 1) {
+                for (MKL_INT k = 0; k < a.n; k++)
+                    zgemm("c", "c", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
+                          b.data, &b.n, &cfactor, &c(k, stride), &c.n);
+            } else {
+                for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
+                        const complex<double> factor = scale * conj(a(j, i));
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            for (MKL_INT l = 0; l < b.m; l++)
+                                c(i * b.n + k, j * b.m + l + stride) +=
+                                    factor * conj(b(l, k));
+                    }
+            }
+            break;
+        default:
+            assert(false);
+        }
+    }
+    // SVD; original matrix will be destroyed
+    static void svd(const ComplexMatrixRef &a, const ComplexMatrixRef &l,
+                    const MatrixRef &s, const ComplexMatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n),
+                lrwork = 5 * min(a.m, a.n);
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(lrwork);
+        assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
+        zgesvd("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n, l.data,
+               &k, work, &lwork, rwork, &info);
+        assert(info == 0);
+        d_alloc->deallocate(rwork, lrwork);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // SVD for parallelism over sites; PRB 87, 155137 (2013)
+    static void accurate_svd(const ComplexMatrixRef &a,
+                             const ComplexMatrixRef &l, const MatrixRef &s,
+                             const ComplexMatrixRef &r, double eps = 1E-4) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        ComplexMatrixRef aa(nullptr, a.m, a.n);
+        aa.data = d_alloc->complex_allocate(aa.size());
+        copy(aa, a);
+        svd(aa, l, s, r);
+        MKL_INT k = min(a.m, a.n);
+        MKL_INT p = -1;
+        for (MKL_INT ip = 0; ip < k; ip++)
+            if (s.data[ip] < eps * s.data[0]) {
+                p = ip;
+                break;
+            }
+        if (p != -1) {
+            ComplexMatrixRef xa(nullptr, k - p, k - p),
+                xl(nullptr, k - p, k - p), xr(nullptr, k - p, k - p);
+            xa.data = d_alloc->complex_allocate(xa.size());
+            xl.data = d_alloc->complex_allocate(xl.size());
+            xr.data = d_alloc->complex_allocate(xr.size());
+            rotate(a, xa, ComplexMatrixRef(l.data + p, l.m, l.n), 3,
+                   ComplexMatrixRef(r.data + p * r.n, r.m - p, r.n), 3, 1.0);
+            accurate_svd(xa, xl, MatrixRef(s.data + p, 1, k - p), xr, eps);
+            ComplexMatrixRef bl(nullptr, l.m, l.n), br(nullptr, r.m, r.n);
+            bl.data = d_alloc->complex_allocate(bl.size());
+            br.data = d_alloc->complex_allocate(br.size());
+            copy(bl, l);
+            copy(br, r);
+            multiply(ComplexMatrixRef(bl.data + p, bl.m, bl.n), false, xl,
+                     false, ComplexMatrixRef(l.data + p, l.m, l.n), 1.0, 0.0);
+            multiply(xr, false,
+                     ComplexMatrixRef(br.data + p * br.n, br.m - p, br.n),
+                     false, ComplexMatrixRef(r.data + p * r.n, r.m - p, r.n),
+                     1.0, 0.0);
+            d_alloc->complex_deallocate(br.data, br.size());
+            d_alloc->complex_deallocate(bl.data, bl.size());
+            d_alloc->complex_deallocate(xr.data, xr.size());
+            d_alloc->complex_deallocate(xl.data, xl.size());
+            d_alloc->complex_deallocate(xa.data, xa.size());
+        }
+        d_alloc->complex_deallocate(aa.data, aa.size());
+    }
+    // LQ factorization
+    static void lq(const ComplexMatrixRef &a, const ComplexMatrixRef &l,
+                   const ComplexMatrixRef &q) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.m;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        complex<double> *tau = d_alloc->complex_allocate(k);
+        complex<double> *t = d_alloc->complex_allocate(a.m * a.n);
+        assert(a.m == l.m && a.n == q.n && l.n == k && q.m == k);
+        memcpy(t, a.data, sizeof(complex<double>) * a.m * a.n);
+        zgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(l.data, 0, sizeof(complex<double>) * k * a.m);
+        for (MKL_INT j = 0; j < a.m; j++)
+            memcpy(l.data + j * k, t + j * a.n,
+                   sizeof(complex<double>) * min(j + 1, k));
+        zungqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memcpy(q.data, t, sizeof(complex<double>) * k * a.n);
+        d_alloc->complex_deallocate(t, a.m * a.n);
+        d_alloc->complex_deallocate(tau, k);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // QR factorization
+    static void qr(const ComplexMatrixRef &a, const ComplexMatrixRef &q,
+                   const ComplexMatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.n;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        complex<double> *tau = d_alloc->complex_allocate(k);
+        complex<double> *t = d_alloc->complex_allocate(a.m * a.n);
+        assert(a.m == q.m && a.n == r.n && q.n == k && r.m == k);
+        memcpy(t, a.data, sizeof(complex<double>) * a.m * a.n);
+        zgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(r.data, 0, sizeof(complex<double>) * k * a.n);
+        for (MKL_INT j = 0; j < k; j++)
+            memcpy(r.data + j * a.n + j, t + j * a.n + j,
+                   sizeof(complex<double>) * (a.n - j));
+        zunglq(&k, &a.m, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        for (MKL_INT j = 0; j < a.m; j++)
+            memcpy(q.data + j * k, t + j * a.n, sizeof(complex<double>) * k);
+        d_alloc->complex_deallocate(t, a.m * a.n);
+        d_alloc->complex_deallocate(tau, k);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // a += b.T
+    static void transpose(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+                          complex<double> scale = 1.0,
+                          complex<double> cfactor = 1.0) {
+        assert(a.m == b.n && a.n == b.m);
+        const complex<double> one = 1.0;
+        for (MKL_INT k = 0, inc = 1; k < b.n; k++)
+            zgemm("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,
+                  &inc, &cfactor, &a(k, 0), &a.n);
+    }
+    // diagonalization for each symmetry block
+    static void block_eigs(const ComplexMatrixRef &a, const DiagonalMatrix &w,
+                           const vector<uint8_t> &x) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        uint8_t maxx = *max_element(x.begin(), x.end()) + 1;
+        vector<vector<MKL_INT>> mp(maxx);
+        assert(a.m == a.n && w.n == a.n && (MKL_INT)x.size() == a.n);
+        for (MKL_INT i = 0; i < a.n; i++)
+            mp[x[i]].push_back(i);
+        for (uint8_t i = 0; i < maxx; i++)
+            if (mp[i].size() != 0) {
+                complex<double> *work =
+                    d_alloc->complex_allocate(mp[i].size() * mp[i].size());
+                double *wwork = d_alloc->allocate(mp[i].size());
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        work[j * mp[i].size() + k] = a(mp[i][j], mp[i][k]);
+                eigs(ComplexMatrixRef(work, (MKL_INT)mp[i].size(),
+                                      (MKL_INT)mp[i].size()),
+                     DiagonalMatrix(wwork, (MKL_INT)mp[i].size()));
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (MKL_INT k = 0; k < a.n; k++)
+                        a(mp[i][j], k) = 0.0, a(k, mp[i][j]) = 0.0;
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        a(mp[i][j], mp[i][k]) = work[j * mp[i].size() + k];
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    w(mp[i][j], mp[i][j]) = wwork[j];
+                d_alloc->deallocate(wwork, mp[i].size());
+                d_alloc->complex_deallocate(work, mp[i].size() * mp[i].size());
+            }
+    }
+    // eigenvectors are row right vectors
+    // U A^T = W U
+    static void eigs(const ComplexMatrixRef &a, const DiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n && w.n == a.n);
+        const double scale = -1.0;
+        MKL_INT lwork = 34 * a.n, n = a.m * a.n, incx = 2, info;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(max(1, 3 * a.n - 2));
+        zheev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, rwork, &info);
+        assert((size_t)a.m * a.n == n);
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+        assert(info == 0);
+        d_alloc->deallocate(rwork, max(1, 3 * a.n - 2));
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // z = r / aa
+    static void cg_precondition(const ComplexMatrixRef &z,
+                                const ComplexMatrixRef &r,
+                                const ComplexDiagonalMatrix &aa) {
+        copy(z, r);
+        if (aa.size() != 0) {
+            assert(aa.size() == r.size() && r.size() == z.size());
+            for (MKL_INT i = 0; i < aa.n; i++)
+                if (abs(aa.data[i]) > 1E-12)
+                    z.data[i] /= aa.data[i];
         }
     }
     // Computes exp(t*H), the matrix exponential of a general complex
@@ -933,164 +1647,6 @@ template <> struct GMatrixFunctions<complex<double>> {
                         work.data(), lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(complex<double>) * w.size());
         return (int)nmult;
-    }
-    // z = r / aa
-    static void cg_precondition(const ComplexMatrixRef &z,
-                                const ComplexMatrixRef &r,
-                                const ComplexDiagonalMatrixRef &aa) {
-        copy(z, r);
-        if (aa.size() != 0) {
-            assert(aa.size() == r.size() && r.size() == z.size());
-            for (MKL_INT i = 0; i < aa.n; i++)
-                if (abs(aa.data[i]) > 1E-12)
-                    z.data[i] /= aa.data[i];
-        }
-    }
-    // GCROT(m, k) method for solving x in linear equation H x = b
-    template <typename MatMul, typename PComm>
-    static complex<double>
-    gcrotmk(MatMul &op, const ComplexDiagonalMatrixRef &aa, ComplexMatrixRef x,
-            ComplexMatrixRef b, int &nmult, int &niter, int m = 20, int k = -1,
-            bool iprint = false, const PComm &pcomm = nullptr,
-            double conv_thrd = 5E-6, int max_iter = 5000,
-            int soft_max_iter = -1) {
-        ComplexMatrixRef r(nullptr, x.m, x.n), w(nullptr, x.m, x.n);
-        double ff[4];
-        double &beta = ff[0], &rr = ff[1];
-        complex<double> &func = (complex<double> &)ff[2];
-        r.allocate();
-        w.allocate();
-        r.clear();
-        op(x, r);
-        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-            iscale(r, -1);
-            iadd(r, b, 1); // r = b - Ax
-            func = complex_dot(x, b);
-            beta = norm(r);
-        }
-        if (pcomm != nullptr)
-            pcomm->broadcast(&beta, 4, pcomm->root);
-        if (iprint)
-            cout << endl;
-        if (k == -1)
-            k = m;
-        int xiter = 0, jiter = 1, nn = k + m + 2;
-        vector<ComplexMatrixRef> cvs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
-        vector<ComplexMatrixRef> uzs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
-        vector<complex<double>> pcus;
-        pcus.reserve(x.size() * 2 * nn);
-        for (int i = 0; i < nn; i++) {
-            cvs[i].data = pcus.data() + cvs[i].size() * i;
-            uzs[i].data = pcus.data() + uzs[i].size() * (i + nn);
-        }
-        int ncs = 0, icu = 0;
-        ComplexMatrixRef bmat(nullptr, k, k + m);
-        ComplexMatrixRef hmat(nullptr, k + m + 1, k + m);
-        ComplexMatrixRef ys(nullptr, k + m, 1);
-        ComplexMatrixRef bys(nullptr, k, 1);
-        ComplexMatrixRef hys(nullptr, k + m + 1, 1);
-        bmat.allocate();
-        hmat.allocate();
-        ys.allocate();
-        bys.allocate();
-        hys.allocate();
-        while (jiter < max_iter &&
-               (soft_max_iter == -1 || jiter < soft_max_iter)) {
-            xiter++;
-            if (iprint)
-                cout << setw(6) << xiter << setw(6) << jiter << fixed
-                     << setw(15) << setprecision(8) << real(func) << "+"
-                     << setw(15) << setprecision(8) << imag(func) << "i"
-                     << scientific << setw(13) << setprecision(2) << beta * beta
-                     << endl;
-            if (beta * beta < conv_thrd)
-                break;
-            int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
-            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                iadd(cvs[ivz % nn], r, 1 / beta, 0.0);
-                hmat.clear();
-                hys.clear();
-                hys.data[0] = beta;
-            }
-            for (int j = 0; j < ml; j++) {
-                jiter++;
-                ComplexMatrixRef z(uzs[(ivz + j) % nn].data, x.m, x.n);
-                if (pcomm == nullptr || pcomm->root == pcomm->rank)
-                    cg_precondition(z, cvs[(ivz + j) % nn], aa);
-                if (pcomm != nullptr)
-                    pcomm->broadcast(z.data, z.size(), pcomm->root);
-                w.clear();
-                op(z, w);
-                nz = j + 1;
-                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    for (int i = 0; i < ncs; i++) {
-                        bmat(i, j) = complex_dot(cvs[(icu + i) % nn], w);
-                        iadd(w, cvs[(icu + i) % nn], -bmat(i, j));
-                    }
-                    for (int i = 0; i < nz; i++) {
-                        hmat(i, j) = complex_dot(cvs[(ivz + i) % nn], w);
-                        iadd(w, cvs[(ivz + i) % nn], -hmat(i, j));
-                    }
-                    hmat(j + 1, j) = norm(w);
-                    iadd(cvs[(ivz + nz) % nn], w, 1.0 / hmat(j + 1, j), 0.0);
-                    rr = least_squares(
-                        ComplexMatrixRef(hmat.data, j + 2, hmat.n),
-                        ComplexMatrixRef(hys.data, j + 2, 1),
-                        ComplexMatrixRef(ys.data, j + 1, 1));
-                }
-                if (pcomm != nullptr)
-                    pcomm->broadcast(&rr, 1, pcomm->root);
-                if (rr * rr < conv_thrd)
-                    break;
-            }
-            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                multiply(ComplexMatrixRef(bmat.data, ncs, bmat.n), false,
-                         ComplexMatrixRef(ys.data, nz, 1), false,
-                         ComplexMatrixRef(bys.data, ncs, 1), 1.0, 0.0);
-                multiply(ComplexMatrixRef(hmat.data, nz + 1, hmat.n), false,
-                         ComplexMatrixRef(ys.data, nz, 1), false,
-                         ComplexMatrixRef(hys.data, nz + 1, 1), 1.0, 0.0);
-                for (int i = 0; i < nz; i++)
-                    iadd(uzs[(icu + ncs) % nn], uzs[(ivz + i) % nn], ys(i, 0),
-                         !!i);
-                for (int i = 0; i < ncs; i++)
-                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn],
-                         -bys(i, 0));
-                for (int i = 0; i < nz + 1; i++)
-                    iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
-                         !!i);
-                double alpha = norm(cvs[(icu + ncs) % nn]);
-                iscale(cvs[(icu + ncs) % nn], 1 / alpha);
-                iscale(uzs[(icu + ncs) % nn], 1 / alpha);
-                complex<double> gamma = complex_dot(cvs[(icu + ncs) % nn], r);
-                iadd(r, cvs[(icu + ncs) % nn], -gamma);
-                iadd(x, uzs[(icu + ncs) % nn], gamma);
-                func = complex_dot(x, b);
-                beta = norm(r);
-            }
-            if (pcomm != nullptr)
-                pcomm->broadcast(&beta, 4, pcomm->root);
-            if (ncs == k)
-                icu = (icu + 1) % nn;
-            else
-                ncs++;
-        }
-        if (jiter >= max_iter && beta * beta >= conv_thrd) {
-            cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
-            assert(false);
-        }
-        nmult = jiter;
-        niter = xiter + 1;
-        hys.deallocate();
-        bys.deallocate();
-        ys.deallocate();
-        hmat.deallocate();
-        bmat.deallocate();
-        w.deallocate();
-        r.deallocate();
-        if (pcomm != nullptr)
-            pcomm->broadcast(x.data, x.size(), pcomm->root);
-        return func;
     }
 };
 
