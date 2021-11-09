@@ -370,14 +370,14 @@ template <typename S, typename FL> struct OpElement : OpExpr<S> {
     }
     bool operator==(const OpElement &other) const {
         return name == other.name && site_index == other.site_index &&
-               ::abs(factor - other.factor) < 1E-12;
+               std::abs(factor - other.factor) < 1E-12;
     }
     bool operator<(const OpElement &other) const {
         if (name != other.name)
             return name < other.name;
         else if (site_index != other.site_index)
             return site_index < other.site_index;
-        else if (::abs(factor - other.factor) >= 1E-12)
+        else if (std::abs(factor - other.factor) >= 1E-12)
             return xreal<FL>(factor) != xreal<FL>(other.factor)
                        ? xreal<FL>(factor) < xreal<FL>(other.factor)
                        : ximag<FL>(factor) < ximag<FL>(other.factor);
@@ -527,7 +527,7 @@ template <typename S, typename FL> struct OpProduct : OpExpr<S> {
         return *a == *other.a &&
                (b == nullptr ? other.b == nullptr
                              : (other.b != nullptr && *b == *other.b)) &&
-               ::abs(factor - other.factor) < 1E-12 && conj == other.conj;
+               std::abs(factor - other.factor) < 1E-12 && conj == other.conj;
     }
     shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
                                const shared_ptr<OpExpr<S>> &b) const override {
@@ -674,7 +674,7 @@ template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
             return false;
         else if (conjs != other.conjs)
             return false;
-        else if (::abs(OpProduct<S, FL>::factor - other.factor) >= 1E-12)
+        else if (std::abs(OpProduct<S, FL>::factor - other.factor) >= 1E-12)
             return false;
         else
             for (size_t i = 0; i < ops.size(); i++)
