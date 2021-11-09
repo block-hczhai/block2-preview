@@ -1062,10 +1062,14 @@ template <typename S> void bind_algorithms(py::module &m) {
         .def_readwrite("eq_type", &Linear<S>::eq_type)
         .def_readwrite("ex_type", &Linear<S>::ex_type)
         .def_readwrite("algo_type", &Linear<S>::algo_type)
+        .def_readwrite("solver_type", &Linear<S>::solver_type,
+                       "Currently only used for complex Green's function")
+        .def_readwrite("preconditioner_type", &Linear<S>::preconditioner_type,
+                       "Currently only used for complex Green's function")
         .def_readwrite("precondition_cg", &Linear<S>::precondition_cg)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S>::cg_n_harmonic_projection)
-        .def_readwrite("gcrotmk_size", &Linear<S>::gcrotmk_size)
+        .def_readwrite("gcrotmk_size", &Linear<S>::gcrotmk_size, "First entry also used for IDR(S)")
         .def_readwrite("decomp_last_site", &Linear<S>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
                        &Linear<S>::sweep_cumulative_nflop)
@@ -1481,6 +1485,17 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("FirstMinimal", ConvergenceTypes::FirstMinimal)
         .value("FirstMaximal", ConvergenceTypes::FirstMaximal)
         .value("MiddleSite", ConvergenceTypes::MiddleSite);
+
+    py::enum_<LinearSolverTypes>(m, "LinearSolverTypes", py::arithmetic())
+            .value("CG", LinearSolverTypes::CG)
+            .value("MinRes", LinearSolverTypes::MinRes)
+            .value("GCROT", LinearSolverTypes::GCROT)
+            .value("IDRS", LinearSolverTypes::IDRS)
+            .value("LSQR", LinearSolverTypes::LSQR);
+
+    py::enum_<PreconditionerTypes>(m, "PreconditionerTypes", py::arithmetic())
+            .value("Diagonal", PreconditionerTypes::Diagonal)
+            .value("Nothing", PreconditionerTypes::None);
 
     py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
         .value("Nothing", OpCachingTypes::None)
