@@ -2627,8 +2627,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 linfo->n_states_ket[il]);
                         }
                     } else
-                        GMatrixFunctions<FLS>::multiply((*wfn)[iw], 3,
-                                                        (*right)[i], true,
+                        GMatrixFunctions<FLS>::multiply((*wfn)[iw], false,
+                                                        (*right)[i], 3,
                                                         (*left)[il], 1.0, 0.0);
                 }
                 iss += im[i];

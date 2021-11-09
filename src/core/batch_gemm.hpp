@@ -238,6 +238,7 @@ template <typename FL> struct BatchGEMM {
                                 : (conja ? CblasTrans : CblasNoTrans));
         tb.push_back(conjb == 3 ? CblasConjTrans
                                 : (conjb ? CblasTrans : CblasNoTrans));
+        assert(lda >= (conja ? m : k) && ldb >= (conjb ? k : n) && ldc >= n);
         this->m.push_back(m), this->n.push_back(n), this->k.push_back(k);
         this->alpha.push_back(alpha), this->beta.push_back(beta);
         this->lda.push_back(lda), this->ldb.push_back(ldb),
@@ -484,7 +485,7 @@ struct AdvancedGEMM<FL, typename enable_if<is_same<FL, double>::value>::type> {
                          const GMatrix<FL> &ket, uint8_t conj_ket, FL scale,
                          vector<uint8_t> &cjc) {
         GMatrix<FL> work((FL *)0 + batch[0]->work, a.m,
-                         conj_ket ? ket.m : ket.n);
+                         (conj_ket & 1) ? ket.m : ket.n);
         AdvancedGEMM<FL>::multiply(batch[0], a, false, ket, conj_ket, work, 1.0,
                                    0.0);
         AdvancedGEMM<FL>::multiply(batch[1], bra, conj_bra, work, false, c,
