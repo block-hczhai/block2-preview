@@ -773,7 +773,7 @@ TEST_F(TestComplexMatrix, TestDavidson) {
         DiagonalMatrix w(&vw[0], k);
         ComplexMatrixFunctions::eigs(a, ww);
         DiagonalMatrix w2(ww.data, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(w, w2, 1E-6, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(w, w2, 1E-6, 1E-6));
         for (int i = 0; i < k; i++) {
             complex<double> factor = 0.0;
             for (int j = 0; j < a.n; j++)
@@ -783,7 +783,7 @@ TEST_F(TestComplexMatrix, TestDavidson) {
                 }
             ASSERT_LE(abs(factor) - 1.0, 1E-3);
             ASSERT_TRUE(ComplexMatrixFunctions::all_close(
-                ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 0.0,
+                ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 1E-3,
                 factor));
         }
         for (int i = k - 1; i >= 0; i--)
