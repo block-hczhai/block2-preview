@@ -32,8 +32,11 @@ class TestCSRMatrix : public ::testing::Test {
 TEST_F(TestCSRMatrix, TestIadd) {
     Timer t;
     double dst = 0.0, spt = 0.0;
-    for (int i = 0; i < n_tests; i++) {
-        int ma = Random::rand_int(1, 200), na = Random::rand_int(1, 200);
+    for (int i = 0; i < n_tests * 10; i++) {
+        int ma = Random::rand_int(0, 2) ? Random::rand_int(1, 7)
+                                        : Random::rand_int(1, 200),
+            na = Random::rand_int(0, 2) ? Random::rand_int(1, 7)
+                                        : Random::rand_int(1, 200);
         MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef b(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef stda(dalloc_()->allocate(ma * na), ma, na);

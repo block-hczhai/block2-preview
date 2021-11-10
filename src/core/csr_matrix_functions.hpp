@@ -319,7 +319,8 @@ template <typename FL> struct GCSRMatrixFunctions {
             a.from_dense(ad);
             ad.deallocate(d_alloc);
             return;
-        }
+        } else if (b.nnz == 0)
+            return;
 #ifdef _HAS_INTEL_MKL
         shared_ptr<sparse_matrix_t> spa =
             MKLSparseAllocator<FL>::to_mkl_sparse_matrix(a);
