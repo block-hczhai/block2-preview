@@ -209,7 +209,7 @@ void TestResponseN2STO3G::test_dmrg(
          << (pdm - pdm_std) << " T = " << fixed << setw(10) << setprecision(3)
          << t.get_time() << endl;
 
-    EXPECT_LT(abs(pdm - pdm_std), 1E-7);
+    EXPECT_LT(abs(pdm - pdm_std), dot == 1 ? 1E-4 : 1E-7);
 
     dmps_info->deallocate();
     mps_info->deallocate();
