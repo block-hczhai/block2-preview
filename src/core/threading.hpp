@@ -173,6 +173,22 @@ struct Threading {
         return false;
 #endif
     }
+    /** Whether complex number extension is used. */
+    bool complex_available() const {
+#ifdef _USE_COMPLEX
+        return true;
+#else
+        return false;
+#endif
+    }
+    /** Whether K symmetry extension is used. */
+    bool ksymm_available() const {
+#ifdef _USE_KSYMM
+        return true;
+#else
+        return false;
+#endif
+    }
     /** Check version of the linked MKL library.
      * @return A version string of the linked MKL library if MKL
      *   is linked, or an empty string otherwise.
@@ -454,6 +470,8 @@ struct Threading {
            << " Operator = " << th.n_threads_op
            << " Quanta = " << th.n_threads_quanta
            << " MKL = " << th.n_threads_mkl;
+        os << " COMPLEX = " << th.complex_available()
+           << " KSYMM = " << th.ksymm_available() << endl;
         return os;
     }
 };

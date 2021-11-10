@@ -63,7 +63,7 @@ TEST_F(TestBatchGEMM, TestRotate) {
                                         d(ic, 0));
             }
             ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 0.0));
+                                                   cstd, 1E-10, 1E-10));
         }
         cstd.deallocate();
         r.deallocate();
@@ -186,7 +186,7 @@ TEST_F(TestBatchGEMM, TestComplexRotate) {
                     conjr ? r.flip_dims() : r, conjr, d(ic, 0));
             }
             ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 0.0));
+                                                   cstd, 1E-10, 1E-10));
         }
         cstd.deallocate();
         r.deallocate();

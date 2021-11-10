@@ -157,7 +157,7 @@ TEST_F(TestComplexMatrix, TestMultiply) {
                 complex<double> x = cfactor * c(ik, jk);
                 for (MKL_INT kk = 0; kk < k; kk++)
                     x += scale * a(ik, kk) * b(kk, jk);
-                ASSERT_LT(abs(x - cc(ik, jk)), 1E-10);
+                ASSERT_LT(abs(x - cc(ik, jk)), 1E-8);
             }
         ComplexMatrixFunctions::copy(cc, c);
         seq->multiply(ta, conja, tb, conjb, cc, scale, cfactor);
@@ -167,7 +167,7 @@ TEST_F(TestComplexMatrix, TestMultiply) {
                 complex<double> x = cfactor * c(ik, jk);
                 for (MKL_INT kk = 0; kk < k; kk++)
                     x += scale * a(ik, kk) * b(kk, jk);
-                ASSERT_LT(abs(x - cc(ik, jk)), 1E-10);
+                ASSERT_LT(abs(x - cc(ik, jk)), 1E-8);
             }
         tb.deallocate();
         ta.deallocate();
@@ -241,7 +241,7 @@ TEST_F(TestComplexMatrix, TestRotate) {
                 complex<double> x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-10);
+                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
             }
         // batch gemm does not support both conjb/conjk case
         if (conjb != 2 || conjk != 2) {
@@ -259,7 +259,7 @@ TEST_F(TestComplexMatrix, TestRotate) {
                     complex<double> x = 0;
                     for (MKL_INT ik = 0; ik < mk; ik++)
                         x += ba(ib, ik) * k(ik, jk);
-                    ASSERT_LT(abs(x - c(ib, jk)), 1E-10);
+                    ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
                 }
         }
         if (conjb)
@@ -296,7 +296,7 @@ TEST_F(TestComplexMatrix, TestRotate) {
                 complex<double> x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-10);
+                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
             }
         if (conjc)
             tc.deallocate();
@@ -317,7 +317,7 @@ TEST_F(TestComplexMatrix, TestRotate) {
                 complex<double> x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-10);
+                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
             }
         if (conjc)
             tc.deallocate();
