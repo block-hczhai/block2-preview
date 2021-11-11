@@ -220,15 +220,17 @@ TEST_F(TestBatchGEMM, TestComplexRotate) {
         Random::complex_fill<double>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
-        bool conjl = Random::rand_int(0, 2);
-        bool conjr = Random::rand_int(0, 2);
+        uint8_t conjl = Random::rand_int(0, 2);
+        uint8_t conjr = Random::rand_int(0, 2);
+        while (conjl == 2 && conjr == 2)
+            conjl = Random::rand_int(0, 4), conjr = Random::rand_int(0, 4);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
                 ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
                 ComplexMatrixRef xc =
                     ComplexMatrixRef(c.data + mc * nc * ic, mc, nc);
-                seq->rotate(xa, xc, conjl ? l.flip_dims() : l, conjl,
-                            conjr ? r.flip_dims() : r, conjr, d(ic, 0));
+                seq->rotate(xa, xc, (conjl & 1) ? l.flip_dims() : l, conjl,
+                            (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
         seq->auto_perform();
         ComplexMatrixRef cstd(dalloc_()->complex_allocate(mc * nc), mc, nc);
@@ -237,8 +239,8 @@ TEST_F(TestBatchGEMM, TestComplexRotate) {
             for (int ii = 0; ii < nbatch; ii++) {
                 ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
                 ComplexMatrixFunctions::rotate(
-                    xa, cstd, conjl ? l.flip_dims() : l, conjl,
-                    conjr ? r.flip_dims() : r, conjr, d(ic, 0));
+                    xa, cstd, (conjl & 1) ? l.flip_dims() : l, conjl,
+                    (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
             ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
                                                    cstd, 1E-10, 1E-10));
@@ -276,8 +278,8 @@ TEST_F(TestBatchGEMM, TestComplexRotateTasked) {
         Random::complex_fill<double>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
-        bool conjl = Random::rand_int(0, 4);
-        bool conjr = Random::rand_int(0, 4);
+        uint8_t conjl = Random::rand_int(0, 4);
+        uint8_t conjr = Random::rand_int(0, 4);
         while (conjl == 2 && conjr == 2)
             conjl = Random::rand_int(0, 4), conjr = Random::rand_int(0, 4);
         for (int ic = 0; ic < ncbatch; ic++)
