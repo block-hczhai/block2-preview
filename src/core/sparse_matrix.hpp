@@ -1703,7 +1703,7 @@ template <typename S, typename FL> struct SparseMatrix {
                             lmat->factor * rmat->factor, 0.0);
                 }
         } else {
-            // rot = trace_right ? wfn x wfn.T : wfn.T x wfn
+            // rot = trace_right ? wfn x wfn.H : wfn.H x wfn
             assert(lmat->info->is_wavefunction && rmat->info->is_wavefunction);
             clear();
             for (int il = 0; il < lmat->info->n; il++) {
@@ -1714,8 +1714,11 @@ template <typename S, typename FL> struct SparseMatrix {
                                 : -lmat->info->quanta[il].get_ket());
                 if (ir != -1 && i != -1)
                     GMatrixFunctions<FL>::multiply(
-                        (*lmat)[il], !trace_right, (*rmat)[ir], trace_right,
-                        (*this)[i], lmat->factor * rmat->factor, 1.0);
+                        (*lmat)[il], !trace_right ? 3 : 0, (*rmat)[ir],
+                        trace_right ? 3 : 0, (*this)[i],
+                        trace_right ? lmat->factor * xconj<FL>(rmat->factor)
+                                    : xconj<FL>(lmat->factor) * rmat->factor,
+                        1.0);
             }
         }
     }

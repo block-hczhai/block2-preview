@@ -248,46 +248,6 @@ struct EffectiveFunctions<
     }
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
-    tuple<FL, FP, int, size_t, double> static expo_apply(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL beta,
-        FL const_e, bool symmetric, bool iprint = false,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        assert(h_eff->compute_diag);
-        FP anorm = GMatrixFunctions<FL>::norm(GMatrix<FL>(
-            h_eff->diag->data, (MKL_INT)h_eff->diag->total_memory, 1));
-        GMatrix<FL> v(h_eff->ket->data, (MKL_INT)h_eff->ket->total_memory, 1);
-        Timer t;
-        t.get_time();
-        h_eff->tf->opf->seq->cumulative_nflop = 0;
-        h_eff->precompute();
-        int nexpo = (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
-                     (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
-                        ? GMatrixFunctions<FL>::expo_apply(
-                              *h_eff->tf, beta, anorm, v, const_e, symmetric, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm)
-                        : GMatrixFunctions<FL>::expo_apply(
-                              *h_eff, beta, anorm, v, const_e, symmetric, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm);
-        FP norm = GMatrixFunctions<FL>::norm(v);
-        GMatrix<FL> tmp(nullptr, (MKL_INT)h_eff->ket->total_memory, 1);
-        tmp.allocate();
-        tmp.clear();
-        if (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
-            (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
-            (*h_eff->tf)(v, tmp);
-        else
-            (*h_eff)(v, tmp);
-        FL energy = GMatrixFunctions<FL>::complex_dot(v, tmp) / (norm * norm);
-        tmp.deallocate();
-        h_eff->post_precompute();
-        uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
-        if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
-        h_eff->tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
-    }
-    // [ket] = exp( [H_eff] ) | [ket] > (exact)
-    // energy, norm, nexpo, nflop, texpo
     // nexpo is number of complex matrix multiplications
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,

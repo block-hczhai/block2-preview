@@ -469,9 +469,9 @@ struct Threading {
         os << " NUMBER : Global = " << th.n_threads_global
            << " Operator = " << th.n_threads_op
            << " Quanta = " << th.n_threads_quanta
-           << " MKL = " << th.n_threads_mkl;
+           << " MKL = " << th.n_threads_mkl << endl;
         os << " COMPLEX = " << th.complex_available()
-           << " KSYMM = " << th.ksymm_available() << endl;
+           << " KSYMM = " << th.ksymm_available();
         return os;
     }
 };

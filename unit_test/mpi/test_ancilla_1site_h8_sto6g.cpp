@@ -186,7 +186,7 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
         make_shared<TimeEvolution<S, FL, FL>>(me, bdims, TETypes::RK4);
     te->iprint = 2;
     te->n_sub_sweeps = 6;
-    te->solve(1, beta / 2, imps->center == 0);
+    te->solve(1, beta / 2.0, imps->center == 0);
 
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());
@@ -195,7 +195,7 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
     me->dot = 1;
 
     te->n_sub_sweeps = 2;
-    te->solve(9, beta / 2, imps->center == 0);
+    te->solve(9, beta / 2.0, imps->center == 0);
 
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());
@@ -206,10 +206,10 @@ void TestOneSiteAncillaH8STO6G::test_imag_te(
 
     for (size_t i = 0; i < te_energies.size(); i++) {
         cout << "== " << name << " =="
-             << " BETA = " << setw(10) << fixed << setprecision(4) << (i * beta)
-             << " E = " << fixed << setw(22) << setprecision(12)
-             << te_energies[i] << " error-fted = " << scientific
-             << setprecision(3) << setw(10)
+             << " BETA = " << setw(10) << fixed << setprecision(4)
+             << ((FL)i * beta) << " E = " << fixed << setw(22)
+             << setprecision(12) << te_energies[i]
+             << " error-fted = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_fted[i])
              << " error-m500 = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_m500[i]) << " T = " << fixed

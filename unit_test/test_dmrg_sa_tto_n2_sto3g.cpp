@@ -5,12 +5,13 @@
 
 using namespace block2;
 
-class TestTTODMRGN2STO3GSA : public ::testing::Test {
+template <typename FL> class TestTTODMRGN2STO3GSA : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
+    typedef typename GMatrix<FL>::FP FP;
 
-    template <typename S, typename FL>
+    template <typename S>
     void test_dmrg(const vector<S> &targets, const vector<FL> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, ubond_t bond_dim, uint16_t nroots,
@@ -32,8 +33,9 @@ class TestTTODMRGN2STO3GSA : public ::testing::Test {
     }
 };
 
-template <typename S, typename FL>
-void TestTTODMRGN2STO3GSA::test_dmrg(
+template <typename FL>
+template <typename S>
+void TestTTODMRGN2STO3GSA<FL>::test_dmrg(
     const vector<S> &targets, const vector<FL> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     ubond_t bond_dim, uint16_t nroots, int tto) {
@@ -54,7 +56,7 @@ void TestTTODMRGN2STO3GSA::test_dmrg(
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     vector<ubond_t> bdims = {bond_dim};
-    vector<FL> noises = {1E-5, 1E-7, 1E-8, 0.0};
+    vector<FP> noises = {1E-5, 1E-7, 1E-8, 0.0};
 
     t.get_time();
 
@@ -112,13 +114,22 @@ void TestTTODMRGN2STO3GSA::test_dmrg(
     mpo->deallocate();
 }
 
-TEST_F(TestTTODMRGN2STO3GSA, TestSU2) {
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
 
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+TYPED_TEST_CASE(TestTTODMRGN2STO3GSA, TestFL);
+
+TYPED_TEST(TestTTODMRGN2STO3GSA, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -132,7 +143,7 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSU2) {
                 if (na - nb >= 0)
                     targets.push_back(SU2(na + nb, na - nb, i));
 
-    vector<double> energies = {
+    vector<FL> energies = {
         -107.654122447525, // < N=14 S=0 PG=0 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
@@ -146,11 +157,11 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSU2) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2, double>> hamil =
-        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
     for (int tto = 3; tto < 5; tto++)
-        test_dmrg<SU2, double>(
+        this->template test_dmrg<SU2>(
             targets, energies, hamil, "SU2",
             (ubond_t)min(200U, (uint32_t)numeric_limits<ubond_t>::max()), 10,
             tto);
@@ -159,13 +170,14 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSU2) {
     fcidump->deallocate();
 }
 
-TEST_F(TestTTODMRGN2STO3GSA, TestSZ) {
+TYPED_TEST(TestTTODMRGN2STO3GSA, TestSZ) {
+    using FL = TypeParam;
 
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -178,7 +190,7 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSZ) {
             for (int nb = ne - 1; nb <= ne + 1; nb++)
                 targets.push_back(SZ(na + nb, na - nb, i));
 
-    vector<double> energies = {
+    vector<FL> energies = {
         -107.654122447526, // < N=14 S=0 PG=0 >
         -107.356943001689, // < N=14 S=-1|0|1 PG=2|3 >
         -107.356943001688, // < N=14 S=-1|0|1 PG=2|3 >
@@ -198,11 +210,11 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSZ) {
     };
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ, double>> hamil =
-        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, FL>> hamil =
+        make_shared<HamiltonianQC<SZ, FL>>(vacuum, norb, orbsym, fcidump);
 
     for (int tto = 3; tto < 5; tto++)
-        test_dmrg<SZ, double>(
+        this->template test_dmrg<SZ>(
             targets, energies, hamil, "SZ",
             (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 16,
             tto);

@@ -521,7 +521,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         shared_ptr<OpExpr<S>> expr = nullptr;
         if (const_e != 0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
-        assert(ex_type == ExpectationTypes::Real);
+        assert(ex_type == ExpectationTypes::Real || is_complex<FL>::value);
         if (algo_type == ExpectationAlgorithmTypes::Automatic)
             algo_type = op->mat->data.size() > 1
                             ? ExpectationAlgorithmTypes::Fast
@@ -785,6 +785,45 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_pair(r, make_tuple(energy, norm, 4 + eval_energy,
                                        (size_t)nflop, t.get_time()));
+    }
+    // [ket] = exp( [H_eff] ) | [ket] > (exact)
+    // energy, norm, nexpo, nflop, texpo
+    tuple<FL, FP, int, size_t, double>
+    expo_apply(FL beta, FL const_e, bool symmetric, bool iprint = false,
+               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(compute_diag);
+        FP anorm = GMatrixFunctions<FL>::norm(
+            GMatrix<FL>(diag->data, (MKL_INT)diag->total_memory, 1));
+        GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
+        Timer t;
+        t.get_time();
+        tf->opf->seq->cumulative_nflop = 0;
+        precompute();
+        int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
+                     (tf->opf->seq->mode & SeqTypes::Tasked))
+                        ? IterativeMatrixFunctions<FL>::expo_apply(
+                              *tf, beta, anorm, v, const_e, symmetric, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm)
+                        : IterativeMatrixFunctions<FL>::expo_apply(
+                              *this, beta, anorm, v, const_e, symmetric, iprint,
+                              para_rule == nullptr ? nullptr : para_rule->comm);
+        FP norm = GMatrixFunctions<FL>::norm(v);
+        GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
+        tmp.allocate();
+        tmp.clear();
+        if (tf->opf->seq->mode == SeqTypes::Auto ||
+            (tf->opf->seq->mode & SeqTypes::Tasked))
+            (*tf)(v, tmp);
+        else
+            (*this)(v, tmp);
+        FL energy = GMatrixFunctions<FL>::complex_dot(v, tmp) / (norm * norm);
+        tmp.deallocate();
+        post_precompute();
+        uint64_t nflop = tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);

@@ -24,6 +24,7 @@
 #include "operator_tensor.hpp"
 #include "sparse_matrix.hpp"
 #include "symbolic.hpp"
+#include <array>
 #include <cassert>
 #include <map>
 #include <memory>
@@ -70,7 +71,7 @@ template <typename S, typename FL> struct TensorFunctions {
                 op(tf, i);
         } else {
             vector<shared_ptr<TensorFunctions>> tfs(1, tf);
-            vector<pair<size_t, size_t>> tf_sz(ntop + 1);
+            vector<array<size_t, 4>> tf_sz(ntop + 1);
             for (int i = 1; i < ntop; i++) {
                 tfs.push_back(this->copy());
                 tfs[i]->opf->seq->cumulative_nflop = 0;
@@ -80,13 +81,22 @@ template <typename S, typename FL> struct TensorFunctions {
                 int tid = threading->get_thread_id();
                 op(tfs[tid], (size_t)i);
             }
-            tf_sz[1].first = opf->seq->batch[0]->gp.size();
-            tf_sz[1].second = opf->seq->batch[1]->gp.size();
+            tf_sz[1][0] = opf->seq->batch[0]->gp.size();
+            tf_sz[1][1] = opf->seq->batch[0]->c.size();
+            tf_sz[1][2] = opf->seq->batch[1]->gp.size();
+            tf_sz[1][3] = opf->seq->batch[1]->c.size();
+            bool has_acidxs = opf->seq->batch[0]->acidxs.size() != 0;
             for (int i = 1; i < ntop; i++) {
-                tf_sz[i + 1].first =
-                    tf_sz[i].first + tfs[i]->opf->seq->batch[0]->gp.size();
-                tf_sz[i + 1].second =
-                    tf_sz[i].second + tfs[i]->opf->seq->batch[1]->gp.size();
+                tf_sz[i + 1][0] =
+                    tf_sz[i][0] + tfs[i]->opf->seq->batch[0]->gp.size();
+                tf_sz[i + 1][1] =
+                    tf_sz[i][1] + tfs[i]->opf->seq->batch[0]->c.size();
+                tf_sz[i + 1][2] =
+                    tf_sz[i][2] + tfs[i]->opf->seq->batch[1]->gp.size();
+                tf_sz[i + 1][3] =
+                    tf_sz[i][3] + tfs[i]->opf->seq->batch[1]->c.size();
+                has_acidxs = has_acidxs ||
+                             tfs[i]->opf->seq->batch[0]->acidxs.size() != 0;
                 opf->seq->batch[0]->nflop += tfs[i]->opf->seq->batch[0]->nflop;
                 opf->seq->batch[1]->nflop += tfs[i]->opf->seq->batch[1]->nflop;
                 opf->seq->cumulative_nflop +=
@@ -94,19 +104,23 @@ template <typename S, typename FL> struct TensorFunctions {
                 opf->seq->max_work =
                     max(opf->seq->max_work, tfs[i]->opf->seq->max_work);
             }
-            if (tf_sz[ntop].second != 0) {
-                if (tf_sz[ntop].first != 0)
-                    opf->seq->batch[0]->resize(tf_sz[ntop].first);
-                opf->seq->batch[1]->resize(tf_sz[ntop].second);
+            if (tf_sz[ntop][2] != 0) {
+                if (tf_sz[ntop][0] != 0)
+                    opf->seq->batch[0]->resize(tf_sz[ntop][0], tf_sz[ntop][1]);
+                opf->seq->batch[1]->resize(tf_sz[ntop][2], tf_sz[ntop][3]);
+                if (has_acidxs)
+                    opf->seq->batch[0]->acidxs.resize(tf_sz[ntop][0]);
 #pragma omp parallel num_threads(ntop)
                 {
                     int tid = threading->get_thread_id();
                     if (tid != 0) {
-                        if (tf_sz[ntop].first != 0)
+                        if (tf_sz[ntop][0] != 0)
                             opf->seq->batch[0]->copy_from(
-                                tf_sz[tid].first, tfs[tid]->opf->seq->batch[0]);
+                                tf_sz[tid][0], tf_sz[tid][1],
+                                tfs[tid]->opf->seq->batch[0]);
                         opf->seq->batch[1]->copy_from(
-                            tf_sz[tid].second, tfs[tid]->opf->seq->batch[1]);
+                            tf_sz[tid][2], tf_sz[tid][3],
+                            tfs[tid]->opf->seq->batch[1]);
                     }
                 }
             }

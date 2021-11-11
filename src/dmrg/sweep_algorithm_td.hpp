@@ -167,9 +167,8 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                l_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(
                 forward, i, i, fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
@@ -453,9 +452,8 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                    hkets[0]->total_memory * sizeof(FLS));
             pdi = lvmt.second;
         } else
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                l_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = l_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pbra = l_eff->perturbative_noise(forward, i, i + 1,
                                              FuseTypes::FuseLR, lme->bra->info,
@@ -871,9 +869,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
@@ -881,9 +878,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1022,9 +1018,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->move_to(i + 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
-                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
-                    k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
-                    me->para_rule);
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                             iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1041,9 +1036,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->move_to(i - 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
-                auto pdk = EffectiveFunctions<S, FL>::expo_apply(
-                    k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
-                    me->para_rule);
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                             iprint >= 3, me->para_rule);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1155,9 +1149,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
@@ -1165,9 +1158,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = EffectiveFunctions<S, FL>::expo_apply(
-                h_eff, -beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
+                                    iprint >= 3, me->para_rule);
         else if (effective_mode == TETypes::RK4) {
             auto pdp =
                 h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
@@ -1267,9 +1259,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
                             me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
-            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
-                k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                         iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
@@ -1285,9 +1276,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,
                             me->bra->tensors[i], me->ket->tensors[i]);
-            auto pdk = EffectiveFunctions<S, FL>::expo_apply(
-                k_eff, beta, me->mpo->const_e, hermitian, iprint >= 3,
-                me->para_rule);
+            auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                         iprint >= 3, me->para_rule);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
