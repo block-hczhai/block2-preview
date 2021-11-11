@@ -5,12 +5,13 @@
 
 using namespace block2;
 
-class TestLinearN2STO3G : public ::testing::Test {
+template <typename FL> class TestLinearN2STO3G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 24;
+    size_t isize = 1L << 24;
+    size_t dsize = 1L << 28;
+    typedef typename GMatrix<FL>::FP FP;
 
-    template <typename S, typename FL>
+    template <typename S>
     void test_dmrg(S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, int dot);
     void SetUp() override {
@@ -29,12 +30,13 @@ class TestLinearN2STO3G : public ::testing::Test {
     }
 };
 
-template <typename S, typename FL>
-void TestLinearN2STO3G::test_dmrg(S target,
-                                  const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-                                  const string &name, int dot) {
+template <typename FL>
+template <typename S>
+void TestLinearN2STO3G<FL>::test_dmrg(
+    S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
+    int dot) {
 
-    double energy_std = -107.654122447525;
+    FL energy_std = -107.654122447525;
 
     Timer t;
     t.get_time();
@@ -72,7 +74,7 @@ void TestLinearN2STO3G::test_dmrg(S target,
 
     ubond_t bond_dim = 200, bra_bond_dim = 100;
     vector<ubond_t> bdims = {bond_dim};
-    vector<FL> noises = {1E-8, 1E-9, 0.0};
+    vector<FP> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -160,8 +162,8 @@ void TestLinearN2STO3G::test_dmrg(S target,
     ntr_mpo->const_e = 0;
     eme->init_environments(false);
 
-    shared_ptr<Expect<S, FL, FL>> ex2 =
-        make_shared<Expect<S, FL, FL>>(eme, bond_dim, bond_dim);
+    shared_ptr<Expect<S, FL, FL, FL>> ex2 =
+        make_shared<Expect<S, FL, FL, FL>>(eme, bond_dim, bond_dim);
     energy = ex2->solve(false);
 
     cout << "== " << name << " (CPS) ==" << setw(20) << target
@@ -180,12 +182,22 @@ void TestLinearN2STO3G::test_dmrg(S target,
     mpo->deallocate();
 }
 
-TEST_F(TestLinearN2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestLinearN2STO3G, TestFL);
+
+TYPED_TEST(TestLinearN2STO3G, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -194,22 +206,24 @@ TEST_F(TestLinearN2STO3G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2, double>> hamil =
-        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2, double>(target, hamil, "SU2/2-site", 2);
-    test_dmrg<SU2, double>(target, hamil, "SU2/1-site", 1);
+    this->template test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
+    this->template test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
-TEST_F(TestLinearN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+TYPED_TEST(TestLinearN2STO3G, TestSZ) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -217,14 +231,12 @@ TEST_F(TestLinearN2STO3G, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
 
-    double energy_std = -107.654122447525;
-
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ, double>> hamil =
-        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, FL>> hamil =
+        make_shared<HamiltonianQC<SZ, FL>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ, double>(target, hamil, "SZ/2-site", 2);
-    test_dmrg<SZ, double>(target, hamil, "SZ/1-site", 1);
+    this->template test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
+    this->template test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();

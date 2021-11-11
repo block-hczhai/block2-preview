@@ -672,7 +672,7 @@ inline shared_ptr<MPO<S, FL>> operator*(const shared_ptr<MPO<S, FL>> &mpo,
 
 template <typename S, typename FL>
 inline shared_ptr<MPO<S, FL>> operator-(const shared_ptr<MPO<S, FL>> &mpo) {
-    return (-1.0) * mpo;
+    return (FL)(-1.0) * mpo;
 }
 
 // Diagonal part of MPO (will copy the diagonal elements)

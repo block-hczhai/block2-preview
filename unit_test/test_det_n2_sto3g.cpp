@@ -5,12 +5,13 @@
 
 using namespace block2;
 
-class TestDETN2STO3G : public ::testing::Test {
+template <typename FL> class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
+    typedef typename GMatrix<FL>::FP FP;
 
-    template <typename S, typename FL>
+    template <typename S>
     void test_dmrg(const S target,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name);
@@ -30,10 +31,11 @@ class TestDETN2STO3G : public ::testing::Test {
     }
 };
 
-template <typename S, typename FL>
-void TestDETN2STO3G::test_dmrg(const S target,
-                               const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-                               const string &name) {
+template <typename FL>
+template <typename S>
+void TestDETN2STO3G<FL>::test_dmrg(
+    const S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+    const string &name) {
 
     vector<FL> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
@@ -115,7 +117,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
 
     // DMRG
     vector<ubond_t> bdims = {bond_dim};
-    vector<FL> noises = {1E-8, 0.0};
+    vector<FP> noises = {1E-8, 0.0};
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
@@ -141,7 +143,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
         for (auto x : det)
             cout << (int)x;
         int ii = dtrie->find(det);
-        double val = ii != -1 ? dtrie->vals[ii] : 0;
+        FL val = ii != -1 ? dtrie->vals[ii] : 0.0;
         cout << " = " << setw(22) << fixed << setprecision(12) << val
              << " error = " << scientific << setprecision(3) << setw(10)
              << (abs(val) - abs(coeffs[i])) << endl;
@@ -154,45 +156,57 @@ void TestDETN2STO3G::test_dmrg(const S target,
     mpo->deallocate();
 }
 
-TEST_F(TestDETN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestDETN2STO3G, TestFL);
+
+TYPED_TEST(TestDETN2STO3G, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
-    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
-
-    SZ vacuum(0);
-    SZ target(fcidump->n_elec(), fcidump->twos(),
-              PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SZ, double>> hamil =
-        make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),
-                                               orbsym, fcidump);
-
-    test_dmrg<SZ, double>(target, hamil, " SZ");
-
-    hamil->deallocate();
-    fcidump->deallocate();
-}
-
-TEST_F(TestDETN2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
-    PGTypes pg = PGTypes::D2H;
-    string filename = "data/N2.STO3G.FCIDUMP";
-    fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SU2, double>> hamil =
-        make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
-                                                orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, fcidump->n_sites(), orbsym,
+                                            fcidump);
 
-    test_dmrg<SU2, double>(target, hamil, "SU2");
+    this->template test_dmrg<SU2>(target, hamil, "SU2");
+
+    hamil->deallocate();
+    fcidump->deallocate();
+}
+
+TYPED_TEST(TestDETN2STO3G, TestSZ) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
+    PGTypes pg = PGTypes::D2H;
+    string filename = "data/N2.STO3G.FCIDUMP";
+    fcidump->read(filename);
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_pg(pg));
+
+    SZ vacuum(0);
+    SZ target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_pg(pg)(fcidump->isym()));
+    shared_ptr<HamiltonianQC<SZ, FL>> hamil =
+        make_shared<HamiltonianQC<SZ, FL>>(vacuum, fcidump->n_sites(), orbsym,
+                                           fcidump);
+
+    this->template test_dmrg<SZ>(target, hamil, " SZ");
 
     hamil->deallocate();
     fcidump->deallocate();

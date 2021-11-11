@@ -725,10 +725,9 @@ TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
         for (int i = 0; i < k - 1; i++) {
             complex<double> factor = 0.0;
             for (int j = 0; j < a.n; j++)
-                if (abs(bs[i].data[j]) > 1E-10) {
-                    factor = a.data[a.n * eigval_idxs[i] + j] / bs[i].data[j];
-                    break;
-                }
+                if (abs(bs[i].data[j]) > 1E-10)
+                    factor += a.data[a.n * eigval_idxs[i] + j] / bs[i].data[j];
+            factor = factor / abs(factor);
             ASSERT_LE(abs(factor) - 1.0, 1E-3);
             ASSERT_TRUE(ComplexMatrixFunctions::all_close(
                 ComplexMatrixRef(a.data + a.n * eigval_idxs[i], a.n, 1), bs[i],
@@ -777,10 +776,9 @@ TEST_F(TestComplexMatrix, TestDavidson) {
         for (int i = 0; i < k; i++) {
             complex<double> factor = 0.0;
             for (int j = 0; j < a.n; j++)
-                if (abs(bs[i].data[j]) > 1E-10) {
-                    factor = a.data[a.n * i + j] / bs[i].data[j];
-                    break;
-                }
+                if (abs(bs[i].data[j]) > 1E-10)
+                    factor += a.data[a.n * i + j] / bs[i].data[j];
+            factor = factor / abs(factor);
             ASSERT_LE(abs(factor) - 1.0, 1E-3);
             ASSERT_TRUE(ComplexMatrixFunctions::all_close(
                 ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 1E-3,
