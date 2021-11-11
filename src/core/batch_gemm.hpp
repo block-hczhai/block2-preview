@@ -742,7 +742,7 @@ template <typename FL> struct BatchGEMMSeq {
     vector<BatchGEMMRef<FL>> refs;
     size_t cumulative_nflop = 0;
     size_t max_batch_flops = 1LU << 30;
-    size_t max_work, max_rwork;
+    size_t max_work = 0, max_rwork = 0;
     FL *work, *rwork;
     SeqTypes mode;
     bool no_check = true;
