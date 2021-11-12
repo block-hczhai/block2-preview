@@ -120,8 +120,8 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_KSYMM
-    bind_dmrg<SU2K>(m_su2k, "SU2K");
-    bind_dmrg<SZK>(m_szk, "SZK");
+    bind_dmrg<SU2K, double>(m_su2k, "SU2K");
+    bind_dmrg<SZK, double>(m_szk, "SZK");
     bind_trans_mps<SU2K, SZK>(m_su2k, "szk");
     bind_trans_mps<SZK, SU2K>(m_szk, "su2k");
     bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(m_su2k, "szk");
