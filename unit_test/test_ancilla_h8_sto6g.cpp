@@ -107,7 +107,7 @@ void TestAncillaH8STO6G<FL>::test_imag_te(
                        te->energies.end());
 
     te->n_sub_sweeps = 2;
-    te->solve(9, beta / 2.0, mps_thermal->center == 0);
+    te->solve(3, beta / 2.0, mps_thermal->center == 0);
 
     te_energies.insert(te_energies.end(), te->energies.begin(),
                        te->energies.end());

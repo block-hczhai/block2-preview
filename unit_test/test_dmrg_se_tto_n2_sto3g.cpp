@@ -176,8 +176,8 @@ TYPED_TEST(TestTTODMRGSingletEmbedding, TestSU2) {
     shared_ptr<HamiltonianQC<SU2, FL>> hamil =
         make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
-    targets.resize(2);
-    energies.resize(2);
+    targets.resize(1);
+    energies.resize(1);
 
     for (int tto = 4; tto < 8; tto++) {
         this->template test_dmrg<SU2>(targets, energies, hamil, "SU2",

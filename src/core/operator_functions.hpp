@@ -41,7 +41,6 @@ enum struct NoiseTypes : uint16_t {
     Unscaled = 16,
     Collected = 32,
     LowMem = 64,
-    ComplexDensityMatrix = 128,
     ReducedPerturbative = 4 | 8,
     PerturbativeUnscaled = 4 | 16,
     ReducedPerturbativeUnscaled = 4 | 8 | 16,
@@ -743,8 +742,6 @@ template <typename S, typename FL> struct OperatorFunctions {
                 else if (noise_scale != 0.0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
                     GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
-                if (!(noise_type & NoiseTypes::ComplexDensityMatrix))
-                    GMatrixFunctions<FL>::keep_real((*b)[ib]);
             }
         else
             for (int ia = 0; ia < a->info->n; ia++) {
@@ -761,8 +758,6 @@ template <typename S, typename FL> struct OperatorFunctions {
                 else if (noise_scale != 0.0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
                     GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
-                if (!(noise_type & NoiseTypes::ComplexDensityMatrix))
-                    GMatrixFunctions<FL>::keep_real((*b)[ib]);
             }
         if (noise != 0.0)
             tmp.deallocate();

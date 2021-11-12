@@ -1894,30 +1894,36 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->ket->canonical_form[i] == 'T')
                 return update_multi_two_dot(i, forward, advance, beta, bond_dim,
                                             noise);
-            else {
-                // FIXME :: allow complex complex TE here
-                if (beta.imag() != 0)
-                    throw runtime_error("Cannot do real TE for real MPS!");
+            else if (beta.imag() == 0)
                 return update_two_dot(i, forward, advance, beta.real(),
                                       bond_dim, noise);
-            }
+            else if (is_same<FLS, FCS>::value)
+                return update_two_dot(i, forward, advance, (FLS &)beta,
+                                      bond_dim, noise);
+            else
+                throw runtime_error("Cannot do real TE for real MPS!");
         } else {
             if (me->ket->canonical_form[i] == 'J' ||
                 me->ket->canonical_form[i] == 'T' ||
                 me->ket->canonical_form[i] == 'M')
                 return update_multi_one_dot(i, forward, advance, beta, bond_dim,
                                             noise);
-            else {
-                // FIXME :: allow complex complex TE here
-                if (beta.imag() != 0)
-                    throw runtime_error("Cannot do real TE for real MPS!");
+            else if (beta.imag() == 0)
                 return update_one_dot(i, forward, advance, beta.real(),
                                       bond_dim, noise);
-            }
+            else if (is_same<FLS, FCS>::value)
+                return update_one_dot(i, forward, advance, (FLS &)beta,
+                                      bond_dim, noise);
+            else
+                throw runtime_error("Cannot do real TE for real MPS!");
         }
     }
     tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
                                ubond_t bond_dim, FPS noise) {
+        frame->twrite = frame->tread = frame->tasync = 0;
+        frame->fpwrite = frame->fpread = 0;
+        if (frame->fp_codec != nullptr)
+            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
         me->prepare();
         vector<FLS> energies;
         vector<FPS> normsqs;
@@ -2037,6 +2043,18 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP")
                          << endl;
+                    cout << " | Tread = " << frame->tread
+                         << " | Twrite = " << frame->twrite
+                         << " | Tfpread = " << frame->fpread
+                         << " | Tfpwrite = " << frame->fpwrite;
+                    if (frame->fp_codec != nullptr)
+                        cout << " | data = "
+                             << Parsing::to_size_string(frame->fp_codec->ndata *
+                                                        8)
+                             << " | cpsd = "
+                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
+                                                        8);
+                    cout << " | Tasync = " << frame->tasync << endl;
                 }
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));

@@ -166,12 +166,12 @@ TYPED_TEST(TestDelayedN2STO3G, TestSU2) {
     shared_ptr<HamiltonianQC<SU2, FL>> hamil =
         make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
+    targets.resize(1);
+    energies.resize(1);
+
     this->template test_dmrg<SU2>(targets, energies, hamil, "SU2",
                                   DecompositionTypes::DensityMatrix,
                                   NoiseTypes::DensityMatrix);
-
-    targets.resize(2);
-    energies.resize(2);
 
     this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
                                   DecompositionTypes::DensityMatrix,
@@ -226,12 +226,12 @@ TYPED_TEST(TestDelayedN2STO3G, TestSZ) {
     shared_ptr<HamiltonianQC<SZ, FL>> hamil =
         make_shared<HamiltonianQC<SZ, FL>>(vacuum, norb, orbsym, fcidump);
 
+    targets.resize(1);
+    energies.resize(1);
+
     this->template test_dmrg<SZ>(targets, energies, hamil, "SZ",
                                  DecompositionTypes::DensityMatrix,
                                  NoiseTypes::DensityMatrix);
-
-    targets.resize(2);
-    energies.resize(2);
 
     this->template test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
                                  DecompositionTypes::DensityMatrix,

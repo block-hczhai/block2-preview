@@ -232,8 +232,8 @@ TYPED_TEST(TestTTODMRGN2STO3G, TestSZ) {
     shared_ptr<HamiltonianQC<SZ, FL>> hamil =
         make_shared<HamiltonianQC<SZ, FL>>(vacuum, norb, orbsym, fcidump);
 
-    targets.resize(2);
-    energies.resize(2);
+    targets.resize(1);
+    energies.resize(1);
 
     for (int tto = 4; tto < 8; tto++) {
         this->template test_dmrg<SZ>(targets, energies, hamil, "SZ",
