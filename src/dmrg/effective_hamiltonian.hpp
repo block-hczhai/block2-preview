@@ -60,9 +60,6 @@ enum struct LinearSolverTypes : uint8_t {
     LSQR
 };
 
-/** Currently only used for Complex Green's Functions */
-enum struct PreconditionerTypes : uint8_t { Diagonal, None };
-
 template <typename S, typename FL, typename = MPS<S, FL>>
 struct EffectiveHamiltonian;
 

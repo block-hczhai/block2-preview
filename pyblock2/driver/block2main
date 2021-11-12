@@ -13,7 +13,7 @@ from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, T
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
-from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
 import numpy as np
 import time
 import os
@@ -284,6 +284,12 @@ if dic.get("te_type", "rk4") == "rk4":
     te_type = TETypes.RK4
 else:
     te_type = TETypes.TangentSpace
+if dic.get("expt_algo_type", "auto") == "auto":
+    algo_type = ExpectationAlgorithmTypes.Automatic
+elif dic.get("expt_algo_type", "auto") == "fast":
+    algo_type = ExpectationAlgorithmTypes.Fast
+else:
+    algo_type = ExpectationAlgorithmTypes.Normal
 
 has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
     or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
@@ -1716,7 +1722,8 @@ if not pre_run:
         me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
         # currently delayed_contraction is not compatible to
         # ExpectationAlgorithmTypes.Fast
-        # me.delayed_contraction = OpNamesSet.normal_ops()
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1724,6 +1731,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         _print("Final canonical form = ", bmps.canonical_form, bmps.center)
@@ -1940,7 +1948,8 @@ if not pre_run:
     if "restart_correlation" in dic or "correlation" in dic:
         assert nroots == 1
         me = MovingEnvironment(nmpo, mps, mps, "1NPC")
-        # me.delayed_contraction = OpNamesSet.normal_ops()
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1948,6 +1957,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, mps.center == 0)
         _print("Final canonical form = ", mps.canonical_form, mps.center)
@@ -1983,6 +1993,8 @@ if not pre_run:
 
     def do_twopdm(bmps, kmps):
         me = MovingEnvironment(p2mpo, bmps, kmps, "2PDM")
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1990,6 +2002,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         _print("Final canonical form = ", bmps.canonical_form, bmps.center)
