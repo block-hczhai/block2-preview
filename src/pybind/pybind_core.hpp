@@ -81,8 +81,9 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, double>>,
         op_expr_less<SZ>>);
-PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>);
-PYBIND11_MAKE_OPAQUE(vector<vector<pair<pair<SZ, SZ>, shared_ptr<Tensor>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<double>>>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<SU2>);
 PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SU2>>);
@@ -117,6 +118,49 @@ PYBIND11_MAKE_OPAQUE(map<string, string>);
 PYBIND11_MAKE_OPAQUE(vector<SZK>);
 // SU2K
 PYBIND11_MAKE_OPAQUE(vector<SU2K>);
+
+#ifdef _USE_COMPLEX
+// complex
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<double>>>>);
+// SZ
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, complex<double>>>,
+        op_expr_less<SZ>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<complex<double>>>>>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, complex<double>>>,
+        op_expr_less<SU2>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<double>>>>>>);
+#endif
 
 template <typename T> struct Array {
     T *data;
@@ -569,20 +613,24 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         .def("pseudo_inverse", &SparseMatrix<S, FL>::pseudo_inverse,
              py::arg("bond_dim"), py::arg("svd_eps") = 1E-4,
              py::arg("svd_cutoff") = 1E-12)
-        .def("left_svd",
-             [](SparseMatrix<S, FL> *self) {
-                 vector<S> qs;
-                 vector<shared_ptr<GTensor<FL>>> l, s, r;
-                 self->left_svd(qs, l, s, r);
-                 return make_tuple(qs, l, s, r);
-             })
-        .def("right_svd",
-             [](SparseMatrix<S, FL> *self) {
-                 vector<S> qs;
-                 vector<shared_ptr<GTensor<FL>>> l, s, r;
-                 self->right_svd(qs, l, s, r);
-                 return make_tuple(qs, l, s, r);
-             })
+        .def(
+            "left_svd",
+            [](SparseMatrix<S, FL> *self) {
+                vector<S> qs;
+                vector<shared_ptr<GTensor<FL>>> l, r;
+                vector<shared_ptr<GTensor<typename SparseMatrix<S, FL>::FP>>> s;
+                self->left_svd(qs, l, s, r);
+                return make_tuple(qs, l, s, r);
+            })
+        .def(
+            "right_svd",
+            [](SparseMatrix<S, FL> *self) {
+                vector<S> qs;
+                vector<shared_ptr<GTensor<FL>>> l, r;
+                vector<shared_ptr<GTensor<typename SparseMatrix<S, FL>::FP>>> s;
+                self->right_svd(qs, l, s, r);
+                return make_tuple(qs, l, s, r);
+            })
         .def("left_canonicalize", &SparseMatrix<S, FL>::left_canonicalize,
              py::arg("rmat"))
         .def("right_canonicalize", &SparseMatrix<S, FL>::right_canonicalize,
@@ -734,7 +782,8 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         .def("left_svd",
              [](SparseMatrixGroup<S, FL> *self) {
                  vector<S> qs;
-                 vector<shared_ptr<GTensor<FL>>> s, r;
+                 vector<shared_ptr<GTensor<FL>>> r;
+                 vector<shared_ptr<GTensor<typename GMatrix<FL>::FP>>> s;
                  vector<vector<shared_ptr<GTensor<FL>>>> l;
                  self->left_svd(qs, l, s, r);
                  return make_tuple(qs, l, s, r);
@@ -742,7 +791,8 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         .def("right_svd",
              [](SparseMatrixGroup<S, FL> *self) {
                  vector<S> qs;
-                 vector<shared_ptr<GTensor<FL>>> l, s;
+                 vector<shared_ptr<GTensor<FL>>> l;
+                 vector<shared_ptr<GTensor<typename GMatrix<FL>::FP>>> s;
                  vector<vector<shared_ptr<GTensor<FL>>>> r;
                  self->right_svd(qs, l, s, r);
                  return make_tuple(qs, l, s, r);
@@ -979,21 +1029,24 @@ template <typename S, typename FL> void bind_fl_rule(py::module &m) {
         .def(py::init<const shared_ptr<Rule<S, FL>> &>());
 }
 
-template <typename S> void bind_core(py::module &m, const string &name) {
+template <typename S, typename FL>
+void bind_core(py::module &m, const string &name) {
 
-    bind_cg<S>(m);
-    bind_expr<S>(m);
-    bind_state_info<S>(m, name);
-    bind_sparse<S>(m);
-    bind_parallel<S>(m);
+    if (is_same<typename GMatrix<FL>::FP, FL>::value) {
+        bind_cg<S>(m);
+        bind_expr<S>(m);
+        bind_state_info<S>(m, name);
+        bind_sparse<S>(m);
+        bind_parallel<S>(m);
+    }
 
-    bind_fl_expr<S, double>(m);
-    bind_fl_state_info<S, double>(m);
-    bind_fl_sparse<S, double>(m);
-    bind_fl_operator<S, double>(m);
-    bind_fl_hamiltonian<S, double>(m);
-    bind_fl_parallel<S, double>(m);
-    bind_fl_rule<S, double>(m);
+    bind_fl_expr<S, FL>(m);
+    bind_fl_state_info<S, FL>(m);
+    bind_fl_sparse<S, FL>(m);
+    bind_fl_operator<S, FL>(m);
+    bind_fl_hamiltonian<S, FL>(m);
+    bind_fl_parallel<S, FL>(m);
+    bind_fl_rule<S, FL>(m);
 }
 
 template <typename S, typename T>
@@ -1661,12 +1714,11 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("rand_int", &Random::rand_int, py::arg("a"), py::arg("b"))
         .def_static("rand_double", &Random::rand_double, py::arg("a") = 0,
                     py::arg("b") = 1)
-        .def_static("fill_rand_double",
-                    [](py::object, py::array_t<double> &data, double a = 0,
-                       double b = 1) {
-                        return Random::fill<double>(data.mutable_data(),
-                                                        data.size(), a, b);
-                    });
+        .def_static("fill_rand_double", [](py::object,
+                                           py::array_t<double> &data,
+                                           double a = 0, double b = 1) {
+            return Random::fill<double>(data.mutable_data(), data.size(), a, b);
+        });
 
     py::class_<Parsing, shared_ptr<Parsing>>(m, "Parsing")
         .def_static("to_size_string", &Parsing::to_size_string,
@@ -1772,6 +1824,11 @@ template <typename S = void> void bind_matrix(py::module &m) {
         });
 
     py::class_<ComplexMatrixFunctions>(m, "ComplexMatrixFunctions");
+
+    py::class_<IterativeMatrixFunctions<double>>(m, "IterativeMatrixFunctions");
+
+    py::class_<IterativeMatrixFunctions<complex<double>>>(
+        m, "ComplexIterativeMatrixFunctions");
 }
 
 template <typename S = void> void bind_post_matrix(py::module &m) {
@@ -1835,7 +1892,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def_property(
             "data",
             [](GCSRMatrix<FL> *self) {
-                return py::array_t<double>(self->nnz, self->data);
+                return py::array_t<FL>(self->nnz, self->data);
             },
             [](GCSRMatrix<FL> *self, const py::array_t<double> &v) {
                 assert(v.size() == self->nnz);
@@ -1884,8 +1941,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
 
     py::bind_vector<vector<shared_ptr<GCSRMatrix<FL>>>>(m, "VectorCSRMatrix");
 
-    py::class_<Tensor, shared_ptr<GTensor<FL>>>(m, "Tensor",
-                                                py::buffer_protocol())
+    py::class_<GTensor<FL>, shared_ptr<GTensor<FL>>>(m, "Tensor",
+                                                     py::buffer_protocol())
         .def(py::init<MKL_INT, MKL_INT, MKL_INT>())
         .def(py::init<const vector<MKL_INT> &>())
         .def_buffer([](GTensor<FL> *self) -> py::buffer_info {
@@ -1981,7 +2038,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("e", &FCIDUMP<FL>::e)
         .def(
             "t",
-            [](FCIDUMP<FL> *self, py::args &args) -> double {
+            [](FCIDUMP<FL> *self, py::args &args) -> FL {
                 assert(args.size() == 2 || args.size() == 3);
                 if (args.size() == 2)
                     return self->t((uint16_t)args[0].cast<int>(),
@@ -2000,7 +2057,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
             "        s : spin index (0=alpha, 1=beta)")
         .def(
             "v",
-            [](FCIDUMP<FL> *self, py::args &args) -> double {
+            [](FCIDUMP<FL> *self, py::args &args) -> FL {
                 assert(args.size() == 4 || args.size() == 6);
                 if (args.size() == 4)
                     return self->v((uint16_t)args[0].cast<int>(),
@@ -2224,16 +2281,16 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
              py::arg("scale"), py::arg("cfactor"))
         .def("rotate",
-             (void (BatchGEMMSeq<FL>::*)(const MatrixRef &, const MatrixRef &,
-                                         const MatrixRef &, bool,
-                                         const MatrixRef &, bool, double)) &
+             (void (BatchGEMMSeq<FL>::*)(
+                 const GMatrix<FL> &, const GMatrix<FL> &, const GMatrix<FL> &,
+                 uint8_t, const GMatrix<FL> &, uint8_t, FL)) &
                  BatchGEMMSeq<FL>::rotate,
              py::arg("a"), py::arg("c"), py::arg("bra"), py::arg("conj_bra"),
              py::arg("ket"), py::arg("conj_ket"), py::arg("scale"))
         .def("rotate",
              (void (BatchGEMMSeq<FL>::*)(
-                 const MatrixRef &, bool, const MatrixRef &, bool,
-                 const MatrixRef &, const MatrixRef &, double)) &
+                 const GMatrix<FL> &, bool, const GMatrix<FL> &, bool,
+                 const GMatrix<FL> &, const GMatrix<FL> &, FL)) &
                  BatchGEMMSeq<FL>::rotate,
              py::arg("a"), py::arg("conj_a"), py::arg("c"), py::arg("conj_c"),
              py::arg("bra"), py::arg("ket"), py::arg("scale"))
@@ -2250,7 +2307,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("deallocate", &BatchGEMMSeq<FL>::deallocate)
         .def("simple_perform", &BatchGEMMSeq<FL>::simple_perform)
         .def("auto_perform",
-             (void (BatchGEMMSeq<FL>::*)(const MatrixRef &)) &
+             (void (BatchGEMMSeq<FL>::*)(const GMatrix<FL> &)) &
                  BatchGEMMSeq<FL>::auto_perform,
              py::arg("v") = GMatrix<FL>(nullptr, 0, 0))
         .def("auto_perform",
@@ -2501,6 +2558,28 @@ extern template auto
 bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
                                              const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+
+#ifdef _USE_COMPLEX
+
+extern template void bind_fl_matrix<complex<double>>(py::module &m);
+
+extern template void bind_fl_expr<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SZ, complex<double>>(py::module &m);
+
+extern template void bind_fl_expr<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SU2, complex<double>>(py::module &m);
+
+#endif
 
 #ifdef _USE_KSYMM
 extern template void bind_cg<SZK>(py::module &m);

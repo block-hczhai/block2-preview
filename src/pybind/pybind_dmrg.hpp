@@ -47,6 +47,27 @@ PYBIND11_MAKE_OPAQUE(
     vector<shared_ptr<EffectiveHamiltonian<SU2, double, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, double>>>);
 
+#ifdef _USE_COMPLEX
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<
+        shared_ptr<MovingEnvironment<SZ, complex<double>, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<EffectiveHamiltonian<SZ, complex<double>,
+                                                            complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SZ, complex<double>>>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<
+        shared_ptr<MovingEnvironment<SU2, complex<double>, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<shared_ptr<
+        EffectiveHamiltonian<SU2, complex<double>, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, complex<double>>>>);
+#endif
+
 template <typename S, typename FL>
 auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 
@@ -456,7 +477,6 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def("eigs", &EffectiveHamiltonian<S, FL>::eigs)
         .def("multiply", &EffectiveHamiltonian<S, FL>::multiply)
         .def("inverse_multiply", &EffectiveHamiltonian<S, FL>::inverse_multiply)
-        .def("greens_function", &EffectiveHamiltonian<S, FL>::greens_function)
         .def("expect", &EffectiveHamiltonian<S, FL>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S, FL>::rk4_apply,
              py::arg("beta"), py::arg("const_e"),
@@ -465,6 +485,14 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
              py::arg("beta"), py::arg("const_e"), py::arg("symmetric"),
              py::arg("iprint") = false, py::arg("para_rule") = nullptr)
         .def("deallocate", &EffectiveHamiltonian<S, FL>::deallocate);
+
+    py::class_<EffectiveFunctions<S, FL>,
+               shared_ptr<EffectiveFunctions<S, FL>>>(m, "EffectiveFunctions")
+        .def_static("greens_function",
+                    &EffectiveFunctions<S, FL>::greens_function)
+        .def_static("greens_function_squared",
+                    &EffectiveFunctions<S, FL>::greens_function_squared)
+        .def_static("expo_apply", &EffectiveFunctions<S, FL>::expo_apply);
 
     py::bind_vector<vector<shared_ptr<EffectiveHamiltonian<S, FL>>>>(
         m, "VectorEffectiveHamiltonian");
@@ -546,10 +574,6 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
              &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::rk4_apply,
              py::arg("beta"), py::arg("const_e"),
              py::arg("eval_energy") = false, py::arg("para_rule") = nullptr)
-        .def("expo_apply",
-             &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::expo_apply,
-             py::arg("beta"), py::arg("const_e"), py::arg("iprint") = false,
-             py::arg("para_rule") = nullptr)
         .def("deallocate",
              &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::deallocate);
 }
@@ -1115,11 +1139,10 @@ void bind_fl_linear(py::module &m) {
     py::class_<typename Linear<S, FL, FLS>::Iteration,
                shared_ptr<typename Linear<S, FL, FLS>::Iteration>>(
         m, "LinearIteration")
-        .def(py::init<const vector<typename Linear<S, FL, FLS>::FPS> &,
-                      typename Linear<S, FL, FLS>::FPS, int, int, int, size_t,
-                      double>())
-        .def(py::init<const vector<typename Linear<S, FL, FLS>::FPS> &,
-                      typename Linear<S, FL, FLS>::FPS, int, int, int>())
+        .def(py::init<const vector<FLS> &, typename Linear<S, FL, FLS>::FPS,
+                      int, int, int, size_t, double>())
+        .def(py::init<const vector<FLS> &, typename Linear<S, FL, FLS>::FPS,
+                      int, int, int>())
         .def_readwrite("mmps", &Linear<S, FL, FLS>::Iteration::mmps)
         .def_readwrite("targets", &Linear<S, FL, FLS>::Iteration::targets)
         .def_readwrite("error", &Linear<S, FL, FLS>::Iteration::error)
@@ -1506,24 +1529,28 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S, FL>> &>());
 }
 
-template <typename S> void bind_dmrg(py::module &m, const string &name) {
+template <typename S, typename FL>
+void bind_dmrg(py::module &m, const string &name) {
 
-    bind_mps<S>(m);
-    bind_mpo<S>(m);
+    if (is_same<typename GMatrix<FL>::FP, FL>::value) {
+        bind_mps<S>(m);
+        bind_mpo<S>(m);
+    }
 
-    bind_fl_mps<S, double>(m);
-    bind_fl_mpo<S, double>(m);
-    bind_fl_partition<S, double>(m);
-    bind_fl_qc_hamiltonian<S, double>(m);
-    bind_fl_parallel_dmrg<S, double>(m);
-    bind_fl_spin_specific<S, double>(m);
+    bind_fl_mps<S, FL>(m);
+    bind_fl_mpo<S, FL>(m);
+    bind_fl_partition<S, FL>(m);
+    bind_fl_qc_hamiltonian<S, FL>(m);
+    bind_fl_parallel_dmrg<S, FL>(m);
+    bind_fl_spin_specific<S, FL>(m);
 
-    bind_fl_moving_environment<S, double, double>(m);
-    bind_fl_dmrg<S, double, double>(m);
-    bind_fl_td_dmrg<S, double, double>(m);
-    bind_fl_linear<S, double, double>(m);
-    bind_fl_expect<S, double, double, double>(m, "Expect");
-    bind_fl_expect<S, double, double, complex<double>>(m, "ComplexExpect");
+    bind_fl_moving_environment<S, FL, FL>(m);
+    bind_fl_dmrg<S, FL, FL>(m);
+    bind_fl_td_dmrg<S, FL, FL>(m);
+    bind_fl_linear<S, FL, FL>(m);
+    bind_fl_expect<S, FL, FL, FL>(m, "Expect");
+    if (!is_same<typename GMatrix<FL>::FC, FL>::value)
+        bind_fl_expect<S, FL, FL, typename GMatrix<FL>::FC>(m, "ComplexExpect");
 }
 
 template <typename S, typename T>
@@ -1550,7 +1577,10 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Reduced", TruncationTypes::Reduced)
         .value("ReducedInversed", TruncationTypes::ReducedInversed)
         .value("KeepOne", TruncationTypes::KeepOne)
-        .def(py::self * int(), "For KeepOne: Keep X states per quantum number");
+        .value("ComplexDensityMatrix", TruncationTypes::ComplexDensityMatrix)
+        .def(py::self * int(), "For KeepOne: Keep X states per quantum number")
+        .def(py::self & py::self)
+        .def(py::self | py::self);
 
     py::enum_<DecompositionTypes>(m, "DecompositionTypes", py::arithmetic())
         .value("DensityMatrix", DecompositionTypes::DensityMatrix)
@@ -1715,6 +1745,54 @@ extern template auto
 bind_fl_trans_mps_spin_specific<SU2, SZ, double>(py::module &m,
                                                  const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+
+#ifdef _USE_COMPLEX
+
+extern template void bind_fl_mps<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_qc_hamiltonian<SZ, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SZ, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SZ, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_dmrg<SZ, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SZ, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SZ, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SZ, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+
+extern template void bind_fl_mps<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SU2, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SU2, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SU2, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SU2, complex<double>, complex<double>>(
+    py::module &m);
+extern template void
+bind_fl_dmrg<SU2, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SU2, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SU2, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SU2, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+
+extern template auto bind_fl_spin_specific<SZ, complex<double>>(py::module &m)
+    -> decltype(typename SZ::is_sz_t());
+extern template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+
+#endif
 
 #ifdef _USE_KSYMM
 

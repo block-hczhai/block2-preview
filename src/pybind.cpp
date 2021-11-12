@@ -57,6 +57,14 @@ PYBIND11_MODULE(block2, m) {
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
     bind_data<>(m);
 
+#ifdef _USE_COMPLEX
+    py::module m_cpx = m.def_submodule("cpx", "Complex numbers.");
+    py::module m_su2_cpx =
+        m_cpx.def_submodule("su2", "Spin-adapted (complex).");
+    py::module m_sz_cpx =
+        m_cpx.def_submodule("sz", "Non-spin-adapted (complex).");
+#endif
+
 #ifdef _USE_CORE
     bind_types<>(m);
     bind_io<>(m);
@@ -65,38 +73,64 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_matrix<double>(m);
     bind_post_matrix<>(m);
 
-    bind_core<SU2>(m_su2, "SU2");
-    bind_core<SZ>(m_sz, "SZ");
+    bind_core<SU2, double>(m_su2, "SU2");
+    bind_core<SZ, double>(m_sz, "SZ");
     bind_trans_state_info<SU2, SZ>(m_su2, "sz");
     bind_trans_state_info<SZ, SU2>(m_sz, "su2");
     bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
+#ifdef _USE_COMPLEX
+    bind_fl_matrix<complex<double>>(m_cpx);
+    bind_core<SU2, complex<double>>(m_su2_cpx, "SU2");
+    bind_core<SZ, complex<double>>(m_sz_cpx, "SZ");
+#endif
+
 #ifdef _USE_KSYMM
     py::module m_su2k =
         m.def_submodule("su2k", "Spin-adapted with k symmetry.");
     py::module m_szk =
         m.def_submodule("szk", "Non-spin-adapted with k symmetry.");
-    bind_core<SU2K>(m_su2k, "SU2K");
-    bind_core<SZK>(m_szk, "SZK");
+    bind_core<SU2K, double>(m_su2k, "SU2K");
+    bind_core<SZK, double>(m_szk, "SZK");
     bind_trans_state_info<SU2K, SZK>(m_su2k, "szk");
     bind_trans_state_info<SZK, SU2K>(m_szk, "su2k");
     bind_trans_state_info_spin_specific<SU2K, SZK>(m_su2k, "szk");
+#ifdef _USE_COMPLEX
+    py::module m_su2k_cpx =
+        m_cpx.def_submodule("su2k", "Spin-adapted with k symmetry (complex).");
+    py::module m_szk_cpx = m_cpx.def_submodule(
+        "szk", "Non-spin-adapted with k symmetry (complex).");
+    bind_core<SU2K, complex<double>>(m_su2k_cpx, "SU2K");
+    bind_core<SZK, complex<double>>(m_szk_cpx, "SZK");
+#endif
 #endif
 #endif
 
 #ifdef _USE_DMRG
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
-    bind_dmrg<SU2>(m_su2, "SU2");
-    bind_dmrg<SZ>(m_sz, "SZ");
+    bind_dmrg<SU2, double>(m_su2, "SU2");
+    bind_dmrg<SZ, double>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
     bind_trans_mps<SZ, SU2>(m_sz, "su2");
     bind_fl_trans_mps_spin_specific<SU2, SZ, double>(m_su2, "sz");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SU2, complex<double>>(m_su2_cpx, "SU2");
+    bind_dmrg<SZ, complex<double>>(m_sz_cpx, "SZ");
+    bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(m_su2_cpx, "sz");
+#endif
+
 #ifdef _USE_KSYMM
     bind_dmrg<SU2K>(m_su2k, "SU2K");
     bind_dmrg<SZK>(m_szk, "SZK");
     bind_trans_mps<SU2K, SZK>(m_su2k, "szk");
     bind_trans_mps<SZK, SU2K>(m_szk, "su2k");
     bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(m_su2k, "szk");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SU2K, complex<double>>(m_su2k_cpx, "SU2K");
+    bind_dmrg<SZK, complex<double>>(m_szk_cpx, "SZK");
+    bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(m_su2k_cpx,
+                                                                "szk");
+#endif
 #endif
 #endif
 

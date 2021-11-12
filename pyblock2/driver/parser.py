@@ -37,7 +37,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "nevpt2sd",  "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
               "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
               "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
-              "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center"}
+              "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center",
+              "use_complex", "complex_density_matrix"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

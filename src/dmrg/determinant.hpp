@@ -146,7 +146,7 @@ template <typename D, typename FL, uint8_t L = 4> struct TRIE {
             vector<FP> &ipop = pop[tid];
 #pragma omp for schedule(static)
             for (int i = 0; i < dets.size(); i++) {
-                FP vsq = xconj(vals[i]) * vals[i];
+                FP vsq = xreal<FL>(xconj<FL>(vals[i]) * vals[i]);
                 vector<uint8_t> det = (*this)[i];
                 for (int j = 0; j < n_sites; j++)
                     ipop[j * L + det[j]] += vsq;

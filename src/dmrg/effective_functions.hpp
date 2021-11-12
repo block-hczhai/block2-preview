@@ -331,15 +331,6 @@ struct EffectiveFunctions<S, FL,
     }
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
-    tuple<FL, FP, int, size_t, double> static expo_apply(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL beta,
-        FL const_e, bool symmetric, bool iprint = false,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        assert(false);
-        return make_tuple(0.0, 0.0, 0, (size_t)0, 0.0);
-    }
-    // [ket] = exp( [H_eff] ) | [ket] > (exact)
-    // energy, norm, nexpo, nflop, texpo
     // nexpo is number of complex matrix multiplications
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
