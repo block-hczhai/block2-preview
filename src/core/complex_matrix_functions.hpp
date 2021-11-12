@@ -1362,7 +1362,7 @@ struct ComplexMatrixFunctions {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     out(i, 0) = in(i,0) / a_diagonal(i, i);
                 } else {
-                    out(i, 0) = in(1,0) / precond_reg;
+                    out(i, 0) = in(i,0) / precond_reg;
                 }
             }
         };
@@ -1381,7 +1381,7 @@ struct ComplexMatrixFunctions {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     tmpP(i, 0) = in(i,0) / a_diagonal(i, i);
                 } else {
-                    tmpP(i, 0) = in(1,0) / precond_reg;
+                    tmpP(i, 0) = in(i,0) / precond_reg;
                 }
             }
             op(tmpP,out);
