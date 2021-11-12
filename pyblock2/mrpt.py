@@ -233,7 +233,7 @@ class NEVPT(lib.StreamObject):
         linear.decomp_last_site = False
         linear.cutoff = self.dmrg_args["cutoff"]
         linear.iprint = max(min(self.verbose - 4, 3), 0)
-        linear.minres_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
+        linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
 
         self.e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
 

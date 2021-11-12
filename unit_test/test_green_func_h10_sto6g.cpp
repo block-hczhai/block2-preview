@@ -226,7 +226,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
     linear->eq_type = EquationTypes::GreensFunction;
     linear->gf_eta = eta;
     linear->gf_omega = omega;
-    linear->precondition_cg = true;
+    linear->linear_use_precondition = true;
     linear->noise_type = NoiseTypes::ReducedPerturbative;
     linear->decomp_type = DecompositionTypes::SVD;
     linear->right_weight = 0.2;

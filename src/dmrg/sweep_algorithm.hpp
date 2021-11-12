@@ -1860,9 +1860,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
     vector<FPS> discarded_weights;
     vector<vector<FLS>> sweep_targets;
     vector<FPS> sweep_discarded_weights;
-    vector<FPS> minres_conv_thrds;
-    int minres_max_iter = 5000;
-    int minres_soft_max_iter = -1;
+    vector<FPS> linear_conv_thrds;
+    int linear_max_iter = 5000;
+    int linear_soft_max_iter = -1;
     int conv_required_sweeps = 3;
     ConvergenceTypes conv_type = ConvergenceTypes::LastMinimal;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -1881,7 +1881,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     double tprt = 0, tmult = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0,
            tsplt = 0, tsvd = 0;
     Timer _t, _t2;
-    bool precondition_cg = true;
+    bool linear_use_precondition = true;
     // number of eigenvalues solved using harmonic Davidson
     // for deflated CG; 0 means normal CG
     int cg_n_harmonic_projection = 0;
@@ -1974,7 +1974,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     };
     Iteration update_one_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, FPS noise,
-                             FPS minres_conv_thrd) {
+                             FPS linear_conv_thrd) {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
         frame->activate(0);
@@ -2088,7 +2088,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         } else if (lme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
-                precondition_cg, me->bra->tensors[i], right_bra);
+                linear_use_precondition, me->bra->tensors[i], right_bra);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
@@ -2103,8 +2103,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         : (eq_type == EquationTypes::NormalMinRes
                                ? LinearSolverTypes::MinRes
                                : LinearSolverTypes::GCROT),
-                    gcrotmk_size, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                    gcrotmk_size, iprint >= 3, linear_conv_thrd,
+                    linear_max_iter, linear_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2131,16 +2131,16 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     gf_extra_omegas[j],
                                     gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                     real_bra, cg_n_harmonic_projection,
-                                    iprint >= 3, minres_conv_thrd,
-                                    minres_max_iter, minres_soft_max_iter,
+                                    iprint >= 3, linear_conv_thrd,
+                                    linear_max_iter, linear_soft_max_iter,
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
                                 l_eff, lme->mpo->const_e, gf_extra_omegas[j],
                                 gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
-                                minres_conv_thrd, minres_max_iter,
-                                minres_soft_max_iter, me->para_rule);
+                                linear_conv_thrd, linear_max_iter,
+                                linear_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
                             memcpy(extra_bras.data() +
                                        j * 2 * l_eff->bra->total_memory,
@@ -2165,13 +2165,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 if (eq_type == EquationTypes::GreensFunctionSquared)
                     lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                        cg_n_harmonic_projection, iprint >= 3, linear_conv_thrd,
+                        linear_max_iter, linear_soft_max_iter, me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        gcrotmk_size, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                        gcrotmk_size, iprint >= 3, linear_conv_thrd,
+                        linear_max_iter, linear_soft_max_iter, me->para_rule);
                 targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2691,7 +2691,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     }
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, FPS noise,
-                             FPS minres_conv_thrd) {
+                             FPS linear_conv_thrd) {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
         frame->activate(0);
@@ -2776,7 +2776,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             }
         } else if (lme != nullptr) {
             shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
-                lme->eff_ham(FuseTypes::FuseLR, forward, precondition_cg,
+                lme->eff_ham(FuseTypes::FuseLR, forward, linear_use_precondition,
                              me->bra->tensors[i], right_bra);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
@@ -2792,8 +2792,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         : (eq_type == EquationTypes::NormalMinRes
                                ? LinearSolverTypes::MinRes
                                : LinearSolverTypes::GCROT),
-                    gcrotmk_size, iprint >= 3, minres_conv_thrd,
-                    minres_max_iter, minres_soft_max_iter, me->para_rule);
+                    gcrotmk_size, iprint >= 3, linear_conv_thrd,
+                    linear_max_iter, linear_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2820,16 +2820,16 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     gf_extra_omegas[j],
                                     gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                     real_bra, cg_n_harmonic_projection,
-                                    iprint >= 3, minres_conv_thrd,
-                                    minres_max_iter, minres_soft_max_iter,
+                                    iprint >= 3, linear_conv_thrd,
+                                    linear_max_iter, linear_soft_max_iter,
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
                                 l_eff, lme->mpo->const_e, gf_extra_omegas[j],
                                 gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
                                 real_bra, gcrotmk_size, iprint >= 3,
-                                minres_conv_thrd, minres_max_iter,
-                                minres_soft_max_iter, me->para_rule);
+                                linear_conv_thrd, linear_max_iter,
+                                linear_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
                             memcpy(extra_bras.data() +
                                        j * 2 * l_eff->bra->total_memory,
@@ -2854,13 +2854,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 if (eq_type == EquationTypes::GreensFunctionSquared)
                     lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        cg_n_harmonic_projection, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                        cg_n_harmonic_projection, iprint >= 3, linear_conv_thrd,
+                        linear_max_iter, linear_soft_max_iter, me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        gcrotmk_size, iprint >= 3, minres_conv_thrd,
-                        minres_max_iter, minres_soft_max_iter, me->para_rule);
+                        gcrotmk_size, iprint >= 3, linear_conv_thrd,
+                        linear_max_iter, linear_soft_max_iter, me->para_rule);
                 targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -3231,7 +3231,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                                ubond_t ket_bond_dim, FPS noise,
-                               FPS minres_conv_thrd) {
+                               FPS linear_conv_thrd) {
         _t2.get_time();
         rme->move_to(i);
         if (lme != nullptr)
@@ -3244,16 +3244,16 @@ template <typename S, typename FL, typename FLS> struct Linear {
         Iteration it(vector<FLS>(), 0, 0, 0, 0);
         if (rme->dot == 2)
             it = update_two_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
-                                minres_conv_thrd);
+                                linear_conv_thrd);
         else
             it = update_one_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
-                                minres_conv_thrd);
+                                linear_conv_thrd);
         tblk += _t2.get_time();
         return it;
     }
     tuple<vector<FLS>, FPS> sweep(bool forward, ubond_t bra_bond_dim,
                                   ubond_t ket_bond_dim, FPS noise,
-                                  FPS minres_conv_thrd) {
+                                  FPS linear_conv_thrd) {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         frame->fpwrite = frame->fpread = 0;
@@ -3300,7 +3300,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             }
             t.get_time();
             Iteration r = blocking(i, forward, bra_bond_dim, ket_bond_dim,
-                                   noise, minres_conv_thrd);
+                                   noise, linear_conv_thrd);
             sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
@@ -3471,9 +3471,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
             ket_bond_dims.resize(n_sweeps, ket_bond_dims.back());
         if (noises.size() < n_sweeps)
             noises.resize(n_sweeps, noises.size() == 0 ? 0.0 : noises.back());
-        if (minres_conv_thrds.size() < n_sweeps)
-            for (size_t i = minres_conv_thrds.size(); i < noises.size(); i++)
-                minres_conv_thrds.push_back(
+        if (linear_conv_thrds.size() < n_sweeps)
+            for (size_t i = linear_conv_thrds.size(); i < noises.size(); i++)
+                linear_conv_thrds.push_back(
                     (noises[i] == 0 ? (tol == 0 ? 1E-9 : tol) : noises[i]) *
                     0.1);
         Timer start, current;
@@ -3493,13 +3493,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                      << " | Noise = " << scientific << setw(9)
                      << setprecision(2) << noises[iw];
                 if (lme != nullptr)
-                    cout << " | MinRes threshold = " << scientific << setw(9)
-                         << setprecision(2) << minres_conv_thrds[iw];
+                    cout << " | Linear threshold = " << scientific << setw(9)
+                         << setprecision(2) << linear_conv_thrds[iw];
                 cout << endl;
             }
             auto sweep_results =
                 sweep(forward, bra_bond_dims[iw], ket_bond_dims[iw], noises[iw],
-                      minres_conv_thrds[iw]);
+                      linear_conv_thrds[iw]);
             targets.push_back(get<0>(sweep_results));
             discarded_weights.push_back(get<1>(sweep_results));
             if (targets.size() >= 2)

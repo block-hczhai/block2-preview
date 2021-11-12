@@ -337,11 +337,11 @@ class GFDMRG(FTDMRG):
             linear = Linear(lme, rme, VectorUBond(bond_dims),
                             VectorUBond(cps_bond_dims[-1:]), VectorDouble(noises))
             linear.gf_eta = eta
-            linear.minres_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
+            linear.linear_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
             # TZ: Not raising error even if CG is not converged
-            linear.minres_soft_max_iter = max_solver_iter
-            linear.minres_max_iter = max_solver_iter + 1000
+            linear.linear_soft_max_iter = max_solver_iter
+            linear.linear_max_iter = max_solver_iter + 1000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -354,7 +354,7 @@ class GFDMRG(FTDMRG):
                 t = time.perf_counter()
 
                 linear.tme = None
-                linear.minres_soft_max_iter = max_solver_iter
+                linear.linear_soft_max_iter = max_solver_iter
                 linear.noises = VectorDouble(noises)
                 linear.bra_bond_dims = VectorUBond(bond_dims)
                 linear.gf_omega = w
@@ -408,7 +408,7 @@ class GFDMRG(FTDMRG):
                             linear.solve(1, mps.center != 0, 0)
                             rgf, igf = linear.targets[-1]
                         else:
-                            linear.minres_soft_max_iter = max_solver_iter_off_diag if \
+                            linear.linear_soft_max_iter = max_solver_iter_off_diag if \
                                 max_solver_iter_off_diag != -1 else max_solver_iter
                             linear.solve(1, mps.center == 0, 0)
                             if mps.center == 0:

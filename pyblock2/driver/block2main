@@ -2380,7 +2380,7 @@ if not pre_run:
         linear.cutoff = float(dic.get("cutoff", 1E-14))
         linear.decomp_type = decomp_type
         linear.trunc_type = trunc_type
-        linear.minres_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
+        linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
 
         e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
         nevpt_sweep_energies = np.array(linear.targets)

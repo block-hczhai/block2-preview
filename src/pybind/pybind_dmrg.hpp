@@ -1209,7 +1209,7 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("eq_type", &Linear<S, FL, FLS>::eq_type)
         .def_readwrite("ex_type", &Linear<S, FL, FLS>::ex_type)
         .def_readwrite("algo_type", &Linear<S, FL, FLS>::algo_type)
-        .def_readwrite("precondition_cg", &Linear<S, FL, FLS>::precondition_cg)
+        .def_readwrite("linear_use_precondition", &Linear<S, FL, FLS>::linear_use_precondition)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S, FL, FLS>::cg_n_harmonic_projection)
         .def_readwrite("gcrotmk_size", &Linear<S, FL, FLS>::gcrotmk_size)
@@ -1221,11 +1221,11 @@ void bind_fl_linear(py::module &m) {
                        &Linear<S, FL, FLS>::sweep_max_pket_size)
         .def_readwrite("sweep_max_eff_ham_size",
                        &Linear<S, FL, FLS>::sweep_max_eff_ham_size)
-        .def_readwrite("minres_conv_thrds",
-                       &Linear<S, FL, FLS>::minres_conv_thrds)
-        .def_readwrite("minres_max_iter", &Linear<S, FL, FLS>::minres_max_iter)
-        .def_readwrite("minres_soft_max_iter",
-                       &Linear<S, FL, FLS>::minres_soft_max_iter)
+        .def_readwrite("linear_conv_thrds",
+                       &Linear<S, FL, FLS>::linear_conv_thrds)
+        .def_readwrite("linear_max_iter", &Linear<S, FL, FLS>::linear_max_iter)
+        .def_readwrite("linear_soft_max_iter",
+                       &Linear<S, FL, FLS>::linear_soft_max_iter)
         .def_readwrite("conv_required_sweeps",
                        &Linear<S, FL, FLS>::conv_required_sweeps)
         .def_readwrite("gf_omega", &Linear<S, FL, FLS>::gf_omega)

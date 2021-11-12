@@ -139,7 +139,7 @@ struct LinearBigSite : Linear<S, FL, FLS> {
     using Linear<S, FL, FLS>::lme;
     using Linear<S, FL, FLS>::rme;
     using Linear<S, FL, FLS>::tme;
-    using Linear<S, FL, FLS>::minres_soft_max_iter;
+    using Linear<S, FL, FLS>::linear_soft_max_iter;
     using Linear<S, FL, FLS>::noise_type;
     using Linear<S, FL, FLS>::decomp_type;
     using Linear<S, FL, FLS>::targets;
@@ -167,10 +167,10 @@ struct LinearBigSite : Linear<S, FL, FLS> {
                              noises) {}
     Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                        ubond_t ket_bond_dim, FPS noise,
-                       FPS minres_conv_thrd) override {
+                       FPS linear_conv_thrd) override {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         const int dsmi =
-            minres_soft_max_iter; // Save it as it may be changed here
+            linear_soft_max_iter; // Save it as it may be changed here
         const NoiseTypes nt = noise_type;
         const DecompositionTypes dt = decomp_type;
         if (last_site_1site && (i == 0 || i == me->n_sites - 1) &&
@@ -231,7 +231,7 @@ struct LinearBigSite : Linear<S, FL, FLS> {
             }
         }
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
-            minres_soft_max_iter = 0;
+            linear_soft_max_iter = 0;
             if (noise_type & NoiseTypes::DensityMatrix)
                 noise_type = NoiseTypes::Wavefunction;
             else if (noise_type & NoiseTypes::Collected)
@@ -240,11 +240,11 @@ struct LinearBigSite : Linear<S, FL, FLS> {
             decomp_type = DecompositionTypes::SVD;
         }
         Iteration r = Linear<S, FL, FLS>::blocking(
-            i, forward, bra_bond_dim, ket_bond_dim, noise, minres_conv_thrd);
+            i, forward, bra_bond_dim, ket_bond_dim, noise, linear_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             if (targets.size() != 0)
                 r.targets = targets.back();
-            minres_soft_max_iter = dsmi;
+            linear_soft_max_iter = dsmi;
             noise_type = nt;
             decomp_type = dt;
         }
@@ -261,11 +261,11 @@ struct LinearBigSite : Linear<S, FL, FLS> {
             }
         } else if (last_site_1site && !forward && i == me->n_sites - 1) {
             assert(me->dot = 1);
-            minres_soft_max_iter = 0;
+            linear_soft_max_iter = 0;
             // skip this site (only do canonicalization)
             Linear<S, FL, FLS>::blocking(i - 1, forward, bra_bond_dim,
-                                         ket_bond_dim, 0, minres_conv_thrd);
-            minres_soft_max_iter = dsmi;
+                                         ket_bond_dim, 0, linear_conv_thrd);
+            linear_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
             me->dot = 2;

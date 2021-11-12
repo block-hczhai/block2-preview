@@ -296,7 +296,7 @@ TEST_F(TestDMRG, Test) {
     linear->last_site_svd = true;
     linear->last_site_1site = true;
     linear->decomp_last_site = false;
-    linear->minres_conv_thrds = vector<double>(20, 1E-10);
+    linear->linear_conv_thrds = vector<double>(20, 1E-10);
     linear->iprint = 2;
     linear->decomp_type = DecompositionTypes::DensityMatrix;
     linear->noise_type = NoiseTypes::ReducedPerturbative;
