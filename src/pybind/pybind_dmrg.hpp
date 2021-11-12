@@ -1209,10 +1209,11 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("eq_type", &Linear<S, FL, FLS>::eq_type)
         .def_readwrite("ex_type", &Linear<S, FL, FLS>::ex_type)
         .def_readwrite("algo_type", &Linear<S, FL, FLS>::algo_type)
+        .def_readwrite("solver_type", &Linear<S, FL, FLS>::solver_type)
         .def_readwrite("linear_use_precondition", &Linear<S, FL, FLS>::linear_use_precondition)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S, FL, FLS>::cg_n_harmonic_projection)
-        .def_readwrite("gcrotmk_size", &Linear<S, FL, FLS>::gcrotmk_size)
+        .def_readwrite("linear_solver_params", &Linear<S, FL, FLS>::linear_solver_params)
         .def_readwrite("decomp_last_site",
                        &Linear<S, FL, FLS>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
@@ -1577,7 +1578,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Reduced", TruncationTypes::Reduced)
         .value("ReducedInversed", TruncationTypes::ReducedInversed)
         .value("KeepOne", TruncationTypes::KeepOne)
-        .value("ComplexDensityMatrix", TruncationTypes::ComplexDensityMatrix)
+        .value("RealDensityMatrix", TruncationTypes::RealDensityMatrix)
         .def(py::self * int(), "For KeepOne: Keep X states per quantum number")
         .def(py::self & py::self)
         .def(py::self | py::self);
@@ -1647,9 +1648,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Conventional", QCTypes::Conventional);
 
     py::enum_<EquationTypes>(m, "EquationTypes", py::arithmetic())
-        .value("NormalMinRes", EquationTypes::NormalMinRes)
-        .value("NormalCG", EquationTypes::NormalCG)
-        .value("NormalGCROT", EquationTypes::NormalGCROT)
+        .value("Normal", EquationTypes::Normal)
         .value("PerturbativeCompression",
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction)
@@ -1662,6 +1661,14 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("FirstMinimal", ConvergenceTypes::FirstMinimal)
         .value("FirstMaximal", ConvergenceTypes::FirstMaximal)
         .value("MiddleSite", ConvergenceTypes::MiddleSite);
+
+    py::enum_<LinearSolverTypes>(m, "LinearSolverTypes", py::arithmetic())
+            .value("Automatic", LinearSolverTypes::Automatic)
+            .value("CG", LinearSolverTypes::CG)
+            .value("MinRes", LinearSolverTypes::MinRes)
+            .value("GCROT", LinearSolverTypes::GCROT)
+            .value("IDRS", LinearSolverTypes::IDRS)
+            .value("LSQR", LinearSolverTypes::LSQR);
 
     py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
         .value("Nothing", OpCachingTypes::None)

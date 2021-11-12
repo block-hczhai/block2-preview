@@ -41,6 +41,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::inverse;
     using GMatrixFunctions<FL>::least_squares;
     typedef typename GMatrix<FL>::FP FP;
+    static const int cpx_sz = sizeof(FL) / sizeof(FP);
     // z = r / aa
     static void cg_precondition(const GMatrix<FL> &z, const GMatrix<FL> &r,
                                 const GDiagonalMatrix<FL> &aa) {
@@ -1537,6 +1538,806 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (pcomm != nullptr)
             pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;
+    }
+    /** Use Induced Dimension Reduction method [IDR(s)] to solve A x = b
+     *  IDR(1) is identical to BI-CGSTAB.
+     *
+     *  Based on https://github.com/astudillor/idrs, which itself is based on
+     * the IDR(s)'authors matlab version from
+     * http://homepage.tudelft.nl/1w5b5/idrs-software.html
+     *
+     * See (1) Van Gijzen, M. B.; Sonneveld, P.
+     *      Algorithm 913: An Elegant IDR(s) Variant That Efficiently Exploits
+     * Biorthogonality Properties. ACM Trans. Math. Softw. 2011, 38 (1), 1–19.
+     * https://doi.org/10.1145/2049662.2049667. (Fig. 2)
+     *
+     * Note: There is also a STAB(L) variant, which may be faster. See, e.g.,
+     *          1.  Gerard L. G. Sleijpen and Martin B. van Gijzen,
+     *              Exploiting BiCGstab($\ell$) Strategies to Induce Dimension
+     * Reduction, SIAM J. Sci. Comput., 32(5), 2687–2709.
+     *              https://doi.org/10.1137/090752341
+     *          2. Aihara, K., Abe, K., & Ishiwata, E. (2014). A variant of
+     * IDRstab with reliable update strategies for solving sparse linear
+     * systems. Journal of Computational and Applied Mathematics, 259, 244-258.
+     *                     doi:10.1016/j.cam.2013.08.028
+     *          3. Aihara, K., Abe, K., & Ishiwata, E. (2015). Preconditioned
+     *                   IDRSTABL Algorithms for Solving Nonsymmetric Linear
+     * Systems. International Journal of Applied Mathematics, 45(3).
+     *
+     * @author: Henrik R. Larsson, based on versions by Reinaldo Astudillo and
+     * Martin B. van Gijzen
+     *
+     * @param op Computes op(x) = A x
+     * @param a_diagonal Diagonal of A; used for preconditioning.
+     *                           Can point to nullptr if it should not be used
+     * @param x Input guess/ output solution
+     * @param b Right-hand side
+     * @param nmult Used number of matrix-vector products (same as niter)
+     * @param niter Used total number of iterations
+     * @param S Shadow space; similar to Krylov space in GMRES
+     *              Typically, s being around 10 or even 4 is enough.
+     *              Only very badly conditioned problems require s ~ 100; see
+     * (1). S=1 is identical to BI-CGSTAB.
+     * @param iprint Whether to print output during the iterations
+     * @param pcomm MPI communicator
+     * @param precond_reg Preconditioning regularizer. Fix the inverse of
+     * a_diagonal to be at max. the inverse of this.
+     * @param tol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
+     * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
+     * @param max_iter Maximum number of iterations. Throws error afterward.
+     * @param soft_max_iter Maximum number of iterations, without throwing error
+     * @param init_basis Optional initial basis for the search direction.
+     * Defaults to zero
+     * @param omega_used Optional values of used direction magnitudes. Defaults
+     * to GMRES strategy.
+     * @param orthogonalize_P Orthogonalize the random space P matrix of size (
+     * N x S). May be good for numerical stability.
+     * @param random_seed Random seed for setting up P. Defaults to
+     * day-time-convolution
+     * @return <x,b>
+     */
+    template <typename MatMul, typename PComm>
+    static FL
+    idrs(MatMul &op, const GDiagonalMatrix<FL> &a_diagonal, GMatrix<FL> x,
+         GMatrix<FL> b, int &nmult, int &niter, int S = 8,
+         const bool iprint = false, const PComm &pcomm = nullptr,
+         const FP precond_reg = 1E-8, const FP tol = 1E-3, const FP atol = 0.0,
+         const int max_iter = 5000, const int soft_max_iter = -1,
+         const vector<GMatrix<FL>> &init_basis = {},
+         const vector<FL> &omega_used = {}, const bool orthogonalize_P = true,
+         const int random_seed = -1) {
+        assert(b.m == x.m);
+        assert(b.n == x.n);
+        const auto N = b.m; // vector size
+        S = min(S, N);      // Gracefully change S to sth reasonable.
+                            // This should only affect tiny linear problems.
+        assert(b.n == 1 &&
+               "IDRS currently is only implemented for rhs being a vector.");
+        // Allocations
+        GMatrix<FL> r(nullptr, N, 1); // Residual
+        GMatrix<FL> P(nullptr, S,
+                      N); // Shadow-space matrix; S will be left null space of P
+        GMatrix<FL> f(nullptr, S, 1);        // P r
+        GMatrix<FL> cStorage(nullptr, S, 1); // Mc = f
+        GMatrix<FL> v(nullptr, N, 1);        // r - G c
+        GMatrix<FL> tmp(nullptr, N, 1);
+        //                          vvv changed from py implementation for
+        //                          row-majorness
+        GMatrix<FL> G(nullptr, S, N);  // Subspace matrix; for updating residual
+        GMatrix<FL> U(nullptr, S, N);  // For updating x.
+        GMatrix<FL> M(nullptr, S, S);  // M = P' G
+        GMatrix<FL> MM(nullptr, S, S); // copy of M
+        r.allocate();
+        r.clear();
+        P.allocate();
+        P.clear();
+        f.allocate();
+        f.clear();
+        cStorage.allocate();
+        cStorage.clear();
+        v.allocate();
+        v.clear();
+        tmp.allocate();
+        tmp.clear();
+        G.allocate();
+        G.clear();
+        U.allocate();
+        U.clear();
+        M.allocate();
+        M.clear();
+        MM.allocate();
+        MM.clear();
+        // Initialization
+        const FP norm_b = norm(b);
+        const auto used_tol = max(tol * norm_b, atol);
+        // compute residual: r = b - Ax
+        if (norm(x) > 1E-20) {
+            op(x, tmp);
+            copy(r, b);
+            iadd(r, tmp, -1.0);
+        } else {
+            copy(r, b);
+        }
+        FP norm_r = norm(r);
+        if (pcomm != nullptr)
+            pcomm->broadcast(&norm_r, 1, pcomm->root);
+        // Fill P with random numbers. Let's hope it is of full rank.
+        {
+            Random rgen;
+            rgen.rand_seed(random_seed);
+            rgen.fill<FP>((FP *)P.data, P.size() * cpx_sz, -1.0, 1.0);
+            if (orthogonalize_P) {
+                // Make P orthogonal. This is not required but may improve
+                // numerical stability. The original code IDR(S) does it.
+                MKL_INT k = min(P.m, P.n);
+                vector<FL> tau(k);
+                vector<FL> work(P.m);
+                MKL_INT info = 0;
+                xgeqrf<FL>(&P.n, &P.m, P.data, &P.n, tau.data(), work.data(),
+                           &P.m, &info);
+                assert(info == 0 &&
+                       "IDR(S): Fail in QR decomposition of random matrix P");
+                xungqr<FL>(&P.n, &P.m, &k, P.data, &P.n, tau.data(),
+                           work.data(), &P.m, &info);
+                assert(info == 0 && "IDR(S): Fail in Q build up of QR "
+                                    "decomposition of random matrix P");
+            }
+        }
+        // M = 1
+        for (size_t i = 0; i < S; ++i) {
+            M(i, i) = 1.0;
+        }
+        const FP angle = 0.7071067811865476; // To avoid too small residuals
+                                             //  see (1) on page 4; same as
+                                             //  Bi-CGSTAB; sqrt(2)/2
+        FL omega = 1.0;
+        int iOmega = 0;
+        if (omega_used.size() > 0) {
+            omega = omega_used[0];
+        }
+        // do it
+        const auto doContinue = [max_iter, soft_max_iter, used_tol](int iter,
+                                                                    FP rnorm) {
+            if (rnorm <= used_tol)
+                return false;
+            return iter < max_iter &&
+                   (soft_max_iter == -1 || iter < soft_max_iter);
+        };
+        const auto precondition = [&a_diagonal, precond_reg,
+                                   N](GMatrix<FL> in) {
+            if (a_diagonal.data == nullptr)
+                return;
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    in(i, 0) /= a_diagonal(i, i);
+                } else {
+                    in(i, 0) /= precond_reg;
+                }
+            }
+        };
+        niter = 0;
+        if (iprint) {
+            cout << endl << "Start IDR(" << S << ")" << endl;
+            cout << "tol= " << scientific << tol << " atol= " << scientific
+                 << atol << " used tol= " << scientific << used_tol << endl;
+            cout << "maxiter: " << max_iter << "; " << soft_max_iter << endl;
+            auto xdb = complex_dot(x, b);
+            cout << "Initially:         " << fixed << setw(15)
+                 << setprecision(8) << real(xdb) << "+" << setw(15)
+                 << setprecision(8) << imag(xdb) << "i" << scientific
+                 << setw(13) << setprecision(2) << norm_r << endl;
+        }
+        int outeriter = 0;
+        while (doContinue(niter, norm_r)) {
+            // vvv I need P.conj() @ r ...; on the other hand, P is random
+            // anyways. so it should not matter?
+            // multiply(P,false, r,false, f, cmplx(1.0,0.0), cmplx(0.0,0.0));
+            for (size_t i = 0; i < S; ++i) {
+                f(i, 0) = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), r);
+            }
+            for (size_t k = 0; k < S; ++k) { // Krylov space setup
+                // solve Mc = f
+                const auto size = S - k;
+                GMatrix<FL> uk(&U(k, 0), N, 1);
+                GMatrix<FL> gk(&G(k, 0), N, 1);
+                if (outeriter > 0) {
+                    GMatrix<FL> c(cStorage.data, size, 1);
+                    {
+                        // c = la.solve(M[k:S, k:S], f[k:S])
+                        // TODO: avoid copy&paste; would it work by changing
+                        // lda?
+                        GMatrix<FL> M2(MM.data, size, size);
+                        GMatrix<FL> ff(&f(k, 0), size, 1);
+                        for (size_t i = k; i < S; ++i) {
+                            for (size_t j = k; j < S; ++j) {
+                                M2(i - k, j - k) = M(i, j);
+                            }
+                        }
+                        least_squares(M2, ff,
+                                      c); // zgels may be a bit overkill but I
+                                          // guess it can't hurt and S is small
+                    }
+                    // v = r - G[k:S,:].T @ c
+                    copy(v, r);
+                    //       vv this should work as I assume that G is row-major
+                    //                          ATTENTION:      vvv is
+                    //                          transpose, not adjoint (I do
+                    //                          want transpose here)
+                    multiply(GMatrix<FL>(&G(k, 0), size, N), true, c, false, v,
+                             -1.0, 1.0);
+
+                    precondition(v);
+                    // Compute new U[:,k] and G[:,k]; G[:,k] is in space G_j
+                    // ATTENTION: vv Need to be N x 1 and not 1 x N.
+                    //  Otherwise an assertion explodes somewhere deep in the
+                    //  code when cllaed op
+                    //       uk = U c + omega v
+                    // tmp = U[k:S,:].T @ cc
+                    copy(tmp, v);
+                    multiply(GMatrix<FL>(&U(k, 0), size, N), true, c, false,
+                             tmp, 1.0, omega);
+                    copy(uk, tmp);
+                } else if (k < init_basis.size()) {
+                    assert(init_basis[k].m == N && init_basis[k].n == 1);
+                    copy(uk, init_basis[k]);
+                } else {
+                    copy(uk, r);
+                    precondition(uk);
+                }
+                // G = A @ U[:,k]
+                op(uk, gk);
+                // Bi-Orthogonalize the new basis vectors
+                for (size_t i = 0; i < k; ++i) {
+                    FL alpha = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), gk);
+                    alpha /= M(i, i);
+                    iadd(gk, GMatrix<FL>(&G(i, 0), N, 1), -alpha);
+                    iadd(uk, GMatrix<FL>(&U(i, 0), N, 1), -alpha);
+                }
+                // M = P' G (first k-1 entries are zero)
+                for (size_t i = k; i < S; ++i) {
+                    M(i, k) = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), gk);
+                }
+                if (abs(M(k, k)) < 1e-20) { // oops!
+                    if (iprint)
+                        cout << "ATTENTION! |M(k,k)| < 1e-20" << endl;
+                    break;
+                }
+                // Make r orthogonal to g_i, i = 1..k
+                const FL beta = f(k, 0) / M(k, k);
+                iadd(r, gk, -beta);
+                iadd(x, uk, +beta);
+                norm_r = norm(r);
+                if (pcomm != nullptr) {
+                    pcomm->broadcast(x.data, x.size(), pcomm->root);
+                    pcomm->broadcast(r.data, r.size(), pcomm->root);
+                    pcomm->broadcast(&norm_r, 1, pcomm->root);
+                }
+                ++niter;
+                if (iprint) {
+                    FL xdb = complex_dot(x, b);
+                    cout << setw(6) << niter << " inner " << setw(6) << k
+                         << fixed << setw(17) << setprecision(8) << real(xdb)
+                         << "+" << setw(17) << setprecision(8) << imag(xdb)
+                         << "i" << scientific << setw(13) << setprecision(2)
+                         << norm_r << endl;
+                }
+                if (not doContinue(niter, norm_r)) {
+                    break;
+                }
+                // New f = P'*r (first k components are zero)
+                if (k < S - 1) {
+                    for (size_t j = k + 1; j < S; ++j) {
+                        f(j, 0) -= beta * M(j, k);
+                    }
+                }
+            } // Krylov space setup
+            ++outeriter;
+
+            if (not doContinue(niter, norm_r))
+                break;
+            // Precondition v = Minv r; TODO avoid copy&paste
+            copy(v, r);
+            precondition(v);
+
+            op(v, tmp); // tmp = A v
+            if (omega_used.size() == 0) {
+                const auto norm_Av = norm(tmp);
+                const auto tr = complex_dot(tmp, r);
+                omega = tr / complex_dot(tmp, tmp);
+                auto abs_rho = abs(tr / (norm_Av * norm_r));
+                if (pcomm != nullptr) {
+                    pcomm->broadcast(&abs_rho, 1, pcomm->root);
+                    pcomm->broadcast(&omega, 1, pcomm->root);
+                }
+                if (abs_rho < angle) {
+                    omega *= angle / abs_rho;
+                }
+            } else {
+                omega = omega_used[iOmega++];
+                iOmega = iOmega > omega_used.size() ? 0 : iOmega;
+            }
+            // r -= omega t; x += omega v
+            iadd(r, tmp, -omega);
+            iadd(x, v, +omega);
+            if (pcomm != nullptr) {
+                pcomm->broadcast(x.data, x.size(), pcomm->root);
+                pcomm->broadcast(r.data, r.size(), pcomm->root);
+            }
+            norm_r = norm(r);
+            if (pcomm != nullptr)
+                pcomm->broadcast(&norm_r, 1, pcomm->root);
+            ++niter;
+            if (iprint) {
+                auto xdb = complex_dot(x, b);
+                cout << setw(6) << niter << " outer " << outeriter << fixed
+                     << setw(17) << setprecision(8) << real(xdb) << "+"
+                     << setw(17) << setprecision(8) << imag(xdb) << "i"
+                     << scientific << setw(13) << setprecision(2) << norm_r
+                     << endl;
+            }
+            if (norm_r <= used_tol) {
+                break;
+            }
+        }
+
+        // Deallocations
+        MM.deallocate();
+        M.deallocate();
+        U.deallocate();
+        G.deallocate();
+        tmp.deallocate();
+        v.deallocate();
+        cStorage.deallocate();
+        f.deallocate();
+        P.deallocate();
+        r.deallocate();
+
+        if (niter >= max_iter && norm_r > used_tol) {
+            cerr << "Error: linear solver IDR(S) not converged!" << endl;
+            cerr << "\t total number of iterations used:" << niter << endl;
+            cerr << "\t S=:" << S << endl;
+            cerr << "\t ||Ax-b||=" << norm_r << endl;
+            throw runtime_error("Linear solver IDR(S) not converged.");
+        }
+        nmult = niter;
+        auto out = complex_dot(x, b);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+            pcomm->broadcast(&out, 1, pcomm->root);
+        }
+        return out;
+    }
+    //////////////////////////
+    // LSQR stuff
+    // Closely following scipy's implementation
+    // Henrik R. Larsson
+    // Original licence text in scipy:
+    /*
+    The original Fortran code was written by C. C. Paige and M. A. Saunders as
+    described in
+    C. C. Paige and M. A. Saunders, LSQR: An algorithm for sparse linear
+    equations and sparse least squares, TOMS 8(1), 43--71 (1982).
+    C. C. Paige and M. A. Saunders, Algorithm 583; LSQR: Sparse linear
+    equations and least-squares problems, TOMS 8(2), 195--209 (1982).
+    It is licensed under the following BSD license:
+            Copyright (c) 2006, Systems Optimization Laboratory
+    All rights reserved.
+    Redistribution and use in source and binary forms, with or without
+            modification, are permitted provided that the following conditions
+    are met:
+            * Redistributions of source code must retain the above copyright
+            notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following
+            disclaimer in the documentation and/or other materials provided
+            with the distribution.
+    * Neither the name of Stanford University nor the names of its
+            contributors may be used to endorse or promote products derived
+            from this software without specific prior written permission.
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+            LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+    FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+    PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+    OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+    WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+    OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+    ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. The Fortran code was translated
+    to Python for use in CVXOPT by Jeffery Kline with contributions by Mridul
+    Aanjaneya and Bob Myhill. Adapted for SciPy by Stefan van der Walt.
+     */
+    //////////////////////////
+    /**     Stable implementation of Givens rotation.
+     * References
+     * ----------
+     * .. [1] S.-C. Choi, "Iterative Methods for Singular Linear Equations
+     *    and Least-Squares Problems", Dissertation,
+     *    http://www.stanford.edu/group/SOL/dissertations/sou-cheng-choi-thesis.pdf
+     */
+    static tuple<FP, FP, FP> sym_ortho(const FP a, const FP b) {
+        const auto sign = [](FP v) -> FP {
+            return (FP)(int)((0.0 < v) - (v < 0.0));
+        };
+        // const auto sign = [&signR](cmplx v){ return abs(real(v)) < 1e-30 ?
+        // signR(real(v)) : signR(imag(v)); };
+        if (b == 0.0)
+            return make_tuple<FP, FP, FP>(sign(a), 0.0, abs(a));
+        else if (a == 0.0)
+            return make_tuple<FP, FP, FP>(0.0, sign(b), abs(b));
+        else {
+            FP tau = b / a;
+            FP c = sign(a) / sqrt(1.0 + tau * tau);
+            FP s = c * tau;
+            FP r = a / c;
+            return make_tuple<FP, FP, FP>((FP)c, (FP)s, (FP)r);
+        }
+    }
+    /** LSQR implementation. See scipy.sparse.linalg.lsqr
+     *
+     *  I removed the tamp parameter
+     * @author  Henrik R. Larsson, based on scipy's implementation
+     * @param op Computes op(x) = A x
+     * @param rop Computes rop(x) = A' x
+     * @param a_diagonal Diagonal of A; used for preconditioning. Can point to
+     * nullptr if it should not be used Here, preconditioning solves [A inv(M)]
+     * [M x] = b
+     * @param x Input guess/ output solution
+     * @param b Right-hand side
+     * @param nmult Used number of matrix-vector products (same as niter)
+     * @param niter Used total number of iterations
+     * @param iprint Whether to print output during the iterations
+     * @param pcomm MPI communicator
+     * @param precond_reg Preconditioning regularizer. Fix the inverse of
+     * a_diagonal to be at max. the inverse of this.
+     * @param btol, atol Stopping tolerances. If both are 1.0e-9 (say),
+     *          the final residual norm should be accurate to about 9 digits.
+     *         (The final x will usually have fewer correct digits, depending on
+     * cond(A)) atol (btol) defines relative error estimate in A (b) The
+     * stopping criteria are: 1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x|| 2:
+     * ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
+     * @param max_iter Maximum number of iterations. Throws error afterward.
+     * @param soft_max_iter Maximum number of iterations, without throwing error
+     * @return <x,b>
+     */
+    template <typename MatMul, typename MatMul2, typename PComm>
+    static FL lsqr(MatMul &op, MatMul2 &rop,
+                   const GDiagonalMatrix<FL> &a_diagonal, GMatrix<FL> x,
+                   GMatrix<FL> b, int &nmult, int &niter,
+                   const bool iprint = false, const PComm &pcomm = nullptr,
+                   const FP precond_reg = 1E-8, const FP btol = 1E-3,
+                   const FP atol = 1E-3, const int max_iter = 5000,
+                   const int soft_max_iter = -1) {
+        assert(b.m == x.m);
+        assert(b.n == x.n);
+        constexpr FP one = 1.0;
+        const auto N = b.m; // vector size
+        const auto precondition = [&a_diagonal, precond_reg,
+                                   N](const GMatrix<FL> &in,
+                                      const GMatrix<FL> &out) {
+            assert(a_diagonal.data != nullptr);
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    out(i, 0) = in(i, 0) / a_diagonal(i, i);
+                } else {
+                    out(i, 0) = in(i, 0) / precond_reg;
+                }
+            }
+        };
+        GMatrix<FL> tmpP(nullptr, N, 1);
+        if (a_diagonal.data != nullptr) {
+            tmpP.allocate();
+        }
+        const auto opM = [&op, &a_diagonal, &tmpP, precond_reg,
+                          N](const GMatrix<FL> &in, const GMatrix<FL> &out) {
+            if (a_diagonal.data == nullptr) {
+                op(in, out);
+                return;
+            }
+            // out = A M in
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    tmpP(i, 0) = in(i, 0) / a_diagonal(i, i);
+                } else {
+                    tmpP(i, 0) = in(i, 0) / precond_reg;
+                }
+            }
+            op(tmpP, out);
+        };
+        const auto ropM = [&rop, &a_diagonal, precond_reg,
+                           N](const GMatrix<FL> &in, const GMatrix<FL> &out) {
+            rop(in, out);
+            if (a_diagonal.data == nullptr) {
+                return;
+            }
+            // out = M' A' in
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    out(i, 0) /= xconj<FL>(a_diagonal(i, i));
+                } else {
+                    out(i, 0) /= precond_reg;
+                }
+            }
+        };
+
+        GMatrix<FL> u(nullptr, N, 1);
+        GMatrix<FL> tmp(nullptr, N, 1);
+        GMatrix<FL> v(nullptr, N, 1);
+        GMatrix<FL> w(nullptr, N, 1);
+        u.allocate();
+        tmp.allocate();
+        v.allocate();
+        w.allocate();
+
+        niter = 0;
+        FP beta, alpha;
+        int istop = 0;
+        FP anorm = 0.;
+        FP acond = 0.;
+        FP ddnorm = 0.;
+        FP res1 = 0.;
+        FP res2 = 0.;
+        FP xnorm = 0.;
+        FP xxnorm = 0.;
+        FP z = 0.;
+        FP cs2 = -1.;
+        FP sn2 = 0.;
+        FP test1, test2, test3, rtol;
+        constexpr FP eps = std::numeric_limits<FP>::epsilon();
+        // Set up the first vectors u and v for the bidiagonalization.
+        //        These satisfy  beta*u = b - A*x,  alfa*v = A'*u.
+        copy(u, b);
+        auto bnorm = norm(b);
+        xnorm = norm(x);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(&bnorm, 1, pcomm->root);
+            pcomm->broadcast(&xnorm, 1, pcomm->root);
+        }
+        if (xnorm < 1E-20) {
+            iscale(x, 0.0);
+            beta = bnorm;
+        } else {
+            opM(x, v);
+            ++nmult;
+            iadd(u, v, -1.);
+            beta = norm(u);
+        }
+        if (beta > 0.0) {
+            iscale(u, 1.0 / beta);
+            ropM(u, v);
+            ++nmult;
+            alpha = norm(v);
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&alpha, 1, pcomm->root);
+            }
+            iscale(v, 1.0 / alpha);
+        } else {
+            alpha = 0.0;
+            copy(v, x);
+        }
+        copy(w, v);
+
+        auto rhobar = alpha;
+        auto phibar = beta;
+        auto rnorm = beta;
+        auto r1norm = rnorm;
+        auto arnorm = alpha * beta;
+        vector<string> msg{
+            "The exact solution is  x = 0                              ",
+            "Ax - b is small enough, given atol, btol                  ",
+            "The least-squares solution is good enough, given atol     ",
+            "The estimate of cond(Abar) has exceeded conlim            ",
+            "Ax - b is small enough for this machine                   ",
+            "The least-squares solution is good enough for this machine",
+            "Cond(Abar) seems to be too large for this machine         ",
+            "The iteration limit has been reached                      "};
+        assert(arnorm != 0 && "The exact solution is x = 0");
+        test1 = one;
+        test2 = alpha / beta;
+        if (iprint) {
+            cout << endl
+                 << "   Itn    <x|b>                             r1norm     "
+                 << "      Compatible       LS               Norm A           "
+                    "Cond A"
+                 << endl;
+            auto out = complex_dot(x, b);
+            cout << setw(6) << niter << scientific << setw(17)
+                 << setprecision(8) << real(out) << "+" << scientific
+                 << setw(17) << setprecision(8) << imag(out) << "i  "
+                 << scientific << setw(9) << setprecision(8) << r1norm << "   "
+                 << scientific << setw(9) << setprecision(8) << test1 << "   "
+                 << scientific << setw(9) << setprecision(8) << test2 << endl;
+        }
+        // Main iteration loop
+        while (niter < max_iter &&
+               (soft_max_iter == -1 || niter < soft_max_iter)) {
+            ++niter;
+            /*
+             *  Perform the next step of the bidiagonalization to obtain the
+             *  next  beta, u, alfa, v.  These satisfy the relations
+             *   beta*u  =  a*v   -  alpha*u,
+             *     alpha*v  =  A'*u  -  beta*v.
+             */
+            // u = A @ v - alpha u
+            opM(v, tmp);
+            ++nmult;
+            iscale(u, -alpha);
+            iadd(u, tmp, 1.);
+            beta = norm(u);
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&beta, 1, pcomm->root);
+            }
+
+            if (beta > 0.0) {
+                iscale(u, 1.0 / beta);
+                anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
+                // v = A' @ u - beta * v
+                ropM(u, tmp);
+                ++nmult;
+                iscale(v, -beta);
+                iadd(v, tmp, 1.0);
+                alpha = norm(v);
+                if (pcomm != nullptr) {
+                    pcomm->broadcast(&alpha, 1, pcomm->root);
+                }
+                if (alpha > 0.0) {
+                    iscale(v, 1.0 / alpha);
+                }
+            }
+
+            // Use a plane rotation to eliminate the damping parameter.
+            // This alters the diagonal (rhobar) of the lower-bidiagonal matrix.
+            auto rhobar1 = sqrt(rhobar * rhobar);
+            auto cs1 = rhobar / rhobar1;
+            auto sn1 = 1. / rhobar1;
+            auto psi = sn1 * phibar;
+            phibar = cs1 * phibar;
+
+            // Use a plane rotation to eliminate the subdiagonal element (beta)
+            // of the lower-bidiagonal matrix, giving an upper-bidiagonal
+            // matrix.
+            // auto [cs, sn, rho] = sym_ortho(rhobar1, beta); //Sigh
+            auto tupl = sym_ortho(rhobar1, beta); // Sigh; C++17
+            auto cs = get<0>(tupl);
+            auto sn = get<1>(tupl);
+            auto rho = get<2>(tupl);
+
+            auto theta = sn * alpha;
+            rhobar = -cs * alpha;
+            auto phi = cs * phibar;
+            phibar = sn * phibar;
+            auto tau = sn * phi;
+
+            // Update x and w.
+            auto t1 = phi / rho;
+            auto t2 = -theta / rho;
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&rho, 1, pcomm->root);
+                pcomm->broadcast(&t1, 1, pcomm->root);
+                pcomm->broadcast(&t2, 1, pcomm->root);
+            }
+            copy(tmp, w);
+            iscale(tmp, 1. / rho);
+
+            iadd(x, w, t1); // x = x + t1 * w
+            iscale(w, t2);  // w = v + t2 * w
+            iadd(w, v, 1.);
+
+            auto normdk = norm(tmp);
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&normdk, 1, pcomm->root);
+            }
+            ddnorm = ddnorm + normdk * normdk;
+
+            // Use a plane rotation on the right to eliminate the
+            // super-diagonal element (theta) of the upper-bidiagonal matrix.
+            // Then use the result to estimate norm(x).
+            auto delta = sn2 * rho;
+            auto gambar = -cs2 * rho;
+            auto rhs = phi - delta * z;
+            auto zbar = rhs / gambar;
+            xnorm = sqrt(xxnorm + zbar * zbar);
+            auto gamma = sqrt(gambar * gambar + theta * theta);
+            cs2 = gambar / gamma;
+            sn2 = theta / gamma;
+            z = rhs / gamma;
+            xxnorm = xxnorm + z * z;
+
+            // Test for convergence.
+            // First, estimate the condition of the matrix  Abar,
+            // and the norms of  rbar  and  Abar'rbar.
+            acond = anorm * sqrt(ddnorm);
+            res1 = phibar * phibar;
+            res2 = res2 + psi * psi;
+            rnorm = sqrt(res1 + res2);
+            arnorm = alpha * abs(tau);
+
+            // Now use these norms to estimate certain other quantities,
+            // some of which will be small near a solution.
+            test1 = rnorm / bnorm;
+            test2 = arnorm / (anorm * rnorm + eps);
+            test3 = one / (acond + eps);
+            t1 = test1 / (one + anorm * xnorm / bnorm);
+            rtol = btol + atol * anorm * xnorm / bnorm;
+
+            // The following tests guard against extremely small values of
+            // atol, btol  or   (The user may have set any or all of
+            // the parameters  atol, btol, conlim  to 0.)
+            // The effect is equivalent to the normal tests using
+            // atol = eps, btol = eps, conlim = 1/eps.
+            if (one + test3 <= one) {
+                istop = 6;
+            }
+            if (one + test2 <= one) {
+                istop = 5;
+            }
+            if (one + t1 <= one) {
+                istop = 4;
+            }
+            // Allow for tolerances set by the user.
+            if (test2 <= atol) {
+                istop = 2;
+            }
+            if (test1 <= rtol) {
+                istop = 1;
+            }
+            if (!(niter < max_iter &&
+                  (soft_max_iter == -1 || niter < soft_max_iter))) {
+                istop = 7;
+            }
+
+            if (iprint) {
+                auto out = complex_dot(x, b);
+                cout << setw(6) << niter << scientific << setw(17)
+                     << setprecision(8) << real(out) << "+" << scientific
+                     << setw(17) << setprecision(8) << imag(out) << "i  "
+                     << scientific << setw(9) << setprecision(8) << r1norm
+                     << "   " << scientific << scientific << setw(9)
+                     << setprecision(8) << test1 << "   " << scientific
+                     << setw(9) << setprecision(8) << test2 << "   "
+                     << scientific << setw(9) << setprecision(8) << anorm
+                     << "   " << scientific << setw(9) << setprecision(8)
+                     << acond << endl;
+            }
+            if (istop != 0) {
+                break;
+            }
+        }
+        if (iprint) {
+            cout << "istop = " << istop << endl;
+            cout << "msg = " << msg.at(istop) << endl;
+        }
+        // hrl: istop == 5 should be fine
+        if (niter >= max_iter || (istop > 2 && istop != 7 && istop != 5)) {
+            cerr << "Error: linear solver LSQR not converged!" << endl;
+            cerr << "\t total number of iterations used:" << niter << endl;
+            cout << "msg = " << msg.at(istop) << endl;
+            throw runtime_error("Linear solver LSQR not converged.");
+        }
+
+        w.deallocate();
+        v.deallocate();
+        tmp.deallocate();
+        u.deallocate();
+        if (a_diagonal.data != nullptr) {
+            tmpP.deallocate();
+            // M x = z
+            for (size_t i = 0; i < N; ++i) {
+                if (abs(a_diagonal(i, i)) > precond_reg) {
+                    x(i, 0) /= a_diagonal(i, i);
+                } else {
+                    x(i, 0) /= precond_reg;
+                }
+            }
+        }
+        nmult = niter;
+        auto out = complex_dot(x, b);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+            pcomm->broadcast(&out, 1, pcomm->root);
+        }
+        return out;
     }
 };
 

@@ -286,7 +286,7 @@ TYPED_TEST(TestDMRG, Test) {
     // dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
     // dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
-    dmrg->trunc_type =  dmrg->trunc_type | TruncationTypes::ComplexDensityMatrix;
+    dmrg->trunc_type =  dmrg->trunc_type;
     // dmrg->davidson_type = DavidsonTypes::GreaterThan;
     // dmrg->davidson_shift = -2086.4;
     dmrg->solve(20, true);

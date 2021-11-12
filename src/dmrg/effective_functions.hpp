@@ -37,12 +37,16 @@ struct EffectiveFunctions<
     typedef typename GMatrix<FL>::FC FC;
     // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
     // (real gf, imag gf), (nmult, niter), nflop, tmult
-    static tuple<FC, pair<int, int>, size_t, double> greens_function(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL const_e,
-        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
-        pair<int, int> gcrotmk_size, bool iprint = false, FP conv_thrd = 5E-6,
-        int max_iter = 5000, int soft_max_iter = -1,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    static tuple<FC, pair<int, int>, size_t, double>
+    greens_function(const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+                    FL const_e, LinearSolverTypes solver_type, FL omega, FL eta,
+                    const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+                    pair<int, int> linear_solver_params, bool iprint = false,
+                    FP conv_thrd = 5E-6, int max_iter = 5000,
+                    int soft_max_iter = -1,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (solver_type == LinearSolverTypes::Automatic)
+            solver_type = LinearSolverTypes::GCROT;
         int nmult = 0, nmultx = 0, niter = 0;
         frame->activate(0);
         Timer t;
@@ -104,11 +108,59 @@ struct EffectiveFunctions<
         GMatrixFunctions<FC>::fill_complex(
             cket, mket, GMatrix<FL>(nullptr, mket.m, mket.n));
         // solve bra
-        FC gf = IterativeMatrixFunctions<FC>::gcrotmk(
-            op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
-            gcrotmk_size.second, 0.0, iprint,
-            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter);
+        FC gf;
+        if (solver_type == LinearSolverTypes::GCROT)
+            gf = IterativeMatrixFunctions<FC>::gcrotmk(
+                op, aa, cbra, cket, nmultx, niter, linear_solver_params.first,
+                linear_solver_params.second, 0.0, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                max_iter, soft_max_iter);
+        else if (solver_type == LinearSolverTypes::LSQR) {
+            // Implementation uses conventional tolerance of ||r|| instead of
+            // ||r||^2
+            const auto tol = sqrt(conv_thrd);
+            // hrl NOTE: I assume that H is Hermitian. So the only difference of
+            // rop cmp to op is the "-eta".
+            const auto rop = [omega, eta, const_e, &f, &bre, &cre,
+                              &nmult](const ComplexMatrixRef &b,
+                                      const ComplexMatrixRef &c) -> void {
+                ComplexMatrixFunctions::extract_complex(
+                    b, bre, MatrixRef(nullptr, bre.m, bre.n));
+                cre.clear();
+                f(bre, cre);
+                ComplexMatrixFunctions::fill_complex(
+                    c, cre, MatrixRef(nullptr, cre.m, cre.n));
+                ComplexMatrixFunctions::extract_complex(
+                    b, MatrixRef(nullptr, bre.m, bre.n), bre);
+                cre.clear();
+                f(bre, cre);
+                ComplexMatrixFunctions::fill_complex(
+                    c, MatrixRef(nullptr, cre.m, cre.n), cre);
+                ComplexMatrixFunctions::iadd(
+                    c, b, complex<double>(const_e + omega, -eta));
+                nmult += 2;
+            };
+            const FP precond_reg = 1E-8;
+            gf = IterativeMatrixFunctions<FC>::lsqr(
+                op, rop, aa, cbra, cket, nmultx, niter, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, precond_reg,
+                tol, tol, max_iter, soft_max_iter);
+            niter++;
+        } else if (solver_type == LinearSolverTypes::IDRS) {
+            // Use linear_solver_params.first as "S" value in IDR(S)
+            // Implementation uses conventional tolerance of ||r|| instead of
+            // ||r||^2
+            const auto idrs_tol = sqrt(conv_thrd);
+            const FP idrs_atol = 0.0;
+            const FP precond_reg = 1E-8;
+            assert(linear_solver_params.first > 0);
+            gf = IterativeMatrixFunctions<FC>::idrs(
+                op, aa, cbra, cket, nmultx, niter, linear_solver_params.first,
+                iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            niter++;
+        } else
+            throw runtime_error("Invalid solver type of Green's function.");
         gf = xconj<FC>(gf);
         GMatrixFunctions<FC>::extract_complex(cbra, rbra, ibra);
         if (h_eff->compute_diag)
@@ -308,14 +360,102 @@ struct EffectiveFunctions<S, FL,
     typedef typename GMatrix<FL>::FC FC;
     // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
     // (real gf, imag gf), (nmult, niter), nflop, tmult
-    static tuple<FC, pair<int, int>, size_t, double> greens_function(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL const_e,
-        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
-        pair<int, int> gcrotmk_size, bool iprint = false, FP conv_thrd = 5E-6,
-        int max_iter = 5000, int soft_max_iter = -1,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        assert(false);
-        return make_tuple(0.0, make_pair(0, 0), (size_t)0, 0.0);
+    static tuple<FC, pair<int, int>, size_t, double>
+    greens_function(const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+                    FL const_e, LinearSolverTypes solver_type, FL omega, FL eta,
+                    const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+                    pair<int, int> linear_solver_params, bool iprint = false,
+                    FP conv_thrd = 5E-6, int max_iter = 5000,
+                    int soft_max_iter = -1,
+                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(real_bra == nullptr);
+        if (solver_type == LinearSolverTypes::Automatic)
+            solver_type = LinearSolverTypes::GCROT;
+        int nmult = 0, nmultx = 0, niter = 0;
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        GMatrix<FL> mket(h_eff->ket->data, (MKL_INT)h_eff->ket->total_memory,
+                         1);
+        GMatrix<FL> mbra(h_eff->bra->data, (MKL_INT)h_eff->bra->total_memory,
+                         1);
+        GDiagonalMatrix<FC> aa(nullptr, 0);
+        FC const_x = const_e + omega + FC(0.0, 1.0) * eta;
+        if (h_eff->compute_diag) {
+            aa = GDiagonalMatrix<FC>(nullptr,
+                                     (MKL_INT)h_eff->diag->total_memory);
+            aa.allocate();
+            for (MKL_INT i = 0; i < aa.size(); i++)
+                aa.data[i] = h_eff->diag->data[i] + const_x;
+        }
+        h_eff->precompute();
+        auto op = [h_eff, const_x, &nmult](const GMatrix<FC> &b,
+                                           const GMatrix<FC> &c) -> void {
+            if (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+                (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                h_eff->tf->operator()(b, c);
+            else
+                (*h_eff)(b, c);
+            GMatrixFunctions<FC>::iadd(c, b, const_x);
+            nmult++;
+        };
+        h_eff->tf->opf->seq->cumulative_nflop = 0;
+        // solve bra
+        FC gf;
+        if (solver_type == LinearSolverTypes::GCROT)
+            gf = IterativeMatrixFunctions<FC>::gcrotmk(
+                op, aa, mbra, mket, nmultx, niter, linear_solver_params.first,
+                linear_solver_params.second, 0.0, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                max_iter, soft_max_iter);
+        else if (solver_type == LinearSolverTypes::LSQR) {
+            FC const_y = xconj<FL>(const_x);
+            // Implementation uses conventional tolerance of ||r|| instead of
+            // ||r||^2
+            const auto tol = sqrt(conv_thrd);
+            // hrl NOTE: I assume that H is Hermitian. So the only difference of
+            // rop cmp to op is the "-eta".
+            auto rop = [h_eff, const_y, &nmult](const GMatrix<FC> &b,
+                                                const GMatrix<FC> &c) -> void {
+                if (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return h_eff->tf->operator()(b, c);
+                else
+                    return (*h_eff)(b, c);
+                GMatrixFunctions<FC>::iadd(c, b, const_y);
+                nmult += 1;
+            };
+            const FP precond_reg = 1E-8;
+            gf = IterativeMatrixFunctions<FC>::lsqr(
+                op, rop, aa, mbra, mket, nmultx, niter, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, precond_reg,
+                tol, tol, max_iter, soft_max_iter);
+            niter++;
+        } else if (solver_type == LinearSolverTypes::IDRS) {
+            // Use linear_solver_params.first as "S" value in IDR(S)
+            // Implementation uses conventional tolerance of ||r|| instead of
+            // ||r||^2
+            const auto idrs_tol = sqrt(conv_thrd);
+            const FP idrs_atol = 0.0;
+            const FP precond_reg = 1E-8;
+            assert(linear_solver_params.first > 0);
+            gf = IterativeMatrixFunctions<FC>::idrs(
+                op, aa, mbra, mket, nmultx, niter, linear_solver_params.first,
+                iprint, para_rule == nullptr ? nullptr : para_rule->comm,
+                precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
+            niter++;
+        } else
+            throw runtime_error("Invalid solver type of Green's function.");
+        gf = xconj<FC>(gf);
+        if (h_eff->compute_diag)
+            aa.deallocate();
+        h_eff->post_precompute();
+        uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        h_eff->tf->opf->seq->cumulative_nflop = 0;
+        return make_tuple(gf, make_pair(nmult, niter), (size_t)nflop,
+                          t.get_time());
     }
     // [ibra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
     // [rbra] = -([H_eff] + omega) (1/eta) [bra]

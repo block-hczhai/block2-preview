@@ -1812,9 +1812,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
 };
 
 enum struct EquationTypes : uint8_t {
-    NormalMinRes,
-    NormalCG,
-    NormalGCROT,
+    Normal,
     PerturbativeCompression,
     GreensFunction,
     GreensFunctionSquared,
@@ -1868,9 +1866,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     DecompositionTypes decomp_type = DecompositionTypes::DensityMatrix;
-    EquationTypes eq_type = EquationTypes::NormalMinRes;
+    EquationTypes eq_type = EquationTypes::Normal;
     ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Normal;
     ExpectationTypes ex_type = ExpectationTypes::Real;
+    LinearSolverTypes solver_type = LinearSolverTypes::Automatic;
     bool forward;
     uint8_t iprint = 2;
     FPS cutoff = 1E-14;
@@ -1885,7 +1884,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
     // number of eigenvalues solved using harmonic Davidson
     // for deflated CG; 0 means normal CG
     int cg_n_harmonic_projection = 0;
-    pair<int, int> gcrotmk_size = make_pair(40, -1);
+    // First entry also used for "S" in IDR(S). Second entry will then be
+    // ignored
+    pair<int, int> linear_solver_params = make_pair(40, -1);
     // weight for mixing rhs wavefunction in density matrix/svd
     FPS right_weight = 0.0;
     // only useful when target contains some other
@@ -2029,8 +2030,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
             eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S, FLS>>();
             right_bra->allocate(me->bra->tensors[i]->info);
-            if (eq_type == EquationTypes::GreensFunction ||
-                eq_type == EquationTypes::GreensFunctionSquared) {
+            if ((eq_type == EquationTypes::GreensFunction ||
+                 eq_type == EquationTypes::GreensFunctionSquared) &&
+                !is_same<FLS, FCS>::value) {
                 real_bra = make_shared<SparseMatrix<S, FLS>>();
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
@@ -2092,19 +2094,12 @@ template <typename S, typename FL, typename FLS> struct Linear {
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
-            if (eq_type == EquationTypes::NormalMinRes ||
-                eq_type == EquationTypes::NormalCG ||
-                eq_type == EquationTypes::NormalGCROT) {
+            if (eq_type == EquationTypes::Normal) {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e,
-                    eq_type == EquationTypes::NormalCG
-                        ? LinearSolverTypes::CG
-                        : (eq_type == EquationTypes::NormalMinRes
-                               ? LinearSolverTypes::MinRes
-                               : LinearSolverTypes::GCROT),
-                    gcrotmk_size, iprint >= 3, linear_conv_thrd,
-                    linear_max_iter, linear_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e, solver_type, linear_solver_params,
+                    iprint >= 3, linear_conv_thrd, linear_max_iter,
+                    linear_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2136,9 +2131,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
-                                l_eff, lme->mpo->const_e, gf_extra_omegas[j],
+                                l_eff, lme->mpo->const_e, solver_type,
+                                gf_extra_omegas[j],
                                 gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
-                                real_bra, gcrotmk_size, iprint >= 3,
+                                real_bra, linear_solver_params, iprint >= 3,
                                 linear_conv_thrd, linear_max_iter,
                                 linear_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
@@ -2146,13 +2142,18 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                        j * 2 * l_eff->bra->total_memory,
                                    l_eff->bra->data,
                                    l_eff->bra->total_memory * sizeof(FLS));
-                            memcpy(extra_bras.data() +
-                                       (j * 2 + 1) * l_eff->bra->total_memory,
-                                   real_bra->data,
-                                   real_bra->total_memory * sizeof(FLS));
+                            if (real_bra != nullptr)
+                                memcpy(extra_bras.data() +
+                                           (j * 2 + 1) *
+                                               l_eff->bra->total_memory,
+                                       real_bra->data,
+                                       real_bra->total_memory * sizeof(FLS));
                         }
-                        gf_extra_targets[j] = vector<FLS>{xreal(get<0>(lpdi)),
-                                                          ximag(get<0>(lpdi))};
+                        gf_extra_targets[j] =
+                            is_same<FLS, FCS>::value
+                                ? vector<FLS>{(FLS &)get<0>(lpdi)}
+                                : vector<FLS>{xreal(get<0>(lpdi)),
+                                              ximag(get<0>(lpdi))};
                         get<1>(pdi).first += get<1>(lpdi).first;
                         get<1>(pdi).second += get<1>(lpdi).second;
                         get<2>(pdi) += get<2>(lpdi),
@@ -2169,10 +2170,14 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         linear_max_iter, linear_soft_max_iter, me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
-                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        gcrotmk_size, iprint >= 3, linear_conv_thrd,
-                        linear_max_iter, linear_soft_max_iter, me->para_rule);
-                targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
+                        l_eff, lme->mpo->const_e, solver_type, gf_omega, gf_eta,
+                        real_bra, linear_solver_params, iprint >= 3,
+                        linear_conv_thrd, linear_max_iter, linear_soft_max_iter,
+                        me->para_rule);
+                targets =
+                    is_same<FLS, FCS>::value
+                        ? vector<FLS>{(FLS &)get<0>(lpdi)}
+                        : vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
@@ -2206,13 +2211,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     t_eff->bra = real_bra;
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
+                tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                     tme->para_rule);
+                targets.insert(targets.begin(), get<0>(tpdi)[0].second);
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
-                                 tme->para_rule);
-            targets.insert(targets.begin(), get<0>(tpdi)[0].second);
-            get<1>(pdi).first++;
-            get<2>(pdi) += get<1>(tpdi);
-            get<3>(pdi) += get<2>(tpdi);
             if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
                 for (size_t j = 0; j < gf_extra_targets.size(); j++) {
                     FLS *tbra_bak = t_eff->bra->data;
@@ -2225,24 +2230,28 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                            j * 2 * t_eff->ket->total_memory;
                     tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                          tme->para_rule);
-                    gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
                     get<1>(pdi).first++;
                     get<2>(pdi) += get<1>(tpdi);
                     get<3>(pdi) += get<2>(tpdi);
-                    if (tme->bra->tensors[i] == me->bra->tensors[i])
-                        t_eff->bra->data =
-                            extra_bras.data() +
-                            (j * 2 + 1) * t_eff->bra->total_memory;
-                    if (tme->ket->tensors[i] == me->bra->tensors[i])
-                        t_eff->ket->data =
-                            extra_bras.data() +
-                            (j * 2 + 1) * t_eff->ket->total_memory;
-                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
-                                         tme->para_rule);
-                    gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
-                    get<1>(pdi).first++;
-                    get<2>(pdi) += get<1>(tpdi);
-                    get<3>(pdi) += get<2>(tpdi);
+                    if (is_same<FLS, FCS>::value)
+                        gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                    else {
+                        gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
+                        if (tme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->bra->total_memory;
+                        if (tme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(tme->mpo->const_e, algo_type,
+                                             ex_type, tme->para_rule);
+                        gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                    }
                     t_eff->bra->data = tbra_bak;
                     t_eff->ket->data = tket_bak;
                 }
@@ -2318,25 +2327,33 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                                j * 2 * t_eff->ket->total_memory;
                         tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
                                              ex_type, xme->para_rule);
-                        gf_extra_ext_targets[k][j].resize(2);
-                        gf_extra_ext_targets[k][j][1] = get<0>(tpdi)[0].second;
                         get<1>(pdi).first++;
                         get<2>(pdi) += get<1>(tpdi);
                         get<3>(pdi) += get<2>(tpdi);
-                        if (xme->bra->tensors[i] == me->bra->tensors[i])
-                            t_eff->bra->data =
-                                extra_bras.data() +
-                                (j * 2 + 1) * t_eff->bra->total_memory;
-                        if (xme->ket->tensors[i] == me->bra->tensors[i])
-                            t_eff->ket->data =
-                                extra_bras.data() +
-                                (j * 2 + 1) * t_eff->ket->total_memory;
-                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
-                                             ex_type, xme->para_rule);
-                        gf_extra_ext_targets[k][j][0] = get<0>(tpdi)[0].second;
-                        get<1>(pdi).first++;
-                        get<2>(pdi) += get<1>(tpdi);
-                        get<3>(pdi) += get<2>(tpdi);
+                        if (is_same<FLS, FCS>::value) {
+                            gf_extra_ext_targets[k][j].resize(1);
+                            gf_extra_ext_targets[k][j][0] =
+                                get<0>(tpdi)[0].second;
+                        } else {
+                            gf_extra_ext_targets[k][j].resize(2);
+                            gf_extra_ext_targets[k][j][1] =
+                                get<0>(tpdi)[0].second;
+                            if (xme->bra->tensors[i] == me->bra->tensors[i])
+                                t_eff->bra->data =
+                                    extra_bras.data() +
+                                    (j * 2 + 1) * t_eff->bra->total_memory;
+                            if (xme->ket->tensors[i] == me->bra->tensors[i])
+                                t_eff->ket->data =
+                                    extra_bras.data() +
+                                    (j * 2 + 1) * t_eff->ket->total_memory;
+                            tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                                 ex_type, xme->para_rule);
+                            gf_extra_ext_targets[k][j][0] =
+                                get<0>(tpdi)[0].second;
+                            get<1>(pdi).first++;
+                            get<2>(pdi) += get<1>(tpdi);
+                            get<3>(pdi) += get<2>(tpdi);
+                        }
                         t_eff->bra->data = tbra_bak;
                         t_eff->ket->data = tket_bak;
                     }
@@ -2679,8 +2696,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
             eq_type == EquationTypes::FitAddition) {
-            if (eq_type == EquationTypes::GreensFunction ||
-                eq_type == EquationTypes::GreensFunctionSquared)
+            if (real_bra != nullptr)
                 real_bra->deallocate();
             right_bra->deallocate();
         }
@@ -2721,8 +2737,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
             eq_type == EquationTypes::FitAddition) {
             right_bra = make_shared<SparseMatrix<S, FLS>>();
             right_bra->allocate(me->bra->tensors[i]->info);
-            if (eq_type == EquationTypes::GreensFunction ||
-                eq_type == EquationTypes::GreensFunctionSquared) {
+            if ((eq_type == EquationTypes::GreensFunction ||
+                 eq_type == EquationTypes::GreensFunctionSquared) &&
+                !is_same<FLS, FCS>::value) {
                 real_bra = make_shared<SparseMatrix<S, FLS>>();
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
@@ -2775,25 +2792,18 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 l_eff->deallocate();
             }
         } else if (lme != nullptr) {
-            shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
-                lme->eff_ham(FuseTypes::FuseLR, forward, linear_use_precondition,
-                             me->bra->tensors[i], right_bra);
+            shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
+                FuseTypes::FuseLR, forward, linear_use_precondition,
+                me->bra->tensors[i], right_bra);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             teff += _t.get_time();
-            if (eq_type == EquationTypes::NormalMinRes ||
-                eq_type == EquationTypes::NormalCG ||
-                eq_type == EquationTypes::NormalGCROT) {
+            if (eq_type == EquationTypes::Normal) {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
-                    lme->mpo->const_e,
-                    eq_type == EquationTypes::NormalCG
-                        ? LinearSolverTypes::CG
-                        : (eq_type == EquationTypes::NormalMinRes
-                               ? LinearSolverTypes::MinRes
-                               : LinearSolverTypes::GCROT),
-                    gcrotmk_size, iprint >= 3, linear_conv_thrd,
-                    linear_max_iter, linear_soft_max_iter, me->para_rule);
+                    lme->mpo->const_e, solver_type, linear_solver_params,
+                    iprint >= 3, linear_conv_thrd, linear_max_iter,
+                    linear_soft_max_iter, me->para_rule);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2825,9 +2835,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
-                                l_eff, lme->mpo->const_e, gf_extra_omegas[j],
+                                l_eff, lme->mpo->const_e, solver_type,
+                                gf_extra_omegas[j],
                                 gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
-                                real_bra, gcrotmk_size, iprint >= 3,
+                                real_bra, linear_solver_params, iprint >= 3,
                                 linear_conv_thrd, linear_max_iter,
                                 linear_soft_max_iter, me->para_rule);
                         if (tme != nullptr || ext_tmes.size() != 0) {
@@ -2835,13 +2846,18 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                        j * 2 * l_eff->bra->total_memory,
                                    l_eff->bra->data,
                                    l_eff->bra->total_memory * sizeof(FLS));
-                            memcpy(extra_bras.data() +
-                                       (j * 2 + 1) * l_eff->bra->total_memory,
-                                   real_bra->data,
-                                   real_bra->total_memory * sizeof(FLS));
+                            if (real_bra != nullptr)
+                                memcpy(extra_bras.data() +
+                                           (j * 2 + 1) *
+                                               l_eff->bra->total_memory,
+                                       real_bra->data,
+                                       real_bra->total_memory * sizeof(FLS));
                         }
-                        gf_extra_targets[j] = vector<FLS>{xreal(get<0>(lpdi)),
-                                                          ximag(get<0>(lpdi))};
+                        gf_extra_targets[j] =
+                            is_same<FLS, FCS>::value
+                                ? vector<FLS>{(FLS &)get<0>(lpdi)}
+                                : vector<FLS>{xreal(get<0>(lpdi)),
+                                              ximag(get<0>(lpdi))};
                         get<1>(pdi).first += get<1>(lpdi).first;
                         get<1>(pdi).second += get<1>(lpdi).second;
                         get<2>(pdi) += get<2>(lpdi),
@@ -2858,10 +2874,14 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         linear_max_iter, linear_soft_max_iter, me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
-                        l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
-                        gcrotmk_size, iprint >= 3, linear_conv_thrd,
-                        linear_max_iter, linear_soft_max_iter, me->para_rule);
-                targets = vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
+                        l_eff, lme->mpo->const_e, solver_type, gf_omega, gf_eta,
+                        real_bra, linear_solver_params, iprint >= 3,
+                        linear_conv_thrd, linear_max_iter, linear_soft_max_iter,
+                        me->para_rule);
+                targets =
+                    is_same<FLS, FCS>::value
+                        ? vector<FLS>{(FLS &)get<0>(lpdi)}
+                        : vector<FLS>{xreal(get<0>(lpdi)), ximag(get<0>(lpdi))};
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
                 get<2>(pdi) += get<2>(lpdi), get<3>(pdi) += get<3>(lpdi);
@@ -2894,13 +2914,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     t_eff->bra = real_bra;
                 if (tme->ket->tensors[i] == me->bra->tensors[i])
                     t_eff->ket = real_bra;
+                tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
+                                     tme->para_rule);
+                targets.insert(targets.begin(), get<0>(tpdi)[0].second);
+                get<1>(pdi).first++;
+                get<2>(pdi) += get<1>(tpdi);
+                get<3>(pdi) += get<2>(tpdi);
             }
-            tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
-                                 tme->para_rule);
-            targets.insert(targets.begin(), get<0>(tpdi)[0].second);
-            get<1>(pdi).first++;
-            get<2>(pdi) += get<1>(tpdi);
-            get<3>(pdi) += get<2>(tpdi);
             if (gf_extra_omegas_at_site == i && gf_extra_omegas.size() != 0)
                 for (size_t j = 0; j < gf_extra_targets.size(); j++) {
                     FLS *tbra_bak = t_eff->bra->data;
@@ -2913,24 +2933,28 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                            j * 2 * t_eff->ket->total_memory;
                     tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
                                          tme->para_rule);
-                    gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
                     get<1>(pdi).first++;
                     get<2>(pdi) += get<1>(tpdi);
                     get<3>(pdi) += get<2>(tpdi);
-                    if (tme->bra->tensors[i] == me->bra->tensors[i])
-                        t_eff->bra->data =
-                            extra_bras.data() +
-                            (j * 2 + 1) * t_eff->bra->total_memory;
-                    if (tme->ket->tensors[i] == me->bra->tensors[i])
-                        t_eff->ket->data =
-                            extra_bras.data() +
-                            (j * 2 + 1) * t_eff->ket->total_memory;
-                    tpdi = t_eff->expect(tme->mpo->const_e, algo_type, ex_type,
-                                         tme->para_rule);
-                    gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
-                    get<1>(pdi).first++;
-                    get<2>(pdi) += get<1>(tpdi);
-                    get<3>(pdi) += get<2>(tpdi);
+                    if (is_same<FLS, FCS>::value)
+                        gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                    else {
+                        gf_extra_targets[j][1] = get<0>(tpdi)[0].second;
+                        if (tme->bra->tensors[i] == me->bra->tensors[i])
+                            t_eff->bra->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->bra->total_memory;
+                        if (tme->ket->tensors[i] == me->bra->tensors[i])
+                            t_eff->ket->data =
+                                extra_bras.data() +
+                                (j * 2 + 1) * t_eff->ket->total_memory;
+                        tpdi = t_eff->expect(tme->mpo->const_e, algo_type,
+                                             ex_type, tme->para_rule);
+                        gf_extra_targets[j][0] = get<0>(tpdi)[0].second;
+                        get<1>(pdi).first++;
+                        get<2>(pdi) += get<1>(tpdi);
+                        get<3>(pdi) += get<2>(tpdi);
+                    }
                     t_eff->bra->data = tbra_bak;
                     t_eff->ket->data = tket_bak;
                 }
@@ -2989,25 +3013,33 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                                j * 2 * t_eff->ket->total_memory;
                         tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
                                              ex_type, xme->para_rule);
-                        gf_extra_ext_targets[k][j].resize(2);
-                        gf_extra_ext_targets[k][j][1] = get<0>(tpdi)[0].second;
                         get<1>(pdi).first++;
                         get<2>(pdi) += get<1>(tpdi);
                         get<3>(pdi) += get<2>(tpdi);
-                        if (xme->bra->tensors[i] == me->bra->tensors[i])
-                            t_eff->bra->data =
-                                extra_bras.data() +
-                                (j * 2 + 1) * t_eff->bra->total_memory;
-                        if (xme->ket->tensors[i] == me->bra->tensors[i])
-                            t_eff->ket->data =
-                                extra_bras.data() +
-                                (j * 2 + 1) * t_eff->ket->total_memory;
-                        tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
-                                             ex_type, xme->para_rule);
-                        gf_extra_ext_targets[k][j][0] = get<0>(tpdi)[0].second;
-                        get<1>(pdi).first++;
-                        get<2>(pdi) += get<1>(tpdi);
-                        get<3>(pdi) += get<2>(tpdi);
+                        if (is_same<FLS, FCS>::value) {
+                            gf_extra_ext_targets[k][j].resize(1);
+                            gf_extra_ext_targets[k][j][0] =
+                                get<0>(tpdi)[0].second;
+                        } else {
+                            gf_extra_ext_targets[k][j].resize(2);
+                            gf_extra_ext_targets[k][j][1] =
+                                get<0>(tpdi)[0].second;
+                            if (xme->bra->tensors[i] == me->bra->tensors[i])
+                                t_eff->bra->data =
+                                    extra_bras.data() +
+                                    (j * 2 + 1) * t_eff->bra->total_memory;
+                            if (xme->ket->tensors[i] == me->bra->tensors[i])
+                                t_eff->ket->data =
+                                    extra_bras.data() +
+                                    (j * 2 + 1) * t_eff->ket->total_memory;
+                            tpdi = t_eff->expect(xme->mpo->const_e, algo_type,
+                                                 ex_type, xme->para_rule);
+                            gf_extra_ext_targets[k][j][0] =
+                                get<0>(tpdi)[0].second;
+                            get<1>(pdi).first++;
+                            get<2>(pdi) += get<1>(tpdi);
+                            get<3>(pdi) += get<2>(tpdi);
+                        }
                         t_eff->bra->data = tbra_bak;
                         t_eff->ket->data = tket_bak;
                     }
@@ -3214,8 +3246,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
             eq_type == EquationTypes::FitAddition) {
-            if (eq_type == EquationTypes::GreensFunction ||
-                eq_type == EquationTypes::GreensFunctionSquared)
+            if (real_bra != nullptr)
                 real_bra->deallocate();
             right_bra->deallocate();
         }

@@ -1227,3 +1227,129 @@ TEST_F(TestComplexMatrix, TestGCROT) {
         ra.deallocate();
     }
 }
+
+TEST_F(TestComplexMatrix, TestIDRS) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 300);
+        MKL_INT n = 1;
+        int nmult = 0, niter = 0;
+        double eta = 0.05;
+        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
+        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
+        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
+        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
+        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), m, n);
+        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), m, n);
+        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), m, n);
+        Random::fill<double>(ra.data, ra.size());
+        Random::fill<double>(rax.data, rax.size());
+        Random::fill<double>(rb.data, rb.size());
+        a.clear();
+        b.clear();
+        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        for (MKL_INT k = 0; k < n; k++)
+            a(k, k) += complex<double>(0, eta);
+        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
+        Random::fill<double>(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
+        Random::fill<double>(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                af(k, j) = a(j, k);
+        MatMul mop(a);
+        complex<double> func = IterativeMatrixFunctions<complex<double>>::idrs(
+            mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 8,
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 0.0,
+            1E-7, 10000);
+        ComplexMatrixFunctions::copy(xg, b);
+        ComplexMatrixFunctions::linear(af, xg.flip_dims());
+        ComplexMatrixFunctions::extract_complex(xg, rbg,
+                                                MatrixRef(nullptr, m, n));
+        ComplexMatrixFunctions::extract_complex(x, rb,
+                                                MatrixRef(nullptr, m, n));
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
+                                                rbg);
+        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
+                                                rb);
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        xg.deallocate();
+        x.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+        rbg.deallocate();
+        rb.deallocate();
+        rax.deallocate();
+        ra.deallocate();
+    }
+}
+
+TEST_F(TestComplexMatrix, TestLSQR) {
+    for (int i = 0; i < n_tests; i++) {
+        // FIXME: fix lsqr
+        continue;
+        MKL_INT m = Random::rand_int(1, 300);
+        MKL_INT n = 1;
+        int nmult = 0, niter = 0;
+        double eta = 0.05;
+        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
+        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
+        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
+        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
+        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
+        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), m, n);
+        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), m, n);
+        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), m, n);
+        Random::fill<double>(ra.data, ra.size());
+        Random::fill<double>(rax.data, rax.size());
+        Random::fill<double>(rb.data, rb.size());
+        a.clear();
+        b.clear();
+        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        for (MKL_INT k = 0; k < n; k++)
+            a(k, k) += complex<double>(0, eta);
+        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
+        Random::fill<double>(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
+        Random::fill<double>(rb.data, rb.size());
+        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
+        ComplexMatrixFunctions::copy(af, a);
+        ComplexMatrixFunctions::conjugate(af);
+        MatMul mop(a), rop(af);
+        complex<double> func = IterativeMatrixFunctions<complex<double>>::lsqr(
+            mop, rop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter,
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 1E-7,
+            1E-7, 10000);
+        ComplexMatrixFunctions::copy(xg, b);
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                af(k, j) = a(j, k);
+        ComplexMatrixFunctions::linear(af, xg.flip_dims());
+        ComplexMatrixFunctions::extract_complex(xg, rbg,
+                                                MatrixRef(nullptr, m, n));
+        ComplexMatrixFunctions::extract_complex(x, rb,
+                                                MatrixRef(nullptr, m, n));
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
+                                                rbg);
+        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
+                                                rb);
+        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        xg.deallocate();
+        x.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+        rbg.deallocate();
+        rb.deallocate();
+        rax.deallocate();
+        ra.deallocate();
+    }
+}

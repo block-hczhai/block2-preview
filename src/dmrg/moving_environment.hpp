@@ -52,7 +52,7 @@ enum struct TruncationTypes : ubond_t {
     Physical = 0,
     Reduced = 1,
     ReducedInversed = 2,
-    ComplexDensityMatrix = 4,
+    RealDensityMatrix = 4,
     KeepOne = 8,
 };
 
@@ -2157,7 +2157,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             d_allocs[i] = make_shared<VectorAllocator<FPS>>();
             GDiagonalMatrix<FPS> w(nullptr, dm->info->n_states_bra[i]);
             w.allocate(d_allocs[i]);
-            if (!(trunc_type & TruncationTypes::ComplexDensityMatrix))
+            if (trunc_type & TruncationTypes::RealDensityMatrix)
                 GMatrixFunctions<FL>::keep_real((*dm)[i]);
             GMatrixFunctions<FLS>::eigs((*dm)[i], w);
             GMatrix<FPS> wr(nullptr, w.n, 1);

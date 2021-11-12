@@ -1063,3 +1063,40 @@ TEST_F(TestMatrix, TestGCROT) {
         ax.deallocate();
     }
 }
+
+TEST_F(TestMatrix, TestIDRS) {
+    for (int i = 0; i < n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, 200);
+        MKL_INT n = 1;
+        int nmult = 0, niter = 0;
+        double eta = 0.05;
+        MatrixRef ax(dalloc_()->allocate(m * m), m, m);
+        MatrixRef a(dalloc_()->allocate(m * m), m, m);
+        MatrixRef af(dalloc_()->allocate(m * m), m, m);
+        MatrixRef b(dalloc_()->allocate(n * m), m, n);
+        MatrixRef x(dalloc_()->allocate(n * m), m, n);
+        MatrixRef xg(dalloc_()->allocate(n * m), m, n);
+        Random::fill<double>(ax.data, ax.size());
+        Random::fill<double>(b.data, b.size());
+        Random::fill<double>(x.data, x.size());
+        MatrixFunctions::multiply(ax, false, ax, true, a, 1.0, 0.0);
+        for (MKL_INT k = 0; k < n; k++)
+            a(k, k) += eta;
+        MatMul mop(a);
+        double func = IterativeMatrixFunctions<double>::idrs(
+            mop, DiagonalMatrix(nullptr, 0), x, b, nmult, niter, 8, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 0.0, 1E-7,
+            10000);
+        af.clear();
+        MatrixFunctions::transpose(af, a, 1.0);
+        MatrixFunctions::copy(xg, b);
+        MatrixFunctions::linear(af, xg.flip_dims());
+        EXPECT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
+        xg.deallocate();
+        x.deallocate();
+        b.deallocate();
+        af.deallocate();
+        a.deallocate();
+        ax.deallocate();
+    }
+}

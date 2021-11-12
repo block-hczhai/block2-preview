@@ -51,7 +51,17 @@ enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
-enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT };
+enum struct LinearSolverTypes : uint8_t {
+    Automatic,
+    CG,
+    MinRes,
+    GCROT,
+    IDRS,
+    LSQR
+};
+
+/** Currently only used for Complex Green's Functions */
+enum struct PreconditionerTypes : uint8_t { Diagonal, None };
 
 template <typename S, typename FL, typename = MPS<S, FL>>
 struct EffectiveHamiltonian;
@@ -395,10 +405,12 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // energy, nmult, nflop, tmult
     tuple<FL, pair<int, int>, size_t, double>
     inverse_multiply(FL const_e, LinearSolverTypes solver_type,
-                     pair<int, int> gcrotmk_size, bool iprint = false,
+                     pair<int, int> linear_solver_params, bool iprint = false,
                      FP conv_thrd = 5E-6, int max_iter = 5000,
                      int soft_max_iter = -1,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (solver_type == LinearSolverTypes::Automatic)
+            solver_type = LinearSolverTypes::MinRes;
         int nmult = 0, niter = 0;
         frame->activate(0);
         Timer t;
@@ -435,8 +447,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                              conv_thrd, max_iter, soft_max_iter)
                        : IterativeMatrixFunctions<FL>::gcrotmk(
                              f, aa, mbra, mket, nmult, niter,
-                             gcrotmk_size.first, gcrotmk_size.second, const_e,
-                             iprint,
+                             linear_solver_params.first,
+                             linear_solver_params.second, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter));
         if (compute_diag && solver_type != LinearSolverTypes::MinRes)

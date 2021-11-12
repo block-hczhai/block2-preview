@@ -5,12 +5,14 @@
 
 using namespace block2;
 
+template <typename FL>
 class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
+    typedef typename GMatrix<FL>::FP FP;
 
-    template <typename S, typename FL>
+    template <typename S>
     void test_dmrg(S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, int dot);
     void SetUp() override {
@@ -30,13 +32,14 @@ class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
     }
 };
 
-template <typename S, typename FL>
-void TestRTEGreenFunctionH10STO6G::test_dmrg(
+template <typename FL>
+template <typename S>
+void TestRTEGreenFunctionH10STO6G<FL>::test_dmrg(
     S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     int dot) {
 
-    double igf_std = -0.2286598562666365;
-    double energy_std = -5.424385375684663;
+    FP igf_std = -0.2286598562666365;
+    FP energy_std = -5.424385375684663;
 
     Timer t;
     t.get_time();
@@ -106,7 +109,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
 
     ubond_t ket_bond_dim = 500, bra_bond_dim = 750;
     vector<ubond_t> bra_bdims = {bra_bond_dim}, ket_bdims = {ket_bond_dim};
-    vector<FL> noises = {1E-6, 1E-8, 1E-10, 0};
+    vector<FP> noises = {1E-6, 1E-8, 1E-10, 0};
 
     t.get_time();
 
@@ -139,7 +142,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
         make_shared<DMRG<S, FL, FL>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
-    double energy = dmrg->solve(20, mps->center == 0, 1E-12);
+    FP energy = dmrg->solve(20, mps->center == 0, 1E-12);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
@@ -183,7 +186,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
     cps->noise_type = NoiseTypes::ReducedPerturbative;
     cps->decomp_type = DecompositionTypes::SVD;
     cps->eq_type = EquationTypes::PerturbativeCompression;
-    double norm = cps->solve(20, mps->center == 0, 1E-12);
+    FL norm = cps->solve(20, mps->center == 0, 1E-12);
 
     // Y MPS
     shared_ptr<MPSInfo<S>> ymps_info = make_shared<MPSInfo<S>>(
@@ -202,7 +205,7 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
     ymps_info->save_mutable();
     ymps_info->deallocate_mutable();
 
-    double eta = 0.05, omega = -0.17;
+    FL eta = 0.05, omega = -0.17;
 
     // LEFT ME
     shared_ptr<MovingEnvironment<S, FL, FL>> lme =
@@ -231,8 +234,10 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
     linear->decomp_type = DecompositionTypes::SVD;
     linear->right_weight = 0.2;
     linear->iprint = 2;
-    double igf = linear->solve(20, ymps->center == 0, 1E-12);
+    FL igf = linear->solve(20, ymps->center == 0, 1E-12);
     igf = linear->targets.back().back();
+    if (!is_same<FL, FP>::value)
+        igf = ximag<FL>(igf);
 
     cout << "== " << name << " (IGF) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << igf
@@ -248,12 +253,22 @@ void TestRTEGreenFunctionH10STO6G::test_dmrg(
     mpo->deallocate();
 }
 
-TEST_F(TestRTEGreenFunctionH10STO6G, TestSU2) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestRTEGreenFunctionH10STO6G, TestFL);
+
+TYPED_TEST(TestRTEGreenFunctionH10STO6G, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H10.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -262,22 +277,24 @@ TEST_F(TestRTEGreenFunctionH10STO6G, TestSU2) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2, double>> hamil =
-        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2, double>(target, hamil, "SU2/2-site", 2);
-    test_dmrg<SU2, double>(target, hamil, "SU2/1-site", 1);
+    this->template test_dmrg<SU2>(target, hamil, "SU2/2-site", 2);
+    this->template test_dmrg<SU2>(target, hamil, "SU2/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
-TEST_F(TestRTEGreenFunctionH10STO6G, TestSZ) {
-    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+TYPED_TEST(TestRTEGreenFunctionH10STO6G, TestSZ) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/H10.STO6G.R1.8.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -285,14 +302,12 @@ TEST_F(TestRTEGreenFunctionH10STO6G, TestSZ) {
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_pg(pg)(fcidump->isym()));
 
-    double energy_std = -107.654122447525;
-
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ, double>> hamil =
-        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, FL>> hamil =
+        make_shared<HamiltonianQC<SZ, FL>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ, double>(target, hamil, "SZ/2-site", 2);
-    test_dmrg<SZ, double>(target, hamil, "SZ/1-site", 1);
+    this->template test_dmrg<SZ>(target, hamil, "SZ/2-site", 2);
+    this->template test_dmrg<SZ>(target, hamil, "SZ/1-site", 1);
 
     hamil->deallocate();
     fcidump->deallocate();

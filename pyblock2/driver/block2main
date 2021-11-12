@@ -274,8 +274,8 @@ elif dic.get("trunc_type", "physical").startswith("keep "):
         int(dic["trunc_type"][len("keep "):].strip())
 else:
     trunc_type = TruncationTypes.Reduced
-if "complex_density_matrix" in dic:
-    trunc_type = trunc_type | TruncationTypes.ComplexDensityMatrix
+if "real_density_matrix" in dic:
+    trunc_type = trunc_type | TruncationTypes.RealDensityMatrix
 if dic.get("decomp_type", "density_matrix") == "density_matrix":
     decomp_type = DecompositionTypes.DensityMatrix
 else:
@@ -773,7 +773,8 @@ elif "fullrestart" in dic:
             mps.info.load_mutable()
             if MPI is not None:
                 MPI.barrier()
-        mps.center -= 1
+        if not mps.canonical_form[mps.center:mps.center + 2] == "CC":
+            mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2:
         if MPI is not None:
@@ -1169,6 +1170,7 @@ def split_mps(iroot, mps, mps_info):
         smps.center = mps.center
         smps.dot = mps.dot
         smps.canonical_form = '' + mps.canonical_form
+        smps.canonical_form = smps.canonical_form.replace('T', 'S').replace('J', 'K')
         smps.tensors = mps.tensors[:]
         if smps.tensors[smps.center] is None:
             smps.tensors[smps.center] = mps.wfns[iroot][0]
@@ -1177,6 +1179,22 @@ def split_mps(iroot, mps, mps_info):
             assert smps.tensors[smps.center + 1] is None
             smps.tensors[smps.center + 1] = mps.wfns[iroot][0]
         smps.save_mutable()
+
+    if smps.center == 0 and dot == 2:
+        if MPI is not None:
+            MPI.barrier()
+        if smps.canonical_form[smps.center] in "ST":
+            cg = CG(200)
+            cg.initialize()
+            smps.flip_fused_form(smps.center, cg, prule if MPI is not None else None)
+        smps.save_data()
+        forward = True
+        if MPI is not None:
+            MPI.barrier()
+        smps.load_mutable()
+        smps.info.load_mutable()
+        if MPI is not None:
+            MPI.barrier()
 
     smps.dot = dot
     forward = smps.center == 0
@@ -1238,12 +1256,12 @@ def get_mps_from_tags(iroot):
         if smps.center == 0 and smps.canonical_form[0] == 'S':
             cg = CG(200)
             cg.initialize()
-            smps.move_right(cg, prule)
+            smps.move_right(cg, prule if MPI is not None else None)
             smps.center = 0
         elif smps.center == smps.n_sites - 1 and smps.canonical_form[smps.center] == 'K':
             cg = CG(200)
             cg.initialize()
-            smps.move_left(cg, prule)
+            smps.move_left(cg, prule if MPI is not None else None)
             smps.center = smps.n_sites - 2
         smps.dot = dot
         if MPI is not None:
@@ -1902,17 +1920,21 @@ if not pre_run:
                     simps, simps_info, _ = split_mps(iroot, mps, mps_info)
                     sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
                 dm = do_onepdm(simps, sjmps)
-                if SX == SU2:
-                    qsbra = simps.info.targets[0].twos
-                    # fix different Wigner–Eckart theorem convention
-                    dm *= np.sqrt(qsbra + 1)
-                dm = dm / np.sqrt(2)
+                if soc:
+                    if SX == SU2:
+                        if hasattr(simps.info, "targets"):
+                            qsbra = simps.info.targets[0].twos
+                        else:
+                            qsbra = simps.info.target.twos
+                        # fix different Wigner–Eckart theorem convention
+                        dm *= np.sqrt(qsbra + 1)
+                    dm = dm / np.sqrt(2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, jroot), dm)
-            if MPI is None or MPI.rank == 0:
-                _print("DMRG OCC (state %4d) = " % iroot, "".join(
-                    ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
-                simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+                if MPI is None or MPI.rank == 0 and iroot == jroot:
+                    _print("DMRG OCC (state %4d) = " % iroot, "".join(
+                        ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                    simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
