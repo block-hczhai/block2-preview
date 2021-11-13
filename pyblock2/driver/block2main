@@ -1435,6 +1435,8 @@ if not pre_run:
             dmrg.decomp_type = decomp_type
             dmrg.trunc_type = trunc_type
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+            dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
+            dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
 
             sweep_energies = []
             discarded_weights = []
@@ -1514,6 +1516,8 @@ if not pre_run:
         else:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
         dmrg.cutoff = float(dic.get("cutoff", 1E-14))
+        dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
+        dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
         dmrg.decomp_type = decomp_type
         dmrg.trunc_type = trunc_type
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)

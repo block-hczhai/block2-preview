@@ -421,14 +421,14 @@ TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
                                         dc_stride);
         MatrixFunctions::tensor_product_diagonal(ll ? dc : x, ll ? x : dc, cc,
                                                  2.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         c.clear();
         AdvancedGEMM<double>::three_tensor_product_diagonal(
             batch, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll, 2.0,
             dc_stride);
         batch->perform();
         batch->clear();
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         cc.deallocate();
         c.deallocate();
         x.deallocate();

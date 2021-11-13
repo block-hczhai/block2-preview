@@ -475,14 +475,14 @@ TEST_F(TestComplexMatrix, TestThreeTensorProductDiagonal) {
                                                dc_stride);
         ComplexMatrixFunctions::tensor_product_diagonal(
             ll ? dc : x, ll ? x : dc, cc, complex<double>(2.0, 1.0));
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         c.clear();
         AdvancedGEMM<complex<double>>::three_tensor_product_diagonal(
             batch, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll,
             complex<double>(2.0, 1.0), dc_stride);
         batch->perform();
         batch->clear();
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         cc.deallocate();
         c.deallocate();
         x.deallocate();
