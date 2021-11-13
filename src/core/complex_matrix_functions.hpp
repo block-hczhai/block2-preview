@@ -1433,7 +1433,7 @@ struct ComplexMatrixFunctions {
         double test1, test2, test3, rtol;
         constexpr double eps = std::numeric_limits<double>::epsilon();
         // Set up the first vectors u and v for the bidiagonalization.
-        //        These satisfy  beta*u = b - A*x,  alfa*v = A'*u.
+        //        These satisfy  beta*u = b - A*x,  alpha*v = A'*u.
         copy(u, b);
         auto bnorm = norm(b);
         xnorm = norm(x);
