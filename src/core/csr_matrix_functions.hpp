@@ -475,11 +475,11 @@ template <typename FL> struct GCSRMatrixFunctions {
             jp = c.rows[i], jr = i == c.m - 1 ? c.nnz : c.rows[i + 1];
             jr = jr - jp;
             tcols.clear(), tdata.clear();
-            if (jr != 0 && cfactor != 0) {
+            if (jr != 0 && cfactor != 0.0) {
                 tcols.resize(jr), tdata.resize(jr);
                 memcpy(tcols.data(), c.cols + jp, jr * sizeof(MKL_INT));
                 memcpy(tdata.data(), c.data + jp, jr * sizeof(FL));
-                dscal(&jr, &cfactor, tdata.data(), &inc);
+                xscal<FL>(&jr, &cfactor, tdata.data(), &inc);
             }
             jp = arows[i], jr = i == am - 1 ? a.nnz : arows[i + 1];
             for (MKL_INT j = jp; j < jr; j++) {
