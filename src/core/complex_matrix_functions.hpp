@@ -1301,8 +1301,14 @@ struct ComplexMatrixFunctions {
         // const auto sign = [&signR](cmplx v){ return abs(real(v)) < 1e-30 ? signR(real(v)) : signR(imag(v)); };
         if(b == 0.) {
             return make_tuple<double, double, double>(sign(a), 0., abs(a));
-        }else if(a == 0.){
+        }else if(a == 0.) {
             return make_tuple<double, double, double>(0., sign(b), abs(b));
+        }else if(abs(b) > abs(a)) {
+            auto tau = a / b;
+            auto s = sign(b) / sqrt(1. + tau * tau);
+            auto c = s * tau;
+            auto r = b / s;
+            return make_tuple<double, double, double>(double(c), double(s), double(r));
         }else{
             auto tau = b / a;
             auto c = sign(a) / sqrt(1. + tau * tau);
@@ -1589,6 +1595,11 @@ struct ComplexMatrixFunctions {
             res2 = res2 + psi * psi;
             rnorm = sqrt(res1 + res2);
             arnorm = alpha * abs(tau);
+
+            auto r1sq = rnorm * rnorm;
+            r1norm = sqrt(abs(r1sq));
+            if (r1sq < 0)
+                r1norm *= -1;
 
 
             // Now use these norms to estimate certain other quantities,
