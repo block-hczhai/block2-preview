@@ -74,14 +74,6 @@ extern void zgemm(const char *transa, const char *transb, const MKL_INT *m,
 // LU factorization
 extern void zgetrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
-// QR factorization
-extern void zgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
-                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
-                   const MKL_INT *lwork, MKL_INT *info);
-
-extern void zungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, complex<double> *a,
-                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
-                   const MKL_INT *lwork, MKL_INT *info);
 
 // matrix inverse
 extern void zgetri(const MKL_INT *n, complex<double> *a, const MKL_INT *lda,

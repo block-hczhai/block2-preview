@@ -23,7 +23,10 @@
 #include "../core/allocator.hpp"
 #include "../core/archived_sparse_matrix.hpp"
 #include "../core/archived_tensor_functions.hpp"
+#include "../core/batch_gemm.hpp"
 #include "../core/cg.hpp"
+#include "../core/csr_matrix.hpp"
+#include "../core/csr_matrix_functions.hpp"
 #include "../core/csr_operator_functions.hpp"
 #include "../core/csr_sparse_matrix.hpp"
 #include "../core/delayed_sparse_matrix.hpp"
@@ -34,6 +37,7 @@
 #include "../core/hamiltonian.hpp"
 #include "../core/integral.hpp"
 #include "../core/iterative_matrix_functions.hpp"
+#include "../core/matrix.hpp"
 #include "../core/matrix_functions.hpp"
 #include "../core/operator_functions.hpp"
 #include "../core/operator_tensor.hpp"
@@ -60,9 +64,28 @@ extern template struct block2::ArchivedSparseMatrix<block2::SU2, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SZ, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SU2, double>;
 
+// batch_gemm.hpp
+extern template struct block2::BatchGEMM<double>;
+extern template struct block2::BatchGEMMRef<double>;
+extern template struct block2::AdvancedGEMM<double>;
+extern template struct block2::BatchGEMMSeq<double>;
+
+extern template struct block2::BatchGEMM<complex<double>>;
+extern template struct block2::BatchGEMMRef<complex<double>>;
+extern template struct block2::AdvancedGEMM<complex<double>>;
+extern template struct block2::BatchGEMMSeq<complex<double>>;
+
 // cg.hpp
 extern template struct block2::CG<block2::SZ>;
 extern template struct block2::CG<block2::SU2>;
+
+// csr_matrix.hpp
+extern template struct block2::GCSRMatrix<double>;
+extern template struct block2::GCSRMatrix<complex<double>>;
+
+// csr_matrix_functions.hpp
+extern template struct block2::GCSRMatrixFunctions<double>;
+extern template struct block2::GCSRMatrixFunctions<complex<double>>;
 
 // csr_operator_functions.hpp
 extern template struct block2::CSROperatorFunctions<block2::SZ, double>;
@@ -128,6 +151,16 @@ extern template struct block2::FCIDUMP<double>;
 // iterative_matrix_functions.hpp
 extern template struct block2::IterativeMatrixFunctions<double>;
 extern template struct block2::IterativeMatrixFunctions<complex<double>>;
+
+// matrix.hpp
+extern template struct block2::GMatrix<double>;
+extern template struct block2::GDiagonalMatrix<double>;
+extern template struct block2::GIdentityMatrix<double>;
+extern template struct block2::GTensor<double>;
+
+extern template struct block2::GMatrix<complex<double>>;
+extern template struct block2::GDiagonalMatrix<complex<double>>;
+extern template struct block2::GTensor<complex<double>>;
 
 // matrix_functions.hpp
 extern template struct block2::GMatrixFunctions<double>;
