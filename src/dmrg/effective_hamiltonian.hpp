@@ -1324,6 +1324,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     // energies, ndav, nflop, tdav
     tuple<vector<FP>, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
+         int soft_max_iter = -1,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
@@ -1344,11 +1345,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter)
+                      conv_thrd, max_iter, soft_max_iter)
                 : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter);
+                      conv_thrd, max_iter, soft_max_iter);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)

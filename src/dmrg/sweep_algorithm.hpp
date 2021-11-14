@@ -981,9 +981,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
-        pdi = h_eff->eigs(
-            iprint >= 3, davidson_conv_thrd, davidson_max_iter, davidson_type,
-            davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_soft_max_iter, davidson_type,
+                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -1155,9 +1156,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         teff += _t.get_time();
-        pdi = h_eff->eigs(
-            iprint >= 3, davidson_conv_thrd, davidson_max_iter, davidson_type,
-            davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                          davidson_soft_max_iter, davidson_type,
+                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
