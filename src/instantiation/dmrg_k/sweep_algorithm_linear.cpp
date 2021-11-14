@@ -20,12 +20,5 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::DMRG<block2::SZK, complex<double>, complex<double>>;
-template struct block2::Linear<block2::SZK, complex<double>, complex<double>>;
-template struct block2::Expect<block2::SZK, complex<double>, complex<double>,
-                               complex<double>>;
-
-template struct block2::DMRG<block2::SU2K, complex<double>, complex<double>>;
-template struct block2::Linear<block2::SU2K, complex<double>, complex<double>>;
-template struct block2::Expect<block2::SU2K, complex<double>, complex<double>,
-                               complex<double>>;
+template struct block2::Linear<block2::SZK, double, double>;
+template struct block2::Linear<block2::SU2K, double, double>;
