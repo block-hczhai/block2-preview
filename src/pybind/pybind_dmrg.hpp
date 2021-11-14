@@ -1854,6 +1854,55 @@ extern template auto
 bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(py::module &m,
                                                    const string &aux_name)
     -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+
+#ifdef _USE_COMPLEX
+
+extern template void bind_fl_mps<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_qc_hamiltonian<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SZK, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SZK, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_dmrg<SZK, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SZK, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SZK, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SZK, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+
+extern template void bind_fl_mps<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SU2K, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SU2K, complex<double>, complex<double>>(
+    py::module &m);
+extern template void
+bind_fl_dmrg<SU2K, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SU2K, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SU2K, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SU2K, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+
+extern template auto bind_fl_spin_specific<SZK, complex<double>>(py::module &m)
+    -> decltype(typename SZK::is_sz_t());
+extern template auto bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+
+#endif
+
 #endif
 
 #endif

@@ -2618,6 +2618,26 @@ extern template auto
 bind_trans_state_info_spin_specific<SU2K, SZK>(py::module &m,
                                                const string &aux_name)
     -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+
+#ifdef _USE_COMPLEX
+extern template void bind_fl_expr<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SZK, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SZK, complex<double>>(py::module &m);
+
+extern template void bind_fl_expr<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SU2K, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SU2K, complex<double>>(py::module &m);
+
+#endif
+
 #endif
 
 #endif
