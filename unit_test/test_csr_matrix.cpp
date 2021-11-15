@@ -230,7 +230,7 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         c.clear();
         double alpha = Random::rand_double();
         t.get_time();
-        MatrixFunctions::tensor_product_diagonal(a, b, c, alpha);
+        MatrixFunctions::tensor_product_diagonal(0, a, b, c, alpha);
         dst += t.get_time();
         GCSRMatrix<double> ca, cb;
         ca.from_dense(a);
@@ -239,21 +239,24 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        GCSRMatrixFunctions<double>::tensor_product_diagonal(ca, b, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(0, ca, b, cc,
+                                                             alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        GCSRMatrixFunctions<double>::tensor_product_diagonal(a, cb, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(0, a, cb, cc,
+                                                             alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        GCSRMatrixFunctions<double>::tensor_product_diagonal(ca, cb, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(0, ca, cb, cc,
+                                                             alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.deallocate();

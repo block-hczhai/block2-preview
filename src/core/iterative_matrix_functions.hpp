@@ -64,8 +64,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (abs(ld - aa.data[i]) > 1E-12)
                 q.data[i] /= ld - aa.data[i];
     }
-    static void olsen_precondition(const GMatrix<FL> &q, const GMatrix<FL> &c,
-                                   FP ld, const GDiagonalMatrix<FL> &aa) {
+    // q = Kinv q - (Kinv c, q) / (c, Kinv c) Kinv c
+    static void olsen_precondition_old(const GMatrix<FL> &q,
+                                       const GMatrix<FL> &c, FP ld,
+                                       const GDiagonalMatrix<FL> &aa) {
         assert(aa.size() == c.size());
         GMatrix<FL> t(nullptr, c.m, c.n);
         t.allocate();
@@ -77,6 +79,21 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12)
                 q.data[i] /= ld - aa.data[i];
+        t.deallocate();
+    }
+    // q = Kinv q - (c, Kinv q) / (c, Kinv c) Kinv c
+    static void olsen_precondition(const GMatrix<FL> &q, const GMatrix<FL> &c,
+                                   FP ld, const GDiagonalMatrix<FL> &aa) {
+        assert(aa.size() == c.size());
+        GMatrix<FL> t(nullptr, c.m, c.n);
+        t.allocate();
+        copy(t, c);
+        for (MKL_INT i = 0; i < aa.n; i++)
+            if (abs(ld - aa.data[i]) > 1E-12) {
+                t.data[i] /= ld - aa.data[i];
+                q.data[i] /= ld - aa.data[i];
+            }
+        iadd(q, t, -complex_dot(c, q) / complex_dot(c, t));
         t.deallocate();
     }
     // Davidson algorithm
@@ -127,20 +144,20 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
-            iscale(bs[i], 1.0 / sqrt(complex_dot(bs[i], bs[i])));
+            iscale(bs[i], 1.0 / norm(bs[i]));
         }
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < nor; j++)
                 if (abs(or_normsqs[j]) > 1E-14)
                     iadd(bs[i], ors[j],
                          -complex_dot(ors[j], bs[i]) / or_normsqs[j]);
-            FL normsq = complex_dot(bs[i], bs[i]);
-            if (abs(normsq) < 1E-14) {
+            FL normx = norm(bs[i]);
+            if (abs(normx * normx) < 1E-14) {
                 cout << "Cannot generate initial guess " << i
                      << " for Davidson unitary to all given states!" << endl;
                 assert(false);
             }
-            iscale(bs[i], 1.0 / sqrt(normsq));
+            iscale(bs[i], 1.0 / normx);
         }
         vector<FP> eigvals(k);
         vector<int> eigval_idxs(deflation_max_size);
@@ -324,7 +341,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         if (abs(or_normsqs[j]) > 1E-14)
                             iadd(q, ors[j],
                                  -complex_dot(ors[j], q) / or_normsqs[j]);
-                    iscale(q, 1.0 / sqrt(complex_dot(q, q)));
+                    iscale(q, 1.0 / norm(q));
                     copy(bs[m], q);
                 }
                 m++;
@@ -1553,7 +1570,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      *
      * Note: There is also a STAB(L) variant, which may be faster. See, e.g.,
      *          1.  Gerard L. G. Sleijpen and Martin B. van Gijzen,
-     *              Exploiting BiCGstab($\ell$) Strategies to Induce Dimension
+     *              Exploiting BiCGstab(l) Strategies to Induce Dimension
      * Reduction, SIAM J. Sci. Comput., 32(5), 2687–2709.
      *              https://doi.org/10.1137/090752341
      *          2. Aihara, K., Abe, K., & Ishiwata, E. (2014). A variant of

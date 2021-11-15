@@ -2295,8 +2295,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              py::arg("a"), py::arg("conj_a"), py::arg("c"), py::arg("conj_c"),
              py::arg("bra"), py::arg("ket"), py::arg("scale"))
         .def("tensor_product_diagonal",
-             &BatchGEMMSeq<FL>::tensor_product_diagonal, py::arg("a"),
-             py::arg("b"), py::arg("c"), py::arg("scale"))
+             &BatchGEMMSeq<FL>::tensor_product_diagonal, py::arg("conj"),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("scale"))
         .def("tensor_product", &BatchGEMMSeq<FL>::tensor_product, py::arg("a"),
              py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
              py::arg("scale"), py::arg("stride"))

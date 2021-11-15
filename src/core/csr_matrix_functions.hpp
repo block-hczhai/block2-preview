@@ -775,7 +775,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         work.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const GCSRMatrix<FL> &a,
+    static void tensor_product_diagonal(uint8_t abconj, const GCSRMatrix<FL> &a,
                                         const GMatrix<FL> &b,
                                         const GMatrix<FL> &c, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -791,7 +791,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         ad.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const GMatrix<FL> &a,
+    static void tensor_product_diagonal(uint8_t abconj, const GMatrix<FL> &a,
                                         const GCSRMatrix<FL> &b,
                                         const GMatrix<FL> &c, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -807,7 +807,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         bd.deallocate(d_alloc);
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const GCSRMatrix<FL> &a,
+    static void tensor_product_diagonal(uint8_t abconj, const GCSRMatrix<FL> &a,
                                         const GCSRMatrix<FL> &b,
                                         const GMatrix<FL> &c, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =

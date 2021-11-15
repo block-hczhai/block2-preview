@@ -136,6 +136,7 @@ void TestTTODMRGN2STO3GSA::test_dmrg(
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
+    dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
     dmrg->solve(tto, mps->center == 0, 0);
 
     me->dot = 1;

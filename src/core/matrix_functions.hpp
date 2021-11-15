@@ -477,8 +477,9 @@ template <> struct GMatrixFunctions<double> {
         }
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
-                                        const MatrixRef &c, double scale) {
+    static void tensor_product_diagonal(uint8_t abconj, const MatrixRef &a,
+                                        const MatrixRef &b, const MatrixRef &c,
+                                        double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
@@ -487,10 +488,11 @@ template <> struct GMatrixFunctions<double> {
     }
     // diagonal element of three-matrix tensor product
     static void
-    three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
-                                  const MatrixRef &c, const MatrixRef &da,
-                                  bool dconja, const MatrixRef &db, bool dconjb,
-                                  bool dleft, double scale, uint32_t stride) {
+    three_tensor_product_diagonal(uint8_t abconj, const MatrixRef &a,
+                                  const MatrixRef &b, const MatrixRef &c,
+                                  const MatrixRef &da, bool dconja,
+                                  const MatrixRef &db, bool dconjb, bool dleft,
+                                  double scale, uint32_t stride) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);

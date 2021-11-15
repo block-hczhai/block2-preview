@@ -285,12 +285,6 @@ template <typename FL> struct BatchGEMM {
         this->xgemm(conja, conjb, c.m, conjb ? b.m : b.n, conjb ? b.n : b.m,
                     scale, a.data, a.n, b.data, b.n, cfactor, c.data, c.n);
     }
-    // [c] = diag(a) (out product) diag(b)
-    void tensor_product_diagonal(const GMatrix<FL> &a, const GMatrix<FL> &b,
-                                 const GMatrix<FL> &c, FL scale) {
-        this->xgemm(false, true, a.n, b.n, 1, scale, a.data, a.n + 1, b.data,
-                    b.n + 1, 1.0, c.data, c.n);
-    }
     // Execute DGEMM operation groups from index ii to ii + nn
     void perform(MKL_INT ii = 0, MKL_INT kk = 0, MKL_INT nn = 0) {
         if (nn != 0 || gp.size() != 0) {
@@ -453,13 +447,21 @@ struct AdvancedGEMM<FL, typename enable_if<is_same<FL, double>::value>::type> {
             }
         }
     }
+    // [c] = diag(a) (out product) diag(b)
+    static void tensor_product_diagonal(const shared_ptr<BatchGEMM<FL>> &batch,
+                                        uint8_t abconj, const GMatrix<FL> &a,
+                                        const GMatrix<FL> &b,
+                                        const GMatrix<FL> &c, FL scale) {
+        batch->xgemm(false, true, a.n, b.n, 1, scale, a.data, a.n + 1, b.data,
+                     b.n + 1, 1.0, c.data, c.n);
+    }
     //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
     // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
     static void three_tensor_product_diagonal(
-        const shared_ptr<BatchGEMM<FL>> &batch, const GMatrix<FL> &a,
-        const GMatrix<FL> &b, const GMatrix<FL> &c, const GMatrix<FL> &da,
-        bool dconja, const GMatrix<FL> &db, bool dconjb, bool dleft, FL scale,
-        uint32_t stride) {
+        const shared_ptr<BatchGEMM<FL>> &batch, uint8_t abconj,
+        const GMatrix<FL> &a, const GMatrix<FL> &b, const GMatrix<FL> &c,
+        const GMatrix<FL> &da, bool dconja, const GMatrix<FL> &db, bool dconjb,
+        bool dleft, FL scale, uint32_t stride) {
         const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
         const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
@@ -621,74 +623,116 @@ struct AdvancedGEMM<
             }
         }
     }
+    // [c] = diag(a) (out product) diag(b)
+    static void tensor_product_diagonal(const shared_ptr<BatchGEMM<FL>> &batch,
+                                        uint8_t abconj, const GMatrix<FL> &a,
+                                        const GMatrix<FL> &b,
+                                        const GMatrix<FL> &c, FL scale) {
+        if (!(abconj & 1))
+            batch->xgemm(false, abconj & 2 ? 3 : 1, a.n, b.n, 1, scale, a.data,
+                         a.n + 1, b.data, b.n + 1, 1.0, c.data, c.n);
+        else {
+            batch->xgemm_group(3, abconj & 2 ? 3 : 1, 1, b.n, 1, scale, 1,
+                               b.n + 1, 1.0, c.n, a.n);
+            for (MKL_INT i = 0; i < a.n; i++)
+                batch->xgemm_array(a.data + i * a.n + i, b.data,
+                                   c.data + i * c.n);
+        }
+    }
     //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
     // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
     static void three_tensor_product_diagonal(
-        const shared_ptr<BatchGEMM<FL>> &batch, const GMatrix<FL> &a,
-        const GMatrix<FL> &b, const GMatrix<FL> &c, const GMatrix<FL> &da,
-        bool dconja, const GMatrix<FL> &db, bool dconjb, bool dleft, FL scale,
-        uint32_t stride) {
+        const shared_ptr<BatchGEMM<FL>> &batch, uint8_t abconj,
+        const GMatrix<FL> &a, const GMatrix<FL> &b, const GMatrix<FL> &c,
+        const GMatrix<FL> &da, bool dconja, const GMatrix<FL> &db, bool dconjb,
+        bool dleft, FL scale, uint32_t stride) {
         const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
         const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
         if (dstrn != dstrm)
             return;
         assert(da.m == da.n && db.m == db.n);
         const MKL_INT ddstr = 0;
+        const bool ddconja =
+            dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+        const bool ddconjb =
+            dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
         if (da.m == 1 && da.n == 1) {
-            scale *= dconja ? xconj<FL>(*da.data) : *da.data;
+            scale *= ddconja ? xconj<FL>(*da.data) : *da.data;
             const FL *bdata =
                 dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
                        : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
             if (db.n > abs(ddstr)) {
                 if (dleft)
                     // (1 x db) x b
-                    if (!dconjb)
-                        batch->xgemm(false, true, db.n - abs(ddstr), b.n, 1,
-                                     scale, bdata, db.n + 1, b.data, b.n + 1,
-                                     1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
-                                     c.n);
+                    if (!ddconjb)
+                        batch->xgemm(false, abconj & 2 ? 3 : 1,
+                                     db.n - abs(ddstr), b.n, 1, scale, bdata,
+                                     db.n + 1, b.data, b.n + 1, 1.0,
+                                     &c(max(dstrn, dstrm), (MKL_INT)0), c.n);
                     else {
-                        batch->xgemm_group(3, true, 1, b.n, 1, scale, 1,
-                                           b.n + 1, 1.0, c.n,
+                        batch->xgemm_group(3, abconj & 2 ? 3 : 1, 1, b.n, 1,
+                                           scale, 1, b.n + 1, 1.0, c.n,
                                            db.n - abs(ddstr));
                         for (MKL_INT i = 0; i < db.n - abs(ddstr); i++)
                             batch->xgemm_array(
                                 bdata + i * (db.n + 1), b.data,
                                 &c(max(dstrn, dstrm) + i, (MKL_INT)0));
                     }
-                else
+                else {
                     // a x (1 x db)
-                    batch->xgemm(false, dconjb ? 3 : 1, a.n, db.n - abs(ddstr),
-                                 1, scale, a.data, a.n + 1, bdata, db.n + 1,
-                                 1.0, &c(0, max(dstrn, dstrm)), c.n);
+                    if (!(abconj & 1))
+                        batch->xgemm(false, ddconjb ? 3 : 1, a.n,
+                                     db.n - abs(ddstr), 1, scale, a.data,
+                                     a.n + 1, bdata, db.n + 1, 1.0,
+                                     &c(0, max(dstrn, dstrm)), c.n);
+                    else {
+                        batch->xgemm_group(3, ddconjb ? 3 : 1, 1,
+                                           db.n - abs(ddstr), 1, scale, 1,
+                                           db.n + 1, 1.0, c.n, a.n);
+                        for (MKL_INT i = 0; i < a.n; i++)
+                            batch->xgemm_array(a.data + i * a.n + i, bdata,
+                                               &c(i, max(dstrn, dstrm)));
+                    }
+                }
             }
         } else if (db.m == 1 && db.n == 1) {
-            scale *= dconjb ? xconj<FL>(*db.data) : *db.data;
+            scale *= ddconjb ? xconj<FL>(*db.data) : *db.data;
             const FL *adata =
                 dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
                        : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
             if (da.n > abs(ddstr)) {
                 if (dleft)
                     // (da x 1) x b
-                    if (!dconja)
-                        batch->xgemm(false, true, da.n - abs(ddstr), b.n, 1,
-                                     scale, adata, da.n + 1, b.data, b.n + 1,
-                                     1.0, &c(max(dstrn, dstrm), (MKL_INT)0),
-                                     c.n);
+                    if (!ddconja)
+                        batch->xgemm(false, abconj & 2 ? 3 : 1,
+                                     da.n - abs(ddstr), b.n, 1, scale, adata,
+                                     da.n + 1, b.data, b.n + 1, 1.0,
+                                     &c(max(dstrn, dstrm), (MKL_INT)0), c.n);
                     else {
-                        batch->xgemm_group(3, true, 1, b.n, 1, scale, 1,
-                                           b.n + 1, 1.0, c.n,
+                        batch->xgemm_group(3, abconj & 2 ? 3 : 1, 1, b.n, 1,
+                                           scale, 1, b.n + 1, 1.0, c.n,
                                            da.n - abs(ddstr));
                         for (MKL_INT i = 0; i < da.n - abs(ddstr); i++)
                             batch->xgemm_array(
                                 adata + i * (da.n + 1), b.data,
                                 &c(max(dstrn, dstrm) + i, (MKL_INT)0));
                     }
-                else
+                else {
                     // a x (da x 1)
-                    batch->xgemm(false, dconja ? 3 : 1, a.n, da.n - abs(ddstr),
-                                 1, scale, a.data, a.n + 1, adata, da.n + 1,
-                                 1.0, &c(0, max(dstrn, dstrm)), c.n);
+                    if (!(abconj & 1))
+                        batch->xgemm(false, ddconja ? 3 : 1, a.n,
+                                     da.n - abs(ddstr), 1, scale, a.data,
+                                     a.n + 1, adata, da.n + 1, 1.0,
+                                     &c(0, max(dstrn, dstrm)), c.n);
+                    else {
+                        batch->xgemm_group(3, ddconja ? 3 : 1, 1,
+                                           da.n - abs(ddstr), 1, scale, 1,
+                                           da.n + 1, 1.0, c.n, a.n);
+                        for (MKL_INT i = 0; i < a.n; i++)
+                            batch->xgemm_array(a.data + i * a.n + i, adata,
+                                               &c(i, max(dstrn, dstrm)));
+                    }
+                }
             }
         } else
             assert(false);
@@ -958,20 +1002,23 @@ template <typename FL> struct BatchGEMMSeq {
         }
     }
     // [c] = scale * diag(a) (out product) diag(b)
-    void tensor_product_diagonal(const GMatrix<FL> &a, const GMatrix<FL> &b,
-                                 const GMatrix<FL> &c, FL scale) {
-        batch[1]->tensor_product_diagonal(a, b, c, scale);
+    void tensor_product_diagonal(uint8_t abconj, const GMatrix<FL> &a,
+                                 const GMatrix<FL> &b, const GMatrix<FL> &c,
+                                 FL scale) {
+        AdvancedGEMM<FL>::tensor_product_diagonal(batch[1], abconj, a, b, c,
+                                                  scale);
     }
     //  dleft: [c] = scale * diag([a] = da x db) x diag(b)
     // !dleft: [c] = scale * diag(a) x diag([b] = da x db)
-    void three_tensor_product_diagonal(const GMatrix<FL> &a,
+    void three_tensor_product_diagonal(uint8_t abconj, const GMatrix<FL> &a,
                                        const GMatrix<FL> &b,
                                        const GMatrix<FL> &c,
                                        const GMatrix<FL> &da, bool dconja,
                                        const GMatrix<FL> &db, bool dconjb,
                                        bool dleft, FL scale, uint32_t stride) {
         AdvancedGEMM<FL>::three_tensor_product_diagonal(
-            batch[1], a, b, c, da, dconja, db, dconjb, dleft, scale, stride);
+            batch[1], abconj, a, b, c, da, dconja, db, dconjb, dleft, scale,
+            stride);
     }
     // [c + stride] = [a] * (scalar b) or [c] = (scalar a) * [b]
     void tensor_product(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,

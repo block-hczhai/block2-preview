@@ -90,6 +90,7 @@ void TestOneSiteDMRGN2STO3GSA<FL>::test_dmrg(
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
+    dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
     FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     // deallocate persistent stack memory

@@ -57,8 +57,14 @@ cached\_contraction
 nonspinadapted
     Optional. If given, the code will work in the non-spin-adapted ``SZ`` mode. Otherwise, it will work in the spin-adapted ``SU2`` mode.
 
-k_symmetry
+k\_symmetry
     Optional. If given, the code will work in the non-spin-adapted or spin-adapted mode with additionally the K symmetry.
+    Requiring the code to be built with ``-DUSE_KSYMM``.
+
+use\_complex
+    Optional. If given, the code will work in the complex number mode, where the integral, MPO and MPS contain all complex numbers.
+    FCIDUMP with real or complex integral can be accepted in this mode.
+    Requiring the code to be built with ``-DUSE_COMPLEX``.
 
 singlet\_embedding
     Optional. If given, the code will use the singlet embedding formalism.
@@ -301,6 +307,22 @@ trunc\_type
 
 decomp\_type
     Optional. Can be ``density_matrix`` (default) or ``svd``, where `svd` may be less numerical stable and not working with ``nroots > 1``.
+
+real\_density\_matrix
+    Optional. Only have effects in the complex mode and when ``decomp_type`` is ``density_matrix``.
+    If given, the imaginary part of the density matrix will be discarded before diagonalization.
+    This means that all rotation matrices will be orthogonal rather than unitary, although they will be stored as complex matrices.
+    For complex mode DMRG with more than one roots, this keyword has to be used (not checked).
+
+davidson\_max\_iter
+    Optional. Maximal number of iterations in Davidson. Default is 5000.
+    If this number is reached but convergence is not achieved, the calculation will abort.
+
+davidson\_soft\_max\_iter
+    Optional. Maximal number of iterations in Davidson. Default is -1.
+    If this number is reached but convergence is not achieved, the calculation will continue as if the convergence is achieved.
+    If this numebr is -1, or larger than or equal to ``davidson_max_iter``,
+    this keyword has no effect and ``davidson_max_iter`` is used instead.
 
 System Definition
 -----------------
