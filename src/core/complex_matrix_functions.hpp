@@ -180,6 +180,28 @@ struct ComplexMatrixFunctions {
         MKL_INT n = a.m * a.n, inc = 1;
         return dznrm2(&n, a.data, &inc);
     }
+
+    // Computes norm more accurately
+    static double norm_accurate(const ComplexMatrixRef &a) __attribute__((optimize("-O0"))){
+        MKL_INT n = a.m * a.n;
+        complex<long double> out = 0.0;
+        complex<long double> compensate = 0.0;
+        for(MKL_INT ii = 0; ii < n; ++ii){
+            complex<long double> sumi = a.data[ii];
+            sumi *= conj(a.data[ii]);
+            // Kahan summation
+            auto y = sumi - compensate;
+            // somehow, volatile keyword leads to compile error. so just hope the compiler does not optimize this away..
+            const complex<long double> t = out + y;
+            const complex<long double> z = t - out;
+            compensate = z - y;
+            out = t;
+        }
+        out = sqrt(out);
+        volatile long double outd = real(out);
+        return static_cast<double>(outd);
+    }
+
     // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
     static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
         shared_ptr<VectorAllocator<double>> d_alloc =
@@ -1435,8 +1457,8 @@ struct ComplexMatrixFunctions {
         // Set up the first vectors u and v for the bidiagonalization.
         //        These satisfy  beta*u = b - A*x,  alpha*v = A'*u.
         copy(u, b);
-        auto bnorm = norm(b);
-        xnorm = norm(x);
+        auto bnorm = norm_accurate(b);
+        xnorm = norm_accurate(x);
         if (pcomm != nullptr) {
             pcomm->broadcast(&bnorm, 1, pcomm->root);
             pcomm->broadcast(&xnorm, 1, pcomm->root);
@@ -1448,13 +1470,13 @@ struct ComplexMatrixFunctions {
             opM(x,v);
             ++nmult;
             iadd(u,v,-1.);
-            beta = norm(u);
+            beta = norm_accurate(u);
         }
         if(beta > 0.){
             iscale(u, 1./beta);
             ropM(u,v);
             ++nmult;
-            alpha = norm(v);
+            alpha = norm_accurate(v);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&alpha, 1, pcomm->root);
             }
@@ -1506,25 +1528,33 @@ struct ComplexMatrixFunctions {
             ++nmult;
             iscale(u, -alpha);
             iadd(u,tmp, 1.);
-            beta = norm(u);
+            beta = norm_accurate(u);
+
             if (pcomm != nullptr) {
                 pcomm->broadcast(&beta, 1, pcomm->root);
             }
+            //beta = static_cast<double>( static_cast<float>(beta) ) ;
 
             if (beta > 0.) {
-                iscale(u, 1./beta);
+                //iscale(u, 1./beta); // vv is more accurate
+                for (size_t i = 0; i < N; ++i) {
+                    u(i,0) /= beta;
+                }
                 anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
                 //v = A' @ u - beta * v
                 ropM(u,tmp);
                 ++nmult;
                 iscale(v, -beta);
                 iadd(v,tmp, 1.);
-                alpha = norm(v);
+                alpha = norm_accurate(v);
                 if (pcomm != nullptr) {
                     pcomm->broadcast(&alpha, 1, pcomm->root);
                 }
                 if (alpha > 0.) {
-                    iscale(v, 1./alpha);
+                    //iscale(v, 1./alpha);
+                    for (size_t i = 0; i < N; ++i) {
+                        v(i,0) /= alpha;
+                    }
                 }
             }
 
@@ -1567,7 +1597,7 @@ struct ComplexMatrixFunctions {
             iadd(w, v, 1.);
 
 
-            auto normdk = norm(tmp);
+            auto normdk = norm_accurate(tmp);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&normdk, 1, pcomm->root);
             }
