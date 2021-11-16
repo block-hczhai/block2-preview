@@ -2019,13 +2019,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             FP s = sign(b) / sqrt(1. + tau * tau);
             FP c = s * tau;
             FP r = b / s;
-            return make_tuple<FP, FP, FP>(FP(c), FP(s), FP(r));
+            return make_tuple<FP, FP, FP>(c, s, r);
         }else{
             FP tau = b / a;
             FP c = sign(a) / sqrt(1. + tau * tau);
             FP s = c * tau;
             FP r = a / c;
-            return make_tuple<FP, FP, FP>(FP(c), FP(s), FP(r));
+            return make_tuple<FP, FP, FP>(c, s, r);
         }
     }
 
