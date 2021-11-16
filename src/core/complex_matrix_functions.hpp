@@ -511,7 +511,11 @@ template <> struct GMatrixFunctions<complex<double>> {
     }
 
     // Computes norm more accurately
+#ifdef __GNUC__
     static double norm_accurate(const ComplexMatrixRef &a) __attribute__((optimize("-O0"))){
+#else
+    static double norm_accurate(const ComplexMatrixRef &a) {
+#endif
         MKL_INT n = a.m * a.n;
         complex<long double> out = 0.0;
         complex<long double> compensate = 0.0;
