@@ -132,8 +132,13 @@ compression
     MPS compression.
 
 delta\_t
-    Followed by a single float value as the time step for time evolution.
-    Imaginary time evolution of MPS.
+    Followed by a single float value or complex value as the time step for the time evolution.
+    The computation will apply :math:`\exp (-\Delta t H) |\psi\rangle` (with multiple steps).
+    So when it is a real float value, we will do imaginary time evolution of the MPS
+    (namely, optimizing to ground state or finite-temperature state).
+    When it is a pure imaginary value, we will do real time evolution of the MPS 
+    (namely, solving the time dependent Schrodinger equation).
+    General complex value can also be supported, but may not be useful.
 
 stopt\_dmrg
     First step of stochastic perturbative DMRG, which is the normal DMRG with a small bond dimension.
@@ -154,7 +159,7 @@ target\_t
     This keyword should be used only together with ``delta_t``. Default is 1.
 
 te\_type
-    Optional. Followed by ``rk4`` or ``tangent_space``. This keyword sets the imaginary time evolution algorithm.
+    Optional. Followed by ``rk4`` or ``tangent_space``. This keyword sets the time evolution algorithm.
     This keyword should be used only together with ``delta_t``. Default is ``rk4``.
 
 statespecific
@@ -194,6 +199,19 @@ trans\_mps\_to\_singlet\_embedding
 trans\_mps\_from\_singlet\_embedding
     Optional keyword with no associated value. If given, the MPS will be transformed to non-singlet-embedding format before being saved. This keyword can only be used together with ``restart_copy_mps`` or ``copy_mps``.
 
+trans\_mps\_to\_complex
+    Optional keyword with no associated value. If given, the MPS will be transformed to complex wavefunction with real rotation matrix before being saved.
+    This keyword can only be used together with ``restart_copy_mps`` or ``copy_mps``, and optionally with ``split_states``.
+    This keyword is conflict with other ``trans\_mps\_*`` keywords.
+    To load this MPS in the subsequent calculations, the keyword ``complex_mps`` must be used.
+
+split\_states
+    Optional keyword with no associated value. If given, the state averaged MPS will be split into individual MPSs.
+    This keyword can only be used together with ``restart_copy_mps`` or ``copy_mps``, and optionally with ``trans_mps_to_complex``.
+    This keyword is conflict with other ``trans\_mps\_*`` keywords.
+    The individual MPS will be the tag given by the keyword ``restart_copy_mps`` or ``copy_mps`` with ``-<n>`` appended,
+    where ``n`` is the root index counting from zero.
+
 resolve\_twosz
     Optional. Followed by an integer, which is two times the projected spin.
     The transformed SZ MPS will have the specified projected spin.
@@ -218,6 +236,19 @@ expt\_algo\_type
     Optional. Followed by a string ``auto``, ``fast``, or ``lowmem``. Default is ``auto``.
     This keyword can only be used with density matrix or transition density matrix calculations.
     The default is ``auto``. ``lowmem`` uses less memory, but the complexity can be higher.
+
+one\_body\_parallel\_rule
+    Optional keyword with no associated value. If given, the more efficient parallelization rule will be
+    used to distribute the MPO. This rule only works when the two-body term is zero or purely local.
+    Real space Huabbard model is one of the case. For such Hamiltonian, the default (quantum chemistry)
+    parallelization rule can still work, but may have no improvements with multiple processors.
+    If this keyword is used with non-trivial two-body term, runtime error may happen.
+
+complex\_mps
+    Optional keyword with no associated value. If given, complex expectation values will be computed
+    for MPS with complex wavefunction tensor and real rotation matrices (in non-complex mode).
+    Should be used together with ``pdm``, ``oh``, or (complex) ``delta_t`` type calculations.
+    In complex mode, this should not be used as everything is complex.
 
 Uncontracted Dynamic Correlation
 --------------------------------
@@ -323,6 +354,10 @@ davidson\_soft\_max\_iter
     If this number is reached but convergence is not achieved, the calculation will continue as if the convergence is achieved.
     If this numebr is -1, or larger than or equal to ``davidson_max_iter``,
     this keyword has no effect and ``davidson_max_iter`` is used instead.
+
+n\_sub\_sweeps
+    Optional. Number of sweeps for each time step. Defualt is 2.
+    This keyword only has effect when used with ``delta_t`` and when ``te_type`` is ``rk4``.
 
 System Definition
 -----------------

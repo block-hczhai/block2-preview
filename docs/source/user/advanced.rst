@@ -108,6 +108,7 @@ The following input file is used for this step: ::
         0 1000 0 0
     end
 
+    mps_tags BRA
     orbital_rotation
     delta_t 0.05
     outputlevel 1
@@ -155,6 +156,7 @@ and the transformed MPS (stored in the scratch folder), using the following inpu
     maxM 500
     maxiter 30
 
+    mps_tags BRA
     restart_oh
     restart_onepdm
     noreorder
@@ -837,3 +839,245 @@ Some reference outputs for this input file: ::
     DMRG Energy =  -75.724471636942383
 
 Here the calculation runs faster because the better initial guess, but the energy becomes worse.
+
+Time Evolution
+--------------
+
+Now we give an example on how to do time evolution.
+The computation will apply :math:`|MPS_{out}\rangle = \exp (-t H) |MPS_{in}\rangle` (with multiple steps).
+When :math:`t` is a real floating point value, we will do imaginary time evolution of the MPS (namely, optimizing to ground state or finite-temperature state).
+When :math:`t` is a pure imaginary value, we will do real time evolution of the MPS (namely, solving the time dependent Schrodinger equation).
+
+To get accurate results, the time step has to be sufficiently small. The keyword ``delta_t`` is used to set a time step :math:`\Delta t` and indicate that this is a time evolution calculation. The keyword ``target_t`` is used to set a target "stopping" time, namely, the :math:`t`. The "starting" time is considered as zero. Therefore, the number of time steps is computed as :math:`nsteps = t / \Delta t` and printed.
+
+If ``delta_t`` is too big, the time step error will be large. If ``delta_t`` is small, for fixed target time we have to do more time steps, with MPS bond dimension truncation happening after each sweep. So if ``delta_t`` is too small, the accumulated bond dimension truncation error will be large. Some meaningful time steps may be 0.01 to 0.1.
+
+Real Time Evolution
+^^^^^^^^^^^^^^^^^^^
+
+First, we do a state-averaged calculation for the lowest two states using the following input file: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+    nroots 2
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    noreorder
+
+Note that the orbital reordering is disabled. The output: ::
+
+    $ grep elapsed dmrg-1.out | tail -1
+    Time elapsed =      5.762 | E[  2] =     -75.7268133875    -75.6376794953 | DE = -8.89e-08 | DW = 6.38e-05
+    $ grep Final dmrg-1.out
+    Final canonical form =  LLLLLLLLLLLLLLLLLLLLLLLLLJ 25
+
+The energy of the MPS at the last site is actually -75.72629673 and -75.63717415, which are slightly different from the above values.
+
+Second, we can use the following input file to load the
+state-averaged MPS and then split it into individual MPSs: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+    nroots 2
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+    restart_copy_mps
+    split_states
+    trans_mps_to_complex
+    noreorder
+
+Note that here ``nroots`` must be the same as the previous case (or smaller, but larger than one),
+otherwise the state-averaged MPS cannot be correctly loaded. The state-averaged MPS has the default tag KET.
+We use calculation type keyword ``restart_copy_mps`` to do this transformation.
+The new keyword ``split_states`` indicates that we want to split the MPS, this keyword should only be used
+together with ``restart_copy_mps``.
+The extra keyword ``trans_mps_to_complex`` will further make the MPS a complex MPS. This is required for
+real time evolution, where ``delta_t`` can be imaginary.
+
+For imaginary time evolution and real ``delta_t`` and real ``target_t``, everything will be real during the time evolution, so normally we do not need this extra keyword ``trans_mps_to_complex`` (but if you add it it is also okay).
+
+The output looks like : ::
+    
+    $ tail -7 dmrg-2.out 
+    ----- root =   0 /   2 -----
+        final tag = KET-CPX-0
+        final canonical form = LLLLLLLLLLLLLLLLLLLLLLLLLT
+    ----- root =   1 /   2 -----
+        final tag = KET-CPX-1
+        final canonical form = LLLLLLLLLLLLLLLLLLLLLLLLLT
+    MPI FINALIZE: rank 0 of 1
+
+By default, the tranformed MPS will have tags ``KET-0``, ``KET-1`` etc, if it is real, or
+``KET-CPX-0``, ``KET-CPX-1`` etc if it is complex.
+If you set a custom tag, for example, when the input is like ``restart_copy_mps SKET``, the
+tranformed MPS will have tags ``SKET-0``, ``SKET-1``, etc, no matter it is real or complex.
+
+Third, we use the following script to do real time evolution: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    hf_occ integral
+    schedule
+    0 500 0 0
+    end
+    maxiter 10
+
+    read_mps_tags KET-CPX-0
+    mps_tags BRA
+    delta_t 0.05i
+    target_t 0.20i
+    complex_mps
+    noreorder
+
+Note that a custom sweep schedule has to be used, to set the bond dimension to ``500`` (for example).
+The keyword ``maxiter`` and ``noise`` in the sweep schedule are ignored.
+
+For every time step, there can be multiple sweeps, called "sub sweeps". The total number of sweeps is ``n_sweeps = nsteps * n_sub_sweeps``. The keyword ``n_sub_sweeps`` can be used to set the number of sub sweeps. Default value is 2.
+
+For real time evolution, ``delta_t`` and ``target_t`` should be pure imaginary values.
+But they can also be general complex values.
+When doing imaginary time evolution, ``delta_t`` and ``target_t`` should be all real.
+
+The tag of the input MPS (old MPS) is given by ``read_mps_tags``.
+The tag of the output MPS (new MPS) is given by ``mps_tags``. The two tags cannot be the same.
+They should (better) not have common prefix. For example, ``KET`` and ``KET-1`` may not be used together, as ``-1`` may be used by the code internally which will lead to confusion.
+
+For this example, ``target_t`` is four times ``delta_t``, so we will have 4 steps. Each time step has 2 sweeps. In total there will be 8 sweeps. The output is the result of applying ``\exp(-0.2i H)`` to the input.
+
+Whenever a complex MPS is used, the keyword ``complex_mps`` should be used, otherwise the code will load the MPS incorrectly.
+
+The output : ::
+
+    $ grep 'final' dmrg-3.out
+        mps final tag = BRA
+        mps final canonical form = MRRRRRRRRRRRRRRRRRRRRRRRRR
+    $ grep '<E>' dmrg-3.out
+    T = RE    0.00000 + IM    0.05000 <E> =  -75.726309692728165 <Norm^2> =    0.999999608946318
+    T = RE    0.00000 + IM    0.10000 <E> =  -75.726336818185246 <Norm^2> =    0.999994467614067
+    T = RE    0.00000 + IM    0.15000 <E> =  -75.726364807114123 <Norm^2> =    0.999990200387707
+    T = RE    0.00000 + IM    0.20000 <E> =  -75.726389514836484 <Norm^2> =    0.999986418355937
+
+Here we see that the expectation value is printed after each time step.
+The energy is roughly conserved (similar to the DMRG output -75.72629673), and the norm is roughly one.
+Decreasing the time step may give more accurate results.
+
+We can do the same for the excited state: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    hf_occ integral
+    schedule
+    0 500 0 0
+    end
+    maxiter 10
+
+    read_mps_tags KET-CPX-1
+    mps_tags BRAEX
+    delta_t 0.05i
+    target_t 0.20i
+    complex_mps
+    noreorder
+
+The output : ::
+
+    $ grep 'final' dmrg-4.out
+        mps final tag = BRAEX
+        mps final canonical form = MRRRRRRRRRRRRRRRRRRRRRRRRR
+    $ grep '<E>' dmrg-4.out
+    T = RE    0.00000 + IM    0.05000 <E> =  -75.637185795841717 <Norm^2> =    0.999999661398567
+    T = RE    0.00000 + IM    0.10000 <E> =  -75.637212093724074 <Norm^2> =    0.999995415040728
+    T = RE    0.00000 + IM    0.15000 <E> =  -75.637238086798163 <Norm^2> =    0.999991630799571
+    T = RE    0.00000 + IM    0.20000 <E> =  -75.637260508028248 <Norm^2> =    0.999988252849994
+
+The energy is close to the DMRG value -75.63717415.
+
+For imaginary time evolution, since the propagator is not unitary, the norm will increase exponentially.
+You may use the extra keyword ``normalize_mps`` to normalize MPS after each time step. The norm will still be computed and printed, but it will not be accumulated.
+
+Finally, we can verify the energy at ``T = 0.0`` and ``T = 0.2`` and compute the overlap for these states.
+The overlap between the all four states can be computed using the following input : ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    hf_occ integral
+    schedule
+    0 500 0 0
+    end
+    maxiter 10
+
+    mps_tags KET-CPX-0 BRA KET-CPX-1 BRAEX
+    restart_tran_oh
+    complex_mps
+    overlap
+    noreorder
+
+The output is: ::
+
+    $ grep 'OH' dmrg-5.out
+    OH Energy    0 -    0 = RE    1.000000000000002 + IM    0.000000000000000
+    OH Energy    1 -    0 = RE   -0.845792004408687 + IM   -0.533433527528264
+    OH Energy    1 -    1 = RE    0.999986418355938 + IM    0.000000000000000
+    OH Energy    2 -    0 = RE   -0.000000000000000 + IM    0.000000000000000
+    OH Energy    2 -    1 = RE   -0.000000827506956 + IM   -0.000000742303613
+    OH Energy    2 -    2 = RE    1.000000000000004 + IM    0.000000000000000
+    OH Energy    3 -    0 = RE    0.000001731091412 + IM   -0.000000316659748
+    OH Energy    3 -    1 = RE   -0.000001122421894 + IM    0.000002348984005
+    OH Energy    3 -    2 = RE   -0.836158473098047 + IM   -0.548435696470209
+    OH Energy    3 -    3 = RE    0.999988252849993 + IM    0.000000000000000
+
+Here in the output each MPS gets a number, according to the order of tags in ``mps_tags``.
+We have ``0 (KET-CPX-0), 1 (BRA), 2 (KET-CPX-1)`` and ``3 (BRAEX)``.
+
+Note that state 1 (not normalized) is time evolved from state 0 (normalized).
+We see that the overlap ``<1|1>`` is exactly 1. To get the overlap between the normalized states, we have: ::
+
+    < normlized(0) | normlized(1) >
+    = <0|1> / sqrt(<0|0> * <1|1>)
+    = (-0.845792004408687 -0.533433527528264j) / sqrt( 0.999986418355938 * 1.000000000000002)
+    = -0.8457977480901698 -0.5334371500173138j
+
+The absolute value and the angle of this complex overlap is : ::
+
+       np.abs( -0.8457977480901698 -0.5334371500173138j ) =  0.9999645112167714
+    np.angle ( -0.8457977480901698 -0.5334371500173138j ) = -2.578911293480138
+
+The absolute value is close to one. So the time evolution simply introduced a complex phase factor for the state, as expected. The complex phase factor can be computed as the remainder of ``E t`` divided by ``2 pi``: ::
+
+    -75.72638951483646 * 0.2 % (2 * np.pi) - 2 * np.pi = -2.5789072886081197
+
+Which is close to the printed value.
+
+Also note that the overlap between the ground state and the excited state ``<2|0>`` is exactly zero. The corresponding overlap between the time evolved states ``<3|1>`` is slightly different from zero, mainly due to the time step error and truncation error.
+
+We can also get the energy expetation, by removing the keyword ``overlap``: ::
+
+    $ grep 'OH' dmrg-6.out
+    OH Energy    0 -    0 = RE  -75.726296730204453 + IM    0.000000000000000
+    OH Energy    1 -    0 = RE   64.049088006450049 + IM   40.394772180607831
+    OH Energy    1 -    1 = RE  -75.725361025967970 + IM   -0.000000000000007
+    OH Energy    2 -    0 = RE    0.000000000000008 + IM    0.000000000000000
+    OH Energy    2 -    1 = RE    0.000061050951670 + IM    0.000056012958492
+    OH Energy    2 -    2 = RE  -75.637174152353893 + IM    0.000000000000000
+    OH Energy    3 -    0 = RE   -0.000132735557064 + IM    0.000024638559206
+    OH Energy    3 -    1 = RE    0.000086585167013 + IM   -0.000178008928209
+    OH Energy    3 -    2 = RE   63.244928578558032 + IM   41.482021915322555
+    OH Energy    3 -    3 = RE  -75.636371985782972 + IM    0.000000000000000
+
+Note that here not all states are normalized, the printed value is not directly the energy.
+The printed value is ``<A|H|B>``, but the energy is ``<A|H|B>/<A|B>``.
+So the printed value should be divided by the square of the norm of the MPS (see previous output). For example, for state 1 we have : ::
+
+    -75.725361025967970 / 0.999986418355938 = -75.72638951483646
+
+Which is the same as the number ``<E>`` printed by the time evolution (-75.726389514836484).

@@ -39,7 +39,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
               "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center",
               "use_complex", "real_density_matrix", "expt_algo_type",
-              "davidson_max_iter", "davidson_soft_max_iter"}
+              "davidson_max_iter", "davidson_soft_max_iter", "one_body_parallel_rule",
+              "n_sub_sweeps", "complex_mps", "split_states", "trans_mps_to_complex"}
 
 REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
