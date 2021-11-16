@@ -88,7 +88,7 @@ void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
-    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    double energy = dmrg->solve(20, mps->center == 0, 1E-8);
 
     for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
         cout << "== " << name << " (SA) =="
