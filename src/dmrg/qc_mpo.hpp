@@ -38,24 +38,26 @@ using namespace std;
 namespace block2 {
 
 // MPO of identity operator
-template <typename S> struct IdentityMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    using MPO<S>::site_op_infos;
+template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::site_op_infos;
     // identity between differect pg
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
-                S delta_quantum, const shared_ptr<OperatorFunctions<S>> &opf,
+                S delta_quantum,
+                const shared_ptr<OperatorFunctions<S, FL>> &opf,
                 const vector<typename S::pg_t> &bra_orb_sym =
                     vector<typename S::pg_t>(),
                 const vector<typename S::pg_t> &ket_orb_sym =
                     vector<typename S::pg_t>())
-        : MPO<S>((int)bra_basis.size()) {
-        shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
+        : MPO<S, FL>((int)bra_basis.size()) {
+        shared_ptr<OpElement<S, FL>> i_op =
+            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), vacuum);
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(bra_basis.size() == ket_basis.size());
         assert(bra_orb_sym.size() == ket_orb_sym.size());
         unordered_map<typename S::pg_t, set<typename S::pg_t>> ket_to_bra_map;
@@ -79,9 +81,9 @@ template <typename S> struct IdentityMPO : MPO<S> {
             }
             imq++;
         }
-        MPO<S>::op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), delta_quantum);
-        MPO<S>::const_e = 0.0;
+        MPO<S, FL>::op = make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(),
+                                                       delta_quantum);
+        MPO<S, FL>::const_e = 0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++) {
@@ -158,13 +160,14 @@ template <typename S> struct IdentityMPO : MPO<S> {
                             if (dq.pg() == 0)
                                 (*pmat)[{xi, xj}] = i_op;
                             else
-                                (*pmat)[{xi, xj}] = make_shared<OpElement<S>>(
-                                    OpNames::I, SiteIndex((uint16_t)dq.pg()),
-                                    dq);
+                                (*pmat)[{xi, xj}] =
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::I,
+                                        SiteIndex((uint16_t)dq.pg()), dq);
                         }
                 }
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop =
@@ -174,7 +177,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
                 if (dq.pg() == 0)
                     (*plop)[xj] = i_op;
                 else
-                    (*plop)[xj] = make_shared<OpElement<S>>(
+                    (*plop)[xj] = make_shared<OpElement<S, FL>>(
                         OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
             }
             this->left_operator_names.push_back(plop);
@@ -185,7 +188,7 @@ template <typename S> struct IdentityMPO : MPO<S> {
                 if (dq.pg() == 0)
                     (*prop)[xi] = i_op;
                 else
-                    (*prop)[xi] = make_shared<OpElement<S>>(
+                    (*prop)[xi] = make_shared<OpElement<S, FL>>(
                         OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
             }
             this->right_operator_names.push_back(prop);
@@ -198,15 +201,15 @@ template <typename S> struct IdentityMPO : MPO<S> {
                 shared_ptr<SparseMatrixInfo<S>> info =
                     site_op_infos[m][xk].second;
                 S mat_dq = info->delta_quantum;
-                shared_ptr<OpElement<S>> xop =
+                shared_ptr<OpElement<S, FL>> xop =
                     dq.pg() == 0
                         ? i_op
-                        : make_shared<OpElement<S>>(
+                        : make_shared<OpElement<S, FL>>(
                               OpNames::I, SiteIndex((uint16_t)dq.pg()), dq);
                 assert(xop->q_label == info->delta_quantum);
                 if (no_sparse) {
-                    shared_ptr<SparseMatrix<S>> mat =
-                        make_shared<SparseMatrix<S>>(d_alloc);
+                    shared_ptr<SparseMatrix<S, FL>> mat =
+                        make_shared<SparseMatrix<S, FL>>(d_alloc);
                     opt->ops[xop] = mat;
                     mat->allocate(info);
                     if (ket_to_bra_map.size() == 0) {
@@ -227,13 +230,13 @@ template <typename S> struct IdentityMPO : MPO<S> {
                     }
                 } else {
                     has_sparse = true;
-                    MPO<S>::sparse_form[m] = 'S';
-                    shared_ptr<CSRSparseMatrix<S>> mat =
-                        make_shared<CSRSparseMatrix<S>>(d_alloc);
+                    MPO<S, FL>::sparse_form[m] = 'S';
+                    shared_ptr<CSRSparseMatrix<S, FL>> mat =
+                        make_shared<CSRSparseMatrix<S, FL>>(d_alloc);
                     opt->ops[xop] = mat;
                     mat->initialize(info);
                     for (int i = 0; i < info->n; i++) {
-                        shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                        shared_ptr<GCSRMatrix<FL>> cmat = mat->csr_data[i];
                         cmat->nnz = min(cmat->m, cmat->n);
                         cmat->allocate();
                         if (ket_to_bra_map.size() == 0 ||
@@ -284,25 +287,25 @@ template <typename S> struct IdentityMPO : MPO<S> {
             this->tensors.push_back(opt);
         }
         if (has_sparse) {
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(opf->cg));
-            MPO<S>::tf->opf->seq = opf->seq;
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(
+                make_shared<CSROperatorFunctions<S, FL>>(opf->cg));
+            MPO<S, FL>::tf->opf->seq = opf->seq;
         } else
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(opf);
     }
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
-                const shared_ptr<OperatorFunctions<S>> &opf)
-        : MPO<S>((int)bra_basis.size()) {
-        shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
+                const shared_ptr<OperatorFunctions<S, FL>> &opf)
+        : MPO<S, FL>((int)bra_basis.size()) {
+        shared_ptr<OpElement<S, FL>> i_op =
+            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), vacuum);
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(bra_basis.size() == ket_basis.size());
-        MPO<S>::op = i_op;
-        MPO<S>::const_e = 0.0;
+        MPO<S, FL>::op = i_op;
+        MPO<S, FL>::const_e = 0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++) {
@@ -322,8 +325,8 @@ template <typename S> struct IdentityMPO : MPO<S> {
             else
                 pmat = make_shared<SymbolicMatrix<S>>(1, 1);
             (*pmat)[{0, 0}] = i_op;
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop =
@@ -339,21 +342,21 @@ template <typename S> struct IdentityMPO : MPO<S> {
             // site operators
             shared_ptr<SparseMatrixInfo<S>> info = site_op_infos[m][0].second;
             if (no_sparse) {
-                shared_ptr<SparseMatrix<S>> mat =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrix<S, FL>> mat =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 opt->ops[i_op] = mat;
                 mat->allocate(info);
                 for (MKL_INT i = 0; i < mat->total_memory; i++)
                     mat->data[i] = 1;
             } else {
                 has_sparse = true;
-                MPO<S>::sparse_form[m] = 'S';
-                shared_ptr<CSRSparseMatrix<S>> mat =
-                    make_shared<CSRSparseMatrix<S>>(d_alloc);
+                MPO<S, FL>::sparse_form[m] = 'S';
+                shared_ptr<CSRSparseMatrix<S, FL>> mat =
+                    make_shared<CSRSparseMatrix<S, FL>>(d_alloc);
                 opt->ops[i_op] = mat;
                 mat->initialize(info);
                 for (int i = 0; i < info->n; i++) {
-                    shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                    shared_ptr<GCSRMatrix<FL>> cmat = mat->csr_data[i];
                     cmat->nnz = min(cmat->m, cmat->n);
                     cmat->allocate();
                     for (MKL_INT j = 0; j < cmat->nnz; j++)
@@ -369,32 +372,33 @@ template <typename S> struct IdentityMPO : MPO<S> {
             this->tensors.push_back(opt);
         }
         if (has_sparse) {
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(opf->cg));
-            MPO<S>::tf->opf->seq = opf->seq;
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(
+                make_shared<CSROperatorFunctions<S, FL>>(opf->cg));
+            MPO<S, FL>::tf->opf->seq = opf->seq;
         } else
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(opf);
     }
-    IdentityMPO(const shared_ptr<Hamiltonian<S>> &hamil)
-        : MPO<S>(hamil->n_sites) {
-        shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+    IdentityMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
-        MPO<S>::op = i_op;
-        MPO<S>::const_e = 0.0;
+        MPO<S, FL>::op = i_op;
+        MPO<S, FL>::const_e = 0.0;
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
-        MPO<S>::basis = hamil->basis;
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::basis = hamil->basis;
         for (uint16_t m = 0; m < n_sites; m++) {
             // site tensor
             shared_ptr<Symbolic<S>> pmat;
@@ -405,8 +409,8 @@ template <typename S> struct IdentityMPO : MPO<S> {
             else
                 pmat = make_shared<SymbolicMatrix<S>>(1, 1);
             (*pmat)[{0, 0}] = i_op;
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop =
@@ -425,38 +429,39 @@ template <typename S> struct IdentityMPO : MPO<S> {
 };
 
 // MPO of single site operator
-template <typename S> struct SiteMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    using MPO<S>::site_op_infos;
+template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::site_op_infos;
     // build site operator op at site k
-    SiteMPO(const shared_ptr<Hamiltonian<S>> &hamil,
-            const shared_ptr<OpElement<S>> &op, int k = -1)
-        : MPO<S>(hamil->n_sites) {
-        shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+    SiteMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+            const shared_ptr<OpElement<S, FL>> &op, int k = -1)
+        : MPO<S, FL>(hamil->n_sites) {
+        shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        MPO<S>::op = op;
-        MPO<S>::const_e = 0.0;
+        MPO<S, FL>::op = op;
+        MPO<S, FL>::const_e = 0.0;
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
         if (k == -1) {
             assert(op->site_index.size() >= 1);
             k = op->site_index[0];
         }
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         for (uint16_t pm = 0; pm < n_sites; pm++) {
             uint16_t m = pm + n_orbs_big_left - 1;
             // site tensor
@@ -468,8 +473,8 @@ template <typename S> struct SiteMPO : MPO<S> {
             else
                 pmat = make_shared<SymbolicMatrix<S>>(1, 1);
             (*pmat)[{0, 0}] = m == k ? op : i_op;
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop =
@@ -488,38 +493,39 @@ template <typename S> struct SiteMPO : MPO<S> {
 };
 
 // sum of MPO of single site operators
-template <typename S> struct LocalMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    using MPO<S>::site_op_infos;
-    LocalMPO(const shared_ptr<Hamiltonian<S>> &hamil,
-             const vector<shared_ptr<OpElement<S>>> &ops)
-        : MPO<S>(hamil->n_sites) {
-        shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpElement<S>> h_op = make_shared<OpElement<S>>(
+template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::site_op_infos;
+    LocalMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+             const vector<shared_ptr<OpElement<S, FL>>> &ops)
+        : MPO<S, FL>(hamil->n_sites) {
+        shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> h_op = make_shared<OpElement<S, FL>>(
             ops[0]->name, SiteIndex(), ops[0]->q_label);
         uint16_t n_sites = hamil->n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
-        MPO<S>::op = h_op;
+        MPO<S, FL>::op = h_op;
         assert((uint16_t)ops.size() == n_sites);
         for (auto op : ops)
             assert(op->q_label == ops[0]->q_label);
-        MPO<S>::const_e = 0.0;
+        MPO<S, FL>::const_e = 0.0;
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         // FIXME: need special name for the sum operators
         shared_ptr<OpExpr<S>> f_op =
             n_orbs_big_left == 1
@@ -549,8 +555,8 @@ template <typename S> struct LocalMPO : MPO<S> {
                 (*pmat)[{1, 0}] = ops[m];
                 (*pmat)[{1, 1}] = i_op;
             }
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop;
@@ -587,26 +593,28 @@ template <typename S> struct LocalMPO : MPO<S> {
 //               and CN scheme after middle site
 enum QCTypes : uint8_t { NC = 1, CN = 2, Conventional = 4 };
 
-template <typename, typename = void> struct MPOQC;
+template <typename, typename, typename = void> struct MPOQC;
 
 // Quantum chemistry MPO (non-spin-adapted)
-template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
+template <typename S, typename FL>
+struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
     QCTypes mode;
     const bool symmetrized_p = true;
-    MPOQC(const shared_ptr<HamiltonianQC<S>> &hamil, QCTypes mode = QCTypes::NC,
-          int trans_center = -1, bool symmetrized_p = true)
-        : MPO<S>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
-        shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+    MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+          QCTypes mode = QCTypes::NC, int trans_center = -1,
+          bool symmetrized_p = true)
+        : MPO<S, FL>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+        shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
+            OpNames::H, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
@@ -655,13 +663,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs][4];
         shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs][4];
 #endif
-        MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
-        MPO<S>::const_e = hamil->e();
+        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         uint16_t trans_l = -1, trans_r = n_sites;
         if (trans_center == -1)
             trans_center = n_sites >> 1;
@@ -673,28 +682,28 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_orbs; m++)
             for (uint8_t s = 0; s < 2; s++) {
-                c_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] = make_shared<OpElement<S>>(
+                c_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::C, SiteIndex({m}, {s}),
+                    S(1, sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::D, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
-                mc_op[m][s] = make_shared<OpElement<S>>(
+                mc_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::C, SiteIndex({m}, {s}),
                     S(1, sz[s], hamil->orb_sym[m]), -1.0);
-                md_op[m][s] = make_shared<OpElement<S>>(
+                md_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::D, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])), -1.0);
-                rd_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::RD, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil->orb_sym[m]));
-                r_op[m][s] = make_shared<OpElement<S>>(
+                rd_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::RD, SiteIndex({m}, {s}),
+                    S(1, sz[s], hamil->orb_sym[m]));
+                r_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::R, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
-                mrd_op[m][s] = make_shared<OpElement<S>>(
+                mrd_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::RD, SiteIndex({m}, {s}),
                     S(1, sz[s], hamil->orb_sym[m]), -1.0);
-                mr_op[m][s] = make_shared<OpElement<S>>(
+                mr_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::R, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])), -1.0);
             }
@@ -703,30 +712,30 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
-                    a_op[i][j][s] = make_shared<OpElement<S>>(
+                    a_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s],
                           S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
-                    ad_op[i][j][s] = make_shared<OpElement<S>>(
+                    ad_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::AD, sidx,
                         S(-2, -sz_plus[s],
                           S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    b_op[i][j][s] = make_shared<OpElement<S>>(
+                    b_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
                           S::pg_mul(hamil->orb_sym[i],
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    p_op[i][j][s] = make_shared<OpElement<S>>(
+                    p_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
                           S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    pd_op[i][j][s] = make_shared<OpElement<S>>(
+                    pd_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::PD, sidx,
                         S(2, sz_plus[s],
                           S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
-                    q_op[i][j][s] = make_shared<OpElement<S>>(
+                    q_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
                           S::pg_inv(S::pg_mul(hamil->orb_sym[i],
@@ -739,7 +748,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         this->right_operator_names.resize(n_sites, nullptr);
         this->tensors.resize(n_sites, nullptr);
         for (uint16_t m = 0; m < n_sites; m++)
-            this->tensors[m] = make_shared<OperatorTensor<S>>();
+            this->tensors[m] = make_shared<OperatorTensor<S, FL>>();
         int ntg = threading->activate_global();
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
@@ -957,8 +966,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint8_t sp = 0; sp < 2; sp++)
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
-                                            double f =
-                                                hamil->v(s, sp, j, i, l, m);
+                                            FL f = hamil->v(s, sp, j, i, l, m);
                                             mat[{pa[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] =
                                                 f * d_op[m][sp];
@@ -967,11 +975,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint8_t sp = 0; sp < 2; sp++)
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
-                                            double f0 = 0.5 * hamil->v(s, sp, j,
-                                                                       i, l, m),
-                                                   f1 =
-                                                       -0.5 * hamil->v(s, sp, l,
-                                                                       i, j, m);
+                                            FL f0 = 0.5 *
+                                                    hamil->v(s, sp, j, i, l, m),
+                                               f1 = -0.5 *
+                                                    hamil->v(s, sp, l, i, j, m);
                                             mat[{pa[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] +=
                                                 f0 * d_op[m][sp];
@@ -982,14 +989,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = 0; k < m; k++)
                                     for (uint16_t l = 0; l < m; l++) {
-                                        double f = hamil->v(s, sp, m, i, l, k);
+                                        FL f = hamil->v(s, sp, m, i, l, k);
                                         mat[{pb[sp | (sp << 1)] + l * m + k,
                                              p + i - (m + 1)}] = f * c_op[m][s];
                                     }
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = 0; j < m; j++)
                                     for (uint16_t k = 0; k < m; k++) {
-                                        double f =
+                                        FL f =
                                             -1.0 * hamil->v(s, sp, j, i, m, k);
                                         mat[{pb[s | (sp << 1)] + j * m + k,
                                              p + i - (m + 1)}] +=
@@ -1014,8 +1021,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint8_t sp = 0; sp < 2; sp++)
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
-                                            double f = -1.0 * hamil->v(s, sp, i,
-                                                                       j, m, l);
+                                            FL f = -1.0 *
+                                                   hamil->v(s, sp, i, j, m, l);
                                             mat[{pad[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] =
                                                 f * c_op[m][sp];
@@ -1024,11 +1031,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                 for (uint8_t sp = 0; sp < 2; sp++)
                                     for (uint16_t j = 0; j < m; j++)
                                         for (uint16_t l = 0; l < m; l++) {
-                                            double f0 =
-                                                       -0.5 * hamil->v(s, sp, i,
-                                                                       j, m, l),
-                                                   f1 = 0.5 * hamil->v(s, sp, i,
-                                                                       l, m, j);
+                                            FL f0 = -0.5 *
+                                                    hamil->v(s, sp, i, j, m, l),
+                                               f1 = 0.5 *
+                                                    hamil->v(s, sp, i, l, m, j);
                                             mat[{pad[s | (sp << 1)] + j * m + l,
                                                  p + i - (m + 1)}] +=
                                                 f0 * c_op[m][sp];
@@ -1039,7 +1045,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = 0; k < m; k++)
                                     for (uint16_t l = 0; l < m; l++) {
-                                        double f =
+                                        FL f =
                                             -1.0 * hamil->v(s, sp, i, m, k, l);
                                         mat[{pb[sp | (sp << 1)] + k * m + l,
                                              p + i - (m + 1)}] = f * d_op[m][s];
@@ -1047,8 +1053,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = 0; j < m; j++)
                                     for (uint16_t k = 0; k < m; k++) {
-                                        double f = (-1.0) * (-1.0) *
-                                                   hamil->v(s, sp, i, j, k, m);
+                                        FL f = (-1.0) * (-1.0) *
+                                               hamil->v(s, sp, i, j, k, m);
                                         mat[{pb[sp | (s << 1)] + k * m + j,
                                              p + i - (m + 1)}] =
                                             f * d_op[m][sp];
@@ -1206,8 +1212,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = m + 1; j < n_orbs; j++)
                                         for (uint16_t l = m + 1; l < n_orbs;
                                              l++) {
-                                            double f =
-                                                hamil->v(s, sp, i, j, m, l);
+                                            FL f = hamil->v(s, sp, i, j, m, l);
                                             mat[{p + i, pad[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] =
@@ -1218,11 +1223,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = m + 1; j < n_orbs; j++)
                                         for (uint16_t l = m + 1; l < n_orbs;
                                              l++) {
-                                            double f0 = 0.5 * hamil->v(s, sp, i,
-                                                                       j, m, l);
-                                            double f1 =
-                                                -0.5 *
-                                                hamil->v(s, sp, i, l, m, j);
+                                            FL f0 = 0.5 *
+                                                    hamil->v(s, sp, i, j, m, l);
+                                            FL f1 = -0.5 *
+                                                    hamil->v(s, sp, i, l, m, j);
                                             mat[{p + i, pad[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] +=
@@ -1235,7 +1239,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = m + 1; k < n_orbs; k++)
                                     for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                        double f = hamil->v(s, sp, i, m, k, l);
+                                        FL f = hamil->v(s, sp, i, m, k, l);
                                         mat[{p + i, pb[sp | (sp << 1)] +
                                                         (k - m - 1) * mm + l -
                                                         m - 1}] =
@@ -1244,8 +1248,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = m + 1; j < n_orbs; j++)
                                     for (uint16_t k = m + 1; k < n_orbs; k++) {
-                                        double f = (-1.0) *
-                                                   hamil->v(s, sp, i, j, k, m);
+                                        FL f = (-1.0) *
+                                               hamil->v(s, sp, i, j, k, m);
                                         mat[{p + i, pb[sp | (s << 1)] +
                                                         (k - m - 1) * mm + j -
                                                         m - 1}] =
@@ -1271,8 +1275,8 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = m + 1; j < n_orbs; j++)
                                         for (uint16_t l = m + 1; l < n_orbs;
                                              l++) {
-                                            double f = -1.0 * hamil->v(s, sp, j,
-                                                                       i, l, m);
+                                            FL f = -1.0 *
+                                                   hamil->v(s, sp, j, i, l, m);
                                             mat[{p + i, pa[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] =
@@ -1283,11 +1287,10 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                                     for (uint16_t j = m + 1; j < n_orbs; j++)
                                         for (uint16_t l = m + 1; l < n_orbs;
                                              l++) {
-                                            double f0 =
-                                                -0.5 *
-                                                hamil->v(s, sp, j, i, l, m);
-                                            double f1 = 0.5 * hamil->v(s, sp, l,
-                                                                       i, j, m);
+                                            FL f0 = -0.5 *
+                                                    hamil->v(s, sp, j, i, l, m);
+                                            FL f1 = 0.5 *
+                                                    hamil->v(s, sp, l, i, j, m);
                                             mat[{p + i, pa[s | (sp << 1)] +
                                                             (j - m - 1) * mm +
                                                             l - m - 1}] +=
@@ -1300,7 +1303,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t k = m + 1; k < n_orbs; k++)
                                     for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                        double f =
+                                        FL f =
                                             -1.0 * hamil->v(s, sp, m, i, l, k);
                                         mat[{p + i, pb[sp | (sp << 1)] +
                                                         (l - m - 1) * mm + k -
@@ -1310,7 +1313,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                             for (uint8_t sp = 0; sp < 2; sp++)
                                 for (uint16_t j = m + 1; j < n_orbs; j++)
                                     for (uint16_t k = m + 1; k < n_orbs; k++) {
-                                        double f = hamil->v(s, sp, j, i, m, k);
+                                        FL f = hamil->v(s, sp, j, i, m, k);
                                         mat[{p + i, pb[s | (sp << 1)] +
                                                         (j - m - 1) * mm + k -
                                                         m - 1}] =
@@ -1395,7 +1398,7 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 assert(false);
                 break;
             }
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[pm];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
             if (mode != QCTypes::Conventional ||
                 !(pm == trans_l + 1 && pm == trans_r - 1))
                 opt->lmat = opt->rmat = pmat;
@@ -1578,16 +1581,16 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
         if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[0];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
             hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
         }
         if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[n_sites - 1];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
             hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
@@ -1595,20 +1598,20 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
             uint16_t m, pm;
-            MPO<S>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
             // left transform
             pm = trans_l;
             m = pm + n_orbs_big_left - 1;
             int new_rshape =
                 2 + 4 * n_orbs + 12 * (n_orbs - m - 1) * (n_orbs - m - 1);
-            MPO<S>::schemer->left_new_operator_names =
+            MPO<S, FL>::schemer->left_new_operator_names =
                 make_shared<SymbolicRowVector<S>>(new_rshape);
-            MPO<S>::schemer->left_new_operator_exprs =
+            MPO<S, FL>::schemer->left_new_operator_exprs =
                 make_shared<SymbolicRowVector<S>>(new_rshape);
             SymbolicRowVector<S> &lop =
-                *MPO<S>::schemer->left_new_operator_names;
+                *MPO<S, FL>::schemer->left_new_operator_names;
             SymbolicRowVector<S> &lexpr =
-                *MPO<S>::schemer->left_new_operator_exprs;
+                *MPO<S, FL>::schemer->left_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * n_orbs; i++)
                 lop[i] = this->left_operator_names[pm]->data[i];
 #ifdef _MSC_VER
@@ -1670,14 +1673,14 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
             pm = trans_r - 1;
             m = pm + n_orbs_big_left - 1;
             int new_lshape = 2 + 4 * n_orbs + 12 * (m + 1) * (m + 1);
-            MPO<S>::schemer->right_new_operator_names =
+            MPO<S, FL>::schemer->right_new_operator_names =
                 make_shared<SymbolicColumnVector<S>>(new_lshape);
-            MPO<S>::schemer->right_new_operator_exprs =
+            MPO<S, FL>::schemer->right_new_operator_exprs =
                 make_shared<SymbolicColumnVector<S>>(new_lshape);
             SymbolicColumnVector<S> &rop =
-                *MPO<S>::schemer->right_new_operator_names;
+                *MPO<S, FL>::schemer->right_new_operator_names;
             SymbolicColumnVector<S> &rexpr =
-                *MPO<S>::schemer->right_new_operator_exprs;
+                *MPO<S, FL>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 4 * n_orbs; i++)
                 rop[i] = this->right_operator_names[pm + 1]->data[i];
 #ifdef _MSC_VER
@@ -1744,22 +1747,23 @@ template <typename S> struct MPOQC<S, typename S::is_sz_t> : MPO<S> {
 };
 
 // Quantum chemistry MPO (spin-adapted)
-template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
+template <typename S, typename FL>
+struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     QCTypes mode;
-    MPOQC(const shared_ptr<HamiltonianQC<S>> &hamil, QCTypes mode = QCTypes::NC,
-          int trans_center = -1)
-        : MPO<S>(hamil->n_sites), mode(mode) {
-        shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+    MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+          QCTypes mode = QCTypes::NC, int trans_center = -1)
+        : MPO<S, FL>(hamil->n_sites), mode(mode) {
+        shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
+            OpNames::H, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
         if (hamil->opf != nullptr &&
             hamil->opf->get_type() == SparseMatrixTypes::CSR) {
             if (hamil->get_n_orbs_left() > 0)
-                MPO<S>::sparse_form[0] = 'S';
+                MPO<S, FL>::sparse_form[0] = 'S';
             if (hamil->get_n_orbs_right() > 0)
-                MPO<S>::sparse_form[n_sites - 1] = 'S';
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
@@ -1798,13 +1802,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs][2];
         shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs][2];
 #endif
-        MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
-        MPO<S>::const_e = hamil->e();
+        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         uint16_t trans_l = -1, trans_r = n_sites;
         if (trans_center == -1)
             trans_center = n_sites >> 1;
@@ -1813,49 +1818,49 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         else if (mode == QCTypes::Conventional)
             trans_l = trans_center - 1, trans_r = trans_center + 1;
         for (uint16_t m = 0; m < n_orbs; m++) {
-            c_op[m] = make_shared<OpElement<S>>(OpNames::C, SiteIndex(m),
-                                                S(1, 1, hamil->orb_sym[m]));
-            d_op[m] = make_shared<OpElement<S>>(
+            c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
+                                                    S(1, 1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S, FL>>(
                 OpNames::D, SiteIndex(m),
                 S(-1, 1, S::pg_inv(hamil->orb_sym[m])));
-            mc_op[m] = make_shared<OpElement<S>>(
+            mc_op[m] = make_shared<OpElement<S, FL>>(
                 OpNames::C, SiteIndex(m), S(1, 1, hamil->orb_sym[m]), -1.0);
-            md_op[m] = make_shared<OpElement<S>>(
+            md_op[m] = make_shared<OpElement<S, FL>>(
                 OpNames::D, SiteIndex(m),
                 S(-1, 1, S::pg_inv(hamil->orb_sym[m])), -1.0);
-            trd_op[m] = make_shared<OpElement<S>>(
+            trd_op[m] = make_shared<OpElement<S, FL>>(
                 OpNames::RD, SiteIndex(m), S(1, 1, hamil->orb_sym[m]), 2.0);
-            tr_op[m] = make_shared<OpElement<S>>(
+            tr_op[m] = make_shared<OpElement<S, FL>>(
                 OpNames::R, SiteIndex(m),
                 S(-1, 1, S::pg_inv(hamil->orb_sym[m])), 2.0);
         }
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++)
                 for (uint8_t s = 0; s < 2; s++) {
-                    a_op[i][j][s] = make_shared<OpElement<S>>(
+                    a_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::A, SiteIndex(i, j, s),
                         S(2, s * 2,
                           S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
-                    ad_op[i][j][s] = make_shared<OpElement<S>>(
+                    ad_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::AD, SiteIndex(i, j, s),
                         S(-2, s * 2,
                           S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    b_op[i][j][s] = make_shared<OpElement<S>>(
+                    b_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::B, SiteIndex(i, j, s),
                         S(0, s * 2,
                           S::pg_mul(hamil->orb_sym[i],
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    p_op[i][j][s] = make_shared<OpElement<S>>(
+                    p_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::P, SiteIndex(i, j, s),
                         S(-2, s * 2,
                           S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    pd_op[i][j][s] = make_shared<OpElement<S>>(
+                    pd_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::PD, SiteIndex(i, j, s),
                         S(2, s * 2,
                           S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
-                    q_op[i][j][s] = make_shared<OpElement<S>>(
+                    q_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::Q, SiteIndex(i, j, s),
                         S(0, s * 2,
                           S::pg_inv(S::pg_mul(hamil->orb_sym[i],
@@ -1868,7 +1873,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         this->right_operator_names.resize(n_sites, nullptr);
         this->tensors.resize(n_sites, nullptr);
         for (uint16_t m = 0; m < n_sites; m++)
-            this->tensors[m] = make_shared<OperatorTensor<S>>();
+            this->tensors[m] = make_shared<OperatorTensor<S, FL>>();
         int ntg = threading->activate_global();
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
@@ -1992,7 +1997,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{p, 0}] = c_op[m];
                         p += n_orbs - m;
                     }
-                    vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                    vector<FL> su2_factor{-0.5, -0.5 * sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint16_t j = 0; j < m; j++) {
                             for (uint16_t k = 0; k < m; k++)
@@ -2051,9 +2056,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         }
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t l = 0; l < m; l++) {
-                                double f0 =
+                                FL f0 =
                                     hamil->v(j, i, l, m) + hamil->v(l, i, j, m);
-                                double f1 =
+                                FL f1 =
                                     hamil->v(j, i, l, m) - hamil->v(l, i, j, m);
                                 mat[{pa0 + j * m + l, p + i - (m + 1)}] =
                                     f0 * (-0.5) * d_op[m];
@@ -2062,14 +2067,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = 0; k < m; k++)
                             for (uint16_t l = 0; l < m; l++) {
-                                double f = 2.0 * hamil->v(m, i, l, k) -
-                                           hamil->v(l, i, m, k);
+                                FL f = 2.0 * hamil->v(m, i, l, k) -
+                                       hamil->v(l, i, m, k);
                                 mat[{pb0 + l * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
                             }
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t k = 0; k < m; k++) {
-                                double f = hamil->v(j, i, m, k) * sqrt(3);
+                                FL f = hamil->v(j, i, m, k) * sqrt(3);
                                 mat[{pb1 + j * m + k, p + i - (m + 1)}] =
                                     f * c_op[m];
                             }
@@ -2089,9 +2094,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         }
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t l = 0; l < m; l++) {
-                                double f0 =
+                                FL f0 =
                                     hamil->v(i, j, m, l) + hamil->v(i, l, m, j);
-                                double f1 =
+                                FL f1 =
                                     hamil->v(i, j, m, l) - hamil->v(i, l, m, j);
                                 mat[{pad0 + j * m + l, p + i - (m + 1)}] =
                                     f0 * (-0.5) * c_op[m];
@@ -2100,15 +2105,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = 0; k < m; k++)
                             for (uint16_t l = 0; l < m; l++) {
-                                double f = 2.0 * hamil->v(i, m, k, l) -
-                                           hamil->v(i, l, k, m);
+                                FL f = 2.0 * hamil->v(i, m, k, l) -
+                                       hamil->v(i, l, k, m);
                                 mat[{pb0 + k * m + l, p + i - (m + 1)}] =
                                     f * d_op[m];
                             }
                         for (uint16_t j = 0; j < m; j++)
                             for (uint16_t k = 0; k < m; k++) {
-                                double f =
-                                    (-1.0) * hamil->v(i, j, k, m) * sqrt(3);
+                                FL f = (-1.0) * hamil->v(i, j, k, m) * sqrt(3);
                                 mat[{pb1 + k * m + j, p + i - (m + 1)}] =
                                     f * d_op[m];
                             }
@@ -2199,7 +2203,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             mat[{1, p + j - m - 1}] = tr_op[j];
                         p += n_orbs - m - 1;
                     }
-                    vector<double> su2_factor{-0.5, -0.5 * sqrt(3)};
+                    vector<FL> su2_factor{-0.5, -0.5 * sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint16_t j = m + 1; j < n_orbs; j++) {
                             for (uint16_t k = m + 1; k < n_orbs; k++)
@@ -2245,9 +2249,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{p + i, pr + i}] = i_op;
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                double f0 =
+                                FL f0 =
                                     hamil->v(i, j, m, l) + hamil->v(i, l, m, j);
-                                double f1 =
+                                FL f1 =
                                     hamil->v(i, j, m, l) - hamil->v(i, l, m, j);
                                 mat[{p + i, pad0 + (j - m - 1) * mm + l - m -
                                                 1}] = f0 * (-0.5) * c_op[m];
@@ -2257,14 +2261,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = m + 1; k < n_orbs; k++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                double f = 2.0 * hamil->v(i, m, k, l) -
-                                           hamil->v(i, l, k, m);
+                                FL f = 2.0 * hamil->v(i, m, k, l) -
+                                       hamil->v(i, l, k, m);
                                 mat[{p + i, pb0 + (k - m - 1) * mm + l - m -
                                                 1}] = f * d_op[m];
                             }
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t k = m + 1; k < n_orbs; k++) {
-                                double f = hamil->v(i, j, k, m) * sqrt(3);
+                                FL f = hamil->v(i, j, k, m) * sqrt(3);
                                 mat[{p + i, pb1 + (k - m - 1) * mm + j - m -
                                                 1}] = f * d_op[m];
                             }
@@ -2284,9 +2288,9 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                         mat[{p + i, prd + i}] = i_op;
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                double f0 =
+                                FL f0 =
                                     hamil->v(j, i, l, m) + hamil->v(l, i, j, m);
-                                double f1 =
+                                FL f1 =
                                     hamil->v(j, i, l, m) - hamil->v(l, i, j, m);
                                 mat[{p + i, pa0 + (j - m - 1) * mm + l - m -
                                                 1}] = f0 * (-0.5) * d_op[m];
@@ -2296,15 +2300,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             }
                         for (uint16_t k = m + 1; k < n_orbs; k++)
                             for (uint16_t l = m + 1; l < n_orbs; l++) {
-                                double f = 2.0 * hamil->v(m, i, l, k) -
-                                           hamil->v(l, i, m, k);
+                                FL f = 2.0 * hamil->v(m, i, l, k) -
+                                       hamil->v(l, i, m, k);
                                 mat[{p + i, pb0 + (l - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }
                         for (uint16_t j = m + 1; j < n_orbs; j++)
                             for (uint16_t k = m + 1; k < n_orbs; k++) {
-                                double f =
-                                    (-1.0) * hamil->v(j, i, m, k) * sqrt(3);
+                                FL f = (-1.0) * hamil->v(j, i, m, k) * sqrt(3);
                                 mat[{p + i, pb1 + (j - m - 1) * mm + k - m -
                                                 1}] = f * c_op[m];
                             }
@@ -2381,7 +2384,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 assert(false);
                 break;
             }
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[pm];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
             if (mode != QCTypes::Conventional ||
                 !(pm == trans_l + 1 && pm == trans_r - 1))
                 opt->lmat = opt->rmat = pmat;
@@ -2413,7 +2416,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     for (uint16_t j = m + 1; j < n_orbs; j++)
                         lop[p + j - (m + 1)] = tr_op[j];
                     p += n_orbs - (m + 1);
-                    vector<double> su2_factor;
+                    vector<FL> su2_factor;
                     switch (effective_mode) {
                     case QCTypes::NC:
                         for (uint8_t s = 0; s < 2; s++)
@@ -2493,7 +2496,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     for (uint16_t j = m; j < n_orbs; j++)
                         rop[p + j - m] = c_op[j];
                     p += n_orbs - m;
-                    vector<double> su2_factor;
+                    vector<FL> su2_factor;
                     switch (effective_mode) {
                     case QCTypes::NC:
                         su2_factor = {-0.5, -0.5 * sqrt(3)};
@@ -2557,16 +2560,16 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[m];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
         if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[0];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
             hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
         }
         if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
-            shared_ptr<OperatorTensor<S>> opt = this->tensors[n_sites - 1];
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
             hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
         }
@@ -2574,24 +2577,24 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
             mode == QCTypes::Conventional) {
             uint16_t m, pm;
-            MPO<S>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
             // left transform
             pm = trans_l;
             m = pm + n_orbs_big_left - 1;
             int new_rshape =
                 2 + 2 * n_orbs + 6 * (n_orbs - m - 1) * (n_orbs - m - 1);
-            MPO<S>::schemer->left_new_operator_names =
+            MPO<S, FL>::schemer->left_new_operator_names =
                 make_shared<SymbolicRowVector<S>>(new_rshape);
-            MPO<S>::schemer->left_new_operator_exprs =
+            MPO<S, FL>::schemer->left_new_operator_exprs =
                 make_shared<SymbolicRowVector<S>>(new_rshape);
             SymbolicRowVector<S> &lop =
-                *MPO<S>::schemer->left_new_operator_names;
+                *MPO<S, FL>::schemer->left_new_operator_names;
             SymbolicRowVector<S> &lexpr =
-                *MPO<S>::schemer->left_new_operator_exprs;
+                *MPO<S, FL>::schemer->left_new_operator_exprs;
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 lop[i] = this->left_operator_names[pm]->data[i];
-            const vector<double> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
-            const vector<double> su2_factor_q = {1.0, sqrt(3)};
+            const vector<FL> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
+            const vector<FL> su2_factor_q = {1.0, sqrt(3)};
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
             for (int sj = 0; sj < (int)(2 * (n_orbs - (m + 1))); sj++) {
@@ -2614,7 +2617,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     ad_op[g][h][s]);
                     lop[p] = su2_factor_p[s] * p_op[j][k][s];
                     lexpr[p] = sum(exprs);
@@ -2625,7 +2628,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     a_op[g][h][s]);
                     lop[p] = su2_factor_p[s] * pd_op[j][k][s];
                     lexpr[p] = sum(exprs);
@@ -2634,12 +2637,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     if (s == 0) {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
-                                if (abs(2 * hamil->v(j, k, g, h) -
+                                if (abs(2.0 * hamil->v(j, k, g, h) -
                                         hamil->v(j, h, g, k)) > TINY)
-                                    exprs.push_back((su2_factor_q[0] *
-                                                     (2 * hamil->v(j, k, g, h) -
-                                                      hamil->v(j, h, g, k))) *
-                                                    b_op[g][h][0]);
+                                    exprs.push_back(
+                                        (su2_factor_q[0] *
+                                         (2.0 * hamil->v(j, k, g, h) -
+                                          hamil->v(j, h, g, k))) *
+                                        b_op[g][h][0]);
                     } else {
                         for (uint16_t g = 0; g < m + 1; g++)
                             for (uint16_t h = 0; h < m + 1; h++)
@@ -2656,14 +2660,14 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
             pm = trans_r - 1;
             m = pm + n_orbs_big_left - 1;
             int new_lshape = 2 + 2 * n_orbs + 6 * (m + 1) * (m + 1);
-            MPO<S>::schemer->right_new_operator_names =
+            MPO<S, FL>::schemer->right_new_operator_names =
                 make_shared<SymbolicColumnVector<S>>(new_lshape);
-            MPO<S>::schemer->right_new_operator_exprs =
+            MPO<S, FL>::schemer->right_new_operator_exprs =
                 make_shared<SymbolicColumnVector<S>>(new_lshape);
             SymbolicColumnVector<S> &rop =
-                *MPO<S>::schemer->right_new_operator_names;
+                *MPO<S, FL>::schemer->right_new_operator_names;
             SymbolicColumnVector<S> &rexpr =
-                *MPO<S>::schemer->right_new_operator_exprs;
+                *MPO<S, FL>::schemer->right_new_operator_exprs;
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 rop[i] = this->right_operator_names[pm + 1]->data[i];
 #ifdef _MSC_VER
@@ -2687,7 +2691,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     ad_op[g][h][s]);
                     rop[p] = su2_factor_p[s] * p_op[j][k][s];
                     rexpr[p] = sum(exprs);
@@ -2698,7 +2702,7 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                             if (abs(hamil->v(j, g, k, h)) > TINY)
                                 exprs.push_back(
                                     (su2_factor_p[s] * hamil->v(j, g, k, h) *
-                                     (s ? -1 : 1)) *
+                                     (s ? -1.0 : 1.0)) *
                                     a_op[g][h][s]);
                     rop[p] = su2_factor_p[s] * pd_op[j][k][s];
                     rexpr[p] = sum(exprs);
@@ -2707,12 +2711,13 @@ template <typename S> struct MPOQC<S, typename S::is_su2_t> : MPO<S> {
                     if (s == 0) {
                         for (uint16_t g = m + 1; g < n_orbs; g++)
                             for (uint16_t h = m + 1; h < n_orbs; h++)
-                                if (abs(2 * hamil->v(j, k, g, h) -
+                                if (abs(2.0 * hamil->v(j, k, g, h) -
                                         hamil->v(j, h, g, k)) > TINY)
-                                    exprs.push_back((su2_factor_q[0] *
-                                                     (2 * hamil->v(j, k, g, h) -
-                                                      hamil->v(j, h, g, k))) *
-                                                    b_op[g][h][0]);
+                                    exprs.push_back(
+                                        (su2_factor_q[0] *
+                                         (2.0 * hamil->v(j, k, g, h) -
+                                          hamil->v(j, h, g, k))) *
+                                        b_op[g][h][0]);
                     } else {
                         for (uint16_t g = m + 1; g < n_orbs; g++)
                             for (uint16_t h = m + 1; h < n_orbs; h++)

@@ -29,7 +29,7 @@ from block2 import init_memory, release_memory, SiteIndex
 from block2 import VectorUInt8, PointGroup, FCIDUMP, QCTypes, SeqTypes, OpNames, Random
 from block2 import VectorUBond, VectorDouble, NoiseTypes, DecompositionTypes, EquationTypes
 from block2 import OrbitalOrdering, VectorUInt16
-from block2 import LinearSolverTypes, PreconditionerTypes
+from block2 import LinearSolverTypes
 
 import time
 
@@ -96,8 +96,8 @@ class GFDMRG(FTDMRG):
                         max_solver_iter_off_diag=0,
                         occs=None, bias=1.0, mo_coeff=None,
                         solver_type = LinearSolverTypes.LSQR,
-                        preconditioner_type = PreconditionerTypes.Nothing,
-                        gcrotmk_size = (80,-1),
+                        use_preconditioner=False,
+                        linear_solver_params = (80,-1),
                         callback=lambda i,j,w,gf:None) -> np.ndarray:
         """ Solve for the Green's function.
         GF_ij(omega + i eta) = <psi0| V_i' inv(H - E0 + omega + i eta) V_j |psi0>
@@ -130,8 +130,8 @@ class GFDMRG(FTDMRG):
         :param mo_coeff: MPO is in MO basis but GF should be computed in AO basis
         :param solver_type: Linear solver type. Supported: GCROT; IDRS; LSQR
                 LSQR is most robust
-        :param preconditioner_type: Preconditioner for solver. No one or diagonal. No one is most robust.
-        :param gcrotmk_size: Sizes for either GCROT(M,K) or for IDR(S) (first entry; 2nd will be ignored)
+        :param use_preconditioner: Preconditioner for solver. No one or diagonal. No one is most robust.
+        :param linear_solver_params: Sizes for either GCROT(M,K) or for IDR(S) (first entry; 2nd will be ignored)
             Will be ignored for LSQR.
         :param callback: Callback function after each GF computation.
                         Called as callback(i,j,w,GF_ij(omega))
@@ -347,16 +347,16 @@ class GFDMRG(FTDMRG):
             linear = Linear(lme, rme, VectorUBond(bond_dims),
                             VectorUBond(cps_bond_dims[-1:]), VectorDouble(noises))
             linear.gf_eta = eta
-            linear.minres_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
+            linear.linear_conv_thrds = VectorDouble([solver_tol] * n_sweeps)
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
-            linear.gcrotmk_size = gcrotmk_size
+            linear.linear_solver_params = linear_solver_params
             linear.solver_type = solver_type
-            linear.preconditioner_type = preconditioner_type
+            linear.linear_use_precondition = use_preconditioner
 
 
             # TZ: Not raising error even if CG is not converged
-            linear.minres_soft_max_iter = max_solver_iter
-            linear.minres_max_iter = max_solver_iter + 1000
+            linear.linear_soft_max_iter = max_solver_iter
+            linear.linear_max_iter = max_solver_iter + 1000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -369,7 +369,7 @@ class GFDMRG(FTDMRG):
                 t = time.perf_counter()
 
                 linear.tme = None
-                linear.minres_soft_max_iter = max_solver_iter
+                linear.linear_soft_max_iter = max_solver_iter
                 linear.noises = VectorDouble(noises)
                 linear.bra_bond_dims = VectorUBond(bond_dims)
                 linear.gf_omega = w
@@ -423,7 +423,7 @@ class GFDMRG(FTDMRG):
                             linear.solve(1, mps.center != 0, 0)
                             rgf, igf = linear.targets[-1]
                         else:
-                            linear.minres_soft_max_iter = max_solver_iter_off_diag if \
+                            linear.linear_soft_max_iter = max_solver_iter_off_diag if \
                                 max_solver_iter_off_diag != -1 else max_solver_iter
                             linear.solve(1, mps.center == 0, 0)
                             if mps.center == 0:

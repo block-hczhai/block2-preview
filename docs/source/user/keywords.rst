@@ -208,6 +208,11 @@ big\_site
     If this keyword is not given, the dynamic correlation calculation will be performed with normal MPS
     with no big sites.
 
+expt\_algo\_type
+    Optional. Followed by a string ``auto``, ``fast``, or ``lowmem``. Default is ``auto``.
+    This keyword can only be used with density matrix or transition density matrix calculations.
+    The default is ``auto``. ``lowmem`` uses less memory, but the complexity can be higher.
+
 Uncontracted Dynamic Correlation
 --------------------------------
 

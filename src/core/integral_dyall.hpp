@@ -27,14 +27,21 @@ using namespace std;
 
 namespace block2 {
 
-struct DyallFCIDUMP : FCIDUMP {
+struct DyallFCIDUMP : FCIDUMP<double> {
+    using FCIDUMP<double>::params;
+    using FCIDUMP<double>::data;
+    using FCIDUMP<double>::uhf;
+    using FCIDUMP<double>::n_sites;
+    using FCIDUMP<double>::vs;
+    using FCIDUMP<double>::vgs;
+    using FCIDUMP<double>::vabs;
     shared_ptr<vector<double>> vdata_fock, vdata_heff;
-    vector<TInt> fock, heff;
-    shared_ptr<FCIDUMP> fcidump;
+    vector<TInt<double>> fock, heff;
+    shared_ptr<FCIDUMP<double>> fcidump;
     uint16_t n_inactive, n_virtual, n_active;
     bool fock_uhf = false;
     double const_e_dyall;
-    DyallFCIDUMP(const shared_ptr<FCIDUMP> &fcidump, uint16_t n_inactive,
+    DyallFCIDUMP(const shared_ptr<FCIDUMP<double>> &fcidump, uint16_t n_inactive,
                  uint16_t n_virtual)
         : fcidump(fcidump), n_inactive(n_inactive), n_virtual(n_virtual),
           n_active(fcidump->n_sites() - n_inactive - n_virtual) {
@@ -64,7 +71,7 @@ struct DyallFCIDUMP : FCIDUMP {
         initialize_const();
     }
     void read(const string &filename) override {
-        shared_ptr<FCIDUMP> fd = make_shared<FCIDUMP>();
+        shared_ptr<FCIDUMP<double>> fd = make_shared<FCIDUMP<double>>();
         fd->read(filename);
         vdata_fock = fd->vdata;
         fock = fd->ts;
@@ -73,7 +80,7 @@ struct DyallFCIDUMP : FCIDUMP {
         initialize_const();
     }
     void initialize_fock_su2(MatrixRef pdm1) {
-        fock.push_back(TInt(fcidump->n_sites(), true));
+        fock.push_back(TInt<double>(fcidump->n_sites(), true));
         assert(pdm1.size() == fock[0].size());
         vdata_fock = make_shared<vector<double>>(fock[0].size());
         fock[0].data = vdata_fock->data();
@@ -89,7 +96,7 @@ struct DyallFCIDUMP : FCIDUMP {
         fock_uhf = false;
     }
     void initialize_fock_sz(MatrixRef pdm1) {
-        fock.push_back(TInt(fcidump->n_sites(), true));
+        fock.push_back(TInt<double>(fcidump->n_sites(), true));
         fock.push_back(fock[0]);
         assert(pdm1.size() == fock[0].size() * 4);
         vdata_fock =
@@ -114,7 +121,7 @@ struct DyallFCIDUMP : FCIDUMP {
         fock_uhf = true;
     }
     void initialize_fock_su2(const double *f, size_t lf) {
-        fock.push_back(TInt(fcidump->n_sites(), false));
+        fock.push_back(TInt<double>(fcidump->n_sites(), false));
         if (lf != fock[0].size())
             fock[0].general = true;
         assert(lf == fock[0].size());
@@ -125,7 +132,7 @@ struct DyallFCIDUMP : FCIDUMP {
     }
     void initialize_fock_sz(const double *fa, size_t lfa, const double *fb,
                             size_t lfb) {
-        fock.push_back(TInt(fcidump->n_sites(), false));
+        fock.push_back(TInt<double>(fcidump->n_sites(), false));
         if (lfa != fock[0].size())
             fock[0].general = true;
         fock.push_back(fock[0]);
@@ -140,7 +147,7 @@ struct DyallFCIDUMP : FCIDUMP {
     }
     void initialize_heff() {
         if (!fcidump->uhf) {
-            heff.push_back(TInt(n_active, true));
+            heff.push_back(TInt<double>(n_active, true));
             vdata_heff = make_shared<vector<double>>(heff[0].size());
             heff[0].data = vdata_heff->data();
             for (uint16_t a = 0; a < n_active; a++)
@@ -153,8 +160,8 @@ struct DyallFCIDUMP : FCIDUMP {
                     heff[0](a, b) = v;
                 }
         } else {
-            heff.push_back(TInt(n_active, true));
-            heff.push_back(TInt(n_active, true));
+            heff.push_back(TInt<double>(n_active, true));
+            heff.push_back(TInt<double>(n_active, true));
             vdata_heff =
                 make_shared<vector<double>>(heff[0].size() + heff[1].size());
             heff[0].data = vdata_heff->data();
@@ -209,8 +216,8 @@ struct DyallFCIDUMP : FCIDUMP {
                 }
         }
     }
-    shared_ptr<FCIDUMP> deep_copy() const override {
-        shared_ptr<FCIDUMP> fd = fcidump->deep_copy();
+    shared_ptr<FCIDUMP<double>> deep_copy() const override {
+        shared_ptr<FCIDUMP<double>> fd = fcidump->deep_copy();
         uint16_t n = n_sites();
         for (size_t s = 0; s < fd->ts.size(); s++) {
             fd->ts[s].clear();

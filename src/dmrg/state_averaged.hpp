@@ -155,35 +155,38 @@ template <typename S> struct MultiMPSInfo : MPSInfo<S> {
 };
 
 // Matrix Product State for multiple targets and multiple wavefunctions
-template <typename S> struct MultiMPS : MPS<S> {
-    using MPS<S>::n_sites;
-    using MPS<S>::center;
-    using MPS<S>::dot;
-    using MPS<S>::info;
-    using MPS<S>::tensors;
-    using MPS<S>::canonical_form;
-    using MPS<S>::shallow_copy_to;
+template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    static const int cpx_sz = sizeof(FL) / sizeof(FP);
+    typedef typename GMatrix<FL>::FC FC;
+    using MPS<S, FL>::n_sites;
+    using MPS<S, FL>::center;
+    using MPS<S, FL>::dot;
+    using MPS<S, FL>::info;
+    using MPS<S, FL>::tensors;
+    using MPS<S, FL>::canonical_form;
+    using MPS<S, FL>::shallow_copy_to;
     // numebr of wavefunctions
     int nroots;
     // wavefunctions
-    vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
+    vector<shared_ptr<SparseMatrixGroup<S, FL>>> wfns;
     // weights of wavefunctions
-    vector<double> weights;
-    MultiMPS(const shared_ptr<MultiMPSInfo<S>> &info) : MPS<S>(info) {}
+    vector<FP> weights;
+    MultiMPS(const shared_ptr<MultiMPSInfo<S>> &info) : MPS<S, FL>(info) {}
     MultiMPS(int n_sites, int center, int dot, int nroots)
-        : MPS<S>(n_sites, center, dot), nroots(nroots) {
+        : MPS<S, FL>(n_sites, center, dot), nroots(nroots) {
         if (center >= 0 && center < n_sites)
             for (int i = center; i < center + dot; i++)
                 canonical_form[i] = 'M';
-        weights = vector<double>(nroots, 1.0 / nroots);
+        weights = vector<FP>(nroots, 1.0 / nroots);
     }
     MPSTypes get_type() const override { return MPSTypes::MultiWfn; }
     void initialize(const shared_ptr<MPSInfo<S>> &info, bool init_left = true,
                     bool init_right = true) override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         this->info = info;
         assert(info->get_type() == MPSTypes::MultiWfn);
         shared_ptr<MultiMPSInfo<S>> minfo =
@@ -193,7 +196,7 @@ template <typename S> struct MultiMPS : MPS<S> {
         tensors.resize(n_sites);
         wfns.resize(nroots);
         if (init_left)
-            MPS<S>::initialize_left(info, center - 1);
+            MPS<S, FL>::initialize_left(info, center - 1);
         if (center >= 0 && center < n_sites && (init_left || init_right)) {
             for (size_t i = 0; i < minfo->targets.size(); i++)
                 wfn_infos[i] = make_shared<SparseMatrixInfo<S>>(i_alloc);
@@ -217,12 +220,12 @@ template <typename S> struct MultiMPS : MPS<S> {
                                              true);
             }
             for (int j = 0; j < nroots; j++) {
-                wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+                wfns[j] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
                 wfns[j]->allocate(wfn_infos);
             }
         }
         if (init_right)
-            MPS<S>::initialize_right(info, center + dot);
+            MPS<S, FL>::initialize_right(info, center + dot);
     }
     void flip_fused_form(
         int center, const shared_ptr<CG<S>> &cg,
@@ -249,7 +252,7 @@ template <typename S> struct MultiMPS : MPS<S> {
     }
     void random_canonicalize() override {
         for (int i = 0; i < n_sites; i++)
-            MPS<S>::random_canonicalize_tensor(i);
+            MPS<S, FL>::random_canonicalize_tensor(i);
         for (int j = 0; j < nroots; j++)
             wfns[j]->randomize();
     }
@@ -265,33 +268,33 @@ template <typename S> struct MultiMPS : MPS<S> {
            << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
-    shared_ptr<MPS<S>> make_single(const string &xtag) {
+    shared_ptr<MPS<S, FL>> make_single(const string &xtag) {
         shared_ptr<MultiMPSInfo<S>> minfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(info);
         assert(nroots == 1);
         shared_ptr<MPSInfo<S>> xinfo = minfo->make_single(0);
         xinfo->load_mutable();
-        shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(xinfo);
+        shared_ptr<MPS<S, FL>> xmps = make_shared<MPS<S, FL>>(xinfo);
         load_data();
         load_mutable();
         int iinfo = 0;
-        double norm = (*wfns[0])[0]->norm(), normx;
+        FP norm = (*wfns[0])[0]->norm(), normx;
         for (int i = 0; i < wfns[0]->n; i++)
             if ((normx = (*wfns[0])[i]->norm()) > norm)
                 norm = normx, iinfo = i;
         xinfo->target = minfo->targets[iinfo];
-        *xmps = *(MPS<S> *)this;
+        *xmps = *(MPS<S, FL> *)this;
         xmps->info = xinfo;
         xinfo->tag = xtag;
         xinfo->save_mutable();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         int ctr = xmps->center;
         if (xmps->tensors[ctr] != nullptr)
             for (ctr = 0; ctr < xmps->n_sites && xmps->tensors[ctr] != nullptr;)
                 ctr++;
         assert(xmps->tensors[ctr] == nullptr);
-        xmps->tensors[ctr] = make_shared<SparseMatrix<S>>(d_alloc);
+        xmps->tensors[ctr] = make_shared<SparseMatrix<S, FL>>(d_alloc);
         xmps->tensors[ctr]->allocate(wfns[0]->infos[iinfo]);
         xmps->tensors[ctr]->copy_data_from((*wfns[0])[iinfo]);
         const string rp = "CKS", og = "MJT";
@@ -306,24 +309,24 @@ template <typename S> struct MultiMPS : MPS<S> {
         return xmps;
     }
     // translate real MPS to complex MPS
-    static shared_ptr<MultiMPS<S>> make_complex(const shared_ptr<MPS<S>> &mps,
-                                                const string &xtag) {
+    static shared_ptr<MultiMPS<S, FL>>
+    make_complex(const shared_ptr<MPS<S, FL>> &mps, const string &xtag) {
         const int nroots = 2;
         shared_ptr<MultiMPSInfo<S>> xinfo =
             MultiMPSInfo<S>::from_mps_info(mps->info);
         xinfo->load_mutable();
-        shared_ptr<MultiMPS<S>> xmps = make_shared<MultiMPS<S>>(xinfo);
+        shared_ptr<MultiMPS<S, FL>> xmps = make_shared<MultiMPS<S, FL>>(xinfo);
         mps->load_data();
         mps->load_mutable();
-        *(dynamic_pointer_cast<MPS<S>>(xmps)) = *mps;
+        *(dynamic_pointer_cast<MPS<S, FL>>(xmps)) = *mps;
         xmps->info = xinfo;
         xinfo->tag = xtag;
         xinfo->save_mutable();
         xmps->nroots = nroots;
         xmps->wfns.resize(nroots);
-        xmps->weights = vector<double>(nroots, 1.0);
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        xmps->weights = vector<FP>(nroots, 1.0);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         int ctr = xmps->center;
         if (!xmps->tensors[ctr]->info->is_wavefunction)
             for (ctr = 0; ctr < xmps->n_sites &&
@@ -333,7 +336,7 @@ template <typename S> struct MultiMPS : MPS<S> {
                 ;
         assert(xmps->tensors[ctr]->info->is_wavefunction);
         for (int i = 0; i < nroots; i++) {
-            xmps->wfns[i] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            xmps->wfns[i] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
             xmps->wfns[i]->allocate(vector<shared_ptr<SparseMatrixInfo<S>>>{
                 xmps->tensors[ctr]->info});
         }
@@ -350,33 +353,33 @@ template <typename S> struct MultiMPS : MPS<S> {
         xinfo->deallocate_mutable();
         return xmps;
     }
-    void iscale(const complex<double> &d) {
-        double dre = d.real(), dim = d.imag();
+    void iscale(const FC &d) {
+        FL dre = xreal(d), dim = ximag(d);
         assert(nroots == 2);
         load_wavefunction(center);
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        MatrixRef tre(nullptr, (MKL_INT)wfns[0]->total_memory, 1);
-        MatrixRef tim(nullptr, (MKL_INT)wfns[1]->total_memory, 1);
-        tre.data = d_alloc->allocate(wfns[0]->total_memory);
-        tim.data = d_alloc->allocate(wfns[1]->total_memory);
-        MatrixRef wre(wfns[0]->data, (MKL_INT)wfns[0]->total_memory, 1);
-        MatrixRef wim(wfns[1]->data, (MKL_INT)wfns[1]->total_memory, 1);
-        MatrixFunctions::copy(tre, wre);
-        MatrixFunctions::copy(tim, wim);
-        MatrixFunctions::iscale(wre, dre);
-        MatrixFunctions::iscale(wim, dre);
-        MatrixFunctions::iadd(wre, tim, -dim);
-        MatrixFunctions::iadd(wim, tre, dim);
-        d_alloc->deallocate(tim.data, wfns[1]->total_memory);
-        d_alloc->deallocate(tre.data, wfns[0]->total_memory);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        GMatrix<FL> tre(nullptr, (MKL_INT)wfns[0]->total_memory, 1);
+        GMatrix<FL> tim(nullptr, (MKL_INT)wfns[1]->total_memory, 1);
+        tre.data = (FL *)d_alloc->allocate(wfns[0]->total_memory * cpx_sz);
+        tim.data = (FL *)d_alloc->allocate(wfns[1]->total_memory * cpx_sz);
+        GMatrix<FL> wre(wfns[0]->data, (MKL_INT)wfns[0]->total_memory, 1);
+        GMatrix<FL> wim(wfns[1]->data, (MKL_INT)wfns[1]->total_memory, 1);
+        GMatrixFunctions<FL>::copy(tre, wre);
+        GMatrixFunctions<FL>::copy(tim, wim);
+        GMatrixFunctions<FL>::iscale(wre, dre);
+        GMatrixFunctions<FL>::iscale(wim, dre);
+        GMatrixFunctions<FL>::iadd(wre, tim, -dim);
+        GMatrixFunctions<FL>::iadd(wim, tre, dim);
+        d_alloc->deallocate(tim.data, wfns[1]->total_memory * cpx_sz);
+        d_alloc->deallocate(tre.data, wfns[0]->total_memory * cpx_sz);
         save_wavefunction(center);
     }
-    shared_ptr<MultiMPS<S>> extract(int iroot, const string xtag) const {
+    shared_ptr<MultiMPS<S, FL>> extract(int iroot, const string xtag) const {
         shared_ptr<MultiMPSInfo<S>> xinfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(info->deep_copy());
         xinfo->load_mutable();
-        shared_ptr<MultiMPS<S>> xmps = make_shared<MultiMPS<S>>(xinfo);
+        shared_ptr<MultiMPS<S, FL>> xmps = make_shared<MultiMPS<S, FL>>(xinfo);
         xmps->load_data();
         xmps->load_mutable();
         xinfo->tag = xtag;
@@ -392,23 +395,23 @@ template <typename S> struct MultiMPS : MPS<S> {
         xinfo->deallocate_mutable();
         return xmps;
     }
-    void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S>> &mps) const {
+    void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S, FL>> &mps) const {
         if (frame->prefix_can_write) {
             for (int j = 0; j < nroots; j++)
                 Parsing::link_file(get_wfn_filename(j),
                                    mps->get_wfn_filename(j));
         }
     }
-    shared_ptr<MPS<S>> shallow_copy(const string &new_tag) const override {
+    shared_ptr<MPS<S, FL>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> new_info = info->shallow_copy(new_tag);
-        shared_ptr<MultiMPS<S>> mps = make_shared<MultiMPS<S>>(*this);
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<MultiMPS<S, FL>> mps = make_shared<MultiMPS<S, FL>>(*this);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < mps->n_sites; i++)
             if (mps->tensors[i] != nullptr)
-                mps->tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+                mps->tensors[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
         for (int j = 0; j < nroots; j++)
-            mps->wfns[j] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            mps->wfns[j] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
         mps->info = new_info;
         shallow_copy_to(mps);
         shallow_copy_wfn_to(mps);
@@ -427,19 +430,19 @@ template <typename S> struct MultiMPS : MPS<S> {
         }
     }
     void load_data() override {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MultiMPS::load_data on '" + get_filename(-1) +
                                 "' failed.");
-        MPS<S>::load_data_from(ifs);
+        MPS<S, FL>::load_data_from(ifs);
         ifs.read((char *)&nroots, sizeof(nroots));
         weights.resize(nroots);
         wfns.resize(nroots);
-        ifs.read((char *)&weights[0], sizeof(double) * nroots);
+        ifs.read((char *)&weights[0], sizeof(FP) * nroots);
         for (int i = 0; i < nroots; i++)
-            wfns[i] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            wfns[i] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MultiMPS::load_data on '" + get_filename(-1) +
                                 "' failed.");
@@ -454,10 +457,10 @@ template <typename S> struct MultiMPS : MPS<S> {
             if (!ofs.good())
                 throw runtime_error("MultiMPS::save_data on '" +
                                     get_filename(-1) + "' failed.");
-            MPS<S>::save_data_to(ofs);
+            MPS<S, FL>::save_data_to(ofs);
             ofs.write((char *)&nroots, sizeof(nroots));
             assert(weights.size() == nroots);
-            ofs.write((char *)&weights[0], sizeof(double) * nroots);
+            ofs.write((char *)&weights[0], sizeof(FP) * nroots);
             if (!ofs.good())
                 throw runtime_error("MultiMPS::save_data on '" +
                                     get_filename(-1) + "' failed.");

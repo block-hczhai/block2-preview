@@ -36,21 +36,22 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct SumMPOQC;
+template <typename, typename, typename = void> struct SumMPOQC;
 
 // Quantum chemistry MPO (non-spin-adapted)
-template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
-    using MPO<S>::n_sites;
+template <typename S, typename FL>
+struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
     vector<uint16_t> ts;
-    SumMPOQC(const shared_ptr<HamiltonianQC<S>> &hamil,
+    SumMPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
              const vector<uint16_t> &pts)
-        : MPO<S>(hamil->n_sites), ts(pts) {
+        : MPO<S, FL>(hamil->n_sites), ts(pts) {
         assert(ts.size() > 0);
         sort(ts.begin(), ts.end());
-        shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
+            OpNames::H, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
         vector<vector<shared_ptr<OpExpr<S>>>> c_op(
             hamil->n_sites, vector<shared_ptr<OpExpr<S>>>(2)),
@@ -82,50 +83,51 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
         shared_ptr<OpExpr<S>> p_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> q_op[n_sites][n_sites][4];
 #endif
-        MPO<S>::op = dynamic_pointer_cast<OpElement<S>>(h_op);
-        MPO<S>::const_e = hamil->e();
+        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
-            MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            MPO<S>::tf = make_shared<DelayedTensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 2; s++) {
-                c_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::C, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil->orb_sym[m]));
-                d_op[m][s] = make_shared<OpElement<S>>(
+                c_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::C, SiteIndex({m}, {s}),
+                    S(1, sz[s], hamil->orb_sym[m]));
+                d_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::D, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
-                tr_op[m][s] = make_shared<OpElement<S>>(
+                tr_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::TR, SiteIndex({m}, {s}),
                     S(-1, -sz[s], S::pg_inv(hamil->orb_sym[m])));
-                ts_op[m][s] =
-                    make_shared<OpElement<S>>(OpNames::TS, SiteIndex({m}, {s}),
-                                              S(1, sz[s], hamil->orb_sym[m]));
+                ts_op[m][s] = make_shared<OpElement<S, FL>>(
+                    OpNames::TS, SiteIndex({m}, {s}),
+                    S(1, sz[s], hamil->orb_sym[m]));
             }
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++) {
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
-                    a_op[i][j][s] = make_shared<OpElement<S>>(
+                    a_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s],
                           S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
-                    b_op[i][j][s] = make_shared<OpElement<S>>(
+                    b_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s],
                           S::pg_mul(hamil->orb_sym[i],
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    p_op[i][j][s] = make_shared<OpElement<S>>(
+                    p_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
                           S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
                                     S::pg_inv(hamil->orb_sym[j]))));
-                    q_op[i][j][s] = make_shared<OpElement<S>>(
+                    q_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
                           S::pg_mul(hamil->orb_sym[i],
@@ -553,8 +555,8 @@ template <typename S> struct SumMPOQC<S, typename S::is_sz_t> : MPO<S> {
                 }
                 assert(p == mat.n);
             }
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             opt->lmat = opt->rmat = pmat;
             // left operator names
             shared_ptr<SymbolicRowVector<S>> plop;

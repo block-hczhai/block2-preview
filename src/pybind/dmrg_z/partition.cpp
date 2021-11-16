@@ -18,12 +18,7 @@
  *
  */
 
-#include "../block2_dmrg.hpp"
+#include "../pybind_dmrg.hpp"
 
-template struct block2::DMRG<block2::SZK>;
-template struct block2::Linear<block2::SZK>;
-template struct block2::Expect<block2::SZK>;
-
-template struct block2::DMRG<block2::SU2K>;
-template struct block2::Linear<block2::SU2K>;
-template struct block2::Expect<block2::SU2K>;
+template void bind_fl_partition<SZ, complex<double>>(py::module &m);
+template void bind_fl_partition<SU2, complex<double>>(py::module &m);

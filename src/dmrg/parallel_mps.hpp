@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "mps.hpp"
 #include "../core/parallel_rule.hpp"
+#include "mps.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -34,41 +34,42 @@ using namespace std;
 namespace block2 {
 
 // Matrix Product State with multi canonical centers
-template <typename S> struct ParallelMPS : MPS<S> {
-    using MPS<S>::n_sites;
-    using MPS<S>::center;
-    using MPS<S>::dot;
-    using MPS<S>::info;
-    using MPS<S>::tensors;
-    using MPS<S>::canonical_form;
-    using MPS<S>::move_left;
-    using MPS<S>::move_right;
-    using MPS<S>::load_tensor;
-    using MPS<S>::save_tensor;
-    using MPS<S>::unload_tensor;
-    using MPS<S>::get_filename;
+template <typename S, typename FL> struct ParallelMPS : MPS<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using MPS<S, FL>::n_sites;
+    using MPS<S, FL>::center;
+    using MPS<S, FL>::dot;
+    using MPS<S, FL>::info;
+    using MPS<S, FL>::tensors;
+    using MPS<S, FL>::canonical_form;
+    using MPS<S, FL>::move_left;
+    using MPS<S, FL>::move_right;
+    using MPS<S, FL>::load_tensor;
+    using MPS<S, FL>::save_tensor;
+    using MPS<S, FL>::unload_tensor;
+    using MPS<S, FL>::get_filename;
     vector<int> conn_centers;
-    vector<shared_ptr<SparseMatrix<S>>> conn_matrices;
+    vector<shared_ptr<SparseMatrix<S, FL>>> conn_matrices;
     shared_ptr<ParallelRule<S>> rule;
     int ncenter = 0;
     string ref_canonical_form;
-    double svd_eps = 1E-4;
-    double svd_cutoff = 1E-12;
+    FP svd_eps = 1E-4;
+    FP svd_cutoff = 1E-12;
     ParallelMPS(const shared_ptr<MPSInfo<S>> &info,
                 const shared_ptr<ParallelRule<S>> &rule = nullptr)
-        : MPS<S>(info), rule(rule) {
+        : MPS<S, FL>(info), rule(rule) {
         n_sites = info->n_sites;
         init_para_mps();
     }
     ParallelMPS(int n_sites, int center, int dot,
                 const shared_ptr<ParallelRule<S>> &rule = nullptr)
-        : MPS<S>(n_sites, center, dot), rule(rule) {
+        : MPS<S, FL>(n_sites, center, dot), rule(rule) {
         init_para_mps();
     }
     // need to manually disable MPS writing in multi procs
-    ParallelMPS(const shared_ptr<MPS<S>> &mps,
+    ParallelMPS(const shared_ptr<MPS<S, FL>> &mps,
                 const shared_ptr<ParallelRule<S>> &rule = nullptr)
-        : MPS<S>(*mps), rule(rule) {
+        : MPS<S, FL>(*mps), rule(rule) {
         init_para_mps();
     }
     MPSTypes get_type() const override { return MPSTypes::MultiCenter; }
@@ -139,10 +140,10 @@ template <typename S> struct ParallelMPS : MPS<S> {
             load_conn_matrix(pidx);
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
-            shared_ptr<SparseMatrix<S>> rot =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<SparseMatrix<S, FL>> rot =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             shared_ptr<SparseMatrixInfo<S>> rinfo =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             rinfo->initialize_trans_contract(tensors[center - 1]->info,
@@ -159,16 +160,16 @@ template <typename S> struct ParallelMPS : MPS<S> {
             para_rule->comm->barrier();
     }
     // L|S -> K|S
-    shared_ptr<SparseMatrix<S>>
+    shared_ptr<SparseMatrix<S, FL>>
     para_split(int pidx,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int center = conn_centers[pidx];
         assert(canonical_form[center] == 'S');
         assert(canonical_form[center - 1] == 'L');
-        shared_ptr<SparseMatrix<S>> rmat;
+        shared_ptr<SparseMatrix<S, FL>> rmat;
         if (para_rule == nullptr || para_rule->is_root()) {
             load_tensor(center);
-            shared_ptr<SparseMatrix<S>> left, right;
+            shared_ptr<SparseMatrix<S, FL>> left, right;
             tensors[center]->right_split(left, right, info->bond_dim);
             conn_matrices[pidx] =
                 left->pseudo_inverse(info->bond_dim, svd_eps, svd_cutoff);
@@ -182,10 +183,10 @@ template <typename S> struct ParallelMPS : MPS<S> {
             load_tensor(center - 1);
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
-            shared_ptr<SparseMatrix<S>> wfn =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<SparseMatrix<S, FL>> wfn =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             shared_ptr<SparseMatrixInfo<S>> winfo =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             assert(!tensors[center - 1]->info->is_wavefunction);
@@ -196,22 +197,22 @@ template <typename S> struct ParallelMPS : MPS<S> {
             tensors[center - 1] = wfn;
             save_tensor(center - 1);
         } else {
-            conn_matrices[pidx] = make_shared<SparseMatrix<S>>();
+            conn_matrices[pidx] = make_shared<SparseMatrix<S, FL>>();
             canonical_form[center - 1] = 'K';
-            rmat = make_shared<SparseMatrix<S>>();
+            rmat = make_shared<SparseMatrix<S, FL>>();
         }
         if (para_rule != nullptr)
             para_rule->comm->barrier();
         return rmat;
     }
     void load_data() override {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("ParallelMPS::load_data on '" +
                                 get_filename(-1) + "' failed.");
-        MPS<S>::load_data_from(ifs);
+        MPS<S, FL>::load_data_from(ifs);
         ifs.read((char *)&ncenter, sizeof(ncenter));
         conn_centers.resize(ncenter);
         ifs.read((char *)&conn_centers[0], sizeof(int) * ncenter);
@@ -220,7 +221,7 @@ template <typename S> struct ParallelMPS : MPS<S> {
         if (has_conn != 0) {
             conn_matrices.resize(ncenter);
             for (int i = 0; i < ncenter; i++)
-                conn_matrices[i] = make_shared<SparseMatrix<S>>(d_alloc);
+                conn_matrices[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
         }
         if (ifs.fail() || ifs.bad())
             throw runtime_error("ParallelMPS::load_data on '" +
@@ -236,7 +237,7 @@ template <typename S> struct ParallelMPS : MPS<S> {
             if (!ofs.good())
                 throw runtime_error("ParallelMPS::save_data on '" +
                                     get_filename(-1) + "' failed.");
-            MPS<S>::save_data_to(ofs);
+            MPS<S, FL>::save_data_to(ofs);
             ofs.write((char *)&ncenter, sizeof(ncenter));
             ofs.write((char *)&conn_centers[0], sizeof(int) * ncenter);
             uint8_t has_conn = conn_matrices.size() != 0;
@@ -262,8 +263,8 @@ template <typename S> struct ParallelMPS : MPS<S> {
     virtual void load_conn_matrix(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(conn_matrices[i] != nullptr);
         conn_matrices[i]->alloc = d_alloc;
         conn_matrices[i]->load_data(get_conn_filename(i), true, i_alloc);

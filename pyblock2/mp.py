@@ -76,7 +76,7 @@ class MP(lib.StreamObject):
         linear.eq_type = EquationTypes.FitAddition
         linear.cutoff = 0
         linear.iprint = max(min(self.verbose - 4, 3), 0)
-        linear.minres_conv_thrds = VectorDouble([1E-20])
+        linear.linear_conv_thrds = VectorDouble([1E-20])
         linear.solve(1, True, 0)
 
         return fmps
@@ -107,7 +107,7 @@ class MP(lib.StreamObject):
         linear = Linear(lme, rme, None, VectorUBond([2000]), VectorUBond([2000]), VectorDouble([0]))
         linear.cutoff = 0
         linear.iprint = max(min(self.verbose - 4, 3), 0)
-        linear.minres_conv_thrds = VectorDouble([1E-20])
+        linear.linear_conv_thrds = VectorDouble([1E-20])
         return linear.solve(1, True, 0)
     
     def _expectation(self, mpo, bra, ket):

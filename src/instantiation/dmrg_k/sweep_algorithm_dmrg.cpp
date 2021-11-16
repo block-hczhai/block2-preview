@@ -18,8 +18,7 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_dmrg.hpp"
 
-template void bind_algorithms<SZK>(py::module &m);
-template void bind_algorithms<SU2K>(py::module &m);
-
+template struct block2::DMRG<block2::SZK, double, double>;
+template struct block2::DMRG<block2::SU2K, double, double>;

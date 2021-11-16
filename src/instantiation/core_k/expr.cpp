@@ -21,15 +21,15 @@
 #include "../block2_core.hpp"
 
 template struct block2::OpExpr<block2::SZK>;
-template struct block2::OpElement<block2::SZK>;
-template struct block2::OpElementRef<block2::SZK>;
-template struct block2::OpProduct<block2::SZK>;
-template struct block2::OpSumProd<block2::SZK>;
-template struct block2::OpSum<block2::SZK>;
+template struct block2::OpElement<block2::SZK, double>;
+template struct block2::OpElementRef<block2::SZK, double>;
+template struct block2::OpProduct<block2::SZK, double>;
+template struct block2::OpSumProd<block2::SZK, double>;
+template struct block2::OpSum<block2::SZK, double>;
 
 template struct block2::OpExpr<block2::SU2K>;
-template struct block2::OpElement<block2::SU2K>;
-template struct block2::OpElementRef<block2::SU2K>;
-template struct block2::OpProduct<block2::SU2K>;
-template struct block2::OpSumProd<block2::SU2K>;
-template struct block2::OpSum<block2::SU2K>;
+template struct block2::OpElement<block2::SU2K, double>;
+template struct block2::OpElementRef<block2::SU2K, double>;
+template struct block2::OpProduct<block2::SU2K, double>;
+template struct block2::OpSumProd<block2::SU2K, double>;
+template struct block2::OpSum<block2::SU2K, double>;

@@ -20,8 +20,8 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::ClassicParallelMPO<block2::SZK>;
-template struct block2::ParallelMPO<block2::SZK>;
+template struct block2::ClassicParallelMPO<block2::SZK, double>;
+template struct block2::ParallelMPO<block2::SZK, double>;
 
-template struct block2::ClassicParallelMPO<block2::SU2K>;
-template struct block2::ParallelMPO<block2::SU2K>;
+template struct block2::ClassicParallelMPO<block2::SU2K, double>;
+template struct block2::ParallelMPO<block2::SU2K, double>;

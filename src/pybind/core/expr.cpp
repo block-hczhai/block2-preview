@@ -22,3 +22,6 @@
 
 template void bind_expr<SZ>(py::module &m);
 template void bind_expr<SU2>(py::module &m);
+
+template void bind_fl_expr<SZ, double>(py::module &m);
+template void bind_fl_expr<SU2, double>(py::module &m);

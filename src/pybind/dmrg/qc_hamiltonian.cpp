@@ -20,5 +20,5 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_qc_hamiltonian<SZ>(py::module &m);
-template void bind_qc_hamiltonian<SU2>(py::module &m);
+template void bind_fl_qc_hamiltonian<SZ, double>(py::module &m);
+template void bind_fl_qc_hamiltonian<SU2, double>(py::module &m);

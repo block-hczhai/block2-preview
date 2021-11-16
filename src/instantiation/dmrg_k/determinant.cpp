@@ -20,10 +20,10 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::DeterminantTRIE<block2::SZK>;
-template struct block2::DeterminantQC<block2::SZK>;
-template struct block2::DeterminantMPSInfo<block2::SZK>;
+template struct block2::DeterminantTRIE<block2::SZK, double>;
+template struct block2::DeterminantQC<block2::SZK, double>;
+template struct block2::DeterminantMPSInfo<block2::SZK, double>;
 
-template struct block2::DeterminantTRIE<block2::SU2K>;
-template struct block2::DeterminantQC<block2::SU2K>;
-template struct block2::DeterminantMPSInfo<block2::SU2K>;
+template struct block2::DeterminantTRIE<block2::SU2K, double>;
+template struct block2::DeterminantQC<block2::SU2K, double>;
+template struct block2::DeterminantMPSInfo<block2::SU2K, double>;

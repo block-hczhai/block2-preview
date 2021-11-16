@@ -11,7 +11,7 @@ class TestCSRMatrix : public ::testing::Test {
     size_t dsize = 1L << 32;
     double sparsity = 0.5;
     void fill_sparse_double(double *data, size_t n) {
-        Random::fill_rand_double(data, n);
+        Random::fill<double>(data, n);
         if (Random::rand_double() > 0.2) {
             for (size_t i = 0; i < n; i++)
                 if (Random::rand_double() < sparsity)
@@ -32,8 +32,11 @@ class TestCSRMatrix : public ::testing::Test {
 TEST_F(TestCSRMatrix, TestIadd) {
     Timer t;
     double dst = 0.0, spt = 0.0;
-    for (int i = 0; i < n_tests; i++) {
-        int ma = Random::rand_int(1, 200), na = Random::rand_int(1, 200);
+    for (int i = 0; i < n_tests * 10; i++) {
+        int ma = Random::rand_int(0, 2) ? Random::rand_int(1, 7)
+                                        : Random::rand_int(1, 200),
+            na = Random::rand_int(0, 2) ? Random::rand_int(1, 7)
+                                        : Random::rand_int(1, 200);
         MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef b(dalloc_()->allocate(ma * na), ma, na);
         MatrixRef stda(dalloc_()->allocate(ma * na), ma, na);
@@ -53,12 +56,12 @@ TEST_F(TestCSRMatrix, TestIadd) {
         t.get_time();
         MatrixFunctions::iadd(a, tb, alpha, conj);
         dst += t.get_time();
-        CSRMatrixRef ca, cb;
+        GCSRMatrix<double> ca, cb;
         ca.from_dense(stda);
         cb.from_dense(tb);
         memset(dalloc_()->data + dalloc_()->used, 0, a.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::iadd(ca, cb, alpha, conj);
+        GCSRMatrixFunctions<double>::iadd(ca, cb, alpha, conj);
         spt += t.get_time();
         ca.to_dense(stda);
         ASSERT_TRUE(MatrixFunctions::all_close(stda, a, 1E-10, 0.0));
@@ -105,13 +108,14 @@ TEST_F(TestCSRMatrix, TestMultiply) {
         t.get_time();
         MatrixFunctions::multiply(ta, conja, tb, conjb, c, alpha, cfactor);
         dst += t.get_time();
-        CSRMatrixRef ca, cb, cc;
+        GCSRMatrix<double> ca, cb, cc;
         ca.from_dense(ta);
         cb.from_dense(tb);
         cc.from_dense(stdc);
         memset(dalloc_()->data + dalloc_()->used, 0, c.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::multiply(ca, conja, cb, conjb, cc, alpha, cfactor);
+        GCSRMatrixFunctions<double>::multiply(ca, conja, cb, conjb, cc, alpha,
+                                              cfactor);
         spt += t.get_time();
         cc.to_dense(stdc);
         ASSERT_TRUE(MatrixFunctions::all_close(stdc, c, 1E-10, 0.0));
@@ -161,7 +165,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         t.get_time();
         MatrixFunctions::rotate(a, c, tb, conjb, tk, conjk, alpha);
         dst += t.get_time();
-        CSRMatrixRef ca, cb, ck;
+        GCSRMatrix<double> ca, cb, ck;
         ca.from_dense(a);
         cb.from_dense(tb);
         ck.from_dense(tk);
@@ -170,7 +174,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::rotate(a, cc, cb, conjb, ck, conjk, alpha);
+        GCSRMatrixFunctions<double>::rotate(a, cc, cb, conjb, ck, conjk, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // spket * a * bra
@@ -178,7 +182,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::rotate(a, cc, tb, conjb, ck, conjk, alpha);
+        GCSRMatrixFunctions<double>::rotate(a, cc, tb, conjb, ck, conjk, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // ket * a * spbra
@@ -186,7 +190,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::rotate(a, cc, cb, conjb, tk, conjk, alpha);
+        GCSRMatrixFunctions<double>::rotate(a, cc, cb, conjb, tk, conjk, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // ket * spa * bra
@@ -194,7 +198,8 @@ TEST_F(TestCSRMatrix, TestRotate) {
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::rotate(ca, cc, tb, conjb, tk, conjk, alpha);
+        GCSRMatrixFunctions<double>::rotate(ca, cc, tb, conjb, tk, conjk,
+                                            alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         if (conjb)
@@ -227,28 +232,28 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         t.get_time();
         MatrixFunctions::tensor_product_diagonal(a, b, c, alpha);
         dst += t.get_time();
-        CSRMatrixRef ca, cb;
+        GCSRMatrix<double> ca, cb;
         ca.from_dense(a);
         cb.from_dense(b);
         cc.clear();
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::tensor_product_diagonal(ca, b, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(ca, b, cc, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::tensor_product_diagonal(a, cb, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(a, cb, cc, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
         memset(dalloc_()->data + dalloc_()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
-        CSRMatrixFunctions::tensor_product_diagonal(ca, cb, cc, alpha);
+        GCSRMatrixFunctions<double>::tensor_product_diagonal(ca, cb, cc, alpha);
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.deallocate();
@@ -305,31 +310,31 @@ TEST_F(TestCSRMatrix, TestTensorProduct) {
         MatrixFunctions::tensor_product(ta, conja, tb, conjb, c, alpha,
                                         c_stride);
         dst += t.get_time();
-        CSRMatrixRef ca, cb, cc(c.m, c.n);
+        GCSRMatrix<double> ca, cb, cc(c.m, c.n);
         ca.from_dense(ta);
         cb.from_dense(tb);
         // sp x sp
         t.get_time();
-        CSRMatrixFunctions::tensor_product(ca, conja, cb, conjb, cc, alpha,
-                                           c_stride);
+        GCSRMatrixFunctions<double>::tensor_product(ca, conja, cb, conjb, cc,
+                                                    alpha, c_stride);
         spt += t.get_time();
         cc.to_dense(xc);
         cc.deallocate();
         ASSERT_TRUE(MatrixFunctions::all_close(xc, c, 1E-15, 0.0));
         // sp x ds
-        cc = CSRMatrixRef(c.m, c.n);
+        cc = GCSRMatrix<double>(c.m, c.n);
         t.get_time();
-        CSRMatrixFunctions::tensor_product(ca, conja, tb, conjb, cc, alpha,
-                                           c_stride);
+        GCSRMatrixFunctions<double>::tensor_product(ca, conja, tb, conjb, cc,
+                                                    alpha, c_stride);
         spt += t.get_time();
         cc.to_dense(xc);
         cc.deallocate();
         ASSERT_TRUE(MatrixFunctions::all_close(xc, c, 1E-15, 0.0));
         // ds x sp
-        cc = CSRMatrixRef(c.m, c.n);
+        cc = GCSRMatrix<double>(c.m, c.n);
         t.get_time();
-        CSRMatrixFunctions::tensor_product(ta, conja, cb, conjb, cc, alpha,
-                                           c_stride);
+        GCSRMatrixFunctions<double>::tensor_product(ta, conja, cb, conjb, cc,
+                                                    alpha, c_stride);
         spt += t.get_time();
         cc.to_dense(xc);
         cc.deallocate();

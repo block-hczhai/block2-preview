@@ -22,3 +22,5 @@
 
 template void bind_mpo<SZ>(py::module &m);
 template void bind_mpo<SU2>(py::module &m);
+template void bind_fl_mpo<SZ, double>(py::module &m);
+template void bind_fl_mpo<SU2, double>(py::module &m);

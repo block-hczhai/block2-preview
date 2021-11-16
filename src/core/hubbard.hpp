@@ -28,12 +28,12 @@ using namespace std;
 
 namespace block2 {
 
-struct HubbardFCIDUMP : FCIDUMP {
+struct HubbardFCIDUMP : FCIDUMP<double> {
     double const_u, const_t;
     bool periodic;
     HubbardFCIDUMP(uint16_t n_sites, double t = 1, double u = 2,
                    bool periodic = false)
-        : FCIDUMP(), const_u(u), const_t(t), periodic(periodic) {
+        : FCIDUMP<double>(), const_u(u), const_t(t), periodic(periodic) {
         params.clear();
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_sites);
@@ -78,11 +78,11 @@ struct HubbardFCIDUMP : FCIDUMP {
     void deallocate() override {}
 };
 
-struct HubbardKSpaceFCIDUMP : FCIDUMP {
+struct HubbardKSpaceFCIDUMP : FCIDUMP<double> {
     double const_u, const_t;
     const double _pi = acos(-1);
     HubbardKSpaceFCIDUMP(uint16_t n_sites, double t = 1, double u = 2)
-        : FCIDUMP(), const_u(u), const_t(t) {
+        : FCIDUMP<double>(), const_u(u), const_t(t) {
         params.clear();
         params["norb"] = Parsing::to_string(n_sites);
         params["nelec"] = Parsing::to_string(n_sites);

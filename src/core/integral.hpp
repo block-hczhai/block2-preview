@@ -24,6 +24,7 @@
 #include "utils.hpp"
 #include <array>
 #include <cassert>
+#include <complex>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -36,11 +37,50 @@ using namespace std;
 
 namespace block2 {
 
+inline void fd_write_line(ostream &os, double x, uint16_t i = 0, uint16_t j = 0,
+                          uint16_t k = 0, uint16_t l = 0) {
+    os << fixed << setprecision(16);
+    os << setw(20) << x << setw(4) << i << setw(4) << j << setw(4) << k
+       << setw(4) << l << endl;
+};
+
+inline void fd_write_line(ostream &os, complex<double> x, uint16_t i = 0,
+                          uint16_t j = 0, uint16_t k = 0, uint16_t l = 0) {
+    os << fixed << setprecision(16);
+    os << setw(20) << real(x) << setw(20) << imag(x) << setw(4) << i << setw(4)
+       << j << setw(4) << k << setw(4) << l << endl;
+};
+
+inline void fd_read_line(array<uint16_t, 4> &idx, double &d,
+                         const vector<string> &x) {
+    assert(x.size() == 5);
+    idx = array<uint16_t, 4>{
+        (uint16_t)Parsing::to_int(x[1]), (uint16_t)Parsing::to_int(x[2]),
+        (uint16_t)Parsing::to_int(x[3]), (uint16_t)Parsing::to_int(x[4])};
+    d = Parsing::to_double(x[0]);
+}
+
+inline void fd_read_line(array<uint16_t, 4> &idx, complex<double> &d,
+                         const vector<string> &x) {
+    if (x.size() == 6) {
+        idx = array<uint16_t, 4>{
+            (uint16_t)Parsing::to_int(x[2]), (uint16_t)Parsing::to_int(x[3]),
+            (uint16_t)Parsing::to_int(x[4]), (uint16_t)Parsing::to_int(x[5])};
+        d = complex<double>(Parsing::to_double(x[0]), Parsing::to_double(x[1]));
+    } else if (x.size() == 5) {
+        idx = array<uint16_t, 4>{
+            (uint16_t)Parsing::to_int(x[1]), (uint16_t)Parsing::to_int(x[2]),
+            (uint16_t)Parsing::to_int(x[3]), (uint16_t)Parsing::to_int(x[4])};
+        d = (complex<double>)Parsing::to_double(x[0]);
+    } else
+        assert(false);
+}
+
 // Symmetric/general 2D array for storage of one-electron integrals
-struct TInt {
+template <typename FL> struct TInt {
     // Number of orbitals
     uint16_t n;
-    double *data;
+    FL *data;
     bool general;
     TInt(uint16_t n, bool general = false)
         : n(n), data(nullptr), general(general) {}
@@ -52,11 +92,11 @@ struct TInt {
     size_t size() const {
         return general ? (size_t)n * n : ((size_t)n * (n + 1) >> 1);
     }
-    void clear() { memset(data, 0, sizeof(double) * size()); }
-    double &operator()(uint16_t i, uint16_t j) {
+    void clear() { memset(data, 0, sizeof(FL) * size()); }
+    FL &operator()(uint16_t i, uint16_t j) {
         return *(data + find_index(i, j));
     }
-    double operator()(uint16_t i, uint16_t j) const {
+    FL operator()(uint16_t i, uint16_t j) const {
         return *(data + find_index(i, j));
     }
     void reorder(const TInt &other, const vector<uint16_t> &ord) {
@@ -65,9 +105,9 @@ struct TInt {
             for (uint16_t j = 0; j < (general ? n : i + 1); j++)
                 (*this)(i, j) = other(ord[i], ord[j]);
     }
-    void rotate(const TInt &other, const vector<double> &rot_mat) {
+    void rotate(const TInt &other, const vector<FL> &rot_mat) {
         assert(n == other.n);
-        vector<double> tmp((size_t)n * n);
+        vector<FL> tmp((size_t)n * n);
         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
         {
@@ -80,7 +120,7 @@ struct TInt {
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += other(i, q) * rot_mat[q * n + j];
                 tmp[(size_t)i * n + j] = x;
@@ -96,9 +136,9 @@ struct TInt {
 #endif
                 if (!general && j > i)
                     continue;
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
-                    x += tmp[(size_t)q * n + j] * rot_mat[q * n + i];
+                    x += tmp[(size_t)q * n + j] * xconj(rot_mat[q * n + i]);
                 (*this)(i, j) = x;
             }
         }
@@ -108,25 +148,24 @@ struct TInt {
         for (uint16_t i = 0; i < x.n; i++)
             for (uint16_t j = 0; j < (x.general ? x.n : i + 1); j++)
                 if (x(i, j) != 0.0)
-                    os << setw(20) << x(i, j) << setw(4) << i + 1 << setw(4)
-                       << j + 1 << setw(4) << 0 << setw(4) << 0 << endl;
+                    fd_write_line(os, x(i, j), i + 1, j + 1);
         return os;
     }
 };
 
 // General 4D array for storage of two-electron integrals
-struct V1Int {
+template <typename FL> struct V1Int {
     // Number of orbitals
     uint32_t n;
     size_t m;
-    double *data;
+    FL *data;
     V1Int(uint32_t n) : n(n), m((size_t)n * n * n * n), data(nullptr) {}
     size_t size() const { return m; }
-    void clear() { memset(data, 0, sizeof(double) * size()); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    void clear() { memset(data, 0, sizeof(FL) * size()); }
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return *(data + (((size_t)i * n + j) * n + k) * n + l);
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + (((size_t)i * n + j) * n + k) * n + l);
     }
     void reorder(const V1Int &other, const vector<uint16_t> &ord) {
@@ -138,9 +177,9 @@ struct V1Int {
                         (*this)(i, j, k, l) =
                             other(ord[i], ord[j], ord[k], ord[l]);
     }
-    void rotate(const V1Int &other, const vector<double> &rot_mat) {
+    void rotate(const V1Int &other, const vector<FL> &rot_mat) {
         assert(n == other.n);
-        vector<double> tmp(size());
+        vector<FL> tmp(size());
 #ifdef _MSC_VER
         assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
 #endif
@@ -159,7 +198,7 @@ struct V1Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
@@ -176,10 +215,10 @@ struct V1Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
-                         rot_mat[q * n + k];
+                         xconj(rot_mat[q * n + k]);
                 (*this)(i, j, k, l) = x;
             }
 #ifdef _MSC_VER
@@ -194,7 +233,7 @@ struct V1Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += (*this)(i, q, k, l) * rot_mat[q * n + j];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
@@ -211,10 +250,10 @@ struct V1Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
-                         rot_mat[q * n + i];
+                         xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
             }
         }
@@ -226,19 +265,18 @@ struct V1Int {
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l < x.n; l++)
                         if (x(i, j, k, l) != 0.0)
-                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
-                               << setw(4) << j + 1 << setw(4) << k + 1
-                               << setw(4) << l + 1 << endl;
+                            fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
+                                          k + 1, l + 1);
         return os;
     }
 };
 
 // 4D array with 4-fold symmetry for storage of two-electron integrals
 // [ijkl] = [jikl] = [jilk] = [ijlk]
-struct V4Int {
+template <typename FL> struct V4Int {
     // n: number of orbitals
     uint32_t n, m;
-    double *data;
+    FL *data;
     V4Int(uint32_t n) : n(n), m(n * (n + 1) >> 1), data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
         return i < j ? ((size_t)j * (j + 1) >> 1) + i
@@ -249,11 +287,11 @@ struct V4Int {
         return p * m + q;
     }
     size_t size() const { return (size_t)m * m; }
-    void clear() { memset(data, 0, sizeof(double) * size()); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    void clear() { memset(data, 0, sizeof(FL) * size()); }
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return *(data + find_index(i, j, k, l));
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
     }
     void reorder(const V4Int &other, const vector<uint16_t> &ord) {
@@ -265,9 +303,9 @@ struct V4Int {
                         (*this)(i, j, k, l) =
                             other(ord[i], ord[j], ord[k], ord[l]);
     }
-    void rotate(const V4Int &other, const vector<double> &rot_mat) {
+    void rotate(const V4Int &other, const vector<FL> &rot_mat) {
         assert(n == other.n);
-        vector<double> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
+        vector<FL> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
 #ifdef _MSC_VER
         assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
 #endif
@@ -286,7 +324,7 @@ struct V4Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
@@ -303,10 +341,10 @@ struct V4Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
-                         rot_mat[q * n + k];
+                         xconj(rot_mat[q * n + k]);
                 tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
@@ -321,7 +359,7 @@ struct V4Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
                          rot_mat[q * n + j];
@@ -341,10 +379,10 @@ struct V4Int {
                             if (j > i || l > k)
                                 continue;
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
-                         rot_mat[q * n + i];
+                         xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
             }
         }
@@ -356,19 +394,18 @@ struct V4Int {
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l <= k; l++)
                         if (x(i, j, k, l) != 0.0)
-                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
-                               << setw(4) << j + 1 << setw(4) << k + 1
-                               << setw(4) << l + 1 << endl;
+                            fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
+                                          k + 1, l + 1);
         return os;
     }
 };
 
 // 4D array with 8-fold symmetry for storage of two-electron integrals
 // [ijkl] = [jikl] = [jilk] = [ijlk] = [klij] = [klji] = [lkji] = [lkij]
-struct V8Int {
+template <typename FL> struct V8Int {
     // n: number of orbitals
     uint32_t n, m;
-    double *data;
+    FL *data;
     V8Int(uint32_t n) : n(n), m(n * (n + 1) >> 1), data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
         return i < j ? ((size_t)j * (j + 1) >> 1) + i
@@ -379,11 +416,11 @@ struct V8Int {
         return find_index(p, q);
     }
     size_t size() const { return ((size_t)m * (m + 1) >> 1); }
-    void clear() { memset(data, 0, sizeof(double) * size()); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    void clear() { memset(data, 0, sizeof(FL) * size()); }
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return *(data + find_index(i, j, k, l));
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return *(data + find_index(i, j, k, l));
     }
     void reorder(const V8Int &other, const vector<uint16_t> &ord) {
@@ -396,9 +433,9 @@ struct V8Int {
                             (*this)(i, j, k, l) =
                                 other(ord[i], ord[j], ord[k], ord[l]);
     }
-    void rotate(const V8Int &other, const vector<double> &rot_mat) {
+    void rotate(const V8Int &other, const vector<FL> &rot_mat) {
         assert(n == other.n);
-        vector<double> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
+        vector<FL> tmp((size_t)n * n * n * n), tmp2((size_t)n * n * n * n);
 #ifdef _MSC_VER
         assert((size_t)n * n * n * n <= (size_t)numeric_limits<int>::max());
 #endif
@@ -417,7 +454,7 @@ struct V8Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
@@ -434,10 +471,10 @@ struct V8Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
-                         rot_mat[q * n + k];
+                         xconj(rot_mat[q * n + k]);
                 tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
@@ -452,7 +489,7 @@ struct V8Int {
                     for (int k = 0; k < n; k++)
                         for (int l = 0; l < n; l++) {
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
                          rot_mat[q * n + j];
@@ -473,10 +510,10 @@ struct V8Int {
                                 (k * (k + 1) >> 1) + l > (i * (i + 1) >> 1) + j)
                                 continue;
 #endif
-                double x = 0;
+                FL x = 0;
                 for (int q = 0; q < n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
-                         rot_mat[q * n + i];
+                         xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
             }
         }
@@ -488,23 +525,23 @@ struct V8Int {
                 for (uint32_t k = 0, kl = 0; k <= i; k++)
                     for (uint32_t l = 0; l <= k; l++, kl++)
                         if (ij >= kl && x(i, j, k, l) != 0.0)
-                            os << setw(20) << x(i, j, k, l) << setw(4) << i + 1
-                               << setw(4) << j + 1 << setw(4) << k + 1
-                               << setw(4) << l + 1 << endl;
+                            fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
+                                          k + 1, l + 1);
         return os;
     }
 };
 
 // One- and two-electron integrals
-struct FCIDUMP {
-    shared_ptr<vector<double>> vdata;
+template <typename FL> struct FCIDUMP {
+    typedef decltype(abs((FL)0.0)) FP;
+    shared_ptr<vector<FL>> vdata;
     map<string, string> params;
-    vector<TInt> ts;
-    vector<V8Int> vs;
-    vector<V4Int> vabs;
-    vector<V1Int> vgs;
-    double const_e;
-    double *data;
+    vector<TInt<FL>> ts;
+    vector<V8Int<FL>> vs;
+    vector<V4Int<FL>> vabs;
+    vector<V1Int<FL>> vgs;
+    FL const_e;
+    FL *data;
     size_t total_memory;
     bool uhf, general;
     FCIDUMP() : const_e(0.0), uhf(false), total_memory(0), vdata(nullptr) {}
@@ -513,10 +550,10 @@ struct FCIDUMP {
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
     virtual ~FCIDUMP() = default;
     virtual void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                               uint16_t isym, double e, const double *ta,
-                               size_t lta, const double *tb, size_t ltb,
-                               const double *va, size_t lva, const double *vb,
-                               size_t lvb, const double *vab, size_t lvab) {
+                               uint16_t isym, FL e, const FL *ta, size_t lta,
+                               const FL *tb, size_t ltb, const FL *va,
+                               size_t lva, const FL *vb, size_t lvb,
+                               const FL *vab, size_t lvab) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -528,61 +565,60 @@ struct FCIDUMP {
         params["ms2"] = Parsing::to_string(twos);
         params["isym"] = Parsing::to_string(isym);
         params["iuhf"] = "1";
-        ts.push_back(TInt(n_sites));
-        ts.push_back(TInt(n_sites));
+        ts.push_back(TInt<FL>(n_sites));
+        ts.push_back(TInt<FL>(n_sites));
         if (lta != ts[0].size())
             ts[0].general = ts[1].general = true;
         assert(lta == ts[0].size() && ltb == ts[1].size());
-        vs.push_back(V8Int(n_sites));
-        vs.push_back(V8Int(n_sites));
-        vabs.push_back(V4Int(n_sites));
+        vs.push_back(V8Int<FL>(n_sites));
+        vs.push_back(V8Int<FL>(n_sites));
+        vabs.push_back(V4Int<FL>(n_sites));
         if (vs[0].size() == lva) {
             assert(vs[1].size() == lvb);
             assert(vabs[0].size() == lvab);
             general = false;
             total_memory = lta + ltb + lva + lvb + lvab;
-            vdata = make_shared<vector<double>>(total_memory);
+            vdata = make_shared<vector<FL>>(total_memory);
             data = vdata->data();
             ts[0].data = data;
             ts[1].data = data + lta;
             vs[0].data = data + lta + ltb;
             vs[1].data = data + lta + ltb + lva;
             vabs[0].data = data + lta + ltb + lva + lvb;
-            memcpy(vs[0].data, va, sizeof(double) * lva);
-            memcpy(vs[1].data, vb, sizeof(double) * lvb);
-            memcpy(vabs[0].data, vab, sizeof(double) * lvab);
+            memcpy(vs[0].data, va, sizeof(FL) * lva);
+            memcpy(vs[1].data, vb, sizeof(FL) * lvb);
+            memcpy(vabs[0].data, vab, sizeof(FL) * lvab);
         } else {
             general = true;
             vs.clear();
             vabs.clear();
-            vgs.push_back(V1Int(n_sites));
-            vgs.push_back(V1Int(n_sites));
-            vgs.push_back(V1Int(n_sites));
+            vgs.push_back(V1Int<FL>(n_sites));
+            vgs.push_back(V1Int<FL>(n_sites));
+            vgs.push_back(V1Int<FL>(n_sites));
             assert(vgs[0].size() == lva);
             assert(vgs[1].size() == lvb);
             assert(vgs[2].size() == lvab);
             total_memory = lta + ltb + lva + lvb + lvab;
-            vdata = make_shared<vector<double>>(total_memory);
+            vdata = make_shared<vector<FL>>(total_memory);
             data = vdata->data();
             ts[0].data = data;
             ts[1].data = data + lta;
             vgs[0].data = data + lta + ltb;
             vgs[1].data = data + lta + ltb + lva;
             vgs[2].data = data + lta + ltb + lva + lvb;
-            memcpy(vgs[0].data, va, sizeof(double) * lva);
-            memcpy(vgs[1].data, vb, sizeof(double) * lvb);
-            memcpy(vgs[2].data, vab, sizeof(double) * lvab);
+            memcpy(vgs[0].data, va, sizeof(FL) * lva);
+            memcpy(vgs[1].data, vb, sizeof(FL) * lvb);
+            memcpy(vgs[2].data, vab, sizeof(FL) * lvab);
         }
-        memcpy(ts[0].data, ta, sizeof(double) * lta);
-        memcpy(ts[1].data, tb, sizeof(double) * ltb);
+        memcpy(ts[0].data, ta, sizeof(FL) * lta);
+        memcpy(ts[1].data, tb, sizeof(FL) * ltb);
         uhf = true;
     }
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
     virtual void initialize_su2(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym, double e,
-                                const double *t, size_t lt, const double *v,
-                                size_t lv) {
+                                uint16_t twos, uint16_t isym, FL e, const FL *t,
+                                size_t lt, const FL *v, size_t lv) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -594,38 +630,38 @@ struct FCIDUMP {
         params["ms2"] = Parsing::to_string(twos);
         params["isym"] = Parsing::to_string(isym);
         params["iuhf"] = "0";
-        ts.push_back(TInt(n_sites));
+        ts.push_back(TInt<FL>(n_sites));
         if (lt != ts[0].size())
             ts[0].general = true;
         assert(lt == ts[0].size());
-        vs.push_back(V8Int(n_sites));
+        vs.push_back(V8Int<FL>(n_sites));
         if (vs[0].size() == lv) {
             general = false;
             total_memory = ts[0].size() + vs[0].size();
-            vdata = make_shared<vector<double>>(total_memory);
+            vdata = make_shared<vector<FL>>(total_memory);
             data = vdata->data();
             ts[0].data = data;
             vs[0].data = data + ts[0].size();
-            memcpy(vs[0].data, v, sizeof(double) * lv);
+            memcpy(vs[0].data, v, sizeof(FL) * lv);
         } else {
             general = true;
             vs.clear();
-            vgs.push_back(V1Int(n_sites));
+            vgs.push_back(V1Int<FL>(n_sites));
             assert(lv == vgs[0].size());
             total_memory = ts[0].size() + vgs[0].size();
-            vdata = make_shared<vector<double>>(total_memory);
+            vdata = make_shared<vector<FL>>(total_memory);
             data = vdata->data();
             ts[0].data = data;
             vgs[0].data = data + ts[0].size();
-            memcpy(vgs[0].data, v, sizeof(double) * lv);
+            memcpy(vgs[0].data, v, sizeof(FL) * lv);
         }
-        memcpy(ts[0].data, t, sizeof(double) * lt);
+        memcpy(ts[0].data, t, sizeof(FL) * lt);
         uhf = false;
     }
     // Initialize with only h1e integral
     virtual void initialize_h1e(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym, double e,
-                                const double *t, size_t lt) {
+                                uint16_t twos, uint16_t isym, FL e, const FL *t,
+                                size_t lt) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -637,19 +673,19 @@ struct FCIDUMP {
         params["ms2"] = Parsing::to_string(twos);
         params["isym"] = Parsing::to_string(isym);
         params["iuhf"] = "0";
-        ts.push_back(TInt(n_sites));
+        ts.push_back(TInt<FL>(n_sites));
         if (lt != ts[0].size())
             ts[0].general = true;
         assert(lt == ts[0].size());
-        vs.push_back(V8Int(n_sites));
+        vs.push_back(V8Int<FL>(n_sites));
         general = false;
         total_memory = ts[0].size() + vs[0].size();
-        vdata = make_shared<vector<double>>(total_memory);
+        vdata = make_shared<vector<FL>>(total_memory);
         data = vdata->data();
         ts[0].data = data;
         vs[0].data = data + ts[0].size();
-        memset(vs[0].data, 0, sizeof(double) * vs[0].size());
-        memcpy(ts[0].data, t, sizeof(double) * lt);
+        memset(vs[0].data, 0, sizeof(FL) * vs[0].size());
+        memcpy(ts[0].data, t, sizeof(FL) * lt);
         uhf = false;
     }
     // Writing FCIDUMP file to disk
@@ -674,30 +710,25 @@ struct FCIDUMP {
         if (ts[0].general)
             ofs << "  ITGENERAL=1," << endl;
         ofs << " &END" << endl;
-        auto write_const = [](ofstream &os, double x) {
-            os << fixed << setprecision(16);
-            os << setw(20) << x << setw(4) << 0 << setw(4) << 0 << setw(4) << 0
-               << setw(4) << 0 << endl;
-        };
         if (!uhf) {
             if (general)
                 ofs << vgs[0];
             else
                 ofs << vs[0];
             ofs << ts[0];
-            write_const(ofs, this->const_e);
+            fd_write_line(ofs, this->const_e);
         } else {
             if (general) {
                 for (size_t i = 0; i < vgs.size(); i++)
-                    ofs << vgs[i], write_const(ofs, 0.0);
+                    ofs << vgs[i], fd_write_line(ofs, 0.0);
             } else {
                 for (size_t i = 0; i < vs.size(); i++)
-                    ofs << vs[i], write_const(ofs, 0.0);
-                ofs << vabs[0], write_const(ofs, 0.0);
+                    ofs << vs[i], fd_write_line(ofs, 0.0);
+                ofs << vabs[0], fd_write_line(ofs, 0.0);
             }
             for (size_t i = 0; i < ts.size(); i++)
-                ofs << ts[i], write_const(ofs, 0.0);
-            write_const(ofs, this->const_e);
+                ofs << ts[i], fd_write_line(ofs, 0.0);
+            fd_write_line(ofs, this->const_e);
         }
         if (!ofs.good())
             throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
@@ -750,7 +781,7 @@ struct FCIDUMP {
         }
         size_t int_sz = lines.size() > il ? lines.size() - il : 0;
         vector<array<uint16_t, 4>> int_idx(int_sz);
-        vector<double> int_val(int_sz);
+        vector<FL> int_val(int_sz);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)
         for (int64_t ill = 0; ill < (int64_t)int_sz; ill++) {
@@ -760,12 +791,7 @@ struct FCIDUMP {
                 continue;
             }
             vector<string> ls = Parsing::split(ll, " ", true);
-            assert(ls.size() == 5);
-            int_idx[ill] = array<uint16_t, 4>{(uint16_t)Parsing::to_int(ls[1]),
-                                              (uint16_t)Parsing::to_int(ls[2]),
-                                              (uint16_t)Parsing::to_int(ls[3]),
-                                              (uint16_t)Parsing::to_int(ls[4])};
-            int_val[ill] = Parsing::to_double(ls[0]);
+            fd_read_line(int_idx[ill], int_val[ill], ls);
         }
         threading->activate_normal();
         uint16_t n = (uint16_t)Parsing::to_int(params["norb"]);
@@ -773,22 +799,22 @@ struct FCIDUMP {
         general = params.count("igeneral") != 0 &&
                   Parsing::to_int(params["igeneral"]) == 1;
         if (!uhf) {
-            ts.push_back(TInt(n));
+            ts.push_back(TInt<FL>(n));
             ts[0].general = params.count("itgeneral") != 0 &&
                             Parsing::to_int(params["itgeneral"]) == 1;
             if (!general) {
-                vs.push_back(V8Int(n));
+                vs.push_back(V8Int<FL>(n));
                 total_memory = ts[0].size() + vs[0].size();
-                vdata = make_shared<vector<double>>(total_memory);
+                vdata = make_shared<vector<FL>>(total_memory);
                 data = vdata->data();
                 ts[0].data = data;
                 vs[0].data = data + ts[0].size();
                 ts[0].clear();
                 vs[0].clear();
             } else {
-                vgs.push_back(V1Int(n));
+                vgs.push_back(V1Int<FL>(n));
                 total_memory = ts[0].size() + vgs[0].size();
-                vdata = make_shared<vector<double>>(total_memory);
+                vdata = make_shared<vector<FL>>(total_memory);
                 data = vdata->data();
                 ts[0].data = data;
                 vgs[0].data = data + ts[0].size();
@@ -812,18 +838,18 @@ struct FCIDUMP {
                            int_idx[i][2] - 1, int_idx[i][3] - 1) = int_val[i];
             }
         } else {
-            ts.push_back(TInt(n));
-            ts.push_back(TInt(n));
+            ts.push_back(TInt<FL>(n));
+            ts.push_back(TInt<FL>(n));
             ts[0].general = ts[1].general =
                 params.count("itgeneral") != 0 &&
                 Parsing::to_int(params["itgeneral"]) == 1;
             if (!general) {
-                vs.push_back(V8Int(n));
-                vs.push_back(V8Int(n));
-                vabs.push_back(V4Int(n));
+                vs.push_back(V8Int<FL>(n));
+                vs.push_back(V8Int<FL>(n));
+                vabs.push_back(V4Int<FL>(n));
                 total_memory =
                     ((ts[0].size() + vs[0].size()) << 1) + vabs[0].size();
-                vdata = make_shared<vector<double>>(total_memory);
+                vdata = make_shared<vector<FL>>(total_memory);
                 data = vdata->data();
                 ts[0].data = data;
                 ts[1].data = data + ts[0].size();
@@ -834,9 +860,9 @@ struct FCIDUMP {
                 vs[0].clear(), vs[1].clear(), vabs[0].clear();
             } else {
                 for (int i = 0; i < 3; i++)
-                    vgs.push_back(V1Int(n));
+                    vgs.push_back(V1Int<FL>(n));
                 total_memory = ts[0].size() * 2 + vgs[0].size() * 3;
-                vdata = make_shared<vector<double>>(total_memory);
+                vdata = make_shared<vector<FL>>(total_memory);
                 data = vdata->data();
                 ts[0].data = data;
                 ts[1].data = data + ts[0].size();
@@ -881,10 +907,10 @@ struct FCIDUMP {
     }
     // Remove integral elements that violate point group symmetry
     // orbsym: in XOR convention
-    virtual double symmetrize(const vector<uint8_t> &orbsym) {
+    virtual FP symmetrize(const vector<uint8_t> &orbsym) {
         uint16_t n = n_sites();
         assert((int)orbsym.size() == n);
-        double error = 0.0;
+        FP error = 0.0;
         for (auto &t : ts)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < (t.general ? n : i + 1); j++)
@@ -916,10 +942,10 @@ struct FCIDUMP {
     }
     // Remove integral elements that violate point group symmetry
     // orbsym: in Lz convention
-    virtual double symmetrize(const vector<int16_t> &orbsym) {
+    virtual FP symmetrize(const vector<int16_t> &orbsym) {
         uint16_t n = n_sites();
         assert((int)orbsym.size() == n);
-        double error = 0.0;
+        FP error = 0.0;
         for (auto &t : ts)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < (t.general ? n : i + 1); j++)
@@ -951,14 +977,14 @@ struct FCIDUMP {
     }
     // Remove integral elements that violate point group symmetry
     // ksym: k symmetry
-    virtual double symmetrize(const vector<int> &ksym, int kmod) {
+    virtual FP symmetrize(const vector<int> &ksym, int kmod) {
         uint16_t n = n_sites();
         assert((int)ksym.size() == n);
         if (vabs.size() != 0 || vs.size() != 0)
             cout << "WARNING: k symmetry should not be used together with "
                     "4-fold or 8-fold symmetry."
                  << endl;
-        double error = 0.0;
+        FP error = 0.0;
         for (auto &t : ts)
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < (t.general ? n : i + 1); j++)
@@ -1070,9 +1096,9 @@ struct FCIDUMP {
         return params.count("kisym") ? Parsing::to_int(params.at("kisym")) : 0;
     }
     // energy of a determinant
-    double det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
-                      uint16_t i_end) const {
-        double energy = 0;
+    FL det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
+                  uint16_t i_end) const {
+        FL energy = 0;
         uint16_t n_block_sites = i_end - i_begin;
         vector<uint8_t> spin_occ;
         assert(iocc.size() == n_block_sites ||
@@ -1103,26 +1129,26 @@ struct FCIDUMP {
                 }
         return energy;
     }
-    vector<double> h1e_energy() const {
-        vector<double> r(n_sites());
+    vector<FL> h1e_energy() const {
+        vector<FL> r(n_sites());
         for (uint16_t i = 0; i < n_sites(); i++)
             r[i] = t(i, i);
         return r;
     }
     // h1e matrix
-    vector<double> h1e_matrix() const {
+    vector<FL> h1e_matrix() const {
         uint16_t n = n_sites();
-        vector<double> r(n * n, 0);
+        vector<FL> r(n * n, 0);
         for (uint16_t i = 0; i < n; i++)
             for (uint16_t j = 0; j < n; j++)
                 r[i * n + j] += t(i, j);
         return r;
     }
     // g2e 1-fold
-    vector<double> g2e_1fold() const {
+    vector<FL> g2e_1fold() const {
         const int n = n_sites();
         const size_t m = (size_t)n * n;
-        vector<double> r(m * m, 0);
+        vector<FL> r(m * m, 0);
         size_t ijkl = 0;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
@@ -1133,10 +1159,10 @@ struct FCIDUMP {
         return r;
     }
     // g2e 4-fold
-    vector<double> g2e_4fold() const {
+    vector<FL> g2e_4fold() const {
         const int n = n_sites();
         const size_t m = (size_t)n * (n + 1) >> 1;
-        vector<double> r(m * m, 0);
+        vector<FL> r(m * m, 0);
         size_t ijkl = 0;
         for (int i = 0; i < n; i++)
             for (int j = 0; j <= i; j++)
@@ -1147,10 +1173,10 @@ struct FCIDUMP {
         return r;
     }
     // g2e 8-fold
-    vector<double> g2e_8fold() const {
+    vector<FL> g2e_8fold() const {
         const int n = n_sites();
         const size_t m = (size_t)n * (n + 1) >> 1;
-        vector<double> r(m * (m + 1) >> 1, 0);
+        vector<FL> r(m * (m + 1) >> 1, 0);
         size_t ijkl = 0;
         for (int i = 0, ij = 0; i < n; i++)
             for (int j = 0; j <= i; j++, ij++)
@@ -1162,18 +1188,18 @@ struct FCIDUMP {
         return r;
     }
     // exchange matrix
-    vector<double> exchange_matrix() const {
+    vector<FL> exchange_matrix() const {
         uint16_t n = n_sites();
-        vector<double> r(n * n, 0);
+        vector<FL> r(n * n, 0);
         for (uint16_t i = 0; i < n; i++)
             for (uint16_t j = 0; j < n; j++)
                 r[i * n + j] += v(i, j, j, i);
         return r;
     }
     // abs h1e matrix
-    vector<double> abs_h1e_matrix() const {
+    vector<FP> abs_h1e_matrix() const {
         uint16_t n = n_sites();
-        vector<double> r(n * n, 0);
+        vector<FP> r(n * n, 0);
         for (uint8_t si = 0; si < 2; si++)
             for (uint16_t i = 0; i < n; i++)
                 for (uint16_t j = 0; j < n; j++)
@@ -1181,9 +1207,9 @@ struct FCIDUMP {
         return r;
     }
     // abs exchange matrix
-    vector<double> abs_exchange_matrix() const {
+    vector<FP> abs_exchange_matrix() const {
         uint16_t n = n_sites();
-        vector<double> r(n * n, 0);
+        vector<FP> r(n * n, 0);
         for (uint16_t i = 0; i < n; i++)
             for (uint8_t si = 0; si < 2; si++)
                 for (uint16_t j = 0; j < n; j++)
@@ -1205,12 +1231,11 @@ struct FCIDUMP {
     virtual void reorder(const vector<uint16_t> &ord) {
         uint16_t n = n_sites();
         assert(ord.size() == n);
-        shared_ptr<vector<double>> rdata =
-            make_shared<vector<double>>(total_memory);
-        vector<TInt> rts(ts);
-        vector<V1Int> rvgs(vgs);
-        vector<V4Int> rvabs(vabs);
-        vector<V8Int> rvs(vs);
+        shared_ptr<vector<FL>> rdata = make_shared<vector<FL>>(total_memory);
+        vector<TInt<FL>> rts(ts);
+        vector<V1Int<FL>> rvgs(vgs);
+        vector<V4Int<FL>> rvabs(vabs);
+        vector<V8Int<FL>> rvs(vs);
         for (size_t i = 0; i < ts.size(); i++) {
             rts[i].data = ts[i].data - data + rdata->data();
             rts[i].reorder(ts[i], ord);
@@ -1237,15 +1262,14 @@ struct FCIDUMP {
     }
     // orbital rotation
     // rot_mat: (old, new)
-    virtual void rotate(const vector<double> &rot_mat) {
+    virtual void rotate(const vector<FL> &rot_mat) {
         uint16_t n = n_sites();
         assert((int)rot_mat.size() == (int)n * n);
-        shared_ptr<vector<double>> rdata =
-            make_shared<vector<double>>(total_memory);
-        vector<TInt> rts(ts);
-        vector<V1Int> rvgs(vgs);
-        vector<V4Int> rvabs(vabs);
-        vector<V8Int> rvs(vs);
+        shared_ptr<vector<FL>> rdata = make_shared<vector<FL>>(total_memory);
+        vector<TInt<FL>> rts(ts);
+        vector<V1Int<FL>> rvgs(vgs);
+        vector<V4Int<FL>> rvabs(vabs);
+        vector<V8Int<FL>> rvs(vs);
         for (size_t i = 0; i < ts.size(); i++) {
             rts[i].data = ts[i].data - data + rdata->data();
             rts[i].rotate(ts[i], rot_mat);
@@ -1268,12 +1292,12 @@ struct FCIDUMP {
     }
     virtual shared_ptr<FCIDUMP> deep_copy() const {
         shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>(*this);
-        fcidump->vdata = make_shared<vector<double>>(*vdata);
+        fcidump->vdata = make_shared<vector<FL>>(*vdata);
         fcidump->data = fcidump->vdata->data();
-        vector<TInt> rts(ts);
-        vector<V1Int> rvgs(vgs);
-        vector<V4Int> rvabs(vabs);
-        vector<V8Int> rvs(vs);
+        vector<TInt<FL>> rts(ts);
+        vector<V1Int<FL>> rvgs(vgs);
+        vector<V4Int<FL>> rvabs(vabs);
+        vector<V8Int<FL>> rvs(vs);
         for (size_t i = 0; i < ts.size(); i++)
             fcidump->ts[i].data = ts[i].data - data + fcidump->data;
         for (size_t i = 0; i < vgs.size(); i++)
@@ -1285,18 +1309,18 @@ struct FCIDUMP {
         return fcidump;
     }
     // One-electron integral element (SU(2))
-    virtual double t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
+    virtual FL t(uint16_t i, uint16_t j) const { return ts[0](i, j); }
     // One-electron integral element (SZ)
-    virtual double t(uint8_t s, uint16_t i, uint16_t j) const {
+    virtual FL t(uint8_t s, uint16_t i, uint16_t j) const {
         return uhf ? ts[s](i, j) : ts[0](i, j);
     }
     // Two-electron integral element (SU(2))
-    virtual double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+    virtual FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
     // Two-electron integral element (SZ)
-    virtual double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
-                     uint16_t l) const {
+    virtual FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+                 uint16_t l) const {
         if (uhf) {
             if (sl == sr)
                 return general ? vgs[sl](i, j, k, l) : vs[sl](i, j, k, l);
@@ -1307,7 +1331,7 @@ struct FCIDUMP {
         } else
             return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
-    virtual double e() const { return const_e; }
+    virtual FL e() const { return const_e; }
     virtual void deallocate() {
         assert(total_memory != 0);
         vdata = nullptr;

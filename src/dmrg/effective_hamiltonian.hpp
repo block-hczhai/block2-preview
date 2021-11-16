@@ -21,6 +21,7 @@
 #pragma once
 
 #include "../core/complex_matrix_functions.hpp"
+#include "../core/iterative_matrix_functions.hpp"
 #include "../core/tensor_functions.hpp"
 #include "mpo.hpp"
 #include "mps.hpp"
@@ -50,22 +51,31 @@ enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
-enum struct LinearSolverTypes : uint8_t { CG, MinRes, GCROT, IDRS, LSQR };
+enum struct LinearSolverTypes : uint8_t {
+    Automatic,
+    CG,
+    MinRes,
+    GCROT,
+    IDRS,
+    LSQR
+};
 
-/** Currently only used for Complex Green's Functions */
-enum struct PreconditionerTypes : uint8_t { Diagonal, None };
-
-template <typename S, typename = MPS<S>> struct EffectiveHamiltonian;
+template <typename S, typename FL, typename = MPS<S, FL>>
+struct EffectiveHamiltonian;
 
 // Effective Hamiltonian
-template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
-    typedef S s_type;
+template <typename S, typename FL>
+struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
+    typedef S ST;
+    typedef FL FLT;
+    typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FC FC;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
         right_op_infos;
     // Symbolic expression of effective H
-    shared_ptr<DelayedOperatorTensor<S>> op;
-    shared_ptr<SparseMatrix<S>> bra, ket, diag, cmat, vmat;
-    shared_ptr<TensorFunctions<S>> tf;
+    shared_ptr<DelayedOperatorTensor<S, FL>> op;
+    shared_ptr<SparseMatrix<S, FL>> bra, ket, diag, cmat, vmat;
+    shared_ptr<TensorFunctions<S, FL>> tf;
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
     S opdq;
@@ -76,30 +86,30 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        const shared_ptr<DelayedOperatorTensor<S>> &op,
-        const shared_ptr<SparseMatrix<S>> &bra,
-        const shared_ptr<SparseMatrix<S>> &ket,
-        const shared_ptr<OpElement<S>> &hop,
+        const shared_ptr<DelayedOperatorTensor<S, FL>> &op,
+        const shared_ptr<SparseMatrix<S, FL>> &bra,
+        const shared_ptr<SparseMatrix<S, FL>> &ket,
+        const shared_ptr<OpElement<S, FL>> &hop,
         const shared_ptr<SymbolicColumnVector<S>> &hop_mat,
-        const shared_ptr<TensorFunctions<S>> &ptf, bool compute_diag = true)
+        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
           compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             assert(bra->info == ket->info);
-            diag = make_shared<SparseMatrix<S>>();
+            diag = make_shared<SparseMatrix<S, FL>>();
             diag->allocate(ket->info);
         }
         // unique sub labels
         S cdq = ket->info->delta_quantum;
         S vdq = bra->info->delta_quantum;
         opdq = hop->q_label;
-        vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
+            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl);
         // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
@@ -112,8 +122,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             diag_info->deallocate();
         }
         // temp wavefunction
-        cmat = make_shared<SparseMatrix<S>>();
-        vmat = make_shared<SparseMatrix<S>>();
+        cmat = make_shared<SparseMatrix<S, FL>>();
+        vmat = make_shared<SparseMatrix<S, FL>>();
         *cmat = *ket;
         *vmat = *bra;
         // temp wavefunction info
@@ -136,14 +146,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     // prepare batch gemm
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
-            cmat->data = vmat->data = (double *)0;
+            cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
             tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
-            cmat->data = vmat->data = (double *)0;
+            cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
             tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
@@ -156,21 +166,21 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             tf->opf->seq->clear();
         }
     }
-    shared_ptr<SparseMatrixGroup<S>>
+    shared_ptr<SparseMatrixGroup<S, FL>>
     perturbative_noise(bool trace_right, int iL, int iR, FuseTypes ftype,
                        const shared_ptr<MPSInfo<S>> &mps_info,
                        const NoiseTypes noise_type,
                        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
         shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
         shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
             1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
+        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
             pmat, hop_mat, msl, true, trace_right, false)[0];
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
@@ -223,8 +233,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         r.deallocate();
         l.deallocate();
         // perturbed wavefunctions
-        shared_ptr<SparseMatrixGroup<S>> perturb_ket =
-            make_shared<SparseMatrixGroup<S>>(d_alloc);
+        shared_ptr<SparseMatrixGroup<S, FL>> perturb_ket =
+            make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
         assert(noise_type & NoiseTypes::Perturbative);
         bool do_reduce = !(noise_type & NoiseTypes::Collected);
         bool reduced = noise_type & NoiseTypes::Reduced;
@@ -284,16 +294,16 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             if (!low_mem) {
                 assert(perturb_ket->total_memory <=
-                       (size_t)numeric_limits<decltype(MatrixRef::n)>::max());
-                tf->opf->seq->auto_perform(MatrixRef(
+                       (size_t)numeric_limits<decltype(GMatrix<FL>::n)>::max());
+                tf->opf->seq->auto_perform(GMatrix<FL>(
                     perturb_ket->data, (MKL_INT)perturb_ket->total_memory, 1));
             } else {
-                vector<MatrixRef> pmats(perturb_ket->n,
-                                        MatrixRef(nullptr, 0, 0));
+                vector<GMatrix<FL>> pmats(perturb_ket->n,
+                                          GMatrix<FL>(nullptr, 0, 0));
                 for (int j = 0; j < perturb_ket->n; j++)
-                    pmats[j] =
-                        MatrixRef((*perturb_ket)[j]->data,
-                                  (MKL_INT)(*perturb_ket)[j]->total_memory, 1);
+                    pmats[j] = GMatrix<FL>(
+                        (*perturb_ket)[j]->data,
+                        (MKL_INT)(*perturb_ket)[j]->total_memory, 1);
                 tf->opf->seq->auto_perform(pmats);
             }
             if (para_rule != nullptr && do_reduce)
@@ -312,30 +322,32 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         else if (op->mat->data[0]->get_type() == OpTypes::Sum) {
             int r = 0;
             for (auto &opx :
-                 dynamic_pointer_cast<OpSum<S>>(op->mat->data[0])->strings) {
+                 dynamic_pointer_cast<OpSum<S, FL>>(op->mat->data[0])
+                     ->strings) {
                 if (opx->get_type() == OpTypes::Prod ||
                     opx->get_type() == OpTypes::Elem)
                     r++;
                 else if (opx->get_type() == OpTypes::SumProd)
-                    r += (int)dynamic_pointer_cast<OpSumProd<S>>(opx)
+                    r += (int)dynamic_pointer_cast<OpSumProd<S, FL>>(opx)
                              ->ops.size();
             }
             return r;
         } else if (op->mat->data[0]->get_type() == OpTypes::SumProd)
-            return (int)dynamic_pointer_cast<OpSumProd<S>>(op->mat->data[0])
+            return (int)dynamic_pointer_cast<OpSumProd<S, FL>>(op->mat->data[0])
                 ->ops.size();
         else
             return 1;
     }
     // [c] = [H_eff[idx]] x [b]
-    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
-                    double factor = 1.0, bool all_reduce = true) {
+    void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c, int idx = 0,
+                    FL factor = 1.0, bool all_reduce = true) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
         cmat->factor = factor;
-        S idx_opdq = dynamic_pointer_cast<OpElement<S>>(op->dops[idx])->q_label;
+        S idx_opdq =
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[idx])->q_label;
         size_t ic = lower_bound(operator_quanta.begin(), operator_quanta.end(),
                                 idx_opdq) -
                     operator_quanta.begin();
@@ -346,36 +358,36 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<double, int, size_t, double>
-    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+    tuple<FP, int, size_t, double>
+    eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
-         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
-         const vector<shared_ptr<SparseMatrix<S>>> &ortho_bra =
-             vector<shared_ptr<SparseMatrix<S>>>()) {
+         const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+             vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         int ndav = 0;
         assert(compute_diag);
-        DiagonalMatrix aa(diag->data, (MKL_INT)diag->total_memory);
-        vector<MatrixRef> bs = vector<MatrixRef>{
-            MatrixRef(ket->data, (MKL_INT)ket->total_memory, 1)};
-        vector<MatrixRef> ors =
-            vector<MatrixRef>(ortho_bra.size(), MatrixRef(nullptr, 0, 0));
+        GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
+        vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{
+            GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1)};
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
         for (size_t i = 0; i < ortho_bra.size(); i++)
-            ors[i] = MatrixRef(ortho_bra[i]->data,
-                               (MKL_INT)ortho_bra[i]->total_memory, 1);
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<double> eners =
+        vector<FP> eners =
             (tf->opf->seq->mode == SeqTypes::Auto ||
              (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? MatrixFunctions::harmonic_davidson(
+                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter, 2, 50, ors)
-                : MatrixFunctions::harmonic_davidson(
+                : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter, 2, 50, ors);
@@ -386,314 +398,54 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
     }
-    // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
-    // (real gf, imag gf), (nmult, niter), nflop, tmult
-    tuple<pair<double, double>, pair<int, int>, size_t, double>
-    greens_function(double const_e, double omega, double eta,
-                    const shared_ptr<SparseMatrix<S>> &real_bra,
-                    const LinearSolverTypes solver_type = LinearSolverTypes::GCROT,
-                    const PreconditionerTypes preconditioner_type = PreconditionerTypes::Diagonal,
-                    pair<int, int> gcrotmk_size = {40,-1}, bool iprint = false,
-                    double conv_thrd = 5E-6, int max_iter = 5000,
-                    int soft_max_iter = -1,
-                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        int nmult = 0, nmultx = 0, niter = 0;
-        frame->activate(0);
-        Timer t;
-        t.get_time();
-        MatrixRef mket(ket->data, (MKL_INT)ket->total_memory, 1);
-        MatrixRef ibra(bra->data, (MKL_INT)bra->total_memory, 1);
-        MatrixRef rbra(real_bra->data, (MKL_INT)real_bra->total_memory, 1);
-        MatrixRef bre(nullptr, (MKL_INT)ket->total_memory, 1);
-        MatrixRef cre(nullptr, (MKL_INT)ket->total_memory, 1);
-        ComplexMatrixRef cbra(nullptr, (MKL_INT)bra->total_memory, 1);
-        ComplexMatrixRef cket(nullptr, (MKL_INT)bra->total_memory, 1);
-        bre.allocate();
-        cre.allocate();
-        cbra.allocate();
-        cket.allocate();
-        ComplexDiagonalMatrix aa(nullptr, 0);
-        if (compute_diag and preconditioner_type == PreconditionerTypes::Diagonal) {
-            aa = ComplexDiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
-            aa.allocate();
-            for (MKL_INT i = 0; i < aa.size(); i++)
-                aa.data[i] =
-                        complex<double>(diag->data[i] + const_e + omega, eta);
-        }
-        precompute();
-        const function<void(const MatrixRef &, const MatrixRef &)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b) {
-                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
-                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
-                    return this->tf->operator()(a, b);
-                else
-                    return (*this)(a, b);
-            };
-        auto op = [omega, eta, const_e, &f, &bre, &cre,
-                   &nmult](const ComplexMatrixRef &b,
-                           const ComplexMatrixRef &c) -> void {
-            ComplexMatrixFunctions::extract_complex(
-                b, bre, MatrixRef(nullptr, bre.m, bre.n));
-            cre.clear();
-            f(bre, cre);
-            ComplexMatrixFunctions::fill_complex(
-                c, cre, MatrixRef(nullptr, cre.m, cre.n));
-            ComplexMatrixFunctions::extract_complex(
-                b, MatrixRef(nullptr, bre.m, bre.n), bre);
-            cre.clear();
-            f(bre, cre);
-            ComplexMatrixFunctions::fill_complex(
-                c, MatrixRef(nullptr, cre.m, cre.n), cre);
-            ComplexMatrixFunctions::iadd(c, b,
-                                         complex<double>(const_e + omega, eta));
-            nmult += 2;
-        };
-        tf->opf->seq->cumulative_nflop = 0;
-        rbra.clear();
-        f(ibra, rbra);
-        MatrixFunctions::iadd(rbra, ibra, const_e + omega);
-        MatrixFunctions::iscale(rbra, -1 / eta);
-        ComplexMatrixFunctions::fill_complex(cbra, rbra, ibra);
-        cket.clear();
-        ComplexMatrixFunctions::fill_complex(
-            cket, mket, MatrixRef(nullptr, mket.m, mket.n));
-        // solve bra
-        complex<double> gf;
-        if(solver_type == LinearSolverTypes::LSQR) {
-            // Implementation uses conventional tolerance of ||r|| instead of ||r||²
-            const auto tol = sqrt(conv_thrd);
-            // hrl NOTE: I assume that H is Hermitian. So the only difference of rop cmp to op is the "-eta".
-            const auto rop = [omega, eta, const_e, &f, &bre, &cre,
-                    &nmult](const ComplexMatrixRef &b,
-                            const ComplexMatrixRef &c) -> void {
-                ComplexMatrixFunctions::extract_complex(
-                        b, bre, MatrixRef(nullptr, bre.m, bre.n));
-                cre.clear();
-                f(bre, cre);
-                ComplexMatrixFunctions::fill_complex(
-                        c, cre, MatrixRef(nullptr, cre.m, cre.n));
-                ComplexMatrixFunctions::extract_complex(
-                        b, MatrixRef(nullptr, bre.m, bre.n), bre);
-                cre.clear();
-                f(bre, cre);
-                ComplexMatrixFunctions::fill_complex(
-                        c, MatrixRef(nullptr, cre.m, cre.n), cre);
-                ComplexMatrixFunctions::iadd(c, b,
-                                             complex<double>(const_e + omega, -eta));
-                nmult += 2;
-            };
-            const double precond_reg = 1e-8;
-            gf = ComplexMatrixFunctions::lsqr(
-                    op, rop, aa, cbra, cket, nmultx, niter,
-                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                    precond_reg,
-                    tol, tol, max_iter, soft_max_iter);
-        }else if(solver_type == LinearSolverTypes::IDRS){
-            // Use gcrotmk_size.first as "S" value in IDR(S)
-            // Implementation uses conventional tolerance of ||r|| instead of ||r||²
-            const auto idrs_tol = sqrt(conv_thrd);
-            const double idrs_atol = 0.;
-            const double precond_reg = 1e-8;
-            assert(gcrotmk_size.first > 0);
-            gf = ComplexMatrixFunctions::idrs(
-                    op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
-                    iprint, para_rule == nullptr ? nullptr : para_rule->comm,
-                    precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
-        }else if (solver_type == LinearSolverTypes::GCROT){
-            gf = ComplexMatrixFunctions::gcrotmk(
-                    op, aa, cbra, cket, nmultx, niter, gcrotmk_size.first,
-                    gcrotmk_size.second, iprint,
-                    para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-                    max_iter, soft_max_iter);
-        }else{
-            cerr << "Greens_function: invalid solver type" << static_cast<int>(solver_type) << endl;
-            throw runtime_error("Invalid solver type of Green's function. "
-                                "LSQR, IDRS, and GCROT are supported");
-        }
-        gf = conj(gf);
-        ComplexMatrixFunctions::extract_complex(cbra, rbra, ibra);
-        if (compute_diag and preconditioner_type == PreconditionerTypes::Diagonal)
-            aa.deallocate();
-        cket.deallocate();
-        cbra.deallocate();
-        cre.deallocate();
-        bre.deallocate();
-        post_precompute();
-        uint64_t nflop = tf->opf->seq->cumulative_nflop;
-        if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
-        tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(make_pair(real(gf), imag(gf)),
-                          make_pair(nmult, niter), (size_t)nflop, t.get_time());
-    }
-    // [ibra] = (([H_eff] + omega)^2 + eta^2)^(-1) x (-eta [ket])
-    // [rbra] = -([H_eff] + omega) (1/eta) [bra]
-    // (real gf, imag gf), (nmult, numltp), nflop, tmult
-    tuple<pair<double, double>, pair<int, int>, size_t, double>
-    greens_function_squared(
-        double const_e, double omega, double eta,
-        const shared_ptr<SparseMatrix<S>> &real_bra,
-        int n_harmonic_projection = 0, bool iprint = false,
-        double conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        int nmult = 0, nmultx = 0;
-        frame->activate(0);
-        Timer t;
-        t.get_time();
-        MatrixRef mket(ket->data, (MKL_INT)ket->total_memory, 1);
-        MatrixRef ibra(bra->data, (MKL_INT)bra->total_memory, 1);
-        MatrixRef ktmp(nullptr, (MKL_INT)ket->total_memory, 1);
-        ktmp.allocate();
-        MatrixRef btmp(nullptr, (MKL_INT)bra->total_memory, 1);
-        btmp.allocate();
-        ktmp.clear();
-        MatrixFunctions::iadd(ktmp, mket, -eta);
-        DiagonalMatrix aa(nullptr, 0);
-        if (compute_diag) {
-            aa = DiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
-            aa.allocate();
-            for (MKL_INT i = 0; i < aa.size(); i++) {
-                aa.data[i] = diag->data[i] + const_e + omega;
-                aa.data[i] = aa.data[i] * aa.data[i] + eta * eta;
-            }
-        }
-        precompute();
-        const function<void(const MatrixRef &, const MatrixRef &)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b) {
-                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
-                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
-                    return this->tf->operator()(a, b);
-                else
-                    return (*this)(a, b);
-            };
-        auto op = [omega, eta, const_e, &f, &btmp,
-                   &nmult](const MatrixRef &b, const MatrixRef &c) -> void {
-            btmp.clear();
-            f(b, btmp);
-            MatrixFunctions::iadd(btmp, b, const_e + omega);
-            f(btmp, c);
-            MatrixFunctions::iadd(c, btmp, const_e + omega);
-            MatrixFunctions::iadd(c, b, eta * eta);
-            nmult += 2;
-        };
-        tf->opf->seq->cumulative_nflop = 0;
-        // solve imag part -> ibra
-        double igf = 0;
-        int nmultp = 0;
-        if (n_harmonic_projection == 0)
-            igf = MatrixFunctions::conjugate_gradient(
-                      op, aa, ibra, ktmp, nmultx, 0.0, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter) /
-                  (-eta);
-        else if (n_harmonic_projection < 0) {
-            int ndav = 0, ncg = 0;
-            int kk = -n_harmonic_projection;
-            igf =
-                MatrixFunctions::davidson_projected_deflated_conjugate_gradient(
-                    op, aa, ibra, ktmp, kk, ncg, ndav, 0.0, iprint,
-                    para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-                    conv_thrd, max_iter * kk, soft_max_iter * kk) /
-                (-eta);
-            nmult = ncg * 2;
-            nmultp = ndav * 2;
-        } else {
-            vector<MatrixRef> bs = vector<MatrixRef>(
-                n_harmonic_projection,
-                MatrixRef(nullptr, (MKL_INT)ket->total_memory, 1));
-            for (int ih = 0; ih < n_harmonic_projection; ih++) {
-                bs[ih].allocate();
-                if (ih == 0)
-                    MatrixFunctions::copy(bs[ih], ibra);
-                else
-                    Random::fill_rand_double(bs[ih].data, bs[ih].size());
-            }
-            MatrixFunctions::harmonic_davidson(
-                op, aa, bs, 0.0,
-                DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond,
-                nmultx, iprint,
-                para_rule == nullptr ? nullptr : para_rule->comm, 1E-4,
-                max_iter, soft_max_iter, 2, 50);
-            nmultp = nmult;
-            nmult = 0;
-            igf = MatrixFunctions::deflated_conjugate_gradient(
-                      op, aa, ibra, ktmp, nmultx, 0.0, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, bs) /
-                  (-eta);
-            for (int ih = n_harmonic_projection - 1; ih >= 0; ih--)
-                bs[ih].deallocate();
-        }
-        if (compute_diag)
-            aa.deallocate();
-        btmp.deallocate();
-        ktmp.deallocate();
-        // compute real part -> rbra
-        MatrixRef rbra(real_bra->data, (MKL_INT)real_bra->total_memory, 1);
-        rbra.clear();
-        f(ibra, rbra);
-        MatrixFunctions::iadd(rbra, ibra, const_e + omega);
-        MatrixFunctions::iscale(rbra, -1 / eta);
-        // compute real part green's function
-        double rgf = MatrixFunctions::dot(rbra, mket);
-        post_precompute();
-        uint64_t nflop = tf->opf->seq->cumulative_nflop;
-        if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
-        tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(make_pair(rgf, igf), make_pair(nmult + 1, nmultp),
-                          (size_t)nflop, t.get_time());
-    }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
-    tuple<double, pair<int, int>, size_t, double>
-    inverse_multiply(double const_e, LinearSolverTypes solver_type,
-                     pair<int, int> gcrotmk_size, bool iprint = false,
-                     double conv_thrd = 5E-6, int max_iter = 5000,
+    tuple<FL, pair<int, int>, size_t, double>
+    inverse_multiply(FL const_e, LinearSolverTypes solver_type,
+                     pair<int, int> linear_solver_params, bool iprint = false,
+                     FP conv_thrd = 5E-6, int max_iter = 5000,
                      int soft_max_iter = -1,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (solver_type == LinearSolverTypes::Automatic)
+            solver_type = LinearSolverTypes::MinRes;
         int nmult = 0, niter = 0;
         frame->activate(0);
         Timer t;
         t.get_time();
-        MatrixRef mket(ket->data, (MKL_INT)ket->total_memory, 1);
-        MatrixRef mbra(bra->data, (MKL_INT)bra->total_memory, 1);
+        GMatrix<FL> mket(ket->data, (MKL_INT)ket->total_memory, 1);
+        GMatrix<FL> mbra(bra->data, (MKL_INT)bra->total_memory, 1);
         tf->opf->seq->cumulative_nflop = 0;
-        DiagonalMatrix aa(nullptr, 0);
+        GDiagonalMatrix<FL> aa(nullptr, 0);
         if (compute_diag && solver_type != LinearSolverTypes::MinRes) {
-            aa = DiagonalMatrix(nullptr, (MKL_INT)diag->total_memory);
+            aa = GDiagonalMatrix<FL>(nullptr, (MKL_INT)diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++)
                 aa.data[i] = diag->data[i] + const_e;
         }
         precompute();
-        const function<void(const MatrixRef &, const MatrixRef &)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
                     return this->tf->operator()(a, b);
                 else
                     return (*this)(a, b);
             };
-        assert( solver_type != LinearSolverTypes::IDRS &&
-                "Currently IDR(S) is only implemented for complex-valued data.");
-        assert( solver_type != LinearSolverTypes::LSQR &&
-                "Currently LSQR is only implemented for complex-valued data.");
-        double r =
+        FL r =
             solver_type == LinearSolverTypes::CG
-                ? MatrixFunctions::conjugate_gradient(
+                ? IterativeMatrixFunctions<FL>::conjugate_gradient(
                       f, aa, mbra, mket, nmult, const_e, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter)
                 : (solver_type == LinearSolverTypes::MinRes
-                       ? MatrixFunctions::minres(
+                       ? IterativeMatrixFunctions<FL>::minres(
                              f, mbra, mket, nmult, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter)
-                       : MatrixFunctions::gcrotmk(
+                       : IterativeMatrixFunctions<FL>::gcrotmk(
                              f, aa, mbra, mket, nmult, niter,
-                             gcrotmk_size.first, gcrotmk_size.second, const_e,
-                             iprint,
+                             linear_solver_params.first,
+                             linear_solver_params.second, const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter));
         if (compute_diag && solver_type != LinearSolverTypes::MinRes)
@@ -707,32 +459,33 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                           t.get_time());
     }
     shared_ptr<OpExpr<S>>
-    add_const_term(double const_e,
-                   const shared_ptr<ParallelRule<S>> &para_rule) {
+    add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != 0) {
+        if (const_e != 0.0) {
             // q_label does not matter
-            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label);
             if (para_rule == nullptr || para_rule->is_root()) {
                 if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
                     op->ropt->get_type() == OperatorTensorTypes::Delayed) {
                     bool dleft =
                         op->lopt->get_type() == OperatorTensorTypes::Delayed;
-                    shared_ptr<DelayedOperatorTensor<S>> dopt =
-                        dynamic_pointer_cast<DelayedOperatorTensor<S>>(
+                    shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
+                        dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(
                             dleft ? op->lopt : op->ropt);
-                    shared_ptr<OpElement<S>> xiop =
-                        dynamic_pointer_cast<OpElement<S>>(iop);
+                    shared_ptr<OpElement<S, FL>> xiop =
+                        dynamic_pointer_cast<OpElement<S, FL>>(iop);
                     if (dopt->lopt->ops.count(iop) != 0 &&
                         dopt->ropt->ops.count(iop) != 0)
                         op->mat->data[0] =
                             expr +
-                            (shared_ptr<OpExpr<S>>)make_shared<OpSumProd<S>>(
-                                xiop, xiop,
-                                vector<shared_ptr<OpElement<S>>>{xiop, xiop},
-                                vector<bool>{false, false}, const_e, 0);
+                            (shared_ptr<OpExpr<S>>)
+                                make_shared<OpSumProd<S, FL>>(
+                                    xiop, xiop,
+                                    vector<shared_ptr<OpElement<S, FL>>>{xiop,
+                                                                         xiop},
+                                    vector<bool>{false, false}, const_e, 0);
                     else
                         op->mat->data[0] = expr + const_e * (iop * iop);
                 } else
@@ -743,8 +496,8 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [bra] = [H_eff] x [ket]
     // norm, nmult, nflop, tmult
-    tuple<double, int, size_t, double>
-    multiply(double const_e,
+    tuple<FP, int, size_t, double>
+    multiply(FL const_e,
              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
         shared_ptr<OpExpr<S>> expr = add_const_term(const_e, para_rule);
@@ -756,11 +509,11 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
-        (*this)(MatrixRef(ket->data, (MKL_INT)ket->total_memory, 1),
-                MatrixRef(bra->data, (MKL_INT)bra->total_memory, 1));
+        (*this)(GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
+                GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         op->mat->data[0] = expr;
-        double norm = MatrixFunctions::norm(
-            MatrixRef(bra->data, (MKL_INT)bra->total_memory, 1));
+        FP norm = GMatrixFunctions<FL>::norm(
+            GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -770,14 +523,14 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
-    tuple<vector<pair<shared_ptr<OpExpr<S>>, double>>, size_t, double>
-    expect(double const_e, ExpectationAlgorithmTypes algo_type,
+    tuple<vector<pair<shared_ptr<OpExpr<S>>, FL>>, size_t, double>
+    expect(FL const_e, ExpectationAlgorithmTypes algo_type,
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0 && op->mat->data.size() > 0)
+        if (const_e != 0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
-        assert(ex_type == ExpectationTypes::Real);
+        assert(ex_type == ExpectationTypes::Real || is_complex<FL>::value);
         if (algo_type == ExpectationAlgorithmTypes::Automatic)
             algo_type = op->mat->data.size() > 1
                             ? ExpectationAlgorithmTypes::Fast
@@ -789,45 +542,48 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         Timer t;
         t.get_time();
-        vector<pair<shared_ptr<OpExpr<S>>, double>> expectations;
+        vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations;
         // may happen for NPDM with ancilla
         if (op->mat->data.size() == 1 &&
-            dynamic_pointer_cast<OpElement<S>>(op->dops[0])->name ==
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
                 OpNames::Zero)
             ;
         else if (algo_type == ExpectationAlgorithmTypes::Normal) {
-            MatrixRef ktmp(ket->data, (MKL_INT)ket->total_memory, 1);
-            MatrixRef rtmp(bra->data, (MKL_INT)bra->total_memory, 1);
-            MatrixRef btmp(nullptr, (MKL_INT)bra->total_memory, 1);
+            GMatrix<FL> ktmp(ket->data, (MKL_INT)ket->total_memory, 1);
+            GMatrix<FL> rtmp(bra->data, (MKL_INT)bra->total_memory, 1);
+            GMatrix<FL> btmp(nullptr, (MKL_INT)bra->total_memory, 1);
             btmp.allocate();
             expectations.reserve(op->mat->data.size());
-            vector<double> results;
+            vector<FL> results;
             vector<size_t> results_idx;
             results.reserve(op->mat->data.size());
             results_idx.reserve(op->mat->data.size());
             if (para_rule != nullptr)
                 para_rule->set_partition(ParallelRulePartitionTypes::Middle);
             for (size_t i = 0; i < op->mat->data.size(); i++) {
-                assert(dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name !=
+                using OESF = OpElement<S, FL>;
+                assert(dynamic_pointer_cast<OESF>(op->dops[i])->name !=
                        OpNames::Zero);
-                S idx_opdq =
-                    dynamic_pointer_cast<OpElement<S>>(op->dops[i])->q_label;
+                S idx_opdq = dynamic_pointer_cast<OpElement<S, FL>>(op->dops[i])
+                                 ->q_label;
                 S ket_dq = ket->info->delta_quantum;
                 S bra_dq = bra->info->delta_quantum;
                 if (idx_opdq.combine(bra_dq, ket_dq) == S(S::invalid))
                     expectations.push_back(make_pair(op->dops[i], 0.0));
                 else {
-                    double r = 0.0;
+                    FL r = 0.0;
                     if (para_rule == nullptr ||
-                        !para_rule->number(op->dops[i])) {
+                        !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                             ->number(op->dops[i])) {
                         btmp.clear();
                         (*this)(ktmp, btmp, (int)i, 1.0, true);
-                        r = MatrixFunctions::dot(btmp, rtmp);
+                        r = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                     } else {
-                        if (para_rule->own(op->dops[i])) {
+                        if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                                ->own(op->dops[i])) {
                             btmp.clear();
                             (*this)(ktmp, btmp, (int)i, 1.0, false);
-                            r = MatrixFunctions::dot(btmp, rtmp);
+                            r = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                         }
                         results.push_back(r);
                         results_idx.push_back(expectations.size());
@@ -845,7 +601,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         } else
             expectations = tf->tensor_product_expectation(
                 op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
-        if (const_e != 0 && op->mat->data.size() > 0)
+        if (const_e != 0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -855,25 +611,25 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         return make_tuple(expectations, (size_t)nflop, t.get_time());
     }
     // return |ket> and beta [H_eff] |ket>
-    pair<vector<shared_ptr<SparseMatrix<S>>>, tuple<int, size_t, double>>
-    first_rk4_apply(double beta, double const_e,
+    pair<vector<shared_ptr<SparseMatrix<S, FL>>>, tuple<int, size_t, double>>
+    first_rk4_apply(FL beta, FL const_e,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        vector<shared_ptr<SparseMatrix<S>>> r(2);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<shared_ptr<SparseMatrix<S, FL>>> r(2);
         for (int i = 0; i < 2; i++) {
-            r[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            r[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             r[i]->allocate(bra->info);
         }
-        MatrixRef kk(ket->data, (MKL_INT)ket->total_memory, 1);
-        MatrixRef r0(r[0]->data, (MKL_INT)bra->total_memory, 1);
-        MatrixRef r1(r[1]->data, (MKL_INT)bra->total_memory, 1);
+        GMatrix<FL> kk(ket->data, (MKL_INT)ket->total_memory, 1);
+        GMatrix<FL> r0(r[0]->data, (MKL_INT)bra->total_memory, 1);
+        GMatrix<FL> r1(r[1]->data, (MKL_INT)bra->total_memory, 1);
         Timer t;
         t.get_time();
         assert(op->mat->data.size() > 0);
         precompute();
-        const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
                     return this->tf->operator()(a, b, scale);
@@ -887,7 +643,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         add_const_term(1.0, para_rule);
         f(kk, r0, 1.0);
         op->mat->data[0] = expr;
-        // if (const_e != 0)
+        // if (const_e != 0.0)
         //     MatrixFunctions::iadd(r1, r0, beta * const_e);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -896,42 +652,41 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_pair(r, make_tuple(1, (size_t)nflop, t.get_time()));
     }
-    pair<vector<shared_ptr<SparseMatrix<S>>>,
-         tuple<double, double, int, size_t, double>>
-    second_rk4_apply(double beta, double const_e,
-                     const shared_ptr<SparseMatrix<S>> &hket,
+    pair<vector<shared_ptr<SparseMatrix<S, FL>>>,
+         tuple<FL, FP, int, size_t, double>>
+    second_rk4_apply(FL beta, FL const_e,
+                     const shared_ptr<SparseMatrix<S, FL>> &hket,
                      bool eval_energy = false,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        vector<shared_ptr<SparseMatrix<S>>> rr(3), kk(4);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<shared_ptr<SparseMatrix<S, FL>>> rr(3), kk(4);
         kk[0] = hket;
         for (int i = 0; i < 3; i++) {
-            rr[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            rr[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             rr[i]->allocate(ket->info);
         }
         for (int i = 0; i < 3; i++) {
-            kk[i + 1] = make_shared<SparseMatrix<S>>(d_alloc);
+            kk[i + 1] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             kk[i + 1]->allocate(ket->info);
         }
-        MatrixRef v(ket->data, (MKL_INT)ket->total_memory, 1);
-        vector<MatrixRef> k(4, v), r(3, v);
+        GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
+        vector<GMatrix<FL>> k(4, v), r(3, v);
         Timer t;
         t.get_time();
         for (int i = 0; i < 3; i++)
-            r[i] = MatrixRef(rr[i]->data, (MKL_INT)ket->total_memory, 1);
+            r[i] = GMatrix<FL>(rr[i]->data, (MKL_INT)ket->total_memory, 1);
         for (int i = 0; i < 4; i++)
-            k[i] = MatrixRef(kk[i]->data, (MKL_INT)ket->total_memory, 1);
+            k[i] = GMatrix<FL>(kk[i]->data, (MKL_INT)ket->total_memory, 1);
         tf->opf->seq->cumulative_nflop = 0;
-        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
-        const vector<vector<double>> cs = vector<vector<double>>{
-            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
-                           -5.0 / 162.0},
-            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
-            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
+        const vector<FP> ks = vector<FP>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<FP>> cs = vector<vector<FP>>{
+            vector<FP>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0, -5.0 / 162.0},
+            vector<FP>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<FP>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         precompute();
-        const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
                     return this->tf->operator()(a, b, scale);
@@ -940,24 +695,25 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             };
         // k1 ~ k3
         for (int i = 1; i < 4; i++) {
-            MatrixFunctions::copy(r[0], v);
-            MatrixFunctions::iadd(r[0], k[i - 1], ks[i]);
+            GMatrixFunctions<FL>::copy(r[0], v);
+            GMatrixFunctions<FL>::iadd(r[0], k[i - 1], ks[i]);
             f(r[0], k[i], beta);
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            double factor = exp(beta * (i + 1) / 3 * const_e);
-            MatrixFunctions::copy(r[i], v);
-            MatrixFunctions::iscale(r[i], factor);
+            FL factor = exp(beta * (i + 1.0) / 3.0 * const_e);
+            GMatrixFunctions<FL>::copy(r[i], v);
+            GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
-                MatrixFunctions::iadd(r[i], k[j], cs[i][j] * factor);
+                GMatrixFunctions<FL>::iadd(r[i], k[j], cs[i][j] * factor);
         }
-        double norm = MatrixFunctions::norm(r[2]);
-        double energy = -const_e;
+        FP norm = GMatrixFunctions<FL>::norm(r[2]);
+        FL energy = -const_e;
         if (eval_energy) {
             k[0].clear();
             f(r[2], k[0], 1.0);
-            energy = MatrixFunctions::dot(r[2], k[0]) / (norm * norm);
+            energy =
+                GMatrixFunctions<FL>::complex_dot(r[2], k[0]) / (norm * norm);
         }
         for (int i = 3; i >= 1; i--)
             kk[i]->deallocate();
@@ -971,33 +727,32 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
-    pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
-    rk4_apply(double beta, double const_e, bool eval_energy = false,
+    pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
+    rk4_apply(FL beta, FL const_e, bool eval_energy = false,
               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        MatrixRef v(ket->data, (MKL_INT)ket->total_memory, 1);
-        vector<MatrixRef> k, r;
+        GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
+        vector<GMatrix<FL>> k, r;
         Timer t;
         t.get_time();
         frame->activate(1);
         for (int i = 0; i < 3; i++) {
-            r.push_back(MatrixRef(nullptr, (MKL_INT)ket->total_memory, 1));
+            r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             r[i].allocate();
         }
         frame->activate(0);
         for (int i = 0; i < 4; i++) {
-            k.push_back(MatrixRef(nullptr, (MKL_INT)ket->total_memory, 1));
+            k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             k[i].allocate(), k[i].clear();
         }
         tf->opf->seq->cumulative_nflop = 0;
-        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
-        const vector<vector<double>> cs = vector<vector<double>>{
-            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
-                           -5.0 / 162.0},
-            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
-            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
+        const vector<FP> ks = vector<FP>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<FP>> cs = vector<vector<FP>>{
+            vector<FP>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0, -5.0 / 162.0},
+            vector<FP>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<FP>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         precompute();
-        const function<void(const MatrixRef &, const MatrixRef &, double)> &f =
-            [this](const MatrixRef &a, const MatrixRef &b, double scale) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
                     return this->tf->operator()(a, b, scale);
@@ -1009,25 +764,26 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             if (i == 0)
                 f(v, k[i], beta);
             else {
-                MatrixFunctions::copy(r[0], v);
-                MatrixFunctions::iadd(r[0], k[i - 1], ks[i]);
+                GMatrixFunctions<FL>::copy(r[0], v);
+                GMatrixFunctions<FL>::iadd(r[0], k[i - 1], ks[i]);
                 f(r[0], k[i], beta);
             }
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            double factor = exp(beta * (i + 1) / 3 * const_e);
-            MatrixFunctions::copy(r[i], v);
-            MatrixFunctions::iscale(r[i], factor);
+            FL factor = exp(beta * (i + 1.0) / 3.0 * const_e);
+            GMatrixFunctions<FL>::copy(r[i], v);
+            GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
-                MatrixFunctions::iadd(r[i], k[j], cs[i][j] * factor);
+                GMatrixFunctions<FL>::iadd(r[i], k[j], cs[i][j] * factor);
         }
-        double norm = MatrixFunctions::norm(r[2]);
-        double energy = -const_e;
+        FP norm = GMatrixFunctions<FL>::norm(r[2]);
+        FL energy = -const_e;
         if (eval_energy) {
             k[0].clear();
             f(r[2], k[0], 1.0);
-            energy = MatrixFunctions::dot(r[2], k[0]) / (norm * norm);
+            energy =
+                GMatrixFunctions<FL>::complex_dot(r[2], k[0]) / (norm * norm);
         }
         for (int i = 3; i >= 0; i--)
             k[i].deallocate();
@@ -1041,27 +797,27 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
     }
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
-    tuple<double, double, int, size_t, double>
-    expo_apply(double beta, double const_e, bool symmetric, bool iprint = false,
+    tuple<FL, FP, int, size_t, double>
+    expo_apply(FL beta, FL const_e, bool symmetric, bool iprint = false,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(compute_diag);
-        double anorm = MatrixFunctions::norm(
-            MatrixRef(diag->data, (MKL_INT)diag->total_memory, 1));
-        MatrixRef v(ket->data, (MKL_INT)ket->total_memory, 1);
+        FP anorm = GMatrixFunctions<FL>::norm(
+            GMatrix<FL>(diag->data, (MKL_INT)diag->total_memory, 1));
+        GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
         int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
                      (tf->opf->seq->mode & SeqTypes::Tasked))
-                        ? MatrixFunctions::expo_apply(
+                        ? IterativeMatrixFunctions<FL>::expo_apply(
                               *tf, beta, anorm, v, const_e, symmetric, iprint,
                               para_rule == nullptr ? nullptr : para_rule->comm)
-                        : MatrixFunctions::expo_apply(
+                        : IterativeMatrixFunctions<FL>::expo_apply(
                               *this, beta, anorm, v, const_e, symmetric, iprint,
                               para_rule == nullptr ? nullptr : para_rule->comm);
-        double norm = MatrixFunctions::norm(v);
-        MatrixRef tmp(nullptr, (MKL_INT)ket->total_memory, 1);
+        FP norm = GMatrixFunctions<FL>::norm(v);
+        GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
         tmp.allocate();
         tmp.clear();
         if (tf->opf->seq->mode == SeqTypes::Auto ||
@@ -1069,7 +825,7 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
             (*tf)(v, tmp);
         else
             (*this)(v, tmp);
-        double energy = MatrixFunctions::dot(v, tmp) / (norm * norm);
+        FL energy = GMatrixFunctions<FL>::complex_dot(v, tmp) / (norm * norm);
         tmp.deallocate();
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -1108,27 +864,30 @@ template <typename S> struct EffectiveHamiltonian<S, MPS<S>> {
 };
 
 // Linear combination of Effective Hamiltonians
-template <typename S> struct LinearEffectiveHamiltonian {
-    typedef S s_type;
-    vector<shared_ptr<EffectiveHamiltonian<S>>> h_effs;
-    vector<double> coeffs;
+template <typename S, typename FL> struct LinearEffectiveHamiltonian {
+    typedef S ST;
+    typedef FL FLT;
+    typedef typename GMatrix<FL>::FP FP;
+    vector<shared_ptr<EffectiveHamiltonian<S, FL>>> h_effs;
+    vector<FL> coeffs;
     S opdq;
-    LinearEffectiveHamiltonian(const shared_ptr<EffectiveHamiltonian<S>> &h_eff)
+    LinearEffectiveHamiltonian(
+        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff)
         : h_effs{h_eff}, coeffs{1} {}
     LinearEffectiveHamiltonian(
-        const vector<shared_ptr<EffectiveHamiltonian<S>>> &h_effs,
-        const vector<double> &coeffs)
+        const vector<shared_ptr<EffectiveHamiltonian<S, FL>>> &h_effs,
+        const vector<FL> &coeffs)
         : h_effs(h_effs), coeffs(coeffs) {}
-    static shared_ptr<LinearEffectiveHamiltonian<S>>
-    linearize(const shared_ptr<LinearEffectiveHamiltonian<S>> &x) {
+    static shared_ptr<LinearEffectiveHamiltonian<S, FL>>
+    linearize(const shared_ptr<LinearEffectiveHamiltonian<S, FL>> &x) {
         return x;
     }
-    static shared_ptr<LinearEffectiveHamiltonian<S>>
-    linearize(const shared_ptr<EffectiveHamiltonian<S>> &x) {
-        return make_shared<LinearEffectiveHamiltonian<S>>(x);
+    static shared_ptr<LinearEffectiveHamiltonian<S, FL>>
+    linearize(const shared_ptr<EffectiveHamiltonian<S, FL>> &x) {
+        return make_shared<LinearEffectiveHamiltonian<S, FL>>(x);
     }
     // [c] = [H_eff[idx]] x [b]
-    void operator()(const MatrixRef &b, const MatrixRef &c) {
+    void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c) {
         for (size_t ih = 0; ih < h_effs.size(); ih++)
             if (h_effs[ih]->tf->opf->seq->mode == SeqTypes::Auto ||
                 (h_effs[ih]->tf->opf->seq->mode & SeqTypes::Tasked))
@@ -1144,33 +903,33 @@ template <typename S> struct LinearEffectiveHamiltonian {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<double, int, size_t, double>
-    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
+    tuple<FP, int, size_t, double>
+    eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
-         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(h_effs.size() != 0);
-        const shared_ptr<TensorFunctions<S>> &tf = h_effs[0]->tf;
-        DiagonalMatrix aa(nullptr, (MKL_INT)h_effs[0]->diag->total_memory);
+        const shared_ptr<TensorFunctions<S, FL>> &tf = h_effs[0]->tf;
+        GDiagonalMatrix<FL> aa(nullptr, (MKL_INT)h_effs[0]->diag->total_memory);
         aa.allocate();
         aa.clear();
         for (size_t ih = 0; ih < h_effs.size(); ih++) {
             assert(h_effs[ih]->compute_diag);
-            MatrixFunctions::iadd(
-                MatrixRef(aa.data, (MKL_INT)aa.size(), 1),
-                MatrixRef(h_effs[ih]->diag->data,
-                          (MKL_INT)h_effs[ih]->diag->total_memory, 1),
+            GMatrixFunctions<FL>::iadd(
+                GMatrix<FL>(aa.data, (MKL_INT)aa.size(), 1),
+                GMatrix<FL>(h_effs[ih]->diag->data,
+                            (MKL_INT)h_effs[ih]->diag->total_memory, 1),
                 coeffs[ih]);
             h_effs[ih]->precompute();
         }
-        vector<MatrixRef> bs = vector<MatrixRef>{MatrixRef(
+        vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{GMatrix<FL>(
             h_effs[0]->ket->data, (MKL_INT)h_effs[0]->ket->total_memory, 1)};
         frame->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
-        vector<double> eners = MatrixFunctions::harmonic_davidson(
+        vector<FP> eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
             *this, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
             max_iter, soft_max_iter);
@@ -1187,61 +946,69 @@ template <typename S> struct LinearEffectiveHamiltonian {
 };
 
 template <typename T>
-inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
-operator*(double d, const shared_ptr<T> &x) {
-    shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>> xx =
-        LinearEffectiveHamiltonian<typename T::s_type>::linearize(x);
-    vector<double> new_coeffs;
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>>
+operator*(typename T::FLT d, const shared_ptr<T> &x) {
+    shared_ptr<LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>> xx =
+        LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>::linearize(
+            x);
+    vector<typename T::FLT> new_coeffs;
     for (auto &c : xx->coeffs)
         new_coeffs.push_back(c * d);
-    return make_shared<LinearEffectiveHamiltonian<typename T::s_type>>(
+    return make_shared<
+        LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>>(
         xx->h_effs, new_coeffs);
 }
 
 template <typename T>
-inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
-operator*(const shared_ptr<T> &x, double d) {
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>>
+operator*(const shared_ptr<T> &x, typename T::FLT d) {
     return d * x;
 }
 
 template <typename T>
-inline shared_ptr<LinearEffectiveHamiltonian<typename T::s_type>>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T::ST, typename T::FLT>>
 operator-(const shared_ptr<T> &x) {
     return (-1.0) * x;
 }
 
 template <typename T1, typename T2>
-inline shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T1::ST, typename T1::FLT>>
 operator+(const shared_ptr<T1> &x, const shared_ptr<T2> &y) {
-    shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>> xx =
-        LinearEffectiveHamiltonian<typename T1::s_type>::linearize(x);
-    shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>> yy =
-        LinearEffectiveHamiltonian<typename T1::s_type>::linearize(y);
-    vector<shared_ptr<EffectiveHamiltonian<typename T1::s_type>>> h_effs =
-        xx->h_effs;
-    vector<double> coeffs = xx->coeffs;
+    shared_ptr<LinearEffectiveHamiltonian<typename T1::ST, typename T1::FLT>>
+        xx = LinearEffectiveHamiltonian<typename T1::ST,
+                                        typename T1::FLT>::linearize(x);
+    shared_ptr<LinearEffectiveHamiltonian<typename T1::ST, typename T1::FLT>>
+        yy = LinearEffectiveHamiltonian<typename T1::ST,
+                                        typename T1::FLT>::linearize(y);
+    vector<shared_ptr<EffectiveHamiltonian<typename T1::ST, typename T1::FLT>>>
+        h_effs = xx->h_effs;
+    vector<typename T1::FLT> coeffs = xx->coeffs;
     h_effs.insert(h_effs.end(), yy->h_effs.begin(), yy->h_effs.end());
     coeffs.insert(coeffs.end(), yy->coeffs.begin(), yy->coeffs.end());
-    return make_shared<LinearEffectiveHamiltonian<typename T1::s_type>>(h_effs,
-                                                                        coeffs);
+    return make_shared<
+        LinearEffectiveHamiltonian<typename T1::ST, typename T1::FLT>>(h_effs,
+                                                                       coeffs);
 }
 
 template <typename T1, typename T2>
-inline shared_ptr<LinearEffectiveHamiltonian<typename T1::s_type>>
+inline shared_ptr<LinearEffectiveHamiltonian<typename T1::ST, typename T1::FLT>>
 operator-(const shared_ptr<T1> &x, const shared_ptr<T2> &y) {
     return x + (-1.0) * y;
 }
 
 // Effective Hamiltonian for MultiMPS
-template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
+template <typename S, typename FL>
+struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
+    typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FC FC;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,
         right_op_infos;
     // Symbolic expression of effective H
-    shared_ptr<DelayedOperatorTensor<S>> op;
-    shared_ptr<SparseMatrixGroup<S>> diag;
-    vector<shared_ptr<SparseMatrixGroup<S>>> bra, ket;
-    shared_ptr<SparseMatrixGroup<S>> cmat, vmat;
-    shared_ptr<TensorFunctions<S>> tf;
+    shared_ptr<DelayedOperatorTensor<S, FL>> op;
+    shared_ptr<SparseMatrixGroup<S, FL>> diag;
+    vector<shared_ptr<SparseMatrixGroup<S, FL>>> bra, ket;
+    shared_ptr<SparseMatrixGroup<S, FL>> cmat, vmat;
+    shared_ptr<TensorFunctions<S, FL>> tf;
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
     S opdq;
@@ -1254,28 +1021,28 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        const shared_ptr<DelayedOperatorTensor<S>> &op,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &bra,
-        const vector<shared_ptr<SparseMatrixGroup<S>>> &ket,
-        const shared_ptr<OpElement<S>> &hop,
+        const shared_ptr<DelayedOperatorTensor<S, FL>> &op,
+        const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &bra,
+        const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &ket,
+        const shared_ptr<OpElement<S, FL>> &hop,
         const shared_ptr<SymbolicColumnVector<S>> &hop_mat,
-        const shared_ptr<TensorFunctions<S>> &ptf, bool compute_diag = true)
+        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
           compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             assert(bra == ket);
-            diag = make_shared<SparseMatrixGroup<S>>();
+            diag = make_shared<SparseMatrixGroup<S, FL>>();
             diag->allocate(ket[0]->infos);
         }
         // unique sub labels
         opdq = hop->q_label;
-        vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S>::get_uniq_sub_labels(op->mat, hop_mat, msl);
+            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl);
         // tensor product diagonal
         if (compute_diag) {
             for (int i = 0; i < diag->n; i++) {
@@ -1286,15 +1053,15 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                     ket[0]->infos[i]->delta_quantum, opdq, msubsl[0],
                     left_op_infos, right_op_infos, diag->infos[i], tf->opf->cg);
                 diag->infos[i]->cinfo = diag_info;
-                shared_ptr<SparseMatrix<S>> xdiag = (*diag)[i];
+                shared_ptr<SparseMatrix<S, FL>> xdiag = (*diag)[i];
                 tf->tensor_product_diagonal(op->mat->data[0], op->lopt,
                                             op->ropt, xdiag, opdq);
                 diag_info->deallocate();
             }
         }
         // temp wavefunction
-        cmat = make_shared<SparseMatrixGroup<S>>();
-        vmat = make_shared<SparseMatrixGroup<S>>();
+        cmat = make_shared<SparseMatrixGroup<S, FL>>();
+        vmat = make_shared<SparseMatrixGroup<S, FL>>();
         *cmat = *ket[0];
         *vmat = *bra[0];
         // temp wavefunction info
@@ -1327,14 +1094,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     // prepare batch gemm
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
-            cmat->data = vmat->data = (double *)0;
+            cmat->data = vmat->data = (FL *)0;
             tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
                                               op->ropt, cmat, vmat,
                                               wfn_infos[0], opdq, 1.0, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
-            cmat->data = vmat->data = (double *)0;
+            cmat->data = vmat->data = (FL *)0;
             tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
                                               op->ropt, cmat, vmat,
                                               wfn_infos[0], opdq, 1.0, false);
@@ -1347,25 +1114,24 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             tf->opf->seq->clear();
         }
     }
-    shared_ptr<SparseMatrixGroup<S>>
+    shared_ptr<SparseMatrixGroup<S, FL>>
     perturbative_noise(bool trace_right, int iL, int iR, FuseTypes ftype,
                        const shared_ptr<MPSInfo<S>> &mps_info,
-                       const vector<double> &weights,
-                       const NoiseTypes noise_type,
+                       const vector<FP> &weights, const NoiseTypes noise_type,
                        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(mps_info->get_type() & MPSTypes::MultiWfn);
         shared_ptr<MultiMPSInfo<S>> minfo =
             dynamic_pointer_cast<MultiMPSInfo<S>>(mps_info);
-        vector<S> msl = Partition<S>::get_uniq_labels({hop_mat});
+        vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
         shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
         shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
             1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S>::get_uniq_sub_labels(
+        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
             pmat, hop_mat, msl, true, trace_right, false)[0];
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         for (int i = 0; i < ket[0]->n; i++) {
@@ -1419,8 +1185,8 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         r.deallocate();
         l.deallocate();
         // perturbed wavefunctions
-        shared_ptr<SparseMatrixGroup<S>> perturb_ket =
-            make_shared<SparseMatrixGroup<S>>(d_alloc);
+        shared_ptr<SparseMatrixGroup<S, FL>> perturb_ket =
+            make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
         assert(noise_type & NoiseTypes::Perturbative);
         bool do_reduce = !(noise_type & NoiseTypes::Collected);
         bool reduced = noise_type & NoiseTypes::Reduced;
@@ -1474,7 +1240,7 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             // perform multiplication
             for (int ii = 0, pvidx = vidx; ii < (int)ket.size(); ii++) {
                 vidx = pvidx;
-                double ket_norm = (*ket[ii])[i]->norm();
+                FP ket_norm = (*ket[ii])[i]->norm();
                 if (abs(ket_norm) > TINY)
                     tf->tensor_product_partial_multiply(
                         (weights[ii] / ket_norm) * pexpr, op->lopt, op->ropt,
@@ -1492,16 +1258,16 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             if (!low_mem) {
                 assert(perturb_ket->total_memory <=
-                       (size_t)numeric_limits<decltype(MatrixRef::n)>::max());
-                tf->opf->seq->auto_perform(MatrixRef(
+                       (size_t)numeric_limits<decltype(GMatrix<FL>::n)>::max());
+                tf->opf->seq->auto_perform(GMatrix<FL>(
                     perturb_ket->data, (MKL_INT)perturb_ket->total_memory, 1));
             } else {
-                vector<MatrixRef> pmats(perturb_ket->n,
-                                        MatrixRef(nullptr, 0, 0));
+                vector<GMatrix<FL>> pmats(perturb_ket->n,
+                                          GMatrix<FL>(nullptr, 0, 0));
                 for (int j = 0; j < perturb_ket->n; j++)
-                    pmats[j] =
-                        MatrixRef((*perturb_ket)[j]->data,
-                                  (MKL_INT)(*perturb_ket)[j]->total_memory, 1);
+                    pmats[j] = GMatrix<FL>(
+                        (*perturb_ket)[j]->data,
+                        (MKL_INT)(*perturb_ket)[j]->total_memory, 1);
                 tf->opf->seq->auto_perform(pmats);
             }
             if (para_rule != nullptr && do_reduce)
@@ -1521,29 +1287,31 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         else if (op->mat->data[0]->get_type() == OpTypes::Sum) {
             int r = 0;
             for (auto &opx :
-                 dynamic_pointer_cast<OpSum<S>>(op->mat->data[0])->strings) {
+                 dynamic_pointer_cast<OpSum<S, FL>>(op->mat->data[0])
+                     ->strings) {
                 if (opx->get_type() == OpTypes::Prod ||
                     opx->get_type() == OpTypes::Elem)
                     r++;
                 else if (opx->get_type() == OpTypes::SumProd)
-                    r += (int)dynamic_pointer_cast<OpSumProd<S>>(opx)
+                    r += (int)dynamic_pointer_cast<OpSumProd<S, FL>>(opx)
                              ->ops.size();
             }
             return r;
         } else if (op->mat->data[0]->get_type() == OpTypes::SumProd)
-            return (int)dynamic_pointer_cast<OpSumProd<S>>(op->mat->data[0])
+            return (int)dynamic_pointer_cast<OpSumProd<S, FL>>(op->mat->data[0])
                 ->ops.size();
         else
             return 1;
     }
     // [c] = [H_eff[idx]] x [b]
-    void operator()(const MatrixRef &b, const MatrixRef &c, int idx = 0,
-                    double factor = 1.0, bool all_reduce = true) {
+    void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c, int idx = 0,
+                    FL factor = 1.0, bool all_reduce = true) {
         assert(b.m * b.n == cmat->total_memory);
         assert(c.m * c.n == vmat->total_memory);
         cmat->data = b.data;
         vmat->data = c.data;
-        S idx_opdq = dynamic_pointer_cast<OpElement<S>>(op->dops[idx])->q_label;
+        S idx_opdq =
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[idx])->q_label;
         size_t ic = lower_bound(operator_quanta.begin(), operator_quanta.end(),
                                 idx_opdq) -
                     operator_quanta.begin();
@@ -1554,33 +1322,34 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
-    tuple<vector<double>, int, size_t, double>
-    eigs(bool iprint = false, double conv_thrd = 5E-6, int max_iter = 5000,
-         DavidsonTypes davidson_type = DavidsonTypes::Normal, double shift = 0,
+    tuple<vector<FP>, int, size_t, double>
+    eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
+         int soft_max_iter = -1,
+         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(compute_diag);
-        DiagonalMatrix aa(diag->data, (MKL_INT)diag->total_memory);
-        vector<MatrixRef> bs;
+        GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
+        vector<GMatrix<FL>> bs;
         for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(
-                MatrixRef(ket[i]->data, (MKL_INT)ket[i]->total_memory, 1));
+                GMatrix<FL>(ket[i]->data, (MKL_INT)ket[i]->total_memory, 1));
         frame->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<double> eners =
+        vector<FP> eners =
             (tf->opf->seq->mode == SeqTypes::Auto ||
              (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? MatrixFunctions::harmonic_davidson(
+                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter)
-                : MatrixFunctions::harmonic_davidson(
+                      conv_thrd, max_iter, soft_max_iter)
+                : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter);
+                      conv_thrd, max_iter, soft_max_iter);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1589,32 +1358,33 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         return make_tuple(eners, ndav, (size_t)nflop, t.get_time());
     }
     shared_ptr<OpExpr<S>>
-    add_const_term(double const_e,
-                   const shared_ptr<ParallelRule<S>> &para_rule) {
+    add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != 0) {
+        if (const_e != 0.0) {
             // q_label does not matter
-            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S>>(
+            shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
-                dynamic_pointer_cast<OpElement<S>>(op->dops[0])->q_label);
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label);
             if (para_rule == nullptr || para_rule->is_root()) {
                 if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
                     op->ropt->get_type() == OperatorTensorTypes::Delayed) {
                     bool dleft =
                         op->lopt->get_type() == OperatorTensorTypes::Delayed;
-                    shared_ptr<DelayedOperatorTensor<S>> dopt =
-                        dynamic_pointer_cast<DelayedOperatorTensor<S>>(
+                    shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
+                        dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(
                             dleft ? op->lopt : op->ropt);
-                    shared_ptr<OpElement<S>> xiop =
-                        dynamic_pointer_cast<OpElement<S>>(iop);
+                    shared_ptr<OpElement<S, FL>> xiop =
+                        dynamic_pointer_cast<OpElement<S, FL>>(iop);
                     if (dopt->lopt->ops.count(iop) != 0 &&
                         dopt->ropt->ops.count(iop) != 0)
                         op->mat->data[0] =
                             expr +
-                            (shared_ptr<OpExpr<S>>)make_shared<OpSumProd<S>>(
-                                xiop, xiop,
-                                vector<shared_ptr<OpElement<S>>>{xiop, xiop},
-                                vector<bool>{false, false}, const_e, 0);
+                            (shared_ptr<OpExpr<S>>)
+                                make_shared<OpSumProd<S, FL>>(
+                                    xiop, xiop,
+                                    vector<shared_ptr<OpElement<S, FL>>>{xiop,
+                                                                         xiop},
+                                    vector<bool>{false, false}, const_e, 0);
                     else
                         op->mat->data[0] = expr + const_e * (iop * iop);
                 } else
@@ -1625,54 +1395,58 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
-    tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<double>>>, size_t, double>
-    expect(double const_e, ExpectationAlgorithmTypes algo_type,
+    tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>>, size_t, double>
+    expect(FL const_e, ExpectationAlgorithmTypes algo_type,
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0 && op->mat->data.size() > 0)
+        if (const_e != 0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         Timer t;
         t.get_time();
-        MatrixRef ktmp(nullptr, (MKL_INT)ket[0]->total_memory, 1);
-        MatrixRef rtmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
-        MatrixRef btmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
+        GMatrix<FL> ktmp(nullptr, (MKL_INT)ket[0]->total_memory, 1);
+        GMatrix<FL> rtmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
+        GMatrix<FL> btmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
         btmp.allocate();
         SeqTypes mode = tf->opf->seq->mode;
         tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
-        vector<pair<shared_ptr<OpExpr<S>>, vector<double>>> expectations;
+        vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>> expectations;
         expectations.reserve(op->mat->data.size());
-        vector<double> results;
+        vector<FL> results;
         vector<size_t> results_idx;
         results.reserve(op->mat->data.size() * ket.size());
         results_idx.reserve(op->mat->data.size());
         if (para_rule != nullptr)
             para_rule->set_partition(ParallelRulePartitionTypes::Middle);
         for (size_t i = 0; i < op->mat->data.size(); i++) {
-            vector<double> rr(ket.size(), 0);
-            if (dynamic_pointer_cast<OpElement<S>>(op->dops[i])->name ==
+            vector<FL> rr(ket.size(), 0);
+            if (dynamic_pointer_cast<OpElement<S, FL>>(op->dops[i])->name ==
                 OpNames::Zero)
                 continue;
             else if (ex_type == ExpectationTypes::Real) {
-                if (para_rule == nullptr || !para_rule->number(op->dops[i])) {
+                if (para_rule == nullptr ||
+                    !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                         ->number(op->dops[i])) {
                     for (int j = 0; j < (int)ket.size(); j++) {
                         ktmp.data = ket[j]->data;
                         rtmp.data = bra[j]->data;
                         btmp.clear();
                         (*this)(ktmp, btmp, (int)i, 1.0, true);
-                        rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                        rr[j] = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                     }
                 } else {
-                    if (para_rule->own(op->dops[i])) {
+                    if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                            ->own(op->dops[i])) {
                         for (int j = 0; j < (int)ket.size(); j++) {
                             ktmp.data = ket[j]->data;
                             rtmp.data = bra[j]->data;
                             btmp.clear();
                             (*this)(ktmp, btmp, (int)i, 1.0, false);
-                            rr[j] = MatrixFunctions::dot(btmp, rtmp);
+                            rr[j] =
+                                GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                         }
                     }
                     results.insert(results.end(), rr.begin(), rr.end());
@@ -1683,23 +1457,28 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                 assert(ket.size() == 2 && bra.size() == 2);
                 assert(ket[0]->total_memory == ket[1]->total_memory);
                 assert(bra[0]->total_memory == bra[1]->total_memory);
-                MatrixRef itmp(nullptr, (MKL_INT)bra[1]->total_memory, 1);
-                if (para_rule == nullptr || !para_rule->number(op->dops[i]) ||
-                    para_rule->own(op->dops[i])) {
+                GMatrix<FL> itmp(nullptr, (MKL_INT)bra[1]->total_memory, 1);
+                if (para_rule == nullptr ||
+                    !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                         ->number(op->dops[i]) ||
+                    dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)->own(
+                        op->dops[i])) {
                     rtmp.data = bra[0]->data;
                     itmp.data = bra[1]->data;
                     ktmp.data = ket[0]->data;
                     btmp.clear();
                     (*this)(ktmp, btmp, (int)i, 1.0, true);
-                    rr[0] = MatrixFunctions::dot(btmp, rtmp);
-                    rr[1] = -MatrixFunctions::dot(btmp, itmp);
+                    rr[0] = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
+                    rr[1] = -GMatrixFunctions<FL>::complex_dot(itmp, btmp);
                     ktmp.data = ket[1]->data;
                     btmp.clear();
                     (*this)(ktmp, btmp, (int)i, 1.0, true);
-                    rr[1] += MatrixFunctions::dot(btmp, rtmp);
-                    rr[0] += MatrixFunctions::dot(btmp, itmp);
+                    rr[1] += GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
+                    rr[0] += GMatrixFunctions<FL>::complex_dot(itmp, btmp);
                 }
-                if (para_rule != nullptr && para_rule->number(op->dops[i])) {
+                if (para_rule != nullptr &&
+                    dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                        ->number(op->dops[i])) {
                     results.insert(results.end(), rr.begin(), rr.end());
                     results_idx.push_back(expectations.size());
                 }
@@ -1708,14 +1487,14 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
                 assert(false);
         }
         btmp.deallocate();
-        if (const_e != 0 && op->mat->data.size() > 0)
+        if (const_e != 0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         if (results.size() != 0) {
             assert(para_rule != nullptr);
             para_rule->comm->allreduce_sum(results.data(), results.size());
             for (size_t i = 0; i < results.size(); i += ket.size())
                 memcpy(expectations[results_idx[i]].second.data(),
-                       results.data() + i, sizeof(double) * ket.size());
+                       results.data() + i, sizeof(FL) * ket.size());
         }
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -1726,43 +1505,40 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
     }
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
-    pair<vector<MatrixRef>, tuple<double, double, int, size_t, double>>
-    rk4_apply(complex<double> beta, double const_e, bool eval_energy = false,
+    pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
+    rk4_apply(FC beta, FL const_e, bool eval_energy = false,
               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(ket.size() == 2);
-        MatrixRef vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
-        MatrixRef vi(ket[1]->data, (MKL_INT)ket[1]->total_memory, 1);
-        vector<MatrixRef> k, r;
+        GMatrix<FL> vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
+        GMatrix<FL> vi(ket[1]->data, (MKL_INT)ket[1]->total_memory, 1);
+        vector<GMatrix<FL>> k, r;
         Timer t;
         t.get_time();
         frame->activate(1);
         for (int i = 0; i < 3; i++) {
-            r.push_back(MatrixRef(nullptr, (MKL_INT)ket[0]->total_memory, 1));
+            r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[0]->total_memory, 1));
             r[i + i].allocate();
-            r.push_back(MatrixRef(nullptr, (MKL_INT)ket[1]->total_memory, 1));
+            r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[1]->total_memory, 1));
             r[i + i + 1].allocate();
         }
         frame->activate(0);
         for (int i = 0; i < 4; i++) {
-            k.push_back(MatrixRef(nullptr, (MKL_INT)ket[0]->total_memory, 1));
+            k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[0]->total_memory, 1));
             k[i + i].allocate(), k[i + i].clear();
-            k.push_back(MatrixRef(nullptr, (MKL_INT)ket[1]->total_memory, 1));
+            k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[1]->total_memory, 1));
             k[i + i + 1].allocate(), k[i + i + 1].clear();
         }
         tf->opf->seq->cumulative_nflop = 0;
-        const vector<double> ks = vector<double>{0.0, 0.5, 0.5, 1.0};
-        const vector<vector<double>> cs = vector<vector<double>>{
-            vector<double>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0,
-                           -5.0 / 162.0},
-            vector<double>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
-            vector<double>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
+        const vector<FP> ks = vector<FP>{0.0, 0.5, 0.5, 1.0};
+        const vector<vector<FP>> cs = vector<vector<FP>>{
+            vector<FP>{31.0 / 162.0, 14.0 / 162.0, 14.0 / 162.0, -5.0 / 162.0},
+            vector<FP>{16.0 / 81.0, 20.0 / 81.0, 20.0 / 81.0, -2.0 / 81.0},
+            vector<FP>{1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0}};
         precompute();
-        const function<void(const MatrixRef &, const MatrixRef &,
-                            const MatrixRef &, const MatrixRef &,
-                            complex<double>)> &f =
-            [this](const MatrixRef &are, const MatrixRef &aim,
-                   const MatrixRef &bre, const MatrixRef &bim,
-                   complex<double> scale) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &,
+                            const GMatrix<FL> &, const GMatrix<FL> &, FC)> &f =
+            [this](const GMatrix<FL> &are, const GMatrix<FL> &aim,
+                   const GMatrix<FL> &bre, const GMatrix<FL> &bim, FC scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked)) {
                     if (scale.real() != 0) {
@@ -1789,51 +1565,50 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
             if (i == 0)
                 f(vr, vi, k[i + i], k[i + i + 1], beta);
             else {
-                MatrixFunctions::copy(r[0], vr);
-                MatrixFunctions::copy(r[1], vi);
-                MatrixFunctions::iadd(r[0], k[i + i - 2], ks[i]);
-                MatrixFunctions::iadd(r[1], k[i + i - 1], ks[i]);
+                GMatrixFunctions<FL>::copy(r[0], vr);
+                GMatrixFunctions<FL>::copy(r[1], vi);
+                GMatrixFunctions<FL>::iadd(r[0], k[i + i - 2], ks[i]);
+                GMatrixFunctions<FL>::iadd(r[1], k[i + i - 1], ks[i]);
                 f(r[0], r[1], k[i + i], k[i + i + 1], beta);
             }
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            complex<double> factor =
-                exp(beta * (double)((i + 1) / 3) * const_e);
+            FC factor = exp(beta * (FL)((i + 1) / 3) * const_e);
             r[i + i].clear(), r[i + i + 1].clear();
             if (factor.real() != 0) {
-                MatrixFunctions::iadd(r[i + i], vr, factor.real());
-                MatrixFunctions::iadd(r[i + i + 1], vi, factor.real());
+                GMatrixFunctions<FL>::iadd(r[i + i], vr, factor.real());
+                GMatrixFunctions<FL>::iadd(r[i + i + 1], vi, factor.real());
             }
             if (factor.imag() != 0) {
-                MatrixFunctions::iadd(r[i + i], vi, factor.imag());
-                MatrixFunctions::iadd(r[i + i + 1], vr, -factor.imag());
+                GMatrixFunctions<FL>::iadd(r[i + i], vi, factor.imag());
+                GMatrixFunctions<FL>::iadd(r[i + i + 1], vr, -factor.imag());
             }
             for (size_t j = 0; j < 4; j++) {
                 if (factor.real() != 0) {
-                    MatrixFunctions::iadd(r[i + i], k[j + j],
-                                          cs[i][j] * factor.real());
-                    MatrixFunctions::iadd(r[i + i + 1], k[j + j + 1],
-                                          cs[i][j] * factor.real());
+                    GMatrixFunctions<FL>::iadd(r[i + i], k[j + j],
+                                               cs[i][j] * factor.real());
+                    GMatrixFunctions<FL>::iadd(r[i + i + 1], k[j + j + 1],
+                                               cs[i][j] * factor.real());
                 }
                 if (factor.imag() != 0) {
-                    MatrixFunctions::iadd(r[i + i], k[j + j + 1],
-                                          cs[i][j] * factor.imag());
-                    MatrixFunctions::iadd(r[i + i + 1], k[j + j],
-                                          -cs[i][j] * factor.imag());
+                    GMatrixFunctions<FL>::iadd(r[i + i], k[j + j + 1],
+                                               cs[i][j] * factor.imag());
+                    GMatrixFunctions<FL>::iadd(r[i + i + 1], k[j + j],
+                                               -cs[i][j] * factor.imag());
                 }
             }
         }
-        double norm_re = MatrixFunctions::norm(r[2 + 2]);
-        double norm_im = MatrixFunctions::norm(r[2 + 2 + 1]);
-        double norm = sqrt(norm_re * norm_re + norm_im * norm_im);
-        double energy = -const_e;
+        FP norm_re = GMatrixFunctions<FL>::norm(r[2 + 2]);
+        FP norm_im = GMatrixFunctions<FL>::norm(r[2 + 2 + 1]);
+        FP norm = sqrt(norm_re * norm_re + norm_im * norm_im);
+        FL energy = -const_e;
         if (eval_energy) {
             k[0].clear();
             k[1].clear();
             f(r[2 + 2], r[2 + 2 + 1], k[0], k[1], 1.0);
-            energy = (MatrixFunctions::dot(r[2 + 2], k[0]) +
-                      MatrixFunctions::dot(r[2 + 2 + 1], k[1])) /
+            energy = (GMatrixFunctions<FL>::complex_dot(r[2 + 2], k[0]) +
+                      GMatrixFunctions<FL>::complex_dot(r[2 + 2 + 1], k[1])) /
                      (norm * norm);
         }
         for (int i = 3; i >= 0; i--)
@@ -1845,56 +1620,6 @@ template <typename S> struct EffectiveHamiltonian<S, MultiMPS<S>> {
         tf->opf->seq->cumulative_nflop = 0;
         return make_pair(r, make_tuple(energy, norm, 4 + eval_energy,
                                        (size_t)nflop, t.get_time()));
-    }
-    // [ket] = exp( [H_eff] ) | [ket] > (exact)
-    // energy, norm, nexpo, nflop, texpo
-    // nexpo is number of complex matrix multiplications
-    tuple<double, double, int, size_t, double>
-    expo_apply(complex<double> beta, double const_e, bool iprint = false,
-               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
-        assert(compute_diag);
-        assert(ket.size() == 2);
-        double anorm = MatrixFunctions::norm(
-            MatrixRef(diag->data, (MKL_INT)diag->total_memory, 1));
-        MatrixRef vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
-        MatrixRef vi(ket[1]->data, (MKL_INT)ket[1]->total_memory, 1);
-        Timer t;
-        t.get_time();
-        tf->opf->seq->cumulative_nflop = 0;
-        precompute();
-        int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
-                     (tf->opf->seq->mode & SeqTypes::Tasked))
-                        ? ComplexMatrixFunctions::expo_apply(
-                              *tf, beta, anorm, vr, vi, const_e, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm)
-                        : ComplexMatrixFunctions::expo_apply(
-                              *this, beta, anorm, vr, vi, const_e, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm);
-        double norm_re = MatrixFunctions::norm(vr);
-        double norm_im = MatrixFunctions::norm(vi);
-        double norm = sqrt(norm_re * norm_re + norm_im * norm_im);
-        MatrixRef tmp_re(nullptr, (MKL_INT)ket[0]->total_memory, 1);
-        MatrixRef tmp_im(nullptr, (MKL_INT)ket[1]->total_memory, 1);
-        tmp_re.allocate();
-        tmp_im.allocate();
-        tmp_re.clear();
-        tmp_im.clear();
-        if (tf->opf->seq->mode == SeqTypes::Auto ||
-            (tf->opf->seq->mode & SeqTypes::Tasked))
-            (*tf)(vr, tmp_re), (*tf)(vi, tmp_im);
-        else
-            (*this)(vr, tmp_re), (*this)(vi, tmp_im);
-        double energy = (MatrixFunctions::dot(vr, tmp_re) +
-                         MatrixFunctions::dot(vi, tmp_im)) /
-                        (norm * norm);
-        tmp_im.deallocate();
-        tmp_re.deallocate();
-        post_precompute();
-        uint64_t nflop = tf->opf->seq->cumulative_nflop;
-        if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
-        tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
     void deallocate() {
         frame->activate(0);

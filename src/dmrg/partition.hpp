@@ -36,23 +36,23 @@ using namespace std;
 namespace block2 {
 
 // Represent a specific partition of left block and right block
-template <typename S> struct Partition {
+template <typename S, typename FL> struct Partition {
     // Operator tensor formed by contraction of left block MPO tensors
-    shared_ptr<OperatorTensor<S>> left;
+    shared_ptr<OperatorTensor<S, FL>> left;
     // Operator tensor formed by contraction of right block MPO tensors
-    shared_ptr<OperatorTensor<S>> right;
+    shared_ptr<OperatorTensor<S, FL>> right;
     // MPO tensors in dot block(s)
-    vector<shared_ptr<OperatorTensor<S>>> middle;
+    vector<shared_ptr<OperatorTensor<S, FL>>> middle;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos;
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos;
-    Partition(const shared_ptr<OperatorTensor<S>> &left,
-              const shared_ptr<OperatorTensor<S>> &right,
-              const shared_ptr<OperatorTensor<S>> &dot)
+    Partition(const shared_ptr<OperatorTensor<S, FL>> &left,
+              const shared_ptr<OperatorTensor<S, FL>> &right,
+              const shared_ptr<OperatorTensor<S, FL>> &dot)
         : left(left), right(right), middle{dot} {}
-    Partition(const shared_ptr<OperatorTensor<S>> &left,
-              const shared_ptr<OperatorTensor<S>> &right,
-              const shared_ptr<OperatorTensor<S>> &ldot,
-              const shared_ptr<OperatorTensor<S>> &rdot)
+    Partition(const shared_ptr<OperatorTensor<S, FL>> &left,
+              const shared_ptr<OperatorTensor<S, FL>> &right,
+              const shared_ptr<OperatorTensor<S, FL>> &ldot,
+              const shared_ptr<OperatorTensor<S, FL>> &rdot)
         : left(left), right(right), middle{ldot, rdot} {}
     Partition(const Partition &other)
         : left(other.left), right(other.right), middle(other.middle) {}
@@ -61,7 +61,7 @@ template <typename S> struct Partition {
             uint8_t has_left;
             ifs.read((char *)&has_left, sizeof(has_left));
             if (has_left) {
-                left = make_shared<OperatorTensor<S>>();
+                left = make_shared<OperatorTensor<S, FL>>();
                 left->load_data(ifs, true);
             } else
                 left = nullptr;
@@ -70,7 +70,7 @@ template <typename S> struct Partition {
             uint8_t has_right;
             ifs.read((char *)&has_right, sizeof(has_right));
             if (has_right) {
-                right = make_shared<OperatorTensor<S>>();
+                right = make_shared<OperatorTensor<S, FL>>();
                 right->load_data(ifs, true);
             } else
                 right = nullptr;
@@ -148,11 +148,12 @@ template <typename S> struct Partition {
             return p->second;
     }
     // Build the shell of contracted left block operators
-    static shared_ptr<OperatorTensor<S>> build_left(
+    static shared_ptr<OperatorTensor<S, FL>> build_left(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         bool csr = false) {
-        shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+        shared_ptr<OperatorTensor<S, FL>> opt =
+            make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::RVec);
         opt->lmat = make_shared<SymbolicRowVector<S>>(
@@ -161,23 +162,24 @@ template <typename S> struct Partition {
             for (size_t i = 0; i < mat->data.size(); i++)
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S>>()
-                                       : make_shared<SparseMatrix<S>>();
+                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                       : make_shared<SparseMatrix<S, FL>>();
                 }
         }
         for (auto &p : opt->ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             p.second->info = find_op_info(left_op_infos, op->q_label);
         }
         return opt;
     }
     // Build the shell of contracted right block operators
-    static shared_ptr<OperatorTensor<S>> build_right(
+    static shared_ptr<OperatorTensor<S, FL>> build_right(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
         bool csr = false) {
-        shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+        shared_ptr<OperatorTensor<S, FL>> opt =
+            make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::CVec);
         opt->rmat = make_shared<SymbolicColumnVector<S>>(
@@ -186,13 +188,13 @@ template <typename S> struct Partition {
             for (size_t i = 0; i < mat->data.size(); i++)
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S>>()
-                                       : make_shared<SparseMatrix<S>>();
+                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                       : make_shared<SparseMatrix<S, FL>>();
                 }
         }
         for (auto &p : opt->ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             p.second->info = find_op_info(right_op_infos, op->q_label);
         }
         return opt;
@@ -208,8 +210,8 @@ template <typename S> struct Partition {
                    mat->get_type() == SymTypes::CVec);
             sl.reserve(sl.size() + mat->data.size());
             for (size_t i = 0; i < mat->data.size(); i++) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(mat->data[i]);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(mat->data[i]);
                 sl.push_back(op->q_label);
             }
         }
@@ -229,8 +231,8 @@ template <typename S> struct Partition {
             return subsl;
         assert(mat->data.size() == exprs->data.size());
         for (size_t i = 0; i < mat->data.size(); i++) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(mat->data[i]);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(mat->data[i]);
             S l = op->q_label;
             size_t idx = lower_bound(sl.begin(), sl.end(), l) - sl.begin();
             assert(idx != sl.size());
@@ -242,16 +244,16 @@ template <typename S> struct Partition {
             case OpTypes::Zero:
                 break;
             case OpTypes::Elem: {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(opx);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(opx);
                 assert(l == op->q_label);
                 S p = l.combine(S(0), -l);
                 assert(p != S(S::invalid));
                 subsl[idx].push_back(make_pair(0, p));
             } break;
             case OpTypes::Prod: {
-                shared_ptr<OpProduct<S>> op =
-                    dynamic_pointer_cast<OpProduct<S>>(opx);
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(opx);
                 assert(op->b != nullptr);
                 S bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                 S ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
@@ -265,7 +267,8 @@ template <typename S> struct Partition {
                     subsl[idx].push_back(make_pair(!!(op->conj & 2), -ket));
             } break;
             case OpTypes::Sum: {
-                shared_ptr<OpSum<S>> sop = dynamic_pointer_cast<OpSum<S>>(opx);
+                shared_ptr<OpSum<S, FL>> sop =
+                    dynamic_pointer_cast<OpSum<S, FL>>(opx);
                 for (auto &op : sop->strings) {
                     S bra, ket;
                     if (op->a != nullptr && op->b != nullptr) {
@@ -273,8 +276,8 @@ template <typename S> struct Partition {
                         ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
                     } else {
                         assert(op->get_type() == OpTypes::SumProd);
-                        shared_ptr<OpSumProd<S>> spop =
-                            dynamic_pointer_cast<OpSumProd<S>>(op);
+                        shared_ptr<OpSumProd<S, FL>> spop =
+                            dynamic_pointer_cast<OpSumProd<S, FL>>(op);
                         assert(spop->ops.size() != 0);
                         if (spop->a != nullptr) {
                             bra = (op->conj & 1) ? -op->a->q_label

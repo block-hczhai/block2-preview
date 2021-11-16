@@ -20,6 +20,6 @@
 
 #include "../pybind_core.hpp"
 
-template void bind_operator<SZK>(py::module &m);
-template void bind_operator<SU2K>(py::module &m);
+template void bind_fl_operator<SZK, double>(py::module &m);
+template void bind_fl_operator<SU2K, double>(py::module &m);
 

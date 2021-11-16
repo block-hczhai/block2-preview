@@ -668,13 +668,13 @@ class GFDMRG:
             linear = Linear(lme, rme, VectorUBond(bond_dims),
                             VectorUBond(cps_bond_dims[-1:]), VectorDouble(noises))
             linear.gf_eta = eta
-            linear.minres_conv_thrds = VectorDouble([gmres_tol] * n_steps)
+            linear.linear_conv_thrds = VectorDouble([gmres_tol] * n_steps)
             linear.noise_type = NoiseTypes.ReducedPerturbative
             linear.decomp_type = DecompositionTypes.SVD
             # TZ: Not raising error even if CG is not converged
             max_cg_iter = 20000
-            linear.minres_soft_max_iter = max_cg_iter
-            linear.minres_max_iter = max_cg_iter + 1000
+            linear.linear_soft_max_iter = max_cg_iter
+            linear.linear_max_iter = max_cg_iter + 1000
             linear.eq_type = EquationTypes.GreensFunction
             linear.iprint = max(self.verbose - 1, 0)
             linear.cutoff = cutoff
@@ -688,7 +688,7 @@ class GFDMRG:
 
                 linear.tme = None
                 linear.noises[0] = noises[0]
-                linear.minres_soft_max_iter = max_cg_iter
+                linear.linear_soft_max_iter = max_cg_iter
                 linear.noises = VectorDouble(noises)
                 linear.bra_bond_dims = VectorUBond(bond_dims)
                 linear.gf_omega = w
@@ -739,7 +739,7 @@ class GFDMRG:
                             linear.solve(1, mps.center != 0, 0)
                             rgf, igf = linear.targets[-1]
                         else:
-                            linear.minres_soft_max_iter = n_off_diag_cg if n_off_diag_cg != -1 else max_cg_iter
+                            linear.linear_soft_max_iter = n_off_diag_cg if n_off_diag_cg != -1 else max_cg_iter
                             linear.solve(1, mps.center == 0, 0)
                             if mps.center == 0:
                                 rgf, igf = np.array(linear.sweep_targets)[::-1][min_site]

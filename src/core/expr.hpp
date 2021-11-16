@@ -20,7 +20,9 @@
 
 #pragma once
 
+#include "utils.hpp"
 #include <cassert>
+#include <complex>
 #include <cstdint>
 #include <fstream>
 #include <initializer_list>
@@ -28,6 +30,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <type_traits>
 #include <vector>
 
 using namespace std;
@@ -144,7 +147,89 @@ template <typename S> struct OpExpr {
     virtual OpTypes get_type() const { return OpTypes::Zero; }
     bool operator==(const OpExpr &other) const { return true; }
     virtual string get_name() const { return ""; }
+    virtual bool is_normalized() const { return get_type() == OpTypes::Zero; }
+    virtual shared_ptr<OpExpr> abs_expr() const {
+        assert(false);
+        return nullptr;
+    }
+    virtual shared_ptr<OpExpr> scalar_multiply(double d) const {
+        return scalar_multiply((complex<double>)d);
+    }
+    virtual shared_ptr<OpExpr> scalar_multiply(complex<double> d) const {
+        return make_shared<OpExpr>();
+    }
+    virtual size_t hash() const noexcept { return 0; }
+    virtual bool is_equal_to(const shared_ptr<OpExpr> &other) const {
+        if (get_type() != other->get_type())
+            return false;
+        else if (get_type() == OpTypes::Zero)
+            return *this == *other;
+        else
+            assert(false);
+        return false;
+    }
+    virtual bool is_less_than(const shared_ptr<OpExpr> &other) const {
+        assert(false);
+        return false;
+    }
+    virtual shared_ptr<OpExpr>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const {
+        return nullptr;
+    }
+    virtual shared_ptr<OpExpr> plus(const shared_ptr<OpExpr> &a,
+                                    const shared_ptr<OpExpr> &b) const {
+        if (a->get_type() == OpTypes::Zero)
+            return b;
+        else if (b->get_type() == OpTypes::Zero)
+            return a;
+        else
+            return nullptr;
+    }
+    virtual shared_ptr<OpExpr> multiply(const shared_ptr<OpExpr> &a,
+                                        const shared_ptr<OpExpr> &b) const {
+        if (a->get_type() == OpTypes::Zero)
+            return a;
+        else if (b->get_type() == OpTypes::Zero)
+            return b;
+        else
+            return nullptr;
+    }
+    virtual void save(ostream &ofs) const {
+        OpTypes tp = get_type();
+        ofs.write((char *)&tp, sizeof(tp));
+    }
+    static shared_ptr<OpExpr> load(istream &ifs) {
+        return make_shared<OpExpr>();
+    }
+    virtual string to_str() const {
+        stringstream ss;
+        ss << 0;
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, const OpExpr &c) {
+        os << c.to_str();
+        return os;
+    }
 };
+
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>> plus_expr(const shared_ptr<OpExpr<S>> &a,
+                                             const shared_ptr<OpExpr<S>> &b);
+
+template <typename S>
+inline const shared_ptr<OpExpr<S>>
+plus_expr_ref(const shared_ptr<OpExpr<S>> &a, const shared_ptr<OpExpr<S>> &b);
+
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>>
+multiply_expr(const shared_ptr<OpExpr<S>> &a, const shared_ptr<OpExpr<S>> &b);
+
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>>
+sum_expr(const vector<shared_ptr<OpExpr<S>>> &x);
+
+template <typename S, typename FL>
+inline shared_ptr<OpExpr<S>> load_expr(istream &ifs);
 
 // Site index in operator symbol
 // (support at most 4 site indices (< 4096) and 8 spin indices)
@@ -255,50 +340,69 @@ struct SiteIndex {
 };
 
 // Single operator symbol: (A)
-template <typename S> struct OpElement : OpExpr<S> {
+template <typename S, typename FL> struct OpElement : OpExpr<S> {
     OpNames name;
     SiteIndex site_index;
-    double factor;
+    FL factor;
     S q_label;
-    OpElement(OpNames name, SiteIndex site_index, S q_label,
-              double factor = 1.0)
+    OpElement(OpNames name, SiteIndex site_index, S q_label, FL factor = 1.0)
         : name(name), site_index(site_index), factor(factor), q_label(q_label) {
     }
     OpTypes get_type() const override { return OpTypes::Elem; }
+    bool is_normalized() const override { return factor == 1.0; }
+    shared_ptr<OpExpr<S>> abs_expr() const override {
+        return make_shared<OpElement>(abs());
+    }
     OpElement abs() const { return OpElement(name, site_index, q_label, 1.0); }
-    OpElement operator*(double d) const {
+    shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
+        return make_shared<OpElement>(*this * d);
+    }
+    OpElement operator*(FL d) const {
         return OpElement(name, site_index, q_label, factor * d);
+    }
+    bool is_equal_to(const shared_ptr<OpExpr<S>> &other) const override {
+        if (get_type() != other->get_type())
+            return false;
+        return *this == *dynamic_pointer_cast<OpElement>(other);
+    }
+    bool is_less_than(const shared_ptr<OpExpr<S>> &other) const override {
+        return *this < *dynamic_pointer_cast<OpElement>(other);
     }
     bool operator==(const OpElement &other) const {
         return name == other.name && site_index == other.site_index &&
-               ::abs(factor - other.factor) < 1E-12;
+               std::abs(factor - other.factor) < 1E-12;
     }
     bool operator<(const OpElement &other) const {
         if (name != other.name)
             return name < other.name;
         else if (site_index != other.site_index)
             return site_index < other.site_index;
-        else if (::abs(factor - other.factor) >= 1E-12)
-            return factor < other.factor;
+        else if (std::abs(factor - other.factor) >= 1E-12)
+            return xreal<FL>(factor) != xreal<FL>(other.factor)
+                       ? xreal<FL>(factor) < xreal<FL>(other.factor)
+                       : ximag<FL>(factor) < ximag<FL>(other.factor);
         else
             return false;
     }
-    size_t hash() const noexcept {
+    size_t hash() const noexcept override {
         size_t h = (size_t)name;
         h ^= site_index.hash() + 0x9E3779B9 + (h << 6) + (h >> 2);
-        h ^= std::hash<double>{}(factor) + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= std::hash<FL>{}(factor) + 0x9E3779B9 + (h << 6) + (h >> 2);
         return h;
     }
-    friend ostream &operator<<(ostream &os, const OpElement<S> &c) {
-        if (c.factor != 1.0)
-            os << "(" << c.factor << " " << c.abs() << ")";
-        else if (c.site_index.data == 0)
-            os << c.name;
-        else if (c.site_index.size() == 1 && c.site_index.spin_size() == 0)
-            os << c.name << (int)c.site_index[0];
+    string to_str() const override {
+        stringstream ss;
+        if (ximag<FL>(factor) != 0.0)
+            ss << "(" << factor << " " << abs() << ")";
+        else if (xreal<FL>(factor) != 1.0)
+            ss << "(" << xreal<FL>(factor) << " " << abs() << ")";
+        else if (site_index.data == 0)
+            ss << name;
+        else if (site_index.size() == 1 && site_index.spin_size() == 0)
+            ss << name << (int)site_index[0];
         else
-            os << c.name << c.site_index;
-        return os;
+            ss << name << site_index;
+        return ss.str();
     }
     string get_name() const override {
         stringstream ss;
@@ -307,69 +411,184 @@ template <typename S> struct OpElement : OpExpr<S> {
         ss << name << site_index.get_name() << endl;
         return ss.str();
     }
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr<S, FL>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const override {
+        return sum_expr<S, FL>(x);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        return multiply_expr<S, FL>(a, b);
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        ofs.write((char *)&name, sizeof(name));
+        ofs.write((char *)&site_index, sizeof(site_index));
+        ofs.write((char *)&factor, sizeof(factor));
+        ofs.write((char *)&q_label, sizeof(q_label));
+    }
+    static shared_ptr<OpElement> load(istream &ifs) {
+        OpNames name;
+        SiteIndex site_index;
+        FL factor;
+        S q_label;
+        ifs.read((char *)&name, sizeof(name));
+        ifs.read((char *)&site_index, sizeof(site_index));
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&q_label, sizeof(q_label));
+        return make_shared<OpElement>(name, site_index, q_label, factor);
+    }
 };
 
 // Reference to original or transposed symbol: (A) or (A)^T
-template <typename S> struct OpElementRef : OpExpr<S> {
-    shared_ptr<OpElement<S>> op;
+template <typename S, typename FL> struct OpElementRef : OpExpr<S> {
+    shared_ptr<OpElement<S, FL>> op;
     int8_t factor;
     int8_t trans;
-    OpElementRef(const shared_ptr<OpElement<S>> &op, int8_t trans,
+    OpElementRef(const shared_ptr<OpElement<S, FL>> &op, int8_t trans,
                  int8_t factor)
         : op(op), trans(trans), factor(factor) {}
     OpTypes get_type() const override { return OpTypes::ElemRef; }
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr<S, FL>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const override {
+        return sum_expr<S, FL>(x);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        return multiply_expr<S, FL>(a, b);
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        ofs.write((char *)&factor, sizeof(factor));
+        ofs.write((char *)&trans, sizeof(trans));
+        assert(op != nullptr);
+        op->save(ofs);
+    }
+    static shared_ptr<OpElementRef> load(istream &ifs) {
+        int8_t factor, trans;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&trans, sizeof(trans));
+        shared_ptr<OpElement<S, FL>> op =
+            dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs));
+        return make_shared<OpElementRef>(op, trans, factor);
+    }
 };
 
 // Tensor product of two operator symbols: (A) x (B)
 // (conj & 1) indicates whether a is transposed
 // (conj & 2) indicates whether b is transposed
-template <typename S> struct OpProduct : OpExpr<S> {
-    shared_ptr<OpElement<S>> a, b;
-    double factor;
+template <typename S, typename FL> struct OpProduct : OpExpr<S> {
+    shared_ptr<OpElement<S, FL>> a, b;
+    FL factor;
     uint8_t conj;
-    OpProduct(const shared_ptr<OpElement<S>> &op, double factor,
+    OpProduct(const shared_ptr<OpElement<S, FL>> &op, FL factor,
               uint8_t conj = 0)
-        : factor(factor * op->factor), a(make_shared<OpElement<S>>(op->abs())),
-          b(nullptr), conj(conj) {}
-    OpProduct(const shared_ptr<OpElement<S>> &a,
-              const shared_ptr<OpElement<S>> &b, double factor,
+        : factor(factor * op->factor),
+          a(make_shared<OpElement<S, FL>>(op->abs())), b(nullptr), conj(conj) {}
+    OpProduct(const shared_ptr<OpElement<S, FL>> &a,
+              const shared_ptr<OpElement<S, FL>> &b, FL factor,
               uint8_t conj = 0)
         : factor(factor * (a == nullptr ? 1.0 : a->factor) *
                  (b == nullptr ? 1.0 : b->factor)),
-          a(a == nullptr ? nullptr : make_shared<OpElement<S>>(a->abs())),
-          b(b == nullptr ? nullptr : make_shared<OpElement<S>>(b->abs())),
+          a(a == nullptr ? nullptr : make_shared<OpElement<S, FL>>(a->abs())),
+          b(b == nullptr ? nullptr : make_shared<OpElement<S, FL>>(b->abs())),
           conj(conj) {}
     virtual OpTypes get_type() const override { return OpTypes::Prod; }
+    bool is_normalized() const override { return factor == 1.0; }
+    shared_ptr<OpExpr<S>> abs_expr() const override {
+        return make_shared<OpProduct>(abs());
+    }
     OpProduct abs() const { return OpProduct(a, b, 1.0, conj); }
-    shared_ptr<OpElement<S>> get_op() const {
+    shared_ptr<OpElement<S, FL>> get_op() const {
         assert(b == nullptr);
         return a;
     }
-    OpProduct operator*(double d) const {
+    shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
+        return make_shared<OpProduct>(*this * d);
+    }
+    OpProduct operator*(FL d) const {
         return OpProduct(a, b, factor * d, conj);
+    }
+    bool is_equal_to(const shared_ptr<OpExpr<S>> &other) const override {
+        if (get_type() != other->get_type())
+            return false;
+        return *this == *dynamic_pointer_cast<OpProduct>(other);
     }
     bool operator==(const OpProduct &other) const {
         return *a == *other.a &&
                (b == nullptr ? other.b == nullptr
                              : (other.b != nullptr && *b == *other.b)) &&
-               factor == other.factor && conj == other.conj;
+               std::abs(factor - other.factor) < 1E-12 && conj == other.conj;
     }
-    size_t hash() const noexcept {
-        size_t h = std::hash<double>{}(factor);
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr<S, FL>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const override {
+        return sum_expr<S, FL>(x);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        return multiply_expr<S, FL>(a, b);
+    }
+    size_t hash() const noexcept override {
+        size_t h = std::hash<FL>{}(factor);
         h ^= (a == nullptr ? 0 : a->hash()) + 0x9E3779B9 + (h << 6) + (h >> 2);
         h ^= (b == nullptr ? 0 : b->hash()) + 0x9E3779B9 + (h << 6) + (h >> 2);
         h ^= conj + 0x9E3779B9 + (h << 6) + (h >> 2);
         return h;
     }
-    friend ostream &operator<<(ostream &os, const OpProduct<S> &c) {
-        if (c.factor != 1.0)
-            os << "(" << c.factor << " " << c.abs() << ")";
+    string to_str() const override {
+        stringstream ss;
+        if (ximag<FL>(factor) != 0.0)
+            ss << "(" << factor << " " << abs() << ")";
+        else if (xreal<FL>(factor) != 1.0)
+            ss << "(" << xreal<FL>(factor) << " " << abs() << ")";
         else {
-            os << *c.a << (c.conj & 1 ? "^T " : " ");
-            if (c.b != nullptr)
-                os << *c.b << (c.conj & 2 ? "^T " : " ");
+            ss << *a << (conj & 1 ? "^T " : " ");
+            if (b != nullptr)
+                ss << *b << (conj & 2 ? "^T " : " ");
         }
-        return os;
+        return ss.str();
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        ofs.write((char *)&factor, sizeof(factor));
+        ofs.write((char *)&conj, sizeof(conj));
+        uint8_t has_ab =
+            (uint8_t)((uint8_t)(a != nullptr) | ((b != nullptr) << 1));
+        ofs.write((char *)&has_ab, sizeof(has_ab));
+        if (has_ab & 1)
+            a->save(ofs);
+        if (has_ab & 2)
+            b->save(ofs);
+    }
+    static shared_ptr<OpProduct> load(istream &ifs) {
+        FL factor;
+        uint8_t conj, has_ab;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&conj, sizeof(conj));
+        ifs.read((char *)&has_ab, sizeof(has_ab));
+        shared_ptr<OpElement<S, FL>> a =
+            (has_ab & 1)
+                ? dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs))
+                : nullptr;
+        shared_ptr<OpElement<S, FL>> b =
+            (has_ab & 2)
+                ? dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs))
+                : nullptr;
+        return make_shared<OpProduct>(a, b, factor, conj);
     }
 };
 
@@ -378,64 +597,84 @@ template <typename S> struct OpProduct : OpExpr<S> {
 // first element in conjs must be 0
 // Optionally, c is the intermediate operator name for ops
 // if a b != nullptr, this is A * B * C; ops = (A, B) or (B, C)
-template <typename S> struct OpSumProd : OpProduct<S> {
-    vector<shared_ptr<OpElement<S>>> ops;
-    shared_ptr<OpElement<S>> c;
+template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
+    using OpProduct<S, FL>::factor;
+    using OpProduct<S, FL>::a;
+    using OpProduct<S, FL>::b;
+    using OpProduct<S, FL>::conj;
+    vector<shared_ptr<OpElement<S, FL>>> ops;
+    shared_ptr<OpElement<S, FL>> c;
     vector<bool> conjs;
-    OpSumProd(const shared_ptr<OpElement<S>> &lop,
-              const vector<shared_ptr<OpElement<S>>> &ops,
-              const vector<bool> &conjs, double factor, uint8_t conj = 0,
-              const shared_ptr<OpElement<S>> &c = nullptr)
+    OpSumProd(const shared_ptr<OpElement<S, FL>> &lop,
+              const vector<shared_ptr<OpElement<S, FL>>> &ops,
+              const vector<bool> &conjs, FL factor, uint8_t conj = 0,
+              const shared_ptr<OpElement<S, FL>> &c = nullptr)
         : ops(ops), conjs(conjs),
-          c(c), OpProduct<S>(lop, nullptr, factor, conj) {}
-    OpSumProd(const vector<shared_ptr<OpElement<S>>> &ops,
-              const shared_ptr<OpElement<S>> &rop, const vector<bool> &conjs,
-              double factor, uint8_t conj = 0,
-              const shared_ptr<OpElement<S>> &c = nullptr)
+          c(c), OpProduct<S, FL>(lop, nullptr, factor, conj) {}
+    OpSumProd(const vector<shared_ptr<OpElement<S, FL>>> &ops,
+              const shared_ptr<OpElement<S, FL>> &rop,
+              const vector<bool> &conjs, FL factor, uint8_t conj = 0,
+              const shared_ptr<OpElement<S, FL>> &c = nullptr)
         : ops(ops), conjs(conjs),
-          c(c), OpProduct<S>(nullptr, rop, factor, conj) {}
-    OpSumProd(const shared_ptr<OpElement<S>> &a,
-              const shared_ptr<OpElement<S>> &b,
-              const vector<shared_ptr<OpElement<S>>> &ops,
-              const vector<bool> &conjs, double factor, uint8_t conj = 0)
-        : ops(ops), conjs(conjs), OpProduct<S>(a, b, factor, conj) {}
+          c(c), OpProduct<S, FL>(nullptr, rop, factor, conj) {}
+    OpSumProd(const shared_ptr<OpElement<S, FL>> &a,
+              const shared_ptr<OpElement<S, FL>> &b,
+              const vector<shared_ptr<OpElement<S, FL>>> &ops,
+              const vector<bool> &conjs, FL factor, uint8_t conj = 0)
+        : ops(ops), conjs(conjs), OpProduct<S, FL>(a, b, factor, conj) {}
     OpTypes get_type() const override { return OpTypes::SumProd; }
-    OpSumProd abs() const {
-        if (OpProduct<S>::a == nullptr)
-            return OpSumProd(ops, OpProduct<S>::b, conjs, 1.0,
-                             OpProduct<S>::conj, c);
-        else if (OpProduct<S>::b == nullptr)
-            return OpSumProd(OpProduct<S>::a, ops, conjs, 1.0,
-                             OpProduct<S>::conj, c);
-        else
-            return OpSumProd(OpProduct<S>::a, OpProduct<S>::b, ops, conjs, 1.0,
-                             OpProduct<S>::conj);
+    shared_ptr<OpExpr<S>> abs_expr() const override {
+        return make_shared<OpSumProd>(abs());
     }
-    OpSumProd operator*(double d) const {
-        if (OpProduct<S>::a == nullptr)
-            return OpSumProd(ops, OpProduct<S>::b, conjs,
-                             OpProduct<S>::factor * d, OpProduct<S>::conj, c);
-        else if (OpProduct<S>::b == nullptr)
-            return OpSumProd(OpProduct<S>::a, ops, conjs,
-                             OpProduct<S>::factor * d, OpProduct<S>::conj, c);
+    OpSumProd abs() const {
+        if (OpProduct<S, FL>::a == nullptr)
+            return OpSumProd(ops, OpProduct<S, FL>::b, conjs, 1.0,
+                             OpProduct<S, FL>::conj, c);
+        else if (OpProduct<S, FL>::b == nullptr)
+            return OpSumProd(OpProduct<S, FL>::a, ops, conjs, 1.0,
+                             OpProduct<S, FL>::conj, c);
         else
-            return OpSumProd(OpProduct<S>::a, OpProduct<S>::b, ops, conjs,
-                             OpProduct<S>::factor * d, OpProduct<S>::conj);
+            return OpSumProd(OpProduct<S, FL>::a, OpProduct<S, FL>::b, ops,
+                             conjs, 1.0, OpProduct<S, FL>::conj);
+    }
+    shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
+        return make_shared<OpSumProd>(*this * d);
+    }
+    OpSumProd operator*(FL d) const {
+        if (OpProduct<S, FL>::a == nullptr)
+            return OpSumProd(ops, OpProduct<S, FL>::b, conjs,
+                             OpProduct<S, FL>::factor * d,
+                             OpProduct<S, FL>::conj, c);
+        else if (OpProduct<S, FL>::b == nullptr)
+            return OpSumProd(OpProduct<S, FL>::a, ops, conjs,
+                             OpProduct<S, FL>::factor * d,
+                             OpProduct<S, FL>::conj, c);
+        else
+            return OpSumProd(OpProduct<S, FL>::a, OpProduct<S, FL>::b, ops,
+                             conjs, OpProduct<S, FL>::factor * d,
+                             OpProduct<S, FL>::conj);
+    }
+    bool is_equal_to(const shared_ptr<OpExpr<S>> &other) const override {
+        if (get_type() != other->get_type())
+            return false;
+        return *this == *dynamic_pointer_cast<OpSumProd>(other);
     }
     bool operator==(const OpSumProd &other) const {
         if (ops.size() != other.ops.size() ||
-            (OpProduct<S>::a == nullptr) != (other.a == nullptr) ||
-            (OpProduct<S>::b == nullptr) != (other.b == nullptr))
+            (OpProduct<S, FL>::a == nullptr) != (other.a == nullptr) ||
+            (OpProduct<S, FL>::b == nullptr) != (other.b == nullptr))
             return false;
-        else if (OpProduct<S>::a == nullptr && !(*OpProduct<S>::b == *other.b))
+        else if (OpProduct<S, FL>::a == nullptr &&
+                 !(*OpProduct<S, FL>::b == *other.b))
             return false;
-        else if (OpProduct<S>::b == nullptr && !(*OpProduct<S>::a == *other.a))
+        else if (OpProduct<S, FL>::b == nullptr &&
+                 !(*OpProduct<S, FL>::a == *other.a))
             return false;
-        else if (OpProduct<S>::conj != other.conj)
+        else if (OpProduct<S, FL>::conj != other.conj)
             return false;
         else if (conjs != other.conjs)
             return false;
-        else if (OpProduct<S>::factor != other.factor)
+        else if (std::abs(OpProduct<S, FL>::factor - other.factor) >= 1E-12)
             return false;
         else
             for (size_t i = 0; i < ops.size(); i++)
@@ -443,25 +682,100 @@ template <typename S> struct OpSumProd : OpProduct<S> {
                     return false;
         return true;
     }
-    friend ostream &operator<<(ostream &os, const OpSumProd<S> &c) {
-        if (c.ops.size() != 0) {
-            if (c.factor != 1.0)
-                os << "(" << c.factor << " ";
-            if (c.a != nullptr)
-                os << *c.a << (c.conj & 1 ? "^T " : " ");
-            if (c.c != nullptr)
-                os << "[[~ " << *c.c << " ]]";
-            os << "{ ";
-            for (size_t i = 0; i < c.ops.size() - 1; i++)
-                os << *c.ops[i] << (c.conjs[i] ? "^T " : " ") << " + ";
-            os << *c.ops.back();
-            os << " }" << (c.conj & ((c.a != nullptr) + 1) ? "^T" : "");
-            if (c.b != nullptr)
-                os << " " << *c.b << (c.conj & 2 ? "^T " : " ");
-            if (c.factor != 1.0)
-                os << " )";
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr<S, FL>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const override {
+        return sum_expr<S, FL>(x);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        return multiply_expr<S, FL>(a, b);
+    }
+    string to_str() const override {
+        stringstream ss;
+        if (ops.size() != 0) {
+            if (ximag<FL>(factor) != 0.0)
+                ss << "(" << factor << " ";
+            else if (xreal<FL>(factor) != 1.0)
+                ss << "(" << xreal<FL>(factor) << " ";
+            if (a != nullptr)
+                ss << *a << (conj & 1 ? "^T " : " ");
+            if (c != nullptr)
+                ss << "[[~ " << *c << " ]]";
+            ss << "{ ";
+            for (size_t i = 0; i < ops.size() - 1; i++)
+                ss << *ops[i] << (conjs[i] ? "^T " : " ") << " + ";
+            ss << *ops.back();
+            ss << " }" << (conj & ((a != nullptr) + 1) ? "^T" : "");
+            if (b != nullptr)
+                ss << " " << *b << (conj & 2 ? "^T " : " ");
+            if (ximag<FL>(factor) != 0.0 || xreal<FL>(factor) != 1.0)
+                ss << " )";
         }
-        return os;
+        return ss.str();
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        ofs.write((char *)&factor, sizeof(factor));
+        ofs.write((char *)&conj, sizeof(conj));
+        uint8_t has_abc =
+            (uint8_t)((uint8_t)(a != nullptr) | ((b != nullptr) << 1) |
+                      ((c != nullptr) << 2));
+        ofs.write((char *)&has_abc, sizeof(has_abc));
+        if (has_abc & 1)
+            a->save(ofs);
+        if (has_abc & 2)
+            b->save(ofs);
+        if (has_abc & 4)
+            c->save(ofs);
+        assert(ops.size() == conjs.size());
+        int sz = (int)ops.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            ops[i]->save(ofs);
+        for (int i = 0; i < sz; i++) {
+            bool x = conjs[i];
+            ofs.write((char *)&x, sizeof(x));
+        }
+    }
+    static shared_ptr<OpSumProd> load(istream &ifs) {
+        FL factor;
+        uint8_t conj, has_abc;
+        ifs.read((char *)&factor, sizeof(factor));
+        ifs.read((char *)&conj, sizeof(conj));
+        ifs.read((char *)&has_abc, sizeof(has_abc));
+        shared_ptr<OpElement<S, FL>> a =
+            (has_abc & 1)
+                ? dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs))
+                : nullptr;
+        shared_ptr<OpElement<S, FL>> b =
+            (has_abc & 2)
+                ? dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs))
+                : nullptr;
+        shared_ptr<OpElement<S, FL>> c =
+            (has_abc & 4)
+                ? dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs))
+                : nullptr;
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        vector<shared_ptr<OpElement<S, FL>>> ops(sz);
+        vector<bool> conjs(sz);
+        for (int i = 0; i < sz; i++)
+            ops[i] =
+                dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs));
+        for (int i = 0; i < sz; i++) {
+            bool x;
+            ifs.read((char *)&x, sizeof(x));
+            conjs[i] = x;
+        }
+        assert(a == nullptr || b == nullptr);
+        return b == nullptr
+                   ? make_shared<OpSumProd>(a, ops, conjs, factor, conj, c)
+                   : make_shared<OpSumProd>(ops, b, conjs, factor, conj, c);
     }
 };
 
@@ -469,20 +783,29 @@ template <typename S> struct OpSumProd : OpProduct<S> {
 // (A) + (B) + (C) + ... or
 // (A1) x (B1) + (A2) x (B2) + ... or
 // (A1) x { (B1) + (B2) + ...} + (A2) x { {C1} + ... } + ...
-template <typename S> struct OpSum : OpExpr<S> {
-    vector<shared_ptr<OpProduct<S>>> strings;
-    OpSum(const vector<shared_ptr<OpProduct<S>>> &strings) : strings(strings) {}
+template <typename S, typename FL> struct OpSum : OpExpr<S> {
+    vector<shared_ptr<OpProduct<S, FL>>> strings;
+    OpSum(const vector<shared_ptr<OpProduct<S, FL>>> &strings)
+        : strings(strings) {}
     OpTypes get_type() const override { return OpTypes::Sum; }
-    OpSum operator*(double d) const {
-        vector<shared_ptr<OpProduct<S>>> strs;
+    shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
+        return make_shared<OpSum>(*this * d);
+    }
+    OpSum operator*(FL d) const {
+        vector<shared_ptr<OpProduct<S, FL>>> strs;
         strs.reserve(strings.size());
         for (auto &r : strings)
             if (r->get_type() == OpTypes::Prod)
-                strs.push_back(make_shared<OpProduct<S>>(*r * d));
+                strs.push_back(make_shared<OpProduct<S, FL>>(*r * d));
             else
-                strs.push_back(make_shared<OpSumProd<S>>(
-                    *dynamic_pointer_cast<OpSumProd<S>>(r) * d));
+                strs.push_back(make_shared<OpSumProd<S, FL>>(
+                    *dynamic_pointer_cast<OpSumProd<S, FL>>(r) * d));
         return OpSum(strs);
+    }
+    bool is_equal_to(const shared_ptr<OpExpr<S>> &other) const override {
+        if (get_type() != other->get_type())
+            return false;
+        return *this == *dynamic_pointer_cast<OpSum>(other);
     }
     bool operator==(const OpSum &other) const {
         if (strings.size() != other.strings.size())
@@ -492,20 +815,43 @@ template <typename S> struct OpSum : OpExpr<S> {
                 return false;
         return true;
     }
-    friend ostream &operator<<(ostream &os, const OpSum<S> &c) {
-        if (c.strings.size() != 0) {
-            for (size_t i = 0; i < c.strings.size() - 1; i++)
-                if (c.strings[i]->get_type() == OpTypes::Prod)
-                    os << *c.strings[i] << " + ";
-                else if (c.strings[i]->get_type() == OpTypes::SumProd)
-                    os << *dynamic_pointer_cast<OpSumProd<S>>(c.strings[i])
-                       << " + ";
-            if (c.strings.back()->get_type() == OpTypes::Prod)
-                os << *c.strings.back();
-            else if (c.strings.back()->get_type() == OpTypes::SumProd)
-                os << *dynamic_pointer_cast<OpSumProd<S>>(c.strings.back());
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr<S, FL>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    sum(const vector<shared_ptr<OpExpr<S>>> &x) const override {
+        return sum_expr<S, FL>(x);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        return multiply_expr<S, FL>(a, b);
+    }
+    string to_str() const override {
+        stringstream ss;
+        if (strings.size() != 0) {
+            for (size_t i = 0; i < strings.size() - 1; i++)
+                ss << *strings[i] << " + ";
+            ss << *strings.back();
         }
-        return os;
+        return ss.str();
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        int sz = (int)strings.size();
+        ofs.write((char *)&sz, sizeof(sz));
+        for (int i = 0; i < sz; i++)
+            strings[i]->save(ofs);
+    }
+    static shared_ptr<OpSum> load(istream &ifs) {
+        int sz;
+        ifs.read((char *)&sz, sizeof(sz));
+        vector<shared_ptr<OpProduct<S, FL>>> strings(sz);
+        for (int i = 0; i < sz; i++)
+            strings[i] =
+                dynamic_pointer_cast<OpProduct<S, FL>>(load_expr<S, FL>(ifs));
+        return make_shared<OpSum>(strings);
     }
 };
 
@@ -517,177 +863,89 @@ template <typename S> struct OpExprRef : OpExpr<S> {
               const shared_ptr<OpExpr<S>> &orig = nullptr)
         : op(op), is_local(is_local), orig(orig) {}
     OpTypes get_type() const override { return OpTypes::ExprRef; }
+    bool is_normalized() const override {
+        return op->is_normalized() && orig->is_normalized();
+    }
+    shared_ptr<OpExpr<S>> abs_expr() const override {
+        return make_shared<OpExprRef>(abs());
+    }
+    OpExprRef abs() const {
+        return OpExprRef(op->abs_expr(), is_local, orig->abs_expr());
+    }
+    shared_ptr<OpExpr<S>> scalar_multiply(double d) const override {
+        return make_shared<OpExprRef>(*this * d);
+    }
+    shared_ptr<OpExpr<S>> scalar_multiply(complex<double> d) const override {
+        return make_shared<OpExprRef>(*this * d);
+    }
+    template <typename FL> OpExprRef operator*(FL d) const {
+        return OpExprRef(op->scalar_multiply(d), is_local,
+                         orig != nullptr ? orig->scalar_multiply(d) : nullptr);
+    }
+    shared_ptr<OpExpr<S>> plus(const shared_ptr<OpExpr<S>> &a,
+                               const shared_ptr<OpExpr<S>> &b) const override {
+        return plus_expr_ref<S>(a, b);
+    }
+    shared_ptr<OpExpr<S>>
+    multiply(const shared_ptr<OpExpr<S>> &a,
+             const shared_ptr<OpExpr<S>> &b) const override {
+        assert(false);
+        return nullptr;
+    }
+    void save(ostream &ofs) const override {
+        OpExpr<S>::save(ofs);
+        ofs.write((char *)&is_local, sizeof(is_local));
+        assert(op != nullptr);
+        op->save(ofs);
+        uint8_t has_orig = orig != nullptr;
+        ofs.write((char *)&has_orig, sizeof(has_orig));
+        if (has_orig & 1)
+            orig->save(ofs);
+    }
+    template <typename FL> static shared_ptr<OpExprRef> load(istream &ifs) {
+        bool is_local;
+        ifs.read((char *)&is_local, sizeof(is_local));
+        shared_ptr<OpExpr<S>> op = load_expr<S, FL>(ifs);
+        uint8_t has_orig;
+        ifs.read((char *)&has_orig, sizeof(has_orig));
+        shared_ptr<OpExpr<S>> orig =
+            (has_orig & 1) ? load_expr<S, FL>(ifs) : nullptr;
+        return make_shared<OpExprRef>(op, is_local, orig);
+    }
 };
 
 template <typename S>
 inline void save_expr(const shared_ptr<OpExpr<S>> &x, ostream &ofs) {
-    OpTypes tp = x->get_type();
-    ofs.write((char *)&tp, sizeof(tp));
-    if (tp == OpTypes::Zero)
-        ;
-    else if (tp == OpTypes::Elem) {
-        shared_ptr<OpElement<S>> op = dynamic_pointer_cast<OpElement<S>>(x);
-        ofs.write((char *)&op->name, sizeof(op->name));
-        ofs.write((char *)&op->site_index, sizeof(op->site_index));
-        ofs.write((char *)&op->factor, sizeof(op->factor));
-        ofs.write((char *)&op->q_label, sizeof(op->q_label));
-    } else if (tp == OpTypes::Prod) {
-        shared_ptr<OpProduct<S>> op = dynamic_pointer_cast<OpProduct<S>>(x);
-        ofs.write((char *)&op->factor, sizeof(op->factor));
-        ofs.write((char *)&op->conj, sizeof(op->conj));
-        uint8_t has_ab =
-            (uint8_t)((uint8_t)(op->a != nullptr) | ((op->b != nullptr) << 1));
-        ofs.write((char *)&has_ab, sizeof(has_ab));
-        if (has_ab & 1)
-            save_expr<S>(op->a, ofs);
-        if (has_ab & 2)
-            save_expr<S>(op->b, ofs);
-    } else if (tp == OpTypes::Sum) {
-        shared_ptr<OpSum<S>> op = dynamic_pointer_cast<OpSum<S>>(x);
-        int sz = (int)op->strings.size();
-        ofs.write((char *)&sz, sizeof(sz));
-        for (int i = 0; i < sz; i++)
-            save_expr<S>(op->strings[i], ofs);
-    } else if (tp == OpTypes::ElemRef) {
-        shared_ptr<OpElementRef<S>> op =
-            dynamic_pointer_cast<OpElementRef<S>>(x);
-        ofs.write((char *)&op->factor, sizeof(op->factor));
-        ofs.write((char *)&op->trans, sizeof(op->trans));
-        assert(op->op != nullptr);
-        save_expr<S>(op->op, ofs);
-    } else if (tp == OpTypes::SumProd) {
-        shared_ptr<OpSumProd<S>> op = dynamic_pointer_cast<OpSumProd<S>>(x);
-        ofs.write((char *)&op->factor, sizeof(op->factor));
-        ofs.write((char *)&op->conj, sizeof(op->conj));
-        uint8_t has_abc =
-            (uint8_t)((uint8_t)(op->a != nullptr) | ((op->b != nullptr) << 1) |
-                      ((op->c != nullptr) << 2));
-        ofs.write((char *)&has_abc, sizeof(has_abc));
-        if (has_abc & 1)
-            save_expr<S>(op->a, ofs);
-        if (has_abc & 2)
-            save_expr<S>(op->b, ofs);
-        if (has_abc & 4)
-            save_expr<S>(op->c, ofs);
-        assert(op->ops.size() == op->conjs.size());
-        int sz = (int)op->ops.size();
-        ofs.write((char *)&sz, sizeof(sz));
-        for (int i = 0; i < sz; i++)
-            save_expr<S>(op->ops[i], ofs);
-        for (int i = 0; i < sz; i++) {
-            bool x = op->conjs[i];
-            ofs.write((char *)&x, sizeof(x));
-        }
-    } else if (tp == OpTypes::ExprRef) {
-        shared_ptr<OpExprRef<S>> op = dynamic_pointer_cast<OpExprRef<S>>(x);
-        ofs.write((char *)&op->is_local, sizeof(op->is_local));
-        assert(op->op != nullptr);
-        save_expr<S>(op->op, ofs);
-        uint8_t has_orig = op->orig != nullptr;
-        ofs.write((char *)&has_orig, sizeof(has_orig));
-        if (has_orig & 1)
-            save_expr<S>(op->orig, ofs);
-    } else
-        assert(false);
+    x->save(ofs);
 }
 
-template <typename S> inline shared_ptr<OpExpr<S>> load_expr(istream &ifs) {
+template <typename S, typename FL>
+inline shared_ptr<OpExpr<S>> load_expr(istream &ifs) {
     OpTypes tp;
     ifs.read((char *)&tp, sizeof(tp));
     if (tp == OpTypes::Zero)
-        return make_shared<OpExpr<S>>();
-    else if (tp == OpTypes::Elem) {
-        OpNames name;
-        SiteIndex site_index;
-        double factor;
-        S q_label;
-        ifs.read((char *)&name, sizeof(name));
-        ifs.read((char *)&site_index, sizeof(site_index));
-        ifs.read((char *)&factor, sizeof(factor));
-        ifs.read((char *)&q_label, sizeof(q_label));
-        return make_shared<OpElement<S>>(name, site_index, q_label, factor);
-    } else if (tp == OpTypes::Prod) {
-        double factor;
-        uint8_t conj, has_ab;
-        ifs.read((char *)&factor, sizeof(factor));
-        ifs.read((char *)&conj, sizeof(conj));
-        ifs.read((char *)&has_ab, sizeof(has_ab));
-        shared_ptr<OpElement<S>> a =
-            (has_ab & 1) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                         : nullptr;
-        shared_ptr<OpElement<S>> b =
-            (has_ab & 2) ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                         : nullptr;
-        return make_shared<OpProduct<S>>(a, b, factor, conj);
-    } else if (tp == OpTypes::Sum) {
-        int sz;
-        ifs.read((char *)&sz, sizeof(sz));
-        vector<shared_ptr<OpProduct<S>>> strings(sz);
-        for (int i = 0; i < sz; i++)
-            strings[i] = dynamic_pointer_cast<OpProduct<S>>(load_expr<S>(ifs));
-        return make_shared<OpSum<S>>(strings);
-    } else if (tp == OpTypes::ElemRef) {
-        int8_t factor, trans;
-        ifs.read((char *)&factor, sizeof(factor));
-        ifs.read((char *)&trans, sizeof(trans));
-        shared_ptr<OpElement<S>> op =
-            dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
-        return make_shared<OpElementRef<S>>(op, trans, factor);
-    } else if (tp == OpTypes::SumProd) {
-        double factor;
-        uint8_t conj, has_abc;
-        ifs.read((char *)&factor, sizeof(factor));
-        ifs.read((char *)&conj, sizeof(conj));
-        ifs.read((char *)&has_abc, sizeof(has_abc));
-        shared_ptr<OpElement<S>> a =
-            (has_abc & 1)
-                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                : nullptr;
-        shared_ptr<OpElement<S>> b =
-            (has_abc & 2)
-                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                : nullptr;
-        shared_ptr<OpElement<S>> c =
-            (has_abc & 4)
-                ? dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs))
-                : nullptr;
-        int sz;
-        ifs.read((char *)&sz, sizeof(sz));
-        vector<shared_ptr<OpElement<S>>> ops(sz);
-        vector<bool> conjs(sz);
-        for (int i = 0; i < sz; i++)
-            ops[i] = dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
-        for (int i = 0; i < sz; i++) {
-            bool x;
-            ifs.read((char *)&x, sizeof(x));
-            conjs[i] = x;
-        }
-        assert(a == nullptr || b == nullptr);
-        return b == nullptr
-                   ? make_shared<OpSumProd<S>>(a, ops, conjs, factor, conj, c)
-                   : make_shared<OpSumProd<S>>(ops, b, conjs, factor, conj, c);
-    } else if (tp == OpTypes::ExprRef) {
-        bool is_local;
-        ifs.read((char *)&is_local, sizeof(is_local));
-        shared_ptr<OpExpr<S>> op = load_expr<S>(ifs);
-        uint8_t has_orig;
-        ifs.read((char *)&has_orig, sizeof(has_orig));
-        shared_ptr<OpExpr<S>> orig =
-            (has_orig & 1) ? load_expr<S>(ifs) : nullptr;
-        return make_shared<OpExprRef<S>>(op, is_local, orig);
-    } else {
+        return OpExpr<S>::load(ifs);
+    else if (tp == OpTypes::Elem)
+        return OpElement<S, FL>::load(ifs);
+    else if (tp == OpTypes::Prod)
+        return OpProduct<S, FL>::load(ifs);
+    else if (tp == OpTypes::Sum)
+        return OpSum<S, FL>::load(ifs);
+    else if (tp == OpTypes::ElemRef)
+        return OpElementRef<S, FL>::load(ifs);
+    else if (tp == OpTypes::SumProd)
+        return OpSumProd<S, FL>::load(ifs);
+    else if (tp == OpTypes::ExprRef)
+        return OpExprRef<S>::template load<FL>(ifs);
+    else
         assert(false);
-        return nullptr;
-    }
+    return nullptr;
 }
 
 template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
-    if (x->get_type() == OpTypes::Elem)
-        return dynamic_pointer_cast<OpElement<S>>(x)->hash();
-    else if (x->get_type() == OpTypes::Prod)
-        return dynamic_pointer_cast<OpProduct<S>>(x)->hash();
-    else if (x->get_type() == OpTypes::Zero)
-        return 0;
+    if (x->get_type() == OpTypes::Elem || x->get_type() == OpTypes::Prod ||
+        x->get_type() == OpTypes::Zero)
+        return x->hash();
     else
         assert(false);
     return 0;
@@ -696,65 +954,13 @@ template <typename S> inline size_t hash_value(const shared_ptr<OpExpr<S>> &x) {
 // Absolute value
 template <typename S>
 inline shared_ptr<OpExpr<S>> abs_value(const shared_ptr<OpExpr<S>> &x) {
-    if (x->get_type() == OpTypes::Zero)
-        return x;
-    else if (x->get_type() == OpTypes::Elem) {
-        shared_ptr<OpElement<S>> op = dynamic_pointer_cast<OpElement<S>>(x);
-        return op->factor == 1.0 ? x : make_shared<OpElement<S>>(op->abs());
-    } else if (x->get_type() == OpTypes::ExprRef) {
-        shared_ptr<OpExprRef<S>> op = dynamic_pointer_cast<OpExprRef<S>>(x);
-        return make_shared<OpExprRef<S>>(abs_value(op->op), op->is_local,
-                                         abs_value(op->orig));
-    } else {
-        assert(x->get_type() == OpTypes::Prod);
-        shared_ptr<OpProduct<S>> op = dynamic_pointer_cast<OpProduct<S>>(x);
-        return op->factor == 1.0 ? x : make_shared<OpProduct<S>>(op->abs());
-    }
-}
-
-// String representation
-template <typename S> inline string to_str(const shared_ptr<OpExpr<S>> &x) {
-    stringstream ss;
-    if (x->get_type() == OpTypes::Zero)
-        ss << 0;
-    else if (x->get_type() == OpTypes::Elem)
-        ss << *dynamic_pointer_cast<OpElement<S>>(x);
-    else if (x->get_type() == OpTypes::Prod)
-        ss << *dynamic_pointer_cast<OpProduct<S>>(x);
-    else if (x->get_type() == OpTypes::Sum)
-        ss << *dynamic_pointer_cast<OpSum<S>>(x);
-    else if (x->get_type() == OpTypes::SumProd)
-        ss << *dynamic_pointer_cast<OpSumProd<S>>(x);
-    else if (x->get_type() == OpTypes::ExprRef)
-        ss << "["
-           << (dynamic_pointer_cast<OpExprRef<S>>(x)->is_local ? "T" : "F")
-           << "]" << to_str(dynamic_pointer_cast<OpExprRef<S>>(x)->op);
-    return ss.str();
+    return x->is_normalized() ? x : x->abs_expr();
 }
 
 template <typename S>
 inline bool operator==(const shared_ptr<OpExpr<S>> &a,
                        const shared_ptr<OpExpr<S>> &b) {
-    if (a->get_type() != b->get_type())
-        return false;
-    switch (a->get_type()) {
-    case OpTypes::Zero:
-        return *a == *b;
-    case OpTypes::Elem:
-        return *dynamic_pointer_cast<OpElement<S>>(a) ==
-               *dynamic_pointer_cast<OpElement<S>>(b);
-    case OpTypes::Prod:
-        return *dynamic_pointer_cast<OpProduct<S>>(a) ==
-               *dynamic_pointer_cast<OpProduct<S>>(b);
-    case OpTypes::Sum:
-        return *dynamic_pointer_cast<OpSum<S>>(a) ==
-               *dynamic_pointer_cast<OpSum<S>>(b);
-    case OpTypes::SumProd:
-        return *dynamic_pointer_cast<OpSumProd<S>>(a) ==
-               *dynamic_pointer_cast<OpSumProd<S>>(b);
-    default:
-        return false;
-    }
+    return a->is_equal_to(b);
 }
 
 template <typename S>
@@ -766,10 +972,7 @@ inline bool operator!=(const shared_ptr<OpExpr<S>> &a,
 template <typename S> struct op_expr_less {
     bool operator()(const shared_ptr<OpExpr<S>> &a,
                     const shared_ptr<OpExpr<S>> &b) const {
-        assert(a->get_type() == OpTypes::Elem &&
-               b->get_type() == OpTypes::Elem);
-        return *dynamic_pointer_cast<OpElement<S>>(a) <
-               *dynamic_pointer_cast<OpElement<S>>(b);
+        return a->is_less_than(b);
     }
 };
 
@@ -777,79 +980,18 @@ template <typename S> struct op_expr_less {
 template <typename S>
 inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
                                              const shared_ptr<OpExpr<S>> &b) {
+    return a->plus(a, b);
+}
+
+template <typename S>
+inline const shared_ptr<OpExpr<S>>
+plus_expr_ref(const shared_ptr<OpExpr<S>> &a, const shared_ptr<OpExpr<S>> &b) {
     if (a->get_type() == OpTypes::Zero)
         return b;
     else if (b->get_type() == OpTypes::Zero)
         return a;
-    else if (a->get_type() == OpTypes::Elem) {
-        if (b->get_type() == OpTypes::Elem) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.push_back(make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(a), 1.0));
-            strs.push_back(make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(b), 1.0));
-            return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Sum) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(b)->strings.size() + 1);
-            strs.push_back(make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(a), 1.0));
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
-            return make_shared<OpSum<S>>(strs);
-        }
-    } else if (a->get_type() == OpTypes::Prod ||
-               a->get_type() == OpTypes::SumProd) {
-        if (b->get_type() == OpTypes::Sum) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(b)->strings.size() + 1);
-            strs.push_back(dynamic_pointer_cast<OpProduct<S>>(a));
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
-            return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Prod ||
-                   b->get_type() == OpTypes::SumProd) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(2);
-            strs.push_back(dynamic_pointer_cast<OpProduct<S>>(a));
-            strs.push_back(dynamic_pointer_cast<OpProduct<S>>(b));
-            return make_shared<OpSum<S>>(strs);
-        }
-    } else if (a->get_type() == OpTypes::Sum) {
-        if (b->get_type() == OpTypes::Elem) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(a)->strings.size() + 1);
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.end());
-            strs.push_back(make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(b), 1.0));
-            return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Prod ||
-                   b->get_type() == OpTypes::SumProd) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(a)->strings.size() + 1);
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.end());
-            strs.push_back(dynamic_pointer_cast<OpProduct<S>>(b));
-            return make_shared<OpSum<S>>(strs);
-        } else if (b->get_type() == OpTypes::Sum) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(a)->strings.size() +
-                         dynamic_pointer_cast<OpSum<S>>(b)->strings.size());
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(a)->strings.end());
-            strs.insert(strs.end(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.begin(),
-                        dynamic_pointer_cast<OpSum<S>>(b)->strings.end());
-            return make_shared<OpSum<S>>(strs);
-        }
-    } else if (a->get_type() == OpTypes::ExprRef &&
-               b->get_type() == OpTypes::ExprRef) {
+    else if (a->get_type() == OpTypes::ExprRef &&
+             b->get_type() == OpTypes::ExprRef) {
         bool is_local = dynamic_pointer_cast<OpExprRef<S>>(a)->is_local &&
                         dynamic_pointer_cast<OpExprRef<S>>(b)->is_local;
         shared_ptr<OpExpr<S>> op = dynamic_pointer_cast<OpExprRef<S>>(a)->op +
@@ -877,6 +1019,90 @@ inline const shared_ptr<OpExpr<S>> operator+(const shared_ptr<OpExpr<S>> &a,
     return nullptr;
 }
 
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>> plus_expr(const shared_ptr<OpExpr<S>> &a,
+                                             const shared_ptr<OpExpr<S>> &b) {
+    if (a->get_type() == OpTypes::Zero)
+        return b;
+    else if (b->get_type() == OpTypes::Zero)
+        return a;
+    else if (a->get_type() == OpTypes::Elem) {
+        if (b->get_type() == OpTypes::Elem) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.push_back(make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(a), 1.0));
+            strs.push_back(make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(b), 1.0));
+            return make_shared<OpSum<S, FL>>(strs);
+        } else if (b->get_type() == OpTypes::Sum) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.size() +
+                         1);
+            strs.push_back(make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(a), 1.0));
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.end());
+            return make_shared<OpSum<S, FL>>(strs);
+        }
+    } else if (a->get_type() == OpTypes::Prod ||
+               a->get_type() == OpTypes::SumProd) {
+        if (b->get_type() == OpTypes::Sum) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.size() +
+                         1);
+            strs.push_back(dynamic_pointer_cast<OpProduct<S, FL>>(a));
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.end());
+            return make_shared<OpSum<S, FL>>(strs);
+        } else if (b->get_type() == OpTypes::Prod ||
+                   b->get_type() == OpTypes::SumProd) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(2);
+            strs.push_back(dynamic_pointer_cast<OpProduct<S, FL>>(a));
+            strs.push_back(dynamic_pointer_cast<OpProduct<S, FL>>(b));
+            return make_shared<OpSum<S, FL>>(strs);
+        }
+    } else if (a->get_type() == OpTypes::Sum) {
+        if (b->get_type() == OpTypes::Elem) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.size() +
+                         1);
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.end());
+            strs.push_back(make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(b), 1.0));
+            return make_shared<OpSum<S, FL>>(strs);
+        } else if (b->get_type() == OpTypes::Prod ||
+                   b->get_type() == OpTypes::SumProd) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.size() +
+                         1);
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.end());
+            strs.push_back(dynamic_pointer_cast<OpProduct<S, FL>>(b));
+            return make_shared<OpSum<S, FL>>(strs);
+        } else if (b->get_type() == OpTypes::Sum) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.size() +
+                         dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.size());
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.end());
+            strs.insert(strs.end(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.begin(),
+                        dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.end());
+            return make_shared<OpSum<S, FL>>(strs);
+        }
+    } else
+        return plus_expr_ref<S>(a, b);
+    assert(false);
+    return nullptr;
+}
+
 template <typename S>
 inline const shared_ptr<OpExpr<S>> operator+=(shared_ptr<OpExpr<S>> &a,
                                               const shared_ptr<OpExpr<S>> &b) {
@@ -884,37 +1110,28 @@ inline const shared_ptr<OpExpr<S>> operator+=(shared_ptr<OpExpr<S>> &a,
 }
 
 // A symbolic expression multiply a scalar
-template <typename S>
+template <typename S, typename FL,
+          typename = typename enable_if<is_complex<FL>::value ||
+                                        is_floating_point<FL>::value ||
+                                        is_integral<FL>::value>::type>
 inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
-                                             double d) {
+                                             FL d) {
     if (x->get_type() == OpTypes::Zero)
         return x;
     else if (d == 0.0)
         return make_shared<OpExpr<S>>();
     else if (d == 1.0)
         return x;
-    else if (x->get_type() == OpTypes::Elem)
-        return make_shared<OpElement<S>>(
-            *dynamic_pointer_cast<OpElement<S>>(x) * d);
-    else if (x->get_type() == OpTypes::Prod)
-        return make_shared<OpProduct<S>>(
-            *dynamic_pointer_cast<OpProduct<S>>(x) * d);
-    else if (x->get_type() == OpTypes::Sum)
-        return make_shared<OpSum<S>>(*dynamic_pointer_cast<OpSum<S>>(x) * d);
-    else if (x->get_type() == OpTypes::ExprRef)
-        return make_shared<OpExprRef<S>>(
-            dynamic_pointer_cast<OpExprRef<S>>(x)->op * d,
-            dynamic_pointer_cast<OpExprRef<S>>(x)->is_local,
-            dynamic_pointer_cast<OpExprRef<S>>(x)->orig != nullptr
-                ? dynamic_pointer_cast<OpExprRef<S>>(x)->orig * d
-                : nullptr);
-    assert(false);
-    return nullptr;
+    else
+        return x->scalar_multiply(d);
 }
 
 // A scalar multiply a symbolic expression
-template <typename S>
-inline const shared_ptr<OpExpr<S>> operator*(double d,
+template <typename S, typename FL,
+          typename = typename enable_if<is_complex<FL>::value ||
+                                        is_floating_point<FL>::value ||
+                                        is_integral<FL>::value>::type>
+inline const shared_ptr<OpExpr<S>> operator*(FL d,
                                              const shared_ptr<OpExpr<S>> &x) {
     return x * d;
 }
@@ -923,57 +1140,66 @@ inline const shared_ptr<OpExpr<S>> operator*(double d,
 template <typename S>
 inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &a,
                                              const shared_ptr<OpExpr<S>> &b) {
+    return a->multiply(a, b);
+}
+
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>>
+multiply_expr(const shared_ptr<OpExpr<S>> &a, const shared_ptr<OpExpr<S>> &b) {
+    using OPSF = OpProduct<S, FL>;
     if (a->get_type() == OpTypes::Zero)
         return a;
     else if (b->get_type() == OpTypes::Zero)
         return b;
     else if (a->get_type() == OpTypes::Elem) {
         if (b->get_type() == OpTypes::Sum) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(b)->strings.size());
-            for (auto &r : dynamic_pointer_cast<OpSum<S>>(b)->strings) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(b)->strings.size());
+            for (auto &r : dynamic_pointer_cast<OpSum<S, FL>>(b)->strings) {
                 assert(r->b == nullptr);
-                strs.push_back(make_shared<OpProduct<S>>(
-                    dynamic_pointer_cast<OpElement<S>>(a), r->a, r->factor));
+                strs.push_back(make_shared<OpProduct<S, FL>>(
+                    dynamic_pointer_cast<OpElement<S, FL>>(a), r->a,
+                    r->factor));
             }
-            return make_shared<OpSum<S>>(strs);
+            return make_shared<OpSum<S, FL>>(strs);
         } else if (b->get_type() == OpTypes::Elem)
-            return make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(a),
-                dynamic_pointer_cast<OpElement<S>>(b), 1.0);
+            return make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(a),
+                dynamic_pointer_cast<OpElement<S, FL>>(b), 1.0);
         else if (b->get_type() == OpTypes::Prod) {
-            assert(dynamic_pointer_cast<OpProduct<S>>(b)->b == nullptr);
-            return make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(a),
-                dynamic_pointer_cast<OpProduct<S>>(b)->a,
-                dynamic_pointer_cast<OpProduct<S>>(b)->factor);
+            assert(dynamic_pointer_cast<OPSF>(b)->b == nullptr);
+            return make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(a),
+                dynamic_pointer_cast<OpProduct<S, FL>>(b)->a,
+                dynamic_pointer_cast<OpProduct<S, FL>>(b)->factor);
         }
     } else if (a->get_type() == OpTypes::Prod) {
         if (b->get_type() == OpTypes::Elem) {
-            assert(dynamic_pointer_cast<OpProduct<S>>(a)->b == nullptr);
-            return make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpProduct<S>>(a)->a,
-                dynamic_pointer_cast<OpElement<S>>(b),
-                dynamic_pointer_cast<OpProduct<S>>(a)->factor);
+            assert(dynamic_pointer_cast<OPSF>(a)->b == nullptr);
+            return make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpProduct<S, FL>>(a)->a,
+                dynamic_pointer_cast<OpElement<S, FL>>(b),
+                dynamic_pointer_cast<OpProduct<S, FL>>(a)->factor);
         } else if (b->get_type() == OpTypes::Prod) {
-            assert(dynamic_pointer_cast<OpProduct<S>>(a)->b == nullptr);
-            assert(dynamic_pointer_cast<OpProduct<S>>(b)->b == nullptr);
-            return make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpProduct<S>>(a)->a,
-                dynamic_pointer_cast<OpProduct<S>>(b)->a,
-                dynamic_pointer_cast<OpProduct<S>>(a)->factor *
-                    dynamic_pointer_cast<OpProduct<S>>(b)->factor);
+            assert(dynamic_pointer_cast<OPSF>(a)->b == nullptr);
+            assert(dynamic_pointer_cast<OPSF>(b)->b == nullptr);
+            return make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpProduct<S, FL>>(a)->a,
+                dynamic_pointer_cast<OpProduct<S, FL>>(b)->a,
+                dynamic_pointer_cast<OpProduct<S, FL>>(a)->factor *
+                    dynamic_pointer_cast<OpProduct<S, FL>>(b)->factor);
         }
     } else if (a->get_type() == OpTypes::Sum) {
         if (b->get_type() == OpTypes::Elem) {
-            vector<shared_ptr<OpProduct<S>>> strs;
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(a)->strings.size());
-            for (auto &r : dynamic_pointer_cast<OpSum<S>>(a)->strings) {
+            vector<shared_ptr<OpProduct<S, FL>>> strs;
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(a)->strings.size());
+            for (auto &r : dynamic_pointer_cast<OpSum<S, FL>>(a)->strings) {
                 assert(r->b == nullptr);
-                strs.push_back(make_shared<OpProduct<S>>(
-                    r->a, dynamic_pointer_cast<OpElement<S>>(b), r->factor));
+                strs.push_back(make_shared<OpProduct<S, FL>>(
+                    r->a, dynamic_pointer_cast<OpElement<S, FL>>(b),
+                    r->factor));
             }
-            return make_shared<OpSum<S>>(strs);
+            return make_shared<OpSum<S, FL>>(strs);
         }
     }
     assert(false);
@@ -981,26 +1207,44 @@ inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &a,
 }
 
 // Sum of several symbolic expressions
+template <typename S, typename FL>
+inline const shared_ptr<OpExpr<S>>
+sum_expr(const vector<shared_ptr<OpExpr<S>>> &xs) {
+    const static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+    vector<shared_ptr<OpProduct<S, FL>>> strs;
+    for (auto &r : xs)
+        if (r->get_type() == OpTypes::Zero)
+            ;
+        else if (r->get_type() == OpTypes::Prod)
+            strs.push_back(dynamic_pointer_cast<OpProduct<S, FL>>(r));
+        else if (r->get_type() == OpTypes::SumProd)
+            strs.push_back(dynamic_pointer_cast<OpSumProd<S, FL>>(r));
+        else if (r->get_type() == OpTypes::Elem)
+            strs.push_back(make_shared<OpProduct<S, FL>>(
+                dynamic_pointer_cast<OpElement<S, FL>>(r), 1.0));
+        else if (r->get_type() == OpTypes::ElemRef)
+            assert(false);
+        else if (r->get_type() == OpTypes::Sum) {
+            strs.reserve(dynamic_pointer_cast<OpSum<S, FL>>(r)->strings.size() +
+                         strs.size());
+            for (auto &rr : dynamic_pointer_cast<OpSum<S, FL>>(r)->strings)
+                strs.push_back(rr);
+        } else
+            assert(false);
+    return strs.size() != 0 ? make_shared<OpSum<S, FL>>(strs) : zero;
+}
+
+// Sum of several symbolic expressions
 template <typename S>
 inline const shared_ptr<OpExpr<S>>
 sum(const vector<shared_ptr<OpExpr<S>>> &xs) {
     const static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
-    vector<shared_ptr<OpProduct<S>>> strs;
-    for (auto &r : xs)
-        if (r->get_type() == OpTypes::Prod)
-            strs.push_back(dynamic_pointer_cast<OpProduct<S>>(r));
-        else if (r->get_type() == OpTypes::SumProd)
-            strs.push_back(dynamic_pointer_cast<OpSumProd<S>>(r));
-        else if (r->get_type() == OpTypes::Elem)
-            strs.push_back(make_shared<OpProduct<S>>(
-                dynamic_pointer_cast<OpElement<S>>(r), 1.0));
-        else if (r->get_type() == OpTypes::Sum) {
-            strs.reserve(dynamic_pointer_cast<OpSum<S>>(r)->strings.size() +
-                         strs.size());
-            for (auto &rr : dynamic_pointer_cast<OpSum<S>>(r)->strings)
-                strs.push_back(rr);
-        }
-    return strs.size() != 0 ? make_shared<OpSum<S>>(strs) : zero;
+    for (auto &x : xs) {
+        shared_ptr<OpExpr<S>> r = x->sum(xs);
+        if (r != nullptr)
+            return r;
+    }
+    return zero;
 }
 
 // Dot product of two vectors of symbolic expressions
@@ -1012,12 +1256,12 @@ dot_product(const vector<shared_ptr<OpExpr<S>>> &a,
     assert(a.size() == b.size());
     for (size_t k = 0; k < a.size(); k++)
         xs.push_back(a[k] * b[k]);
-    return sum(xs);
+    return sum<S>(xs);
 }
 
 template <typename S>
 inline ostream &operator<<(ostream &os, const shared_ptr<OpExpr<S>> &c) {
-    os << to_str(c);
+    os << *c;
     return os;
 }
 
@@ -1029,14 +1273,22 @@ template <> struct hash<block2::OpNames> {
     size_t operator()(block2::OpNames s) const noexcept { return (size_t)s; }
 };
 
-template <typename S> struct hash<block2::OpElement<S>> {
-    size_t operator()(const block2::OpElement<S> &s) const noexcept {
+template <typename FL> struct hash<complex<FL>> {
+    size_t operator()(const complex<FL> &x) const noexcept {
+        size_t h = hash<FL>{}(real(x));
+        h ^= hash<FL>{}(imag(x)) + 0x9E3779B9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+template <typename S, typename FL> struct hash<block2::OpElement<S, FL>> {
+    size_t operator()(const block2::OpElement<S, FL> &s) const noexcept {
         return s.hash();
     }
 };
 
-template <typename S> struct hash<block2::OpProduct<S>> {
-    size_t operator()(const block2::OpProduct<S> &s) const noexcept {
+template <typename S, typename FL> struct hash<block2::OpProduct<S, FL>> {
+    size_t operator()(const block2::OpProduct<S, FL> &s) const noexcept {
         return s.hash();
     }
 };

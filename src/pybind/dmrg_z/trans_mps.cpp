@@ -20,6 +20,6 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_algorithms<SZ>(py::module &m);
-template void bind_algorithms<SU2>(py::module &m);
-
+template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));

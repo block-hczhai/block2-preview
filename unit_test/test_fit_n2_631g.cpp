@@ -10,10 +10,10 @@ class TestFITN2631G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_dmrg(int n_ext, int ci_order, const S target, double energy,
-                   const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
-                   DecompositionTypes dt, NoiseTypes nt);
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+                   const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
@@ -30,9 +30,10 @@ class TestFITN2631G : public ::testing::Test {
     }
 };
 
-template <typename S>
+template <typename S, typename FL>
 void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
-                              double energy, const shared_ptr<HamiltonianQC<S>> &hamil,
+                              double energy,
+                              const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                               const string &name, DecompositionTypes dt,
                               NoiseTypes nt) {
 
@@ -43,8 +44,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     t.get_time();
     // MPO construction (MRCISD-DMRG)
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional, hamil->n_sites / 3);
+    shared_ptr<MPO<S, FL>> mpo = make_shared<MPOQC<S, FL>>(
+        hamil, QCTypes::Conventional, hamil->n_sites / 3);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
@@ -54,7 +55,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     //     hamil->n_sites, hamil->vacuum, target, hamil->basis);
     mpo->basis = hamil->basis;
     for (int i = 0; i < n_ext; i++)
-        mpo = make_shared<FusedMPO<S>>(
+        mpo = make_shared<FusedMPO<S, FL>>(
             mpo, mpo->basis, mpo->n_sites - 2, mpo->n_sites - 1,
             fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
     fusing_mps_info->deallocate();
@@ -63,7 +64,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "MPO sparsification start" << endl;
     int idx = mpo->n_sites - 1;
     for (auto &op : mpo->tensors[idx]->ops) {
-        shared_ptr<CSRSparseMatrix<S>> smat = make_shared<CSRSparseMatrix<S>>();
+        shared_ptr<CSRSparseMatrix<S, FL>> smat =
+            make_shared<CSRSparseMatrix<S, FL>>();
         if (op.second->sparsity() > 0.75) {
             smat->from_dense(op.second);
             op.second->deallocate();
@@ -72,14 +74,15 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
         op.second = smat;
     }
     mpo->sparse_form[idx] = 'S';
-    mpo->tf = make_shared<TensorFunctions<S>>(
-        make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+    mpo->tf = make_shared<TensorFunctions<S, FL>>(
+        make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
     mpo->tf->opf->seq = hamil->opf->seq;
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -88,14 +91,14 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     t.get_time();
 
-    shared_ptr<MPSInfo<S>> mps_info =
-        make_shared<MPSInfo<S>>(mpo->n_sites, hamil->vacuum, target, mpo->basis);
+    shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
+        mpo->n_sites, hamil->vacuum, target, mpo->basis);
     mps_info->set_bond_dimension(bond_dim);
 
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(mpo->n_sites, 0, dot);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(mpo->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -106,12 +109,13 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     me->init_environments(false);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->decomp_type = dt;
     dmrg->noise_type = nt;
@@ -127,8 +131,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // MPO2 construction (Full space DMRG)
     cout << "MPO2 start" << endl;
-    shared_ptr<MPO<S>> mpo2 =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional, hamil->n_sites / 3);
+    shared_ptr<MPO<S, FL>> mpo2 = make_shared<MPOQC<S, FL>>(
+        hamil, QCTypes::Conventional, hamil->n_sites / 3);
     cout << "MPO2 end .. T = " << t.get_time() << endl;
 
     cout << "MPO2 fusing start" << endl;
@@ -137,7 +141,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     mpo2->basis = hamil->basis;
     for (int i = 0; i < n_ext; i++)
-        mpo2 = make_shared<FusedMPO<S>>(
+        mpo2 = make_shared<FusedMPO<S, FL>>(
             mpo2, mpo2->basis, mpo2->n_sites - 2, mpo2->n_sites - 1,
             fusing_mps_info->right_dims_fci[mpo2->n_sites - 2]);
     fusing_mps_info->deallocate();
@@ -146,7 +150,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "MPO2 sparsification start" << endl;
     idx = mpo2->n_sites - 1;
     for (auto &op : mpo2->tensors[idx]->ops) {
-        shared_ptr<CSRSparseMatrix<S>> smat = make_shared<CSRSparseMatrix<S>>();
+        shared_ptr<CSRSparseMatrix<S, FL>> smat =
+            make_shared<CSRSparseMatrix<S, FL>>();
         if (op.second->sparsity() > 0.75) {
             smat->from_dense(op.second);
             op.second->deallocate();
@@ -155,22 +160,23 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
         op.second = smat;
     }
     mpo2->sparse_form[idx] = 'S';
-    mpo2->tf = make_shared<TensorFunctions<S>>(
-        make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+    mpo2->tf = make_shared<TensorFunctions<S, FL>>(
+        make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
     mpo2->tf->opf->seq = hamil->opf->seq;
     cout << "MPO2 sparsification end .. T = " << t.get_time() << endl;
 
     // MPO2 simplification
     cout << "MPO2 simplification start" << endl;
-    mpo2 = make_shared<SimplifiedMPO<S>>(mpo2, make_shared<RuleQC<S>>(), true);
+    mpo2 = make_shared<SimplifiedMPO<S, FL>>(mpo2, make_shared<RuleQC<S, FL>>(),
+                                             true);
     cout << "MPO2 simplification end .. T = " << t.get_time() << endl;
 
     // Identity MPO
     cout << "Identity MPO start" << endl;
-    shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(
+    shared_ptr<MPO<S, FL>> impo = make_shared<IdentityMPO<S, FL>>(
         mpo2->basis, mpo->basis, hamil->vacuum, hamil->opf);
     // Attention: use trivial Rule or NoTransposeRule(RuleQC)
-    impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
+    impo = make_shared<SimplifiedMPO<S, FL>>(impo, make_shared<Rule<S, FL>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim2 = 270, bond_dim3 = 300;
@@ -185,8 +191,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     if (mps->center == mps->n_sites - 1)
         mps->center--;
-    shared_ptr<MPS<S>> mps2 =
-        make_shared<MPS<S>>(mpo2->n_sites, mps->center, dot);
+    shared_ptr<MPS<S, FL>> mps2 =
+        make_shared<MPS<S, FL>>(mpo2->n_sites, mps->center, dot);
     mps2->initialize(mps_info2);
     mps2->random_canonicalize();
 
@@ -197,25 +203,27 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     mps_info2->deallocate_mutable();
 
     // Identity ME
-    shared_ptr<MovingEnvironment<S>> ime =
-        make_shared<MovingEnvironment<S>>(impo, mps2, mps, "COMPRESS");
+    shared_ptr<MovingEnvironment<S, FL, FL>> ime =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo, mps2, mps, "COMPRESS");
     ime->dot = 2;
     ime->init_environments();
 
     // Linear
-    shared_ptr<Linear<S>> cps = make_shared<Linear<S>>(ime, bdims2, bdims1);
+    shared_ptr<Linear<S, FL, FL>> cps =
+        make_shared<Linear<S, FL, FL>>(ime, bdims2, bdims1);
     cps->iprint = 2;
     cps->decomp_type = dt;
     cps->decomp_last_site = dcl;
     double norm = cps->solve(5, mps->center == 0);
 
     // ME2
-    shared_ptr<MovingEnvironment<S>> me2 =
-        make_shared<MovingEnvironment<S>>(mpo2, mps2, mps2, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me2 =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo2, mps2, mps2, "DMRG");
     me2->init_environments(false);
 
     // DMRG2
-    shared_ptr<DMRG<S>> dmrg2 = make_shared<DMRG<S>>(me2, bdims2, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg2 =
+        make_shared<DMRG<S, FL, FL>>(me2, bdims2, noises);
     dmrg2->iprint = 2;
     dmrg2->decomp_type = dt;
     dmrg2->noise_type = nt;
@@ -224,8 +232,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // Now add KET1 & KET2 to BRA-ADD
     // the center of the three mpss must match
-    shared_ptr<MPSInfo<S>> mps_info3 =
-        make_shared<MPSInfo<S>>(mpo->n_sites, hamil->vacuum, target, mpo->basis);
+    shared_ptr<MPSInfo<S>> mps_info3 = make_shared<MPSInfo<S>>(
+        mpo->n_sites, hamil->vacuum, target, mpo->basis);
     mps_info3->set_bond_dimension(bond_dim3);
     mps_info3->tag = "BRA-ADD";
 
@@ -251,14 +259,15 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "checking overlap ..." << endl;
 
     // Overlap
-    ime = make_shared<MovingEnvironment<S>>(impo, mps2, mps, "IDT");
+    ime = make_shared<MovingEnvironment<S, FL, FL>>(impo, mps2, mps, "IDT");
     ime->init_environments();
-    shared_ptr<Expect<S>> ex = make_shared<Expect<S>>(ime, 400, 300);
+    shared_ptr<Expect<S, FL, FL>> ex =
+        make_shared<Expect<S, FL, FL>>(ime, 400, 300);
     double overlap = ex->solve(false);
     cout << "OVERLAP = " << setprecision(10) << fixed << overlap << endl;
 
-    shared_ptr<MPS<S>> mps3 =
-        make_shared<MPS<S>>(mpo->n_sites, mps->center, dot);
+    shared_ptr<MPS<S, FL>> mps3 =
+        make_shared<MPS<S, FL>>(mpo->n_sites, mps->center, dot);
     mps3->initialize(mps_info3);
     mps3->random_canonicalize();
 
@@ -269,25 +278,27 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     mps_info3->deallocate_mutable();
 
     // 0.25 * Identity MPO between mps3 / mps
-    shared_ptr<MPO<S>> impo25 = make_shared<IdentityMPO<S>>(
+    shared_ptr<MPO<S, FL>> impo25 = make_shared<IdentityMPO<S, FL>>(
         mpo->basis, mpo->basis, hamil->vacuum, hamil->opf);
-    impo25 = make_shared<SimplifiedMPO<S>>(impo25, make_shared<Rule<S>>());
+    impo25 =
+        make_shared<SimplifiedMPO<S, FL>>(impo25, make_shared<Rule<S, FL>>());
     impo25 = 0.25 * impo25;
 
     // 0.75 * Identity MPO between mps3 / mps2
-    shared_ptr<MPO<S>> impo75 = make_shared<IdentityMPO<S>>(
+    shared_ptr<MPO<S, FL>> impo75 = make_shared<IdentityMPO<S, FL>>(
         mpo->basis, mpo2->basis, hamil->vacuum, hamil->opf);
-    impo75 = make_shared<SimplifiedMPO<S>>(impo75, make_shared<Rule<S>>());
+    impo75 =
+        make_shared<SimplifiedMPO<S, FL>>(impo75, make_shared<Rule<S, FL>>());
     impo75 = 0.75 * impo75;
 
-    shared_ptr<MovingEnvironment<S>> laddme =
-        make_shared<MovingEnvironment<S>>(impo25, mps3, mps, "ADDL");
+    shared_ptr<MovingEnvironment<S, FL, FL>> laddme =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo25, mps3, mps, "ADDL");
     laddme->init_environments();
-    shared_ptr<MovingEnvironment<S>> raddme =
-        make_shared<MovingEnvironment<S>>(impo75, mps3, mps2, "ADDR");
+    shared_ptr<MovingEnvironment<S, FL, FL>> raddme =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo75, mps3, mps2, "ADDR");
     raddme->init_environments();
-    shared_ptr<MovingEnvironment<S>> pertme =
-        make_shared<MovingEnvironment<S>>(mpo, mps3, mps3, "PERT");
+    shared_ptr<MovingEnvironment<S, FL, FL>> pertme =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps3, mps3, "PERT");
     pertme->init_environments();
 
     cout << "fit mps addition ..." << endl;
@@ -298,8 +309,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // bond_dim2 = bond dim for mps2
     // note that pertme can also be nullptr, then no perturbative noise will be
     // applied
-    shared_ptr<Linear<S>> addmps =
-        make_shared<Linear<S>>(pertme, laddme, raddme, bdims3, bdims1, noises);
+    shared_ptr<Linear<S, FL, FL>> addmps = make_shared<Linear<S, FL, FL>>(
+        pertme, laddme, raddme, bdims3, bdims1, noises);
     addmps->eq_type = EquationTypes::FitAddition;
     addmps->target_ket_bond_dim = bond_dim2;
     addmps->iprint = 2;
@@ -322,7 +333,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 }
 
 TEST_F(TestFITN2631G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
@@ -334,17 +345,19 @@ TEST_F(TestFITN2631G, TestSU2) {
     SU2 target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
+                                                orbsym, fcidump);
 
-    test_dmrg<SU2>(5, 2, target, energy, hamil, "SU2", DecompositionTypes::SVD,
-                   NoiseTypes::Perturbative);
+    test_dmrg<SU2, double>(5, 2, target, energy, hamil, "SU2",
+                           DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestFITN2631G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
@@ -356,10 +369,12 @@ TEST_F(TestFITN2631G, TestSZ) {
     SZ target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),
+                                               orbsym, fcidump);
 
-    test_dmrg<SZ>(5, 2, target, energy, hamil, "SZ", DecompositionTypes::SVD,
-                  NoiseTypes::Perturbative);
+    test_dmrg<SZ, double>(5, 2, target, energy, hamil, "SZ",
+                          DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil->deallocate();
     fcidump->deallocate();

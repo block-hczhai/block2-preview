@@ -21,8 +21,8 @@
 #pragma once
 
 #include "../core/matrix.hpp"
-#include "mps.hpp"
 #include "../core/sparse_matrix.hpp"
+#include "mps.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -37,11 +37,11 @@ using namespace std;
 namespace block2 {
 
 // block-sparse three-index tensor
-template <typename S> struct SparseTensor {
-    vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>> data;
+template <typename S, typename FL> struct SparseTensor {
+    vector<vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>> data;
     SparseTensor() {}
     SparseTensor(
-        const vector<vector<pair<pair<S, S>, shared_ptr<Tensor>>>> &data)
+        const vector<vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>> &data)
         : data(data) {}
     friend ostream &operator<<(ostream &os, const SparseTensor &spt) {
         int ip = 0;
@@ -55,15 +55,17 @@ template <typename S> struct SparseTensor {
     }
 };
 
-template <typename S1, typename S2, typename = void, typename = void>
+template <typename S1, typename S2, typename FL, typename = void,
+          typename = void>
 struct TransSparseTensor;
 
 // Translation between SU2 and SZ MPSInfo
 // only works for normal nstate = 1 basis
-template <typename S1, typename S2>
-struct TransSparseTensor<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
-    static shared_ptr<SparseTensor<S2>>
-    forward(const shared_ptr<SparseTensor<S1>> &spt,
+template <typename S1, typename S2, typename FL>
+struct TransSparseTensor<S1, S2, FL, typename S1::is_su2_t,
+                         typename S2::is_sz_t> {
+    static shared_ptr<SparseTensor<S2, FL>>
+    forward(const shared_ptr<SparseTensor<S1, FL>> &spt,
             const shared_ptr<StateInfo<S1>> &basis,
             const shared_ptr<StateInfo<S1>> &left_dim,
             const shared_ptr<StateInfo<S1>> &right_dim,
@@ -80,7 +82,7 @@ struct TransSparseTensor<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
         shared_ptr<StateInfo<S1>> conn_right_dim =
             TransStateInfo<S2, S1>::backward_connection(right_dim,
                                                         tr_right_dim);
-        vector<map<pair<S2, S2>, shared_ptr<Tensor>>> mp(tr_basis->n);
+        vector<map<pair<S2, S2>, shared_ptr<GTensor<FL>>>> mp(tr_basis->n);
         for (int ip = 0; ip < basis->n; ip++) {
             S1 mq = basis->quanta[ip];
             for (auto &r : spt->data[ip]) {
@@ -112,9 +114,9 @@ struct TransSparseTensor<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
                                         ->n_states[tr_right_dim->find_state(
                                             rqz)];
                                 mp[imqz][make_pair(lqz, rqz)] =
-                                    make_shared<Tensor>(m, k, n);
+                                    make_shared<GTensor<FL>>(m, k, n);
                             }
-                            shared_ptr<Tensor> x =
+                            shared_ptr<GTensor<FL>> x =
                                 mp[imqz].at(make_pair(lqz, rqz));
                             int il = tr_left_dim->find_state(lqz);
                             int ir = tr_right_dim->find_state(rqz);
@@ -149,26 +151,27 @@ struct TransSparseTensor<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
                         }
             }
         }
-        shared_ptr<SparseTensor<S2>> rst = make_shared<SparseTensor<S2>>();
+        shared_ptr<SparseTensor<S2, FL>> rst =
+            make_shared<SparseTensor<S2, FL>>();
         rst->data.resize(tr_basis->n);
         for (int i = 0; i < tr_basis->n; i++)
-            rst->data[i] = vector<pair<pair<S2, S2>, shared_ptr<Tensor>>>(
+            rst->data[i] = vector<pair<pair<S2, S2>, shared_ptr<GTensor<FL>>>>(
                 mp[i].cbegin(), mp[i].cend());
         return rst;
     }
 };
 
 // MPS represented in three-index tensor
-template <typename S> struct UnfusedMPS {
+template <typename S, typename FL> struct UnfusedMPS {
     shared_ptr<MPSInfo<S>> info;
-    vector<shared_ptr<SparseTensor<S>>> tensors;
+    vector<shared_ptr<SparseTensor<S, FL>>> tensors;
     string canonical_form;
     int center, n_sites, dot;
     UnfusedMPS() {}
-    UnfusedMPS(const shared_ptr<MPS<S>> &mps) { this->initialize(mps); }
-    static shared_ptr<SparseTensor<S>>
-    forward_left_fused(int ii, const shared_ptr<MPS<S>> &mps, bool wfn) {
-        shared_ptr<SparseTensor<S>> ts = make_shared<SparseTensor<S>>();
+    UnfusedMPS(const shared_ptr<MPS<S, FL>> &mps) { this->initialize(mps); }
+    static shared_ptr<SparseTensor<S, FL>>
+    forward_left_fused(int ii, const shared_ptr<MPS<S, FL>> &mps, bool wfn) {
+        shared_ptr<SparseTensor<S, FL>> ts = make_shared<SparseTensor<S, FL>>();
         StateInfo<S> m = *mps->info->basis[ii];
         ts->data.resize(m.n);
         mps->info->load_left_dims(ii);
@@ -176,7 +179,7 @@ template <typename S> struct UnfusedMPS {
         StateInfo<S> lm = StateInfo<S>::tensor_product(
             l, m, *mps->info->left_dims_fci[ii + 1]);
         StateInfo<S> clm = StateInfo<S>::get_connection_info(l, m, lm);
-        shared_ptr<SparseMatrix<S>> mat = mps->tensors[ii];
+        shared_ptr<SparseMatrix<S, FL>> mat = mps->tensors[ii];
         assert(wfn == mat->info->is_wavefunction);
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
@@ -194,10 +197,10 @@ template <typename S> struct UnfusedMPS {
                 ts->data[ibbb].push_back(make_pair(
                     make_pair(l.quanta[ibba],
                               wfn ? mps->info->target - ket : ket),
-                    make_shared<Tensor>(l.n_states[ibba], m.n_states[ibbb],
-                                        mat->info->n_states_ket[i])));
+                    make_shared<GTensor<FL>>(l.n_states[ibba], m.n_states[ibbb],
+                                             mat->info->n_states_ket[i])));
                 memcpy(ts->data[ibbb].back().second->data.data(), mat->data + p,
-                       lp * sizeof(double));
+                       lp * sizeof(FL));
                 p += lp;
             }
             assert(p == (i != mat->info->n - 1
@@ -209,9 +212,9 @@ template <typename S> struct UnfusedMPS {
         l.deallocate();
         return ts;
     }
-    static shared_ptr<SparseTensor<S>>
-    forward_right_fused(int ii, const shared_ptr<MPS<S>> &mps, bool wfn) {
-        shared_ptr<SparseTensor<S>> ts = make_shared<SparseTensor<S>>();
+    static shared_ptr<SparseTensor<S, FL>>
+    forward_right_fused(int ii, const shared_ptr<MPS<S, FL>> &mps, bool wfn) {
+        shared_ptr<SparseTensor<S, FL>> ts = make_shared<SparseTensor<S, FL>>();
         StateInfo<S> m = *mps->info->basis[ii];
         ts->data.resize(m.n);
         mps->info->load_right_dims(ii + 1);
@@ -219,7 +222,7 @@ template <typename S> struct UnfusedMPS {
         StateInfo<S> mr =
             StateInfo<S>::tensor_product(m, r, *mps->info->right_dims_fci[ii]);
         StateInfo<S> cmr = StateInfo<S>::get_connection_info(m, r, mr);
-        shared_ptr<SparseMatrix<S>> mat = mps->tensors[ii];
+        shared_ptr<SparseMatrix<S, FL>> mat = mps->tensors[ii];
         assert(wfn == mat->info->is_wavefunction);
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
@@ -236,12 +239,13 @@ template <typename S> struct UnfusedMPS {
                 ts->data[ikka].push_back(make_pair(
                     make_pair(wfn ? bra : mps->info->target - bra,
                               mps->info->target - r.quanta[ikkb]),
-                    make_shared<Tensor>(mat->info->n_states_bra[i],
-                                        m.n_states[ikka], r.n_states[ikkb])));
+                    make_shared<GTensor<FL>>(mat->info->n_states_bra[i],
+                                             m.n_states[ikka],
+                                             r.n_states[ikkb])));
                 for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
                     memcpy(&ts->data[ikka].back().second->data[ip * lp],
                            mat->data + p + ip * mat->info->n_states_ket[i],
-                           lp * sizeof(double));
+                           lp * sizeof(FL));
                 p += lp;
             }
             assert(p - mat->info->n_states_total[i] ==
@@ -252,11 +256,11 @@ template <typename S> struct UnfusedMPS {
         r.deallocate();
         return ts;
     }
-    static shared_ptr<SparseTensor<S>>
-    forward_mps_tensor(int i, const shared_ptr<MPS<S>> &mps) {
+    static shared_ptr<SparseTensor<S, FL>>
+    forward_mps_tensor(int i, const shared_ptr<MPS<S, FL>> &mps) {
         assert(mps->tensors[i] != nullptr);
         mps->load_tensor(i);
-        shared_ptr<SparseTensor<S>> ts;
+        shared_ptr<SparseTensor<S, FL>> ts;
         if (mps->canonical_form[i] == 'L' || mps->canonical_form[i] == 'K' ||
             (i == 0 && mps->canonical_form[i] == 'C')) {
             ts = forward_left_fused(i, mps,
@@ -273,13 +277,13 @@ template <typename S> struct UnfusedMPS {
         mps->unload_tensor(i);
         return ts;
     }
-    static shared_ptr<SparseMatrix<S>>
-    backward_left_fused(int ii, const shared_ptr<MPS<S>> &mps,
-                        const shared_ptr<SparseTensor<S>> &spt, bool wfn) {
+    static shared_ptr<SparseMatrix<S, FL>>
+    backward_left_fused(int ii, const shared_ptr<MPS<S, FL>> &mps,
+                        const shared_ptr<SparseTensor<S, FL>> &spt, bool wfn) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> m = *mps->info->basis[ii];
         StateInfo<S> l = *mps->info->left_dims[ii];
         StateInfo<S> lm = StateInfo<S>::tensor_product(
@@ -293,13 +297,14 @@ template <typename S> struct UnfusedMPS {
         else
             minfo->initialize(lm, *mps->info->left_dims[ii + 1],
                               mps->info->vacuum, false);
-        shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> mat =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         mat->allocate(minfo);
         assert(wfn == mat->info->is_wavefunction);
-        vector<map<pair<S, S>, shared_ptr<Tensor>>> mp(spt->data.size());
+        vector<map<pair<S, S>, shared_ptr<GTensor<FL>>>> mp(spt->data.size());
         for (size_t i = 0; i < spt->data.size(); i++)
-            mp[i] = map<pair<S, S>, shared_ptr<Tensor>>(spt->data[i].cbegin(),
-                                                        spt->data[i].cend());
+            mp[i] = map<pair<S, S>, shared_ptr<GTensor<FL>>>(
+                spt->data[i].cbegin(), spt->data[i].cend());
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -316,11 +321,11 @@ template <typename S> struct UnfusedMPS {
                 pair<S, S> qq = make_pair(l.quanta[ibba],
                                           wfn ? mps->info->target - ket : ket);
                 if (mp[ibbb].count(qq)) {
-                    shared_ptr<Tensor> ts = mp[ibbb].at(qq);
+                    shared_ptr<GTensor<FL>> ts = mp[ibbb].at(qq);
                     assert(ts->shape[0] == l.n_states[ibba]);
                     assert(ts->shape[1] == m.n_states[ibbb]);
                     assert(ts->shape[2] == mat->info->n_states_ket[i]);
-                    memcpy(mat->data + p, ts->data.data(), lp * sizeof(double));
+                    memcpy(mat->data + p, ts->data.data(), lp * sizeof(FL));
                 }
                 p += lp;
             }
@@ -332,13 +337,13 @@ template <typename S> struct UnfusedMPS {
         lm.deallocate();
         return mat;
     }
-    static shared_ptr<SparseMatrix<S>>
-    backward_right_fused(int ii, const shared_ptr<MPS<S>> &mps,
-                         const shared_ptr<SparseTensor<S>> &spt, bool wfn) {
+    static shared_ptr<SparseMatrix<S, FL>>
+    backward_right_fused(int ii, const shared_ptr<MPS<S, FL>> &mps,
+                         const shared_ptr<SparseTensor<S, FL>> &spt, bool wfn) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> m = *mps->info->basis[ii];
         StateInfo<S> r = *mps->info->right_dims[ii + 1];
         StateInfo<S> mr =
@@ -352,13 +357,14 @@ template <typename S> struct UnfusedMPS {
         else
             minfo->initialize(*mps->info->right_dims[ii], mr, mps->info->vacuum,
                               false);
-        shared_ptr<SparseMatrix<S>> mat = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> mat =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         mat->allocate(minfo);
         assert(wfn == mat->info->is_wavefunction);
-        vector<map<pair<S, S>, shared_ptr<Tensor>>> mp(spt->data.size());
+        vector<map<pair<S, S>, shared_ptr<GTensor<FL>>>> mp(spt->data.size());
         for (size_t i = 0; i < spt->data.size(); i++)
-            mp[i] = map<pair<S, S>, shared_ptr<Tensor>>(spt->data[i].cbegin(),
-                                                        spt->data[i].cend());
+            mp[i] = map<pair<S, S>, shared_ptr<GTensor<FL>>>(
+                spt->data[i].cbegin(), spt->data[i].cend());
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -374,13 +380,13 @@ template <typename S> struct UnfusedMPS {
                 pair<S, S> qq = make_pair(wfn ? bra : mps->info->target - bra,
                                           mps->info->target - r.quanta[ikkb]);
                 if (mp[ikka].count(qq)) {
-                    shared_ptr<Tensor> ts = mp[ikka].at(qq);
+                    shared_ptr<GTensor<FL>> ts = mp[ikka].at(qq);
                     assert(ts->shape[0] == mat->info->n_states_bra[i]);
                     assert(ts->shape[1] == m.n_states[ikka]);
                     assert(ts->shape[2] == r.n_states[ikkb]);
                     for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
                         memcpy(mat->data + p + ip * mat->info->n_states_ket[i],
-                               &ts->data[ip * lp], lp * sizeof(double));
+                               &ts->data[ip * lp], lp * sizeof(FL));
                 }
                 p += lp;
             }
@@ -391,10 +397,10 @@ template <typename S> struct UnfusedMPS {
         mr.deallocate();
         return mat;
     }
-    static shared_ptr<SparseMatrix<S>>
-    backward_mps_tensor(int i, const shared_ptr<MPS<S>> &mps,
-                        const shared_ptr<SparseTensor<S>> &spt) {
-        shared_ptr<SparseMatrix<S>> mat;
+    static shared_ptr<SparseMatrix<S, FL>>
+    backward_mps_tensor(int i, const shared_ptr<MPS<S, FL>> &mps,
+                        const shared_ptr<SparseTensor<S, FL>> &spt) {
+        shared_ptr<SparseMatrix<S, FL>> mat;
         if (mps->canonical_form[i] == 'L' || mps->canonical_form[i] == 'K' ||
             (i == 0 && mps->canonical_form[i] == 'C')) {
             mat = backward_left_fused(i, mps, spt,
@@ -410,7 +416,7 @@ template <typename S> struct UnfusedMPS {
             assert(false);
         return mat;
     }
-    void initialize(const shared_ptr<MPS<S>> &mps) {
+    void initialize(const shared_ptr<MPS<S, FL>> &mps) {
         this->info = mps->info;
         canonical_form = mps->canonical_form;
         center = mps->center;
@@ -421,9 +427,9 @@ template <typename S> struct UnfusedMPS {
             tensors[i] = forward_mps_tensor(i, mps);
     }
     // Transform from Unfused MPS to normal MPS
-    shared_ptr<MPS<S>> finalize() const {
+    shared_ptr<MPS<S, FL>> finalize() const {
         info->load_mutable();
-        shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(info);
+        shared_ptr<MPS<S, FL>> xmps = make_shared<MPS<S, FL>>(info);
         xmps->canonical_form = canonical_form;
         xmps->center = center;
         xmps->n_sites = n_sites;
@@ -465,7 +471,8 @@ template <typename S> struct UnfusedMPS {
         }
         info->save_mutable();
         info->deallocate_mutable();
-        shared_ptr<SparseTensor<S>> rst = make_shared<SparseTensor<S>>();
+        shared_ptr<SparseTensor<S, FL>> rst =
+            make_shared<SparseTensor<S, FL>>();
         rst->data.resize(info->basis[0]->n);
         for (int i = 0; i < info->basis[0]->n; i++) {
             for (auto &x : tensors[0]->data[i])
@@ -482,17 +489,19 @@ template <typename S> struct UnfusedMPS {
     }
 };
 
-template <typename S1, typename S2, typename = void, typename = void>
+template <typename S1, typename S2, typename FL, typename = void,
+          typename = void>
 struct TransUnfusedMPS;
 
 // Translation between SU2 and SZ MPSInfo
 // only works for normal nstate = 1 basis
-template <typename S1, typename S2>
-struct TransUnfusedMPS<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
-    static shared_ptr<UnfusedMPS<S2>>
-    forward(const shared_ptr<UnfusedMPS<S1>> &umps, const string &xtag,
+template <typename S1, typename S2, typename FL>
+struct TransUnfusedMPS<S1, S2, FL, typename S1::is_su2_t,
+                       typename S2::is_sz_t> {
+    static shared_ptr<UnfusedMPS<S2, FL>>
+    forward(const shared_ptr<UnfusedMPS<S1, FL>> &umps, const string &xtag,
             const shared_ptr<CG<S1>> &cg) {
-        shared_ptr<UnfusedMPS<S2>> fmps = make_shared<UnfusedMPS<S2>>();
+        shared_ptr<UnfusedMPS<S2, FL>> fmps = make_shared<UnfusedMPS<S2, FL>>();
         assert(umps->info->target.twos() == 0);
         S2 target(umps->info->target.n(), umps->info->target.twos(),
                   umps->info->target.pg());
@@ -508,7 +517,7 @@ struct TransUnfusedMPS<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
         umps->info->load_mutable();
         for (int i = 0; i < umps->n_sites; i++)
             if (umps->canonical_form[i] == 'L')
-                fmps->tensors[i] = TransSparseTensor<S1, S2>::forward(
+                fmps->tensors[i] = TransSparseTensor<S1, S2, FL>::forward(
                     umps->tensors[i], umps->info->basis[i],
                     umps->info->left_dims[i], umps->info->left_dims[i + 1], cg,
                     true);
@@ -519,13 +528,13 @@ struct TransUnfusedMPS<S1, S2, typename S1::is_su2_t, typename S2::is_sz_t> {
                 shared_ptr<StateInfo<S1>> rj =
                     make_shared<StateInfo<S1>>(StateInfo<S1>::complementary(
                         *umps->info->right_dims[i + 1], umps->info->target));
-                fmps->tensors[i] = TransSparseTensor<S1, S2>::forward(
+                fmps->tensors[i] = TransSparseTensor<S1, S2, FL>::forward(
                     umps->tensors[i], umps->info->basis[i], ri, rj, cg, true);
             } else {
                 shared_ptr<StateInfo<S1>> ri =
                     make_shared<StateInfo<S1>>(StateInfo<S1>::complementary(
                         *umps->info->right_dims[i + 1], umps->info->target));
-                fmps->tensors[i] = TransSparseTensor<S1, S2>::forward(
+                fmps->tensors[i] = TransSparseTensor<S1, S2, FL>::forward(
                     umps->tensors[i], umps->info->basis[i],
                     umps->info->left_dims[i], ri, cg, true);
             }

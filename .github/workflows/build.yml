@@ -59,7 +59,7 @@ jobs:
       - name: build gtest (macos)
         if: matrix.os == 'macos-latest'
         run: |
-          git clone -b release-1.10.0 https://github.com/google/googletest
+          git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
           cmake CMakeLists.txt
           make
@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON
           make -j 4
 
       - name: run test (serial)
@@ -91,7 +91,7 @@ jobs:
           sed -i "s|unit_test/test_|unit_test/mpi/test_|" CMakeLists.txt
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON
           make -j 4
 
       - name: run test (mpi)

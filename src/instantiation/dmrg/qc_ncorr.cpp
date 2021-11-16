@@ -20,5 +20,5 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::NPC1MPOQC<block2::SZ>;
-template struct block2::NPC1MPOQC<block2::SU2>;
+template struct block2::NPC1MPOQC<block2::SZ, double>;
+template struct block2::NPC1MPOQC<block2::SU2, double>;

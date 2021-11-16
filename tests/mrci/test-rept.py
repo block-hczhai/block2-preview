@@ -305,7 +305,7 @@ def test_rept():
     cps.trunc_type = TruncationTypes.KeepOne * 1
     cps.last_site_svd = True
     cps.cutoff = 1e-12
-    cps.minres_conv_thrds = VectorDouble([x / 50 for x in davTols])
+    cps.linear_conv_thrds = VectorDouble([x / 50 for x in davTols])
 
 
     # Need extra quantum numbers to represent -H|bra> accurately

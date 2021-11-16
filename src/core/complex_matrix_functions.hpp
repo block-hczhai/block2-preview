@@ -74,14 +74,6 @@ extern void zgemm(const char *transa, const char *transb, const MKL_INT *m,
 // LU factorization
 extern void zgetrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
-// QR factorization
-extern void zgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
-                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
-                   const MKL_INT *lwork, MKL_INT *info);
-
-extern void zungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, complex<double> *a,
-                   const MKL_INT *lda, complex<double> *tau, complex<double> *work,
-                   const MKL_INT *lwork, MKL_INT *info);
 
 // matrix inverse
 extern void zgetri(const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
@@ -114,11 +106,326 @@ extern void zgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   complex<double> *b, const MKL_INT *ldb, complex<double> *work,
                   const MKL_INT *lwork, MKL_INT *info);
 
+// matrix copy
+// mat [b] = mat [a]
+extern void zlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const complex<double> *a, const MKL_INT *lda,
+                   complex<double> *b, const MKL_INT *ldb);
+
+// QR factorization
+extern void zgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info);
+extern void zungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+
+// LQ factorization
+extern void zgelqf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info);
+extern void zunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+
+// eigenvalue problem
+extern void zheev(const char *jobz, const char *uplo, const MKL_INT *n,
+                  complex<double> *a, const MKL_INT *lda, double *w,
+                  complex<double> *work, const MKL_INT *lwork, double *rwork,
+                  MKL_INT *info);
+
+// SVD
+// mat [a] = mat [u] * vector [sigma] * mat [vt]
+extern void zgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                   double *s, complex<double> *u, const MKL_INT *ldu,
+                   complex<double> *vt, const MKL_INT *ldvt,
+                   complex<double> *work, const MKL_INT *lwork, double *rwork,
+                   MKL_INT *info);
+
 #endif
 }
 
+template <typename FL>
+inline void xgemm(const char *transa, const char *transb, const MKL_INT *m,
+                  const MKL_INT *n, const MKL_INT *k, const FL *alpha,
+                  const FL *a, const MKL_INT *lda, const FL *b,
+                  const MKL_INT *ldb, const FL *beta, FL *c,
+                  const MKL_INT *ldc) noexcept;
+
+template <>
+inline void xgemm<double>(const char *transa, const char *transb,
+                          const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                          const double *alpha, const double *a,
+                          const MKL_INT *lda, const double *b,
+                          const MKL_INT *ldb, const double *beta, double *c,
+                          const MKL_INT *ldc) noexcept {
+    return dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <>
+inline void
+xgemm<complex<double>>(const char *transa, const char *transb, const MKL_INT *m,
+                       const MKL_INT *n, const MKL_INT *k,
+                       const complex<double> *alpha, const complex<double> *a,
+                       const MKL_INT *lda, const complex<double> *b,
+                       const MKL_INT *ldb, const complex<double> *beta,
+                       complex<double> *c, const MKL_INT *ldc) noexcept {
+    return zgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
+}
+
+template <typename FL>
+inline void xscal(const MKL_INT *n, const FL *sa, FL *sx,
+                  const MKL_INT *incx) noexcept;
+
+template <>
+inline void xscal<double>(const MKL_INT *n, const double *sa, double *sx,
+                          const MKL_INT *incx) noexcept {
+    dscal(n, sa, sx, incx);
+}
+
+template <>
+inline void xscal<complex<double>>(const MKL_INT *n, const complex<double> *sa,
+                                   complex<double> *sx,
+                                   const MKL_INT *incx) noexcept {
+    zscal(n, sa, sx, incx);
+}
+
+template <typename FL>
+inline void xdscal(const MKL_INT *n, const double *sa, FL *sx,
+                   const MKL_INT *incx) noexcept;
+
+template <>
+inline void xdscal<double>(const MKL_INT *n, const double *sa, double *sx,
+                           const MKL_INT *incx) noexcept {
+    dscal(n, sa, sx, incx);
+}
+
+template <>
+inline void xdscal<complex<double>>(const MKL_INT *n, const double *sa,
+                                    complex<double> *sx,
+                                    const MKL_INT *incx) noexcept {
+    zdscal(n, sa, sx, incx);
+}
+
+template <typename FL>
+inline double xnrm2(const MKL_INT *n, const FL *x,
+                    const MKL_INT *incx) noexcept;
+
+template <>
+inline double xnrm2<double>(const MKL_INT *n, const double *x,
+                            const MKL_INT *incx) noexcept {
+    return dnrm2(n, x, incx);
+}
+
+template <>
+inline double xnrm2<complex<double>>(const MKL_INT *n, const complex<double> *x,
+                                     const MKL_INT *incx) noexcept {
+    return dznrm2(n, x, incx);
+}
+
+template <typename FL>
+inline void xcopy(const MKL_INT *n, const FL *dx, const MKL_INT *incx, FL *dy,
+                  const MKL_INT *incy) noexcept;
+
+template <>
+inline void xcopy<double>(const MKL_INT *n, const double *dx,
+                          const MKL_INT *incx, double *dy,
+                          const MKL_INT *incy) noexcept {
+    dcopy(n, dx, incx, dy, incy);
+}
+
+template <>
+inline void xcopy<complex<double>>(const MKL_INT *n, const complex<double> *dx,
+                                   const MKL_INT *incx, complex<double> *dy,
+                                   const MKL_INT *incy) noexcept {
+    zcopy(n, dx, incx, dy, incy);
+}
+
+template <typename FL>
+inline FL xdot(const MKL_INT *n, const FL *dx, const MKL_INT *incx,
+               const FL *dy, const MKL_INT *incy) noexcept;
+
+template <>
+inline double xdot<double>(const MKL_INT *n, const double *dx,
+                           const MKL_INT *incx, const double *dy,
+                           const MKL_INT *incy) noexcept {
+    return ddot(n, dx, incx, dy, incy);
+}
+
+template <>
+inline complex<double>
+xdot<complex<double>>(const MKL_INT *n, const complex<double> *dx,
+                      const MKL_INT *incx, const complex<double> *dy,
+                      const MKL_INT *incy) noexcept {
+    static const complex<double> x = 1.0, zz = 0.0;
+    MKL_INT inc = 1;
+    complex<double> r;
+    zgemm("n", "t", &inc, &inc, n, &x, dy, incy, dx, incx, &zz, &r, &inc);
+    return r;
+}
+
+template <typename FL>
+inline void xaxpy(const MKL_INT *n, const FL *sa, const FL *sx,
+                  const MKL_INT *incx, FL *sy, const MKL_INT *incy) noexcept;
+
+template <>
+inline void xaxpy<double>(const MKL_INT *n, const double *sa, const double *sx,
+                          const MKL_INT *incx, double *sy,
+                          const MKL_INT *incy) noexcept {
+    daxpy(n, sa, sx, incx, sy, incy);
+}
+
+template <>
+inline void xaxpy<complex<double>>(const MKL_INT *n, const complex<double> *sa,
+                                   const complex<double> *sx,
+                                   const MKL_INT *incx, complex<double> *sy,
+                                   const MKL_INT *incy) noexcept {
+    zaxpy(n, sa, sx, incx, sy, incy);
+}
+
+template <typename FL>
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const FL *a, const MKL_INT *lda, FL *b, const MKL_INT *ldb);
+
+template <>
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const double *a, const MKL_INT *lda, double *b,
+                   const MKL_INT *ldb) {
+    dlacpy(uplo, m, n, a, lda, b, ldb);
+}
+template <>
+inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                   const complex<double> *a, const MKL_INT *lda,
+                   complex<double> *b, const MKL_INT *ldb) {
+    zlacpy(uplo, m, n, a, lda, b, ldb);
+}
+
+template <typename FL>
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const FL *alpha, const FL *a, const MKL_INT *lda, const FL *x,
+                  const MKL_INT *incx, const FL *beta, FL *y,
+                  const MKL_INT *incy);
+
+template <>
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const double *alpha, const double *a, const MKL_INT *lda,
+                  const double *x, const MKL_INT *incx, const double *beta,
+                  double *y, const MKL_INT *incy) {
+    dgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+template <>
+inline void xgemv(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                  const complex<double> *alpha, const complex<double> *a,
+                  const MKL_INT *lda, const complex<double> *x,
+                  const MKL_INT *incx, const complex<double> *beta,
+                  complex<double> *y, const MKL_INT *incy) {
+    zgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+template <typename FL>
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, FL *tau, FL *work, const MKL_INT *lwork,
+                   MKL_INT *info);
+template <>
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
+    dgeqrf(m, n, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
+    zgeqrf(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, FL *a,
+                   const MKL_INT *lda, const FL *tau, FL *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+template <>
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info) {
+    dorgqr(m, n, k, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
+    zungqr(m, n, k, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, FL *tau, FL *work, const MKL_INT *lwork,
+                   MKL_INT *info);
+template <>
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, double *a,
+                   const MKL_INT *lda, double *tau, double *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
+    dgelqf(m, n, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xgelqf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
+    zgelqf(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k, FL *a,
+                   const MKL_INT *lda, const FL *tau, FL *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+template <>
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   double *a, const MKL_INT *lda, const double *tau,
+                   double *work, const MKL_INT *lwork, MKL_INT *info) {
+    dorglq(m, n, k, a, lda, tau, work, lwork, info);
+}
+template <>
+inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                   complex<double> *a, const MKL_INT *lda,
+                   const complex<double> *tau, complex<double> *work,
+                   const MKL_INT *lwork, MKL_INT *info) {
+    zunglq(m, n, k, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, FL *a, const MKL_INT *lda, double *s,
+                   FL *u, const MKL_INT *ldu, FL *vt, const MKL_INT *ldvt,
+                   FL *work, const MKL_INT *lwork, MKL_INT *info);
+template <>
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, double *a, const MKL_INT *lda, double *s,
+                   double *u, const MKL_INT *ldu, double *vt,
+                   const MKL_INT *ldvt, double *work, const MKL_INT *lwork,
+                   MKL_INT *info) {
+    dgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
+}
+template <>
+inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
+                   const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                   double *s, complex<double> *u, const MKL_INT *ldu,
+                   complex<double> *vt, const MKL_INT *ldvt,
+                   complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
+    vector<double> rwork;
+    rwork.reserve(5 * min(*m, *n));
+    zgesvd(jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork,
+           rwork.data(), info);
+}
+
+// General matrix operations
+template <typename FL> struct GMatrixFunctions;
+
 // Dense complex number matrix operations
-struct ComplexMatrixFunctions {
+template <> struct GMatrixFunctions<complex<double>> {
     // a = re + im i
     static void fill_complex(const ComplexMatrixRef &a, const MatrixRef &re,
                              const MatrixRef &im) {
@@ -151,17 +458,43 @@ struct ComplexMatrixFunctions {
         MKL_INT n = a.m * a.n;
         zscal(&n, &scale, a.data, &inc);
     }
+    static void keep_real(const ComplexMatrixRef &a) {
+        const MKL_INT incx = 2;
+        const double scale = 0.0;
+        MKL_INT n = a.m * a.n;
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+    }
+    static void conjugate(const ComplexMatrixRef &a) {
+        const MKL_INT incx = 2;
+        const double scale = -1.0;
+        MKL_INT n = a.m * a.n;
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+    }
     // a = a + scale * op(b)
+    // conj means conj trans
     static void iadd(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
-                     complex<double> scale, complex<double> cfactor = 1.0) {
+                     complex<double> scale, bool conj = false,
+                     complex<double> cfactor = 1.0) {
         static const complex<double> x = 1.0;
-        assert(a.m == b.m && a.n == b.n);
+        if (!conj) {
+            assert(a.m == b.m && a.n == b.n);
+            MKL_INT n = a.m * a.n, inc = 1;
+            if (cfactor == 1.0)
+                zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
+            else
+                zgemm("n", "n", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
+                      &cfactor, a.data, &inc);
+        } else {
+            assert(a.m == b.n && a.n == b.m);
+            const complex<double> one = 1.0;
+            for (MKL_INT k = 0, inc = 1; k < b.n; k++)
+                zgemm("c", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,
+                      &inc, &cfactor, &a(k, 0), &a.n);
+        }
+    }
+    static double norm(const ComplexMatrixRef &a) {
         MKL_INT n = a.m * a.n, inc = 1;
-        if (cfactor == 1.0)
-            zaxpy(&n, &scale, b.data, &inc, a.data, &inc);
-        else
-            zgemm("N", "N", &inc, &n, &inc, &scale, &x, &inc, b.data, &inc,
-                  &cfactor, a.data, &inc);
+        return dznrm2(&n, a.data, &inc);
     }
     // dot product (a ^ H, b)
     static complex<double> complex_dot(const ComplexMatrixRef &a,
@@ -172,13 +505,9 @@ struct ComplexMatrixFunctions {
         complex<double> r;
         // zdotc can sometimes return zero
         // zdotc(&r, &n, a.data, &inc, b.data, &inc);
-        zgemm("C", "N", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
+        zgemm("c", "n", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
               &inc);
         return r;
-    }
-    static double norm(const ComplexMatrixRef &a) {
-        MKL_INT n = a.m * a.n, inc = 1;
-        return dznrm2(&n, a.data, &inc);
     }
 
     // Computes norm more accurately
@@ -202,24 +531,28 @@ struct ComplexMatrixFunctions {
         return static_cast<double>(outd);
     }
 
-    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
-    static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
-        assert(a.m == a.n && w.n == a.n);
-        MKL_INT lwork = 34 * a.n, info;
-        complex<double> *work = (complex<double> *)d_alloc->allocate(lwork * 2);
-        double *rwork = d_alloc->allocate(a.m * 2);
-        complex<double> *vl =
-            (complex<double> *)d_alloc->allocate(a.m * a.n * 2);
-        zgeev("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
-              work, &lwork, rwork, &info);
-        assert(info == 0);
-        for (size_t k = 0; k < a.m * a.n; k++)
-            a.data[k] = conj(vl[k]);
-        d_alloc->deallocate((double *)vl, a.m * a.n * 2);
-        d_alloc->deallocate(rwork, a.m * 2);
-        d_alloc->deallocate((double *)work, lwork * 2);
+    template <typename T1, typename T2>
+    static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
+                          double rtol = 1E-5, complex<double> scale = 1.0) {
+        assert(a.m == b.m && a.n == b.n);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
+                if (abs(a(i, j) - scale * b(i, j)) > atol + rtol * abs(b(i, j)))
+                    return false;
+        return true;
+    }
+
+
+    // dot product (a ^ T, b)
+    static complex<double> dot(const ComplexMatrixRef &a,
+                               const ComplexMatrixRef &b) {
+        static const complex<double> x = 1.0, zz = 0.0;
+        assert(a.m == b.m && a.n == b.n);
+        MKL_INT n = a.m * a.n, inc = 1;
+        complex<double> r;
+        zgemm("t", "n", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
+              &inc);
+        return r;
     }
     // matrix inverse
     static void inverse(const ComplexMatrixRef &a) {
@@ -256,6 +589,24 @@ struct ComplexMatrixFunctions {
         zcopy(&x.m, xtr.data(), &nrhs, x.data, &nrhs);
         return nr > 0 ? dznrm2(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
+    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
+    static void eig(const ComplexMatrixRef &a, const ComplexDiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n && w.n == a.n);
+        MKL_INT lwork = 34 * a.n, info;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(a.m * 2);
+        complex<double> *vl = d_alloc->complex_allocate(a.m * a.n);
+        zgeev("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
+              work, &lwork, rwork, &info);
+        assert(info == 0);
+        for (size_t k = 0; k < a.m * a.n; k++)
+            a.data[k] = conj(vl[k]);
+        d_alloc->complex_deallocate(vl, a.m * a.n);
+        d_alloc->deallocate(rwork, a.m * 2);
+        d_alloc->complex_deallocate(work, lwork);
+    }
     // matrix logarithm using diagonalization
     static void logarithm(const ComplexMatrixRef &a) {
         shared_ptr<VectorAllocator<double>> d_alloc =
@@ -287,30 +638,646 @@ struct ComplexMatrixFunctions {
         ialloc->deallocate(work, a.n * _MINTSZ);
     }
     // c.n is used for ldc; a.n is used for lda
-    // hrl: ATTENTION: conja/conjb means here *transpose* and not adjoint
-    static void multiply(const ComplexMatrixRef &a, bool conja,
-                         const ComplexMatrixRef &b, bool conjb,
+    // conj can be 0 (no conj no trans), 1 (trans), 3 (conj trans)
+    static void multiply(const ComplexMatrixRef &a, uint8_t conja,
+                         const ComplexMatrixRef &b, uint8_t conjb,
                          const ComplexMatrixRef &c, complex<double> scale,
                          complex<double> cfactor) {
-        // if assertion fails here, check whether it is the case
+        static const char ntxc[5] = "ntxc";
+        // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
         if (!conja && !conjb) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             zgemm("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
                   &a.n, &cfactor, c.data, &c.n);
-        } else if (!conja && conjb) {
+        } else if (!conja && conjb != 2) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
-            zgemm("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
-        } else if (conja && !conjb) {
+            zgemm(ntxc + conjb, "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n,
+                  a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja != 2 && !conjb) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
-            zgemm("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
-        } else {
+            zgemm("n", ntxc + conja, &b.n, &c.m, &b.m, &scale, b.data, &b.n,
+                  a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja != 2 && conjb != 2) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
-            zgemm("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
-                  &a.n, &cfactor, c.data, &c.n);
+            zgemm(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale, b.data,
+                  &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (conja == 2 && conjb != 2) {
+            const MKL_INT one = 1;
+            for (MKL_INT k = 0; k < c.m; k++)
+                zgemm(ntxc + conjb, "c", (conjb & 1) ? &b.m : &b.n, &one,
+                      (conjb & 1) ? &b.n : &b.m, &scale, b.data, &b.n, &a(k, 0),
+                      &one, &cfactor, &c(k, 0), &c.n);
+        } else if (conja != 3 && conjb == 2) {
+            const MKL_INT one = 1;
+            for (MKL_INT k = 0; k < c.m; k++)
+                zgemm(ntxc + (conja ^ 1), "c", &one, &b.n, &b.m, &scale,
+                      (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &b.n,
+                      &cfactor, &c(k, 0), &one);
+        } else
+            assert(false);
+    }
+    // c = bra(.T) * a * ket(.T)
+    // return nflop
+    // conj can be 0 (no conj no trans), 1 (trans), 2 (conj), 3 (conj trans)
+    static size_t rotate(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                         const ComplexMatrixRef &bra, uint8_t conj_bra,
+                         const ComplexMatrixRef &ket, uint8_t conj_ket,
+                         complex<double> scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (conj_bra != 2 && conj_ket != 2) {
+            ComplexMatrixRef work(nullptr, a.m, (conj_ket & 1) ? ket.m : ket.n);
+            work.allocate(d_alloc);
+            multiply(a, false, ket, conj_ket, work, 1.0, 0.0);
+            multiply(bra, conj_bra, work, false, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * c.m;
+        } else if (conj_bra != 2) {
+            ComplexMatrixRef work(nullptr, ket.n, a.m);
+            work.allocate(d_alloc);
+            multiply(ket, 3, a, true, work, 1.0, 0.0);
+            multiply(bra, conj_bra, work, true, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.n +
+                   (size_t)work.m * work.n * c.m;
+        } else if (conj_ket != 2) {
+            ComplexMatrixRef work(nullptr, a.n, bra.m);
+            work.allocate(d_alloc);
+            multiply(a, true, bra, 3, work, 1.0, 0.0);
+            multiply(work, true, ket, conj_ket, c, scale, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)bra.m * bra.n * work.n +
+                   (size_t)work.m * work.n * ((conj_ket & 1) ? ket.m : ket.n);
+        } else {
+            ComplexMatrixRef work(nullptr, ket.n, a.m);
+            ComplexMatrixRef work2(nullptr, work.m, bra.m);
+            work.allocate(d_alloc);
+            work2.allocate(d_alloc);
+            multiply(ket, 3, a, true, work, 1.0, 0.0);
+            multiply(work, false, bra, 3, work2, 1.0, 0.0);
+            transpose(c, work2, scale);
+            work2.deallocate(d_alloc);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.n +
+                   (size_t)work.m * work.n * c.m + (size_t)work2.m * work2.n;
+        }
+        return 0;
+    }
+    // c(.T) = bra.T * a(.T) * ket
+    // return nflop. (.T) is always transpose conjugate
+    static size_t rotate(const ComplexMatrixRef &a, bool conj_a,
+                         const ComplexMatrixRef &c, bool conj_c,
+                         const ComplexMatrixRef &bra,
+                         const ComplexMatrixRef &ket, complex<double> scale) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        ComplexMatrixRef work(nullptr, conj_a ? a.n : a.m, ket.n);
+        work.allocate(d_alloc);
+        multiply(a, conj_a ? 3 : 0, ket, false, work, 1.0, 0.0);
+        if (!conj_c)
+            multiply(bra, 3, work, false, c, scale, 1.0);
+        else
+            multiply(work, 3, bra, false, c, conj(scale), 1.0);
+        work.deallocate(d_alloc);
+        return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * bra.n;
+    }
+    // dleft == true : c = bra (= da x db) * a * ket
+    // dleft == false: c = bra * a * ket (= da x db)
+    // return nflop. conj means conj and trans
+    // conj means conj and trans / none for bra, trans / conj for ket
+    static size_t three_rotate(const ComplexMatrixRef &a,
+                               const ComplexMatrixRef &c,
+                               const ComplexMatrixRef &bra, bool conj_bra,
+                               const ComplexMatrixRef &ket, bool conj_ket,
+                               const ComplexMatrixRef &da, bool dconja,
+                               const ComplexMatrixRef &db, bool dconjb,
+                               bool dleft, complex<double> scale,
+                               uint32_t stride) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            ComplexMatrixRef work(nullptr, am, conj_ket ? ket.m : ket.n);
+            work.allocate(d_alloc);
+            // work = a * ket
+            multiply(ComplexMatrixRef(&a(ast, 0), am, a.n), false, ket,
+                     conj_ket ? 1 : 2, work, 1.0, 0.0);
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * work
+                multiply(db, dconjb ? 3 : 0, work, false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconja ? conj(*da.data) : *da.data), 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * work
+                multiply(da, dconja ? 3 : 0, work, false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconjb ? conj(*db.data) : *db.data), 1.0);
+            else
+                assert(false);
+            work.deallocate(d_alloc);
+            return (size_t)ket.m * ket.n * work.m +
+                   (size_t)work.m * work.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            ComplexMatrixRef work(nullptr, a.m, kn);
+            work.allocate(d_alloc);
+            if (da.m == 1 && da.n == 1)
+                // work = a * (1 x db)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, db,
+                         dconjb ? 1 : 2, work,
+                         (!dconja ? conj(*da.data) : *da.data) * scale, 0.0);
+            else if (db.m == 1 && db.n == 1)
+                // work = a * (da x 1)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, da,
+                         dconja ? 1 : 2, work,
+                         (!dconjb ? conj(*db.data) : *db.data) * scale, 0.0);
+            else
+                assert(false);
+            // c = bra * work
+            multiply(bra, conj_bra ? 3 : 0, work, false,
+                     ComplexMatrixRef(&c(0, cst), c.m, c.n), 1.0, 1.0);
+            work.deallocate(d_alloc);
+            return (size_t)km * kn * work.m + (size_t)work.m * work.n * c.m;
+        }
+    }
+    // dleft == true : c = a * ket
+    // dleft == false: c = a * ket (= da x db)
+    // return nflop
+    static size_t
+    three_rotate_tr_left(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                         const ComplexMatrixRef &bra, bool conj_bra,
+                         const ComplexMatrixRef &ket, bool conj_ket,
+                         const ComplexMatrixRef &da, bool dconja,
+                         const ComplexMatrixRef &db, bool dconjb, bool dleft,
+                         complex<double> scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            multiply(ComplexMatrixRef(&a(ast, 0), am, a.n), false, ket,
+                     conj_ket ? 1 : 2, ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                     scale, 1.0);
+            return (size_t)ket.m * ket.n * am;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            if (da.m == 1 && da.n == 1)
+                // c = a * (1 x db)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, db,
+                         dconjb ? 1 : 2, ComplexMatrixRef(&c(0, cst), c.m, c.n),
+                         (!dconja ? conj(*da.data) : *da.data) * scale, 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = a * (da x 1)
+                multiply(ComplexMatrixRef(&a(0, ast), a.m, a.n), false, da,
+                         dconja ? 1 : 2, ComplexMatrixRef(&c(0, cst), c.m, c.n),
+                         (!dconjb ? conj(*db.data) : *db.data) * scale, 1.0);
+            else
+                assert(false);
+            return (size_t)km * kn * c.m;
+        }
+    }
+    // dleft == true : c = bra (= da x db) * a
+    // dleft == false: c = bra * a
+    // return nflop
+    static size_t
+    three_rotate_tr_right(const ComplexMatrixRef &a, const ComplexMatrixRef &c,
+                          const ComplexMatrixRef &bra, bool conj_bra,
+                          const ComplexMatrixRef &ket, bool conj_ket,
+                          const ComplexMatrixRef &da, bool dconja,
+                          const ComplexMatrixRef &db, bool dconjb, bool dleft,
+                          complex<double> scale, uint32_t stride) {
+        if (dleft) {
+            dconja ^= conj_bra, dconjb ^= conj_bra;
+            MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
+            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            if (da.m == 1 && da.n == 1)
+                // c = (1 x db) * a
+                multiply(db, dconjb ? 3 : 0,
+                         ComplexMatrixRef(&a(ast, 0), am, a.n), false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconja ? conj(*da.data) : *da.data), 1.0);
+            else if (db.m == 1 && db.n == 1)
+                // c = (da x 1) * a
+                multiply(da, dconja ? 3 : 0,
+                         ComplexMatrixRef(&a(ast, 0), am, a.n), false,
+                         ComplexMatrixRef(&c(cst, 0), cm, c.n),
+                         scale * (dconjb ? conj(*db.data) : *db.data), 1.0);
+            else
+                assert(false);
+            return (size_t)am * a.n * cm;
+        } else {
+            dconja ^= conj_ket, dconjb ^= conj_ket;
+            MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
+            MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
+            const complex<double> cfactor = 1.0;
+            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
+            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            zgemm("n", conj_bra ? "c" : "n", &kn, &c.m, &a.m, &scale,
+                  &a(0, ast), &a.n, bra.data, &bra.n, &cfactor, &c(0, cst),
+                  &c.n);
+            return (size_t)a.m * a.n * c.m;
+        }
+    }
+    // only diagonal elements so no conj parameters
+    static void tensor_product_diagonal(const ComplexMatrixRef &a,
+                                        const ComplexMatrixRef &b,
+                                        const ComplexMatrixRef &c,
+                                        complex<double> scale) {
+        // TODO:: check whether conj is really needed
+        // here I assume a and b diag are all real
+        // but a and b may be complex conjugate to each other and c real
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        const complex<double> cfactor = 1.0;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
+        zgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
+              &cfactor, c.data, &c.n);
+    }
+    // diagonal element of three-matrix tensor product
+    static void three_tensor_product_diagonal(
+        const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+        const ComplexMatrixRef &c, const ComplexMatrixRef &da, bool dconja,
+        const ComplexMatrixRef &db, bool dconjb, bool dleft,
+        complex<double> scale, uint32_t stride) {
+        assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
+        const complex<double> cfactor = 1.0;
+        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
+        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        if (dstrn != dstrm)
+            return;
+        assert(da.m == da.n && db.m == db.n);
+        const MKL_INT ddstr = 0;
+        const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
+        const MKL_INT ldda = da.n + 1, lddb = db.n + 1;
+        if (da.m == 1 && da.n == 1) {
+            scale *= dconja ? conj(*da.data) : *da.data;
+            const MKL_INT dn = db.n - abs(ddstr);
+            const complex<double> *bdata =
+                dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &db(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (dn > 0) {
+                if (dleft) {
+                    // (1 x db) x b
+                    if (!dconjb)
+                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
+                              bdata, &lddb, &cfactor,
+                              &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < dn; i++)
+                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
+                                  bdata + i * lddb, &k, &cfactor,
+                                  &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
+                } else
+                    // a x (1 x db)
+                    zgemm(dconjb ? "c" : "t", "n", &dn, &a.n, &k, &scale, bdata,
+                          &lddb, a.data, &lda, &cfactor,
+                          &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else if (db.m == 1 && db.n == 1) {
+            scale *= dconjb ? conj(*db.data) : *db.data;
+            const MKL_INT dn = da.n - abs(ddstr);
+            const complex<double> *adata =
+                dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
+                       : &da(max(ddstr, (MKL_INT)0), max(-ddstr, (MKL_INT)0));
+            if (dn > 0) {
+                if (dleft) {
+                    // (da x 1) x b
+                    if (!dconja)
+                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
+                              adata, &ldda, &cfactor,
+                              &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < dn; i++)
+                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
+                                  adata + i * ldda, &k, &cfactor,
+                                  &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
+                } else
+                    // a x (da x 1)
+                    zgemm(dconja ? "c" : "t", "n", &dn, &a.n, &k, &scale, adata,
+                          &ldda, a.data, &lda, &cfactor,
+                          &c(0, max(dstrn, dstrm)), &c.n);
+            }
+        } else
+            assert(false);
+    }
+    static void tensor_product(const ComplexMatrixRef &a, bool conja,
+                               const ComplexMatrixRef &b, bool conjb,
+                               const ComplexMatrixRef &c, complex<double> scale,
+                               uint32_t stride) {
+        const complex<double> cfactor = 1.0;
+        switch ((uint8_t)conja | (conjb << 1)) {
+        case 0:
+            if (a.m == 1 && a.n == 1) {
+                if (b.n == c.n) {
+                    const MKL_INT n = b.m * b.n;
+                    zgemm("n", "n", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
+                          &a.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(b.n < c.n);
+                    for (MKL_INT k = 0; k < b.m; k++)
+                        zgemm("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else if (b.m == 1 && b.n == 1) {
+                if (a.n == c.n) {
+                    const MKL_INT n = a.m * a.n;
+                    zgemm("n", "n", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
+                          &b.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(a.n < c.n);
+                    for (MKL_INT k = 0; k < a.m; k++)
+                        zgemm("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else {
+                for (MKL_INT i = 0, inc = 1; i < a.m; i++)
+                    for (MKL_INT j = 0; j < a.n; j++) {
+                        const complex<double> factor = scale * a(i, j);
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            zaxpy(&b.n, &factor, &b(k, 0), &inc,
+                                  &c(i * b.m + k, j * b.n + stride), &inc);
+                    }
+            }
+            break;
+        case 1:
+            if (a.m == 1 && a.n == 1) {
+                if (b.n == c.n) {
+                    const MKL_INT n = b.m * b.n;
+                    zgemm("n", "c", &n, &a.n, &a.n, &scale, b.data, &n, a.data,
+                          &a.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(b.n < c.n);
+                    for (MKL_INT k = 0; k < b.m; k++)
+                        zgemm("n", "c", &b.n, &a.n, &a.n, &scale, &b(k, 0),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else if (b.m == 1 && b.n == 1) {
+                assert(a.m <= c.n);
+                for (MKL_INT k = 0; k < a.n; k++)
+                    zgemm("c", "n", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
+                          b.data, &b.n, &cfactor, &c(k, stride), &c.n);
+            } else {
+                for (MKL_INT i = 0, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
+                        const complex<double> factor = scale * conj(a(j, i));
+                        for (MKL_INT k = 0; k < b.m; k++)
+                            zaxpy(&b.n, &factor, &b(k, 0), &inc,
+                                  &c(i * b.m + k, j * b.n + stride), &inc);
+                    }
+            }
+            break;
+        case 2:
+            if (a.m == 1 && a.n == 1) {
+                assert(b.m <= c.n);
+                for (MKL_INT k = 0; k < b.n; k++)
+                    zgemm("c", "n", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
+                          a.data, &a.n, &cfactor, &c(k, stride), &c.n);
+            } else if (b.m == 1 && b.n == 1) {
+                if (a.n == c.n) {
+                    const MKL_INT n = a.m * a.n;
+                    zgemm("n", "c", &n, &b.n, &b.n, &scale, a.data, &n, b.data,
+                          &b.n, &cfactor, &c(0, stride), &n);
+                } else {
+                    assert(a.n < c.n);
+                    for (MKL_INT k = 0; k < a.m; k++)
+                        zgemm("n", "c", &a.n, &b.n, &b.n, &scale, &a(k, 0),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &c.n);
+                }
+            } else {
+                for (MKL_INT i = 0, inca = 1, inc = b.m; i < b.n; i++)
+                    for (MKL_INT j = 0; j < b.m; j++) {
+                        const complex<double> factor = scale * conj(b(j, i));
+                        for (MKL_INT k = 0; k < a.m; k++)
+                            zaxpy(&a.n, &factor, &a(k, 0), &inca,
+                                  &c(k * b.n + i, j + stride), &inc);
+                    }
+            }
+            break;
+        case 1 | 2:
+            if (a.m == 1 && a.n == 1) {
+                for (MKL_INT k = 0; k < b.n; k++)
+                    zgemm("c", "c", &b.m, &a.n, &a.n, &scale, &b(0, k), &b.n,
+                          a.data, &a.n, &cfactor, &c(k, stride), &c.n);
+            } else if (b.m == 1 && b.n == 1) {
+                for (MKL_INT k = 0; k < a.n; k++)
+                    zgemm("c", "c", &a.m, &b.n, &b.n, &scale, &a(0, k), &a.n,
+                          b.data, &b.n, &cfactor, &c(k, stride), &c.n);
+            } else {
+                for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.n; i++)
+                    for (MKL_INT j = 0; j < a.m; j++) {
+                        const complex<double> factor = scale * conj(a(j, i));
+                        for (MKL_INT k = 0; k < b.n; k++)
+                            for (MKL_INT l = 0; l < b.m; l++)
+                                c(i * b.n + k, j * b.m + l + stride) +=
+                                    factor * conj(b(l, k));
+                    }
+            }
+            break;
+        default:
+            assert(false);
+        }
+    }
+    // SVD; original matrix will be destroyed
+    static void svd(const ComplexMatrixRef &a, const ComplexMatrixRef &l,
+                    const MatrixRef &s, const ComplexMatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n),
+                lrwork = 5 * min(a.m, a.n);
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(lrwork);
+        assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
+        zgesvd("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n, l.data,
+               &k, work, &lwork, rwork, &info);
+        assert(info == 0);
+        d_alloc->deallocate(rwork, lrwork);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // SVD for parallelism over sites; PRB 87, 155137 (2013)
+    static void accurate_svd(const ComplexMatrixRef &a,
+                             const ComplexMatrixRef &l, const MatrixRef &s,
+                             const ComplexMatrixRef &r, double eps = 1E-4) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        ComplexMatrixRef aa(nullptr, a.m, a.n);
+        aa.data = d_alloc->complex_allocate(aa.size());
+        copy(aa, a);
+        svd(aa, l, s, r);
+        MKL_INT k = min(a.m, a.n);
+        MKL_INT p = -1;
+        for (MKL_INT ip = 0; ip < k; ip++)
+            if (s.data[ip] < eps * s.data[0]) {
+                p = ip;
+                break;
+            }
+        if (p != -1) {
+            ComplexMatrixRef xa(nullptr, k - p, k - p),
+                xl(nullptr, k - p, k - p), xr(nullptr, k - p, k - p);
+            xa.data = d_alloc->complex_allocate(xa.size());
+            xl.data = d_alloc->complex_allocate(xl.size());
+            xr.data = d_alloc->complex_allocate(xr.size());
+            rotate(a, xa, ComplexMatrixRef(l.data + p, l.m, l.n), 3,
+                   ComplexMatrixRef(r.data + p * r.n, r.m - p, r.n), 3, 1.0);
+            accurate_svd(xa, xl, MatrixRef(s.data + p, 1, k - p), xr, eps);
+            ComplexMatrixRef bl(nullptr, l.m, l.n), br(nullptr, r.m, r.n);
+            bl.data = d_alloc->complex_allocate(bl.size());
+            br.data = d_alloc->complex_allocate(br.size());
+            copy(bl, l);
+            copy(br, r);
+            multiply(ComplexMatrixRef(bl.data + p, bl.m, bl.n), false, xl,
+                     false, ComplexMatrixRef(l.data + p, l.m, l.n), 1.0, 0.0);
+            multiply(xr, false,
+                     ComplexMatrixRef(br.data + p * br.n, br.m - p, br.n),
+                     false, ComplexMatrixRef(r.data + p * r.n, r.m - p, r.n),
+                     1.0, 0.0);
+            d_alloc->complex_deallocate(br.data, br.size());
+            d_alloc->complex_deallocate(bl.data, bl.size());
+            d_alloc->complex_deallocate(xr.data, xr.size());
+            d_alloc->complex_deallocate(xl.data, xl.size());
+            d_alloc->complex_deallocate(xa.data, xa.size());
+        }
+        d_alloc->complex_deallocate(aa.data, aa.size());
+    }
+    // LQ factorization
+    static void lq(const ComplexMatrixRef &a, const ComplexMatrixRef &l,
+                   const ComplexMatrixRef &q) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.m;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        complex<double> *tau = d_alloc->complex_allocate(k);
+        complex<double> *t = d_alloc->complex_allocate(a.m * a.n);
+        assert(a.m == l.m && a.n == q.n && l.n == k && q.m == k);
+        memcpy(t, a.data, sizeof(complex<double>) * a.m * a.n);
+        zgeqrf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(l.data, 0, sizeof(complex<double>) * k * a.m);
+        for (MKL_INT j = 0; j < a.m; j++)
+            memcpy(l.data + j * k, t + j * a.n,
+                   sizeof(complex<double>) * min(j + 1, k));
+        zungqr(&a.n, &k, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memcpy(q.data, t, sizeof(complex<double>) * k * a.n);
+        d_alloc->complex_deallocate(t, a.m * a.n);
+        d_alloc->complex_deallocate(tau, k);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // QR factorization
+    static void qr(const ComplexMatrixRef &a, const ComplexMatrixRef &q,
+                   const ComplexMatrixRef &r) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        MKL_INT k = min(a.m, a.n), info, lwork = 34 * a.n;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        complex<double> *tau = d_alloc->complex_allocate(k);
+        complex<double> *t = d_alloc->complex_allocate(a.m * a.n);
+        assert(a.m == q.m && a.n == r.n && q.n == k && r.m == k);
+        memcpy(t, a.data, sizeof(complex<double>) * a.m * a.n);
+        zgelqf(&a.n, &a.m, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        memset(r.data, 0, sizeof(complex<double>) * k * a.n);
+        for (MKL_INT j = 0; j < k; j++)
+            memcpy(r.data + j * a.n + j, t + j * a.n + j,
+                   sizeof(complex<double>) * (a.n - j));
+        zunglq(&k, &a.m, &k, t, &a.n, tau, work, &lwork, &info);
+        assert(info == 0);
+        for (MKL_INT j = 0; j < a.m; j++)
+            memcpy(q.data + j * k, t + j * a.n, sizeof(complex<double>) * k);
+        d_alloc->complex_deallocate(t, a.m * a.n);
+        d_alloc->complex_deallocate(tau, k);
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // a += b.T
+    static void transpose(const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+                          complex<double> scale = 1.0,
+                          complex<double> cfactor = 1.0) {
+        assert(a.m == b.n && a.n == b.m);
+        const complex<double> one = 1.0;
+        for (MKL_INT k = 0, inc = 1; k < b.n; k++)
+            zgemm("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,
+                  &inc, &cfactor, &a(k, 0), &a.n);
+    }
+    // diagonalization for each symmetry block
+    static void block_eigs(const ComplexMatrixRef &a, const DiagonalMatrix &w,
+                           const vector<uint8_t> &x) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        uint8_t maxx = *max_element(x.begin(), x.end()) + 1;
+        vector<vector<MKL_INT>> mp(maxx);
+        assert(a.m == a.n && w.n == a.n && (MKL_INT)x.size() == a.n);
+        for (MKL_INT i = 0; i < a.n; i++)
+            mp[x[i]].push_back(i);
+        for (uint8_t i = 0; i < maxx; i++)
+            if (mp[i].size() != 0) {
+                complex<double> *work =
+                    d_alloc->complex_allocate(mp[i].size() * mp[i].size());
+                double *wwork = d_alloc->allocate(mp[i].size());
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        work[j * mp[i].size() + k] = a(mp[i][j], mp[i][k]);
+                eigs(ComplexMatrixRef(work, (MKL_INT)mp[i].size(),
+                                      (MKL_INT)mp[i].size()),
+                     DiagonalMatrix(wwork, (MKL_INT)mp[i].size()));
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (MKL_INT k = 0; k < a.n; k++)
+                        a(mp[i][j], k) = 0.0, a(k, mp[i][j]) = 0.0;
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    for (size_t k = 0; k < mp[i].size(); k++)
+                        a(mp[i][j], mp[i][k]) = work[j * mp[i].size() + k];
+                for (size_t j = 0; j < mp[i].size(); j++)
+                    w(mp[i][j], mp[i][j]) = wwork[j];
+                d_alloc->deallocate(wwork, mp[i].size());
+                d_alloc->complex_deallocate(work, mp[i].size() * mp[i].size());
+            }
+    }
+    // eigenvectors are row right vectors
+    // U A^T = W U
+    static void eigs(const ComplexMatrixRef &a, const DiagonalMatrix &w) {
+        shared_ptr<VectorAllocator<double>> d_alloc =
+            make_shared<VectorAllocator<double>>();
+        assert(a.m == a.n && w.n == a.n);
+        const double scale = -1.0;
+        MKL_INT lwork = 34 * a.n, n = a.m * a.n, incx = 2, info;
+        complex<double> *work = d_alloc->complex_allocate(lwork);
+        double *rwork = d_alloc->allocate(max(1, 3 * a.n - 2));
+        zheev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, rwork, &info);
+        assert((size_t)a.m * a.n == n);
+        dscal(&n, &scale, (double *)a.data + 1, &incx);
+        assert(info == 0);
+        d_alloc->deallocate(rwork, max(1, 3 * a.n - 2));
+        d_alloc->complex_deallocate(work, lwork);
+    }
+    // z = r / aa
+    static void cg_precondition(const ComplexMatrixRef &z,
+                                const ComplexMatrixRef &r,
+                                const ComplexDiagonalMatrix &aa) {
+        copy(z, r);
+        if (aa.size() != 0) {
+            assert(aa.size() == r.size() && r.size() == z.size());
+            for (MKL_INT i = 0; i < aa.n; i++)
+                if (abs(aa.data[i]) > 1E-12)
+                    z.data[i] /= aa.data[i];
         }
     }
     // Computes exp(t*H), the matrix exponential of a general complex
@@ -700,1023 +1667,15 @@ struct ComplexMatrixFunctions {
         anorm = (anorm + abs(consta) * n) * abs(tt);
         if (anorm < 1E-10)
             anorm = 1.0;
-        MKL_INT nmult = ComplexMatrixFunctions::expo_krylov(
-            lop, n, m, abst, v.data, w.data(), conv_thrd, anorm, work.data(),
-            lwork, iprint, (PComm)pcomm);
+        MKL_INT nmult =
+            expo_krylov(lop, n, m, abst, v.data, w.data(), conv_thrd, anorm,
+                        work.data(), lwork, iprint, (PComm)pcomm);
         memcpy(v.data, w.data(), sizeof(complex<double>) * w.size());
         return (int)nmult;
     }
-    // z = r / aa
-    static void cg_precondition(const ComplexMatrixRef &z,
-                                const ComplexMatrixRef &r,
-                                const ComplexDiagonalMatrix &aa) {
-        copy(z, r);
-        if (aa.size() != 0) {
-            assert(aa.size() == r.size() && r.size() == z.size());
-            for (MKL_INT i = 0; i < aa.n; i++)
-                if (abs(aa.data[i]) > 1E-12)
-                    z.data[i] /= aa.data[i];
-        }
-    }
-    // GCROT(m, k) method for solving x in linear equation H x = b
-    //  aa can point to nullptr if it should not be used
-    template <typename MatMul, typename PComm>
-    static complex<double>
-    gcrotmk(MatMul &op, const ComplexDiagonalMatrix &aa, ComplexMatrixRef x,
-            ComplexMatrixRef b, int &nmult, int &niter, int m = 20, int k = -1,
-            bool iprint = false, const PComm &pcomm = nullptr,
-            double conv_thrd = 5E-6, int max_iter = 5000,
-            int soft_max_iter = -1) {
-        ComplexMatrixRef r(nullptr, x.m, x.n), w(nullptr, x.m, x.n);
-        double ff[4];
-        double &beta = ff[0], &rr = ff[1];
-        complex<double> &func = (complex<double> &)ff[2];
-        r.allocate();
-        w.allocate();
-        r.clear();
-        op(x, r);
-        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-            iscale(r, -1);
-            iadd(r, b, 1); // r = b - Ax
-            func = complex_dot(x, b);
-            beta = norm(r);
-        }
-        if (pcomm != nullptr)
-            pcomm->broadcast(&beta, 4, pcomm->root);
-        if (iprint)
-            cout << endl;
-        if (k == -1)
-            k = m;
-        int xiter = 0, jiter = 1, nn = k + m + 2;
-        vector<ComplexMatrixRef> cvs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
-        vector<ComplexMatrixRef> uzs(nn, ComplexMatrixRef(nullptr, x.m, x.n));
-        vector<complex<double>> pcus;
-        pcus.reserve(x.size() * 2 * nn);
-        for (int i = 0; i < nn; i++) {
-            cvs[i].data = pcus.data() + cvs[i].size() * i;
-            uzs[i].data = pcus.data() + uzs[i].size() * (i + nn);
-        }
-        int ncs = 0, icu = 0;
-        ComplexMatrixRef bmat(nullptr, k, k + m);
-        ComplexMatrixRef hmat(nullptr, k + m + 1, k + m);
-        ComplexMatrixRef ys(nullptr, k + m, 1);
-        ComplexMatrixRef bys(nullptr, k, 1);
-        ComplexMatrixRef hys(nullptr, k + m + 1, 1);
-        bmat.allocate();
-        hmat.allocate();
-        ys.allocate();
-        bys.allocate();
-        hys.allocate();
-        while (jiter < max_iter &&
-               (soft_max_iter == -1 || jiter < soft_max_iter)) {
-            xiter++;
-            if (iprint)
-                cout << setw(6) << xiter << setw(6) << jiter << fixed
-                     << setw(15) << setprecision(8) << real(func) << "+"
-                     << setw(15) << setprecision(8) << imag(func) << "i"
-                     << scientific << setw(13) << setprecision(2) << beta * beta
-                     << endl;
-            if (beta * beta < conv_thrd)
-                break;
-            int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
-            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                iadd(cvs[ivz % nn], r, 1 / beta, 0.0);
-                hmat.clear();
-                hys.clear();
-                hys.data[0] = beta;
-            }
-            for (int j = 0; j < ml; j++) {
-                jiter++;
-                ComplexMatrixRef z(uzs[(ivz + j) % nn].data, x.m, x.n);
-                if (pcomm == nullptr || pcomm->root == pcomm->rank)
-                    cg_precondition(z, cvs[(ivz + j) % nn], aa);
-                if (pcomm != nullptr)
-                    pcomm->broadcast(z.data, z.size(), pcomm->root);
-                w.clear();
-                op(z, w);
-                nz = j + 1;
-                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                    for (int i = 0; i < ncs; i++) {
-                        bmat(i, j) = complex_dot(cvs[(icu + i) % nn], w);
-                        iadd(w, cvs[(icu + i) % nn], -bmat(i, j));
-                    }
-                    for (int i = 0; i < nz; i++) {
-                        hmat(i, j) = complex_dot(cvs[(ivz + i) % nn], w);
-                        iadd(w, cvs[(ivz + i) % nn], -hmat(i, j));
-                    }
-                    hmat(j + 1, j) = norm(w);
-                    iadd(cvs[(ivz + nz) % nn], w, 1.0 / hmat(j + 1, j), 0.0);
-                    rr = least_squares(
-                        ComplexMatrixRef(hmat.data, j + 2, hmat.n),
-                        ComplexMatrixRef(hys.data, j + 2, 1),
-                        ComplexMatrixRef(ys.data, j + 1, 1));
-                }
-                if (pcomm != nullptr)
-                    pcomm->broadcast(&rr, 1, pcomm->root);
-                if (rr * rr < conv_thrd)
-                    break;
-            }
-            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                multiply(ComplexMatrixRef(bmat.data, ncs, bmat.n), false,
-                         ComplexMatrixRef(ys.data, nz, 1), false,
-                         ComplexMatrixRef(bys.data, ncs, 1), 1.0, 0.0);
-                multiply(ComplexMatrixRef(hmat.data, nz + 1, hmat.n), false,
-                         ComplexMatrixRef(ys.data, nz, 1), false,
-                         ComplexMatrixRef(hys.data, nz + 1, 1), 1.0, 0.0);
-                for (int i = 0; i < nz; i++)
-                    iadd(uzs[(icu + ncs) % nn], uzs[(ivz + i) % nn], ys(i, 0),
-                         !!i);
-                for (int i = 0; i < ncs; i++)
-                    iadd(uzs[(icu + ncs) % nn], uzs[(icu + i) % nn],
-                         -bys(i, 0));
-                for (int i = 0; i < nz + 1; i++)
-                    iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
-                         !!i);
-                double alpha = norm(cvs[(icu + ncs) % nn]);
-                iscale(cvs[(icu + ncs) % nn], 1 / alpha);
-                iscale(uzs[(icu + ncs) % nn], 1 / alpha);
-                complex<double> gamma = complex_dot(cvs[(icu + ncs) % nn], r);
-                iadd(r, cvs[(icu + ncs) % nn], -gamma);
-                iadd(x, uzs[(icu + ncs) % nn], gamma);
-                func = complex_dot(x, b);
-                beta = norm(r);
-            }
-            if (pcomm != nullptr)
-                pcomm->broadcast(&beta, 4, pcomm->root);
-            if (ncs == k)
-                icu = (icu + 1) % nn;
-            else
-                ncs++;
-        }
-        if (jiter >= max_iter && beta * beta >= conv_thrd) {
-            cout << "Error : linear solver GCROT(m, k) not converged!" << endl;
-            assert(false);
-        }
-        nmult = jiter;
-        niter = xiter + 1;
-        hys.deallocate();
-        bys.deallocate();
-        ys.deallocate();
-        hmat.deallocate();
-        bmat.deallocate();
-        w.deallocate();
-        r.deallocate();
-        if (pcomm != nullptr)
-            pcomm->broadcast(x.data, x.size(), pcomm->root);
-        return func;
-    }
-
-    /** Leja ordering of x.
-     *
-     * Not that this only works for nondegenerate x and the ordering is not unique
-     *
-     * @see L, Reichel, The application of Leja points to Richardson iteration and polynomial preconditioning,
-     *      Linear Algebra and its Applications, 154, 389 (1991)
-     *      https://doi.org/10.1016/0024-3795(91)90386-B.
-     *
-     * @param x Input/Output vector (leja ordered)
-     * @param permutation Permutation order
-     */
-    template<typename Scalar>
-    static void leja_order(vector<Scalar> &x, vector<int> & permutation){
-        const auto n = x.size();
-        permutation.resize(n);
-        iota(permutation.begin(),permutation.end(),0);
-        int argmax = 0;
-        auto m = x[0];
-        for(int i = 1; i < n; ++i) {
-            if(abs(x[i]) > m) {
-                argmax = i;
-                m = abs(x[i]);
-            }
-        }
-        swap(x[0],x[argmax]);
-        swap(permutation[0],permutation[argmax]);
-
-        vector<Scalar> p(n,1); // product vector
-        for(int k = 1; k < n - 1; ++k) {
-            for(int i = k; i < n; ++i) {
-                p[i] *= x[i] - x[k - 1];
-            }
-            argmax = k;
-            m = p[k];
-            for(int i = k + 1; i < n; ++i) {
-                if(abs(p[i]) > m) {
-                    argmax = i;
-                    m = p[i];
-                }
-            }
-            swap(x[k],x[argmax]);
-            swap(p[k],p[argmax]);
-            swap(permutation[k],permutation[argmax]);
-        }
-    }
-
-    /** Use Induced Dimension Reduction method [IDR(s)] to solve A x = b
-     *  IDR(1) is identical to BI-CGSTAB.
-     *
-     *  Based on https://github.com/astudillor/idrs, which itself is based on the IDR(s)'authors
-     *     matlab version from http://homepage.tudelft.nl/1w5b5/idrs-software.html
-     *
-     * See (1) Van Gijzen, M. B.; Sonneveld, P.
-     *      Algorithm 913: An Elegant IDR(s) Variant That Efficiently Exploits Biorthogonality Properties.
-     *      ACM Trans. Math. Softw. 2011, 38 (1), 1–19. https://doi.org/10.1145/2049662.2049667.
-     *      (Fig. 2)
-     *
-     * Note: There is also a STAB(L) variant, which may be faster. See, e.g.,
-     *          1.  Gerard L. G. Sleijpen and Martin B. van Gijzen,
-     *              Exploiting BiCGstab($\ell$) Strategies to Induce Dimension Reduction,
-     *              SIAM J. Sci. Comput., 32(5), 2687–2709.
-     *              https://doi.org/10.1137/090752341
-     *          2. Aihara, K., Abe, K., & Ishiwata, E. (2014). A variant of IDRstab with
-     *              reliable update strategies for solving sparse linear systems. Journal of
-     *                  Computational and Applied Mathematics, 259, 244-258.
-     *                     doi:10.1016/j.cam.2013.08.028
-     *          3. Aihara, K., Abe, K., & Ishiwata, E. (2015). Preconditioned
-     *                   IDRSTABL Algorithms for Solving Nonsymmetric Linear Systems. International
-     *                 Journal of Applied Mathematics, 45(3).
-     *
-     * @author: Henrik R. Larsson, based on versions by Reinaldo Astudillo and Martin B. van Gijzen
-     *
-     * @param op Computes op(x) = A x
-     * @param a_diagonal Diagonal of A; used for preconditioning.
-     *                           Can point to nullptr if it should not be used
-     * @param x Input guess/ output solution
-     * @param b Right-hand side
-     * @param nmult Used number of matrix-vector products (same as niter)
-     * @param niter Used total number of iterations
-     * @param S Shadow space; similar to Krylov space in GMRES
-     *              Typically, s being around 10 or even 4 is enough.
-     *              Only very badly conditioned problems require s ~ 100; see (1).
-     *            S=1 is identical to BI-CGSTAB.
-     * @param iprint Whether to print output during the iterations
-     * @param pcomm MPI communicator
-     * @param precond_reg Preconditioning regularizer. Fix the inverse of a_diagonal to be at max. the inverse of this.
-     * @param tol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
-     * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
-     * @param max_iter Maximum number of iterations. Throws error afterward.
-     * @param soft_max_iter Maximum number of iterations, without throwing error
-     * @param init_basis Optional initial basis for the search direction. Defaults to zero
-     * @param omega_used Optional values of used direction magnitudes. Defaults to GMRES strategy.
-     * @param orthogonalize_P Orthogonalize the random space P matrix of size ( N x S).
-     *                                      May be good for numerical stability.
-     * @param random_seed Random seed for setting up P. Defaults to day-time-convolution
-     * @return <x,b>
-     */
-    using cmplx = complex<double>;
-    template <typename MatMul, typename PComm>
-    static cmplx
-    idrs(MatMul &op, const ComplexDiagonalMatrix &a_diagonal, ComplexMatrixRef x,
-         ComplexMatrixRef b,
-         int &nmult, int &niter,
-         int S = 8,
-         const bool iprint = false, const PComm &pcomm = nullptr,
-         const double precond_reg = 1e-8,
-         const double tol = 1E-3,
-         const double atol = 0.0,
-         const int max_iter = 5000,
-         const int soft_max_iter = -1,
-         const vector<ComplexMatrixRef>& init_basis = {},
-         const vector<cmplx>& omega_used = {},
-         const bool orthogonalize_P = true,
-         const int random_seed = -1) {
-        assert(b.m == x.m);
-        assert(b.n == x.n);
-        const auto N = b.m; // vector size
-        S = min(S,N); // Gracefully change S to sth reasonable.
-                      // This should only affect tiny linear problems.
-        assert(b.n == 1 && "IDRS currently is only implemented for rhs being a vector.");
-        // Allocations
-        ComplexMatrixRef r(nullptr, N, 1); // Residual
-        ComplexMatrixRef P(nullptr, S, N); // Shadow-space matrix; S will be left null space of P
-        ComplexMatrixRef f(nullptr, S, 1); // P r
-        ComplexMatrixRef cStorage(nullptr, S, 1); // Mc = f
-        ComplexMatrixRef v(nullptr, N, 1); // r - G c
-        ComplexMatrixRef tmp(nullptr, N, 1);
-        //                          vvv changed from py implementation for row-majorness
-        ComplexMatrixRef G(nullptr, S, N); // Subspace matrix; for updating residual
-        ComplexMatrixRef U(nullptr, S, N); // For updating x.
-        ComplexMatrixRef M(nullptr, S, S); // M = P' G
-        ComplexMatrixRef MM(nullptr, S, S); // copy of M
-        r.allocate(); r.clear();
-        P.allocate(); P.clear();
-        f.allocate(); f.clear();
-        cStorage.allocate(); cStorage.clear();
-        v.allocate(); v.clear();
-        tmp.allocate(); tmp.clear();
-        G.allocate(); G.clear();
-        U.allocate(); U.clear();
-        M.allocate(); M.clear();
-        MM.allocate(); MM.clear();
-        // Initialization
-        const auto norm_b = norm(b);
-        const auto used_tol = max(tol * norm_b, atol);
-        // compute residual: r = b - Ax
-        if(norm(x) > 1e-20){
-            op(x,tmp);
-            copy(r,b);
-            iadd(r, tmp,-1.);
-        }else{
-            copy(r,b);
-        }
-        double norm_r = norm(r);
-        if (pcomm != nullptr)
-            pcomm->broadcast(&norm_r, 1, pcomm->root);
-        // Fill P with random numbers. Let's hope it is of full rank.
-        {
-            Random rgen;
-            rgen.rand_seed(random_seed);
-            for (size_t s = 0; s < S; ++s) {
-                for (size_t j = 0; j < N; ++j) {
-                    P(s, j) = cmplx(rgen.rand_double(-1,1), rgen.rand_double(-1,1));
-                }
-            }
-            if(orthogonalize_P){
-                // Make P orthogonal. This is not required but may improve numerical stability.
-                // The original code IDR(S) does it.
-                MKL_INT k = min(P.m, P.n);
-                vector<cmplx> tau(k);
-                vector<cmplx> work(P.m);
-                MKL_INT info = 0;
-                zgeqrf(&P.n, &P.m, P.data, &P.n, tau.data(), work.data(), &P.m, &info);
-                assert(info == 0 && "IDR(S): Fail in QR decomposition of random matrix P");
-                zungqr(&P.n, &P.m, &k, P.data, &P.n, tau.data(), work.data(), &P.m, &info);
-                assert(info == 0 && "IDR(S): Fail in Q build up of QR decomposition of random matrix P");
-            }
-        }
-        // M = 1
-        for (size_t i = 0; i < S; ++i) {
-                M(i,i) = 1.;
-        }
-        const double angle = 0.7071067811865476; // To avoid too small residuals
-                                                 //  see (1) on page 4; same as Bi-CGSTAB; sqrt(2)/2
-        cmplx omega(1.,0.);
-        int iOmega{0};
-        if(omega_used.size() > 0){
-            omega = omega_used[0];
-        }
-        // do it
-        const auto doContinue = [max_iter, soft_max_iter, used_tol](int iter, double rnorm){
-            if(rnorm <= used_tol){
-                return false;
-            }
-            return iter < max_iter &&
-                   (soft_max_iter == -1 || iter < soft_max_iter);
-        };
-        const auto precondition = [&a_diagonal, precond_reg, N](ComplexMatrixRef in){
-            if(a_diagonal.data == nullptr){
-                return;
-            }
-            for (size_t i = 0; i < N; ++i) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    in(i, 0) /= a_diagonal(i, i);
-                } else {
-                    in(i, 0) /= precond_reg;
-                }
-            }
-        };
-        niter = 0;
-        if(iprint){
-            cout << endl << "Start IDR(" <<S<< ")" << endl;
-            cout << "tol= "<< scientific << tol
-                << " atol= " << scientific << atol
-                <<" used tol= "<< scientific << used_tol <<endl;
-            cout << "maxiter: " << max_iter << "; "<< soft_max_iter << endl;
-            auto xdb = complex_dot(x,b);
-            cout << "Initially:         " << fixed
-                 << setw(15) << setprecision(8) << real(xdb) << "+"
-                 << setw(15) << setprecision(8) << imag(xdb) << "i"
-                 << scientific << setw(13) << setprecision(2) << norm_r
-                 << endl;
-        }
-        int outeriter = 0;
-        while (doContinue(niter, norm_r)){
-            // vvv I need P.conj() @ r ...; on the other hand, P is random anyways. so it should not matter?
-            //multiply(P,false, r,false, f, cmplx(1.0,0.0), cmplx(0.0,0.0));
-            for(size_t i = 0; i < S; ++i){
-                f(i, 0) = complex_dot(ComplexMatrixRef(&P(i, 0), N, 1), r);
-            }
-            for(size_t k = 0; k < S; ++k){ // Krylov space setup
-                // solve Mc = f
-                const auto size = S - k;
-                ComplexMatrixRef uk(&U(k, 0), N, 1);
-                ComplexMatrixRef gk(&G(k, 0), N, 1);
-                if(outeriter > 0) {
-                    ComplexMatrixRef c(cStorage.data, size, 1);
-                    {
-                        // c = la.solve(M[k:S, k:S], f[k:S])
-                        // TODO: avoid copy&paste; would it work by changing lda?
-                        ComplexMatrixRef M2(MM.data, size, size);
-                        ComplexMatrixRef ff(&f(k, 0), size, 1);
-                        for (size_t i = k; i < S; ++i) {
-                            for (size_t j = k; j < S; ++j) {
-                                M2(i - k, j - k) = M(i, j);
-                            }
-                        }
-                        least_squares(M2, ff,
-                                      c); // zgels may be a bit overkill but I guess it can't hurt and S is small
-                    }
-                    // v = r - G[k:S,:].T @ c
-                    copy(v, r);
-                    //       vv this should work as I assume that G is row-major
-                    //                          ATTENTION:      vvv is transpose, not adjoint (I do want transpose here)
-                    multiply(ComplexMatrixRef(&G(k, 0), size, N), true, c, false, v,
-                             cmplx(-1.0, 0.0), cmplx(1.0, 0.0));
-
-                    precondition(v);
-                    // Compute new U[:,k] and G[:,k]; G[:,k] is in space G_j
-                    // ATTENTION: vv Need to be N x 1 and not 1 x N.
-                    //  Otherwise an assertion explodes somewhere deep in the code when cllaed op
-                    //       uk = U c + omega v
-                    // tmp = U[k:S,:].T @ cc
-                    copy(tmp, v);
-                    multiply(ComplexMatrixRef(&U(k, 0), size, N), true, c, false, tmp,
-                             cmplx(1.0, 0.0), omega);
-                    copy(uk, tmp);
-                }else if (k < init_basis.size() ){
-                    assert(init_basis[k].m == N && init_basis[k].n == 1);
-                    copy(uk, init_basis[k]);
-                }else{
-                    copy(uk, r);
-                    precondition(uk);
-                }
-                // G = A @ U[:,k]
-                op(uk, gk);
-                // Bi-Orthogonalize the new basis vectors
-                for (size_t i = 0; i < k; ++i){
-                    auto alpha = complex_dot(ComplexMatrixRef(&P(i,0), N, 1), gk);
-                    alpha /= M(i,i);
-                    iadd(gk, ComplexMatrixRef(&G(i,0), N, 1), -alpha);
-                    iadd(uk, ComplexMatrixRef(&U(i,0), N, 1), -alpha);
-                }
-                // M = P' G (first k-1 entries are zero)
-                for (size_t i = k; i < S; ++i){
-                    M(i,k) = complex_dot(ComplexMatrixRef(&P(i,0), N, 1), gk);
-                }
-                if( abs(M(k,k)) < 1e-20){ //oops!
-                    if(iprint){
-                        cout << "ATTENTION! |M(k,k)| < 1e-20" << endl;
-                    }
-                    break;
-                }
-                // Make r orthogonal to g_i, i = 1..k
-                const auto beta = f(k,0) / M(k, k);
-                iadd(r, gk, -beta);
-                iadd(x, uk, +beta);
-                norm_r = norm(r);
-                if (pcomm != nullptr) {
-                    pcomm->broadcast(x.data, x.size(), pcomm->root);
-                    pcomm->broadcast(r.data, r.size(), pcomm->root);
-                    pcomm->broadcast(&norm_r, 1, pcomm->root);
-                }
-                ++niter;
-                if (iprint) {
-                    auto xdb = complex_dot(x,b);
-                    cout << setw(6) << niter << " inner " << setw(6) << k << fixed
-                         << setw(17) << setprecision(8) << real(xdb) << "+"
-                         << setw(17) << setprecision(8) << imag(xdb) << "i"
-                         << scientific << setw(13) << setprecision(2) << norm_r
-                         << endl;
-                }
-                if(not doContinue(niter, norm_r)){
-                    break;
-                }
-                // New f = P'*r (first k components are zero)
-                if(k < S - 1){
-                    for (size_t j = k + 1; j < S; ++j) {
-                        f(j,0) -= beta * M(j,k);
-                    }
-                }
-            } // Krylov space setup
-            ++outeriter;
-
-            if(not doContinue(niter, norm_r)){
-                break;
-            }
-            // Precondition v = Minv r; TODO avoid copy&paste
-            copy(v, r);
-            precondition(v);
-
-            op(v,tmp); // tmp = A v
-            if(omega_used.size() == 0) {
-                const auto norm_Av = norm(tmp);
-                const auto tr = complex_dot(tmp, r);
-                omega = tr / complex_dot(tmp, tmp);
-                auto abs_rho = abs(tr / (norm_Av * norm_r));
-                if (pcomm != nullptr) {
-                    pcomm->broadcast(&abs_rho, 1, pcomm->root);
-                    pcomm->broadcast(&omega, 1, pcomm->root);
-                }
-                if (abs_rho < angle) {
-                    omega *= angle / abs_rho;
-                }
-            }else{
-                omega = omega_used[iOmega++];
-                iOmega = iOmega > omega_used.size() ? 0 : iOmega;
-            }
-            // r -= omega t; x += omega v
-            iadd(r, tmp, -omega);
-            iadd(x, v, +omega);
-            if (pcomm != nullptr) {
-                pcomm->broadcast(x.data, x.size(), pcomm->root);
-                pcomm->broadcast(r.data, r.size(), pcomm->root);
-            }
-            norm_r = norm(r);
-            if (pcomm != nullptr)
-                pcomm->broadcast(&norm_r, 1, pcomm->root);
-            ++niter;
-            if (iprint) {
-                auto xdb = complex_dot(x,b);
-                cout << setw(6) << niter << " outer " << outeriter << fixed
-                     << setw(17) << setprecision(8) << real(xdb) << "+"
-                     << setw(17) << setprecision(8) << imag(xdb) << "i"
-                     << scientific << setw(13) << setprecision(2) << norm_r
-                     << endl;
-            }
-            if(norm_r <= used_tol){
-                break;
-            }
-        }
-
-        // Deallocations
-        MM.deallocate();
-        M.deallocate();
-        U.deallocate();
-        G.deallocate();
-        tmp.deallocate();
-        v.deallocate();
-        cStorage.deallocate();
-        f.deallocate();
-        P.deallocate();
-        r.deallocate();
-
-        if (niter >= max_iter && norm_r > used_tol) {
-            cerr << "Error: linear solver IDR(S) not converged!" << endl;
-            cerr << "\t total number of iterations used:" << niter << endl;
-            cerr << "\t S=:" << S << endl;
-            cerr << "\t ||Ax-b||=" << norm_r << endl;
-            throw runtime_error("Linear solver IDR(S) not converged.");
-        }
-        nmult = niter;
-        auto out = complex_dot(x,b);
-        if (pcomm != nullptr) {
-            pcomm->broadcast(x.data, x.size(), pcomm->root);
-            pcomm->broadcast(&out, 1, pcomm->root);
-        }
-        return out;
-    }
-
-
-    //////////////////////////
-    // LSQR stuff
-    // Closely following scipy's implementation
-    // Henrik R. Larsson
-    // Original licence text in scipy:
-    /*
-    The original Fortran code was written by C. C. Paige and M. A. Saunders as
-    described in
-    C. C. Paige and M. A. Saunders, LSQR: An algorithm for sparse linear
-    equations and sparse least squares, TOMS 8(1), 43--71 (1982).
-    C. C. Paige and M. A. Saunders, Algorithm 583; LSQR: Sparse linear
-    equations and least-squares problems, TOMS 8(2), 195--209 (1982).
-    It is licensed under the following BSD license:
-            Copyright (c) 2006, Systems Optimization Laboratory
-    All rights reserved.
-    Redistribution and use in source and binary forms, with or without
-            modification, are permitted provided that the following conditions are
-            met:
-            * Redistributions of source code must retain the above copyright
-            notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above
-    copyright notice, this list of conditions and the following
-            disclaimer in the documentation and/or other materials provided
-            with the distribution.
-    * Neither the name of Stanford University nor the names of its
-            contributors may be used to endorse or promote products derived
-            from this software without specific prior written permission.
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-            LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-    A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-    OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-            SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-                                                          LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-            THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-            (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-    The Fortran code was translated to Python for use in CVXOPT by Jeffery
-            Kline with contributions by Mridul Aanjaneya and Bob Myhill.
-    Adapted for SciPy by Stefan van der Walt.
-     */
-    //////////////////////////
-    /**     Stable implementation of Givens rotation.
-      * References
-      * ----------
-      * .. [1] S.-C. Choi, "Iterative Methods for Singular Linear Equations
-      *    and Least-Squares Problems", Dissertation,
-      *    http://www.stanford.edu/group/SOL/dissertations/sou-cheng-choi-thesis.pdf
-     */
-    static tuple<double,double,double>
-    sym_ortho(const double a, const double b){
-        const auto sign = [](double v){ return static_cast<double>( static_cast<int>( (0. < v) - (v < 0.) ) ); };
-        // const auto sign = [&signR](cmplx v){ return abs(real(v)) < 1e-30 ? signR(real(v)) : signR(imag(v)); };
-        if(b == 0.) {
-            return make_tuple<double, double, double>(sign(a), 0., abs(a));
-        }else if(a == 0.) {
-            return make_tuple<double, double, double>(0., sign(b), abs(b));
-        }else if(abs(b) > abs(a)) {
-            auto tau = a / b;
-            auto s = sign(b) / sqrt(1. + tau * tau);
-            auto c = s * tau;
-            auto r = b / s;
-            return make_tuple<double, double, double>(double(c), double(s), double(r));
-        }else{
-            auto tau = b / a;
-            auto c = sign(a) / sqrt(1. + tau * tau);
-            auto s = c * tau;
-            auto r = a / c;
-            return make_tuple<double, double, double>(double(c), double(s), double(r));
-        }
-    }
-
-    /** LSQR implementation. See scipy.sparse.linalg.lsqr
-     *
-     *  I removed the tamp parameter
-     * @author  Henrik R. Larsson, based on scipy's implementation
-     * @param op Computes op(x) = A x
-     * @param rop Computes rop(x) = A' x
-     * @param a_diagonal Diagonal of A; used for preconditioning. Can point to nullptr if it should not be used
-     *          Here, preconditioning solves [A inv(M)] [M x] = b
-     * @param x Input guess/ output solution
-     * @param b Right-hand side
-     * @param nmult Used number of matrix-vector products (same as niter)
-     * @param niter Used total number of iterations
-     * @param iprint Whether to print output during the iterations
-     * @param pcomm MPI communicator
-     * @param precond_reg Preconditioning regularizer. Fix the inverse of a_diagonal to be at max. the inverse of this.
-     * @param btol, atol Stopping tolerances. If both are 1.0e-9 (say),
-     *          the final residual norm should be accurate to about 9 digits.
-     *         (The final x will usually have fewer correct digits, depending on cond(A))
-     *         atol (btol) defines relative error estimate in A (b)
-     *         The stopping criteria are:
-     *         1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x||
-     *         2: ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
-     * @param max_iter Maximum number of iterations. Throws error afterward.
-     * @param soft_max_iter Maximum number of iterations, without throwing error
-     * @return <x,b>
-     */
-    template <typename MatMul, typename MatMul2, typename PComm>
-    static cmplx
-    lsqr(MatMul &op, MatMul2 &rop,
-         const ComplexDiagonalMatrix &a_diagonal,
-         ComplexMatrixRef x,
-         ComplexMatrixRef b,
-         int &nmult, int &niter,
-         const bool iprint = false, const PComm &pcomm = nullptr,
-         const double precond_reg = 1e-8,
-         const double btol = 1E-3,
-         const double atol = 1E-3,
-         const int max_iter = 5000,
-         const int soft_max_iter = -1) {
-        assert(b.m == x.m);
-        assert(b.n == x.n);
-        constexpr double one{1.};
-        const auto N = b.m; // vector size
-        const auto precondition = [&a_diagonal, precond_reg, N](const ComplexMatrixRef& in,
-                const ComplexMatrixRef& out){
-            assert(a_diagonal.data != nullptr);
-            for (size_t i = 0; i < N; ++i) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    out(i, 0) = in(i,0) / a_diagonal(i, i);
-                } else {
-                    out(i, 0) = in(i,0) / precond_reg;
-                }
-            }
-        };
-        ComplexMatrixRef tmpP(nullptr, N, 1);
-        if(a_diagonal.data != nullptr){
-            tmpP.allocate();
-        }
-        const auto opM = [&op, &a_diagonal, &tmpP, precond_reg, N](const ComplexMatrixRef &in,
-                               const ComplexMatrixRef &out){
-            if(a_diagonal.data == nullptr){
-                op(in,out);
-                return;
-            }
-            // out = A M in
-            for (size_t i = 0; i < N; ++i) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    tmpP(i, 0) = in(i,0) / a_diagonal(i, i);
-                } else {
-                    tmpP(i, 0) = in(i,0) / precond_reg;
-                }
-            }
-            op(tmpP,out);
-        };
-        const auto ropM = [&rop, &a_diagonal, precond_reg, N](const ComplexMatrixRef &in,
-                               const ComplexMatrixRef &out){
-            rop(in,out);
-            if(a_diagonal.data == nullptr){
-                return;
-            }
-            // out = M' A' in
-            for (size_t i = 0; i < N; ++i) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    out(i, 0) /= conj(a_diagonal(i, i));
-                } else {
-                    out(i, 0) /= precond_reg;
-                }
-            }
-        };
-
-        ComplexMatrixRef u(nullptr, N, 1);
-        ComplexMatrixRef tmp(nullptr, N, 1);
-        ComplexMatrixRef v(nullptr, N, 1);
-        ComplexMatrixRef w(nullptr, N, 1);
-        u.allocate();
-        tmp.allocate();
-        v.allocate();
-        w.allocate();
-
-        niter = 0;
-        double beta, alpha;
-        int istop = 0;
-        double anorm = 0.;
-        double acond = 0.;
-        double ddnorm = 0.;
-        double res1 = 0.;
-        double res2 = 0.;
-        double xnorm = 0.;
-        double xxnorm = 0.;
-        double z = 0.;
-        double cs2 = -1.;
-        double sn2 = 0.;
-        double test1, test2, test3, rtol;
-        constexpr double eps = std::numeric_limits<double>::epsilon();
-        // Set up the first vectors u and v for the bidiagonalization.
-        //        These satisfy  beta*u = b - A*x,  alpha*v = A'*u.
-        copy(u, b);
-        auto bnorm = norm_accurate(b);
-        xnorm = norm_accurate(x);
-        if (pcomm != nullptr) {
-            pcomm->broadcast(&bnorm, 1, pcomm->root);
-            pcomm->broadcast(&xnorm, 1, pcomm->root);
-        }
-        if(xnorm < 1e-20){
-            iscale(x, 0.);
-            beta = bnorm;
-        }else{
-            opM(x,v);
-            ++nmult;
-            iadd(u,v,-1.);
-            beta = norm_accurate(u);
-        }
-        if(beta > 0.){
-            iscale(u, 1./beta);
-            ropM(u,v);
-            ++nmult;
-            alpha = norm_accurate(v);
-            if (pcomm != nullptr) {
-                pcomm->broadcast(&alpha, 1, pcomm->root);
-            }
-            iscale(v,1./alpha);
-        }else{
-            alpha = 0.;
-            copy(v,x);
-        }
-        copy(w,v);
-
-        auto rhobar = alpha;
-        auto phibar = beta;
-        auto rnorm = beta;
-        auto r1norm = rnorm;
-        auto arnorm = alpha * beta;
-        vector<string> msg{"The exact solution is  x = 0                              ",
-                           "Ax - b is small enough, given atol, btol                  ",
-                           "The least-squares solution is good enough, given atol     ",
-                           "The estimate of cond(Abar) has exceeded conlim            ",
-                           "Ax - b is small enough for this machine                   ",
-                           "The least-squares solution is good enough for this machine",
-                           "Cond(Abar) seems to be too large for this machine         ",
-                           "The iteration limit has been reached                      "};
-        assert(arnorm != 0 && "The exact solution is x = 0");
-        test1 = one;
-        test2 = alpha / beta;
-        if (iprint){
-            cout << endl << "   Itn    <x|b>                             r1norm     " <<
-                 "      Compatible       LS               Norm A           Cond A" << endl;
-            auto out = complex_dot(x,b);
-            cout << setw(6) << niter
-                    << scientific << setw(17) << setprecision(8) << real(out) << "+"
-                    << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
-                    << scientific << setw(9) << setprecision(8) << r1norm  << "   "
-                    << scientific << setw(9) << setprecision(8) << test1  << "   "
-                    << scientific << setw(9) << setprecision(8) << test2 << endl;
-        }
-        // Main iteration loop
-        while (niter < max_iter && (soft_max_iter == -1 || niter < soft_max_iter)){
-            ++niter;
-            /*
-             *  Perform the next step of the bidiagonalization to obtain the
-             *  next  beta, u, alfa, v.  These satisfy the relations
-             *   beta*u  =  a*v   -  alpha*u,
-             *     alpha*v  =  A'*u  -  beta*v.
-             */
-            // u = A @ v - alpha u
-            opM(v,tmp);
-            ++nmult;
-            iscale(u, -alpha);
-            iadd(u,tmp, 1.);
-            beta = norm_accurate(u);
-
-            if (pcomm != nullptr) {
-                pcomm->broadcast(&beta, 1, pcomm->root);
-            }
-            //beta = static_cast<double>( static_cast<float>(beta) ) ;
-
-            if (beta > 0.) {
-                //iscale(u, 1./beta); // vv is more accurate
-                for (size_t i = 0; i < N; ++i) {
-                    u(i,0) /= beta;
-                }
-                anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
-                //v = A' @ u - beta * v
-                ropM(u,tmp);
-                ++nmult;
-                iscale(v, -beta);
-                iadd(v,tmp, 1.);
-                alpha = norm_accurate(v);
-                if (pcomm != nullptr) {
-                    pcomm->broadcast(&alpha, 1, pcomm->root);
-                }
-                if (alpha > 0.) {
-                    //iscale(v, 1./alpha);
-                    for (size_t i = 0; i < N; ++i) {
-                        v(i,0) /= alpha;
-                    }
-                }
-            }
-
-            // Use a plane rotation to eliminate the damping parameter.
-            // This alters the diagonal (rhobar) of the lower-bidiagonal matrix.
-            auto rhobar1 = sqrt(rhobar * rhobar);
-            auto cs1 = rhobar / rhobar1;
-            auto sn1 = 1. / rhobar1;
-            auto psi = sn1 * phibar;
-            phibar = cs1 * phibar;
-
-            // Use a plane rotation to eliminate the subdiagonal element (beta)
-            // of the lower-bidiagonal matrix, giving an upper-bidiagonal matrix.
-            //auto [cs, sn, rho] = sym_ortho(rhobar1, beta); //Sigh
-            auto tupl = sym_ortho(rhobar1, beta); //Sigh; C++17
-            auto cs = get<0>(tupl);
-            auto sn = get<1>(tupl);
-            auto rho = get<2>(tupl);
-
-
-            auto theta = sn * alpha;
-            rhobar = -cs * alpha;
-            auto phi = cs * phibar;
-            phibar = sn * phibar;
-            auto tau = sn * phi;
-
-            // Update x and w.
-            auto t1 = phi / rho;
-            auto t2 = -theta / rho;
-            if (pcomm != nullptr) {
-                pcomm->broadcast(&rho, 1, pcomm->root);
-                pcomm->broadcast(&t1, 1, pcomm->root);
-                pcomm->broadcast(&t2, 1, pcomm->root);
-            }
-            copy(tmp,w);
-            iscale(tmp,1./rho);
-
-            iadd(x, w, t1); // x = x + t1 * w
-            iscale(w, t2); // w = v + t2 * w
-            iadd(w, v, 1.);
-
-
-            auto normdk = norm_accurate(tmp);
-            if (pcomm != nullptr) {
-                pcomm->broadcast(&normdk, 1, pcomm->root);
-            }
-            ddnorm = ddnorm + normdk * normdk;
-
-            // Use a plane rotation on the right to eliminate the
-            // super-diagonal element (theta) of the upper-bidiagonal matrix.
-            // Then use the result to estimate norm(x).
-            auto delta = sn2 * rho;
-            auto gambar = -cs2 * rho;
-            auto rhs = phi - delta * z;
-            auto zbar = rhs / gambar;
-            xnorm = sqrt(xxnorm + zbar * zbar);
-            auto gamma = sqrt(gambar * gambar + theta * theta);
-            cs2 = gambar / gamma;
-            sn2 = theta / gamma;
-            z = rhs / gamma;
-            xxnorm = xxnorm + z * z;
-
-            // Test for convergence.
-            // First, estimate the condition of the matrix  Abar,
-            // and the norms of  rbar  and  Abar'rbar.
-            acond = anorm * sqrt(ddnorm);
-            res1 = phibar * phibar;
-            res2 = res2 + psi * psi;
-            rnorm = sqrt(res1 + res2);
-            arnorm = alpha * abs(tau);
-
-            auto r1sq = rnorm * rnorm;
-            r1norm = sqrt(abs(r1sq));
-            if (r1sq < 0)
-                r1norm *= -1;
-
-
-            // Now use these norms to estimate certain other quantities,
-            // some of which will be small near a solution.
-            test1 = rnorm / bnorm;
-            test2 = arnorm / (anorm * rnorm + eps);
-            test3 = one / (acond + eps);
-            t1 = test1 / (one + anorm * xnorm / bnorm);
-            rtol = btol + atol * anorm * xnorm / bnorm;
-
-            // The following tests guard against extremely small values of
-            // atol, btol  or   (The user may have set any or all of
-            // the parameters  atol, btol, conlim  to 0.)
-            // The effect is equivalent to the normal tests using
-            // atol = eps, btol = eps, conlim = 1/eps.
-            if (one + test3 <= one){
-                istop = 6;
-            }
-            if (one + test2 <= one){
-                istop = 5;
-            }
-            if (one + t1 <= one) {
-                istop = 4;
-            }
-            // Allow for tolerances set by the user.
-            if (test2 <= atol) {
-                istop = 2;
-            }
-            if (test1 <= rtol) {
-                istop = 1;
-            }
-            if ( !(niter < max_iter && (soft_max_iter == -1 || niter < soft_max_iter))){
-                istop = 7;
-            }
-
-            if (iprint){
-                auto out = complex_dot(x,b);
-                cout << setw(6) << niter
-                     << scientific << setw(17) << setprecision(8) << real(out) << "+"
-                     << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
-                     << scientific << setw(9) << setprecision(8) << r1norm << "   "
-                     << scientific << scientific << setw(9) << setprecision(8) << test1  << "   "
-                     << scientific << setw(9) << setprecision(8) << test2  << "   "
-                     << scientific << setw(9) << setprecision(8) << anorm  << "   "
-                     << scientific << setw(9) << setprecision(8) << acond << endl;
-            }
-            if (istop != 0) {
-                break;
-            }
-        }
-        if(iprint){
-            cout << "istop = " << istop << endl;
-            cout << "msg = " << msg.at(istop) << endl;
-        }
-        // hrl: istop == 5 should be fine
-        if (niter >= max_iter || (istop > 2 && istop != 7 && istop != 5)) {
-            cerr << "Error: linear solver LSQR not converged!" << endl;
-            cerr << "\t total number of iterations used:" << niter << endl;
-            cout << "msg = " << msg.at(istop) << endl;
-            throw runtime_error("Linear solver LSQR not converged.");
-        }
-
-
-        w.deallocate();
-        v.deallocate();
-        tmp.deallocate();
-        u.deallocate();
-        if(a_diagonal.data != nullptr){
-            tmpP.deallocate();
-            // M x = z
-            for (size_t i = 0; i < N; ++i) {
-                if (abs(a_diagonal(i, i)) > precond_reg) {
-                    x(i, 0) /= a_diagonal(i, i);
-                } else {
-                    x(i, 0) /= precond_reg;
-                }
-            }
-        }
-        nmult = niter;
-        auto out = complex_dot(x,b);
-        if (pcomm != nullptr) {
-            pcomm->broadcast(x.data, x.size(), pcomm->root);
-            pcomm->broadcast(&out, 1, pcomm->root);
-        }
-        return out;
-    }
 
 };
+
+typedef GMatrixFunctions<complex<double>> ComplexMatrixFunctions;
 
 } // namespace block2

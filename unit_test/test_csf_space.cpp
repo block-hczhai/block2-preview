@@ -27,8 +27,8 @@ class TestCSFSpace : public ::testing::Test {
 };
 
 TEST_F(TestCSFSpace, TestCSFSpace) {
-    shared_ptr<CSFSpace<SU2>> csf_space =
-        make_shared<CSFSpace<SU2>>(3, 10, false);
+    shared_ptr<CSFSpace<SU2, double>> csf_space =
+        make_shared<CSFSpace<SU2, double>>(3, 10, false);
     vector<pair<pair<MKL_INT, MKL_INT>, double>> mat;
     for (int i = 0; i < csf_space->csf_offsets.back(); i++)
         cout << i << " " << (*csf_space)[i] << endl;
@@ -39,8 +39,8 @@ TEST_F(TestCSFSpace, TestCSFSpace) {
         cout << i << " " << csf_space->to_string(p) << endl;
     }
     vector<uint8_t> x(3, 0);
-    shared_ptr<CSFBigSite<SU2>> csf_bs =
-        make_shared<CSFBigSite<SU2>>(csf_space, nullptr, x);
+    shared_ptr<CSFBigSite<SU2, double>> csf_bs =
+        make_shared<CSFBigSite<SU2, double>>(csf_space, nullptr, x);
     // test 3-op
     const uint8_t i_ops = 0, c_ops = 3, d_ops = 2, c2_ops = 1, d2_ops = 0;
     const uint8_t a0_ops = c_ops + (c2_ops << 2), a1_ops = c_ops + (c_ops << 2);
@@ -297,7 +297,8 @@ TEST_F(TestCSFSpace, TestCSFSpace) {
     cout << *info << endl;
     shared_ptr<VectorAllocator<double>> d_alloc =
         make_shared<VectorAllocator<double>>();
-    shared_ptr<CSRSparseMatrix<SU2>> matg = make_shared<CSRSparseMatrix<SU2>>();
+    shared_ptr<CSRSparseMatrix<SU2, double>> matg =
+        make_shared<CSRSparseMatrix<SU2, double>>();
     matg->initialize(info);
     csf_bs->build_site_op(c_ops, {2}, matg, 1);
 }

@@ -22,6 +22,8 @@
 
 template struct block2::ParallelCommunicator<block2::SZ>;
 template struct block2::ParallelRule<block2::SZ>;
+template struct block2::ParallelRule<block2::SZ, double>;
 
 template struct block2::ParallelCommunicator<block2::SU2>;
 template struct block2::ParallelRule<block2::SU2>;
+template struct block2::ParallelRule<block2::SU2, double>;

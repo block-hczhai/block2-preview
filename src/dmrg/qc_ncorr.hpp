@@ -33,19 +33,20 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct NPC1MPOQC;
+template <typename, typename, typename = void> struct NPC1MPOQC;
 
 // "MPO" for charge/spin correlation (non-spin-adapted)
 // NN[0~3] = n_{p,sp} x n_{q,sq}
 // NN[4] = ad_{pa} a_{pb} x ad_{qb} a_{qa}
 // NN[5] = ad_{pb} a_{pa} x ad_{qa} a_{qb}
-template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
-    NPC1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil)
-        : MPO<S>(hamil->n_sites) {
-        const auto n_sites = MPO<S>::n_sites;
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+template <typename S, typename FL>
+struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        const auto n_sites = MPO<S, FL>::n_sites;
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
             OpNames::Zero, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
         vector<vector<shared_ptr<OpExpr<S>>>> b_op(
@@ -64,7 +65,7 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         const int sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 4; s++)
-                b_op[m][s] = make_shared<OpElement<S>>(
+                b_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::B,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(0, sz_minus[s], 0));
@@ -73,25 +74,25 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
-                    nn_op[i][j][s] = make_shared<OpElement<S>>(
+                    nn_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::NN, sidx, hamil->vacuum);
-                    pdm1_op[i][j][s] = make_shared<OpElement<S>>(
+                    pdm1_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::PDM1, sidx, hamil->vacuum);
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)s, (uint8_t)0, (uint8_t)1});
-                    nn_op[i][j][4 + s] = make_shared<OpElement<S>>(
+                    nn_op[i][j][4 + s] = make_shared<OpElement<S, FL>>(
                         OpNames::NN, sidx, hamil->vacuum);
-                    pdm1_op[i][j][4 + s] = make_shared<OpElement<S>>(
+                    pdm1_op[i][j][4 + s] = make_shared<OpElement<S, FL>>(
                         OpNames::PDM1, sidx, hamil->vacuum);
                 }
             }
-        MPO<S>::const_e = 0.0;
-        MPO<S>::op = zero_op;
-        MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::schemer = nullptr;
+        MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 10 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 11;
@@ -179,8 +180,8 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
                 this->middle_operator_exprs.push_back(pmexpr);
             }
             // site tensors
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             int llshape = 1 + 10 * m;
             int lrshape = m != n_sites - 1 ? 1 + 10 * (m + 1) : 1;
             shared_ptr<Symbolic<S>> plmat = nullptr, prmat = nullptr;
@@ -237,9 +238,9 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         }
     }
     void deallocate() override {}
-    // s == 0: n_{p,sp} x n_{q,sq}
-    // s == 1: ad_{pa} a_{pb} x ad_{qb} a_{qa} / ad_{pb} a_{pa} x ad_{qa} a_{qb}
-    template <typename FL>
+    // here, since this is static, real qc_ncorr can use complex method
+    // s == 0: n_{p,sp} x n_{q,sq} s == 1: ad_{pa} a_{pb} x ad_{qb}
+    // a_{qa} / ad_{pb} a_{pa} x ad_{qa} a_{qb}
     static GMatrix<FL> get_matrix(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
@@ -249,8 +250,8 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
         r.clear();
         for (auto &v : expectations)
             for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(x.first);
                 assert(op->name == OpNames::PDM1);
                 if ((s == 0 && op->site_index.s(2) == 0) ||
                     (s == 1 && op->site_index.s(2) == 0 &&
@@ -265,7 +266,6 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
     }
     // s == 0: sum_(sp,sq) n_{p,sp} x n_{q,sq}
     // s == 1: sum_(sp,sq) ad_{psp} a_{psq} x ad_{qsq} a_{qsp}
-    template <typename FL>
     static GMatrix<FL> get_matrix_spatial(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
@@ -289,13 +289,14 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_sz_t> : MPO<S> {
 // e_pqqp = 2 * XX[0] - delta_pq Epq
 // e_pqpq = sqrt(3) * XX[1] - XX[0] + 2 * delta_pq Epq
 // where Epq = 1pdm spatial
-template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
-    NPC1MPOQC(const shared_ptr<Hamiltonian<S>> &hamil)
-        : MPO<S>(hamil->n_sites) {
-        const auto n_sites = MPO<S>::n_sites;
-        shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil->vacuum);
-        shared_ptr<OpElement<S>> zero_op = make_shared<OpElement<S>>(
+template <typename S, typename FL>
+struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        const auto n_sites = MPO<S, FL>::n_sites;
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
             OpNames::Zero, SiteIndex(), hamil->vacuum);
 #ifdef _MSC_VER
         vector<vector<shared_ptr<OpExpr<S>>>> b_op(
@@ -313,21 +314,21 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
 #endif
         for (uint16_t m = 0; m < n_sites; m++)
             for (uint8_t s = 0; s < 2; s++)
-                b_op[m][s] = make_shared<OpElement<S>>(
+                b_op[m][s] = make_shared<OpElement<S, FL>>(
                     OpNames::B, SiteIndex(m, m, s), S(0, s * 2, 0));
         for (uint16_t i = 0; i < n_sites; i++)
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint8_t s = 0; s < 2; s++) {
-                    nn_op[i][j][s] = make_shared<OpElement<S>>(
+                    nn_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::NN, SiteIndex(i, j, s), hamil->vacuum);
-                    pdm1_op[i][j][s] = make_shared<OpElement<S>>(
+                    pdm1_op[i][j][s] = make_shared<OpElement<S, FL>>(
                         OpNames::PDM1, SiteIndex(i, j, s), hamil->vacuum);
                 }
-        MPO<S>::const_e = 0.0;
-        MPO<S>::op = zero_op;
-        MPO<S>::schemer = nullptr;
-        MPO<S>::tf = make_shared<TensorFunctions<S>>(hamil->opf);
-        MPO<S>::site_op_infos = hamil->site_op_infos;
+        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::schemer = nullptr;
+        MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         for (uint16_t m = 0; m < n_sites; m++) {
             int lshape = m != n_sites - 1 ? 1 + 4 * (m + 1) : 1;
             int rshape = m != n_sites - 1 ? 1 : 5;
@@ -393,8 +394,8 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
                 this->middle_operator_exprs.push_back(pmexpr);
             }
             // site tensors
-            shared_ptr<OperatorTensor<S>> opt =
-                make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
             int llshape = 1 + 4 * m;
             int lrshape = m != n_sites - 1 ? 1 + 4 * (m + 1) : 1;
             shared_ptr<Symbolic<S>> plmat = nullptr, prmat = nullptr;
@@ -443,7 +444,6 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         }
     }
     void deallocate() override {}
-    template <typename FL>
     static shared_ptr<GTensor<FL>> get_matrix_reduced(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
@@ -452,15 +452,14 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
         r->clear();
         for (auto &v : expectations)
             for (auto &x : v) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(x.first);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(x.first);
                 assert(op->name == OpNames::PDM1);
                 (*r)({op->site_index[0], op->site_index[1],
                       op->site_index.ss()}) = x.second;
             }
         return r;
     }
-    template <typename FL>
     static GMatrix<FL> get_matrix(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
@@ -473,7 +472,6 @@ template <typename S> struct NPC1MPOQC<S, typename S::is_su2_t> : MPO<S> {
     }
     // s == 0: sum_(sp,sq) n_{p,sp} x n_{q,sq}
     // s == 2: sum_(sp,sq) ad_{psp} a_{psq} x ad_{qsq} a_{qsp}
-    template <typename FL>
     static GMatrix<FL> get_matrix_spatial(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,

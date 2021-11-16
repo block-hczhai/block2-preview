@@ -21,7 +21,7 @@
 #include "../block2_dmrg.hpp"
 
 template struct block2::MultiMPSInfo<block2::SZ>;
-template struct block2::MultiMPS<block2::SZ>;
+template struct block2::MultiMPS<block2::SZ, double>;
 
 template struct block2::MultiMPSInfo<block2::SU2>;
-template struct block2::MultiMPS<block2::SU2>;
+template struct block2::MultiMPS<block2::SU2, double>;

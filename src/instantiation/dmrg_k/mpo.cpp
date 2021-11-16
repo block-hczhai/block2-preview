@@ -21,13 +21,13 @@
 #include "../block2_dmrg.hpp"
 
 template struct block2::MPOSchemer<block2::SZK>;
-template struct block2::MPO<block2::SZK>;
-template struct block2::DiagonalMPO<block2::SZK>;
-template struct block2::AncillaMPO<block2::SZK>;
-template struct block2::IdentityAddedMPO<block2::SZK>;
+template struct block2::MPO<block2::SZK, double>;
+template struct block2::DiagonalMPO<block2::SZK, double>;
+template struct block2::AncillaMPO<block2::SZK, double>;
+template struct block2::IdentityAddedMPO<block2::SZK, double>;
 
 template struct block2::MPOSchemer<block2::SU2K>;
-template struct block2::MPO<block2::SU2K>;
-template struct block2::DiagonalMPO<block2::SU2K>;
-template struct block2::AncillaMPO<block2::SU2K>;
-template struct block2::IdentityAddedMPO<block2::SU2K>;
+template struct block2::MPO<block2::SU2K, double>;
+template struct block2::DiagonalMPO<block2::SU2K, double>;
+template struct block2::AncillaMPO<block2::SU2K, double>;
+template struct block2::IdentityAddedMPO<block2::SU2K, double>;

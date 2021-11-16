@@ -10,10 +10,10 @@ class TestFusedMPON2STO3G : public ::testing::Test {
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<double>> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
@@ -32,30 +32,29 @@ class TestFusedMPON2STO3G : public ::testing::Test {
     }
 };
 
-template <typename S>
-void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
-                                    const vector<vector<double>> &energies,
-                                    const shared_ptr<HamiltonianQC<S>> &hamil,
-                                    const string &name, DecompositionTypes dt,
-                                    NoiseTypes nt) {
+template <typename S, typename FL>
+void TestFusedMPON2STO3G::test_dmrg(
+    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
+    DecompositionTypes dt, NoiseTypes nt) {
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
     for (int i = 0; i < 2; i++) {
-        mpo = make_shared<FusedMPO<S>>(mpo, hamil->basis, 0, 1);
-        hamil->basis = dynamic_pointer_cast<FusedMPO<S>>(mpo)->basis;
+        mpo = make_shared<FusedMPO<S, FL>>(mpo, hamil->basis, 0, 1);
+        hamil->basis = dynamic_pointer_cast<FusedMPO<S, FL>>(mpo)->basis;
         hamil->n_sites = mpo->n_sites;
     }
     for (int i = 0; i < 2; i++) {
-        mpo = make_shared<FusedMPO<S>>(mpo, hamil->basis, mpo->n_sites - 2,
-                                       mpo->n_sites - 1);
-        hamil->basis = dynamic_pointer_cast<FusedMPO<S>>(mpo)->basis;
+        mpo = make_shared<FusedMPO<S, FL>>(mpo, hamil->basis, mpo->n_sites - 2,
+                                           mpo->n_sites - 1);
+        hamil->basis = dynamic_pointer_cast<FusedMPO<S, FL>>(mpo)->basis;
         hamil->n_sites = mpo->n_sites;
     }
     cout << "MPO fusing end .. T = " << t.get_time() << endl;
@@ -63,8 +62,8 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
     cout << "MPO sparsification start" << endl;
     for (int idx : vector<int>{0, mpo->n_sites - 1}) {
         for (auto &op : mpo->tensors[idx]->ops) {
-            shared_ptr<CSRSparseMatrix<S>> smat =
-                make_shared<CSRSparseMatrix<S>>();
+            shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                make_shared<CSRSparseMatrix<S, FL>>();
             if (op.second->sparsity() > 0.75) {
                 smat->from_dense(op.second);
                 // this requires random deallocatable allocator for
@@ -76,18 +75,19 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
         }
         mpo->sparse_form[idx] = 'S';
     }
-    mpo->tf = make_shared<TensorFunctions<S>>(
-        make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+    mpo->tf = make_shared<TensorFunctions<S, FL>>(
+        make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    vector<FL> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -103,7 +103,8 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 2);
+            shared_ptr<MPS<S, FL>> mps =
+                make_shared<MPS<S, FL>>(hamil->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -114,13 +115,15 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             mps_info->deallocate_mutable();
 
             // ME
-            shared_ptr<MovingEnvironment<S>> me =
-                make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+            shared_ptr<MovingEnvironment<S, FL, FL>> me =
+                make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
+                                                          "DMRG");
             me->init_environments(false);
             me->cached_contraction = true;
 
             // DMRG
-            shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+            shared_ptr<DMRG<S, FL, FL>> dmrg =
+                make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
@@ -151,7 +154,7 @@ void TestFusedMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
 }
 
 TEST_F(TestFusedMPON2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -179,31 +182,34 @@ TEST_F(TestFusedMPON2STO3G, TestSU2) {
     energies[7] = {-107.116397543375, -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(targets, energies, hamil, "SU2",
-                   DecompositionTypes::DensityMatrix,
-                   NoiseTypes::DensityMatrix);
+    test_dmrg<SU2, double>(targets, energies, hamil, "SU2",
+                           DecompositionTypes::DensityMatrix,
+                           NoiseTypes::DensityMatrix);
 
     targets.resize(2);
     energies.resize(2);
 
-    hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
+    test_dmrg<SU2, double>(targets, energies, hamil, "SU2 PERT",
+                           DecompositionTypes::DensityMatrix,
+                           NoiseTypes::Perturbative);
 
-    hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
-                   NoiseTypes::Wavefunction);
+    hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, norb, orbsym, fcidump);
+    test_dmrg<SU2, double>(targets, energies, hamil, "SU2 SVD",
+                           DecompositionTypes::SVD, NoiseTypes::Wavefunction);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestFusedMPON2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -239,23 +245,27 @@ TEST_F(TestFusedMPON2STO3G, TestSZ) {
                    -107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil =
-        make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::DensityMatrix);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ",
+                          DecompositionTypes::DensityMatrix,
+                          NoiseTypes::DensityMatrix);
 
     targets.resize(2);
     energies.resize(2);
 
-    hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SZ>(targets, energies, hamil, "SZ PERT",
-                  DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ PERT",
+                          DecompositionTypes::DensityMatrix,
+                          NoiseTypes::Perturbative);
 
-    hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
-    test_dmrg<SZ>(targets, energies, hamil, "SZ SVD", DecompositionTypes::SVD,
-                  NoiseTypes::Wavefunction);
+    hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
+    test_dmrg<SZ, double>(targets, energies, hamil, "SZ SVD",
+                          DecompositionTypes::SVD, NoiseTypes::Wavefunction);
 
     hamil->deallocate();
     fcidump->deallocate();

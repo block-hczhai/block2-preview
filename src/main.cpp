@@ -52,7 +52,7 @@ map<string, string> read_input(const string &filename) {
     return params;
 }
 
-template <typename S> void run(const map<string, string> &params) {
+template <typename S, typename FL> void run(const map<string, string> &params) {
 
     size_t memory = 4ULL << 30;
     if (params.count("memory") != 0)
@@ -89,7 +89,7 @@ template <typename S> void run(const map<string, string> &params) {
     cout << "bond integer size = " << sizeof(ubond_t) << endl;
     cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
 
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     PGTypes pg = PGTypes::C1;
 
@@ -139,17 +139,17 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("n_threads") != 0) {
         int n_threads = Parsing::to_int(params.at("n_threads"));
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, n_threads,
-            n_threads, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global,
+            n_threads, n_threads, 1);
         threading_()->seq_type = SeqTypes::None;
         cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
 
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
-    double integral_error = fcidump->symmetrize(orbsym);
+    typename FCIDUMP<FL>::FP integral_error = fcidump->symmetrize(orbsym);
     if (integral_error != 0)
         cout << "integral error = " << scientific << setprecision(5)
              << integral_error << endl;
@@ -159,8 +159,8 @@ template <typename S> void run(const map<string, string> &params) {
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<S>> hamil = make_shared<HamiltonianQC<S>>
-            (vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<S, FL>> hamil =
+        make_shared<HamiltonianQC<S, FL>>(vacuum, norb, orbsym, fcidump);
 
     hamil->opf->seq->mode = SeqTypes::Simple;
 
@@ -200,18 +200,18 @@ template <typename S> void run(const map<string, string> &params) {
     Timer t;
     t.get_time();
 
-    shared_ptr<MPO<S>> mpo;
+    shared_ptr<MPO<S, FL>> mpo;
 
     if (params.count("load_mpo") != 0) {
         string fn = params.at("load_mpo");
-        mpo = make_shared<MPO<S>>(0);
+        mpo = make_shared<MPO<S, FL>>(0);
         cout << "MPO loading start" << endl;
         mpo->load_data(fn);
         if (mpo->sparse_form.find('S') == string::npos)
-            mpo->tf = make_shared<TensorFunctions<S>>(hamil->opf);
+            mpo->tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
-            mpo->tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+            mpo->tf = make_shared<TensorFunctions<S, FL>>(
+                make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
         mpo->tf->opf->seq = hamil->opf->seq;
         cout << "MPO loading end .. T = " << t.get_time() << endl;
 
@@ -223,7 +223,7 @@ template <typename S> void run(const map<string, string> &params) {
     } else {
         // MPO construction
         cout << "MPO start" << endl;
-        mpo = make_shared<MPOQC<S>>(hamil, qc_type, trans_center);
+        mpo = make_shared<MPOQC<S, FL>>(hamil, qc_type, trans_center);
         cout << "MPO end .. T = " << t.get_time() << endl;
 
         if (params.count("fused") != 0 || params.count("mrci-fused") != 0) {
@@ -256,19 +256,19 @@ template <typename S> void run(const map<string, string> &params) {
 
             if (params.count("sparse_mpo") != 0) {
                 sparsity = Parsing::to_double(params.at("sparse_mpo"));
-                mpo->tf = make_shared<TensorFunctions<S>>(
-                    make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+                mpo->tf = make_shared<TensorFunctions<S, FL>>(
+                    make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
                 mpo->tf->opf->seq = hamil->opf->seq;
             }
 
             cout << "MPO fusing left start" << endl;
             for (int i = 0; i < n_extl - 1; i++) {
                 cout << "fusing left .. " << i + 1 << " / " << n_extl << endl;
-                mpo = make_shared<FusedMPO<S>>(mpo, hamil->basis, 0, 1);
+                mpo = make_shared<FusedMPO<S, FL>>(mpo, hamil->basis, 0, 1);
                 if (i == 10) {
                     for (auto &op : mpo->tensors[0]->ops) {
-                        shared_ptr<CSRSparseMatrix<S>> smat =
-                            make_shared<CSRSparseMatrix<S>>();
+                        shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                            make_shared<CSRSparseMatrix<S, FL>>();
                         if (op.second->get_type() ==
                             SparseMatrixTypes::Normal) {
                             if (op.second->sparsity() > sparsity) {
@@ -289,13 +289,13 @@ template <typename S> void run(const map<string, string> &params) {
             cout << "MPO fusing right start" << endl;
             for (int i = 0; i < n_extr - 1; i++) {
                 cout << "fusing right .. " << i + 1 << " / " << n_extr << endl;
-                mpo = make_shared<FusedMPO<S>>(
+                mpo = make_shared<FusedMPO<S, FL>>(
                     mpo, hamil->basis, mpo->n_sites - 2, mpo->n_sites - 1,
                     fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
                 if (i == 10) {
                     for (auto &op : mpo->tensors[mpo->n_sites - 1]->ops) {
-                        shared_ptr<CSRSparseMatrix<S>> smat =
-                            make_shared<CSRSparseMatrix<S>>();
+                        shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                            make_shared<CSRSparseMatrix<S, FL>>();
                         if (op.second->get_type() ==
                             SparseMatrixTypes::Normal) {
                             if (op.second->sparsity() > sparsity) {
@@ -320,8 +320,8 @@ template <typename S> void run(const map<string, string> &params) {
 
         // MPO simplification
         cout << "MPO simplification start" << endl;
-        mpo =
-            make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+        mpo = make_shared<SimplifiedMPO<S, FL>>(
+            mpo, make_shared<RuleQC<S, FL>>(), true);
         cout << "MPO simplification end .. T = " << t.get_time() << endl;
     }
 
@@ -356,8 +356,9 @@ template <typename S> void run(const map<string, string> &params) {
     vector<ubond_t> bdims = {
         250, 250, 250,
         250, 250, (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max())};
-    vector<double> noises = {1E-7, 1E-8, 1E-8, 1E-9, 1E-9, 0.0};
-    vector<double> davidson_conv_thrds = {5E-6};
+    vector<typename GMatrix<FL>::FP> noises = {1E-7, 1E-8, 1E-8,
+                                               1E-9, 1E-9, 0.0};
+    vector<typename GMatrix<FL>::FP> davidson_conv_thrds = {5E-6};
 
     if (params.count("bond_dims") != 0) {
         vector<string> xbdims =
@@ -455,16 +456,16 @@ template <typename S> void run(const map<string, string> &params) {
 
     if (params.count("dot") != 0)
         dot = Parsing::to_int(params.at("dot"));
-    shared_ptr<MPS<S>> mps = nullptr;
+    shared_ptr<MPS<S, FL>> mps = nullptr;
 
     if (params.count("load_mps") != 0) {
         mps_info->tag = params.at("load_mps");
-        mps = make_shared<MPS<S>>(mps_info);
+        mps = make_shared<MPS<S, FL>>(mps_info);
         mps->load_data();
         mps->load_mutable();
         mps_info->tag = "KET";
     } else {
-        mps = make_shared<MPS<S>>(norb, center, dot);
+        mps = make_shared<MPS<S, FL>>(norb, center, dot);
         mps->initialize(mps_info);
         mps->random_canonicalize();
     }
@@ -478,8 +479,8 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("iprint") != 0)
         iprint = Parsing::to_int(params.at("iprint"));
 
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(iprint >= 2);
@@ -498,7 +499,8 @@ template <typename S> void run(const map<string, string> &params) {
     if (params.count("tol") != 0)
         tol = Parsing::to_double(params.at("tol"));
 
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->davidson_conv_thrds = davidson_conv_thrds;
     dmrg->iprint = iprint;
 
@@ -577,10 +579,10 @@ int main(int argc, char *argv[]) {
 
     if (params.count("su2") == 0 || !!Parsing::to_int(params.at("su2"))) {
         cout << "SPIN-ADAPTED" << endl;
-        run<SU2>(params);
+        run<SU2, double>(params);
     } else {
         cout << "NON-SPIN-ADAPTED" << endl;
-        run<SZ>(params);
+        run<SZ, double>(params);
     }
 
     return 0;

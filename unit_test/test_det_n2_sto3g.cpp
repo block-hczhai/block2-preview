@@ -5,13 +5,15 @@
 
 using namespace block2;
 
-class TestDETN2STO3G : public ::testing::Test {
+template <typename FL> class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
+    typedef typename GMatrix<FL>::FP FP;
 
     template <typename S>
-    void test_dmrg(const S target, const shared_ptr<HamiltonianQC<S>> &hamil,
+    void test_dmrg(const S target,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name);
     void SetUp() override {
         Random::rand_seed(0);
@@ -29,12 +31,13 @@ class TestDETN2STO3G : public ::testing::Test {
     }
 };
 
+template <typename FL>
 template <typename S>
-void TestDETN2STO3G::test_dmrg(const S target,
-                               const shared_ptr<HamiltonianQC<S>> &hamil,
-                               const string &name) {
+void TestDETN2STO3G<FL>::test_dmrg(
+    const S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+    const string &name) {
 
-    vector<double> coeffs = {
+    vector<FL> coeffs = {
         -0.000000915576, -0.000000022619, -0.000002897952, 0.000006060239,
         -0.000002862448, 0.000018360654,  -0.000002862448, 0.000018360654,
         -0.000000038806, -0.000006230805, 0.000015602435,  -0.000002855035,
@@ -72,13 +75,14 @@ void TestDETN2STO3G::test_dmrg(const S target,
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -90,7 +94,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
 
     // MPS
     Random::rand_seed(0);
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -101,8 +105,8 @@ void TestDETN2STO3G::test_dmrg(const S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -113,23 +117,24 @@ void TestDETN2STO3G::test_dmrg(const S target,
 
     // DMRG
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 0.0};
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    vector<FP> noises = {1E-8, 0.0};
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->solve(10, true, 1E-13);
 
-    shared_ptr<DeterminantTRIE<S>> dtrie =
-        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
+    shared_ptr<DeterminantTRIE<S, FL>> dtrie =
+        make_shared<DeterminantTRIE<S, FL>>(mps->n_sites, true);
 
-    shared_ptr<DeterminantTRIE<S>> dtrie_ref =
-        make_shared<DeterminantTRIE<S>>(mps->n_sites, true);
+    shared_ptr<DeterminantTRIE<S, FL>> dtrie_ref =
+        make_shared<DeterminantTRIE<S, FL>>(mps->n_sites, true);
 
     vector<uint8_t> ref = {0, 0, 0, 3, 3, 3, 3, 3, 3, 3};
     do {
         dtrie_ref->push_back(ref);
     } while (next_permutation(ref.begin(), ref.end()));
 
-    dtrie->evaluate(make_shared<UnfusedMPS<S>>(mps), 1E-7);
+    dtrie->evaluate(make_shared<UnfusedMPS<S, FL>>(mps), 1E-7);
     cout << dtrie->size() << endl;
 
     for (int i = 0; i < (int)dtrie_ref->size(); i++) {
@@ -138,7 +143,7 @@ void TestDETN2STO3G::test_dmrg(const S target,
         for (auto x : det)
             cout << (int)x;
         int ii = dtrie->find(det);
-        double val = ii != -1 ? dtrie->vals[ii] : 0;
+        FL val = ii != -1 ? dtrie->vals[ii] : 0.0;
         cout << " = " << setw(22) << fixed << setprecision(12) << val
              << " error = " << scientific << setprecision(3) << setw(10)
              << (abs(val) - abs(coeffs[i])) << endl;
@@ -151,43 +156,57 @@ void TestDETN2STO3G::test_dmrg(const S target,
     mpo->deallocate();
 }
 
-TEST_F(TestDETN2STO3G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestDETN2STO3G, TestFL);
+
+TYPED_TEST(TestDETN2STO3G, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
-    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
-
-    SZ vacuum(0);
-    SZ target(fcidump->n_elec(), fcidump->twos(),
-              PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
-
-    test_dmrg<SZ>(target, hamil, " SZ");
-
-    hamil->deallocate();
-    fcidump->deallocate();
-}
-
-TEST_F(TestDETN2STO3G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
-    PGTypes pg = PGTypes::D2H;
-    string filename = "data/N2.STO3G.FCIDUMP";
-    fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_pg(pg)(fcidump->isym()));
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, fcidump->n_sites(), orbsym,
+                                            fcidump);
 
-    test_dmrg<SU2>(target, hamil, "SU2");
+    this->template test_dmrg<SU2>(target, hamil, "SU2");
+
+    hamil->deallocate();
+    fcidump->deallocate();
+}
+
+TYPED_TEST(TestDETN2STO3G, TestSZ) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
+    PGTypes pg = PGTypes::D2H;
+    string filename = "data/N2.STO3G.FCIDUMP";
+    fcidump->read(filename);
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_pg(pg));
+
+    SZ vacuum(0);
+    SZ target(fcidump->n_elec(), fcidump->twos(),
+              PointGroup::swap_pg(pg)(fcidump->isym()));
+    shared_ptr<HamiltonianQC<SZ, FL>> hamil =
+        make_shared<HamiltonianQC<SZ, FL>>(vacuum, fcidump->n_sites(), orbsym,
+                                           fcidump);
+
+    this->template test_dmrg<SZ>(target, hamil, " SZ");
 
     hamil->deallocate();
     fcidump->deallocate();

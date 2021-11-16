@@ -23,11 +23,14 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cmath>
+#include <complex>
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <random>
+#include <type_traits>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
@@ -59,7 +62,34 @@ inline int gettimeofday(struct timeval *tp, struct timezone *tzp) {
     tp->tv_usec = chrono::duration_cast<chrono::microseconds>(d - s).count();
     return 0;
 }
+
 #endif
+
+template <typename FL> inline FL xconj(FL x) { return x; }
+
+template <> inline complex<double> xconj<complex<double>>(complex<double> x) {
+    return conj(x);
+}
+
+template <typename FL> inline decltype(abs((FL)0.0)) ximag(FL x) {
+    return (decltype(abs((FL)0.0)))0.0;
+}
+
+template <> inline double ximag<complex<double>>(complex<double> x) {
+    return imag(x);
+}
+
+template <typename FL> inline decltype(abs((FL)0.0)) xreal(FL x) {
+    return (decltype(abs((FL)0.0)))x;
+}
+
+template <> inline double xreal<complex<double>>(complex<double> x) {
+    return real(x);
+}
+
+template <typename T> struct is_complex : integral_constant<bool, false> {};
+
+template <typename T> struct is_complex<complex<T>> : is_floating_point<T> {};
 
 // Wall time recorder
 struct Timer {
@@ -92,13 +122,8 @@ struct RandomMT {
         assert(b > a);
         return uniform_real_distribution<double>(a, b)(rng);
     }
-    void fill_rand_float(float *data, size_t n, float a = 0, float b = 1) {
-        uniform_real_distribution<float> distr(a, b);
-        for (size_t i = 0; i < n; i++)
-            data[i] = distr(rng);
-    }
-    void fill_rand_double(double *data, size_t n, double a = 0, double b = 1) {
-        uniform_real_distribution<double> distr(a, b);
+    template <typename FL> void fill(FL *data, size_t n, FL a = 0, FL b = 1) {
+        uniform_real_distribution<FL> distr(a, b);
         for (size_t i = 0; i < n; i++)
             data[i] = distr(rng);
     }
@@ -126,17 +151,17 @@ struct Random {
         assert(b > a);
         return uniform_real_distribution<double>(a, b)(rng());
     }
-    static void fill_rand_float(float *data, size_t n, float a = 0,
-                                float b = 1) {
-        uniform_real_distribution<float> distr(a, b);
+    template <typename FL>
+    static void fill(FL *data, size_t n, FL a = 0, FL b = 1) {
+        uniform_real_distribution<FL> distr(a, b);
         for (size_t i = 0; i < n; i++)
             data[i] = distr(rng());
     }
-    static void fill_rand_double(double *data, size_t n, double a = 0,
-                                 double b = 1) {
-        uniform_real_distribution<double> distr(a, b);
-        for (size_t i = 0; i < n; i++)
-            data[i] = distr(rng());
+    template <typename FL>
+    static void complex_fill(complex<FL> *data, size_t n, FL a = 0, FL b = 1) {
+        uniform_real_distribution<FL> distr(a, b);
+        for (size_t i = 0; i < n * 2; i++)
+            ((FL *)data)[i] = distr(rng());
     }
 };
 

@@ -13,7 +13,7 @@ from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, T
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
-from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
 import numpy as np
 import time
 import os
@@ -52,74 +52,149 @@ else:
     """)
 
 dic = parse(fin)
-if "nonspinadapted" in dic and "k_symmetry" not in dic:
-    from block2 import VectorSZ as VectorSL
-    from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
-    from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
-    from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
-    from block2.sz import trans_state_info_to_su2 as trans_si
-    from block2.su2 import MPSInfo as TrMPSInfo
-    from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
-    SX = SZ
-    TrSX = SU2
-elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
-    from block2 import VectorSU2 as VectorSL
-    from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
-    from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
-    from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
-    from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
-    from block2.sz import MPSInfo as TrMPSInfo
-    from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
-    SX = SU2
-    TrSX = SZ
-elif "nonspinadapted" in dic and "k_symmetry" in dic:
-    from block2 import VectorSZK as VectorSL
-    from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
-    from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
-    from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.szk import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
-    from block2.szk import trans_state_info_to_su2k as trans_si
-    from block2.su2k import MPSInfo as TrMPSInfo
-    from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
-    SX = SZK
-    TrSX = SU2K
-else:
-    from block2 import VectorSU2K as VectorSL
-    from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-    from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
-    from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
-    from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
-    from block2.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
-    from block2.su2k import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-    from block2.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
-    from block2.su2k import trans_state_info_to_szk as trans_si, trans_unfused_mps_to_szk as trans_mps
-    from block2.szk import MPSInfo as TrMPSInfo
-    from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
-    SX = SU2K
-    TrSX = SZK
-
-try:
-    if "nonspinadapted" in dic:
-        from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
-        from block2.sz import DMRGBigSite, LinearBigSite
-        from block2.sz import SCIFockBigSite
+if "use_complex" not in dic:
+    if "nonspinadapted" in dic and "k_symmetry" not in dic:
+        from block2 import VectorSZ as VectorSL
+        from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
+        from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+        from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.sz import trans_state_info_to_su2 as trans_si
+        from block2.su2 import MPSInfo as TrMPSInfo
+        from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZ
+        TrSX = SU2
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
+        from block2 import VectorSU2 as VectorSL
+        from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
+        from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+        from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
+        from block2.sz import MPSInfo as TrMPSInfo
+        from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2
+        TrSX = SZ
+    elif "nonspinadapted" in dic and "k_symmetry" in dic:
+        from block2 import VectorSZK as VectorSL
+        from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
+        from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+        from block2.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.szk import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.szk import trans_state_info_to_su2k as trans_si
+        from block2.su2k import MPSInfo as TrMPSInfo
+        from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZK
+        TrSX = SU2K
     else:
-        from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
-        from block2.su2 import DMRGBigSite, LinearBigSite
-        from block2.su2 import CSFBigSite
-except ImportError:
-    pass
+        from block2 import VectorSU2K as VectorSL
+        from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
+        from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+        from block2.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.su2k import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.su2k import trans_state_info_to_szk as trans_si, trans_unfused_mps_to_szk as trans_mps
+        from block2.szk import MPSInfo as TrMPSInfo
+        from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2K
+        TrSX = SZK
+
+    try:
+        if "nonspinadapted" in dic:
+            from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.sz import DMRGBigSite, LinearBigSite
+            from block2.sz import SCIFockBigSite
+        else:
+            from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.su2 import DMRGBigSite, LinearBigSite
+            from block2.su2 import CSFBigSite
+    except ImportError:
+        pass
+else:
+    from block2.cpx import FCIDUMP
+    if "nonspinadapted" in dic and "k_symmetry" not in dic:
+        from block2 import VectorSZ as VectorSL
+        from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.sz import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.cpx.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.cpx.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.cpx.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.sz import trans_state_info_to_su2 as trans_si
+        from block2.su2 import MPSInfo as TrMPSInfo
+        from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZ
+        TrSX = SU2
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
+        from block2 import VectorSU2 as VectorSL
+        from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.su2 import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.cpx.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.cpx.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.cpx.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
+        from block2.sz import MPSInfo as TrMPSInfo
+        from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2
+        TrSX = SZ
+    elif "nonspinadapted" in dic and "k_symmetry" in dic:
+        from block2 import VectorSZK as VectorSL
+        from block2.szk import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.cpx.szk import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.szk import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.cpx.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.cpx.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.cpx.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.cpx.szk import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.cpx.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.szk import trans_state_info_to_su2k as trans_si
+        from block2.su2k import MPSInfo as TrMPSInfo
+        from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZK
+        TrSX = SU2K
+    else:
+        from block2 import VectorSU2K as VectorSL
+        from block2.su2k import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.cpx.su2k import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.su2k import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.cpx.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.cpx.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.cpx.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.cpx.su2k import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.cpx.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS
+        from block2.su2k import trans_state_info_to_szk as trans_si, trans_unfused_mps_to_szk as trans_mps
+        from block2.szk import MPSInfo as TrMPSInfo
+        from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2K
+        TrSX = SZK
+
+    try:
+        if "nonspinadapted" in dic:
+            from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.sz import DMRGBigSite, LinearBigSite
+            from block2.sz import SCIFockBigSite
+        else:
+            from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.su2 import DMRGBigSite, LinearBigSite
+            from block2.su2 import CSFBigSite
+    except ImportError:
+        pass
 
 try:
     if "nonspinadapted" in dic and "k_symmetry" not in dic:
@@ -158,6 +233,8 @@ if DEBUG:
         else:
             _print("%-25s %40s" % (key, val))
     _print("*" * 34 + " INPUT END   " + "*" * 34 + "\n")
+    _print("SPIN ADAPTED - " if "nonspinadapted" not in dic else "NON SPIN ADAPTED - ", end='')
+    _print("REAL DOMAIN" if "use_complex" not in dic else "COMPLEX DOMAIN")
 
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
@@ -197,6 +274,8 @@ elif dic.get("trunc_type", "physical").startswith("keep "):
         int(dic["trunc_type"][len("keep "):].strip())
 else:
     trunc_type = TruncationTypes.Reduced
+if "real_density_matrix" in dic:
+    trunc_type = trunc_type | TruncationTypes.RealDensityMatrix
 if dic.get("decomp_type", "density_matrix") == "density_matrix":
     decomp_type = DecompositionTypes.DensityMatrix
 else:
@@ -205,6 +284,12 @@ if dic.get("te_type", "rk4") == "rk4":
     te_type = TETypes.RK4
 else:
     te_type = TETypes.TangentSpace
+if dic.get("expt_algo_type", "auto") == "auto":
+    algo_type = ExpectationAlgorithmTypes.Automatic
+elif dic.get("expt_algo_type", "auto") == "fast":
+    algo_type = ExpectationAlgorithmTypes.Fast
+else:
+    algo_type = ExpectationAlgorithmTypes.Normal
 
 has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
     or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
@@ -1350,6 +1435,8 @@ if not pre_run:
             dmrg.decomp_type = decomp_type
             dmrg.trunc_type = trunc_type
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+            dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
+            dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
 
             sweep_energies = []
             discarded_weights = []
@@ -1429,6 +1516,8 @@ if not pre_run:
         else:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
         dmrg.cutoff = float(dic.get("cutoff", 1E-14))
+        dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
+        dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
         dmrg.decomp_type = decomp_type
         dmrg.trunc_type = trunc_type
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
@@ -1637,7 +1726,8 @@ if not pre_run:
         me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
         # currently delayed_contraction is not compatible to
         # ExpectationAlgorithmTypes.Fast
-        # me.delayed_contraction = OpNamesSet.normal_ops()
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1645,6 +1735,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         _print("Final canonical form = ", bmps.canonical_form, bmps.center)
@@ -1861,7 +1952,8 @@ if not pre_run:
     if "restart_correlation" in dic or "correlation" in dic:
         assert nroots == 1
         me = MovingEnvironment(nmpo, mps, mps, "1NPC")
-        # me.delayed_contraction = OpNamesSet.normal_ops()
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1869,6 +1961,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, mps.info.bond_dim, mps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, mps.center == 0)
         _print("Final canonical form = ", mps.canonical_form, mps.center)
@@ -1904,6 +1997,8 @@ if not pre_run:
 
     def do_twopdm(bmps, kmps):
         me = MovingEnvironment(p2mpo, bmps, kmps, "2PDM")
+        if algo_type == ExpectationAlgorithmTypes.Normal:
+            me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
@@ -1911,6 +2006,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = Expect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         _print("Final canonical form = ", bmps.canonical_form, bmps.center)
@@ -2323,7 +2419,7 @@ if not pre_run:
         linear.cutoff = float(dic.get("cutoff", 1E-14))
         linear.decomp_type = decomp_type
         linear.trunc_type = trunc_type
-        linear.minres_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
+        linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
 
         e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
         nevpt_sweep_energies = np.array(linear.targets)

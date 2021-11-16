@@ -20,5 +20,5 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::SimplifiedMPO<block2::SZK>;
-template struct block2::SimplifiedMPO<block2::SU2K>;
+template struct block2::SimplifiedMPO<block2::SZK, double>;
+template struct block2::SimplifiedMPO<block2::SU2K, double>;

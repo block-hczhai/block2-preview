@@ -37,12 +37,12 @@ using namespace std;
 
 namespace block2 {
 
-template <typename, typename = void> struct SCIFockBigSite;
+template <typename, typename, typename = void> struct SCIFockBigSite;
 
-template <typename S>
-struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
+template <typename S, typename FL>
+struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
     using sizPair = std::pair<std::size_t, std::size_t>;
-    using BLSparseMatrix = block2::CSRSparseMatrix<S>;
+    using BLSparseMatrix = block2::CSRSparseMatrix<S, FL>;
     struct entryTuple1 { // ease life and define this instead of using
                          // std::tuple
         BLSparseMatrix &mat;
@@ -105,7 +105,7 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
      * @param nMaxEl Maximal number of alpha+beta electrons in external space
      */
     SCIFockBigSite(int nOrb, int nOrbExt, bool isRight,
-                   const std::shared_ptr<block2::FCIDUMP> &fcidump,
+                   const std::shared_ptr<block2::FCIDUMP<FL>> &fcidump,
                    const std::vector<uint8_t> &orbsym, int nMaxAlphaEl,
                    int nMaxBetaEl, int nMaxEl, bool verbose = true)
         : SCIFockBigSite{nOrb,        nOrbExt,    isRight, fcidump, orbsym,
@@ -122,7 +122,7 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
      * @param fcidump block2 FCIDUMP file
      */
     SCIFockBigSite(int nOrb, int nOrbExt, bool isRight,
-                   const std::shared_ptr<block2::FCIDUMP> &fcidump,
+                   const std::shared_ptr<block2::FCIDUMP<FL>> &fcidump,
                    const std::vector<uint8_t> &orbsym,
                    const vector<vector<int>> &occs, bool verbose = true)
         : SCIFockBigSite{nOrb, nOrbExt, isRight, fcidump, orbsym,
@@ -131,15 +131,15 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
      * See specialized C'tors.
      */
     SCIFockBigSite(int nOrb, int nOrbExt, bool isRight,
-                   const std::shared_ptr<block2::FCIDUMP> &fcidump,
+                   const std::shared_ptr<block2::FCIDUMP<FL>> &fcidump,
                    const std::vector<uint8_t> &orbsym, int nMaxAlphaEl,
                    int nMaxBetaEl, int nMaxEl, const vector<vector<int>> &occs,
                    bool verbose = true);
     virtual ~SCIFockBigSite() = default;
     void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops)
-        const override;
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override;
     std::vector<SCIFockDeterminant>
         fragSpace; //!< Dummy fragment space. CAS stuff is first
                    //!< fragment; CI is second fragment
@@ -279,7 +279,7 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
   protected:
     SCIFCIDUMPTwoInt ints2;
     SCIFCIDUMPOneInt ints1;
-    using TripletVec = vector<pair<pair<MKL_INT, MKL_INT>, double>>;
+    using TripletVec = vector<pair<pair<MKL_INT, MKL_INT>, FL>>;
 
     /* Get possible ket, bra quantum number combinations for given deltaQN*/
     std::vector<std::pair<int, int>> getQNpairs(const BLSparseMatrix &mat,
@@ -368,9 +368,9 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
     // vv eigenMat is used es entry just for recycling purposes; iRow is coeffs
     // row
     template <bool Symmetrize>
-    size_t fillCoeffs(sci_detail::COOSparseMat<double> &cooMat,
+    size_t fillCoeffs(sci_detail::COOSparseMat<FL> &cooMat,
                       sci_detail::DenseMat<TripletVec> &coeffs, int iRow,
-                      block2::CSRMatrixRef &mat, double &summSparsity,
+                      block2::GCSRMatrix<FL> &mat, double &summSparsity,
                       size_t &numSparse, size_t &numDense,
                       size_t &usedMem) const;
     template <bool Cop>
@@ -386,6 +386,6 @@ struct SCIFockBigSite<S, typename S::is_sz_t> : public BigSite<S> {
                        std::vector<entryTuple2> &entries) const;
 };
 
-extern template struct SCIFockBigSite<block2::SZ>;
+extern template struct SCIFockBigSite<block2::SZ, double>;
 
 } // namespace block2

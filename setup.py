@@ -41,7 +41,9 @@ class CMakeBuild(build_ext):
                 '-DPYTHON_EXECUTABLE_HINT={}'.format(sys.executable),
                 '-DUSE_MKL=ON',
                 '-DBUILD_LIB=ON',
-                '-DLARGE_BOND=ON'
+                '-DLARGE_BOND=ON',
+                '-DUSE_KSYMM=ON',
+                '-DUSE_COMPLEX=ON'
             ]
 
             # We can handle some platform-specific settings at our discretion
@@ -68,7 +70,7 @@ class CMakeBuild(build_ext):
             subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args,
                                   cwd=self.build_temp)
 
-            subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=4'],
+            subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=2'],
                                   cwd=self.build_temp)
 
 

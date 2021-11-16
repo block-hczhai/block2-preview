@@ -20,5 +20,5 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::MovingEnvironment<block2::SZK>;
-template struct block2::MovingEnvironment<block2::SU2K>;
+template struct block2::MovingEnvironment<block2::SZK, double, double>;
+template struct block2::MovingEnvironment<block2::SU2K, double, double>;

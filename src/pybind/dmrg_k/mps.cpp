@@ -22,3 +22,5 @@
 
 template void bind_mps<SZK>(py::module &m);
 template void bind_mps<SU2K>(py::module &m);
+template void bind_fl_mps<SZK, double>(py::module &m);
+template void bind_fl_mps<SU2K, double>(py::module &m);

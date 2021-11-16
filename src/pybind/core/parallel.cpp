@@ -22,3 +22,6 @@
 
 template void bind_parallel<SZ>(py::module &m);
 template void bind_parallel<SU2>(py::module &m);
+
+template void bind_fl_parallel<SZ, double>(py::module &m);
+template void bind_fl_parallel<SU2, double>(py::module &m);

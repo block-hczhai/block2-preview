@@ -37,12 +37,13 @@ namespace block2 {
 enum struct OperatorTensorTypes : uint8_t { Normal, Delayed };
 
 // Matrix/Vector of symbols representation a tensor in MPO or contracted MPO
-template <typename S> struct OperatorTensor {
+template <typename S, typename FL> struct OperatorTensor {
+    typedef typename GMatrix<FL>::FP FP;
     // Symbolic tensor for left blocking and right blocking
     // For normal MPO, lmat and rmat are the same
     shared_ptr<Symbolic<S>> lmat, rmat;
     // SparseMatrix representation of symbols
-    unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> ops;
+    unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>> ops;
     OperatorTensor() : lmat(nullptr), rmat(nullptr) {}
     virtual ~OperatorTensor() = default;
     virtual OperatorTensorTypes get_type() const {
@@ -54,13 +55,13 @@ template <typename S> struct OperatorTensor {
     }
     virtual void deallocate() {
         // need to check order in parallel mode
-        vector<pair<double *, shared_ptr<SparseMatrix<S>>>> mp;
+        vector<pair<FL *, shared_ptr<SparseMatrix<S, FL>>>> mp;
         mp.reserve(ops.size());
         for (auto it = ops.cbegin(); it != ops.cend(); it++)
             mp.emplace_back(it->second->data, it->second);
         sort(mp.begin(), mp.end(),
-             [](const pair<double *, shared_ptr<SparseMatrix<S>>> &a,
-                const pair<double *, shared_ptr<SparseMatrix<S>>> &b) {
+             [](const pair<FL *, shared_ptr<SparseMatrix<S, FL>>> &a,
+                const pair<FL *, shared_ptr<SparseMatrix<S, FL>>> &b) {
                  return a.first > b.first;
              });
         for (const auto &t : mp)
@@ -70,33 +71,33 @@ template <typename S> struct OperatorTensor {
         uint8_t lr;
         ifs.read((char *)&lr, sizeof(lr));
         if (lr == 1) {
-            lmat = load_symbolic<S>(ifs);
+            lmat = load_symbolic<S, FL>(ifs);
             rmat = lmat;
         } else if (lr != 4) {
             if (lr == 0 || lr == 2)
-                lmat = load_symbolic<S>(ifs);
+                lmat = load_symbolic<S, FL>(ifs);
             if (lr == 0 || lr == 3)
-                rmat = load_symbolic<S>(ifs);
+                rmat = load_symbolic<S, FL>(ifs);
         }
         int sz;
         ifs.read((char *)&sz, sizeof(sz));
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         ops.reserve(sz);
         for (int i = 0; i < sz; i++) {
-            shared_ptr<OpExpr<S>> expr = load_expr<S>(ifs);
+            shared_ptr<OpExpr<S>> expr = load_expr<S, FL>(ifs);
             SparseMatrixTypes tp;
             ifs.read((char *)&tp, sizeof(tp));
-            shared_ptr<SparseMatrix<S>> mat;
+            shared_ptr<SparseMatrix<S, FL>> mat;
             if (tp == SparseMatrixTypes::Normal)
-                mat = make_shared<SparseMatrix<S>>(d_alloc);
+                mat = make_shared<SparseMatrix<S, FL>>(d_alloc);
             else if (tp == SparseMatrixTypes::CSR)
-                mat = make_shared<CSRSparseMatrix<S>>(d_alloc);
+                mat = make_shared<CSRSparseMatrix<S, FL>>(d_alloc);
             else if (tp == SparseMatrixTypes::Delayed)
-                mat = make_shared<DelayedSparseMatrix<S, OpExpr<S>>>(0, nullptr,
-                                                                     nullptr);
+                mat = make_shared<DelayedSparseMatrix<S, FL, OpExpr<S>>>(
+                    0, nullptr, nullptr);
             else
                 assert(false);
             mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
@@ -141,14 +142,14 @@ template <typename S> struct OperatorTensor {
         return r;
     }
     shared_ptr<OperatorTensor>
-    deep_copy(const shared_ptr<Allocator<double>> &alloc = nullptr) const {
+    deep_copy(const shared_ptr<Allocator<FP>> &alloc = nullptr) const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
         r->ops.reserve(ops.size());
         for (auto &p : ops) {
             if (p.second->get_type() == SparseMatrixTypes::Normal) {
-                shared_ptr<SparseMatrix<S>> mat =
-                    make_shared<SparseMatrix<S>>(alloc);
+                shared_ptr<SparseMatrix<S, FL>> mat =
+                    make_shared<SparseMatrix<S, FL>>(alloc);
                 if (p.second->total_memory == 0)
                     mat->info = p.second->info;
                 else {
@@ -158,10 +159,10 @@ template <typename S> struct OperatorTensor {
                 mat->factor = p.second->factor;
                 r->ops[p.first] = mat;
             } else if (p.second->get_type() == SparseMatrixTypes::Archived) {
-                shared_ptr<ArchivedSparseMatrix<S>> pmat =
-                    dynamic_pointer_cast<ArchivedSparseMatrix<S>>(p.second);
-                shared_ptr<ArchivedSparseMatrix<S>> mat =
-                    make_shared<ArchivedSparseMatrix<S>>(
+                shared_ptr<ArchivedSparseMatrix<S, FL>> pmat =
+                    dynamic_pointer_cast<ArchivedSparseMatrix<S, FL>>(p.second);
+                shared_ptr<ArchivedSparseMatrix<S, FL>> mat =
+                    make_shared<ArchivedSparseMatrix<S, FL>>(
                         pmat->filename, pmat->offset, pmat->alloc);
                 mat->info = pmat->info;
                 mat->factor = pmat->factor;
@@ -169,7 +170,7 @@ template <typename S> struct OperatorTensor {
                 r->ops[p.first] = mat;
             } else if (p.second->get_type() == SparseMatrixTypes::Delayed)
                 r->ops[p.first] =
-                    dynamic_pointer_cast<DelayedSparseMatrix<S>>(p.second)
+                    dynamic_pointer_cast<DelayedSparseMatrix<S, FL>>(p.second)
                         ->copy();
             else
                 assert(false);
@@ -180,14 +181,15 @@ template <typename S> struct OperatorTensor {
 
 // Delayed contraction of left and right block MPO tensors
 // or left and dot / dot and right (for 3-index operations)
-template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
+template <typename S, typename FL>
+struct DelayedOperatorTensor : OperatorTensor<S, FL> {
     // Symbol of super block operator(s)
     vector<shared_ptr<OpExpr<S>>> dops;
     // Symbolic expression of super block operator(s)
     shared_ptr<Symbolic<S>> mat;
     // SparseMatrix representation of symbols from left and right block
-    shared_ptr<OperatorTensor<S>> lopt, ropt;
-    DelayedOperatorTensor() : OperatorTensor<S>() {}
+    shared_ptr<OperatorTensor<S, FL>> lopt, ropt;
+    DelayedOperatorTensor() : OperatorTensor<S, FL>() {}
     OperatorTensorTypes get_type() const override {
         return OperatorTensorTypes::Delayed;
     }
@@ -211,15 +213,15 @@ template <typename S> struct DelayedOperatorTensor : OperatorTensor<S> {
         // do not free contracted operators for future reuse in rotation
         if (!frame->use_main_stack)
             return;
-        vector<pair<double *, shared_ptr<SparseMatrix<S>>>> mp;
+        vector<pair<FL *, shared_ptr<SparseMatrix<S, FL>>>> mp;
         mp.reserve(lopt->ops.size() + ropt->ops.size());
         for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
             mp.emplace_back(it->second->data, it->second);
         for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
             mp.emplace_back(it->second->data, it->second);
         sort(mp.begin(), mp.end(),
-             [](const pair<double *, shared_ptr<SparseMatrix<S>>> &a,
-                const pair<double *, shared_ptr<SparseMatrix<S>>> &b) {
+             [](const pair<FL *, shared_ptr<SparseMatrix<S, FL>>> &a,
+                const pair<FL *, shared_ptr<SparseMatrix<S, FL>>> &b) {
                  return a.first > b.first;
              });
         for (const auto &t : mp)

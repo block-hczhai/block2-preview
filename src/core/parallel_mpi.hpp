@@ -154,6 +154,18 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void ibroadcast(complex<double> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ibcast((double *)(data + offset),
+                                  min(chunk_size, len - offset) * 2, MPI_DOUBLE,
+                                  owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
     void broadcast(int *data, size_t len, int owner) override {
         _t.get_time();
         int ierr = MPI_Bcast(data, len, MPI_INT, owner, comm);
@@ -166,66 +178,33 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
-    void broadcast(const shared_ptr<SparseMatrix<S>> &mat, int owner) override {
+    template <typename FL>
+    void broadcast_impl(const shared_ptr<SparseMatrix<S, FL>> &mat, int owner) {
         if (mat->get_type() == SparseMatrixTypes::Normal)
             broadcast(mat->data, mat->total_memory, owner);
-        else if (mat->get_type() == SparseMatrixTypes::CSR) {
-            _t.get_time();
-            // remove mkl pointer
-            // csr sparse matrix cannot be allocated by mkl sparse matrix
-            // for mkl sparse matrix the memory for CSRMatrixRef is not
-            // contiguous based on current impl this can never be the case
-            // unless this matrix is formed by iadd
-            shared_ptr<CSRSparseMatrix<S>> cmat =
-                make_shared<CSRSparseMatrix<S>>();
-            cmat->copy_data_from(mat);
-            mat->deallocate();
-            *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = *cmat;
-            vector<int> nnzs(mat->info->n);
-            for (int i = 0; i < mat->info->n; i++)
-                nnzs[i] = cmat->csr_data[i]->nnz;
-            int ierr =
-                MPI_Bcast(nnzs.data(), mat->total_memory, MPI_INT, owner, comm);
-            assert(ierr == 0);
-            size_t dsize = 0, dp = 0;
-            for (int i = 0; i < mat->info->n; i++) {
-                if (cmat->csr_data[i]->nnz != nnzs[i]) {
-                    assert(rank != owner);
-                    assert(cmat->csr_data[i]->alloc != nullptr);
-                    cmat->csr_data[i]->deallocate();
-                    cmat->csr_data[i]->alloc =
-                        make_shared<VectorAllocator<double>>();
-                    cmat->csr_data[i]->nnz = nnzs[i];
-                    cmat->csr_data[i]->allocate();
-                    dsize += cmat->csr_data[i]->memory_size();
-                }
-            }
-            vector<double> dt(dsize);
-            if (rank == owner)
-                for (int i = 0; i < mat->info->n; i++) {
-                    memcpy(dt.data() + dp, cmat->csr_data[i]->data,
-                           sizeof(double) * cmat->csr_data[i]->memory_size());
-                    dp += cmat->csr_data[i]->memory_size();
-                }
-            ierr = MPI_Bcast(dt.data(), dt.size(), MPI_DOUBLE, owner, comm);
-            assert(ierr == 0);
-            dp = 0;
-            if (rank != owner) {
-                for (int i = 0; i < mat->info->n; i++) {
-                    memcpy(cmat->csr_data[i]->data, dt.data() + dp,
-                           sizeof(double) * cmat->csr_data[i]->memory_size());
-                    dp += cmat->csr_data[i]->memory_size();
-                }
-            }
-            tcomm += _t.get_time();
-        } else
+        else
             assert(false);
     }
-    void ibroadcast(const shared_ptr<SparseMatrix<S>> &mat,
+    void broadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
+                   int owner) override {
+        broadcast_impl<double>(mat, owner);
+    }
+    void broadcast(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                   int owner) override {
+        broadcast_impl<complex<double>>(mat, owner);
+    }
+    void ibroadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
                     int owner) override {
         if (mat->get_type() == SparseMatrixTypes::Normal) {
             ibroadcast(mat->data, mat->total_memory, owner);
         } else
+            assert(false);
+    }
+    void ibroadcast(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                    int owner) override {
+        if (mat->get_type() == SparseMatrixTypes::Normal)
+            ibroadcast(mat->data, mat->total_memory, owner);
+        else
             assert(false);
     }
     void allreduce_sum(double *data, size_t len) override {
@@ -258,7 +237,20 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_max(complex<double> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)data + offset,
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_DOUBLE, MPI_MAX, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_max(vector<double> &vs) override {
+        allreduce_max(vs.data(), vs.size());
+    }
+    void allreduce_max(vector<complex<double>> &vs) override {
         allreduce_max(vs.data(), vs.size());
     }
     void allreduce_min(double *data, size_t len) override {
@@ -271,13 +263,37 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_min(complex<double> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_DOUBLE, MPI_MIN, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_min(vector<double> &vs) override {
         allreduce_min(vs.data(), vs.size());
     }
-    void allreduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat) override {
+    void allreduce_min(vector<complex<double>> &vs) override {
+        allreduce_min(vs.data(), vs.size());
+    }
+    void allreduce_sum(
+        const shared_ptr<SparseMatrixGroup<S, double>> &mat) override {
         allreduce_sum(mat->data, mat->total_memory);
     }
-    void allreduce_sum(const shared_ptr<SparseMatrix<S>> &mat) override {
+    void allreduce_sum(
+        const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat) override {
+        allreduce_sum(mat->data, mat->total_memory);
+    }
+    void
+    allreduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat) override {
+        assert(mat->get_type() == SparseMatrixTypes::Normal);
+        allreduce_sum(mat->data, mat->total_memory);
+    }
+    void allreduce_sum(
+        const shared_ptr<SparseMatrix<S, complex<double>>> &mat) override {
         assert(mat->get_type() == SparseMatrixTypes::Normal);
         allreduce_sum(mat->data, mat->total_memory);
     }
@@ -339,6 +355,17 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void reduce_sum(complex<double> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Reduce(
+                rank == owner ? MPI_IN_PLACE : (double *)(data + offset),
+                (double *)(data + offset), min(chunk_size, len - offset) * 2,
+                MPI_DOUBLE, MPI_SUM, owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void ireduce_sum(double *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -351,6 +378,19 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void ireduce_sum(complex<double> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ireduce(
+                rank == owner ? MPI_IN_PLACE : (double *)(data + offset),
+                (double *)(data + offset), min(chunk_size, len - offset) * 2,
+                MPI_DOUBLE, MPI_SUM, owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
     void reduce_sum(uint64_t *data, size_t len, int owner) override {
         _t.get_time();
         int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
@@ -358,87 +398,39 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(ierr == 0);
         tcomm += _t.get_time();
     }
-    void reduce_sum(const shared_ptr<SparseMatrixGroup<S>> &mat,
+    void reduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat,
                     int owner) override {
         return reduce_sum(mat->data, mat->total_memory, owner);
     }
-    void ireduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
+    void
+    reduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat,
+               int owner) override {
+        return reduce_sum(mat->data, mat->total_memory, owner);
+    }
+    void ireduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
                      int owner) override {
         return ireduce_sum(mat->data, mat->total_memory, owner);
     }
-    void reduce_sum(const shared_ptr<SparseMatrix<S>> &mat,
-                    int owner) override {
+    void ireduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                     int owner) override {
+        return ireduce_sum(mat->data, mat->total_memory, owner);
+    }
+    template <typename FL>
+    void reduce_sum_impl(const shared_ptr<SparseMatrix<S, FL>> &mat,
+                         int owner) {
         if (mat->get_type() == SparseMatrixTypes::Normal)
             return reduce_sum(mat->data, mat->total_memory, owner);
-        else if (mat->get_type() == SparseMatrixTypes::CSR) {
-            _t.get_time();
-            // remove mkl pointer
-            shared_ptr<CSRSparseMatrix<S>> cmat =
-                make_shared<CSRSparseMatrix<S>>();
-            cmat->copy_data_from(mat);
-            mat->deallocate();
-            *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = *cmat;
-            shared_ptr<CSROperatorFunctions<S>> copf =
-                make_shared<CSROperatorFunctions<S>>(nullptr);
-            vector<MKL_INT> nnzs(mat->info->n), dz, gnnzs;
-            vector<double> dt;
-            if (rank == owner)
-                gnnzs.resize(mat->info->n * size);
-            for (int i = 0; i < mat->info->n; i++)
-                nnzs[i] = cmat->csr_data[i]->nnz;
-            int ierr =
-                MPI_Gather(nnzs.data(), mat->info->n, MPI_INT, gnnzs.data(),
-                           mat->info->n, MPI_INT, owner, comm);
-            assert(ierr == 0);
-            if (rank == owner) {
-                dz.resize(size, 0);
-                shared_ptr<CSRSparseMatrix<S>> tmp =
-                    make_shared<CSRSparseMatrix<S>>();
-                tmp->allocate(mat->info);
-                for (int i = 0; i < mat->info->n; i++)
-                    tmp->deallocate();
-                for (int k = 0, dp; k < size; k++) {
-                    if (rank == owner)
-                        continue;
-                    for (int i = 0; i < mat->info->n; i++) {
-                        tmp->csr_data[i]->nnz = gnnzs[k * mat->info->n + i];
-                        dz[k] += tmp->csr_data[i]->memory_size();
-                    }
-                    dt.resize(dz[k]);
-                    ierr = MPI_Recv(dt.data(), dz[k], MPI_DOUBLE, k, 11, comm,
-                                    MPI_STATUS_IGNORE);
-                    assert(ierr == 0);
-                    dp = 0;
-                    for (int i = 0; i < mat->info->n; i++) {
-                        tmp->csr_data[i]->allocate(dt.data() + dp);
-                        dp += tmp->csr_data[i]->memory_size();
-                    }
-                    assert(dp == dz[k]);
-                    copf->iadd(cmat, tmp, 1.0, false);
-                }
-                // remove mkl pointer
-                CSRSparseMatrix<S> r;
-                r.copy_data_from(cmat);
-                cmat->deallocate();
-                *dynamic_pointer_cast<CSRSparseMatrix<S>>(mat) = r;
-            } else {
-                MKL_INT dsz = 0;
-                for (int i = 0; i < mat->info->n; i++)
-                    dsz += cmat->csr_data[i]->memory_size();
-                dt.resize(dsz);
-                MKL_INT dp = 0;
-                for (int i = 0; i < mat->info->n; i++) {
-                    memcpy(dt.data() + dp, cmat->csr_data[i]->data,
-                           sizeof(double) * cmat->csr_data[i]->memory_size());
-                    dp += cmat->csr_data[i]->memory_size();
-                }
-                assert(dp == dsz);
-                ierr = MPI_Send(dt.data(), dsz, MPI_DOUBLE, owner, 11, comm);
-                assert(ierr == 0);
-            }
-            tcomm += _t.get_time();
-        }
+        else
+            assert(false);
     }
+    void reduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
+                    int owner) override {
+        reduce_sum_impl<double>(mat, owner);
+    }
+    // void reduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+    //                 int owner) override {
+    //     reduce_sum_impl<complex<double>>(mat, owner);
+    // }
     void waitall() override {
         _t.get_time();
         int ierr =

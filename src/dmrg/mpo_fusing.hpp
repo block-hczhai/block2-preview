@@ -38,32 +38,33 @@ namespace block2 {
 // Fuse adjacent mpo sites to one site
 // MPO must be unsimplified
 // Currently only edge sites are allowed to be fused
-template <typename S> struct FusedMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    using MPO<S>::tensors;
-    using MPO<S>::site_op_infos;
-    using MPO<S>::left_operator_names;
-    using MPO<S>::right_operator_names;
+template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::tensors;
+    using MPO<S, FL>::site_op_infos;
+    using MPO<S, FL>::left_operator_names;
+    using MPO<S, FL>::right_operator_names;
     AncillaTypes ancilla_type;
-    FusedMPO(const shared_ptr<MPO<S>> &mpo,
+    FusedMPO(const shared_ptr<MPO<S, FL>> &mpo,
              const vector<shared_ptr<StateInfo<S>>> &basis, uint16_t a,
              uint16_t b, const shared_ptr<StateInfo<S>> &ref = nullptr)
-        : MPO<S>(mpo->n_sites - 1) {
+        : MPO<S, FL>(mpo->n_sites - 1) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(b == a + 1);
         assert(mpo->n_sites == basis.size());
         assert(mpo->left_operator_exprs.size() == 0);
         assert(mpo->right_operator_exprs.size() == 0);
         assert(mpo->tensors[a]->lmat == mpo->tensors[a]->rmat);
         assert(mpo->tensors[b]->lmat == mpo->tensors[b]->rmat);
-        MPO<S>::const_e = mpo->const_e;
-        MPO<S>::op = mpo->op;
-        MPO<S>::schemer =
+        MPO<S, FL>::const_e = mpo->const_e;
+        MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::schemer =
             mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
-        MPO<S>::tf = mpo->tf;
+        MPO<S, FL>::tf = mpo->tf;
         ancilla_type = mpo->get_ancilla_type();
         char fused_sparse_form =
             mpo->sparse_form[a] == 'N' && mpo->sparse_form[b] == 'N' ? 'N'
@@ -82,7 +83,8 @@ template <typename S> struct FusedMPO : MPO<S> {
             make_shared<StateInfo<S>>(StateInfo<S>::get_connection_info(
                 *basis[a], *basis[b], *fused_basis));
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> fused_op_infos;
-        shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+        shared_ptr<OperatorTensor<S, FL>> opt =
+            make_shared<OperatorTensor<S, FL>>();
         vector<shared_ptr<Symbolic<S>>> mats(1);
         if (fused_mat->m == 1) {
             // left contract infos
@@ -99,9 +101,9 @@ template <typename S> struct FusedMPO : MPO<S> {
             opt->lmat = make_shared<SymbolicColumnVector<S>>(
                 *dynamic_pointer_cast<SymbolicColumnVector<S>>(mats[0]));
         }
-        vector<S> sl = Partition<S>::get_uniq_labels(mats);
+        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
         vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S>::get_uniq_sub_labels(fused_mat, mats[0], sl);
+            Partition<S, FL>::get_uniq_sub_labels(fused_mat, mats[0], sl);
         // site info
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> op_notrunc =
@@ -125,8 +127,8 @@ template <typename S> struct FusedMPO : MPO<S> {
                 if (mat->data[i]->get_type() != OpTypes::Zero) {
                     shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
                     opt->ops[op] = fused_sparse_form == 'N'
-                                       ? make_shared<SparseMatrix<S>>()
-                                       : make_shared<CSRSparseMatrix<S>>();
+                                       ? make_shared<SparseMatrix<S, FL>>()
+                                       : make_shared<CSRSparseMatrix<S, FL>>();
                 }
         }
         // here main stack is not used
@@ -134,12 +136,12 @@ template <typename S> struct FusedMPO : MPO<S> {
         // tf->left/right_contract will skip allocated matrices if alloc !=
         // nullptr
         for (auto &p : opt->ops) {
-            shared_ptr<OpElement<S>> op =
-                dynamic_pointer_cast<OpElement<S>>(p.first);
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
             if (frame->use_main_stack)
                 p.second->alloc = d_alloc;
             p.second->info =
-                Partition<S>::find_op_info(fused_op_infos, op->q_label);
+                Partition<S, FL>::find_op_info(fused_op_infos, op->q_label);
         }
         // contract
         if (fused_mat->m == 1)

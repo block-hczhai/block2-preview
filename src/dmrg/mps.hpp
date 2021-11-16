@@ -622,17 +622,20 @@ template <typename S> struct MPSInfo {
         for (int i = n_sites; i >= 0; i--)
             right_dims[i]->collect();
     }
-    shared_ptr<SparseMatrix<S>>
-    swap_wfn_to_fused_left(int i, const shared_ptr<SparseMatrix<S>> &old_wfn,
+    template <typename FL>
+    shared_ptr<SparseMatrix<S, FL>>
+    swap_wfn_to_fused_left(int i,
+                           const shared_ptr<SparseMatrix<S, FL>> &old_wfn,
                            const shared_ptr<CG<S>> &cg) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
         shared_ptr<SparseMatrixInfo<S>> wfn_info =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
-        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> wfn =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         load_left_dims(i);
         load_right_dims(i + 1);
         l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
@@ -649,17 +652,20 @@ template <typename S> struct MPSInfo {
         lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
-    shared_ptr<SparseMatrix<S>>
-    swap_wfn_to_fused_right(int i, const shared_ptr<SparseMatrix<S>> &old_wfn,
+    template <typename FL>
+    shared_ptr<SparseMatrix<S, FL>>
+    swap_wfn_to_fused_right(int i,
+                            const shared_ptr<SparseMatrix<S, FL>> &old_wfn,
                             const shared_ptr<CG<S>> &cg) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
         shared_ptr<SparseMatrixInfo<S>> wfn_info =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
-        shared_ptr<SparseMatrix<S>> wfn = make_shared<SparseMatrix<S>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> wfn =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
         load_left_dims(i);
         load_right_dims(i + 1);
         l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
@@ -676,16 +682,17 @@ template <typename S> struct MPSInfo {
         lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
-    vector<shared_ptr<SparseMatrixGroup<S>>> swap_multi_wfn_to_fused_left(
-        int i, const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+    template <typename FL>
+    vector<shared_ptr<SparseMatrixGroup<S, FL>>> swap_multi_wfn_to_fused_left(
+        int i, const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
         vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
-        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> wfns;
         load_left_dims(i);
         load_right_dims(i + 1);
         l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
@@ -703,7 +710,7 @@ template <typename S> struct MPSInfo {
         }
         wfns.resize(old_wfns.size());
         for (int k = 0; k < (int)old_wfns.size(); k++) {
-            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            wfns[k] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
             wfns[k]->allocate(wfn_infos);
         }
         for (int k = 0; k < (int)old_wfns.size(); k++)
@@ -714,16 +721,17 @@ template <typename S> struct MPSInfo {
         lm.deallocate(), r.deallocate(), l.deallocate();
         return wfns;
     }
-    vector<shared_ptr<SparseMatrixGroup<S>>> swap_multi_wfn_to_fused_right(
-        int i, const vector<shared_ptr<SparseMatrixGroup<S>>> &old_wfns,
+    template <typename FL>
+    vector<shared_ptr<SparseMatrixGroup<S, FL>>> swap_multi_wfn_to_fused_right(
+        int i, const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &old_wfns,
         const shared_ptr<CG<S>> &cg) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
         vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
-        vector<shared_ptr<SparseMatrixGroup<S>>> wfns;
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> wfns;
         load_left_dims(i);
         load_right_dims(i + 1);
         l = *left_dims[i], m = *basis[i], r = *right_dims[i + 1];
@@ -741,7 +749,7 @@ template <typename S> struct MPSInfo {
         }
         wfns.resize(old_wfns.size());
         for (int k = 0; k < (int)old_wfns.size(); k++) {
-            wfns[k] = make_shared<SparseMatrixGroup<S>>(d_alloc);
+            wfns[k] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
             wfns[k]->allocate(wfn_infos);
         }
         for (int k = 0; k < (int)old_wfns.size(); k++)
@@ -1322,10 +1330,11 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
 };
 
 // Matrix Product State
-template <typename S> struct MPS {
+template <typename S, typename FL> struct MPS {
+    typedef typename GMatrix<FL>::FP FP;
     int n_sites, center, dot;
     shared_ptr<MPSInfo<S>> info;
-    vector<shared_ptr<SparseMatrix<S>>> tensors;
+    vector<shared_ptr<SparseMatrix<S, FL>>> tensors;
     string canonical_form;
     MPS(const shared_ptr<MPSInfo<S>> &info)
         : n_sites(0), center(0), dot(0), info(info) {}
@@ -1343,7 +1352,7 @@ template <typename S> struct MPS {
     virtual ~MPS() = default;
     virtual MPSTypes get_type() const { return MPSTypes::None; }
     // in bytes; 0 = peak memory, 1 = total disk storage
-    // only count lower bound of doubles
+    // only count lower bound of floating point numbers
     virtual vector<size_t>
     estimate_storage(shared_ptr<MPSInfo<S>> info = nullptr) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -1394,13 +1403,13 @@ template <typename S> struct MPS {
                 peak = max(peak, (size_t)(left_total[i] - left_total[i - 1]));
                 total = max(total, left_total[i] + right_total[n_sites - i]);
             }
-        return vector<size_t>{peak * 8, total * 8};
+        return vector<size_t>{peak * sizeof(FL), total * sizeof(FL)};
     }
     void initialize_left(const shared_ptr<MPSInfo<S>> &info, int i_right) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         this->info = info;
         vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
         mat_infos.resize(n_sites);
@@ -1412,15 +1421,15 @@ template <typename S> struct MPS {
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>(i_alloc);
             mat_infos[i]->initialize(t, *info->left_dims[i + 1], info->vacuum,
                                      false);
-            tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            tensors[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             tensors[i]->allocate(mat_infos[i]);
         }
     }
     void initialize_right(const shared_ptr<MPSInfo<S>> &info, int i_left) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         this->info = info;
         vector<shared_ptr<SparseMatrixInfo<S>>> mat_infos;
         mat_infos.resize(n_sites);
@@ -1432,7 +1441,7 @@ template <typename S> struct MPS {
             mat_infos[i] = make_shared<SparseMatrixInfo<S>>(i_alloc);
             mat_infos[i]->initialize(*info->right_dims[i], t, info->vacuum,
                                      false);
-            tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+            tensors[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             tensors[i]->allocate(mat_infos[i]);
         }
     }
@@ -1440,8 +1449,8 @@ template <typename S> struct MPS {
                             bool init_left = true, bool init_right = true) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         this->info = info;
         shared_ptr<SparseMatrixInfo<S>> mat_info;
         tensors.resize(n_sites);
@@ -1465,7 +1474,7 @@ template <typename S> struct MPS {
                     *info->right_dims_fci[center + 1]);
                 mat_info->initialize(tl, tr, info->target, false, true);
             }
-            tensors[center] = make_shared<SparseMatrix<S>>(d_alloc);
+            tensors[center] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             tensors[center]->allocate(mat_info);
         }
         if (init_right)
@@ -1551,12 +1560,12 @@ template <typename S> struct MPS {
             assert(tensors[center]->info->is_wavefunction);
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
             shared_ptr<SparseMatrixInfo<S>> wfn_info =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
-            shared_ptr<SparseMatrix<S>> wfn =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> wfn =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             StateInfo<S> lsi(info->vacuum), rsi(dq);
             rsi.n_states[0] = tensors[center]->info->n_states_ket[0];
             wfn_info->initialize(lsi, rsi, dq, false, true);
@@ -1565,7 +1574,7 @@ template <typename S> struct MPS {
             lsi.deallocate();
             assert(wfn->total_memory == tensors[center]->total_memory);
             memcpy(wfn->data, tensors[center]->data,
-                   sizeof(double) * wfn->total_memory);
+                   sizeof(FL) * wfn->total_memory);
             unload_tensor(center);
             tensors[center] = wfn;
             save_tensor(center);
@@ -1607,12 +1616,12 @@ template <typename S> struct MPS {
             assert(tensors[center]->info->is_wavefunction);
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
-            shared_ptr<VectorAllocator<double>> d_alloc =
-                make_shared<VectorAllocator<double>>();
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
             shared_ptr<SparseMatrixInfo<S>> wfn_info =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
-            shared_ptr<SparseMatrix<S>> wfn =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> wfn =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             S dqse(dq.n() + dq.twos(), 0, dq.pg());
             S lq(dq.twos(), dq.twos(), 0);
             StateInfo<S> lsi(lq), rsi(dq);
@@ -1623,7 +1632,7 @@ template <typename S> struct MPS {
             lsi.deallocate();
             assert(wfn->total_memory == tensors[center]->total_memory);
             memcpy(wfn->data, tensors[center]->data,
-                   sizeof(double) * wfn->total_memory);
+                   sizeof(FL) * wfn->total_memory);
             unload_tensor(center);
             tensors[center] = wfn;
             save_tensor(center);
@@ -1653,7 +1662,7 @@ template <typename S> struct MPS {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
             if (para_rule == nullptr || para_rule->is_root()) {
-                shared_ptr<SparseMatrix<S>> left, right;
+                shared_ptr<SparseMatrix<S, FL>> left, right;
                 load_tensor(center);
                 tensors[center]->right_split(left, right, info->bond_dim);
                 info->right_dims[center + 1] =
@@ -1667,8 +1676,8 @@ template <typename S> struct MPS {
                 unload_tensor(center + 1);
                 unload_tensor(center);
             } else {
-                tensors[center] = make_shared<SparseMatrix<S>>();
-                tensors[center + 1] = make_shared<SparseMatrix<S>>();
+                tensors[center] = make_shared<SparseMatrix<S, FL>>();
+                tensors[center + 1] = make_shared<SparseMatrix<S, FL>>();
             }
             if (para_rule != nullptr)
                 para_rule->comm->barrier();
@@ -1691,7 +1700,7 @@ template <typename S> struct MPS {
                     }
                 }
                 assert(canonical_form[center - 1] == 'L');
-                shared_ptr<SparseMatrix<S>> left, right;
+                shared_ptr<SparseMatrix<S, FL>> left, right;
                 tensors[center]->right_split(left, right, info->bond_dim);
                 info->right_dims[center] =
                     right->info->extract_state_info(false);
@@ -1704,10 +1713,10 @@ template <typename S> struct MPS {
                 assert(tensors[center - 1]->info->n != 0);
                 shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                     make_shared<VectorAllocator<uint32_t>>();
-                shared_ptr<VectorAllocator<double>> d_alloc =
-                    make_shared<VectorAllocator<double>>();
-                shared_ptr<SparseMatrix<S>> wfn =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
+                shared_ptr<SparseMatrix<S, FL>> wfn =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 shared_ptr<SparseMatrixInfo<S>> winfo =
                     make_shared<SparseMatrixInfo<S>>(i_alloc);
                 winfo->initialize_contract(tensors[center - 1]->info,
@@ -1742,7 +1751,7 @@ template <typename S> struct MPS {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
             if (para_rule == nullptr || para_rule->is_root()) {
-                shared_ptr<SparseMatrix<S>> left, right;
+                shared_ptr<SparseMatrix<S, FL>> left, right;
                 load_tensor(center);
                 tensors[center]->left_split(left, right, info->bond_dim);
                 info->left_dims[center + 1] =
@@ -1756,8 +1765,8 @@ template <typename S> struct MPS {
                 unload_tensor(center + 1);
                 unload_tensor(center);
             } else {
-                tensors[center] = make_shared<SparseMatrix<S>>();
-                tensors[center + 1] = make_shared<SparseMatrix<S>>();
+                tensors[center] = make_shared<SparseMatrix<S, FL>>();
+                tensors[center + 1] = make_shared<SparseMatrix<S, FL>>();
             }
             if (para_rule != nullptr)
                 para_rule->comm->barrier();
@@ -1783,7 +1792,7 @@ template <typename S> struct MPS {
                 }
                 assert(tensors[center]->info->n != 0);
                 assert(canonical_form[center + 1] == 'R');
-                shared_ptr<SparseMatrix<S>> left, right;
+                shared_ptr<SparseMatrix<S, FL>> left, right;
                 tensors[center]->left_split(left, right, info->bond_dim);
                 info->left_dims[center + 1] =
                     left->info->extract_state_info(true);
@@ -1794,10 +1803,10 @@ template <typename S> struct MPS {
                 load_tensor(center + 1);
                 shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                     make_shared<VectorAllocator<uint32_t>>();
-                shared_ptr<VectorAllocator<double>> d_alloc =
-                    make_shared<VectorAllocator<double>>();
-                shared_ptr<SparseMatrix<S>> wfn =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
+                shared_ptr<SparseMatrix<S, FL>> wfn =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 shared_ptr<SparseMatrixInfo<S>> winfo =
                     make_shared<SparseMatrixInfo<S>>(i_alloc);
                 winfo->initialize_contract(right->info,
@@ -1828,11 +1837,11 @@ template <typename S> struct MPS {
     void dynamic_canonicalize() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < center; i++) {
             assert(tensors[i] != nullptr);
-            shared_ptr<SparseMatrix<S>> left, right;
+            shared_ptr<SparseMatrix<S, FL>> left, right;
             tensors[i]->left_split(left, right, 0);
             tensors[i] = left;
             shared_ptr<StateInfo<S>> nl = left->info->extract_state_info(true);
@@ -1866,14 +1875,14 @@ template <typename S> struct MPS {
         }
         for (int i = n_sites - 1; i >= center + dot; i--) {
             assert(tensors[i] != nullptr);
-            shared_ptr<SparseMatrix<S>> left, right;
+            shared_ptr<SparseMatrix<S, FL>> left, right;
             tensors[i]->right_split(left, right, 0);
             tensors[i] = right;
             shared_ptr<StateInfo<S>> nr =
                 right->info->extract_state_info(false);
             if (dot == 1 && i - 1 == center) {
-                shared_ptr<SparseMatrix<S>> wfn =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrix<S, FL>> wfn =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 shared_ptr<SparseMatrixInfo<S>> winfo =
                     make_shared<SparseMatrixInfo<S>>(i_alloc);
                 winfo->initialize_contract(tensors[i - 1]->info, left->info);
@@ -1917,12 +1926,12 @@ template <typename S> struct MPS {
     void canonicalize() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < center; i++) {
             assert(tensors[i] != nullptr);
-            shared_ptr<SparseMatrix<S>> tmat =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> tmat =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             shared_ptr<SparseMatrixInfo<S>> tmat_info =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             tmat_info->initialize(*info->left_dims[i + 1],
@@ -1953,8 +1962,8 @@ template <typename S> struct MPS {
         }
         for (int i = n_sites - 1; i >= center + dot; i--) {
             assert(tensors[i] != nullptr);
-            shared_ptr<SparseMatrix<S>> tmat =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> tmat =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             shared_ptr<SparseMatrixInfo<S>> tmat_info =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             tmat_info->initialize(*info->right_dims[i], *info->right_dims[i],
@@ -1962,8 +1971,8 @@ template <typename S> struct MPS {
             tmat->allocate(tmat_info);
             tensors[i]->right_canonicalize(tmat);
             if (dot == 1 && i - 1 == center) {
-                shared_ptr<SparseMatrix<S>> tmp =
-                    make_shared<SparseMatrix<S>>(d_alloc);
+                shared_ptr<SparseMatrix<S, FL>> tmp =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
                 tmp->allocate(tensors[i - 1]->info);
                 tmp->copy_data_from(tensors[i - 1]);
                 assert(tensors[i - 1] != nullptr);
@@ -2000,11 +2009,11 @@ template <typename S> struct MPS {
     void random_canonicalize_tensor(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         if (tensors[i] != nullptr) {
-            shared_ptr<SparseMatrix<S>> tmat =
-                make_shared<SparseMatrix<S>>(d_alloc);
+            shared_ptr<SparseMatrix<S, FL>> tmat =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
             shared_ptr<SparseMatrixInfo<S>> tmat_info =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             tensors[i]->randomize();
@@ -2037,27 +2046,27 @@ template <typename S> struct MPS {
            << ".MPS." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
-    void shallow_copy_to(const shared_ptr<MPS<S>> &mps) const {
+    void shallow_copy_to(const shared_ptr<MPS> &mps) const {
         if (frame->prefix_can_write)
             for (int i = 0; i < n_sites; i++)
                 Parsing::link_file(get_filename(i), mps->get_filename(i));
     }
-    virtual shared_ptr<MPS<S>> shallow_copy(const string &new_tag) const {
+    virtual shared_ptr<MPS> shallow_copy(const string &new_tag) const {
         shared_ptr<MPSInfo<S>> new_info = info->shallow_copy(new_tag);
-        shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(*this);
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<MPS> mps = make_shared<MPS>(*this);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < mps->n_sites; i++)
             if (mps->tensors[i] != nullptr)
-                mps->tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+                mps->tensors[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
         mps->info = new_info;
         shallow_copy_to(mps);
         return mps;
     }
-    virtual shared_ptr<MPS<S>> deep_copy(const string &xtag) const {
+    virtual shared_ptr<MPS> deep_copy(const string &xtag) const {
         shared_ptr<MPSInfo<S>> xinfo = info->deep_copy();
         xinfo->load_mutable();
-        shared_ptr<MPS<S>> xmps = make_shared<MPS<S>>(xinfo);
+        shared_ptr<MPS> xmps = make_shared<MPS>(xinfo);
         xmps->load_data();
         xmps->load_mutable();
         xinfo->tag = xtag;
@@ -2077,8 +2086,8 @@ template <typename S> struct MPS {
         }
     }
     void load_data_from(istream &ifs) {
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         ifs.read((char *)&n_sites, sizeof(n_sites));
         ifs.read((char *)&center, sizeof(center));
         ifs.read((char *)&dot, sizeof(dot));
@@ -2089,7 +2098,7 @@ template <typename S> struct MPS {
         tensors.resize(n_sites, nullptr);
         for (int i = 0; i < n_sites; i++)
             if (bs[i])
-                tensors[i] = make_shared<SparseMatrix<S>>(d_alloc);
+                tensors[i] = make_shared<SparseMatrix<S, FL>>(d_alloc);
     }
     virtual void load_data() {
         ifstream ifs(get_filename(-1).c_str(), ios::binary);
@@ -2131,8 +2140,8 @@ template <typename S> struct MPS {
     void load_mutable_left() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < center; i++)
             if (tensors[i] != nullptr) {
                 tensors[i]->alloc = d_alloc;
@@ -2142,8 +2151,8 @@ template <typename S> struct MPS {
     void load_mutable_right() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = center + dot; i < n_sites; i++)
             if (tensors[i] != nullptr) {
                 tensors[i]->alloc = d_alloc;
@@ -2153,8 +2162,8 @@ template <typename S> struct MPS {
     virtual void load_mutable() const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < n_sites; i++)
             if (tensors[i] != nullptr) {
                 tensors[i]->alloc = d_alloc;
@@ -2176,8 +2185,8 @@ template <typename S> struct MPS {
     virtual void load_tensor(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<double>> d_alloc =
-            make_shared<VectorAllocator<double>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(tensors[i] != nullptr);
         tensors[i]->alloc = d_alloc;
         tensors[i]->load_data(get_filename(i), true, i_alloc);

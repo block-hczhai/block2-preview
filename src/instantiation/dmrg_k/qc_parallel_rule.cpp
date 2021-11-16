@@ -20,18 +20,18 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::ParallelRuleQC<block2::SZK>;
-template struct block2::ParallelRuleOneBodyQC<block2::SZK>;
-template struct block2::ParallelRulePDM1QC<block2::SZK>;
-template struct block2::ParallelRulePDM2QC<block2::SZK>;
-template struct block2::ParallelRuleNPDMQC<block2::SZK>;
-template struct block2::ParallelRuleSiteQC<block2::SZK>;
-template struct block2::ParallelRuleIdentity<block2::SZK>;
+template struct block2::ParallelRuleQC<block2::SZK, double>;
+template struct block2::ParallelRuleOneBodyQC<block2::SZK, double>;
+template struct block2::ParallelRulePDM1QC<block2::SZK, double>;
+template struct block2::ParallelRulePDM2QC<block2::SZK, double>;
+template struct block2::ParallelRuleNPDMQC<block2::SZK, double>;
+template struct block2::ParallelRuleSiteQC<block2::SZK, double>;
+template struct block2::ParallelRuleIdentity<block2::SZK, double>;
 
-template struct block2::ParallelRuleQC<block2::SU2K>;
-template struct block2::ParallelRuleOneBodyQC<block2::SU2K>;
-template struct block2::ParallelRulePDM1QC<block2::SU2K>;
-template struct block2::ParallelRulePDM2QC<block2::SU2K>;
-template struct block2::ParallelRuleNPDMQC<block2::SU2K>;
-template struct block2::ParallelRuleSiteQC<block2::SU2K>;
-template struct block2::ParallelRuleIdentity<block2::SU2K>;
+template struct block2::ParallelRuleQC<block2::SU2K, double>;
+template struct block2::ParallelRuleOneBodyQC<block2::SU2K, double>;
+template struct block2::ParallelRulePDM1QC<block2::SU2K, double>;
+template struct block2::ParallelRulePDM2QC<block2::SU2K, double>;
+template struct block2::ParallelRuleNPDMQC<block2::SU2K, double>;
+template struct block2::ParallelRuleSiteQC<block2::SU2K, double>;
+template struct block2::ParallelRuleIdentity<block2::SU2K, double>;

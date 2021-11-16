@@ -10,10 +10,10 @@ class TestFITPGN2631G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
 
-    template <typename S>
+    template <typename S, typename FL>
     void test_dmrg(int n_ext, int ci_order, const S target, double energy,
-                   const shared_ptr<HamiltonianQC<S>> &hamil,
-                   const shared_ptr<HamiltonianQC<S>> &hamil_red,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil_red,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
@@ -31,13 +31,12 @@ class TestFITPGN2631G : public ::testing::Test {
     }
 };
 
-template <typename S>
-void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
-                                double energy,
-                                const shared_ptr<HamiltonianQC<S>> &hamil,
-                                const shared_ptr<HamiltonianQC<S>> &hamil_red,
-                                const string &name, DecompositionTypes dt,
-                                NoiseTypes nt) {
+template <typename S, typename FL>
+void TestFITPGN2631G::test_dmrg(
+    int n_ext, int ci_order, const S target, double energy,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil_red, const string &name,
+    DecompositionTypes dt, NoiseTypes nt) {
 
     bool dcl = false;
     int dot = 2;
@@ -47,8 +46,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // MPO construction (MRCISD-DMRG)
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional, hamil->n_sites / 3);
+    shared_ptr<MPO<S, FL>> mpo = make_shared<MPOQC<S, FL>>(
+        hamil, QCTypes::Conventional, hamil->n_sites / 3);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
@@ -60,7 +59,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
                                       hamil->basis);
     mpo->basis = hamil->basis;
     for (int i = 0; i < n_ext; i++)
-        mpo = make_shared<FusedMPO<S>>(
+        mpo = make_shared<FusedMPO<S, FL>>(
             mpo, mpo->basis, mpo->n_sites - 2, mpo->n_sites - 1,
             fusing_mps_info->right_dims_fci[mpo->n_sites - 2]);
     fusing_mps_info->deallocate();
@@ -70,8 +69,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     int idx = mpo->n_sites - 1;
     if (n_ext != 0) {
         for (auto &op : mpo->tensors[idx]->ops) {
-            shared_ptr<CSRSparseMatrix<S>> smat =
-                make_shared<CSRSparseMatrix<S>>();
+            shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                make_shared<CSRSparseMatrix<S, FL>>();
             if (op.second->sparsity() > 0.75) {
                 smat->from_dense(op.second);
                 op.second->deallocate();
@@ -80,14 +79,15 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
             op.second = smat;
         }
         mpo->sparse_form[idx] = 'S';
-        mpo->tf = make_shared<TensorFunctions<S>>(
-            make_shared<CSROperatorFunctions<S>>(hamil->opf->cg));
+        mpo->tf = make_shared<TensorFunctions<S, FL>>(
+            make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
     }
     cout << "MPO sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<RuleQC<S, FL>>(),
+                                            true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
@@ -104,7 +104,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(mpo->n_sites, 0, dot);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(mpo->n_sites, 0, dot);
     mps->initialize(mps_info);
     mps->random_canonicalize();
 
@@ -115,12 +115,13 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     me->init_environments(true);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->decomp_type = dt;
     dmrg->noise_type = nt;
@@ -134,7 +135,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // MPO RED construction (MRCISD-DMRG)
     cout << "MPO RED start" << endl;
-    shared_ptr<MPO<S>> mpo_red = make_shared<MPOQC<S>>(
+    shared_ptr<MPO<S, FL>> mpo_red = make_shared<MPOQC<S, FL>>(
         hamil_red, QCTypes::Conventional, hamil_red->n_sites / 3);
     cout << "MPO RED end .. T = " << t.get_time() << endl;
 
@@ -148,7 +149,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
                                       target, hamil_red->basis);
     mpo_red->basis = hamil_red->basis;
     for (int i = 0; i < n_ext; i++)
-        mpo_red = make_shared<FusedMPO<S>>(
+        mpo_red = make_shared<FusedMPO<S, FL>>(
             mpo_red, mpo_red->basis, mpo_red->n_sites - 2, mpo_red->n_sites - 1,
             fusing_mps_info_red->right_dims_fci[mpo_red->n_sites - 2]);
     fusing_mps_info_red->deallocate();
@@ -157,8 +158,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "MPO RED sparsification start" << endl;
     if (n_ext != 0) {
         for (auto &op : mpo_red->tensors[idx]->ops) {
-            shared_ptr<CSRSparseMatrix<S>> smat =
-                make_shared<CSRSparseMatrix<S>>();
+            shared_ptr<CSRSparseMatrix<S, FL>> smat =
+                make_shared<CSRSparseMatrix<S, FL>>();
             if (op.second->sparsity() > 0.75) {
                 smat->from_dense(op.second);
                 op.second->deallocate();
@@ -167,15 +168,15 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
             op.second = smat;
         }
         mpo_red->sparse_form[idx] = 'S';
-        mpo_red->tf = make_shared<TensorFunctions<S>>(
-            make_shared<CSROperatorFunctions<S>>(hamil_red->opf->cg));
+        mpo_red->tf = make_shared<TensorFunctions<S, FL>>(
+            make_shared<CSROperatorFunctions<S, FL>>(hamil_red->opf->cg));
     }
     cout << "MPO RED sparsification end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO RED simplification start" << endl;
-    mpo_red =
-        make_shared<SimplifiedMPO<S>>(mpo_red, make_shared<RuleQC<S>>(), true);
+    mpo_red = make_shared<SimplifiedMPO<S, FL>>(
+        mpo_red, make_shared<RuleQC<S, FL>>(), true);
     cout << "MPO RED simplification end .. T = " << t.get_time() << endl;
 
     shared_ptr<MPSInfo<S>> mps_info_red = make_shared<MPSInfo<S>>(
@@ -186,8 +187,8 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPS
     Random::rand_seed(0);
 
-    shared_ptr<MPS<S>> mps_red =
-        make_shared<MPS<S>>(mpo_red->n_sites, mps->center, dot);
+    shared_ptr<MPS<S, FL>> mps_red =
+        make_shared<MPS<S, FL>>(mpo_red->n_sites, mps->center, dot);
     mps_red->initialize(mps_info_red);
     mps_red->random_canonicalize();
 
@@ -199,21 +200,23 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // Identity MPO
     cout << "Identity MPO start" << endl;
-    shared_ptr<MPO<S>> impo_red = make_shared<IdentityMPO<S>>(
+    shared_ptr<MPO<S, FL>> impo_red = make_shared<IdentityMPO<S, FL>>(
         mpo_red->basis, mpo->basis, hamil->vacuum, hamil->vacuum, hamil->opf,
         hamil_red->orb_sym, hamil->orb_sym);
     // Attention: use trivial Rule or NoTransposeRule(RuleQC)
-    impo_red = make_shared<SimplifiedMPO<S>>(impo_red, make_shared<Rule<S>>());
+    impo_red =
+        make_shared<SimplifiedMPO<S, FL>>(impo_red, make_shared<Rule<S, FL>>());
     cout << "Identity MPO end .. T = " << t.get_time() << endl;
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me_trans =
-        make_shared<MovingEnvironment<S>>(impo_red, mps_red, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me_trans =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo_red, mps_red, mps,
+                                                  "DMRG");
     me_trans->init_environments(true);
 
     // Linear
-    shared_ptr<Linear<S>> cps_trans =
-        make_shared<Linear<S>>(me_trans, bdims_trans, bdims_trans);
+    shared_ptr<Linear<S, FL, FL>> cps_trans =
+        make_shared<Linear<S, FL, FL>>(me_trans, bdims_trans, bdims_trans);
     cps_trans->iprint = 2;
     cps_trans->decomp_type = dt;
     cps_trans->decomp_last_site = dcl;
@@ -222,13 +225,14 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     cout << "OVERLAP = " << setprecision(10) << fixed << norm_trans << endl;
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me_red =
-        make_shared<MovingEnvironment<S>>(mpo_red, mps_red, mps_red, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me_red =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo_red, mps_red, mps_red,
+                                                  "DMRG");
     me_red->init_environments(true);
 
     // DMRG
-    shared_ptr<DMRG<S>> dmrg_red =
-        make_shared<DMRG<S>>(me_red, bdims_trans, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg_red =
+        make_shared<DMRG<S, FL, FL>>(me_red, bdims_trans, noises);
     dmrg_red->iprint = 2;
     dmrg_red->decomp_type = dt;
     dmrg_red->noise_type = nt;
@@ -247,7 +251,7 @@ void TestFITPGN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 }
 
 TEST_F(TestFITPGN2631G, TestSU2) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
@@ -262,20 +266,22 @@ TEST_F(TestFITPGN2631G, TestSU2) {
     SU2 target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
-    shared_ptr<HamiltonianQC<SU2>> hamil_red = make_shared<HamiltonianQC<SU2>>(
-        vacuum, fcidump->n_sites(), orbsym_red, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
+                                                orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, double>> hamil_red =
+        make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
+                                                orbsym_red, fcidump);
 
-    test_dmrg<SU2>(0, 2, target, energy, hamil, hamil_red, "SU2",
-                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
+    test_dmrg<SU2, double>(0, 2, target, energy, hamil, hamil_red, "SU2",
+                           DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil->deallocate();
     fcidump->deallocate();
 }
 
 TEST_F(TestFITPGN2631G, TestSZ) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.CAS.6-31G.FCIDUMP";
     fcidump->read(filename);
@@ -290,13 +296,15 @@ TEST_F(TestFITPGN2631G, TestSZ) {
     SZ target(fcidump->n_elec(), 0, 0);
     double energy = 0.1;
 
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(
-        vacuum, fcidump->n_sites(), orbsym, fcidump);
-    shared_ptr<HamiltonianQC<SZ>> hamil_red = make_shared<HamiltonianQC<SZ>>(
-        vacuum, fcidump->n_sites(), orbsym_red, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),
+                                               orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SZ, double>> hamil_red =
+        make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),
+                                               orbsym_red, fcidump);
 
-    test_dmrg<SZ>(0, 2, target, energy, hamil, hamil_red, "SZ",
-                  DecompositionTypes::SVD, NoiseTypes::Perturbative);
+    test_dmrg<SZ, double>(0, 2, target, energy, hamil, hamil_red, "SZ",
+                          DecompositionTypes::SVD, NoiseTypes::Perturbative);
 
     hamil->deallocate();
     fcidump->deallocate();

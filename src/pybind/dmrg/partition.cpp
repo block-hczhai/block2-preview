@@ -20,5 +20,5 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_partition<SZ>(py::module &m);
-template void bind_partition<SU2>(py::module &m);
+template void bind_fl_partition<SZ, double>(py::module &m);
+template void bind_fl_partition<SU2, double>(py::module &m);

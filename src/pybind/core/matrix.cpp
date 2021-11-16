@@ -21,3 +21,5 @@
 #include "../pybind_core.hpp"
 
 template void bind_matrix<>(py::module &m);
+template void bind_fl_matrix<double>(py::module &m);
+template void bind_post_matrix<>(py::module &m);

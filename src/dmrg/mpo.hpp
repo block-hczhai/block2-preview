@@ -61,19 +61,19 @@ template <typename S> struct MPOSchemer {
                 right_new_operator_exprs->copy());
         return r;
     }
-    void load_data(istream &ifs, bool minimal = false) {
+    template <typename FL> void load_data(istream &ifs, bool minimal = false) {
         ifs.read((char *)&left_trans_site, sizeof(left_trans_site));
         ifs.read((char *)&right_trans_site, sizeof(right_trans_site));
-        left_new_operator_names =
-            dynamic_pointer_cast<SymbolicRowVector<S>>(load_symbolic<S>(ifs));
+        left_new_operator_names = dynamic_pointer_cast<SymbolicRowVector<S>>(
+            load_symbolic<S, FL>(ifs));
         right_new_operator_names =
             dynamic_pointer_cast<SymbolicColumnVector<S>>(
-                load_symbolic<S>(ifs));
-        left_new_operator_exprs =
-            dynamic_pointer_cast<SymbolicRowVector<S>>(load_symbolic<S>(ifs));
+                load_symbolic<S, FL>(ifs));
+        left_new_operator_exprs = dynamic_pointer_cast<SymbolicRowVector<S>>(
+            load_symbolic<S, FL>(ifs));
         right_new_operator_exprs =
             dynamic_pointer_cast<SymbolicColumnVector<S>>(
-                load_symbolic<S>(ifs));
+                load_symbolic<S, FL>(ifs));
         if (minimal)
             unload_data();
     }
@@ -120,21 +120,22 @@ template <typename S> struct MPOSchemer {
 };
 
 // Symbolic Matrix Product Operator
-template <typename S> struct MPO {
-    vector<shared_ptr<OperatorTensor<S>>> tensors;
+template <typename S, typename FL> struct MPO {
+    typedef typename GMatrix<FL>::FP FP;
+    vector<shared_ptr<OperatorTensor<S, FL>>> tensors;
     vector<shared_ptr<Symbolic<S>>> left_operator_names;
     vector<shared_ptr<Symbolic<S>>> right_operator_names;
     vector<shared_ptr<Symbolic<S>>> middle_operator_names;
     vector<shared_ptr<Symbolic<S>>> left_operator_exprs;
     vector<shared_ptr<Symbolic<S>>> right_operator_exprs;
     vector<shared_ptr<Symbolic<S>>> middle_operator_exprs;
-    shared_ptr<OpElement<S>> op;
+    shared_ptr<OpElement<S, FL>> op;
     shared_ptr<MPOSchemer<S>> schemer;
     // Number of sites
     int n_sites;
     // Const energy term
-    double const_e;
-    shared_ptr<TensorFunctions<S>> tf;
+    FL const_e;
+    shared_ptr<TensorFunctions<S, FL>> tf;
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
     vector<shared_ptr<StateInfo<S>>> basis; // only for fused mpo
     // N = Normal, S = CSR
@@ -152,7 +153,7 @@ template <typename S> struct MPO {
         return ParallelTypes::Serial;
     }
     // in bytes; 0 = peak term, 1 = peak memory, 2 = total disk storage
-    // only count lower bound of doubles
+    // only count lower bound of floating point numbers
     virtual vector<size_t> estimate_storage(shared_ptr<MPSInfo<S>> info,
                                             int dot) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -166,8 +167,8 @@ template <typename S> struct MPO {
             map<S, size_t> mpsz;
             load_left_operators(i);
             for (auto xop : left_operator_names[i]->data) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(xop);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(xop);
                 if (!mpsz.count(op->q_label)) {
                     mat_info->initialize(*info->left_dims[i + 1],
                                          *info->left_dims[i + 1], op->q_label,
@@ -185,8 +186,8 @@ template <typename S> struct MPO {
             map<S, size_t> mpsz;
             load_right_operators(i);
             for (auto xop : right_operator_names[i]->data) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(xop);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(xop);
                 if (!mpsz.count(op->q_label)) {
                     mat_info->initialize(*info->right_dims[i],
                                          *info->right_dims[i], op->q_label,
@@ -234,8 +235,8 @@ template <typename S> struct MPO {
             map<S, size_t> mpszl, mpszr;
             load_left_operators(iL);
             for (auto xop : left_operator_names[iL]->data) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(xop);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(xop);
                 if (!mpszl.count(op->q_label)) {
                     mat_info->initialize(tl, tl, op->q_label,
                                          op->q_label.is_fermion());
@@ -248,8 +249,8 @@ template <typename S> struct MPO {
             unload_left_operators(iL);
             load_right_operators(iR);
             for (auto xop : right_operator_names[iR]->data) {
-                shared_ptr<OpElement<S>> op =
-                    dynamic_pointer_cast<OpElement<S>>(xop);
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(xop);
                 if (!mpszr.count(op->q_label)) {
                     mat_info->initialize(tr, tr, op->q_label,
                                          op->q_label.is_fermion());
@@ -280,7 +281,7 @@ template <typename S> struct MPO {
                                 "' failed.");
         ifs.clear();
         ifs.seekg(archive_marks[i][0]);
-        tensors[i] = make_shared<OperatorTensor<S>>();
+        tensors[i] = make_shared<OperatorTensor<S, FL>>();
         tensors[i]->load_data(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_tensor on '" + archive_filename +
@@ -301,7 +302,7 @@ template <typename S> struct MPO {
                                 "' failed.");
         ifs.clear();
         ifs.seekg(archive_schemer_mark);
-        schemer->load_data(ifs, false);
+        schemer->template load_data<FL>(ifs, false);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_schemer on '" + archive_filename +
                                 "' failed.");
@@ -322,11 +323,11 @@ template <typename S> struct MPO {
         ifs.clear();
         ifs.seekg(archive_marks[i][1]);
         if (archive_marks[i][1] != 0)
-            left_operator_names[i] = load_symbolic<S>(ifs);
+            left_operator_names[i] = load_symbolic<S, FL>(ifs);
         ifs.clear();
         ifs.seekg(archive_marks[i][4]);
         if (archive_marks[i][4] != 0)
-            left_operator_exprs[i] = load_symbolic<S>(ifs);
+            left_operator_exprs[i] = load_symbolic<S, FL>(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_left_operators on '" +
                                 archive_filename + "' failed.");
@@ -350,11 +351,11 @@ template <typename S> struct MPO {
         ifs.clear();
         ifs.seekg(archive_marks[i][2]);
         if (archive_marks[i][2] != 0)
-            right_operator_names[i] = load_symbolic<S>(ifs);
+            right_operator_names[i] = load_symbolic<S, FL>(ifs);
         ifs.clear();
         ifs.seekg(archive_marks[i][5]);
         if (archive_marks[i][5] != 0)
-            right_operator_exprs[i] = load_symbolic<S>(ifs);
+            right_operator_exprs[i] = load_symbolic<S, FL>(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_right_operators on '" +
                                 archive_filename + "' failed.");
@@ -378,11 +379,11 @@ template <typename S> struct MPO {
         ifs.clear();
         ifs.seekg(archive_marks[i][3]);
         if (archive_marks[i][3] != 0)
-            middle_operator_names[i] = load_symbolic<S>(ifs);
+            middle_operator_names[i] = load_symbolic<S, FL>(ifs);
         ifs.clear();
         ifs.seekg(archive_marks[i][6]);
         if (archive_marks[i][6] != 0)
-            middle_operator_exprs[i] = load_symbolic<S>(ifs);
+            middle_operator_exprs[i] = load_symbolic<S, FL>(ifs);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("MPO:load_middle_operators on '" +
                                 archive_filename + "' failed.");
@@ -403,21 +404,21 @@ template <typename S> struct MPO {
         shared_ptr<CG<S>> cg = make_shared<CG<S>>(200);
         cg->initialize();
         if (sparse_form.find('S') == string::npos)
-            tf = make_shared<TensorFunctions<S>>(
-                make_shared<OperatorFunctions<S>>(cg));
+            tf = make_shared<TensorFunctions<S, FL>>(
+                make_shared<OperatorFunctions<S, FL>>(cg));
         else
-            tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(cg));
+            tf = make_shared<TensorFunctions<S, FL>>(
+                make_shared<CSROperatorFunctions<S, FL>>(cg));
         bool has_op, has_schemer;
         ifs.read((char *)&has_op, sizeof(has_op));
         ifs.read((char *)&has_schemer, sizeof(has_schemer));
         if (has_op)
-            op = dynamic_pointer_cast<OpElement<S>>(load_expr<S>(ifs));
+            op = dynamic_pointer_cast<OpElement<S, FL>>(load_expr<S, FL>(ifs));
         if (has_schemer) {
             schemer = make_shared<MPOSchemer<S>>(0, 0);
             if (minimal)
                 archive_schemer_mark = (size_t)ifs.tellg();
-            schemer->load_data(ifs, minimal);
+            schemer->template load_data<FL>(ifs, minimal);
         }
         int sz, sub_sz;
         ifs.read((char *)&sz, sizeof(sz));
@@ -441,7 +442,7 @@ template <typename S> struct MPO {
         ifs.read((char *)&sz, sizeof(sz));
         tensors.resize(sz);
         for (int i = 0; i < sz; i++) {
-            tensors[i] = make_shared<OperatorTensor<S>>();
+            tensors[i] = make_shared<OperatorTensor<S, FL>>();
             if (minimal)
                 archive_marks[i][0] = (size_t)ifs.tellg();
             tensors[i]->load_data(ifs);
@@ -459,7 +460,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][1] = (size_t)ifs.tellg();
-            left_operator_names[i] = load_symbolic<S>(ifs);
+            left_operator_names[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 left_operator_names[i] = nullptr;
         }
@@ -468,7 +469,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][2] = (size_t)ifs.tellg();
-            right_operator_names[i] = load_symbolic<S>(ifs);
+            right_operator_names[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 right_operator_names[i] = nullptr;
         }
@@ -477,7 +478,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][3] = (size_t)ifs.tellg();
-            middle_operator_names[i] = load_symbolic<S>(ifs);
+            middle_operator_names[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 middle_operator_names[i] = nullptr;
         }
@@ -486,7 +487,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][4] = (size_t)ifs.tellg();
-            left_operator_exprs[i] = load_symbolic<S>(ifs);
+            left_operator_exprs[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 left_operator_exprs[i] = nullptr;
         }
@@ -495,7 +496,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][5] = (size_t)ifs.tellg();
-            right_operator_exprs[i] = load_symbolic<S>(ifs);
+            right_operator_exprs[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 right_operator_exprs[i] = nullptr;
         }
@@ -504,7 +505,7 @@ template <typename S> struct MPO {
         for (int i = 0; i < sz; i++) {
             if (minimal)
                 archive_marks[i][6] = (size_t)ifs.tellg();
-            middle_operator_exprs[i] = load_symbolic<S>(ifs);
+            middle_operator_exprs[i] = load_symbolic<S, FL>(ifs);
             if (minimal)
                 middle_operator_exprs[i] = nullptr;
         }
@@ -593,10 +594,10 @@ template <typename S> struct MPO {
         for (int i = 1; i < n_sites - 1; i++)
             tensors[i]->lmat = tensors[i]->rmat = 0;
     }
-    shared_ptr<MPO<S>> deep_copy() const {
+    shared_ptr<MPO> deep_copy() const {
         stringstream ss;
         save_data(ss);
-        shared_ptr<MPO<S>> mpo = make_shared<MPO<S>>(0);
+        shared_ptr<MPO> mpo = make_shared<MPO>(0);
         mpo->load_data(ss);
         mpo->tf = this->tf;
         return mpo;
@@ -643,8 +644,8 @@ template <typename S> struct MPO {
             ss << schemer->get_transform_formulas() << endl;
         return ss.str();
     }
-    virtual shared_ptr<MPO<S>> scalar_multiply(double d) const {
-        shared_ptr<MPO<S>> rmpo = make_shared<MPO<S>>(*this);
+    virtual shared_ptr<MPO> scalar_multiply(FL d) const {
+        shared_ptr<MPO> rmpo = make_shared<MPO>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);
         for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
             auto &x = rmpo->middle_operator_exprs[ix];
@@ -657,90 +658,96 @@ template <typename S> struct MPO {
     }
 };
 
-template <typename S>
-inline shared_ptr<MPO<S>> operator*(double d, const shared_ptr<MPO<S>> &mpo) {
+template <typename S, typename FL>
+inline shared_ptr<MPO<S, FL>> operator*(FL d,
+                                        const shared_ptr<MPO<S, FL>> &mpo) {
     return mpo->scalar_multiply(d);
 }
 
-template <typename S>
-inline shared_ptr<MPO<S>> operator*(const shared_ptr<MPO<S>> &mpo, double d) {
+template <typename S, typename FL>
+inline shared_ptr<MPO<S, FL>> operator*(const shared_ptr<MPO<S, FL>> &mpo,
+                                        FL d) {
     return d * mpo;
 }
 
-template <typename S>
-inline shared_ptr<MPO<S>> operator-(const shared_ptr<MPO<S>> &mpo) {
-    return (-1.0) * mpo;
+template <typename S, typename FL>
+inline shared_ptr<MPO<S, FL>> operator-(const shared_ptr<MPO<S, FL>> &mpo) {
+    return (FL)(-1.0) * mpo;
 }
 
 // Diagonal part of MPO (will copy the diagonal elements)
 // MPO must be unsimplified
-template <typename S> struct DiagonalMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    DiagonalMPO(const shared_ptr<MPO<S>> &mpo,
-                const shared_ptr<Rule<S>> &rule = nullptr)
-        : MPO<S>(mpo->n_sites) {
-        MPO<S>::const_e = mpo->const_e;
-        MPO<S>::op = mpo->op;
-        MPO<S>::tf = mpo->tf;
-        MPO<S>::basis = mpo->basis;
-        MPO<S>::site_op_infos = mpo->site_op_infos;
-        MPO<S>::sparse_form = mpo->sparse_form;
-        MPO<S>::schemer =
+template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
+    using typename MPO<S, FL>::FP;
+    DiagonalMPO(const shared_ptr<MPO<S, FL>> &mpo,
+                const shared_ptr<Rule<S, FL>> &rule = nullptr)
+        : MPO<S, FL>(mpo->n_sites) {
+        MPO<S, FL>::const_e = mpo->const_e;
+        MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::tf = mpo->tf;
+        MPO<S, FL>::basis = mpo->basis;
+        MPO<S, FL>::site_op_infos = mpo->site_op_infos;
+        MPO<S, FL>::sparse_form = mpo->sparse_form;
+        MPO<S, FL>::schemer =
             mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
-        MPO<S>::left_operator_names = mpo->left_operator_names;
-        MPO<S>::right_operator_names = mpo->right_operator_names;
+        MPO<S, FL>::left_operator_names = mpo->left_operator_names;
+        MPO<S, FL>::right_operator_names = mpo->right_operator_names;
         assert(mpo->left_operator_exprs.size() == 0);
         assert(mpo->right_operator_exprs.size() == 0);
-        shared_ptr<SparseMatrix<S>> zmat = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, FL>> zmat =
+            make_shared<SparseMatrix<S, FL>>();
         zmat->factor = 0;
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
-        MPO<S>::tensors.resize(n_sites, nullptr);
+        MPO<S, FL>::tensors.resize(n_sites, nullptr);
         for (int m = 0; m < n_sites; m++) {
-            shared_ptr<OperatorTensor<S>> r = make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, FL>> r =
+                make_shared<OperatorTensor<S, FL>>();
             r->lmat = mpo->tensors[m]->lmat->copy();
             r->rmat = mpo->tensors[m]->rmat->copy();
             r->ops = mpo->tensors[m]->ops;
-            MPO<S>::tensors[m] = r;
+            MPO<S, FL>::tensors[m] = r;
             for (auto &p : r->ops) {
-                OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+                OpElement<S, FL> &op =
+                    *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
                 if (op.q_label != mpo->op->q_label)
                     p.second = zmat;
                 else if (p.second->get_type() == SparseMatrixTypes::Normal) {
-                    shared_ptr<VectorAllocator<double>> d_alloc =
-                        make_shared<VectorAllocator<double>>();
-                    shared_ptr<SparseMatrix<S>> mat =
-                        make_shared<SparseMatrix<S>>(d_alloc);
+                    shared_ptr<VectorAllocator<FP>> d_alloc =
+                        make_shared<VectorAllocator<FP>>();
+                    shared_ptr<SparseMatrix<S, FL>> mat =
+                        make_shared<SparseMatrix<S, FL>>(d_alloc);
                     mat->allocate(p.second->info);
                     mat->factor = p.second->factor;
                     if (p.second->info->n == p.second->total_memory) {
-                        MatrixRef mmat(mat->data, (MKL_INT)mat->total_memory,
-                                       1),
-                            pmat(p.second->data,
-                                 (MKL_INT)p.second->total_memory, 1);
-                        MatrixFunctions::copy(mmat, pmat);
+                        GMatrix<FL> mmat(mat->data, (MKL_INT)mat->total_memory,
+                                         1);
+                        GMatrix<FL> pmat(p.second->data,
+                                         (MKL_INT)p.second->total_memory, 1);
+                        GMatrixFunctions<FL>::copy(mmat, pmat);
                     } else {
                         for (int i = 0; i < mat->info->n; i++) {
-                            MatrixRef mmat = (*mat)[i], pmat = (*p.second)[i];
+                            GMatrix<FL> mmat = (*mat)[i], pmat = (*p.second)[i];
                             mmat.n = pmat.n = 1;
-                            MatrixFunctions::copy(mmat, pmat, mmat.m + 1,
-                                                  pmat.m + 1);
+                            GMatrixFunctions<FL>::copy(mmat, pmat, mmat.m + 1,
+                                                       pmat.m + 1);
                         }
                     }
                     p.second = mat;
                 } else if (p.second->get_type() == SparseMatrixTypes::CSR) {
-                    shared_ptr<CSRSparseMatrix<S>> pmat =
-                        dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
-                    shared_ptr<VectorAllocator<double>> d_alloc =
-                        make_shared<VectorAllocator<double>>();
-                    shared_ptr<CSRSparseMatrix<S>> mat =
-                        make_shared<CSRSparseMatrix<S>>(d_alloc);
+                    shared_ptr<CSRSparseMatrix<S, FL>> pmat =
+                        dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(p.second);
+                    shared_ptr<VectorAllocator<FP>> d_alloc =
+                        make_shared<VectorAllocator<FP>>();
+                    shared_ptr<CSRSparseMatrix<S, FL>> mat =
+                        make_shared<CSRSparseMatrix<S, FL>>(d_alloc);
                     mat->initialize(p.second->info);
                     for (int i = 0; i < mat->info->n; i++) {
-                        shared_ptr<CSRMatrixRef> cmat = mat->csr_data[i];
+                        shared_ptr<GCSRMatrix<FL>> cmat = mat->csr_data[i];
                         assert(cmat->m == cmat->n);
                         cmat->nnz = cmat->m;
                         cmat->allocate();
-                        MatrixRef dmat(cmat->data, cmat->m, 1);
+                        GMatrix<FL> dmat(cmat->data, cmat->m, 1);
                         pmat->csr_data[i]->diag(dmat);
                         if (cmat->nnz != cmat->size()) {
                             for (MKL_INT j = 0; j < cmat->m; j++)
@@ -750,21 +757,21 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                     }
                     p.second = mat;
                 } else if (p.second->get_type() == SparseMatrixTypes::Delayed)
-                    p.second =
-                        dynamic_pointer_cast<DelayedSparseMatrix<S>>(p.second)
-                            ->copy();
+                    p.second = dynamic_pointer_cast<DelayedSparseMatrix<S, FL>>(
+                                   p.second)
+                                   ->copy();
                 else
                     assert(false);
             }
             if (rule != nullptr) {
                 for (auto &p : r->ops) {
-                    auto pop = dynamic_pointer_cast<OpElement<S>>(p.first);
+                    auto pop = dynamic_pointer_cast<OpElement<S, FL>>(p.first);
                     if (p.second->get_type() == SparseMatrixTypes::Delayed) {
                         auto rop = (*rule)(pop);
                         if (rop != nullptr) {
                             auto ref_op = rop->op;
                             if (r->ops.count(ref_op) &&
-                                (r->ops.at(ref_op)->factor == 0 ||
+                                (r->ops.at(ref_op)->factor == 0.0 ||
                                  r->ops.at(ref_op)->info->n == 0 ||
                                  r->ops.at(ref_op)->norm() < TINY))
                                 p.second = zmat;
@@ -774,7 +781,7 @@ template <typename S> struct DiagonalMPO : MPO<S> {
             }
             vector<shared_ptr<Symbolic<S>>> pmats = {r->lmat, r->rmat};
             size_t kk;
-            shared_ptr<OpSum<S>> px;
+            shared_ptr<OpSum<S, FL>> px;
             for (auto pmat : pmats)
                 for (auto &x : pmat->data) {
                     shared_ptr<OpExpr<S>> xx;
@@ -790,13 +797,13 @@ template <typename S> struct DiagonalMPO : MPO<S> {
                         break;
                     case OpTypes::Sum:
                         kk = 0;
-                        px = make_shared<OpSum<S>>(
-                            dynamic_pointer_cast<OpSum<S>>(x)->strings);
+                        px = make_shared<OpSum<S, FL>>(
+                            dynamic_pointer_cast<OpSum<S, FL>>(x)->strings);
                         x = px;
                         for (size_t i = 0; i < px->strings.size(); i++) {
                             xx = abs_value((shared_ptr<OpExpr<S>>)px->strings[i]
                                                ->get_op());
-                            shared_ptr<SparseMatrix<S>> &mat = r->ops[xx];
+                            shared_ptr<SparseMatrix<S, FL>> &mat = r->ops[xx];
                             if (!(mat->factor == 0.0 || mat->info->n == 0 ||
                                   mat->norm() < TINY)) {
                                 if (i != kk)
@@ -840,87 +847,89 @@ template <typename S> struct DiagonalMPO : MPO<S> {
 
 // Adding ancilla (identity) sites to a MPO
 // n_sites = 2 * n_physical_sites
-template <typename S> struct AncillaMPO : MPO<S> {
+template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
     int n_physical_sites;
-    shared_ptr<MPO<S>> prim_mpo;
-    AncillaMPO(const shared_ptr<MPO<S>> &mpo, bool npdm = false,
+    shared_ptr<MPO<S, FL>> prim_mpo;
+    AncillaMPO(const shared_ptr<MPO<S, FL>> &mpo, bool npdm = false,
                bool trace_right = true)
         : n_physical_sites(mpo->n_sites),
-          prim_mpo(mpo), MPO<S>(mpo->n_sites << 1) {
-        const auto n_sites = MPO<S>::n_sites;
+          prim_mpo(mpo), MPO<S, FL>(mpo->n_sites << 1) {
+        const auto n_sites = MPO<S, FL>::n_sites;
         const shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
-        MPO<S>::const_e = mpo->const_e;
-        MPO<S>::op = mpo->op;
-        MPO<S>::tf = mpo->tf;
-        MPO<S>::site_op_infos =
+            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        MPO<S, FL>::const_e = mpo->const_e;
+        MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::tf = mpo->tf;
+        MPO<S, FL>::site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
-        MPO<S>::sparse_form = string(n_sites, 'N');
+        MPO<S, FL>::sparse_form = string(n_sites, 'N');
         for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
-            MPO<S>::site_op_infos[j] = mpo->site_op_infos[i];
-            MPO<S>::site_op_infos[j + 1] = mpo->site_op_infos[i];
-            MPO<S>::sparse_form[trace_right ? j : j + 1] =
-                MPO<S>::sparse_form[i];
+            MPO<S, FL>::site_op_infos[j] = mpo->site_op_infos[i];
+            MPO<S, FL>::site_op_infos[j + 1] = mpo->site_op_infos[i];
+            MPO<S, FL>::sparse_form[trace_right ? j : j + 1] =
+                MPO<S, FL>::sparse_form[i];
         }
         // operator names
-        MPO<S>::left_operator_names.resize(n_sites, nullptr);
-        MPO<S>::right_operator_names.resize(n_sites, nullptr);
+        MPO<S, FL>::left_operator_names.resize(n_sites, nullptr);
+        MPO<S, FL>::right_operator_names.resize(n_sites, nullptr);
         if (trace_right) {
             for (int i = 0, j = 0; i < n_physical_sites; i++, j += 2) {
-                MPO<S>::left_operator_names[j] = mpo->left_operator_names[i];
-                MPO<S>::left_operator_names[j + 1] =
-                    MPO<S>::left_operator_names[j]->copy();
-                MPO<S>::right_operator_names[j] = mpo->right_operator_names[i];
+                MPO<S, FL>::left_operator_names[j] =
+                    mpo->left_operator_names[i];
+                MPO<S, FL>::left_operator_names[j + 1] =
+                    MPO<S, FL>::left_operator_names[j]->copy();
+                MPO<S, FL>::right_operator_names[j] =
+                    mpo->right_operator_names[i];
                 if (j - 1 >= 0)
-                    MPO<S>::right_operator_names[j - 1] =
-                        MPO<S>::right_operator_names[j]->copy();
+                    MPO<S, FL>::right_operator_names[j - 1] =
+                        MPO<S, FL>::right_operator_names[j]->copy();
             }
-            MPO<S>::right_operator_names[n_sites - 1] =
+            MPO<S, FL>::right_operator_names[n_sites - 1] =
                 make_shared<SymbolicColumnVector<S>>(1);
-            MPO<S>::right_operator_names[n_sites - 1]->data[0] = i_op;
+            MPO<S, FL>::right_operator_names[n_sites - 1]->data[0] = i_op;
         } else {
             for (int i = n_physical_sites - 1, j = n_sites - 2; i >= 0;
                  i--, j -= 2) {
-                MPO<S>::right_operator_names[j + 1] =
+                MPO<S, FL>::right_operator_names[j + 1] =
                     mpo->right_operator_names[i];
-                MPO<S>::right_operator_names[j] =
-                    MPO<S>::right_operator_names[j + 1]->copy();
-                MPO<S>::left_operator_names[j + 1] =
+                MPO<S, FL>::right_operator_names[j] =
+                    MPO<S, FL>::right_operator_names[j + 1]->copy();
+                MPO<S, FL>::left_operator_names[j + 1] =
                     mpo->left_operator_names[i];
                 if (j + 2 < n_sites)
-                    MPO<S>::left_operator_names[j + 2] =
-                        MPO<S>::left_operator_names[j + 1]->copy();
+                    MPO<S, FL>::left_operator_names[j + 2] =
+                        MPO<S, FL>::left_operator_names[j + 1]->copy();
             }
-            MPO<S>::left_operator_names[0] =
+            MPO<S, FL>::left_operator_names[0] =
                 make_shared<SymbolicRowVector<S>>(1);
-            MPO<S>::left_operator_names[0]->data[0] = i_op;
+            MPO<S, FL>::left_operator_names[0]->data[0] = i_op;
         }
         // middle operators
         if (mpo->middle_operator_names.size() != 0) {
             assert(mpo->schemer == nullptr);
-            MPO<S>::middle_operator_names.resize(n_sites - 1);
-            MPO<S>::middle_operator_exprs.resize(n_sites - 1);
+            MPO<S, FL>::middle_operator_names.resize(n_sites - 1);
+            MPO<S, FL>::middle_operator_exprs.resize(n_sites - 1);
             shared_ptr<SymbolicColumnVector<S>> zero_mat =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*zero_mat)[0] =
-                make_shared<OpElement<S>>(OpNames::Zero, SiteIndex(), S());
+                make_shared<OpElement<S, FL>>(OpNames::Zero, SiteIndex(), S());
             shared_ptr<SymbolicColumnVector<S>> zero_expr =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*zero_expr)[0] = make_shared<OpExpr<S>>();
             for (int i = 0, j = trace_right ? 0 : 1; i < n_physical_sites - 1;
                  i++, j += 2) {
-                MPO<S>::middle_operator_names[j] =
+                MPO<S, FL>::middle_operator_names[j] =
                     mpo->middle_operator_names[i];
-                MPO<S>::middle_operator_exprs[j] =
+                MPO<S, FL>::middle_operator_exprs[j] =
                     mpo->middle_operator_exprs[i];
                 if (!npdm) {
-                    MPO<S>::middle_operator_names[j + 1] =
+                    MPO<S, FL>::middle_operator_names[j + 1] =
                         mpo->middle_operator_names[i];
-                    MPO<S>::middle_operator_exprs[j + 1] =
+                    MPO<S, FL>::middle_operator_exprs[j + 1] =
                         mpo->middle_operator_exprs[i];
                 } else {
-                    MPO<S>::middle_operator_names[j + 1] = zero_mat;
-                    MPO<S>::middle_operator_exprs[j + 1] = zero_expr;
+                    MPO<S, FL>::middle_operator_names[j + 1] = zero_mat;
+                    MPO<S, FL>::middle_operator_exprs[j + 1] = zero_expr;
                 }
             }
             if (trace_right) {
@@ -931,11 +940,11 @@ template <typename S> struct AncillaMPO : MPO<S> {
                     shared_ptr<SymbolicColumnVector<S>> hop_expr =
                         make_shared<SymbolicColumnVector<S>>(1);
                     (*hop_expr)[0] = (shared_ptr<OpExpr<S>>)mpo->op * i_op;
-                    MPO<S>::middle_operator_names[n_sites - 2] = hop_mat;
-                    MPO<S>::middle_operator_exprs[n_sites - 2] = hop_expr;
+                    MPO<S, FL>::middle_operator_names[n_sites - 2] = hop_mat;
+                    MPO<S, FL>::middle_operator_exprs[n_sites - 2] = hop_expr;
                 } else {
-                    MPO<S>::middle_operator_names[n_sites - 2] = zero_mat;
-                    MPO<S>::middle_operator_exprs[n_sites - 2] = zero_expr;
+                    MPO<S, FL>::middle_operator_names[n_sites - 2] = zero_mat;
+                    MPO<S, FL>::middle_operator_exprs[n_sites - 2] = zero_expr;
                 }
             } else {
                 if (mpo->op != nullptr && mpo->op->name != OpNames::Zero) {
@@ -945,153 +954,161 @@ template <typename S> struct AncillaMPO : MPO<S> {
                     shared_ptr<SymbolicRowVector<S>> hop_expr =
                         make_shared<SymbolicRowVector<S>>(1);
                     (*hop_expr)[0] = i_op * (shared_ptr<OpExpr<S>>)mpo->op;
-                    MPO<S>::middle_operator_names[0] = hop_mat;
-                    MPO<S>::middle_operator_exprs[0] = hop_expr;
+                    MPO<S, FL>::middle_operator_names[0] = hop_mat;
+                    MPO<S, FL>::middle_operator_exprs[0] = hop_expr;
                 } else {
-                    MPO<S>::middle_operator_names[0] = zero_mat;
-                    MPO<S>::middle_operator_exprs[0] = zero_expr;
+                    MPO<S, FL>::middle_operator_names[0] = zero_mat;
+                    MPO<S, FL>::middle_operator_exprs[0] = zero_expr;
                 }
             }
         }
         // operator tensors
-        MPO<S>::tensors.resize(n_sites, nullptr);
+        MPO<S, FL>::tensors.resize(n_sites, nullptr);
         for (int i = 0, j = trace_right ? 0 : 1; i < n_physical_sites;
              i++, j += 2) {
             if (j + 1 < n_sites - 1) {
-                MPO<S>::tensors[j] = mpo->tensors[i];
-                int rshape = MPO<S>::tensors[j]->lmat->n;
-                MPO<S>::tensors[j + 1] = make_shared<OperatorTensor<S>>();
-                MPO<S>::tensors[j + 1]->lmat = MPO<S>::tensors[j + 1]->rmat =
-                    make_shared<SymbolicMatrix<S>>(rshape, rshape);
+                MPO<S, FL>::tensors[j] = mpo->tensors[i];
+                int rshape = MPO<S, FL>::tensors[j]->lmat->n;
+                MPO<S, FL>::tensors[j + 1] =
+                    make_shared<OperatorTensor<S, FL>>();
+                MPO<S, FL>::tensors[j + 1]->lmat =
+                    MPO<S, FL>::tensors[j + 1]->rmat =
+                        make_shared<SymbolicMatrix<S>>(rshape, rshape);
                 for (int k = 0; k < rshape; k++)
-                    (*MPO<S>::tensors[j + 1]->lmat)[{k, k}] = i_op;
+                    (*MPO<S, FL>::tensors[j + 1]->lmat)[{k, k}] = i_op;
                 if (mpo->tensors[i]->lmat != mpo->tensors[i]->rmat &&
                     !(mpo->schemer != nullptr &&
                       mpo->schemer->right_trans_site -
                               mpo->schemer->left_trans_site ==
                           2)) {
                     int lshape = mpo->tensors[i + 1]->rmat->m;
-                    MPO<S>::tensors[j + 1]->rmat =
+                    MPO<S, FL>::tensors[j + 1]->rmat =
                         make_shared<SymbolicMatrix<S>>(lshape, lshape);
                     for (int k = 0; k < lshape; k++)
-                        (*MPO<S>::tensors[j + 1]->rmat)[{k, k}] = i_op;
+                        (*MPO<S, FL>::tensors[j + 1]->rmat)[{k, k}] = i_op;
                 }
             } else if (j == n_sites - 2) {
                 int lshape = mpo->tensors[i]->lmat->m;
-                MPO<S>::tensors[j] = make_shared<OperatorTensor<S>>();
-                MPO<S>::tensors[j]->lmat = MPO<S>::tensors[j]->rmat =
+                MPO<S, FL>::tensors[j] = make_shared<OperatorTensor<S, FL>>();
+                MPO<S, FL>::tensors[j]->lmat = MPO<S, FL>::tensors[j]->rmat =
                     make_shared<SymbolicMatrix<S>>(lshape, 1);
                 for (int k = 0; k < lshape; k++)
-                    (*MPO<S>::tensors[j]->lmat)[{k, 0}] =
+                    (*MPO<S, FL>::tensors[j]->lmat)[{k, 0}] =
                         mpo->tensors[i]->lmat->data[k];
                 if (mpo->tensors[i]->lmat != mpo->tensors[i]->rmat) {
                     lshape = mpo->tensors[i]->rmat->m;
-                    MPO<S>::tensors[j]->rmat =
+                    MPO<S, FL>::tensors[j]->rmat =
                         make_shared<SymbolicMatrix<S>>(lshape, 1);
                     for (int k = 0; k < lshape; k++)
-                        (*MPO<S>::tensors[j]->rmat)[{k, 0}] =
+                        (*MPO<S, FL>::tensors[j]->rmat)[{k, 0}] =
                             mpo->tensors[i]->rmat->data[k];
                 }
-                MPO<S>::tensors[j]->ops = mpo->tensors[i]->ops;
-                MPO<S>::tensors[j + 1] = make_shared<OperatorTensor<S>>();
-                MPO<S>::tensors[j + 1]->lmat = MPO<S>::tensors[j + 1]->rmat =
-                    make_shared<SymbolicColumnVector<S>>(1);
-                MPO<S>::tensors[j + 1]->lmat->data[0] = i_op;
+                MPO<S, FL>::tensors[j]->ops = mpo->tensors[i]->ops;
+                MPO<S, FL>::tensors[j + 1] =
+                    make_shared<OperatorTensor<S, FL>>();
+                MPO<S, FL>::tensors[j + 1]->lmat =
+                    MPO<S, FL>::tensors[j + 1]->rmat =
+                        make_shared<SymbolicColumnVector<S>>(1);
+                MPO<S, FL>::tensors[j + 1]->lmat->data[0] = i_op;
             } else {
-                MPO<S>::tensors[j] = mpo->tensors[i];
-                MPO<S>::tensors[0] = make_shared<OperatorTensor<S>>();
-                MPO<S>::tensors[0]->lmat = MPO<S>::tensors[0]->rmat =
+                MPO<S, FL>::tensors[j] = mpo->tensors[i];
+                MPO<S, FL>::tensors[0] = make_shared<OperatorTensor<S, FL>>();
+                MPO<S, FL>::tensors[0]->lmat = MPO<S, FL>::tensors[0]->rmat =
                     make_shared<SymbolicRowVector<S>>(1);
-                MPO<S>::tensors[0]->lmat->data[0] = i_op;
-                MPO<S>::tensors[0]->ops[i_op] =
-                    MPO<S>::tensors[1]->ops.at(i_op);
+                MPO<S, FL>::tensors[0]->lmat->data[0] = i_op;
+                MPO<S, FL>::tensors[0]->ops[i_op] =
+                    MPO<S, FL>::tensors[1]->ops.at(i_op);
                 int rshape = mpo->tensors[0]->lmat->n;
-                MPO<S>::tensors[1] = make_shared<OperatorTensor<S>>();
-                MPO<S>::tensors[1]->lmat = MPO<S>::tensors[1]->rmat =
+                MPO<S, FL>::tensors[1] = make_shared<OperatorTensor<S, FL>>();
+                MPO<S, FL>::tensors[1]->lmat = MPO<S, FL>::tensors[1]->rmat =
                     make_shared<SymbolicMatrix<S>>(1, rshape);
                 for (int k = 0; k < rshape; k++)
-                    (*MPO<S>::tensors[1]->lmat)[{0, k}] =
+                    (*MPO<S, FL>::tensors[1]->lmat)[{0, k}] =
                         mpo->tensors[0]->lmat->data[k];
                 if (mpo->tensors[0]->lmat != mpo->tensors[0]->rmat) {
                     rshape = mpo->tensors[0]->rmat->n;
-                    MPO<S>::tensors[1]->rmat =
+                    MPO<S, FL>::tensors[1]->rmat =
                         make_shared<SymbolicMatrix<S>>(1, rshape);
                     for (int k = 0; k < rshape; k++)
-                        (*MPO<S>::tensors[1]->rmat)[{0, k}] =
+                        (*MPO<S, FL>::tensors[1]->rmat)[{0, k}] =
                             mpo->tensors[0]->rmat->data[k];
                 }
-                MPO<S>::tensors[1]->ops = mpo->tensors[0]->ops;
+                MPO<S, FL>::tensors[1]->ops = mpo->tensors[0]->ops;
             }
             if (trace_right)
-                MPO<S>::tensors[j + 1]->ops[i_op] =
-                    MPO<S>::tensors[j]->ops.at(i_op);
+                MPO<S, FL>::tensors[j + 1]->ops[i_op] =
+                    MPO<S, FL>::tensors[j]->ops.at(i_op);
             else if (j - 1 != 0)
-                MPO<S>::tensors[j - 1]->ops[i_op] =
-                    MPO<S>::tensors[j]->ops.at(i_op);
+                MPO<S, FL>::tensors[j - 1]->ops[i_op] =
+                    MPO<S, FL>::tensors[j]->ops.at(i_op);
         }
         // numerical transform
         if (mpo->schemer != nullptr &&
             mpo->schemer->right_trans_site - mpo->schemer->left_trans_site ==
                 2) {
-            MPO<S>::schemer = mpo->schemer->copy();
+            MPO<S, FL>::schemer = mpo->schemer->copy();
             if (trace_right) {
                 if (n_physical_sites & 1) {
-                    MPO<S>::schemer->left_trans_site = n_physical_sites - 2;
-                    MPO<S>::schemer->right_trans_site = n_physical_sites;
+                    MPO<S, FL>::schemer->left_trans_site = n_physical_sites - 2;
+                    MPO<S, FL>::schemer->right_trans_site = n_physical_sites;
                 } else {
-                    MPO<S>::schemer->left_trans_site = n_physical_sites - 1;
-                    MPO<S>::schemer->right_trans_site = n_physical_sites + 1;
+                    MPO<S, FL>::schemer->left_trans_site = n_physical_sites - 1;
+                    MPO<S, FL>::schemer->right_trans_site =
+                        n_physical_sites + 1;
                 }
             } else {
                 if (n_physical_sites & 1) {
-                    MPO<S>::schemer->left_trans_site = n_physical_sites - 1;
-                    MPO<S>::schemer->right_trans_site = n_physical_sites + 1;
+                    MPO<S, FL>::schemer->left_trans_site = n_physical_sites - 1;
+                    MPO<S, FL>::schemer->right_trans_site =
+                        n_physical_sites + 1;
                 } else {
-                    MPO<S>::schemer->left_trans_site = n_physical_sites;
-                    MPO<S>::schemer->right_trans_site = n_physical_sites + 2;
+                    MPO<S, FL>::schemer->left_trans_site = n_physical_sites;
+                    MPO<S, FL>::schemer->right_trans_site =
+                        n_physical_sites + 2;
                 }
             }
         } else if (mpo->schemer != nullptr)
             assert(false);
         else
-            MPO<S>::schemer = nullptr;
+            MPO<S, FL>::schemer = nullptr;
     }
     void deallocate() override { prim_mpo->deallocate(); }
 };
 
 // Add identity operator to MPO (will not change expression of MPO)
 // MPO must be simplified
-template <typename S> struct IdentityAddedMPO : MPO<S> {
-    using MPO<S>::n_sites;
-    IdentityAddedMPO(const shared_ptr<MPO<S>> &mpo) : MPO<S>(mpo->n_sites) {
-        MPO<S>::const_e = mpo->const_e;
-        MPO<S>::op = mpo->op;
-        MPO<S>::tf = mpo->tf;
-        MPO<S>::basis = mpo->basis;
-        MPO<S>::site_op_infos = mpo->site_op_infos;
-        MPO<S>::sparse_form = mpo->sparse_form;
-        MPO<S>::schemer =
+template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
+    using MPO<S, FL>::n_sites;
+    IdentityAddedMPO(const shared_ptr<MPO<S, FL>> &mpo)
+        : MPO<S, FL>(mpo->n_sites) {
+        MPO<S, FL>::const_e = mpo->const_e;
+        MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::tf = mpo->tf;
+        MPO<S, FL>::basis = mpo->basis;
+        MPO<S, FL>::site_op_infos = mpo->site_op_infos;
+        MPO<S, FL>::sparse_form = mpo->sparse_form;
+        MPO<S, FL>::schemer =
             mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
-        MPO<S>::left_operator_names = mpo->left_operator_names;
-        MPO<S>::right_operator_names = mpo->right_operator_names;
-        MPO<S>::middle_operator_names = mpo->middle_operator_names;
-        MPO<S>::left_operator_exprs = mpo->left_operator_exprs;
-        MPO<S>::right_operator_exprs = mpo->right_operator_exprs;
-        MPO<S>::middle_operator_exprs = mpo->middle_operator_exprs;
+        MPO<S, FL>::left_operator_names = mpo->left_operator_names;
+        MPO<S, FL>::right_operator_names = mpo->right_operator_names;
+        MPO<S, FL>::middle_operator_names = mpo->middle_operator_names;
+        MPO<S, FL>::left_operator_exprs = mpo->left_operator_exprs;
+        MPO<S, FL>::right_operator_exprs = mpo->right_operator_exprs;
+        MPO<S, FL>::middle_operator_exprs = mpo->middle_operator_exprs;
         assert(mpo->left_operator_exprs.size() != 0);
         assert(mpo->right_operator_exprs.size() != 0);
-        MPO<S>::tensors = mpo->tensors;
+        MPO<S, FL>::tensors = mpo->tensors;
         const shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), S());
-        for (size_t m = 0; m < MPO<S>::left_operator_names.size(); m++) {
+            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        for (size_t m = 0; m < MPO<S, FL>::left_operator_names.size(); m++) {
             bool found = false;
-            auto &x = MPO<S>::left_operator_names[m];
-            auto &y = MPO<S>::left_operator_exprs[m];
+            auto &x = MPO<S, FL>::left_operator_names[m];
+            auto &y = MPO<S, FL>::left_operator_exprs[m];
             x = x->copy();
             y = y->copy();
             if (y->get_type() != x->get_type()) {
                 y = make_shared<SymbolicRowVector<S>>(x->n);
-                y->data = MPO<S>::left_operator_exprs[m]->data;
+                y->data = MPO<S, FL>::left_operator_exprs[m]->data;
             }
             for (size_t j = 0; j < x->data.size(); j++)
                 if (x->data[j] == i_op) {
@@ -1104,22 +1121,22 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
                 assert(x->get_type() == SymTypes::RVec);
                 x->n = y->n = (int)x->data.size();
                 if (m == 0) {
-                    auto &z = MPO<S>::tensors[m]->lmat;
+                    auto &z = MPO<S, FL>::tensors[m]->lmat;
                     z = z->copy();
                     z->data.push_back(i_op);
                     z->n = (int)z->data.size();
                 }
             }
         }
-        for (size_t m = 0; m < MPO<S>::right_operator_names.size(); m++) {
+        for (size_t m = 0; m < MPO<S, FL>::right_operator_names.size(); m++) {
             bool found = false;
-            auto &x = MPO<S>::right_operator_names[m];
-            auto &y = MPO<S>::right_operator_exprs[m];
+            auto &x = MPO<S, FL>::right_operator_names[m];
+            auto &y = MPO<S, FL>::right_operator_exprs[m];
             x = x->copy();
             y = y->copy();
             if (y->get_type() != x->get_type()) {
                 y = make_shared<SymbolicColumnVector<S>>(x->m);
-                y->data = MPO<S>::right_operator_exprs[m]->data;
+                y->data = MPO<S, FL>::right_operator_exprs[m]->data;
             }
             for (size_t j = 0; j < x->data.size(); j++)
                 if (x->data[j] == i_op) {
@@ -1132,7 +1149,7 @@ template <typename S> struct IdentityAddedMPO : MPO<S> {
                 assert(x->get_type() == SymTypes::CVec);
                 x->m = y->m = (int)x->data.size();
                 if (m == mpo->n_sites - 1) {
-                    auto &z = MPO<S>::tensors[m]->rmat;
+                    auto &z = MPO<S, FL>::tensors[m]->rmat;
                     z = z->copy();
                     z->data.push_back(i_op);
                     z->m = (int)z->data.size();

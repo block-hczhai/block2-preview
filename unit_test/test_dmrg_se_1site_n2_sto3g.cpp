@@ -5,15 +5,17 @@
 
 using namespace block2;
 
+template <typename FL>
 class TestOneSiteDMRGSingletEmbedding : public ::testing::Test {
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
+    typedef typename GMatrix<FL>::FP FP;
 
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<double>> &energies,
-                   const shared_ptr<HamiltonianQC<S>> &hamil,
+                   const vector<vector<FL>> &energies,
+                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
@@ -34,29 +36,30 @@ class TestOneSiteDMRGSingletEmbedding : public ::testing::Test {
     }
 };
 
+template <typename FL>
 template <typename S>
-void TestOneSiteDMRGSingletEmbedding::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
-    const shared_ptr<HamiltonianQC<S>> &hamil, const string &name,
+void TestOneSiteDMRGSingletEmbedding<FL>::test_dmrg(
+    const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
+    const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt) {
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
-                                      OpNamesSet({OpNames::R, OpNames::RD}));
+    mpo = make_shared<SimplifiedMPO<S, FL>>(
+        mpo, make_shared<RuleQC<S, FL>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
-    vector<double> noises = {1E-8, 1E-9, 0.0};
+    vector<FP> noises = {1E-8, 1E-9, 0.0};
 
     t.get_time();
 
@@ -77,7 +80,8 @@ void TestOneSiteDMRGSingletEmbedding::test_dmrg(
 
             // MPS
 
-            shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(hamil->n_sites, 0, 1);
+            shared_ptr<MPS<S, FL>> mps =
+                make_shared<MPS<S, FL>>(hamil->n_sites, 0, 1);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -88,19 +92,21 @@ void TestOneSiteDMRGSingletEmbedding::test_dmrg(
             mps_info->deallocate_mutable();
 
             // ME
-            shared_ptr<MovingEnvironment<S>> me =
-                make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+            shared_ptr<MovingEnvironment<S, FL, FL>> me =
+                make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
+                                                          "DMRG");
             me->init_environments(false);
             me->delayed_contraction = OpNamesSet::normal_ops();
             me->cached_contraction = true;
 
             // DMRG
-            shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+            shared_ptr<DMRG<S, FL, FL>> dmrg =
+                make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             dmrg->davidson_soft_max_iter = 4000;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -125,13 +131,22 @@ void TestOneSiteDMRGSingletEmbedding::test_dmrg(
     mpo->deallocate();
 }
 
-TEST_F(TestOneSiteDMRGSingletEmbedding, TestSU2) {
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
 
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+TYPED_TEST_CASE(TestOneSiteDMRGSingletEmbedding, TestFL);
+
+TYPED_TEST(TestOneSiteDMRGSingletEmbedding, TestSU2) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
 
@@ -144,7 +159,7 @@ TEST_F(TestOneSiteDMRGSingletEmbedding, TestSU2) {
             targets[i][j - 1] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<double>> energies(8);
+    vector<vector<FL>> energies(8);
     energies[0] = {-106.939132859668, -107.031449471627};
     energies[1] = {-106.999600016661, -106.633790589321};
     energies[2] = {-107.356943001688, -106.931515926732};
@@ -155,35 +170,40 @@ TEST_F(TestOneSiteDMRGSingletEmbedding, TestSU2) {
     energies[7] = {-107.208021870379, -107.070427868786};
 
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SU2>> hamil =
-        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2, FL>> hamil =
+        make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
-    test_dmrg<SU2>(targets, energies, hamil, "SU2",
-                   DecompositionTypes::DensityMatrix,
-                   NoiseTypes::DensityMatrix);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::DensityMatrix);
 
     targets.resize(2);
     energies.resize(2);
 
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD", DecompositionTypes::SVD,
-                   NoiseTypes::Wavefunction);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD",
-                   DecompositionTypes::PureSVD, NoiseTypes::Wavefunction);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
-                   DecompositionTypes::DensityMatrix, NoiseTypes::Perturbative);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
-                   DecompositionTypes::SVD, NoiseTypes::Perturbative);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
-                   DecompositionTypes::DensityMatrix,
-                   NoiseTypes::ReducedPerturbative);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
-                   DecompositionTypes::SVD, NoiseTypes::ReducedPerturbative);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT LM",
-                   DecompositionTypes::DensityMatrix,
-                   NoiseTypes::ReducedPerturbativeLowMem);
-    test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT LM",
-                   DecompositionTypes::SVD,
-                   NoiseTypes::ReducedPerturbativeLowMem);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::Wavefunction);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 PURE SVD",
+                                  DecompositionTypes::PureSVD,
+                                  NoiseTypes::Wavefunction);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 PERT",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::Perturbative);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD PERT",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::Perturbative);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::ReducedPerturbative);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 SVD RED PERT",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::ReducedPerturbative);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2 RED PERT LM",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::ReducedPerturbativeLowMem);
+    this->template test_dmrg<SU2>(
+        targets, energies, hamil, "SU2 SVD RED PERT LM",
+        DecompositionTypes::SVD, NoiseTypes::ReducedPerturbativeLowMem);
 
     hamil->deallocate();
     fcidump->deallocate();

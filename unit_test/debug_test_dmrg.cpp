@@ -5,10 +5,12 @@
 
 using namespace block2;
 
-class TestDMRG : public ::testing::Test {
+template <typename FL> class TestDMRG : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
+    typedef typename GMatrix<FL>::FP FP;
+
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
@@ -36,11 +38,21 @@ class TestDMRG : public ::testing::Test {
     }
 };
 
-typedef SU2 S;
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<double>> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
 
-TEST_F(TestDMRG, Test) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<CompressedFCIDUMP>(1E-13);
-    // shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+TYPED_TEST_CASE(TestDMRG, TestFL);
+
+TYPED_TEST(TestDMRG, Test) {
+    using FL = TypeParam;
+    using FP = typename TestFixture::FP;
+    using S = SU2;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<CompressedFCIDUMP<FL>>(1E-13);
+    // shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
 
@@ -72,7 +84,7 @@ TEST_F(TestDMRG, Test) {
         // for (size_t i = 0; i < kmat.size(); i++)
         //     kmat[i] = hmat[i] * 1E-7 + kmat[i];
         auto kmat = read_occ(pdm_filename);
-        auto omat = fcidump->orb_sym<uint8_t>();
+        auto omat = fcidump->template orb_sym<uint8_t>();
         for (size_t i = 0; i < fcidump->n_sites(); i++)
             for (size_t j = 0; j < fcidump->n_sites(); j++)
                 if (omat[i] != omat[j])
@@ -115,7 +127,7 @@ TEST_F(TestDMRG, Test) {
 
     cout << "ORB SYM = ";
     for (int i = 0; i < fcidump->n_sites(); i++)
-        cout << setw(2) << (int)fcidump->orb_sym<uint8_t>()[i];
+        cout << setw(2) << (int)fcidump->template orb_sym<uint8_t>()[i];
     cout << endl;
 
     vector<uint8_t> ioccs;
@@ -126,32 +138,33 @@ TEST_F(TestDMRG, Test) {
     //      << fcidump->det_energy(ioccs, 0, fcidump->n_sites()) + fcidump->e
     //      << endl;
 
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
     S vacuum(0);
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    vector<typename S::pg_t> pg_sym = HamiltonianQC<S>::combine_orb_sym(
-        orbsym, fcidump->k_sym<int>(), fcidump->k_mod());
+    vector<typename S::pg_t> pg_sym = HamiltonianQC<S, FL>::combine_orb_sym(
+        orbsym, fcidump->template k_sym<int>(), fcidump->k_mod());
     uint8_t isym = PointGroup::swap_pg(pg)(fcidump->isym());
-    S target(fcidump->n_elec(), fcidump->twos(), S::pg_combine(isym, 0, fcidump->k_mod()));
-    shared_ptr<HamiltonianQC<S>> hamil =
-        make_shared<HamiltonianQC<S>>(vacuum, norb, pg_sym, fcidump);
+    S target(fcidump->n_elec(), fcidump->twos(),
+             S::pg_combine(isym, 0, fcidump->k_mod()));
+    shared_ptr<HamiltonianQC<S, FL>> hamil =
+        make_shared<HamiltonianQC<S, FL>>(vacuum, norb, pg_sym, fcidump);
 
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S>> mpo =
-        make_shared<MPOQC<S>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     // mpo = make_shared<ArchivedMPO<S>>(mpo);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo =
-        make_shared<SimplifiedMPO<S>>(mpo, make_shared<RuleQC<S>>(), true, true,
-                                      OpNamesSet({OpNames::R, OpNames::RD}));
+    mpo = make_shared<SimplifiedMPO<S, FL>>(
+        mpo, make_shared<RuleQC<S, FL>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -159,7 +172,7 @@ TEST_F(TestDMRG, Test) {
     mpo->reduce_data();
     mpo->save_data("mpo.bin");
 
-    mpo = make_shared<MPO<S>>(0);
+    mpo = make_shared<MPO<S, FL>>(0);
     mpo->load_data("mpo.bin", true);
 
     ubond_t bond_dim = 200;
@@ -211,7 +224,7 @@ TEST_F(TestDMRG, Test) {
     // int x = Random::rand_int(0, 1000000);
     Random::rand_seed(384666);
     // cout << "Random = " << x << endl;
-    shared_ptr<MPS<S>> mps = make_shared<MPS<S>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(norb, 0, 2);
     auto st = mps->estimate_storage(mps_info);
     cout << "MPS memory = " << Parsing::to_size_string(st[0])
          << "; storage = " << Parsing::to_size_string(st[1]) << endl;
@@ -238,8 +251,8 @@ TEST_F(TestDMRG, Test) {
     mps_info->deallocate_mutable();
 
     // ME
-    shared_ptr<MovingEnvironment<S>> me =
-        make_shared<MovingEnvironment<S>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
     me->init_environments(false);
@@ -253,14 +266,15 @@ TEST_F(TestDMRG, Test) {
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500, 500,
                              500, 500, 500, 500, 500, 500, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5,
-                             1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6};
-    vector<double> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
-                              1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
-                              5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
+    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5,
+                         1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6};
+    vector<FP> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
+                          1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
+                          5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
-    shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davthrs;
@@ -269,7 +283,10 @@ TEST_F(TestDMRG, Test) {
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
-    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
+    // dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
+    // dmrg->noise_type = NoiseTypes::ReducedPerturbative;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
+    dmrg->trunc_type =  dmrg->trunc_type;
     // dmrg->davidson_type = DavidsonTypes::GreaterThan;
     // dmrg->davidson_shift = -2086.4;
     dmrg->solve(20, true);
@@ -279,24 +296,24 @@ TEST_F(TestDMRG, Test) {
     bra_info->set_bond_dimension(bond_dim);
     bra_info->tag = "BRA";
 
-    shared_ptr<MPS<S>> bra = make_shared<MPS<S>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> bra = make_shared<MPS<S, FL>>(norb, 0, 2);
     bra->initialize(bra_info);
     bra->random_canonicalize();
     bra->save_mutable();
     bra_info->save_mutable();
 
-    shared_ptr<MPO<S>> impo = make_shared<IdentityMPO<S>>(hamil);
-    impo = make_shared<SimplifiedMPO<S>>(impo, make_shared<Rule<S>>());
+    shared_ptr<MPO<S, FL>> impo = make_shared<IdentityMPO<S, FL>>(hamil);
+    impo = make_shared<SimplifiedMPO<S, FL>>(impo, make_shared<Rule<S, FL>>());
 
-    shared_ptr<MovingEnvironment<S>> ime =
-        make_shared<MovingEnvironment<S>>(impo, bra, mps, "RHS");
+    shared_ptr<MovingEnvironment<S, FL, FL>> ime =
+        make_shared<MovingEnvironment<S, FL, FL>>(impo, bra, mps, "RHS");
     ime->init_environments();
     vector<ubond_t> bra_dims = {250};
     vector<ubond_t> ket_dims = {250};
-    shared_ptr<Linear<S>> linear =
-        make_shared<Linear<S>>(ime, bra_dims, ket_dims);
+    shared_ptr<Linear<S, FL, FL>> linear =
+        make_shared<Linear<S, FL, FL>>(ime, bra_dims, ket_dims);
     linear->cutoff = 1E-14;
-    double igf = linear->solve(20, bra->center == 0, 1E-12);
+    FL igf = linear->solve(20, bra->center == 0, 1E-12);
 
     // deallocate persistent stack memory
     mps_info->deallocate();

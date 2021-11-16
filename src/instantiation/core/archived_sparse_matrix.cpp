@@ -20,5 +20,5 @@
 
 #include "../block2_core.hpp"
 
-template struct block2::ArchivedSparseMatrix<block2::SZ>;
-template struct block2::ArchivedSparseMatrix<block2::SU2>;
+template struct block2::ArchivedSparseMatrix<block2::SZ, double>;
+template struct block2::ArchivedSparseMatrix<block2::SU2, double>;
