@@ -1291,8 +1291,6 @@ TEST_F(TestComplexMatrix, TestIDRS) {
 
 TEST_F(TestComplexMatrix, TestLSQR) {
     for (int i = 0; i < n_tests; i++) {
-        // FIXME: fix lsqr
-        continue;
         MKL_INT m = Random::rand_int(1, 300);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
@@ -1323,10 +1321,15 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         ComplexMatrixFunctions::copy(af, a);
         ComplexMatrixFunctions::conjugate(af);
         MatMul mop(a), rop(af);
+        // hrl: Note: The input matrix can be highly illconditioned (cond~10^5)
+        //      which causes problems for lsqr. 
+        //      It is important to have long maxiters and small atol.
+        //      It may still fail in extreme situations,
+        //      in particular when m ~ 300.
         complex<double> func = IterativeMatrixFunctions<complex<double>>::lsqr(
             mop, rop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 1E-7,
-            1E-7, 10000);
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 
+            1E-7,0., 15000, 12000);
         ComplexMatrixFunctions::copy(xg, b);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
