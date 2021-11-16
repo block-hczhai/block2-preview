@@ -133,6 +133,7 @@ void TestOneSiteDMRGN2STO3GSA::test_dmrg(
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
+    dmrg->davidson_soft_max_iter = 2000;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
     double energy = dmrg->solve(10, mps->center == 0, 1E-8);
