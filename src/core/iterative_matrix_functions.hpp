@@ -1559,7 +1559,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         int argmax = 0;
         auto m = x[0];
         for(int i = 1; i < n; ++i) {
-            if(abs(x[i]) > m) {
+            if(abs(x[i]) > real(m)) {
                 argmax = i;
                 m = abs(x[i]);
             }
@@ -1575,7 +1575,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             argmax = k;
             m = p[k];
             for(int i = k + 1; i < n; ++i) {
-                if(abs(p[i]) > m) {
+                if(abs(p[i]) > real(m)) {
                     argmax = i;
                     m = p[i];
                 }
@@ -1633,15 +1633,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
-     * @param init_basis Optional initial basis for the search direction.
-     * Defaults to zero
+     * @param init_basis_in Optional initial basis for the search direction.
+     *      Defaults to zero
      * @param omega_used Optional values of used direction magnitudes. 
-     * Defaults to GMRES strategy. If given, Leja ordering is useful 
-     * (+ permuting init_basis accordingly)
-     * @param orthogonalize_P Orthogonalize the random space P matrix of size (
-     * N x S). May be good for numerical stability.
+     *      Defaults to GMRES strategy. If given, Leja ordering is useful
+     *      (+ permuting init_basis accordingly)
+     * @param orthogonalize_P Orthogonalize the random space P matrix of size
+     *      (N x S). May be good for numerical stability.
      * @param random_seed Random seed for setting up P. Defaults to
-     * day-time-convolution
+     *      day-time-convolution
+     * @param use_leja_ordering Use Leja ordering for omega_used and init_basis
+     *          Attention: This will modify omega_used and init_basis
      * @return <x,b>
      */
     template <typename MatMul, typename PComm>
@@ -1651,11 +1653,33 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
          const bool iprint = false, const PComm &pcomm = nullptr,
          const FP precond_reg = 1E-8, const FP tol = 1E-3, const FP atol = 0.0,
          const int max_iter = 5000, const int soft_max_iter = -1,
-         const vector<GMatrix<FL>> &init_basis = {},
-         const vector<FL> &omega_used = {}, const bool orthogonalize_P = true,
-         const int random_seed = -1) {
+         const vector<GMatrix<FL>> &init_basis_in = {},
+         const vector<FL> &omega_used_in = {}, const bool orthogonalize_P = true,
+         const int random_seed = -1,
+         const bool use_leja_ordering = false) {
         assert(b.m == x.m);
         assert(b.n == x.n);
+        vector<GMatrix<FL>> init_basis;
+        init_basis.reserve(init_basis_in.size());
+        auto omega_used = omega_used_in;
+        if(use_leja_ordering){
+            assert(omega_used.size() > 0);
+            vector<int> permutation;
+            leja_order(omega_used,permutation);
+            if(init_basis_in.size() > 0){
+                assert(init_basis_in.size() == omega_used.size());
+                assert(init_basis_in.size() == permutation.size());
+                for(int i = 0; i < init_basis_in.size(); ++i){
+                    const auto& b = init_basis_in[permutation[i]];
+                    init_basis.emplace_back(GMatrix<FL>(b.data,b.m,b.n));
+                }
+            }
+        }else{ // Copy init_basis references
+            for(int i = 0; i < init_basis_in.size(); ++i){
+                const auto& b = init_basis_in[i];
+                init_basis.emplace_back(GMatrix<FL>(b.data,b.m,b.n));
+            }
+        }
         const auto N = b.m; // vector size
         S = min(S, N);      // Gracefully change S to sth reasonable.
                             // This should only affect tiny linear problems.
@@ -2019,13 +2043,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             FP s = sign(b) / sqrt(1. + tau * tau);
             FP c = s * tau;
             FP r = b / s;
-            return make_tuple<FP, FP, FP>(c, s, r);
+            return make_tuple<FP, FP, FP>(move(c), move(s), move(r));
         }else{
             FP tau = b / a;
             FP c = sign(a) / sqrt(1. + tau * tau);
             FP s = c * tau;
             FP r = a / c;
-            return make_tuple<FP, FP, FP>(c, s, r);
+            return make_tuple<FP, FP, FP>(move(c), move(s), move(r));
         }
     }
 
