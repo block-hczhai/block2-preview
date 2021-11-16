@@ -511,7 +511,7 @@ template <> struct GMatrixFunctions<complex<double>> {
     }
 
     // Computes norm more accurately
-#ifdef __GNUC__
+#if defined __GNUC__ && !defined __APPLE__
     static double norm_accurate(const ComplexMatrixRef &a) __attribute__((optimize("-O0"))){
 #else
     static double norm_accurate(const ComplexMatrixRef &a) {
