@@ -34,6 +34,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::iadd;
     using GMatrixFunctions<FL>::complex_dot;
     using GMatrixFunctions<FL>::norm;
+    using GMatrixFunctions<FL>::norm_accurate;
     using GMatrixFunctions<FL>::iscale;
     using GMatrixFunctions<FL>::eigs;
     using GMatrixFunctions<FL>::linear;
@@ -1556,6 +1557,51 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;
     }
+    /** Leja ordering of x.
+     *
+     * Not that this only works for nondegenerate x and the ordering is not
+     * unique
+     *
+     * @see L, Reichel, The application of Leja points to Richardson iteration
+     * and polynomial preconditioning, Linear Algebra and its Applications, 154,
+     * 389 (1991) https://doi.org/10.1016/0024-3795(91)90386-B.
+     *
+     * @param x Input/Output vector (leja ordered)
+     * @param permutation Permutation order
+     */
+    static void leja_order(vector<FL> &x, vector<int> &permutation) {
+        const auto n = x.size();
+        permutation.resize(n);
+        iota(permutation.begin(), permutation.end(), 0);
+        int argmax = 0;
+        auto m = x[0];
+        for (int i = 1; i < n; ++i) {
+            if (abs(x[i]) > real(m)) {
+                argmax = i;
+                m = abs(x[i]);
+            }
+        }
+        swap(x[0], x[argmax]);
+        swap(permutation[0], permutation[argmax]);
+
+        vector<FL> p(n, 1); // product vector
+        for (int k = 1; k < n - 1; ++k) {
+            for (int i = k; i < n; ++i) {
+                p[i] *= x[i] - x[k - 1];
+            }
+            argmax = k;
+            m = p[k];
+            for (int i = k + 1; i < n; ++i) {
+                if (abs(p[i]) > real(m)) {
+                    argmax = i;
+                    m = p[i];
+                }
+            }
+            swap(x[k], x[argmax]);
+            swap(p[k], p[argmax]);
+            swap(permutation[k], permutation[argmax]);
+        }
+    }
     /** Use Induced Dimension Reduction method [IDR(s)] to solve A x = b
      *  IDR(1) is identical to BI-CGSTAB.
      *
@@ -1603,14 +1649,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      * @param atol Convergence tolerance: ||Ax - b|| <=  max(tol*||b||, atol)
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
-     * @param init_basis Optional initial basis for the search direction.
-     * Defaults to zero
-     * @param omega_used Optional values of used direction magnitudes. Defaults
-     * to GMRES strategy.
-     * @param orthogonalize_P Orthogonalize the random space P matrix of size (
-     * N x S). May be good for numerical stability.
+     * @param init_basis_in Optional initial basis for the search direction.
+     *      Defaults to zero
+     * @param omega_used Optional values of used direction magnitudes.
+     *      Defaults to GMRES strategy. If given, Leja ordering is useful
+     *      (+ permuting init_basis accordingly)
+     * @param orthogonalize_P Orthogonalize the random space P matrix of size
+     *      (N x S). May be good for numerical stability.
      * @param random_seed Random seed for setting up P. Defaults to
-     * day-time-convolution
+     *      day-time-convolution
+     * @param use_leja_ordering Use Leja ordering for omega_used and init_basis
+     *          Attention: This will modify omega_used and init_basis
      * @return <x,b>
      */
     template <typename MatMul, typename PComm>
@@ -1620,11 +1669,33 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
          const bool iprint = false, const PComm &pcomm = nullptr,
          const FP precond_reg = 1E-8, const FP tol = 1E-3, const FP atol = 0.0,
          const int max_iter = 5000, const int soft_max_iter = -1,
-         const vector<GMatrix<FL>> &init_basis = {},
-         const vector<FL> &omega_used = {}, const bool orthogonalize_P = true,
-         const int random_seed = -1) {
+         const vector<GMatrix<FL>> &init_basis_in = {},
+         const vector<FL> &omega_used_in = {},
+         const bool orthogonalize_P = true, const int random_seed = -1,
+         const bool use_leja_ordering = false) {
         assert(b.m == x.m);
         assert(b.n == x.n);
+        vector<GMatrix<FL>> init_basis;
+        init_basis.reserve(init_basis_in.size());
+        auto omega_used = omega_used_in;
+        if (use_leja_ordering) {
+            assert(omega_used.size() > 0);
+            vector<int> permutation;
+            leja_order(omega_used, permutation);
+            if (init_basis_in.size() > 0) {
+                assert(init_basis_in.size() == omega_used.size());
+                assert(init_basis_in.size() == permutation.size());
+                for (int i = 0; i < init_basis_in.size(); ++i) {
+                    const auto &b = init_basis_in[permutation[i]];
+                    init_basis.emplace_back(GMatrix<FL>(b.data, b.m, b.n));
+                }
+            }
+        } else { // Copy init_basis references
+            for (int i = 0; i < init_basis_in.size(); ++i) {
+                const auto &b = init_basis_in[i];
+                init_basis.emplace_back(GMatrix<FL>(b.data, b.m, b.n));
+            }
+        }
         const auto N = b.m; // vector size
         S = min(S, N);      // Gracefully change S to sth reasonable.
                             // This should only affect tiny linear problems.
@@ -1979,16 +2050,22 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         };
         // const auto sign = [&signR](cmplx v){ return abs(real(v)) < 1e-30 ?
         // signR(real(v)) : signR(imag(v)); };
-        if (b == 0.0)
+        if (b == 0.0) {
             return make_tuple<FP, FP, FP>(sign(a), 0.0, abs(a));
-        else if (a == 0.0)
+        } else if (a == 0.0) {
             return make_tuple<FP, FP, FP>(0.0, sign(b), abs(b));
-        else {
-            FP tau = b / a;
-            FP c = sign(a) / sqrt(1.0 + tau * tau);
-            FP s = c * tau;
-            FP r = a / c;
-            return make_tuple<FP, FP, FP>((FP)c, (FP)s, (FP)r);
+        } else if (abs(b) > abs(a)) {
+            const FP tau = a / b;
+            const FP s = sign(b) / sqrt(1. + tau * tau);
+            const FP c = s * tau;
+            const FP r = b / s;
+            return make_tuple(c, s, r);
+        } else {
+            const FP tau = b / a;
+            const FP c = sign(a) / sqrt(1. + tau * tau);
+            const FP s = c * tau;
+            const FP r = a / c;
+            return make_tuple(c, s, r);
         }
     }
     /** LSQR implementation. See scipy.sparse.linalg.lsqr
@@ -2012,8 +2089,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      *          the final residual norm should be accurate to about 9 digits.
      *         (The final x will usually have fewer correct digits, depending on
      * cond(A)) atol (btol) defines relative error estimate in A (b) The
-     * stopping criteria are: 1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x|| 2:
-     * ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
+     * stopping criteria are:
+     * 1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x||
+     * 2: ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
      * @return <x,b>
@@ -2103,7 +2181,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         FP test1, test2, test3, rtol;
         constexpr FP eps = std::numeric_limits<FP>::epsilon();
         // Set up the first vectors u and v for the bidiagonalization.
-        //        These satisfy  beta*u = b - A*x,  alfa*v = A'*u.
+        //        These satisfy  beta*u = b - A*x,  alpha*v = A'*u.
         copy(u, b);
         auto bnorm = norm(b);
         xnorm = norm(x);
@@ -2118,13 +2196,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             opM(x, v);
             ++nmult;
             iadd(u, v, -1.);
-            beta = norm(u);
+            beta = norm_accurate(u);
         }
         if (beta > 0.0) {
             iscale(u, 1.0 / beta);
             ropM(u, v);
             ++nmult;
-            alpha = norm(v);
+            alpha = norm_accurate(v);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&alpha, 1, pcomm->root);
             }
@@ -2181,25 +2259,31 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             ++nmult;
             iscale(u, -alpha);
             iadd(u, tmp, 1.);
-            beta = norm(u);
+            beta = norm_accurate(u);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&beta, 1, pcomm->root);
             }
 
             if (beta > 0.0) {
-                iscale(u, 1.0 / beta);
+                // iscale(u, 1./beta); // vv is more accurate
+                for (size_t i = 0; i < N; ++i) {
+                    u(i, 0) /= beta;
+                }
                 anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
                 // v = A' @ u - beta * v
                 ropM(u, tmp);
                 ++nmult;
                 iscale(v, -beta);
                 iadd(v, tmp, 1.0);
-                alpha = norm(v);
+                alpha = norm_accurate(v);
                 if (pcomm != nullptr) {
                     pcomm->broadcast(&alpha, 1, pcomm->root);
                 }
                 if (alpha > 0.0) {
-                    iscale(v, 1.0 / alpha);
+                    // iscale(v, 1./alpha);
+                    for (size_t i = 0; i < N; ++i) {
+                        v(i, 0) /= alpha;
+                    }
                 }
             }
 
@@ -2241,7 +2325,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             iscale(w, t2);  // w = v + t2 * w
             iadd(w, v, 1.);
 
-            auto normdk = norm(tmp);
+            auto normdk = norm_accurate(tmp);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&normdk, 1, pcomm->root);
             }
@@ -2269,6 +2353,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             res2 = res2 + psi * psi;
             rnorm = sqrt(res1 + res2);
             arnorm = alpha * abs(tau);
+
+            auto r1sq = rnorm * rnorm;
+            r1norm = sqrt(abs(r1sq));
+            if (r1sq < 0)
+                r1norm *= -1;
 
             // Now use these norms to estimate certain other quantities,
             // some of which will be small near a solution.

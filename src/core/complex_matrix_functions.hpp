@@ -509,6 +509,26 @@ template <> struct GMatrixFunctions<complex<double>> {
               &inc);
         return r;
     }
+    // Computes norm more accurately
+    static double norm_accurate(const ComplexMatrixRef &a) {
+        MKL_INT n = a.m * a.n;
+        long double out = 0.0;
+        long double compensate = 0.0;
+        for (MKL_INT ii = 0; ii < n; ++ii) {
+            long double &&xre = (long double)real(a.data[ii]);
+            long double &&xim = (long double)imag(a.data[ii]);
+            long double sumi = xre * xre + xim * xim;
+            // Kahan summation
+            auto y = sumi - compensate;
+            const volatile long double t = out + y;
+            const volatile long double z = t - out;
+            compensate = z - y;
+            out = t;
+        }
+        out = sqrt(out);
+        volatile long double outd = real(out);
+        return static_cast<double>(outd);
+    }
     template <typename T1, typename T2>
     static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
                           double rtol = 1E-5, complex<double> scale = 1.0) {
