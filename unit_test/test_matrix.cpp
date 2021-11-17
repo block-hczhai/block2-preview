@@ -1046,7 +1046,7 @@ TEST_F(TestMatrix, TestGCROT) {
         Random::fill<double>(b.data, b.size());
         Random::fill<double>(x.data, x.size());
         MatrixFunctions::multiply(ax, false, ax, true, a, 1.0, 0.0);
-        for (MKL_INT k = 0; k < n; k++)
+        for (MKL_INT k = 0; k < m; k++)
             a(k, k) += eta;
         MatMul mop(a);
         double func = IterativeMatrixFunctions<double>::gcrotmk(
@@ -1082,7 +1082,7 @@ TEST_F(TestMatrix, TestIDRS) {
         Random::fill<double>(b.data, b.size());
         Random::fill<double>(x.data, x.size());
         MatrixFunctions::multiply(ax, false, ax, true, a, 1.0, 0.0);
-        for (MKL_INT k = 0; k < n; k++)
+        for (MKL_INT k = 0; k < m; k++)
             a(k, k) += eta;
         MatMul mop(a);
         double func = IterativeMatrixFunctions<double>::idrs(

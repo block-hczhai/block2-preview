@@ -1192,7 +1192,7 @@ TEST_F(TestComplexMatrix, TestGCROT) {
         b.clear();
         MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
         ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
-        for (MKL_INT k = 0; k < n; k++)
+        for (MKL_INT k = 0; k < m; k++)
             a(k, k) += complex<double>(0, eta);
         ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
         Random::fill<double>(rb.data, rb.size());
@@ -1254,7 +1254,7 @@ TEST_F(TestComplexMatrix, TestIDRS) {
         b.clear();
         MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
         ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
-        for (MKL_INT k = 0; k < n; k++)
+        for (MKL_INT k = 0; k < m; k++)
             a(k, k) += complex<double>(0, eta);
         ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
         Random::fill<double>(rb.data, rb.size());
@@ -1295,7 +1295,7 @@ TEST_F(TestComplexMatrix, TestIDRS) {
 
 TEST_F(TestComplexMatrix, TestLSQR) {
     for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 5);
+        MKL_INT m = Random::rand_int(1, 200);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
         double eta = 0.05;
@@ -1315,7 +1315,7 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         b.clear();
         MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
         ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
-        for (MKL_INT k = 0; k < n; k++)
+        for (MKL_INT k = 0; k < m; k++)
             a(k, k) += complex<double>(0, eta);
         ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
         Random::fill<double>(rb.data, rb.size());
@@ -1326,7 +1326,7 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         ComplexMatrixFunctions::conjugate(af);
         MatMul mop(a), rop(af);
         // hrl: Note: The input matrix can be highly illconditioned (cond~10^5)
-        //      which causes problems for lsqr. 
+        //      which causes problems for lsqr.
         //      It is important to have long maxiters and small atol.
         //      It may still fail in extreme situations,
         //      in particular when m ~ 300.
