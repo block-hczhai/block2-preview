@@ -607,7 +607,7 @@ TEST_F(TestNPDM, TestSU2) {
             make_shared<DMRG<SU2, double, double>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
-        dmrg->solve(10, true, 1E-12);
+        dmrg->solve(20, true, 1E-14);
 
         // 1PDM ME
         shared_ptr<MovingEnvironment<SU2, double, double>> pme =
@@ -983,7 +983,7 @@ TEST_F(TestNPDM, TestSZ) {
             make_shared<DMRG<SZ, double, double>>(me, bdims, noises);
         dmrg->iprint = 2;
         dmrg->noise_type = NoiseTypes::Perturbative;
-        dmrg->solve(10, true, 1E-12);
+        dmrg->solve(20, true, 1E-12);
 
         // 1PDM ME
         shared_ptr<MovingEnvironment<SZ, double, double>> pme =
