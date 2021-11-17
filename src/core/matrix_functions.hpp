@@ -197,6 +197,25 @@ template <> struct GMatrixFunctions<double> {
         MKL_INT n = a.m * a.n, inc = 1;
         return dnrm2(&n, a.data, &inc);
     }
+    // Computes norm more accurately
+    static double norm_accurate(const MatrixRef &a) {
+        MKL_INT n = a.m * a.n;
+        long double out = 0.0;
+        long double compensate = 0.0;
+        for (MKL_INT ii = 0; ii < n; ++ii) {
+            long double sumi = a.data[ii];
+            sumi *= a.data[ii];
+            // Kahan summation
+            auto y = sumi - compensate;
+            const volatile long double t = out + y;
+            const volatile long double z = t - out;
+            compensate = z - y;
+            out = t;
+        }
+        out = sqrt(out);
+        volatile long double outd = real(out);
+        return static_cast<double>(outd);
+    }
     // determinant
     static double det(const MatrixRef &a) {
         assert(a.m == a.n);
