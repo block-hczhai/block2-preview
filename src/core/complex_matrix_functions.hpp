@@ -539,6 +539,8 @@ template <> struct GMatrixFunctions<complex<double>> {
                     return false;
         return true;
     }
+
+
     // dot product (a ^ T, b)
     static complex<double> dot(const ComplexMatrixRef &a,
                                const ComplexMatrixRef &b) {
@@ -1693,6 +1695,7 @@ template <> struct GMatrixFunctions<complex<double>> {
         memcpy(v.data, w.data(), sizeof(complex<double>) * w.size());
         return (int)nmult;
     }
+
 };
 
 typedef GMatrixFunctions<complex<double>> ComplexMatrixFunctions;

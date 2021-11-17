@@ -1326,7 +1326,7 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         ComplexMatrixFunctions::conjugate(af);
         MatMul mop(a), rop(af);
         // hrl: Note: The input matrix can be highly illconditioned (cond~10^5)
-        //      which causes problems for lsqr.
+        //      which causes problems for lsqr. 
         //      It is important to have long maxiters and small atol.
         //      It may still fail in extreme situations,
         //      in particular when m ~ 300.
