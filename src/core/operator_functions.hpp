@@ -231,11 +231,11 @@ template <typename S, typename FL> struct OperatorFunctions {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
-                seq->tensor_product_diagonal((*a)[ia], (*b)[ib], (*c)[ic],
+                seq->tensor_product_diagonal(conj, (*a)[ia], (*b)[ib], (*c)[ic],
                                              scale * factor);
             else
                 GMatrixFunctions<FL>::tensor_product_diagonal(
-                    (*a)[ia], (*b)[ib], (*c)[ic], scale * factor);
+                    conj, (*a)[ia], (*b)[ib], (*c)[ic], scale * factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -252,9 +252,14 @@ template <typename S, typename FL> struct OperatorFunctions {
                c->get_type() == SparseMatrixTypes::Normal &&
                da->get_type() == SparseMatrixTypes::Normal &&
                db->get_type() == SparseMatrixTypes::Normal);
-        scale = scale * a->factor * b->factor *
-                ((dconj & 1) ? xconj<FL>(da->factor) : da->factor) *
-                ((dconj & 2) ? xconj<FL>(db->factor) : db->factor);
+        scale = scale * ((conj & 1) ? xconj<FL>(a->factor) : a->factor) *
+                ((conj & 2) ? xconj<FL>(b->factor) : b->factor) *
+                (((dconj & 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
+                     ? xconj<FL>(da->factor)
+                     : da->factor) *
+                ((((dconj & 2) >> 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
+                     ? xconj<FL>(db->factor)
+                     : db->factor);
         assert(c->factor == 1.0);
         if (abs(scale) < TINY)
             return;
@@ -298,15 +303,15 @@ template <typename S, typename FL> struct OperatorFunctions {
                     double dfactor = dinfo->factor[idl];
                     if (seq->mode != SeqTypes::None) {
                         seq->three_tensor_product_diagonal(
-                            (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
-                            (*db)[idb], (dconj & 2) >> 1, dleft,
+                            conj, (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida],
+                            dconj & 1, (*db)[idb], (dconj & 2) >> 1, dleft,
                             scale * factor * dfactor, stride);
                         if (seq->mode == SeqTypes::Simple)
                             break;
                     } else
                         GMatrixFunctions<FL>::three_tensor_product_diagonal(
-                            (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida], dconj & 1,
-                            (*db)[idb], (dconj & 2) >> 1, dleft,
+                            conj, (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida],
+                            dconj & 1, (*db)[idb], (dconj & 2) >> 1, dleft,
                             scale * factor * dfactor, stride);
                 }
             }
@@ -388,12 +393,12 @@ template <typename S, typename FL> struct OperatorFunctions {
                 seq->simple_perform();
             double factor = abcv[il].second;
             if (seq->mode != SeqTypes::None)
-                seq->rotate((*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv],
-                            (*c)[ic], scale * factor);
+                seq->rotate((*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1,
+                            (*v)[iv], (*c)[ic], scale * factor);
             else
                 seq->cumulative_nflop += GMatrixFunctions<FL>::rotate(
-                    (*a)[ia], conj & 1, (*b)[ib], conj & 2, (*v)[iv], (*c)[ic],
-                    scale * factor);
+                    (*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*v)[iv],
+                    (*c)[ic], scale * factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -484,10 +489,10 @@ template <typename S, typename FL> struct OperatorFunctions {
                db->get_type() == SparseMatrixTypes::Normal);
         scale = scale * ((conj & 1) ? xconj<FL>(a->factor) : a->factor) *
                 ((conj & 2) ? xconj<FL>(b->factor) : b->factor) * c->factor *
-                (((dconj & 1) ^ (dleft ? (conj & 1) : (conj & 2)))
+                (((dconj & 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
                      ? xconj<FL>(da->factor)
                      : da->factor) *
-                (((dconj & 2) ^ (dleft ? (conj & 1) : (conj & 2)))
+                ((((dconj & 2) >> 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
                      ? xconj<FL>(db->factor)
                      : db->factor);
         assert(v->factor == 1.0);

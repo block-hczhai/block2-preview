@@ -198,22 +198,17 @@ template <> struct GMatrixFunctions<double> {
         return dnrm2(&n, a.data, &inc);
     }
     // Computes norm more accurately
-#if defined __GNUC__ && !defined __APPLE__
-    static double norm_accurate(const MatrixRef &a) __attribute__((optimize("-O0"))){
-#else
     static double norm_accurate(const MatrixRef &a) {
-#endif
         MKL_INT n = a.m * a.n;
         long double out = 0.0;
         long double compensate = 0.0;
-        for(MKL_INT ii = 0; ii < n; ++ii){
+        for (MKL_INT ii = 0; ii < n; ++ii) {
             long double sumi = a.data[ii];
             sumi *= a.data[ii];
             // Kahan summation
             auto y = sumi - compensate;
-            // somehow, volatile keyword leads to compile error. so just hope the compiler does not optimize this away..
-            const long double t = out + y;
-            const long double z = t - out;
+            const volatile long double t = out + y;
+            const volatile long double z = t - out;
             compensate = z - y;
             out = t;
         }
@@ -501,8 +496,9 @@ template <> struct GMatrixFunctions<double> {
         }
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
-                                        const MatrixRef &c, double scale) {
+    static void tensor_product_diagonal(uint8_t abconj, const MatrixRef &a,
+                                        const MatrixRef &b, const MatrixRef &c,
+                                        double scale) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
@@ -511,10 +507,11 @@ template <> struct GMatrixFunctions<double> {
     }
     // diagonal element of three-matrix tensor product
     static void
-    three_tensor_product_diagonal(const MatrixRef &a, const MatrixRef &b,
-                                  const MatrixRef &c, const MatrixRef &da,
-                                  bool dconja, const MatrixRef &db, bool dconjb,
-                                  bool dleft, double scale, uint32_t stride) {
+    three_tensor_product_diagonal(uint8_t abconj, const MatrixRef &a,
+                                  const MatrixRef &b, const MatrixRef &c,
+                                  const MatrixRef &da, bool dconja,
+                                  const MatrixRef &db, bool dconjb, bool dleft,
+                                  double scale, uint32_t stride) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const double cfactor = 1.0;
         const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);

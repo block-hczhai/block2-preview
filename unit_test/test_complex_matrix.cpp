@@ -344,23 +344,26 @@ TEST_F(TestComplexMatrix, TestTensorProductDiagonal) {
         Random::complex_fill<double>(a.data, a.size());
         Random::complex_fill<double>(b.data, b.size());
         c.clear();
+        uint8_t conj = Random::rand_int(0, 4);
         ComplexMatrixFunctions::tensor_product_diagonal(
-            a, b, c, complex<double>(2.0, 1.0));
+            conj, a, b, c, complex<double>(2.0, 1.0));
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
-                ASSERT_LE(
-                    abs(complex<double>(2.0, 1.0) * a(ia, ia) * b(ib, ib) -
-                        c(ia, ib)),
-                    1E-14);
+                ASSERT_LE(abs(complex<double>(2.0, 1.0) *
+                                  ((conj & 1) ? xconj(a(ia, ia)) : a(ia, ia)) *
+                                  ((conj & 2) ? xconj(b(ib, ib)) : b(ib, ib)) -
+                              c(ia, ib)),
+                          1E-14);
         c.clear();
-        seq->tensor_product_diagonal(a, b, c, complex<double>(2.0, 1.0));
+        seq->tensor_product_diagonal(conj, a, b, c, complex<double>(2.0, 1.0));
         seq->simple_perform();
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
-                ASSERT_LE(
-                    abs(complex<double>(2.0, 1.0) * a(ia, ia) * b(ib, ib) -
-                        c(ia, ib)),
-                    1E-14);
+                ASSERT_LE(abs(complex<double>(2.0, 1.0) *
+                                  ((conj & 1) ? xconj(a(ia, ia)) : a(ia, ia)) *
+                                  ((conj & 2) ? xconj(b(ib, ib)) : b(ib, ib)) -
+                              c(ia, ib)),
+                          1E-14);
         c.deallocate();
         b.deallocate();
         a.deallocate();
@@ -467,19 +470,20 @@ TEST_F(TestComplexMatrix, TestThreeTensorProductDiagonal) {
         dcn_stride = dcm_stride;
         MKL_INT dc_stride = dcm_stride * dc.n + dcn_stride;
         c.clear();
+        uint8_t conj = Random::rand_int(0, 4);
         ComplexMatrixFunctions::three_tensor_product_diagonal(
-            ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll,
+            conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll,
             complex<double>(2.0, 1.0), dc_stride);
         dc.clear(), cc.clear();
         ComplexMatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
                                                dc_stride);
         ComplexMatrixFunctions::tensor_product_diagonal(
-            ll ? dc : x, ll ? x : dc, cc, complex<double>(2.0, 1.0));
+            conj, ll ? dc : x, ll ? x : dc, cc, complex<double>(2.0, 1.0));
         ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         c.clear();
         AdvancedGEMM<complex<double>>::three_tensor_product_diagonal(
-            batch, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll,
-            complex<double>(2.0, 1.0), dc_stride);
+            batch, conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb,
+            ll, complex<double>(2.0, 1.0), dc_stride);
         batch->perform();
         batch->clear();
         ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
@@ -731,7 +735,7 @@ TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
             ASSERT_LE(abs(factor) - 1.0, 1E-3);
             ASSERT_TRUE(ComplexMatrixFunctions::all_close(
                 ComplexMatrixRef(a.data + a.n * eigval_idxs[i], a.n, 1), bs[i],
-                1E-3, 1E-3, factor));
+                1E-3, 0, factor));
         }
         for (int i = k - 1; i >= 0; i--)
             bs[i].deallocate();
@@ -781,7 +785,7 @@ TEST_F(TestComplexMatrix, TestDavidson) {
             factor = factor / abs(factor);
             ASSERT_LE(abs(factor) - 1.0, 1E-3);
             ASSERT_TRUE(ComplexMatrixFunctions::all_close(
-                ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 1E-3,
+                ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 0,
                 factor));
         }
         for (int i = k - 1; i >= 0; i--)
@@ -1291,7 +1295,7 @@ TEST_F(TestComplexMatrix, TestIDRS) {
 
 TEST_F(TestComplexMatrix, TestLSQR) {
     for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 300);
+        MKL_INT m = Random::rand_int(1, 5);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
         double eta = 0.05;
@@ -1328,8 +1332,8 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         //      in particular when m ~ 300.
         complex<double> func = IterativeMatrixFunctions<complex<double>>::lsqr(
             mop, rop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 
-            1E-7,0., 15000, 12000);
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 1E-7,
+            0., 10000);
         ComplexMatrixFunctions::copy(xg, b);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)

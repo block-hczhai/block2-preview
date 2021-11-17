@@ -417,6 +417,22 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         shallow_copy_wfn_to(mps);
         return mps;
     }
+    shared_ptr<MPS<S, FL>> deep_copy(const string &xtag) const override {
+        assert(info->get_type() == MPSTypes::MultiWfn);
+        shared_ptr<MultiMPSInfo<S>> xinfo =
+            dynamic_pointer_cast<MultiMPSInfo<S>>(info->deep_copy());
+        xinfo->load_mutable();
+        shared_ptr<MPS<S, FL>> xmps = make_shared<MultiMPS<S, FL>>(xinfo);
+        xmps->load_data();
+        xmps->load_mutable();
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
+    }
     void copy_data(const string &dir) const override {
         if (frame->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)

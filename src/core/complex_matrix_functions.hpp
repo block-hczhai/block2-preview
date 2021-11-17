@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "utils.hpp"
 #include "matrix_functions.hpp"
+#include "utils.hpp"
 #include <complex>
 
 using namespace std;
@@ -509,24 +509,19 @@ template <> struct GMatrixFunctions<complex<double>> {
               &inc);
         return r;
     }
-
     // Computes norm more accurately
-#if defined __GNUC__ && !defined __APPLE__
-    static double norm_accurate(const ComplexMatrixRef &a) __attribute__((optimize("-O0"))){
-#else
     static double norm_accurate(const ComplexMatrixRef &a) {
-#endif
         MKL_INT n = a.m * a.n;
-        complex<long double> out = 0.0;
-        complex<long double> compensate = 0.0;
-        for(MKL_INT ii = 0; ii < n; ++ii){
-            complex<long double> sumi = a.data[ii];
-            sumi *= conj(a.data[ii]);
+        long double out = 0.0;
+        long double compensate = 0.0;
+        for (MKL_INT ii = 0; ii < n; ++ii) {
+            long double &&xre = (long double)real(a.data[ii]);
+            long double &&xim = (long double)imag(a.data[ii]);
+            long double sumi = xre * xre + xim * xim;
             // Kahan summation
             auto y = sumi - compensate;
-            // somehow, volatile keyword leads to compile error. so just hope the compiler does not optimize this away..
-            const complex<long double> t = out + y;
-            const complex<long double> z = t - out;
+            const volatile long double t = out + y;
+            const volatile long double z = t - out;
             compensate = z - y;
             out = t;
         }
@@ -534,7 +529,6 @@ template <> struct GMatrixFunctions<complex<double>> {
         volatile long double outd = real(out);
         return static_cast<double>(outd);
     }
-
     template <typename T1, typename T2>
     static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,
                           double rtol = 1E-5, complex<double> scale = 1.0) {
@@ -901,22 +895,26 @@ template <> struct GMatrixFunctions<complex<double>> {
         }
     }
     // only diagonal elements so no conj parameters
-    static void tensor_product_diagonal(const ComplexMatrixRef &a,
+    static void tensor_product_diagonal(uint8_t abconj,
+                                        const ComplexMatrixRef &a,
                                         const ComplexMatrixRef &b,
                                         const ComplexMatrixRef &c,
                                         complex<double> scale) {
-        // TODO:: check whether conj is really needed
-        // here I assume a and b diag are all real
-        // but a and b may be complex conjugate to each other and c real
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const complex<double> cfactor = 1.0;
         const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
-        zgemm("t", "n", &b.n, &a.n, &k, &scale, b.data, &ldb, a.data, &lda,
-              &cfactor, c.data, &c.n);
+        if (!(abconj & 1))
+            zgemm(abconj & 2 ? "c" : "t", "n", &b.n, &a.n, &k, &scale, b.data,
+                  &ldb, a.data, &lda, &cfactor, c.data, &c.n);
+        else
+            for (MKL_INT i = 0; i < a.n; i++)
+                zgemm(abconj & 2 ? "c" : "t", "c", &b.n, &k, &k, &scale, b.data,
+                      &ldb, a.data + i * lda, &k, &cfactor, c.data + i * c.n,
+                      &c.n);
     }
     // diagonal element of three-matrix tensor product
     static void three_tensor_product_diagonal(
-        const ComplexMatrixRef &a, const ComplexMatrixRef &b,
+        uint8_t abconj, const ComplexMatrixRef &a, const ComplexMatrixRef &b,
         const ComplexMatrixRef &c, const ComplexMatrixRef &da, bool dconja,
         const ComplexMatrixRef &db, bool dconjb, bool dleft,
         complex<double> scale, uint32_t stride) {
@@ -930,8 +928,12 @@ template <> struct GMatrixFunctions<complex<double>> {
         const MKL_INT ddstr = 0;
         const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
         const MKL_INT ldda = da.n + 1, lddb = db.n + 1;
+        const bool ddconja =
+            dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+        const bool ddconjb =
+            dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
         if (da.m == 1 && da.n == 1) {
-            scale *= dconja ? conj(*da.data) : *da.data;
+            scale *= ddconja ? conj(*da.data) : *da.data;
             const MKL_INT dn = db.n - abs(ddstr);
             const complex<double> *bdata =
                 dconjb ? &db(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
@@ -939,23 +941,31 @@ template <> struct GMatrixFunctions<complex<double>> {
             if (dn > 0) {
                 if (dleft) {
                     // (1 x db) x b
-                    if (!dconjb)
-                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
-                              bdata, &lddb, &cfactor,
+                    if (!ddconjb)
+                        zgemm(abconj & 2 ? "c" : "t", "n", &b.n, &dn, &k,
+                              &scale, b.data, &ldb, bdata, &lddb, &cfactor,
                               &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
                     else
                         for (MKL_INT i = 0; i < dn; i++)
-                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
-                                  bdata + i * lddb, &k, &cfactor,
+                            zgemm(abconj & 2 ? "c" : "t", "c", &b.n, &k, &k,
+                                  &scale, b.data, &ldb, bdata + i * lddb, &k,
+                                  &cfactor,
                                   &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
-                } else
+                } else {
                     // a x (1 x db)
-                    zgemm(dconjb ? "c" : "t", "n", &dn, &a.n, &k, &scale, bdata,
-                          &lddb, a.data, &lda, &cfactor,
-                          &c(0, max(dstrn, dstrm)), &c.n);
+                    if (!(abconj & 1))
+                        zgemm(ddconjb ? "c" : "t", "n", &dn, &a.n, &k, &scale,
+                              bdata, &lddb, a.data, &lda, &cfactor,
+                              &c(0, max(dstrn, dstrm)), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < a.n; i++)
+                            zgemm(ddconjb ? "c" : "t", "c", &dn, &k, &k, &scale,
+                                  bdata, &lddb, a.data + i * lda, &k, &cfactor,
+                                  &c(i, max(dstrn, dstrm)), &c.n);
+                }
             }
         } else if (db.m == 1 && db.n == 1) {
-            scale *= dconjb ? conj(*db.data) : *db.data;
+            scale *= ddconjb ? conj(*db.data) : *db.data;
             const MKL_INT dn = da.n - abs(ddstr);
             const complex<double> *adata =
                 dconja ? &da(max(-ddstr, (MKL_INT)0), max(ddstr, (MKL_INT)0))
@@ -963,20 +973,28 @@ template <> struct GMatrixFunctions<complex<double>> {
             if (dn > 0) {
                 if (dleft) {
                     // (da x 1) x b
-                    if (!dconja)
-                        zgemm("t", "n", &b.n, &dn, &k, &scale, b.data, &ldb,
-                              adata, &ldda, &cfactor,
+                    if (!ddconja)
+                        zgemm(abconj & 2 ? "c" : "t", "n", &b.n, &dn, &k,
+                              &scale, b.data, &ldb, adata, &ldda, &cfactor,
                               &c(max(dstrn, dstrm), (MKL_INT)0), &c.n);
                     else
                         for (MKL_INT i = 0; i < dn; i++)
-                            zgemm("t", "c", &b.n, &k, &k, &scale, b.data, &ldb,
-                                  adata + i * ldda, &k, &cfactor,
+                            zgemm(abconj & 2 ? "c" : "t", "c", &b.n, &k, &k,
+                                  &scale, b.data, &ldb, adata + i * ldda, &k,
+                                  &cfactor,
                                   &c(max(dstrn, dstrm) + i, (MKL_INT)0), &c.n);
-                } else
+                } else {
                     // a x (da x 1)
-                    zgemm(dconja ? "c" : "t", "n", &dn, &a.n, &k, &scale, adata,
-                          &ldda, a.data, &lda, &cfactor,
-                          &c(0, max(dstrn, dstrm)), &c.n);
+                    if (!(abconj & 1))
+                        zgemm(ddconja ? "c" : "t", "n", &dn, &a.n, &k, &scale,
+                              adata, &ldda, a.data, &lda, &cfactor,
+                              &c(0, max(dstrn, dstrm)), &c.n);
+                    else
+                        for (MKL_INT i = 0; i < a.n; i++)
+                            zgemm(ddconja ? "c" : "t", "c", &dn, &k, &k, &scale,
+                                  adata, &ldda, a.data + i * lda, &k, &cfactor,
+                                  &c(i, max(dstrn, dstrm)), &c.n);
+                }
             }
         } else
             assert(false);

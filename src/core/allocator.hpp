@@ -88,15 +88,19 @@ template <typename T> struct Allocator {
      * @param n Number of elements in the array.
      */
     virtual void deallocate(void *ptr, size_t n) {}
+    /** Deallocate a length n complex array.
+     * @param ptr The pointer to be deallocated.
+     * @param n Number of elements in the array.
+     */
+    virtual void complex_deallocate(void *ptr, size_t n) {
+        deallocate(ptr, n + n);
+    }
     /** Adjust the size an allocated pointer. No data copying will happen.
      * @param ptr The allocated pointer.
      * @param n Number of elements in original allocation.
      * @param new_n Number of elements in the new allocation.
      * @return The new pointer.
      */
-    virtual void complex_deallocate(void *ptr, size_t n) {
-        deallocate(ptr, n + n);
-    }
     virtual T *reallocate(T *ptr, size_t n, size_t new_n) { return nullptr; }
     /** Return a copy of the allocator.
      * @return ptr The copy of this allocator.

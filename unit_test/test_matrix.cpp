@@ -301,12 +301,13 @@ TEST_F(TestMatrix, TestTensorProductDiagonal) {
         Random::fill<double>(a.data, a.size());
         Random::fill<double>(b.data, b.size());
         c.clear();
-        MatrixFunctions::tensor_product_diagonal(a, b, c, 2.0);
+        uint8_t conj = Random::rand_int(0, 4);
+        MatrixFunctions::tensor_product_diagonal(conj, a, b, c, 2.0);
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
                 ASSERT_EQ(2.0 * a(ia, ia) * b(ib, ib), c(ia, ib));
         c.clear();
-        seq->tensor_product_diagonal(a, b, c, 2.0);
+        seq->tensor_product_diagonal(conj, a, b, c, 2.0);
         seq->simple_perform();
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
@@ -413,19 +414,20 @@ TEST_F(TestMatrix, TestThreeTensorProductDiagonal) {
         dcn_stride = dcm_stride;
         MKL_INT dc_stride = dcm_stride * dc.n + dcn_stride;
         c.clear();
+        uint8_t conj = Random::rand_int(0, 4);
         MatrixFunctions::three_tensor_product_diagonal(
-            ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll, 2.0,
+            conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll, 2.0,
             dc_stride);
         dc.clear(), cc.clear();
         MatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
                                         dc_stride);
-        MatrixFunctions::tensor_product_diagonal(ll ? dc : x, ll ? x : dc, cc,
-                                                 2.0);
+        MatrixFunctions::tensor_product_diagonal(conj, ll ? dc : x, ll ? x : dc,
+                                                 cc, 2.0);
         ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
         c.clear();
         AdvancedGEMM<double>::three_tensor_product_diagonal(
-            batch, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll, 2.0,
-            dc_stride);
+            batch, conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb,
+            ll, 2.0, dc_stride);
         batch->perform();
         batch->clear();
         ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));

@@ -165,15 +165,15 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             switch (idiag) {
             case 1:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    (*ca)[ia], (*b)[ib], (*c)[ic], scale * factor);
+                    conj, (*ca)[ia], (*b)[ib], (*c)[ic], scale * factor);
                 break;
             case 2:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    (*a)[ia], (*cb)[ib], (*c)[ic], scale * factor);
+                    conj, (*a)[ia], (*cb)[ib], (*c)[ic], scale * factor);
                 break;
             case 3:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    (*ca)[ia], (*cb)[ib], (*c)[ic], scale * factor);
+                    conj, (*ca)[ia], (*cb)[ib], (*c)[ic], scale * factor);
                 break;
             default:
                 assert(false);
