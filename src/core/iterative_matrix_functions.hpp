@@ -1651,7 +1651,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      * @param soft_max_iter Maximum number of iterations, without throwing error
      * @param init_basis_in Optional initial basis for the search direction.
      *      Defaults to zero
-     * @param omega_used Optional values of used direction magnitudes. 
+     * @param omega_used Optional values of used direction magnitudes.
      *      Defaults to GMRES strategy. If given, Leja ordering is useful
      *      (+ permuting init_basis accordingly)
      * @param orthogonalize_P Orthogonalize the random space P matrix of size
@@ -1670,8 +1670,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
          const FP precond_reg = 1E-8, const FP tol = 1E-3, const FP atol = 0.0,
          const int max_iter = 5000, const int soft_max_iter = -1,
          const vector<GMatrix<FL>> &init_basis_in = {},
-         const vector<FL> &omega_used_in = {}, const bool orthogonalize_P = true,
-         const int random_seed = -1,
+         const vector<FL> &omega_used_in = {},
+         const bool orthogonalize_P = true, const int random_seed = -1,
          const bool use_leja_ordering = false) {
         assert(b.m == x.m);
         assert(b.n == x.n);
@@ -2069,7 +2069,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
     }
 
-    
     /** LSQR implementation. See scipy.sparse.linalg.lsqr
      *
      *  I removed the tamp parameter
@@ -2092,7 +2091,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      *         (The final x will usually have fewer correct digits, depending on
      * cond(A)) atol (btol) defines relative error estimate in A (b) The
      * stopping criteria are:
-     * 1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x|| 
+     * 1: ||Ax - b || <= btol ||b|| + atol ||A|| ||x||
      * 2: ||A (A x- b)'|| / (||A|| ||Ax - b|| + eps) <= atol
      * @param max_iter Maximum number of iterations. Throws error afterward.
      * @param soft_max_iter Maximum number of iterations, without throwing error
@@ -2234,16 +2233,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         test2 = alpha / beta;
         if (iprint) {
             cout << endl
-                 << "   Itn    <x|b>                             r1norm     " 
-                 << "      Compatible       LS               Norm A           Cond A" 
+                 << "   Itn    <x|b>                             r1norm     "
+                 << "      Compatible       LS               Norm A           "
+                    "Cond A"
                  << endl;
             auto out = complex_dot(x, b);
-            cout << setw(6) << niter
-                    << scientific << setw(17) << setprecision(8) << real(out) << "+"
-                    << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
-                    << scientific << setw(9) << setprecision(8) << r1norm  << "   "
-                    << scientific << setw(9) << setprecision(8) << test1  << "   "
-                    << scientific << setw(9) << setprecision(8) << test2 << endl;
+            cout << setw(6) << niter << scientific << setw(17)
+                 << setprecision(8) << real(out) << "+" << scientific
+                 << setw(17) << setprecision(8) << imag(out) << "i  "
+                 << scientific << setw(9) << setprecision(8) << r1norm << "   "
+                 << scientific << setw(9) << setprecision(8) << test1 << "   "
+                 << scientific << setw(9) << setprecision(8) << test2 << endl;
         }
         // Main iteration loop
         while (niter < max_iter &&
@@ -2394,16 +2394,18 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 istop = 7;
             }
 
-            if (iprint){
-                auto out = complex_dot(x,b);
-                cout << setw(6) << niter
-                     << scientific << setw(17) << setprecision(8) << real(out) << "+"
-                     << scientific << setw(17) << setprecision(8) << imag(out) << "i  "
-                     << scientific << setw(9) << setprecision(8) << r1norm << "   "
-                     << scientific << scientific << setw(9) << setprecision(8) << test1  << "   "
-                     << scientific << setw(9) << setprecision(8) << test2  << "   "
-                     << scientific << setw(9) << setprecision(8) << anorm  << "   "
-                     << scientific << setw(9) << setprecision(8) << acond << endl;
+            if (iprint) {
+                auto out = complex_dot(x, b);
+                cout << setw(6) << niter << scientific << setw(17)
+                     << setprecision(8) << real(out) << "+" << scientific
+                     << setw(17) << setprecision(8) << imag(out) << "i  "
+                     << scientific << setw(9) << setprecision(8) << r1norm
+                     << "   " << scientific << scientific << setw(9)
+                     << setprecision(8) << test1 << "   " << scientific
+                     << setw(9) << setprecision(8) << test2 << "   "
+                     << scientific << setw(9) << setprecision(8) << anorm
+                     << "   " << scientific << setw(9) << setprecision(8)
+                     << acond << endl;
             }
             if (istop != 0) {
                 break;
