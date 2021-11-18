@@ -512,22 +512,30 @@ template <> struct GMatrixFunctions<complex<double>> {
     // Computes norm more accurately
     static double norm_accurate(const ComplexMatrixRef &a) {
         MKL_INT n = a.m * a.n;
-        long double out = 0.0;
-        long double compensate = 0.0;
+        // do re and im separately, as in numpy
+        long double out_real = 0.0;
+        long double out_imag = 0.0;
+        long double compensate_real = 0.0;
+        long double compensate_imag = 0.0;
         for (MKL_INT ii = 0; ii < n; ++ii) {
             long double &&xre = (long double)real(a.data[ii]);
             long double &&xim = (long double)imag(a.data[ii]);
-            long double sumi = xre * xre + xim * xim;
+            long double sumi_real = xre * xre;
+            long double sumi_imag = xim * xim;
             // Kahan summation
-            auto y = sumi - compensate;
-            const volatile long double t = out + y;
-            const volatile long double z = t - out;
-            compensate = z - y;
-            out = t;
+            auto y_real = sumi_real - compensate_real;
+            auto y_imag = sumi_imag - compensate_imag;
+            const volatile long double t_real = out_real + y_real;
+            const volatile long double t_imag = out_imag + y_imag;
+            const volatile long double z_real = t_real - out_real;
+            const volatile long double z_imag = t_imag - out_imag;
+            compensate_real = z_real - y_real;
+            compensate_imag = z_imag - y_imag;
+            out_real = t_real;
+            out_imag = t_imag;
         }
-        out = sqrt(out);
-        volatile long double outd = real(out);
-        return static_cast<double>(outd);
+        long double out = sqrt(out_real + out_imag);
+        return static_cast<double>(out);
     }
     template <typename T1, typename T2>
     static bool all_close(const T1 &a, const T2 &b, double atol = 1E-8,

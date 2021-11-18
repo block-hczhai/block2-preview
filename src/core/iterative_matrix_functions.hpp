@@ -2200,14 +2200,20 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             beta = norm_accurate(u);
         }
         if (beta > 0.0) {
-            iscale(u, 1.0 / beta);
+            //iscale(u, 1.0 / beta); // vv is more accurate
+            for (size_t i = 0; i < N; ++i) {
+                u(i, 0) /= beta;
+            }
             ropM(u, v);
             ++nmult;
             alpha = norm_accurate(v);
             if (pcomm != nullptr) {
                 pcomm->broadcast(&alpha, 1, pcomm->root);
             }
-            iscale(v, 1.0 / alpha);
+            //iscale(v, 1.0 / alpha); // vv is more accurate
+            for (size_t i = 0; i < N; ++i) {
+                v(i, 0) /= alpha;
+            }
         } else {
             alpha = 0.0;
             copy(v, x);
