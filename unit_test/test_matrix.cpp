@@ -796,7 +796,7 @@ TEST_F(TestMatrix, TestMinRes) {
         double func = IterativeMatrixFunctions<double>::minres(
             mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
             (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
