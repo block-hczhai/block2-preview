@@ -886,7 +886,7 @@ TEST_F(TestComplexMatrix, TestMinRes) {
         IterativeMatrixFunctions<complex<double>>::minres(
             mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
             (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 0.0));
+        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -1332,8 +1332,8 @@ TEST_F(TestComplexMatrix, TestLSQR) {
         //      in particular when m ~ 300.
         complex<double> func = IterativeMatrixFunctions<complex<double>>::lsqr(
             mop, rop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 1E-7,
-            0., 10000);
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8,
+            /*rtol*/ 1E-7, /*atol*/ 0., 10000);
         ComplexMatrixFunctions::copy(xg, b);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
