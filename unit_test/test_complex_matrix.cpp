@@ -812,7 +812,7 @@ TEST_F(TestComplexMatrix, TestLinear) {
         ComplexMatrixFunctions::linear(af, x);
         // note that linear solves the H^T problem
         ComplexMatrixFunctions::multiply(x, false, a, false, bg, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(bg, b, 1E-9, 1E-8));
+        ASSERT_TRUE(MatrixFunctions::all_close(bg, b, 1E-7, 1E-7));
         x.deallocate();
         bg.deallocate();
         b.deallocate();
@@ -982,7 +982,7 @@ TEST_F(TestComplexMatrix, TestEigs) {
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 ag(k, j) /= w(k, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 1E-8));
+        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-7, 1E-7));
         w.deallocate();
         ag.deallocate();
         ap.deallocate();

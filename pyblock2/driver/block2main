@@ -132,7 +132,7 @@ else:
         from block2.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
         from block2.cpx.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-        from block2.cpx.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, ComplexExpect
+        from block2.cpx.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
         from block2.sz import trans_state_info_to_su2 as trans_si
         from block2.su2 import MPSInfo as TrMPSInfo
         from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -147,7 +147,7 @@ else:
         from block2.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
         from block2.cpx.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-        from block2.cpx.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, ComplexExpect
+        from block2.cpx.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
         from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
         from block2.sz import MPSInfo as TrMPSInfo
         from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -162,7 +162,7 @@ else:
         from block2.cpx.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
         from block2.cpx.szk import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-        from block2.cpx.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, ComplexExpect
+        from block2.cpx.szk import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
         from block2.szk import trans_state_info_to_su2k as trans_si
         from block2.su2k import MPSInfo as TrMPSInfo
         from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
@@ -177,7 +177,7 @@ else:
         from block2.cpx.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
         from block2.cpx.su2k import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
-        from block2.cpx.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, ComplexExpect
+        from block2.cpx.su2k import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
         from block2.su2k import trans_state_info_to_szk as trans_si, trans_unfused_mps_to_szk as trans_mps
         from block2.szk import MPSInfo as TrMPSInfo
         from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
