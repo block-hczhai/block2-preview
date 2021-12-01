@@ -2145,6 +2145,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     static FPS
     truncate_density_matrix(const shared_ptr<SparseMatrix<S, FLS>> &dm,
                             vector<pair<int, int>> &ss, int k, FPS cutoff,
+                            bool store_wfn_spectra, vector<FPS> &wfn_spectra,
                             TruncationTypes trunc_type) {
         vector<shared_ptr<VectorAllocator<FPS>>> d_allocs(dm->info->n);
         vector<GDiagonalMatrix<FPS>> eigen_values(
@@ -2176,6 +2177,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         int k_total = 0;
         for (int i = 0; i < dm->info->n; i++)
             k_total += eigen_values[i].n;
+        if (store_wfn_spectra) {
+            wfn_spectra.clear();
+            wfn_spectra.reserve(k_total);
+            for (int i = 0; i < dm->info->n; i++)
+                for (int j = 0; j < eigen_values[i].n; j++)
+                    wfn_spectra.push_back(
+                        sqrt(max((FPS)0, eigen_values[i].data[j])));
+        }
         FPS error = 0.0;
         ss.reserve(k_total);
         for (int i = 0; i < (int)eigen_values.size(); i++)
@@ -2248,11 +2257,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         return error;
     }
     // Truncate and keep k singular values
-    static FPS
-    truncate_singular_values(const vector<S> &qs,
-                             const vector<shared_ptr<GTensor<FPS>>> &s,
-                             vector<pair<int, int>> &ss, int k, FPS cutoff,
-                             TruncationTypes trunc_type) {
+    static FPS truncate_singular_values(
+        const vector<S> &qs, const vector<shared_ptr<GTensor<FPS>>> &s,
+        vector<pair<int, int>> &ss, int k, FPS cutoff, bool store_wfn_spectra,
+        vector<FPS> &wfn_spectra, TruncationTypes trunc_type) {
         vector<shared_ptr<GTensor<FPS>>> s_reduced;
         cutoff = sqrt(cutoff);
         int k_total = 0;
@@ -2268,6 +2276,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                               sqrt(qs[i].multiplicity()));
             s_reduced.push_back(wr);
             k_total += wr->shape[0];
+        }
+        if (store_wfn_spectra) {
+            wfn_spectra.clear();
+            wfn_spectra.reserve(k_total);
+            for (int i = 0; i < (int)s.size(); i++)
+                wfn_spectra.insert(wfn_spectra.end(), s[i]->data.begin(),
+                                   s[i]->data.end());
         }
         FPS error = 0.0;
         ss.reserve(k_total);
@@ -2481,6 +2496,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         bool trace_right, bool normalize,
         shared_ptr<SparseMatrix<S, FLS>> &left,
         shared_ptr<SparseMatrix<S, FLS>> &right, FPS cutoff,
+        bool store_wfn_spectra, vector<FPS> &wfn_spectra,
         TruncationTypes trunc_type = TruncationTypes::Physical,
         DecompositionTypes decomp_type = DecompositionTypes::SVD,
         const shared_ptr<SparseMatrixGroup<S, FLS>> &mwfn = nullptr,
@@ -2525,7 +2541,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        FPS error = truncate_singular_values(qs, s, ss, k, cutoff, trunc_type);
+        FPS error = truncate_singular_values(
+            qs, s, ss, k, cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
         // ilr: row index in singular values list
         // im: number of states
         vector<int> ilr;
@@ -2648,10 +2665,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         const shared_ptr<SparseMatrix<S, FLS>> &wfn, int k, bool trace_right,
         bool normalize, shared_ptr<SparseMatrix<S, FLS>> &left,
         shared_ptr<SparseMatrix<S, FLS>> &right, FPS cutoff,
+        bool store_wfn_spectra, vector<FPS> &wfn_spectra,
         TruncationTypes trunc_type = TruncationTypes::Physical) {
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        FPS error = truncate_density_matrix(dm, ss, k, cutoff, trunc_type);
+        FPS error = truncate_density_matrix(
+            dm, ss, k, cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
         // ilr: row index in dm
         // im: number of states
         vector<int> ilr;
@@ -2744,10 +2763,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         bool trace_right, bool normalize,
         vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &new_wfns,
         shared_ptr<SparseMatrix<S, FLS>> &rot_mat, FPS cutoff,
+        bool store_wfn_spectra, vector<FPS> &wfn_spectra,
         TruncationTypes trunc_type = TruncationTypes::Physical) {
         // ss: pair<quantum index in dm, reduced matrix index in dm>
         vector<pair<int, int>> ss;
-        FPS error = truncate_density_matrix(dm, ss, k, cutoff, trunc_type);
+        FPS error = truncate_density_matrix(
+            dm, ss, k, cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
         // ilr: row index in dm
         // im: number of states
         vector<int> ilr;

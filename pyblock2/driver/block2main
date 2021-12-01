@@ -10,7 +10,7 @@ Author:
 from block2 import SZ, SU2, SZK, SU2K
 from block2 import Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
-from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
+from block2 import VectorUInt8, VectorUBond, VectorVectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
 from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
@@ -241,7 +241,12 @@ restart_dir = dic.get("restart_dir", None)
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 n_threads = int(dic.get("num_thrds", 28))
 mkl_threads = int(dic.get("mkl_thrds", 1))
-bond_dims, dav_thrds, noises = dic["schedule"]
+bond_dims, dav_thrds, noises, site_dependent_bdims = dic["schedule"]
+if max([len(x) for x in site_dependent_bdims]) == 0:
+    site_dependent_bdims = []
+site_dependent_bdims = VectorVectorUBond(
+    [VectorUBond(x) for x in site_dependent_bdims])
+store_wfn_spectra = "store_wfn_spectra" in dic
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
 cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 singlet_embedding = "singlet_embedding" in dic
@@ -322,10 +327,11 @@ if MPI is not None:
 memory = int(int(dic.get("mem", "2").split()[0]) * 1e9)
 fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 if "intmem" in dic:
-    intmemory =  int(int(dic["intmem"].split()[0]) * 1e9)
+    intmemory = int(int(dic["intmem"].split()[0]) * 1e9)
     init_memory(isize=int(intmemory), dsize=int(memory), save_dir=scratch)
 else:
-    init_memory(isize=int(memory * 0.1), dsize=int(memory * 0.9), save_dir=scratch)
+    init_memory(isize=int(memory * 0.1),
+                dsize=int(memory * 0.9), save_dir=scratch)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(
     ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -371,20 +377,22 @@ if pre_run or not no_pre_run:
         assert "nofiedler" in dic or "noreorder" in dic
         if "target_t" not in dic:
             dic["target_t"] = "1"
-    elif "model" in dic: # model hamiltonians
+    elif "model" in dic:  # model hamiltonians
         fmods = dic["model"].split()
         if fmods[0] in ["hubbard", "hubbard_periodic", "hubbard_kspace", "hubbard_rspace"]:
             assert len(fmods) in [4, 5]
-            n_sites, const_t, const_u = int(fmods[1]), float(fmods[2]), float(fmods[3])
+            n_sites, const_t, const_u = int(
+                fmods[1]), float(fmods[2]), float(fmods[3])
             if len(fmods) == 5 and fmods[4] == "per-site":
                 const_t /= n_sites
                 const_u /= n_sites
-            _print("1D %s model : L = %d T = %.5f U = %.5f" % (fmods[0], n_sites, const_t, const_u))
+            _print("1D %s model : L = %d T = %.5f U = %.5f" %
+                   (fmods[0], n_sites, const_t, const_u))
             if fmods[0] == "hubbard_kspace":
                 fcidump = HubbardKSpaceFCIDUMP(n_sites, const_t, const_u)
             else:
                 fcidump = HubbardFCIDUMP(n_sites, const_t, const_u,
-                    fmods[0] in ["hubbard_periodic", "hubbard_rspace"])
+                                         fmods[0] in ["hubbard_periodic", "hubbard_rspace"])
             orb_sym = None
         else:
             raise RuntimeError("Model %d not supported!" % fmods[0])
@@ -401,7 +409,8 @@ if pre_run or not no_pre_run:
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
-        np.save(scratch + '/orbital_reorder.npy', np.arange(0, fcidump.n_sites, dtype=int))
+        np.save(scratch + '/orbital_reorder.npy',
+                np.arange(0, fcidump.n_sites, dtype=int))
     else:
         if "gaopt" in dic:
             orb_idx = orbital_reorder(fcidump, method='gaopt ' + dic["gaopt"])
@@ -429,11 +438,12 @@ if pre_run or not no_pre_run:
         if "k_mod" in dic:
             fcidump.k_mod = int(dic["k_mod"])
             if fcidump.k_mod != 0:
-                fcidump.k_sym = VectorInt([x % fcidump.k_mod for x in fcidump.k_sym])
+                fcidump.k_sym = VectorInt(
+                    [x % fcidump.k_mod for x in fcidump.k_sym])
             fcidump.k_isym = fcidump.k_isym % fcidump.k_mod
             iksym = [x % fcidump.k_mod for x in iksym]
         target = SX(fcidump.n_elec, fcidump.twos,
-            SX.pg_combine(swap_pg(fcidump.isym), fcidump.k_isym, fcidump.k_mod))
+                    SX.pg_combine(swap_pg(fcidump.isym), fcidump.k_isym, fcidump.k_mod))
     else:
         target = SX(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
     targets = []
@@ -443,7 +453,7 @@ if pre_run or not no_pre_run:
                 if "k_symmetry" in dic:
                     for iiksym in iksym:
                         targets.append(SX(inelec, ispin,
-                            SX.pg_combine(swap_pg(iisym), iiksym, fcidump.k_mod)))
+                                          SX.pg_combine(swap_pg(iisym), iiksym, fcidump.k_mod)))
                 else:
                     targets.append(SX(inelec, ispin, swap_pg(iisym)))
     targets = VectorSL(targets)
@@ -472,9 +482,9 @@ if pre_run or not no_pre_run:
         sym_error += k_sym_error
         orb_sym = HamiltonianQC.combine_orb_sym(orb_sym, k_sym, k_mod)
     if sym_error > symmetrize_ints_tol:
-        raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
-                            "please check point group symmetry and FCIDUMP or set" +
-                            " a higher tolerance for the keyword '%s'") % (
+        raise RuntimeError(("Integral symmetrization error larger than %10.5g, "
+                            + "please check point group symmetry and FCIDUMP or set"
+                            + " a higher tolerance for the keyword '%s'") % (
             symmetrize_ints_tol, "symmetrize_ints"))
     if dynamic_corr_method is not None:
         if len(dynamic_corr_method[1]) == 2:
@@ -487,7 +497,7 @@ if pre_run or not no_pre_run:
             n_inactive, n_cas, n_external = dynamic_corr_method[1]
             assert n_orbs == n_inactive + n_cas + n_external
         _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
-            % (n_inactive, n_cas, n_external))
+               % (n_inactive, n_cas, n_external))
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
     elif big_site_method == "folding":
@@ -495,27 +505,33 @@ if pre_run or not no_pre_run:
         mpo_fold = MPOQC(hamil, qc_type)
         assert dynamic_corr_method is not None
         if dynamic_corr_method[0] in ["casci"]:
-            mps_info_fold = CASCIMPSInfo(n_orbs, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
+            mps_info_fold = CASCIMPSInfo(
+                n_orbs, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
         elif dynamic_corr_method[0] in ["mrcis", "mrcisd", "mrcisdt"]:
             ci_order = len(dynamic_corr_method[0]) - 4
-            mps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+            mps_info_fold = MRCIMPSInfo(
+                n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
         elif dynamic_corr_method[0] in ["nevpt2sd", "nevpt2s"]:
             ci_order = len(dynamic_corr_method[0]) - 6
-            mps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+            mps_info_fold = MRCIMPSInfo(
+                n_orbs, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
         elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi",
-            "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                        "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
             sub_space = dynamic_corr_method[0][7:]
             n_ex_inactive = sub_space.count('i') + sub_space.count('j')
             n_ex_external = sub_space.count('r') + sub_space.count('s')
-            mps_info_fold = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum, target, hamil.basis)
+            mps_info_fold = NEVPTMPSInfo(
+                n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum, target, hamil.basis)
         for i in range(n_external - 1):
             _print("fold right %d / %d" % (i, n_external))
-            mpo_fold = FusedMPO(mpo_fold, hamil.basis, mpo_fold.n_sites - 2, mpo_fold.n_sites - 1, mps_info_fold.right_dims_fci[mpo_fold.n_sites - 2])
+            mpo_fold = FusedMPO(mpo_fold, hamil.basis, mpo_fold.n_sites - 2,
+                                mpo_fold.n_sites - 1, mps_info_fold.right_dims_fci[mpo_fold.n_sites - 2])
             hamil.basis = mpo_fold.basis
             hamil.n_sites = mpo_fold.n_sites
         for i in range(n_inactive - 1):
             _print("fold left %d / %d" % (i, n_inactive))
-            mpo_fold = FusedMPO(mpo_fold, hamil.basis, 0, 1, mps_info_fold.left_dims_fci[i + 2])
+            mpo_fold = FusedMPO(mpo_fold, hamil.basis, 0, 1,
+                                mps_info_fold.left_dims_fci[i + 2])
             hamil.basis = mpo_fold.basis
             hamil.n_sites = mpo_fold.n_sites
         for k, op in mpo_fold.tensors[0].ops.items():
@@ -550,7 +566,7 @@ if pre_run or not no_pre_run:
             xl = -1, -1, -1
             xr = 1, 1, 1
         elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
-            "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                        "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
             # this is not correct yet
             sub_space = dynamic_corr_method[0][7:]
             n_ex_inactive = sub_space.count('i') + sub_space.count('j')
@@ -569,12 +585,16 @@ if pre_run or not no_pre_run:
             xr = n_alpha, n_beta, nelec[0]
         if big_site_method == "fock":
             assert "nonspinadapted" in dic
-            big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
-            big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, orb_sym, *xr, True)
+            big_left_orig = SCIFockBigSite(
+                n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
+            big_right_orig = SCIFockBigSite(
+                n_orbs, n_external, True, fcidump, orb_sym, *xr, True)
         elif big_site_method == "csf":
             assert "nonspinadapted" not in dic
-            big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
-            big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, orb_sym[-n_external:])
+            big_left_orig = CSFBigSite(n_inactive, abs(
+                xl[-1]), False, fcidump, orb_sym[:n_inactive])
+            big_right_orig = CSFBigSite(n_external, abs(
+                xr[-1]), True, fcidump, orb_sym[-n_external:])
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -587,7 +607,7 @@ if pre_run or not no_pre_run:
                 big_left = ParallelBigSite(big_left, prule)
                 big_right = ParallelBigSite(big_right, prule)
         hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-            None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                                     None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
     n_sites = hamil.n_sites
 
 else:
@@ -623,7 +643,7 @@ if no_pre_run:
                 if "k_symmetry" in dic:
                     for iiksym in iksym:
                         targets.append(SX(inelec, ispin,
-                            SX.pg_combine(swap_pg(iisym), iiksym, k_mod)))
+                                          SX.pg_combine(swap_pg(iisym), iiksym, k_mod)))
                 else:
                     targets.append(SX(inelec, ispin, swap_pg(iisym)))
     assert len(targets) != 0
@@ -708,6 +728,7 @@ def fmt_size(i, suffix='B'):
             a *= 1024
     return "??? " + suffix
 
+
 if "compression" in dic or "stopt_compression" in dic or "delta_t" in dic:
     if mps_tags == read_tags:
         raise RuntimeError("""For compression and time evolution, the input MPS
@@ -764,7 +785,8 @@ elif "fullrestart" in dic:
                 MPI.barrier()
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
+            mps.flip_fused_form(
+                mps.center, cg, prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -778,7 +800,8 @@ elif "fullrestart" in dic:
                 MPI.barrier()
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
+            mps.flip_fused_form(
+                mps.center, cg, prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -795,7 +818,8 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "KJ":
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
+            mps.flip_fused_form(
+                mps.center, cg, prule if MPI is not None else None)
         mps.center = mps.n_sites - 2
         mps.save_data()
         forward = False
@@ -811,7 +835,8 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "ST":
             cg = CG(200)
             cg.initialize()
-            mps.flip_fused_form(mps.center, cg, prule if MPI is not None else None)
+            mps.flip_fused_form(
+                mps.center, cg, prule if MPI is not None else None)
         mps.save_data()
         forward = True
         if MPI is not None:
@@ -839,18 +864,21 @@ elif pre_run or not no_pre_run:
         if nroots == 1 and len(targets) == 1:
             if dynamic_corr_method is not None:
                 if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij",
-                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                              "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
                     if big_site_method is not None:
                         mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
-                            1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
+                                                1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
                     else:
-                        mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
+                        mps_info = CASCIMPSInfo(
+                            n_sites, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
                 elif dynamic_corr_method[0] in ["mrcis", "mrcisd", "mrcisdt"]:
                     if big_site_method is not None:
-                        mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+                        mps_info = MPSInfo(
+                            n_sites, vacuum, target, hamil.basis)
                     else:
                         ci_order = len(dynamic_corr_method[0]) - 4
-                        mps_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+                        mps_info = MRCIMPSInfo(
+                            n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
                 else:
                     mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
             else:
@@ -960,7 +988,8 @@ if pre_run or not no_pre_run:
     else:
         mpo = MPOQC(hamil, qc_type)
     _print("simpl mpo", time.perf_counter() - tx)
-    mpo = SimplifiedMPO(mpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+    mpo = SimplifiedMPO(mpo, simpl_rule, True, True,
+                        OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished", time.perf_counter() - tx)
 
     _print('GS MPO BOND DIMS = ', ''.join(
@@ -996,7 +1025,7 @@ if pre_run or not no_pre_run:
         _print("build 1npc mpo", time.perf_counter() - tx)
         nmpo = NPC1MPOQC(hamil)
         nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True,
-                            OpNamesSet((OpNames.R, OpNames.RD)))
+                             OpNamesSet((OpNames.R, OpNames.RD)))
 
         if MPI is None or MPI.rank == 0:
             nmpo.save_data(scratch + '/mpo-1npc.bin')
@@ -1183,7 +1212,8 @@ def split_mps(iroot, mps, mps_info):
         smps.center = mps.center
         smps.dot = mps.dot
         smps.canonical_form = '' + mps.canonical_form
-        smps.canonical_form = smps.canonical_form.replace('T', 'S').replace('J', 'K')
+        smps.canonical_form = smps.canonical_form.replace(
+            'T', 'S').replace('J', 'K')
         smps.tensors = mps.tensors[:]
         if smps.tensors[smps.center] is None:
             smps.tensors[smps.center] = mps.wfns[iroot][0]
@@ -1199,7 +1229,8 @@ def split_mps(iroot, mps, mps_info):
         if smps.canonical_form[smps.center] in "ST":
             cg = CG(200)
             cg.initialize()
-            smps.flip_fused_form(smps.center, cg, prule if MPI is not None else None)
+            smps.flip_fused_form(
+                smps.center, cg, prule if MPI is not None else None)
         smps.save_data()
         forward = True
         if MPI is not None:
@@ -1287,7 +1318,8 @@ def get_mps_from_tags(iroot):
             if smps.canonical_form[smps.center] in "ST":
                 cg = CG(200)
                 cg.initialize()
-                smps.flip_fused_form(smps.center, cg, prule if MPI is not None else None)
+                smps.flip_fused_form(
+                    smps.center, cg, prule if MPI is not None else None)
             smps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -1466,14 +1498,19 @@ if not pre_run:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
             if "dm_noise" in dic:
                 dmrg.noise_type = NoiseTypes.DensityMatrix
-            else:
+            elif decomp_type != DecompositionTypes.SVD:
                 dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
+            else:
+                dmrg.noise_type = NoiseTypes.ReducedPerturbative
             dmrg.cutoff = float(dic.get("cutoff", 1E-14))
             dmrg.decomp_type = decomp_type
             dmrg.trunc_type = trunc_type
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
             dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
-            dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
+            dmrg.davidson_soft_max_iter = int(
+                dic.get("davidson_soft_max_iter", -1))
+            dmrg.store_wfn_spectra = store_wfn_spectra
+            dmrg.site_dependent_bond_dims = site_dependent_bdims
 
             sweep_energies = []
             discarded_weights = []
@@ -1541,7 +1578,8 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         if big_site_method is not None and n_cas != 0:
-            dmrg = DMRGBigSite(me, VectorUBond(bond_dims), VectorDouble(noises))
+            dmrg = DMRGBigSite(me, VectorUBond(
+                bond_dims), VectorDouble(noises))
             dmrg.last_site_svd = True
             dmrg.last_site_1site = dot == 2
             dmrg.decomp_last_site = False
@@ -1550,14 +1588,19 @@ if not pre_run:
         dmrg.iprint = max(min(outputlevel, 3), 0)
         if "lowmem_noise" in dic:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
-        else:
+        elif decomp_type != DecompositionTypes.SVD:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
+        else:
+            dmrg.noise_type = NoiseTypes.ReducedPerturbative
         dmrg.cutoff = float(dic.get("cutoff", 1E-14))
         dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
-        dmrg.davidson_soft_max_iter = int(dic.get("davidson_soft_max_iter", -1))
+        dmrg.davidson_soft_max_iter = int(
+            dic.get("davidson_soft_max_iter", -1))
         dmrg.decomp_type = decomp_type
         dmrg.trunc_type = trunc_type
         dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+        dmrg.store_wfn_spectra = store_wfn_spectra
+        dmrg.site_dependent_bond_dims = site_dependent_bdims
         sweep_energies = []
         discarded_weights = []
         if "twodot_to_onedot" not in dic:
@@ -1574,6 +1617,7 @@ if not pre_run:
             dmrg.bond_dims = VectorUBond(bond_dims[tto:])
             dmrg.noises = VectorDouble(noises[tto:])
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
+            dmrg.site_dependent_bond_dims = site_dependent_bdims[tto:]
             dmrg.me.dot = 1
             E_dmrg = dmrg.solve(len(bond_dims) - tto,
                                 mps.center == 0, sweep_tol)
@@ -1599,6 +1643,9 @@ if not pre_run:
             np.save(scratch + "/bond_dims.npy", bdims)
             np.save(scratch + "/sweep_energies.npy", sweep_energies)
             np.save(scratch + "/discarded_weights.npy", discarded_weights)
+            if store_wfn_spectra:
+                np.save(scratch + "/sweep_wfn_spectra.npy",
+                        np.array([np.array(x) for x in dmrg.sweep_wfn_spectra], dtype=object))
             if "extrapolation" in dic:
                 ext_eners = []
                 ext_dws = []
@@ -1651,12 +1698,13 @@ if not pre_run:
 
         if dynamic_corr_method is not None:
             if dynamic_corr_method[0] in ['casci', 'nevpt2s', 'nevpt2sd', "nevpt2-ijrs", "nevpt2-ij",
-                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                          "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
                 _print("DMRG-CASCI Energy = %20.15f" % E_dmrg)
             elif dynamic_corr_method[0] in ['dmrgfci']:
                 _print("DMRG-FCI Energy = %20.15f" % E_dmrg)
             elif dynamic_corr_method[0] in ['mrcis', 'mrcisd', 'mrcisdt']:
-                _print("DMRG-%s Energy = %20.15f" % (dynamic_corr_method[0].upper(), E_dmrg))
+                _print("DMRG-%s Energy = %20.15f" %
+                       (dynamic_corr_method[0].upper(), E_dmrg))
         else:
             _print("DMRG Energy = %20.15f" % E_dmrg)
 
@@ -1710,7 +1758,7 @@ if not pre_run:
             np.save(scratch + "/cps_overlap.npy", ovl)
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
-        
+
         if "stopt_compression" in dic:
             mpo.const_e += E_dmrg
 
@@ -1733,8 +1781,10 @@ if not pre_run:
             _print("Time Evolution  DELTA T = %15.8f" % dt)
             _print("Time Evolution TARGET T = %15.8f" % tt)
         else:
-            _print("Time Evolution  DELTA T = RE %15.8f + IM %15.8f" % (np.real(dt), np.imag(dt)))
-            _print("Time Evolution TARGET T = RE %15.8f + IM %15.8f" % (np.real(tt), np.imag(tt)))
+            _print("Time Evolution  DELTA T = RE %15.8f + IM %15.8f" %
+                   (np.real(dt), np.imag(dt)))
+            _print("Time Evolution TARGET T = RE %15.8f + IM %15.8f" %
+                   (np.real(tt), np.imag(tt)))
 
         if isinstance(mps, MultiMPS):
             assert len(mps.wfns) == 2
@@ -1749,7 +1799,8 @@ if not pre_run:
             mps_info = mps.info
 
         _print("Time Evolution   NSTEPS = %d" % n_steps)
-        _print("    with %s wavefunction" % ("complex" if complex_mps else "real"))
+        _print("    with %s wavefunction" %
+               ("complex" if complex_mps else "real"))
         _print("    with %s step (%s TE)" % (
             "real" if is_imag_te else "complex", "imag" if is_imag_te else "real"))
         _print("    init canonical form = %s" % mps.canonical_form)
@@ -1778,10 +1829,10 @@ if not pre_run:
                 te.solve(1, dt, mps.center == 0)
             if is_imag_te:
                 _print("T = %10.5f <E> = %20.15f <Norm^2> = %20.15f" %
-                    ((i + 1) * dt, te.energies[-1], te.normsqs[-1]))
+                       ((i + 1) * dt, te.energies[-1], te.normsqs[-1]))
             else:
                 _print("T = RE %10.5f + IM %10.5f <E> = %20.15f <Norm^2> = %20.15f" %
-                    ((i + 1) * np.real(dt), (i + 1) * np.imag(dt), te.energies[-1], te.normsqs[-1]))
+                       ((i + 1) * np.real(dt), (i + 1) * np.imag(dt), te.energies[-1], te.normsqs[-1]))
             te_times.append((i + 1) * dt)
             te_energies.append(te.energies[-1])
             te_normsqs.append(te.normsqs[-1])
@@ -1963,11 +2014,11 @@ if not pre_run:
                         _print("finished.")
                         rot_sym_error = fcidump.symmetrize(orb_sym)
                         _print("rotated integral sym error = %12.4g" %
-                                rot_sym_error)
+                               rot_sym_error)
                         if rot_sym_error > symmetrize_ints_tol:
-                            raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
-                                                "please check point group symmetry and FCIDUMP or set" +
-                                                " a higher tolerance for the keyword '%s'") % (
+                            raise RuntimeError(("Integral symmetrization error larger than %10.5g, "
+                                                + "please check point group symmetry and FCIDUMP or set"
+                                                + " a higher tolerance for the keyword '%s'") % (
                                 symmetrize_ints_tol, "symmetrize_ints"))
                         _print("writing natural orbital integrals ...")
                         fcidump.write(nat_fname)
@@ -2210,7 +2261,8 @@ if not pre_run:
     if "restart_tran_oh" in dic or "tran_oh" in dic:
 
         assert nroots != 1
-        mat_oh = np.zeros((nroots, nroots), dtype=np.complex128 if complex_mps else float)
+        mat_oh = np.zeros((nroots, nroots),
+                          dtype=np.complex128 if complex_mps else float)
         for iroot in range(nroots):
             for jroot in range(iroot + 1):
                 _print('----- root = %3d -> %3d / %3d -----' %
@@ -2230,21 +2282,23 @@ if not pre_run:
                 if MPI is None or MPI.rank == 0:
                     mat_oh[iroot, jroot] = E_oh
                     if complex_mps:
-                        print("OH Energy %4d - %4d = RE %20.15f + IM %20.15f" % 
-                            (iroot, jroot, np.real(E_oh), np.imag(E_oh)))
+                        print("OH Energy %4d - %4d = RE %20.15f + IM %20.15f" %
+                              (iroot, jroot, np.real(E_oh), np.imag(E_oh)))
                     else:
-                        print("OH Energy %4d - %4d = %20.15f" % (iroot, jroot, E_oh))
+                        print("OH Energy %4d - %4d = %20.15f" %
+                              (iroot, jroot, E_oh))
             if MPI is None or MPI.rank == 0:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_oh.npy", mat_oh)
-    
+
     # NEVPT2
     if dynamic_corr_method is not None and dynamic_corr_method[0] in ["nevpt2s", "nevpt2sd",
-        "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                                                      "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
 
         if fcidump is None:
-            raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'nevpt2'!")
+            raise ValueError(
+                "Need FCIDUMP construction (namely, not a pre run) for 'nevpt2'!")
         if MPI is not None:
             MPI.barrier()
         fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)
@@ -2261,16 +2315,18 @@ if not pre_run:
         sym_error = fd_dyall.symmetrize(orb_sym)
         _print("integral sym error = %12.4g" % sym_error)
         if sym_error > symmetrize_ints_tol:
-            raise RuntimeError(("Integral symmetrization error larger than %10.5g, " +
-                                "please check point group symmetry and FCIDUMP or set" +
-                                " a higher tolerance for the keyword '%s'") % (
+            raise RuntimeError(("Integral symmetrization error larger than %10.5g, "
+                                + "please check point group symmetry and FCIDUMP or set"
+                                + " a higher tolerance for the keyword '%s'") % (
                 symmetrize_ints_tol, "symmetrize_ints"))
 
         if big_site_method == "folding":
             pass
         elif big_site_method is not None:
-            big_left = SimplifiedBigSite(big_left_orig, NoTransposeRule(simpl_rule))
-            big_right = SimplifiedBigSite(big_right_orig, NoTransposeRule(simpl_rule))
+            big_left = SimplifiedBigSite(
+                big_left_orig, NoTransposeRule(simpl_rule))
+            big_right = SimplifiedBigSite(
+                big_right_orig, NoTransposeRule(simpl_rule))
             if MPI is not None:
                 if one_body_only:
                     big_left = ParallelBigSite(big_left, prule_one_body)
@@ -2279,32 +2335,34 @@ if not pre_run:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
             hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-                None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                                         None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
         if big_site_method is None:
             hm_dyall = HamiltonianQC(vacuum, n_sites, orb_sym, fd_dyall)
         elif big_site_method == "folding":
             assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s', "nevpt2-ijrs", "nevpt2-ij",
-                    "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
+                                              "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
             hm_dyall = HamiltonianQC(vacuum, n_orbs, orb_sym, fd_dyall)
             lmpo_fold = MPOQC(hm_dyall, qc_type)
             if dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']:
                 ci_order = len(dynamic_corr_method[0]) - 6
-                lmps_info_fold = MRCIMPSInfo(n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
+                lmps_info_fold = MRCIMPSInfo(
+                    n_orbs, n_inactive, n_external, ci_order, vacuum, target, hm_dyall.basis)
             else:
                 sub_space = dynamic_corr_method[0][7:]
                 n_ex_inactive = sub_space.count('i') + sub_space.count('j')
                 n_ex_external = sub_space.count('r') + sub_space.count('s')
                 lmps_info_fold = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum,
-                    target, hm_dyall.basis)
+                                              target, hm_dyall.basis)
             for i in range(n_external - 1):
                 _print("fold right %d / %d" % (i, n_external))
                 lmpo_fold = FusedMPO(lmpo_fold, hm_dyall.basis, lmpo_fold.n_sites - 2,
-                    lmpo_fold.n_sites - 1, lmps_info_fold.right_dims_fci[lmpo_fold.n_sites - 2])
+                                     lmpo_fold.n_sites - 1, lmps_info_fold.right_dims_fci[lmpo_fold.n_sites - 2])
                 hm_dyall.basis = lmpo_fold.basis
                 hm_dyall.n_sites = lmpo_fold.n_sites
             for i in range(n_inactive - 1):
                 _print("fold left %d / %d" % (i, n_inactive))
-                lmpo_fold = FusedMPO(lmpo_fold, hm_dyall.basis, 0, 1, lmps_info_fold.left_dims_fci[i + 2])
+                lmpo_fold = FusedMPO(
+                    lmpo_fold, hm_dyall.basis, 0, 1, lmps_info_fold.left_dims_fci[i + 2])
                 hm_dyall.basis = lmpo_fold.basis
                 hm_dyall.n_sites = lmpo_fold.n_sites
             for k, op in lmpo_fold.tensors[0].ops.items():
@@ -2324,7 +2382,8 @@ if not pre_run:
                     smat.wrap_dense(op)
                 lmpo_fold.tensors[-1].ops[k] = smat
             lmpo_fold.sparse_form = 'S' + lmpo_fold.sparse_form[1:-1] + 'S'
-            lmpo_fold.tf = TensorFunctions(CSROperatorFunctions(hm_dyall.opf.cg))
+            lmpo_fold.tf = TensorFunctions(
+                CSROperatorFunctions(hm_dyall.opf.cg))
         else:
             assert dynamic_corr_method is not None
             if dynamic_corr_method[0] in ['nevpt2sd']:
@@ -2334,7 +2393,7 @@ if not pre_run:
                 xl = -1, -1, -1
                 xr = 1, 1, 1
             elif dynamic_corr_method[0] in ["nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
-            "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
+                                            "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]:
                 # this is not correct yet
                 sub_space = dynamic_corr_method[0][7:]
                 n_ex_inactive = sub_space.count('i') + sub_space.count('j')
@@ -2345,12 +2404,16 @@ if not pre_run:
                 assert False
             if big_site_method == "fock":
                 assert "nonspinadapted" in dic
-                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_dyall, orb_sym, *xl, True)
-                big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_dyall, orb_sym, *xr, True)
+                big_left_orig = SCIFockBigSite(
+                    n_orbs, n_inactive, False, fd_dyall, orb_sym, *xl, True)
+                big_right_orig = SCIFockBigSite(
+                    n_orbs, n_external, True, fd_dyall, orb_sym, *xr, True)
             elif big_site_method == "csf":
                 assert "nonspinadapted" not in dic
-                big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fd_dyall, orb_sym[:n_inactive])
-                big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fd_dyall, orb_sym[-n_external:])
+                big_left_orig = CSFBigSite(n_inactive, abs(
+                    xl[-1]), False, fd_dyall, orb_sym[:n_inactive])
+                big_right_orig = CSFBigSite(n_external, abs(
+                    xr[-1]), True, fd_dyall, orb_sym[-n_external:])
             else:
                 raise NotImplementedError
             big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -2363,7 +2426,7 @@ if not pre_run:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
             hm_dyall = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fd_dyall,
-                None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                                            None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
 
         # left mpo
         _print("build left mpo", time.perf_counter() - tx)
@@ -2372,7 +2435,8 @@ if not pre_run:
         else:
             lmpo = MPOQC(hm_dyall, qc_type)
         _print("simpl left mpo", time.perf_counter() - tx)
-        lmpo = SimplifiedMPO(lmpo, simpl_rule, True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+        lmpo = SimplifiedMPO(lmpo, simpl_rule, True, True,
+                             OpNamesSet((OpNames.R, OpNames.RD)))
         _print("simpl left mpo finished", time.perf_counter() - tx)
         lmpo.const_e -= e_casci
         lmpo = lmpo * -1
@@ -2382,7 +2446,7 @@ if not pre_run:
 
         if MPI is None or MPI.rank == 0:
             lmpo.save_data(scratch + '/lmpo.bin')
-        
+
         # right mpo
         _print("build right mpo", time.perf_counter() - tx)
         if big_site_method == "folding":
@@ -2391,7 +2455,7 @@ if not pre_run:
             rmpo = MPOQC(hamil, qc_type)
         _print("simpl right mpo", time.perf_counter() - tx)
         rmpo = SimplifiedMPO(rmpo, NoTransposeRule(simpl_rule),
-            True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+                             True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         _print("simpl right mpo finished", time.perf_counter() - tx)
         rmpo.const_e -= e_casci
 
@@ -2412,7 +2476,7 @@ if not pre_run:
                     rmpo = ParallelMPO(rmpo, prule)
 
             _print("para left/right mpo finished", time.perf_counter() - tx)
-        
+
         mps.dot = dot
         if mps.center == mps.n_sites - 1 and mps.dot == 2:
             mps.center = mps.n_sites - 2
@@ -2422,16 +2486,17 @@ if not pre_run:
             bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
         else:
             assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s', "nevpt2-ijrs", "nevpt2-ij",
-                "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
+                                              "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"]
             if dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s']:
                 ci_order = len(dynamic_corr_method[0]) - 6
-                bra_info = MRCIMPSInfo(n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+                bra_info = MRCIMPSInfo(
+                    n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
             else:
                 sub_space = dynamic_corr_method[0][7:]
                 n_ex_inactive = sub_space.count('i') + sub_space.count('j')
                 n_ex_external = sub_space.count('r') + sub_space.count('s')
                 bra_info = NEVPTMPSInfo(n_orbs, n_inactive, n_external, n_ex_inactive, n_ex_external, vacuum,
-                    target, hamil.basis)
+                                        target, hamil.basis)
 
         if singlet_embedding and SX == SU2:
             left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
@@ -2470,10 +2535,11 @@ if not pre_run:
         if MPI is not None:
             MPI.barrier()
 
-        _print("BRA MPS = ", bra.canonical_form, bra.center, bra.dot, bra.info.target)
+        _print("BRA MPS = ", bra.canonical_form,
+               bra.center, bra.dot, bra.info.target)
         _print("BRA INIT MPS BOND DIMS = ", ''.join(
             ["%6d" % x.n_states_total for x in bra_info.left_dims]))
-        
+
         tx = time.perf_counter()
 
         lme = MovingEnvironment(lmpo, bra, bra, "LME")
@@ -2484,20 +2550,24 @@ if not pre_run:
         rme.init_environments(outputlevel >= 2)
 
         _print("env init finished", time.perf_counter() - tx)
-        
+
         right_bdims = VectorUBond([mps_info.bond_dim + 400])
         if big_site_method is not None and n_cas != 0:
-            linear = LinearBigSite(lme, rme, None, VectorUBond(bond_dims), right_bdims, VectorDouble(noises))
+            linear = LinearBigSite(lme, rme, None, VectorUBond(
+                bond_dims), right_bdims, VectorDouble(noises))
             linear.last_site_svd = True
             linear.last_site_1site = dot == 2
             linear.decomp_last_site = False
         else:
-            linear = Linear(lme, rme, None, VectorUBond(bond_dims), right_bdims, VectorDouble(noises))
+            linear = Linear(lme, rme, None, VectorUBond(
+                bond_dims), right_bdims, VectorDouble(noises))
         linear.iprint = max(min(outputlevel, 3), 0)
         if "lowmem_noise" in dic:
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
-        else:
+        elif decomp_type != DecompositionTypes.SVD:
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollected
+        else:
+            linear.noise_type = NoiseTypes.ReducedPerturbative
         linear.cutoff = float(dic.get("cutoff", 1E-14))
         linear.decomp_type = decomp_type
         linear.trunc_type = trunc_type
@@ -2515,16 +2585,18 @@ if not pre_run:
             np.save(scratch + "/E_nevpt2.npy", e_casci + e_corr)
             np.save(scratch + "/nevpt2_e_corr.npy", e_corr)
             np.save(scratch + "/nevpt2_bond_dims.npy", bdims)
-            np.save(scratch + "/nevpt2_sweep_energies.npy", nevpt_sweep_energies)
-            np.save(scratch + "/nevpt2_discarded_weights.npy", nevpt_discarded_weights)
-        
+            np.save(scratch + "/nevpt2_sweep_energies.npy",
+                    nevpt_sweep_energies)
+            np.save(scratch + "/nevpt2_discarded_weights.npy",
+                    nevpt_discarded_weights)
+
         _print("DMRG-CASCI  Energy     = %20.15f" % e_casci)
         _print("DMRG-NEVPT2 Correction = %20.15f" % e_corr)
         _print("DMRG-NEVPT2 Energy     = %20.15f" % (e_corr + e_casci))
 
     # MPS split
     if ("restart_copy_mps" in dic or "copy_mps" in dic) and (
-        "split_states" in dic or "trans_mps_to_complex" in dic):
+            "split_states" in dic or "trans_mps_to_complex" in dic):
 
         if "restart_copy_mps" in dic:
             copy_tag = dic["restart_copy_mps"]
@@ -2534,12 +2606,13 @@ if not pre_run:
         if MPI is None or MPI.rank == 0:
             if "split_states" in dic:
                 assert nroots != 1
-            
+
                 for iroot in range(nroots):
-                    _print('----- root = %3d / %3d -----' %  (iroot, nroots))
+                    _print('----- root = %3d / %3d -----' % (iroot, nroots))
                     simps, simps_info, _ = split_mps(iroot, mps, mps_info)
                     if "trans_mps_to_complex" in dic:
-                        simps = MultiMPS.make_complex(simps, "%s-CPX-%d" % (mps_info.tag, iroot))
+                        simps = MultiMPS.make_complex(
+                            simps, "%s-CPX-%d" % (mps_info.tag, iroot))
                         simps_info = simps.info
                     if copy_tag != '' and "%s-%d" % (copy_tag, iroot) != simps_info.tag:
                         final_tag = "%s-%d" % (copy_tag, iroot)
@@ -2548,9 +2621,11 @@ if not pre_run:
                     else:
                         final_tag = simps_info.tag
                     _print("   final tag = %s" % final_tag)
-                    _print("   final canonical form = %s" % simps.canonical_form)
-                    simps_info.save_data(scratch + '/%s-mps_info.bin' % final_tag)
-        
+                    _print("   final canonical form = %s" %
+                           simps.canonical_form)
+                    simps_info.save_data(
+                        scratch + '/%s-mps_info.bin' % final_tag)
+
             elif "trans_mps_to_complex" in dic:
                 if copy_tag == '':
                     copy_tag = "%s-CPX" % mps_info.tag
@@ -2574,7 +2649,7 @@ if not pre_run:
             MPI.barrier()
         if MPI is None or MPI.rank == 0:
             if (mps.center == 0 and mps.canonical_form[0] == 'S') or \
-                (mps.center == mps.n_sites - 1 and mps.canonical_form[-1] == 'K'):
+                    (mps.center == mps.n_sites - 1 and mps.canonical_form[-1] == 'K'):
                 cg = CG(200)
                 cg.initialize()
                 mps.flip_fused_form(mps.center, cg, None)
@@ -2632,8 +2707,8 @@ if not pre_run:
                 MPI.barrier()
             if last_flipped is not None:
                 cp_mps.flip_fused_form(cp_mps.n_sites - 1, cgx, prulex)
-                cp_mps.canonical_form = cp_mps.canonical_form[:
-                                                              - 1] + last_flipped
+                cp_mps.canonical_form = cp_mps.canonical_form[: -
+                                                              1] + last_flipped
                 if MPI is None or MPI.rank == 0:
                     cp_mps.save_data()
                 if MPI is not None:
@@ -2670,11 +2745,12 @@ if not pre_run:
         mps = cp_mps
         _print("Copy-final canonical form = ", mps.canonical_form, mps.center)
 
-    # stoptDMRG sampling (sampling CSF is not supported yet) 
+    # stoptDMRG sampling (sampling CSF is not supported yet)
     if "stopt_sampling" in dic:
 
         if fcidump is None:
-            raise ValueError("Need FCIDUMP construction (namely, not a pre run) for 'stoptDMRG'!")
+            raise ValueError(
+                "Need FCIDUMP construction (namely, not a pre run) for 'stoptDMRG'!")
         if MPI is not None:
             MPI.barrier()
 
@@ -2685,17 +2761,19 @@ if not pre_run:
 
         nsample = int(dic.get("stopt_sampling", 10000))
         sp_dmrg = SPDMRG(su2="nonspinadapted" not in dic,
-            scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=outputlevel) 
+                         scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=outputlevel)
         e_corr, std_corr = sp_dmrg.kernel(nsample)
 
         if MPI is None or MPI.rank == 0:
             np.save(scratch + "/E_stopt.npy", sp_dmrg.Edmrg + e_corr)
             np.save(scratch + "/stopt_e_corr.npy", e_corr)
             np.save(scratch + "/stopt_std_corr.npy", std_corr)
-        
+
         _print("            DMRG Energy     = %25.15f" % sp_dmrg.Edmrg)
-        _print("stochastic PDMRG Correction = %25.15f (%20.15f)" % (e_corr, std_corr))
-        _print("stochastic PDMRG Energy     = %25.15f (%20.15f)" % (sp_dmrg.Edmrg+e_corr, std_corr))
+        _print("stochastic PDMRG Correction = %25.15f (%20.15f)" %
+               (e_corr, std_corr))
+        _print("stochastic PDMRG Energy     = %25.15f (%20.15f)" %
+               (sp_dmrg.Edmrg + e_corr, std_corr))
 
     # CSF/DET coefficients
     if "restart_sample" in dic or "sample" in dic:

@@ -301,8 +301,23 @@ twodot\_to\_onedot
     Followed by a single number to indicate the sweep iteration when to switch from the two-site DMRG algorithm to the two-site DMRG algorithm. The sweep iteration is counted from zero.
 
 schedule
-    Optional. Followed by the word ``default`` or a multi-line DMRG schedule.
+    Optional. Followed by the word ``default`` or a multi-line DMRG schedule with the last line being ``end``.
     If not given, the defualt schedule will be used.
+    Between the keyword ``schedule`` and ``end`` each line needs to have four values. They are corresponding
+    to starting sweep iteration (counting from zero), MPS bond dimension, tolerance for the Davidson iteration,
+    and noise, respectively. Starting sweep iteration is the sweep iteration in which the given parameters
+    in the line should take effect.
+    For each line, alternatively, one can provide ``n_sites - 1`` values for the MPS bond dimension,
+    where the ith number represents the right virtual bond dimension for the MPS tensor at site i.
+    If this is the case, the site dependent MPS bond dimension truncation will be used.
+
+store_wfn_spectra
+    Optional. If given, the singular values at each left-right partition during the last sweep
+    will be stored as ``sweep_wfn_spectra.npy`` after convergence. Only works with DMRG type calculation.
+    The stored array is an numpy array of 1 dimensional numpy array.
+    The inner arrays normally do not have all the same length.
+    For spin-adapted, each singular values corresponding to a multiplet.
+    So for non-singlet, the wavefunction spectra have different interpretation between SU2 and SZ.
 
 extrapolation
     Optional. Should only be used for standard DMRG calculation with the reverse schedule.

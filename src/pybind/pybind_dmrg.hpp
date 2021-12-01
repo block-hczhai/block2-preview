@@ -717,9 +717,10 @@ void bind_fl_moving_environment(py::module &m) {
                typename MovingEnvironment<S, FL, FLS>::FPS cutoff,
                TruncationTypes trunc_type) {
                 vector<pair<int, int>> ss;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::truncate_density_matrix(
-                        dm, ss, k, cutoff, trunc_type);
+                        dm, ss, k, cutoff, false, wfn_spectra, trunc_type);
                 return make_pair(error, ss);
             })
         .def_static(
@@ -730,9 +731,10 @@ void bind_fl_moving_environment(py::module &m) {
                int k, typename MovingEnvironment<S, FL, FLS>::FPS cutoff,
                TruncationTypes trunc_type) {
                 vector<pair<int, int>> ss;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::truncate_singular_values(
-                        qs, s, ss, k, cutoff, trunc_type);
+                        qs, s, ss, k, cutoff, false, wfn_spectra, trunc_type);
                 return make_pair(error, ss);
             })
         .def_static(
@@ -779,10 +781,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type) {
                 shared_ptr<SparseMatrix<S, FLS>> left = nullptr,
                                                  right = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::split_density_matrix(
                         dm, wfn, k, trace_right, normalize, left, right, cutoff,
-                        trunc_type);
+                        false, wfn_spectra, trunc_type);
                 return make_tuple(error, left, right);
             },
             py::arg("dm"), py::arg("wfn"), py::arg("k"), py::arg("trace_right"),
@@ -796,10 +799,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type, DecompositionTypes decomp_type) {
                 shared_ptr<SparseMatrix<S, FLS>> left = nullptr,
                                                  right = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
                         opdq, wfn, k, trace_right, normalize, left, right,
-                        cutoff, trunc_type, decomp_type);
+                        cutoff, false, wfn_spectra, trunc_type, decomp_type);
                 return make_tuple(error, left, right);
             },
             py::arg("opdq"), py::arg("wfn"), py::arg("k"),
@@ -822,10 +826,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type) {
                 vector<shared_ptr<SparseMatrixGroup<S, FLS>>> new_wfns;
                 shared_ptr<SparseMatrix<S, FLS>> rot_mat = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                         dm, wfns, k, trace_right, normalize, new_wfns, rot_mat,
-                        cutoff, trunc_type);
+                        cutoff, false, wfn_spectra, trunc_type);
                 return make_tuple(error, new_wfns, rot_mat);
             },
             py::arg("dm"), py::arg("wfns"), py::arg("k"),
@@ -903,6 +908,13 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def_readwrite("trunc_type", &Expect<S, FL, FLS, FLX>::trunc_type)
         .def_readwrite("ex_type", &Expect<S, FL, FLS, FLX>::ex_type)
         .def_readwrite("algo_type", &Expect<S, FL, FLS, FLX>::algo_type)
+        .def_readwrite("store_bra_spectra",
+                       &Expect<S, FL, FLS, FLX>::store_bra_spectra)
+        .def_readwrite("store_ket_spectra",
+                       &Expect<S, FL, FLS, FLX>::store_ket_spectra)
+        .def_readwrite("wfn_spectra", &Expect<S, FL, FLS, FLX>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &Expect<S, FL, FLS, FLX>::sweep_wfn_spectra)
         .def("update_one_dot", &Expect<S, FL, FLS, FLX>::update_one_dot)
         .def("update_multi_one_dot",
              &Expect<S, FL, FLS, FLX>::update_multi_one_dot)
@@ -991,6 +1003,14 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::sweep_max_pket_size)
         .def_readwrite("sweep_max_eff_ham_size",
                        &DMRG<S, FL, FLS>::sweep_max_eff_ham_size)
+        .def_readwrite("store_wfn_spectra",
+                       &DMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &DMRG<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &DMRG<S, FL, FLS>::sweep_wfn_spectra)
+        .def_readwrite("isweep", &DMRG<S, FL, FLS>::isweep)
+        .def_readwrite("site_dependent_bond_dims",
+                       &DMRG<S, FL, FLS>::site_dependent_bond_dims)
         .def("update_two_dot", &DMRG<S, FL, FLS>::update_two_dot)
         .def("update_one_dot", &DMRG<S, FL, FLS>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S, FL, FLS>::update_multi_two_dot)
@@ -1058,6 +1078,11 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("hermitian", &TDDMRG<S, FL, FLS>::hermitian)
         .def_readwrite("sweep_cumulative_nflop",
                        &TDDMRG<S, FL, FLS>::sweep_cumulative_nflop)
+        .def_readwrite("store_wfn_spectra",
+                       &TDDMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &TDDMRG<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &TDDMRG<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &TDDMRG<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &TDDMRG<S, FL, FLS>::update_two_dot)
         .def("blocking", &TDDMRG<S, FL, FLS>::blocking)
@@ -1120,6 +1145,11 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("hermitian", &TimeEvolution<S, FL, FLS>::hermitian)
         .def_readwrite("sweep_cumulative_nflop",
                        &TimeEvolution<S, FL, FLS>::sweep_cumulative_nflop)
+        .def_readwrite("store_wfn_spectra",
+                       &TimeEvolution<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &TimeEvolution<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &TimeEvolution<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &TimeEvolution<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &TimeEvolution<S, FL, FLS>::update_two_dot)
         .def("update_multi_one_dot",
@@ -1210,10 +1240,12 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("ex_type", &Linear<S, FL, FLS>::ex_type)
         .def_readwrite("algo_type", &Linear<S, FL, FLS>::algo_type)
         .def_readwrite("solver_type", &Linear<S, FL, FLS>::solver_type)
-        .def_readwrite("linear_use_precondition", &Linear<S, FL, FLS>::linear_use_precondition)
+        .def_readwrite("linear_use_precondition",
+                       &Linear<S, FL, FLS>::linear_use_precondition)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S, FL, FLS>::cg_n_harmonic_projection)
-        .def_readwrite("linear_solver_params", &Linear<S, FL, FLS>::linear_solver_params)
+        .def_readwrite("linear_solver_params",
+                       &Linear<S, FL, FLS>::linear_solver_params)
         .def_readwrite("decomp_last_site",
                        &Linear<S, FL, FLS>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
@@ -1241,6 +1273,13 @@ void bind_fl_linear(py::module &m) {
                        &Linear<S, FL, FLS>::gf_extra_ext_targets)
         .def_readwrite("right_weight", &Linear<S, FL, FLS>::right_weight)
         .def_readwrite("complex_weights", &Linear<S, FL, FLS>::complex_weights)
+        .def_readwrite("store_bra_spectra",
+                       &Linear<S, FL, FLS>::store_bra_spectra)
+        .def_readwrite("store_ket_spectra",
+                       &Linear<S, FL, FLS>::store_ket_spectra)
+        .def_readwrite("wfn_spectra", &Linear<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &Linear<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &Linear<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &Linear<S, FL, FLS>::update_two_dot)
         .def("blocking", &Linear<S, FL, FLS>::blocking)
@@ -1663,12 +1702,12 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("MiddleSite", ConvergenceTypes::MiddleSite);
 
     py::enum_<LinearSolverTypes>(m, "LinearSolverTypes", py::arithmetic())
-            .value("Automatic", LinearSolverTypes::Automatic)
-            .value("CG", LinearSolverTypes::CG)
-            .value("MinRes", LinearSolverTypes::MinRes)
-            .value("GCROT", LinearSolverTypes::GCROT)
-            .value("IDRS", LinearSolverTypes::IDRS)
-            .value("LSQR", LinearSolverTypes::LSQR);
+        .value("Automatic", LinearSolverTypes::Automatic)
+        .value("CG", LinearSolverTypes::CG)
+        .value("MinRes", LinearSolverTypes::MinRes)
+        .value("GCROT", LinearSolverTypes::GCROT)
+        .value("IDRS", LinearSolverTypes::IDRS)
+        .value("LSQR", LinearSolverTypes::LSQR);
 
     py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
         .value("Nothing", OpCachingTypes::None)
@@ -1860,11 +1899,13 @@ bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(py::module &m,
 extern template void bind_fl_mps<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_mpo<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_partition<SZK, complex<double>>(py::module &m);
-extern template void bind_fl_qc_hamiltonian<SZK, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SZK, complex<double>>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SZK, complex<double>, complex<double>>(py::module &m);
+bind_fl_moving_environment<SZK, complex<double>, complex<double>>(
+    py::module &m);
 extern template void
 bind_fl_dmrg<SZK, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -1880,7 +1921,8 @@ extern template void bind_fl_mpo<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_partition<SU2K, complex<double>>(py::module &m);
 extern template void
 bind_fl_qc_hamiltonian<SU2K, complex<double>>(py::module &m);
-extern template void bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
+extern template void
+bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SU2K, complex<double>, complex<double>>(
@@ -1897,7 +1939,8 @@ bind_fl_expect<SU2K, complex<double>, complex<double>, complex<double>>(
 
 extern template auto bind_fl_spin_specific<SZK, complex<double>>(py::module &m)
     -> decltype(typename SZK::is_sz_t());
-extern template auto bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(
+extern template auto
+bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
 
