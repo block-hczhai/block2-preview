@@ -309,14 +309,14 @@ schedule
     in the line should take effect.
     For each line, alternatively, one can provide ``n_sites - 1`` values for the MPS bond dimension,
     where the ith number represents the right virtual bond dimension for the MPS tensor at site i.
-    If this is the case, the site dependent MPS bond dimension truncation will be used.
+    If this is the case, the site-dependent MPS bond dimension truncation will be used.
 
 store_wfn_spectra
-    Optional. If given, the singular values at each left-right partition during the last sweep
+    Optional with no associated value. If given, the singular values at each left-right partition during the last sweep
     will be stored as ``sweep_wfn_spectra.npy`` after convergence. Only works with DMRG type calculation.
-    The stored array is an numpy array of 1 dimensional numpy array.
+    The stored array is a numpy array of 1 dimensional numpy array.
     The inner arrays normally do not have all the same length.
-    For spin-adapted, each singular values corresponding to a multiplet.
+    For spin-adapted, each singular values correspond to a multiplet.
     So for non-singlet, the wavefunction spectra have different interpretation between SU2 and SZ.
 
 extrapolation
