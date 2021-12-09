@@ -20,8 +20,8 @@
 
 #include "../block2_core.hpp"
 
-template struct block2::SiteBasis<block2::SZ>;
-template struct block2::SiteBasis<block2::SU2>;
+template struct block2::SiteBasis<block2::SZK>;
+template struct block2::SiteBasis<block2::SU2K>;
 template struct block2::Hamiltonian<block2::SZK, double>;
 template struct block2::Hamiltonian<block2::SU2K, double>;
 template struct block2::DelayedSparseMatrix<
