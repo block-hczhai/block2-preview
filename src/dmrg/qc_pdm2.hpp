@@ -2292,6 +2292,26 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     }
 };
 
+// "MPO" for two particle density matrix (general spin)
+template <typename S, typename FL>
+struct PDM2MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
+    PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        assert(false);
+    }
+    void deallocate() override {}
+    static shared_ptr<GTensor<FL>> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_sites) {
+        assert(false);
+    }
+    static shared_ptr<GTensor<FL>> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_sites) {
+        assert(false);
+    }
+};
+
 } // namespace block2
 
 #undef SI

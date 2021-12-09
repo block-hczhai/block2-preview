@@ -47,14 +47,23 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
     // (if there are common factors)
     // A x B + A x C + A x D => A x (B + C + D)
     bool collect_terms, use_intermediate;
+    // on some cases, non-redundant operators are removed because
+    // themselves do not appear, but then they are used
+    // indirectly from simplified redundant operators
+    // this attribute will check and keep non-redundant operators
+    // most mpo is written without the need to check this
+    // currently, only the general spin mpo needs this
+    bool check_indirect_ref;
     OpNamesSet intermediate_ops;
     SimplifiedMPO(const shared_ptr<MPO<S, FL>> &mpo,
                   const shared_ptr<Rule<S, FL>> &rule,
                   bool collect_terms = true, bool use_intermediate = false,
-                  OpNamesSet intermediate_ops = OpNamesSet::all_ops())
+                  OpNamesSet intermediate_ops = OpNamesSet::all_ops(),
+                  bool check_indirect_ref = true)
         : prim_mpo(mpo), rule(rule), MPO<S, FL>(mpo->n_sites),
           collect_terms(collect_terms), use_intermediate(use_intermediate),
-          intermediate_ops(intermediate_ops) {
+          intermediate_ops(intermediate_ops),
+          check_indirect_ref(check_indirect_ref) {
         if (!collect_terms)
             use_intermediate = false;
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
@@ -282,6 +291,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             }
         } else {
             vector<uint8_t> px[2];
+            unordered_map<shared_ptr<OpExpr<S>>, int> xmp;
             // figure out the mutual dependence of from right to left
             // px[.][j] is 1 if left operator is useful in next blocking
             for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
@@ -299,14 +309,41 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                             if (MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
-                                !px[i & 1][j])
-                                MPO<S, FL>::left_operator_names[i]->data[j] =
-                                    MPO<S, FL>::right_operator_names[i + 1]
-                                        ->data[j];
-                            else if (MPO<S, FL>::left_operator_names[i]
-                                         ->data[j]
-                                         ->get_type() != OpTypes::Zero)
+                                !px[i & 1][j]) {
+                                if (check_indirect_ref)
+                                    xmp[abs_value(
+                                        MPO<S, FL>::left_operator_names[i]
+                                            ->data[j])] = j;
+                                else
+                                    MPO<S, FL>::left_operator_names[i]
+                                        ->data[j] = zero;
+                            } else if (MPO<S, FL>::left_operator_names[i]
+                                           ->data[j]
+                                           ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                        if (xmp.size() != 0) {
+                            for (size_t j = 0;
+                                 j < MPO<S, FL>::left_operator_names[i]
+                                         ->data.size();
+                                 j++)
+                                if (px[i & 1][j] &&
+                                    MPO<S, FL>::left_operator_names[i]
+                                            ->data[j]
+                                            ->get_type() != OpTypes::Zero) {
+                                    auto xref = rule->operator()(
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            MPO<S, FL>::left_operator_names[i]
+                                                ->data[j]));
+                                    if (xref != nullptr &&
+                                        xmp.count(xref->op) != 0)
+                                        xmp.at(xref->op) = -1;
+                                }
+                            for (auto &j : xmp)
+                                if (j.second != -1)
+                                    MPO<S, FL>::left_operator_names[i]
+                                        ->data[j.second] = zero;
+                            xmp.clear();
+                        }
                     } else if (MPO<S, FL>::schemer->right_trans_site -
                                    MPO<S, FL>::schemer->left_trans_site >
                                1) {
@@ -326,15 +363,42 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                             if (MPO<S, FL>::right_operator_names[i + 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
-                                !px[i & 1][j])
-                                MPO<S, FL>::schemer->left_new_operator_names
-                                    ->data[j] =
-                                    MPO<S, FL>::right_operator_names[i + 1]
-                                        ->data[j];
-                            else if (MPO<S, FL>::schemer
-                                         ->left_new_operator_names->data[j]
-                                         ->get_type() != OpTypes::Zero)
+                                !px[i & 1][j]) {
+                                if (check_indirect_ref)
+                                    xmp[abs_value(MPO<S, FL>::schemer
+                                                      ->left_new_operator_names
+                                                      ->data[j])] = j;
+                                else
+                                    MPO<S, FL>::schemer->left_new_operator_names
+                                        ->data[j] = zero;
+                            } else if (MPO<S, FL>::schemer
+                                           ->left_new_operator_names->data[j]
+                                           ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                        if (xmp.size() != 0) {
+                            for (size_t j = 0;
+                                 j < MPO<S, FL>::schemer
+                                         ->left_new_operator_names->data.size();
+                                 j++)
+                                if (px[i & 1][j] &&
+                                    MPO<S, FL>::schemer->left_new_operator_names
+                                            ->data[j]
+                                            ->get_type() != OpTypes::Zero) {
+                                    auto xref = rule->operator()(
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            MPO<S, FL>::schemer
+                                                ->left_new_operator_names
+                                                ->data[j]));
+                                    if (xref != nullptr &&
+                                        xmp.count(xref->op) != 0)
+                                        xmp.at(xref->op) = -1;
+                                }
+                            for (auto &j : xmp)
+                                if (j.second != -1)
+                                    MPO<S, FL>::schemer->left_new_operator_names
+                                        ->data[j.second] = zero;
+                            xmp.clear();
+                        }
                     }
                     if (MPO<S, FL>::schemer != nullptr &&
                         i == MPO<S, FL>::schemer->left_trans_site) {
@@ -384,8 +448,17 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                         op->strings[k] =
                                             make_shared<OpProduct<S, FL>>(
                                                 *op->strings[k] * 0.0);
-                                    else
+                                    else {
                                         px[i & 1][mp[expr]] = 1;
+                                        if (check_indirect_ref) {
+                                            auto xref = rule->operator()(
+                                                dynamic_pointer_cast<
+                                                    OpElement<S, FL>>(expr));
+                                            if (xref != nullptr &&
+                                                mp.count(xref->op))
+                                                px[i & 1][mp[xref->op]] = 1;
+                                        }
+                                    }
                                     assert(op->strings[k]->b == nullptr);
                                 }
                                 exprs->data[j] = op;
@@ -439,14 +512,41 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                             if (MPO<S, FL>::left_operator_names[i - 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
-                                !px[i & 1][j])
-                                MPO<S, FL>::right_operator_names[i]->data[j] =
-                                    MPO<S, FL>::left_operator_names[i - 1]
-                                        ->data[j];
-                            else if (MPO<S, FL>::right_operator_names[i]
-                                         ->data[j]
-                                         ->get_type() != OpTypes::Zero)
+                                !px[i & 1][j]) {
+                                if (check_indirect_ref)
+                                    xmp[abs_value(
+                                        MPO<S, FL>::right_operator_names[i]
+                                            ->data[j])] = j;
+                                else
+                                    MPO<S, FL>::right_operator_names[i]
+                                        ->data[j] = zero;
+                            } else if (MPO<S, FL>::right_operator_names[i]
+                                           ->data[j]
+                                           ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                        if (xmp.size() != 0) {
+                            for (size_t j = 0;
+                                 j < MPO<S, FL>::right_operator_names[i]
+                                         ->data.size();
+                                 j++)
+                                if (px[i & 1][j] &&
+                                    MPO<S, FL>::right_operator_names[i]
+                                            ->data[j]
+                                            ->get_type() != OpTypes::Zero) {
+                                    auto xref = rule->operator()(
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            MPO<S, FL>::right_operator_names[i]
+                                                ->data[j]));
+                                    if (xref != nullptr &&
+                                        xmp.count(xref->op) != 0)
+                                        xmp.at(xref->op) = -1;
+                                }
+                            for (auto &j : xmp)
+                                if (j.second != -1)
+                                    MPO<S, FL>::right_operator_names[i]
+                                        ->data[j.second] = zero;
+                            xmp.clear();
+                        }
                     } else if (MPO<S, FL>::schemer->right_trans_site -
                                    MPO<S, FL>::schemer->left_trans_site >
                                1) {
@@ -466,15 +566,45 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                             if (MPO<S, FL>::left_operator_names[i - 1]
                                         ->data[j]
                                         ->get_type() == OpTypes::Zero &&
-                                !px[i & 1][j])
-                                MPO<S, FL>::schemer->right_new_operator_names
-                                    ->data[j] =
-                                    MPO<S, FL>::left_operator_names[i - 1]
-                                        ->data[j];
-                            else if (MPO<S, FL>::schemer
-                                         ->right_new_operator_names->data[j]
-                                         ->get_type() != OpTypes::Zero)
+                                !px[i & 1][j]) {
+                                if (check_indirect_ref)
+                                    xmp[abs_value(MPO<S, FL>::schemer
+                                                      ->right_new_operator_names
+                                                      ->data[j])] = j;
+                                else
+                                    MPO<S, FL>::schemer
+                                        ->right_new_operator_names->data[j] =
+                                        zero;
+                            } else if (MPO<S, FL>::schemer
+                                           ->right_new_operator_names->data[j]
+                                           ->get_type() != OpTypes::Zero)
                                 px[i & 1][j] = 1;
+                        if (xmp.size() != 0) {
+                            for (size_t j = 0;
+                                 j <
+                                 MPO<S, FL>::schemer->right_new_operator_names
+                                     ->data.size();
+                                 j++)
+                                if (px[i & 1][j] &&
+                                    MPO<S, FL>::schemer
+                                            ->right_new_operator_names->data[j]
+                                            ->get_type() != OpTypes::Zero) {
+                                    auto xref = rule->operator()(
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            MPO<S, FL>::schemer
+                                                ->right_new_operator_names
+                                                ->data[j]));
+                                    if (xref != nullptr &&
+                                        xmp.count(xref->op) != 0)
+                                        xmp.at(xref->op) = -1;
+                                }
+                            for (auto &j : xmp)
+                                if (j.second != -1)
+                                    MPO<S, FL>::schemer
+                                        ->right_new_operator_names
+                                        ->data[j.second] = zero;
+                            xmp.clear();
+                        }
                     }
                     if (MPO<S, FL>::schemer != nullptr &&
                         i == MPO<S, FL>::schemer->right_trans_site) {
@@ -524,8 +654,17 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                         op->strings[k] =
                                             make_shared<OpProduct<S, FL>>(
                                                 *op->strings[k] * 0.0);
-                                    else
+                                    else {
                                         px[i & 1][mp[expr]] = 1;
+                                        if (check_indirect_ref) {
+                                            auto xref = rule->operator()(
+                                                dynamic_pointer_cast<
+                                                    OpElement<S, FL>>(expr));
+                                            if (xref != nullptr &&
+                                                mp.count(xref->op))
+                                                px[i & 1][mp[xref->op]] = 1;
+                                        }
+                                    }
                                     assert(op->strings[k]->b == nullptr);
                                 }
                                 exprs->data[j] = op;

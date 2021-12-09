@@ -1293,3 +1293,180 @@ TEST_F(TestNPDM, TestSZ) {
     hamil->deallocate();
     fcidump->deallocate();
 }
+
+#ifdef _USE_SG
+
+TEST_F(TestNPDM, TestSGF) {
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
+    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    fcidump->read(filename);
+    fcidump = make_shared<SpinOrbitalFCIDUMP<double>>(fcidump);
+    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_d2h);
+    SGF vacuum(0);
+    SGF target(fcidump->n_elec(),
+               PointGroup::swap_d2h(fcidump->isym()));
+    int norb = fcidump->n_sites();
+    shared_ptr<HamiltonianQC<SGF, double>> hamil =
+        make_shared<HamiltonianQC<SGF, double>>(vacuum, norb, orbsym, fcidump);
+
+    // FCI results
+    vector<tuple<int, int, double>> one_pdm = {
+        {0, 0, 1.999989282592},  {0, 1, -0.000025398134},
+        {0, 2, 0.000238560621},  {1, 0, -0.000025398134},
+        {1, 1, 1.991431489457},  {1, 2, -0.005641787787},
+        {2, 0, 0.000238560621},  {2, 1, -0.005641787787},
+        {2, 2, 1.985471515555},  {3, 3, 1.999992764813},
+        {3, 4, -0.000236022833}, {3, 5, 0.000163863520},
+        {4, 3, -0.000236022833}, {4, 4, 1.986371259953},
+        {4, 5, 0.018363506969},  {5, 3, 0.000163863520},
+        {5, 4, 0.018363506969},  {5, 5, 0.019649294772},
+        {6, 6, 1.931412559660},  {7, 7, 0.077134636900},
+        {8, 8, 1.931412559108},  {9, 9, 0.077134637190}};
+
+    Timer t;
+    t.get_time();
+    // MPO construction
+    cout << "MPO start" << endl;
+    shared_ptr<MPO<SGF, double>> mpo =
+        make_shared<MPOQC<SGF, double>>(hamil, QCTypes::Conventional);
+    cout << "MPO end .. T = " << t.get_time() << endl;
+
+    // MPO simplification
+    cout << "MPO simplification start" << endl;
+    mpo = make_shared<SimplifiedMPO<SGF, double>>(
+        mpo, make_shared<RuleQC<SGF, double>>(), true);
+    cout << "MPO simplification end .. T = " << t.get_time() << endl;
+
+    // 1PDM MPO construction
+    cout << "1PDM MPO start" << endl;
+    shared_ptr<MPO<SGF, double>> pmpo =
+        make_shared<PDM1MPOQC<SGF, double>>(hamil);
+    cout << "1PDM MPO end .. T = " << t.get_time() << endl;
+
+    // 1PDM MPO simplification
+    cout << "1PDM MPO simplification start" << endl;
+    pmpo = make_shared<SimplifiedMPO<SGF, double>>(
+        pmpo, make_shared<RuleQC<SGF, double>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
+    cout << "1PDM MPO simplification end .. T = " << t.get_time() << endl;
+
+    ubond_t bond_dim = 200;
+
+    for (int dot = 1; dot <= 2; dot++) {
+
+        // MPSInfo
+        shared_ptr<MPSInfo<SGF>> mps_info =
+            make_shared<MPSInfo<SGF>>(norb, vacuum, target, hamil->basis);
+        mps_info->set_bond_dimension(bond_dim);
+
+        // MPS
+        Random::rand_seed(0);
+        shared_ptr<MPS<SGF, double>> mps =
+            make_shared<MPS<SGF, double>>(norb, 0, dot);
+        mps->initialize(mps_info);
+        mps->random_canonicalize();
+
+        // MPS/MPSInfo save mutable
+        mps->save_mutable();
+        mps->deallocate();
+        mps_info->save_mutable();
+        mps_info->deallocate_mutable();
+
+        // ME
+        shared_ptr<MovingEnvironment<SGF, double, double>> me =
+            make_shared<MovingEnvironment<SGF, double, double>>(mpo, mps, mps,
+                                                                "DMRG");
+        t.get_time();
+        cout << "INIT start" << endl;
+        me->init_environments(false);
+        cout << "INIT end .. T = " << t.get_time() << endl;
+
+        // DMRG
+        vector<ubond_t> bdims = {bond_dim};
+        vector<double> noises = {1E-8, 0};
+        shared_ptr<DMRG<SGF, double, double>> dmrg =
+            make_shared<DMRG<SGF, double, double>>(me, bdims, noises);
+        dmrg->iprint = 2;
+        dmrg->noise_type = NoiseTypes::Perturbative;
+        dmrg->cutoff = 1E-30;
+        dmrg->solve(20, true, 1E-14);
+
+        // 1PDM ME
+        shared_ptr<MovingEnvironment<SGF, double, double>> pme =
+            make_shared<MovingEnvironment<SGF, double, double>>(pmpo, mps, mps,
+                                                                "1PDM");
+        t.get_time();
+        cout << "1PDM INIT start" << endl;
+        pme->init_environments(false);
+        cout << "1PDM INIT end .. T = " << t.get_time() << endl;
+
+        // 1PDM
+        shared_ptr<Expect<SGF, double, double>> expect =
+            make_shared<Expect<SGF, double, double>>(pme, bond_dim, bond_dim);
+        expect->solve(true, dmrg->forward);
+
+        MatrixRef dm = expect->get_1pdm_spatial();
+        int k = 0;
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (abs(dm(i, j)) > TINY) {
+                    cout << "== SGF 1PDM SPAT / " << dot
+                         << "-site ==" << setw(5) << i << setw(5) << j << fixed
+                         << setw(22) << fixed << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10) << abs(dm(i, j) - get<2>(one_pdm[k]))
+                         << endl;
+
+                    EXPECT_EQ(i, get<0>(one_pdm[k]));
+                    EXPECT_EQ(j, get<1>(one_pdm[k]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
+
+                    k++;
+                }
+
+        EXPECT_EQ(k, (int)one_pdm.size());
+
+        dm.deallocate();
+
+        dm = expect->get_1pdm();
+        int kk[2] = {0, 0};
+        for (int i = 0; i < dm.m; i++)
+            for (int j = 0; j < dm.n; j++)
+                if (i % 2 != j % 2)
+                    EXPECT_LT(abs(dm(i, j)), 1E-6);
+                else if (abs(dm(i, j)) > TINY) {
+                    int ii = i / 2, jj = j / 2, p = i % 2;
+
+                    cout << "== SGF 1PDM / " << dot << "-site ==" << setw(6)
+                         << (p == 0 ? "alpha" : "beta") << setw(5) << ii
+                         << setw(5) << jj << fixed << setw(22) << fixed
+                         << setprecision(12) << dm(i, j)
+                         << " error = " << scientific << setprecision(3)
+                         << setw(10)
+                         << abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2) << endl;
+
+                    EXPECT_EQ(ii, get<0>(one_pdm[kk[p]]));
+                    EXPECT_EQ(jj, get<1>(one_pdm[kk[p]]));
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-6);
+
+                    kk[p]++;
+                }
+
+        EXPECT_EQ(kk[0], (int)one_pdm.size());
+        EXPECT_EQ(kk[1], (int)one_pdm.size());
+
+        dm.deallocate();
+
+        // deallocate persistent stack memory
+        mps_info->deallocate();
+    }
+
+    pmpo->deallocate();
+    mpo->deallocate();
+    hamil->deallocate();
+    fcidump->deallocate();
+}
+
+#endif

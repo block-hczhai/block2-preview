@@ -2739,4 +2739,835 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     }
 };
 
+// Quantum chemistry MPO (general spin)
+template <typename S, typename FL>
+struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
+    QCTypes mode;
+    const bool symmetrized_p = true;
+    MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+          QCTypes mode = QCTypes::NC, int trans_center = -1,
+          bool symmetrized_p = true)
+        : MPO<S, FL>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+        // fermionic exchange factor
+        const FL exf = S::GIF ? -1.0 : 1.0;
+        shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
+            OpNames::H, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        uint16_t n_sites = hamil->n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S, FL>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
+        uint16_t n_orbs =
+            hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
+#ifdef _MSC_VER
+        vector<shared_ptr<OpExpr<S>>> c_op(n_orbs), d_op(n_orbs);
+        vector<shared_ptr<OpExpr<S>>> rd_op(n_orbs), r_op(n_orbs);
+        vector<shared_ptr<OpExpr<S>>> mrd_op(n_orbs), mr_op(n_orbs);
+        vector<vector<shared_ptr<OpExpr<S>>>> a_op(
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> ad_op(
+            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(
+            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> p_op(
+            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> pd_op(
+            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> q_op(
+            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+#else
+        shared_ptr<OpExpr<S>> c_op[n_orbs], d_op[n_orbs];
+        shared_ptr<OpExpr<S>> rd_op[n_orbs], r_op[n_orbs];
+        shared_ptr<OpExpr<S>> mrd_op[n_orbs], mr_op[n_orbs];
+        shared_ptr<OpExpr<S>> a_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> ad_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> b_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> p_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs];
+#endif
+        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::const_e = hamil->e();
+        if (hamil->delayed == DelayedOpNames::None)
+            MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        else
+            MPO<S, FL>::tf =
+                make_shared<DelayedTensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
+        uint16_t trans_l = -1, trans_r = n_sites;
+        if (trans_center == -1)
+            trans_center = n_sites >> 1;
+        if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
+            trans_l = trans_center - 1, trans_r = trans_center;
+        else if (mode == QCTypes::Conventional)
+            trans_l = trans_center - 1, trans_r = trans_center + 1;
+        for (uint16_t m = 0; m < n_orbs; m++) {
+            c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
+                                                    S(1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S, FL>>(
+                OpNames::D, SiteIndex(m), S(-1, S::pg_inv(hamil->orb_sym[m])));
+            rd_op[m] = make_shared<OpElement<S, FL>>(OpNames::RD, SiteIndex(m),
+                                                     S(1, hamil->orb_sym[m]));
+            r_op[m] = make_shared<OpElement<S, FL>>(
+                OpNames::R, SiteIndex(m), S(-1, S::pg_inv(hamil->orb_sym[m])));
+            mrd_op[m] = exf * rd_op[m];
+            mr_op[m] = exf * r_op[m];
+        }
+        for (uint16_t i = 0; i < n_orbs; i++)
+            for (uint16_t j = 0; j < n_orbs; j++) {
+                a_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::A, SiteIndex(i, j),
+                    S(2, S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
+                ad_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::AD, SiteIndex(i, j),
+                    S(-2, S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
+                b_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::B, SiteIndex(i, j),
+                    S(0, S::pg_mul(hamil->orb_sym[i],
+                                   S::pg_inv(hamil->orb_sym[j]))));
+                p_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::P, SiteIndex(i, j),
+                    S(-2, S::pg_mul(S::pg_inv(hamil->orb_sym[i]),
+                                    S::pg_inv(hamil->orb_sym[j]))));
+                pd_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::PD, SiteIndex(i, j),
+                    S(2, S::pg_mul(hamil->orb_sym[i], hamil->orb_sym[j])));
+                q_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::Q, SiteIndex(i, j),
+                    S(0, S::pg_inv(S::pg_mul(hamil->orb_sym[i],
+                                             S::pg_inv(hamil->orb_sym[j])))));
+            }
+        bool need_repeat_m = mode == QCTypes::Conventional &&
+                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
+                             trans_l + 1 < n_sites;
+        this->left_operator_names.resize(n_sites, nullptr);
+        this->right_operator_names.resize(n_sites, nullptr);
+        this->tensors.resize(n_sites, nullptr);
+        for (uint16_t m = 0; m < n_sites; m++)
+            this->tensors[m] = make_shared<OperatorTensor<S, FL>>();
+        int ntg = threading->activate_global();
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (int xxm = 0; xxm < (int)(n_sites + need_repeat_m); xxm++) {
+            uint16_t xm = (uint16_t)xxm;
+#else
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (uint16_t xm = 0; xm < n_sites + need_repeat_m; xm++) {
+#endif
+            uint16_t pm = xm;
+            int p;
+            bool repeat_m = false;
+            if (need_repeat_m && xm > trans_l + 1) {
+                pm = xm - 1;
+                if (pm == trans_l + 1)
+                    repeat_m = true;
+            }
+            uint16_t m = pm + n_orbs_big_left - 1;
+            shared_ptr<Symbolic<S>> pmat;
+            int lshape, rshape;
+            QCTypes effective_mode;
+            if (mode == QCTypes::NC ||
+                ((mode & QCTypes::NC) && pm <= trans_l) ||
+                (mode == QCTypes::Conventional && pm <= trans_l + 1 &&
+                 !repeat_m))
+                effective_mode = QCTypes::NC;
+            else if (mode == QCTypes::CN ||
+                     ((mode & QCTypes::CN) && pm >= trans_r) ||
+                     (mode == QCTypes::Conventional && pm >= trans_r - 1))
+                effective_mode = QCTypes::CN;
+            else
+                assert(false);
+            switch (effective_mode) {
+            case QCTypes::NC:
+                lshape = 2 + 2 * n_orbs + 3 * m * m;
+                rshape = 2 + 2 * n_orbs + 3 * (m + 1) * (m + 1);
+                break;
+            case QCTypes::CN:
+                lshape = 2 + 2 * n_orbs + 3 * (n_orbs - m) * (n_orbs - m);
+                rshape =
+                    2 + 2 * n_orbs + 3 * (n_orbs - m - 1) * (n_orbs - m - 1);
+                break;
+            default:
+                assert(false);
+            }
+            if (pm == 0)
+                pmat = make_shared<SymbolicRowVector<S>>(rshape);
+            else if (pm == n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S>>(lshape);
+            else
+                pmat = make_shared<SymbolicMatrix<S>>(lshape, rshape);
+            Symbolic<S> &mat = *pmat;
+            if (pm == 0) {
+                mat[{0, 0}] = h_op;
+                mat[{0, 1}] = i_op;
+                p = 2;
+                for (uint16_t j = 0; j < m + 1; j++)
+                    mat[{0, p + j}] = c_op[j];
+                p += m + 1;
+                for (uint16_t j = 0; j < m + 1; j++)
+                    mat[{0, p + j}] = d_op[j];
+                p += m + 1;
+                for (uint16_t j = m + 1; j < n_orbs; j++)
+                    mat[{0, p + j - m - 1}] = rd_op[j];
+                p += n_orbs - (m + 1);
+                for (uint16_t j = m + 1; j < n_orbs; j++)
+                    mat[{0, p + j - m - 1}] = mr_op[j];
+                p += n_orbs - (m + 1);
+            } else if (pm == n_sites - 1) {
+                mat[{0, 0}] = i_op;
+                mat[{1, 0}] = h_op;
+                p = 2;
+                for (uint16_t j = 0; j < m; j++)
+                    mat[{p + j, 0}] = r_op[j];
+                p += m;
+                for (uint16_t j = 0; j < m; j++)
+                    mat[{p + j, 0}] = mrd_op[j];
+                p += m;
+                for (uint16_t j = m; j < n_orbs; j++)
+                    mat[{p + j - m, 0}] = d_op[j];
+                p += n_orbs - m;
+                for (uint16_t j = m; j < n_orbs; j++)
+                    mat[{p + j - m, 0}] = c_op[j];
+                p += n_orbs - m;
+            }
+            switch (effective_mode) {
+            case QCTypes::NC:
+                if (pm == 0) {
+                    for (uint16_t j = 0; j < m + 1; j++) {
+                        for (uint16_t k = 0; k < m + 1; k++)
+                            mat[{0, p + k}] = a_op[j][k];
+                        p += m + 1;
+                    }
+                    for (uint16_t j = 0; j < m + 1; j++) {
+                        for (uint16_t k = 0; k < m + 1; k++)
+                            mat[{0, p + k}] = ad_op[j][k];
+                        p += m + 1;
+                    }
+                    for (uint16_t j = 0; j < m + 1; j++) {
+                        for (uint16_t k = 0; k < m + 1; k++)
+                            mat[{0, p + k}] = b_op[j][k];
+                        p += m + 1;
+                    }
+                    assert(p == mat.n);
+                } else {
+                    if (pm != n_sites - 1) {
+                        mat[{0, 0}] = i_op;
+                        mat[{1, 0}] = h_op;
+                        p = 2;
+                        for (uint16_t j = 0; j < m; j++)
+                            mat[{p + j, 0}] = r_op[j];
+                        p += m;
+                        for (uint16_t j = 0; j < m; j++)
+                            mat[{p + j, 0}] = mrd_op[j];
+                        p += m;
+                        mat[{p, 0}] = d_op[m];
+                        p += n_orbs - m;
+                        mat[{p, 0}] = c_op[m];
+                        p += n_orbs - m;
+                    }
+                    for (uint16_t j = 0; j < m; j++) {
+                        for (uint16_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = 0.5 * p_op[j][k];
+                        p += m;
+                    }
+                    for (uint16_t j = 0; j < m; j++) {
+                        for (uint16_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = 0.5 * pd_op[j][k];
+                        p += m;
+                    }
+                    for (uint16_t j = 0; j < m; j++) {
+                        for (uint16_t k = 0; k < m; k++)
+                            mat[{p + k, 0}] = q_op[j][k];
+                        p += m;
+                    }
+                    assert(p == mat.m);
+                }
+                if (pm != 0 && pm != n_sites - 1) {
+                    mat[{1, 1}] = i_op;
+                    p = 2;
+                    // pointers
+                    int pi = 1, pc = 2, pd = 2 + m;
+                    int prd = 2 + m + m - m, pr = 2 + m + n_orbs - m;
+                    int pa = 2 + (n_orbs << 1) + m * m * 0;
+                    int pad = 2 + (n_orbs << 1) + m * m * 1;
+                    int pb = 2 + (n_orbs << 1) + m * m * 2;
+                    // C
+                    for (uint16_t j = 0; j < m; j++)
+                        mat[{pc + j, p + j}] = i_op;
+                    mat[{pi, p + m}] = c_op[m];
+                    p += m + 1;
+                    // D
+                    for (uint16_t j = 0; j < m; j++)
+                        mat[{pd + j, p + j}] = i_op;
+                    mat[{pi, p + m}] = d_op[m];
+                    p += m + 1;
+                    // RD
+                    for (uint16_t i = m + 1; i < n_orbs; i++) {
+                        mat[{prd + i, p + i - (m + 1)}] = i_op;
+                        mat[{pi, p + i - (m + 1)}] = rd_op[i];
+                        for (uint16_t k = 0; k < m; k++) {
+                            mat[{pd + k, p + i - (m + 1)}] = pd_op[i][k];
+                            mat[{pc + k, p + i - (m + 1)}] = q_op[k][i];
+                        }
+                        if (!symmetrized_p)
+                            for (uint16_t j = 0; j < m; j++)
+                                for (uint16_t l = 0; l < m; l++)
+                                    mat[{pa + j * m + l, p + i - (m + 1)}] =
+                                        hamil->v(j, i, l, m) * d_op[m];
+                        else
+                            for (uint16_t j = 0; j < m; j++)
+                                for (uint16_t l = 0; l < m; l++)
+                                    mat[{pa + j * m + l, p + i - (m + 1)}] =
+                                        (0.5 * (hamil->v(j, i, l, m) +
+                                                exf * hamil->v(l, i, j, m))) *
+                                        d_op[m];
+                        for (uint16_t k = 0; k < m; k++)
+                            for (uint16_t l = 0; l < m; l++)
+                                mat[{pb + l * m + k, p + i - (m + 1)}] =
+                                    (hamil->v(m, i, l, k) -
+                                     hamil->v(l, i, m, k)) *
+                                    c_op[m];
+                    }
+                    p += n_orbs - (m + 1);
+                    // R
+                    for (uint16_t i = m + 1; i < n_orbs; i++) {
+                        mat[{pr + i, p + i - (m + 1)}] = i_op;
+                        mat[{pi, p + i - (m + 1)}] = mr_op[i];
+                        for (uint16_t k = 0; k < m; k++) {
+                            mat[{pc + k, p + i - (m + 1)}] = exf * p_op[i][k];
+                            mat[{pd + k, p + i - (m + 1)}] = exf * q_op[i][k];
+                        }
+                        if (!symmetrized_p)
+                            for (uint16_t j = 0; j < m; j++)
+                                for (uint16_t l = 0; l < m; l++)
+                                    mat[{pad + j * m + l, p + i - (m + 1)}] =
+                                        (exf * hamil->v(i, j, m, l)) * c_op[m];
+                        else
+                            for (uint16_t j = 0; j < m; j++)
+                                for (uint16_t l = 0; l < m; l++)
+                                    mat[{pad + j * m + l, p + i - (m + 1)}] =
+                                        (exf * 0.5 *
+                                         (hamil->v(i, j, m, l) +
+                                          exf * hamil->v(i, l, m, j))) *
+                                        c_op[m];
+                        for (uint16_t k = 0; k < m; k++)
+                            for (uint16_t l = 0; l < m; l++)
+                                mat[{pb + k * m + l, p + i - (m + 1)}] =
+                                    (exf * (hamil->v(i, m, k, l) -
+                                            hamil->v(i, l, k, m))) *
+                                    d_op[m];
+                    }
+                    p += n_orbs - (m + 1);
+                    // A
+                    for (uint16_t i = 0; i < m; i++)
+                        for (uint16_t j = 0; j < m; j++)
+                            mat[{pa + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < m; i++) {
+                        mat[{pc + i, p + i * (m + 1) + m}] = c_op[m];
+                        mat[{pc + i, p + m * (m + 1) + i}] = exf * c_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = a_op[m][m];
+                    p += (m + 1) * (m + 1);
+                    // AD
+                    for (uint16_t i = 0; i < m; i++)
+                        for (uint16_t j = 0; j < m; j++)
+                            mat[{pad + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < m; i++) {
+                        mat[{pd + i, p + i * (m + 1) + m}] = exf * d_op[m];
+                        mat[{pd + i, p + m * (m + 1) + i}] = d_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = ad_op[m][m];
+                    p += (m + 1) * (m + 1);
+                    // B
+                    for (uint16_t i = 0; i < m; i++)
+                        for (uint16_t j = 0; j < m; j++)
+                            mat[{pb + i * m + j, p + i * (m + 1) + j}] = i_op;
+                    for (uint16_t i = 0; i < m; i++) {
+                        mat[{pc + i, p + i * (m + 1) + m}] = d_op[m];
+                        mat[{pd + i, p + m * (m + 1) + i}] = exf * c_op[m];
+                    }
+                    mat[{pi, p + m * (m + 1) + m}] = b_op[m][m];
+                    p += (m + 1) * (m + 1);
+                    assert(p == mat.n);
+                }
+                break;
+            case QCTypes::CN:
+                if (pm == n_sites - 1) {
+                    for (uint16_t j = m; j < n_orbs; j++) {
+                        for (uint16_t k = m; k < n_orbs; k++)
+                            mat[{p + k - m, 0}] = a_op[j][k];
+                        p += n_orbs - m;
+                    }
+                    for (uint16_t j = m; j < n_orbs; j++) {
+                        for (uint16_t k = m; k < n_orbs; k++)
+                            mat[{p + k - m, 0}] = ad_op[j][k];
+                        p += n_orbs - m;
+                    }
+                    for (uint16_t j = m; j < n_orbs; j++) {
+                        for (uint16_t k = m; k < n_orbs; k++)
+                            mat[{p + k - m, 0}] = b_op[j][k];
+                        p += n_orbs - m;
+                    }
+                    assert(p == mat.m);
+                } else {
+                    if (pm != 0) {
+                        mat[{1, 0}] = h_op;
+                        mat[{1, 1}] = i_op;
+                        p = 2;
+                        mat[{1, p + m}] = c_op[m];
+                        p += m + 1;
+                        mat[{1, p + m}] = d_op[m];
+                        p += m + 1;
+                        for (uint16_t j = m + 1; j < n_orbs; j++)
+                            mat[{1, p + j - m - 1}] = rd_op[j];
+                        p += n_orbs - m - 1;
+                        for (uint16_t j = m + 1; j < n_orbs; j++)
+                            mat[{1, p + j - m - 1}] = mr_op[j];
+                        p += n_orbs - m - 1;
+                    }
+                    for (uint16_t j = m + 1; j < n_orbs; j++) {
+                        for (uint16_t k = m + 1; k < n_orbs; k++)
+                            mat[{!!pm, p + k - m - 1}] = 0.5 * p_op[j][k];
+                        p += n_orbs - m - 1;
+                    }
+                    for (uint16_t j = m + 1; j < n_orbs; j++) {
+                        for (uint16_t k = m + 1; k < n_orbs; k++)
+                            mat[{!!pm, p + k - m - 1}] = 0.5 * pd_op[j][k];
+                        p += n_orbs - m - 1;
+                    }
+                    for (uint16_t j = m + 1; j < n_orbs; j++) {
+                        for (uint16_t k = m + 1; k < n_orbs; k++)
+                            mat[{!!pm, p + k - m - 1}] = q_op[j][k];
+                        p += n_orbs - m - 1;
+                    }
+                    assert(p == mat.n);
+                }
+                if (pm != 0 && pm != n_sites - 1) {
+                    mat[{0, 0}] = i_op;
+                    p = 2;
+                    // pointers
+                    int mm = n_orbs - m - 1;
+                    int ppm = n_orbs - m;
+                    int pi = 0, pr = 2, prd = 2 + m + 1;
+                    int pd = 2 + m + m + 2 - m - 1,
+                        pc = 2 + m + 1 + n_orbs - m - 1;
+                    int pa = 2 + (n_orbs << 1) + mm * mm * 0;
+                    int pad = 2 + (n_orbs << 1) + mm * mm * 1;
+                    int pb = 2 + (n_orbs << 1) + mm * mm * 2;
+                    // R
+                    for (uint16_t i = 0; i < m; i++) {
+                        mat[{p + i, pi}] = r_op[i];
+                        mat[{p + i, pr + i}] = i_op;
+                        if (!symmetrized_p)
+                            for (uint16_t j = m + 1; j < n_orbs; j++)
+                                for (uint16_t l = m + 1; l < n_orbs; l++)
+                                    mat[{p + i,
+                                         pad + (j - m - 1) * mm + l - m - 1}] =
+                                        hamil->v(i, j, m, l) * c_op[m];
+                        else
+                            for (uint16_t j = m + 1; j < n_orbs; j++)
+                                for (uint16_t l = m + 1; l < n_orbs; l++)
+                                    mat[{p + i,
+                                         pad + (j - m - 1) * mm + l - m - 1}] =
+                                        (0.5 * (hamil->v(i, j, m, l) +
+                                                exf * hamil->v(i, l, m, j))) *
+                                        c_op[m];
+                        for (uint16_t k = m + 1; k < n_orbs; k++)
+                            for (uint16_t l = m + 1; l < n_orbs; l++)
+                                mat[{p + i, pb + (k - m - 1) * mm + l - m -
+                                                1}] = (hamil->v(i, m, k, l) -
+                                                       hamil->v(i, l, k, m)) *
+                                                      d_op[m];
+                        for (uint16_t k = m + 1; k < n_orbs; k++) {
+                            mat[{p + i, pc + k}] = p_op[i][k];
+                            mat[{p + i, pd + k}] = q_op[i][k];
+                        }
+                    }
+                    p += m;
+                    // RD
+                    for (uint16_t i = 0; i < m; i++) {
+                        mat[{p + i, pi}] = mrd_op[i];
+                        mat[{p + i, prd + i}] = i_op;
+                        if (!symmetrized_p)
+                            for (uint16_t j = m + 1; j < n_orbs; j++)
+                                for (uint16_t l = m + 1; l < n_orbs; l++)
+                                    mat[{p + i,
+                                         pa + (j - m - 1) * mm + l - m - 1}] =
+                                        (exf * hamil->v(j, i, l, m)) * d_op[m];
+                        else
+                            for (uint16_t j = m + 1; j < n_orbs; j++)
+                                for (uint16_t l = m + 1; l < n_orbs; l++)
+                                    mat[{p + i,
+                                         pa + (j - m - 1) * mm + l - m - 1}] =
+                                        (exf * 0.5 *
+                                         (hamil->v(j, i, l, m) +
+                                          exf * hamil->v(l, i, j, m))) *
+                                        d_op[m];
+                        for (uint16_t k = m + 1; k < n_orbs; k++)
+                            for (uint16_t l = m + 1; l < n_orbs; l++)
+                                mat[{p + i,
+                                     pb + (l - m - 1) * mm + k - m - 1}] =
+                                    (exf * (hamil->v(m, i, l, k) -
+                                            hamil->v(l, i, m, k))) *
+                                    c_op[m];
+                        for (uint16_t k = m + 1; k < n_orbs; k++) {
+                            mat[{p + i, pd + k}] = exf * pd_op[i][k];
+                            mat[{p + i, pc + k}] = exf * q_op[k][i];
+                        }
+                    }
+                    p += m;
+                    // D
+                    mat[{p + m - m, pi}] = d_op[m];
+                    for (uint16_t j = m + 1; j < n_orbs; j++)
+                        mat[{p + j - m, pd + j}] = i_op;
+                    p += n_orbs - m;
+                    // C
+                    mat[{p + m - m, pi}] = c_op[m];
+                    for (uint16_t j = m + 1; j < n_orbs; j++)
+                        mat[{p + j - m, pc + j}] = i_op;
+                    p += n_orbs - m;
+                    // A
+                    mat[{p + (m - m) * ppm + m - m, pi}] = a_op[m][m];
+                    for (uint16_t i = m + 1; i < n_orbs; i++) {
+                        mat[{p + (m - m) * ppm + i - m, pc + i}] = c_op[m];
+                        mat[{p + (i - m) * ppm + m - m, pc + i}] =
+                            exf * c_op[m];
+                    }
+                    for (uint16_t i = m + 1; i < n_orbs; i++)
+                        for (uint16_t j = m + 1; j < n_orbs; j++)
+                            mat[{p + (i - m) * ppm + j - m,
+                                 pa + (i - m - 1) * mm + j - m - 1}] = i_op;
+                    p += ppm * ppm;
+                    // AD
+                    mat[{p + (m - m) * ppm + m - m, pi}] = ad_op[m][m];
+                    for (uint16_t i = m + 1; i < n_orbs; i++) {
+                        mat[{p + (m - m) * ppm + i - m, pd + i}] =
+                            exf * d_op[m];
+                        mat[{p + (i - m) * ppm + m - m, pd + i}] = d_op[m];
+                    }
+                    for (uint16_t i = m + 1; i < n_orbs; i++)
+                        for (uint16_t j = m + 1; j < n_orbs; j++)
+                            mat[{p + (i - m) * ppm + j - m,
+                                 pad + (i - m - 1) * mm + j - m - 1}] = i_op;
+                    p += ppm * ppm;
+                    // B
+                    mat[{p + (m - m) * ppm + m - m, pi}] = b_op[m][m];
+                    for (uint16_t i = m + 1; i < n_orbs; i++) {
+                        mat[{p + (m - m) * ppm + i - m, pd + i}] = c_op[m];
+                        mat[{p + (i - m) * ppm + m - m, pc + i}] =
+                            exf * d_op[m];
+                    }
+                    for (uint16_t i = m + 1; i < n_orbs; i++)
+                        for (uint16_t j = m + 1; j < n_orbs; j++)
+                            mat[{p + (i - m) * ppm + j - m,
+                                 pb + (i - m - 1) * mm + j - m - 1}] = i_op;
+                    p += ppm * ppm;
+                    assert(p == mat.m);
+                }
+                break;
+            default:
+                assert(false);
+                break;
+            }
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
+            if (mode != QCTypes::Conventional ||
+                !(pm == trans_l + 1 && pm == trans_r - 1))
+                opt->lmat = opt->rmat = pmat;
+            else if (!repeat_m)
+                opt->rmat = pmat;
+            else
+                opt->lmat = pmat;
+            // operator names
+            if (opt->lmat == pmat) {
+                shared_ptr<SymbolicRowVector<S>> plop;
+                if (pm == n_sites - 1)
+                    plop = make_shared<SymbolicRowVector<S>>(1);
+                else
+                    plop = make_shared<SymbolicRowVector<S>>(rshape);
+                SymbolicRowVector<S> &lop = *plop;
+                lop[0] = h_op;
+                if (pm != n_sites - 1) {
+                    lop[1] = i_op;
+                    p = 2;
+                    for (uint16_t j = 0; j < m + 1; j++)
+                        lop[p + j] = c_op[j];
+                    p += m + 1;
+                    for (uint16_t j = 0; j < m + 1; j++)
+                        lop[p + j] = d_op[j];
+                    p += m + 1;
+                    for (uint16_t j = m + 1; j < n_orbs; j++)
+                        lop[p + j - (m + 1)] = rd_op[j];
+                    p += n_orbs - (m + 1);
+                    for (uint16_t j = m + 1; j < n_orbs; j++)
+                        lop[p + j - (m + 1)] = mr_op[j];
+                    p += n_orbs - (m + 1);
+                    switch (effective_mode) {
+                    case QCTypes::NC:
+                        for (uint16_t j = 0; j < m + 1; j++) {
+                            for (uint16_t k = 0; k < m + 1; k++)
+                                lop[p + k] = a_op[j][k];
+                            p += m + 1;
+                        }
+                        for (uint16_t j = 0; j < m + 1; j++) {
+                            for (uint16_t k = 0; k < m + 1; k++)
+                                lop[p + k] = ad_op[j][k];
+                            p += m + 1;
+                        }
+                        for (uint16_t j = 0; j < m + 1; j++) {
+                            for (uint16_t k = 0; k < m + 1; k++)
+                                lop[p + k] = b_op[j][k];
+                            p += m + 1;
+                        }
+                        break;
+                    case QCTypes::CN:
+                        for (uint16_t j = m + 1; j < n_orbs; j++) {
+                            for (uint16_t k = m + 1; k < n_orbs; k++)
+                                lop[p + k - m - 1] = 0.5 * p_op[j][k];
+                            p += n_orbs - m - 1;
+                        }
+                        for (uint16_t j = m + 1; j < n_orbs; j++) {
+                            for (uint16_t k = m + 1; k < n_orbs; k++)
+                                lop[p + k - m - 1] = 0.5 * pd_op[j][k];
+                            p += n_orbs - m - 1;
+                        }
+                        for (uint16_t j = m + 1; j < n_orbs; j++) {
+                            for (uint16_t k = m + 1; k < n_orbs; k++)
+                                lop[p + k - m - 1] = q_op[j][k];
+                            p += n_orbs - m - 1;
+                        }
+                        break;
+                    default:
+                        assert(false);
+                        break;
+                    }
+                    assert(p == rshape);
+                }
+                this->left_operator_names[pm] = plop;
+            }
+            if (opt->rmat == pmat) {
+                shared_ptr<SymbolicColumnVector<S>> prop;
+                if (pm == 0)
+                    prop = make_shared<SymbolicColumnVector<S>>(1);
+                else
+                    prop = make_shared<SymbolicColumnVector<S>>(lshape);
+                SymbolicColumnVector<S> &rop = *prop;
+                if (pm == 0)
+                    rop[0] = h_op;
+                else {
+                    rop[0] = i_op;
+                    rop[1] = h_op;
+                    p = 2;
+                    for (uint16_t j = 0; j < m; j++)
+                        rop[p + j] = r_op[j];
+                    p += m;
+                    for (uint16_t j = 0; j < m; j++)
+                        rop[p + j] = mrd_op[j];
+                    p += m;
+                    for (uint16_t j = m; j < n_orbs; j++)
+                        rop[p + j - m] = d_op[j];
+                    p += n_orbs - m;
+                    for (uint16_t j = m; j < n_orbs; j++)
+                        rop[p + j - m] = c_op[j];
+                    p += n_orbs - m;
+                    switch (effective_mode) {
+                    case QCTypes::NC:
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
+                                rop[p + k] = 0.5 * p_op[j][k];
+                            p += m;
+                        }
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
+                                rop[p + k] = 0.5 * pd_op[j][k];
+                            p += m;
+                        }
+                        for (uint16_t j = 0; j < m; j++) {
+                            for (uint16_t k = 0; k < m; k++)
+                                rop[p + k] = q_op[j][k];
+                            p += m;
+                        }
+                        break;
+                    case QCTypes::CN:
+                        for (uint16_t j = m; j < n_orbs; j++) {
+                            for (uint16_t k = m; k < n_orbs; k++)
+                                rop[p + k - m] = a_op[j][k];
+                            p += n_orbs - m;
+                        }
+                        for (uint16_t j = m; j < n_orbs; j++) {
+                            for (uint16_t k = m; k < n_orbs; k++)
+                                rop[p + k - m] = ad_op[j][k];
+                            p += n_orbs - m;
+                        }
+                        for (uint16_t j = m; j < n_orbs; j++) {
+                            for (uint16_t k = m; k < n_orbs; k++)
+                                rop[p + k - m] = b_op[j][k];
+                            p += n_orbs - m;
+                        }
+                        break;
+                    default:
+                        assert(false);
+                        break;
+                    }
+                    assert(p == lshape);
+                }
+                this->right_operator_names[pm] = prop;
+            }
+        }
+        SeqTypes seqt = hamil->opf->seq->mode;
+        hamil->opf->seq->mode = SeqTypes::None;
+        const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
+        const uint16_t m_end =
+            hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+#ifdef _MSC_VER
+        for (int m = (int)m_start; m < (int)m_end; m++) {
+#else
+        for (uint16_t m = m_start; m < m_end; m++) {
+#endif
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
+            hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
+                                   opt->ops);
+        }
+        if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
+            hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+        }
+        if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
+            hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
+                                   opt->ops);
+        }
+        hamil->opf->seq->mode = seqt;
+        if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
+            mode == QCTypes::Conventional) {
+            uint16_t m, pm;
+            MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            // left transform
+            pm = trans_l;
+            m = pm + n_orbs_big_left - 1;
+            int new_rshape =
+                2 + 2 * n_orbs + 3 * (n_orbs - m - 1) * (n_orbs - m - 1);
+            MPO<S, FL>::schemer->left_new_operator_names =
+                make_shared<SymbolicRowVector<S>>(new_rshape);
+            MPO<S, FL>::schemer->left_new_operator_exprs =
+                make_shared<SymbolicRowVector<S>>(new_rshape);
+            SymbolicRowVector<S> &lop =
+                *MPO<S, FL>::schemer->left_new_operator_names;
+            SymbolicRowVector<S> &lexpr =
+                *MPO<S, FL>::schemer->left_new_operator_exprs;
+            for (int i = 0; i < 2 + 2 * n_orbs; i++)
+                lop[i] = this->left_operator_names[pm]->data[i];
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+#ifdef _MSC_VER
+            for (int j = (int)m + 1; j < (int)n_orbs; j++) {
+#else
+            for (uint16_t j = m + 1; j < n_orbs; j++) {
+#endif
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((m + 1) * (m + 1));
+                for (uint16_t k = m + 1; k < n_orbs; k++) {
+                    int p = (k - m - 1) + (j - m - 1) * (n_orbs - m - 1);
+                    exprs.clear();
+                    p += 2 + 2 * n_orbs;
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil->v(j, g, k, h)) > TINY)
+                                exprs.push_back((0.5 * hamil->v(j, g, k, h)) *
+                                                ad_op[g][h]);
+                    lop[p] = 0.5 * p_op[j][k];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += (n_orbs - m - 1) * (n_orbs - m - 1);
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil->v(j, g, k, h)) > TINY)
+                                exprs.push_back((0.5 * hamil->v(j, g, k, h)) *
+                                                a_op[g][h]);
+                    lop[p] = 0.5 * pd_op[j][k];
+                    lexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += (n_orbs - m - 1) * (n_orbs - m - 1);
+                    for (uint16_t g = 0; g < m + 1; g++)
+                        for (uint16_t h = 0; h < m + 1; h++)
+                            if (abs(hamil->v(j, k, g, h) -
+                                    hamil->v(j, h, g, k)) > TINY)
+                                exprs.push_back((hamil->v(j, k, g, h) -
+                                                 hamil->v(j, h, g, k)) *
+                                                b_op[g][h]);
+                    lop[p] = q_op[j][k];
+                    lexpr[p] = sum(exprs);
+                }
+            }
+            // right transform
+            pm = trans_r - 1;
+            m = pm + n_orbs_big_left - 1;
+            int new_lshape = 2 + 2 * n_orbs + 3 * (m + 1) * (m + 1);
+            MPO<S, FL>::schemer->right_new_operator_names =
+                make_shared<SymbolicColumnVector<S>>(new_lshape);
+            MPO<S, FL>::schemer->right_new_operator_exprs =
+                make_shared<SymbolicColumnVector<S>>(new_lshape);
+            SymbolicColumnVector<S> &rop =
+                *MPO<S, FL>::schemer->right_new_operator_names;
+            SymbolicColumnVector<S> &rexpr =
+                *MPO<S, FL>::schemer->right_new_operator_exprs;
+            for (int i = 0; i < 2 + 2 * n_orbs; i++)
+                rop[i] = this->right_operator_names[pm + 1]->data[i];
+#ifdef _MSC_VER
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (int j = 0; j < (int)m + 1; j++) {
+#else
+            for (uint16_t j = 0; j < m + 1; j++) {
+#endif
+                vector<shared_ptr<OpExpr<S>>> exprs;
+                exprs.reserve((n_orbs - m - 1) * (n_orbs - m - 1));
+                for (uint16_t k = 0; k < m + 1; k++) {
+                    int p = k + j * (m + 1);
+                    exprs.clear();
+                    p += 2 + 2 * n_orbs;
+                    for (uint16_t g = m + 1; g < n_orbs; g++)
+                        for (uint16_t h = m + 1; h < n_orbs; h++)
+                            if (abs(hamil->v(j, g, k, h)) > TINY)
+                                exprs.push_back((0.5 * hamil->v(j, g, k, h)) *
+                                                ad_op[g][h]);
+                    rop[p] = 0.5 * p_op[j][k];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += (m + 1) * (m + 1);
+                    for (uint16_t g = m + 1; g < n_orbs; g++)
+                        for (uint16_t h = m + 1; h < n_orbs; h++)
+                            if (abs(hamil->v(j, g, k, h)) > TINY)
+                                exprs.push_back((0.5 * hamil->v(j, g, k, h)) *
+                                                a_op[g][h]);
+                    rop[p] = 0.5 * pd_op[j][k];
+                    rexpr[p] = sum(exprs);
+                    exprs.clear();
+                    p += (m + 1) * (m + 1);
+                    for (uint16_t g = m + 1; g < n_orbs; g++)
+                        for (uint16_t h = m + 1; h < n_orbs; h++)
+                            if (abs(hamil->v(j, k, g, h) -
+                                    hamil->v(j, h, g, k)) > TINY)
+                                exprs.push_back((hamil->v(j, k, g, h) -
+                                                 hamil->v(j, h, g, k)) *
+                                                b_op[g][h]);
+                    rop[p] = q_op[j][k];
+                    rexpr[p] = sum(exprs);
+                }
+            }
+        }
+        threading->activate_normal();
+    }
+    void deallocate() override {
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            this->tensors[m]->deallocate();
+    }
+};
+
 } // namespace block2

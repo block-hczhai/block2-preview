@@ -18,7 +18,12 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_core.hpp"
 
-template auto bind_fl_spin_specific<SZ, complex<double>>(py::module &m)
-    -> decltype(typename SZ::is_sz_t());
+template struct block2::SparseMatrixInfo<block2::SGF>;
+template struct block2::SparseMatrix<block2::SGF, double>;
+template struct block2::SparseMatrixGroup<block2::SGF, double>;
+
+template struct block2::SparseMatrixInfo<block2::SGB>;
+template struct block2::SparseMatrix<block2::SGB, double>;
+template struct block2::SparseMatrixGroup<block2::SGB, double>;

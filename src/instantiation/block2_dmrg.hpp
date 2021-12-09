@@ -422,6 +422,184 @@ extern template struct block2::TimeEvolution<block2::SU2K, double, double>;
 
 #endif
 
+#ifdef _USE_SG
+
+// archived_mpo.hpp
+extern template struct block2::ArchivedMPO<block2::SGF, double>;
+extern template struct block2::ArchivedMPO<block2::SGB, double>;
+
+// determinant.hpp
+extern template struct block2::DeterminantTRIE<block2::SGF, double>;
+extern template struct block2::DeterminantTRIE<block2::SGB, double>;
+
+// effective_functions.hpp
+extern template struct block2::EffectiveFunctions<block2::SGF, double>;
+extern template struct block2::EffectiveFunctions<block2::SGB, double>;
+
+// effective_hamiltonian.hpp
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGF, double, block2::MPS<block2::SGF, double>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SGF, double>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGF, double, block2::MultiMPS<block2::SGF, double>>;
+
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGB, double, block2::MPS<block2::SGB, double>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SGB, double>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGB, double, block2::MultiMPS<block2::SGB, double>>;
+
+// moving_environment.hpp
+extern template struct block2::MovingEnvironment<block2::SGF, double, double>;
+extern template struct block2::MovingEnvironment<block2::SGB, double, double>;
+
+// mpo.hpp
+extern template struct block2::MPOSchemer<block2::SGF>;
+extern template struct block2::MPO<block2::SGF, double>;
+extern template struct block2::DiagonalMPO<block2::SGF, double>;
+extern template struct block2::AncillaMPO<block2::SGF, double>;
+extern template struct block2::IdentityAddedMPO<block2::SGF, double>;
+
+extern template struct block2::MPOSchemer<block2::SGB>;
+extern template struct block2::MPO<block2::SGB, double>;
+extern template struct block2::DiagonalMPO<block2::SGB, double>;
+extern template struct block2::AncillaMPO<block2::SGB, double>;
+extern template struct block2::IdentityAddedMPO<block2::SGB, double>;
+
+// mpo_fusing.hpp
+extern template struct block2::FusedMPO<block2::SGF, double>;
+extern template struct block2::FusedMPO<block2::SGB, double>;
+
+// mpo_simplification.hpp
+extern template struct block2::SimplifiedMPO<block2::SGF, double>;
+extern template struct block2::SimplifiedMPO<block2::SGB, double>;
+
+// mps.hpp
+extern template struct block2::MPSInfo<block2::SGF>;
+extern template struct block2::DynamicMPSInfo<block2::SGF>;
+extern template struct block2::CASCIMPSInfo<block2::SGF>;
+extern template struct block2::MRCIMPSInfo<block2::SGF>;
+extern template struct block2::NEVPTMPSInfo<block2::SGF>;
+extern template struct block2::AncillaMPSInfo<block2::SGF>;
+extern template struct block2::MPS<block2::SGF, double>;
+
+extern template struct block2::MPSInfo<block2::SGB>;
+extern template struct block2::DynamicMPSInfo<block2::SGB>;
+extern template struct block2::CASCIMPSInfo<block2::SGB>;
+extern template struct block2::MRCIMPSInfo<block2::SGB>;
+extern template struct block2::NEVPTMPSInfo<block2::SGB>;
+extern template struct block2::AncillaMPSInfo<block2::SGB>;
+extern template struct block2::MPS<block2::SGB, double>;
+
+// mps_unfused.hpp
+extern template struct block2::SparseTensor<block2::SGF, double>;
+extern template struct block2::UnfusedMPS<block2::SGF, double>;
+
+extern template struct block2::SparseTensor<block2::SGB, double>;
+extern template struct block2::UnfusedMPS<block2::SGB, double>;
+
+// parallel_mpo.hpp
+extern template struct block2::ClassicParallelMPO<block2::SGF, double>;
+extern template struct block2::ParallelMPO<block2::SGF, double>;
+
+extern template struct block2::ClassicParallelMPO<block2::SGB, double>;
+extern template struct block2::ParallelMPO<block2::SGB, double>;
+
+// parallel_mps.hpp
+extern template struct block2::ParallelMPS<block2::SGF, double>;
+extern template struct block2::ParallelMPS<block2::SGB, double>;
+
+// parallel_rule_sum_mpo.hpp
+extern template struct block2::ParallelRuleSumMPO<block2::SGF, double>;
+extern template struct block2::SumMPORule<block2::SGF, double>;
+extern template struct block2::ParallelFCIDUMP<block2::SGF, double>;
+
+extern template struct block2::ParallelRuleSumMPO<block2::SGB, double>;
+extern template struct block2::SumMPORule<block2::SGB, double>;
+extern template struct block2::ParallelFCIDUMP<block2::SGB, double>;
+
+// partition.hpp
+extern template struct block2::Partition<block2::SGF, double>;
+extern template struct block2::Partition<block2::SGB, double>;
+
+// qc_hamiltonian.hpp
+extern template struct block2::HamiltonianQC<block2::SGF, double>;
+extern template struct block2::HamiltonianQC<block2::SGB, double>;
+
+// qc_mpo.hpp
+extern template struct block2::IdentityMPO<block2::SGF, double>;
+extern template struct block2::SiteMPO<block2::SGF, double>;
+extern template struct block2::MPOQC<block2::SGF, double>;
+
+extern template struct block2::IdentityMPO<block2::SGB, double>;
+extern template struct block2::SiteMPO<block2::SGB, double>;
+extern template struct block2::MPOQC<block2::SGB, double>;
+
+// qc_ncorr.hpp
+extern template struct block2::NPC1MPOQC<block2::SGF, double>;
+extern template struct block2::NPC1MPOQC<block2::SGB, double>;
+
+// qc_parallel_rule.hpp
+extern template struct block2::ParallelRuleQC<block2::SGF, double>;
+extern template struct block2::ParallelRuleOneBodyQC<block2::SGF, double>;
+extern template struct block2::ParallelRulePDM1QC<block2::SGF, double>;
+extern template struct block2::ParallelRulePDM2QC<block2::SGF, double>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SGF, double>;
+extern template struct block2::ParallelRuleSiteQC<block2::SGF, double>;
+extern template struct block2::ParallelRuleIdentity<block2::SGF, double>;
+
+extern template struct block2::ParallelRuleQC<block2::SGB, double>;
+extern template struct block2::ParallelRuleOneBodyQC<block2::SGB, double>;
+extern template struct block2::ParallelRulePDM1QC<block2::SGB, double>;
+extern template struct block2::ParallelRulePDM2QC<block2::SGB, double>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SGB, double>;
+extern template struct block2::ParallelRuleSiteQC<block2::SGB, double>;
+extern template struct block2::ParallelRuleIdentity<block2::SGB, double>;
+
+// qc_pdm1.hpp
+extern template struct block2::PDM1MPOQC<block2::SGF, double>;
+extern template struct block2::PDM1MPOQC<block2::SGB, double>;
+
+// qc_pdm2.hpp
+extern template struct block2::PDM2MPOQC<block2::SGF, double>;
+extern template struct block2::PDM2MPOQC<block2::SGB, double>;
+
+// qc_rule.hpp
+extern template struct block2::RuleQC<block2::SGF, double>;
+extern template struct block2::AntiHermitianRuleQC<block2::SGF, double>;
+
+extern template struct block2::RuleQC<block2::SGB, double>;
+extern template struct block2::AntiHermitianRuleQC<block2::SGB, double>;
+
+// state_averaged.hpp
+extern template struct block2::MultiMPSInfo<block2::SGF>;
+extern template struct block2::MultiMPS<block2::SGF, double>;
+
+extern template struct block2::MultiMPSInfo<block2::SGB>;
+extern template struct block2::MultiMPS<block2::SGB, double>;
+
+// sweep_algorithm.hpp
+extern template struct block2::DMRG<block2::SGF, double, double>;
+extern template struct block2::Linear<block2::SGF, double, double>;
+extern template struct block2::Expect<block2::SGF, double, double, double>;
+extern template struct block2::Expect<block2::SGF, double, double,
+                                      complex<double>>;
+
+extern template struct block2::DMRG<block2::SGB, double, double>;
+extern template struct block2::Linear<block2::SGB, double, double>;
+extern template struct block2::Expect<block2::SGB, double, double, double>;
+extern template struct block2::Expect<block2::SGB, double, double,
+                                      complex<double>>;
+
+// sweep_algorithm_td.hpp
+extern template struct block2::TDDMRG<block2::SGF, double, double>;
+extern template struct block2::TimeEvolution<block2::SGF, double, double>;
+
+extern template struct block2::TDDMRG<block2::SGB, double, double>;
+extern template struct block2::TimeEvolution<block2::SGB, double, double>;
+
+#endif
+
 #ifdef _USE_COMPLEX
 
 // archived_mpo.hpp
@@ -794,6 +972,184 @@ extern template struct block2::TimeEvolution<block2::SZK, complex<double>,
 extern template struct block2::TDDMRG<block2::SU2K, complex<double>,
                                       complex<double>>;
 extern template struct block2::TimeEvolution<block2::SU2K, complex<double>,
+                                             complex<double>>;
+
+#endif
+
+#ifdef _USE_SG
+
+// archived_mpo.hpp
+extern template struct block2::ArchivedMPO<block2::SGF, complex<double>>;
+extern template struct block2::ArchivedMPO<block2::SGB, complex<double>>;
+
+// determinant.hpp
+extern template struct block2::DeterminantTRIE<block2::SGF, complex<double>>;
+extern template struct block2::DeterminantTRIE<block2::SGB, complex<double>>;
+
+// effective_functions.hpp
+extern template struct block2::EffectiveFunctions<block2::SGF, complex<double>>;
+extern template struct block2::EffectiveFunctions<block2::SGB, complex<double>>;
+
+// effective_hamiltonian.hpp
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGF, complex<double>, block2::MPS<block2::SGF, complex<double>>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SGF,
+                                                          complex<double>>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGF, complex<double>,
+    block2::MultiMPS<block2::SGF, complex<double>>>;
+
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGB, complex<double>, block2::MPS<block2::SGB, complex<double>>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SGB,
+                                                          complex<double>>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SGB, complex<double>,
+    block2::MultiMPS<block2::SGB, complex<double>>>;
+
+// moving_environment.hpp
+extern template struct block2::MovingEnvironment<block2::SGF, complex<double>,
+                                                 complex<double>>;
+extern template struct block2::MovingEnvironment<block2::SGB, complex<double>,
+                                                 complex<double>>;
+
+// mpo.hpp
+extern template struct block2::MPO<block2::SGF, complex<double>>;
+extern template struct block2::DiagonalMPO<block2::SGF, complex<double>>;
+extern template struct block2::AncillaMPO<block2::SGF, complex<double>>;
+extern template struct block2::IdentityAddedMPO<block2::SGF, complex<double>>;
+
+extern template struct block2::MPO<block2::SGB, complex<double>>;
+extern template struct block2::DiagonalMPO<block2::SGB, complex<double>>;
+extern template struct block2::AncillaMPO<block2::SGB, complex<double>>;
+extern template struct block2::IdentityAddedMPO<block2::SGB, complex<double>>;
+
+// mpo_fusing.hpp
+extern template struct block2::FusedMPO<block2::SGF, complex<double>>;
+extern template struct block2::FusedMPO<block2::SGB, complex<double>>;
+
+// mpo_simplification.hpp
+extern template struct block2::SimplifiedMPO<block2::SGF, complex<double>>;
+extern template struct block2::SimplifiedMPO<block2::SGB, complex<double>>;
+
+// mps.hpp
+extern template struct block2::MPS<block2::SGF, complex<double>>;
+extern template struct block2::MPS<block2::SGB, complex<double>>;
+
+// mps_unfused.hpp
+extern template struct block2::SparseTensor<block2::SGF, complex<double>>;
+extern template struct block2::UnfusedMPS<block2::SGF, complex<double>>;
+
+extern template struct block2::SparseTensor<block2::SGB, complex<double>>;
+extern template struct block2::UnfusedMPS<block2::SGB, complex<double>>;
+
+// parallel_mpo.hpp
+extern template struct block2::ClassicParallelMPO<block2::SGF, complex<double>>;
+extern template struct block2::ParallelMPO<block2::SGF, complex<double>>;
+
+extern template struct block2::ClassicParallelMPO<block2::SGB, complex<double>>;
+extern template struct block2::ParallelMPO<block2::SGB, complex<double>>;
+
+// parallel_mps.hpp
+extern template struct block2::ParallelMPS<block2::SGF, complex<double>>;
+extern template struct block2::ParallelMPS<block2::SGB, complex<double>>;
+
+// parallel_rule_sum_mpo.hpp
+extern template struct block2::ParallelRuleSumMPO<block2::SGF, complex<double>>;
+extern template struct block2::SumMPORule<block2::SGF, complex<double>>;
+extern template struct block2::ParallelFCIDUMP<block2::SGF, complex<double>>;
+
+extern template struct block2::ParallelRuleSumMPO<block2::SGB, complex<double>>;
+extern template struct block2::SumMPORule<block2::SGB, complex<double>>;
+extern template struct block2::ParallelFCIDUMP<block2::SGB, complex<double>>;
+
+// partition.hpp
+extern template struct block2::Partition<block2::SGF, complex<double>>;
+extern template struct block2::Partition<block2::SGB, complex<double>>;
+
+// qc_hamiltonian.hpp
+extern template struct block2::HamiltonianQC<block2::SGF, complex<double>>;
+extern template struct block2::HamiltonianQC<block2::SGB, complex<double>>;
+
+// qc_mpo.hpp
+extern template struct block2::IdentityMPO<block2::SGF, complex<double>>;
+extern template struct block2::SiteMPO<block2::SGF, complex<double>>;
+extern template struct block2::MPOQC<block2::SGF, complex<double>>;
+
+extern template struct block2::IdentityMPO<block2::SGB, complex<double>>;
+extern template struct block2::SiteMPO<block2::SGB, complex<double>>;
+extern template struct block2::MPOQC<block2::SGB, complex<double>>;
+
+// qc_ncorr.hpp
+extern template struct block2::NPC1MPOQC<block2::SGF, complex<double>>;
+extern template struct block2::NPC1MPOQC<block2::SGB, complex<double>>;
+
+// qc_parallel_rule.hpp
+extern template struct block2::ParallelRuleQC<block2::SGF, complex<double>>;
+extern template struct block2::ParallelRuleOneBodyQC<block2::SGF,
+                                                     complex<double>>;
+extern template struct block2::ParallelRulePDM1QC<block2::SGF, complex<double>>;
+extern template struct block2::ParallelRulePDM2QC<block2::SGF, complex<double>>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SGF, complex<double>>;
+extern template struct block2::ParallelRuleSiteQC<block2::SGF, complex<double>>;
+extern template struct block2::ParallelRuleIdentity<block2::SGF,
+                                                    complex<double>>;
+
+extern template struct block2::ParallelRuleQC<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRuleOneBodyQC<block2::SGB,
+                                                     complex<double>>;
+extern template struct block2::ParallelRulePDM1QC<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRulePDM2QC<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRuleSiteQC<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRuleIdentity<block2::SGB,
+                                                    complex<double>>;
+
+// qc_pdm1.hpp
+extern template struct block2::PDM1MPOQC<block2::SGF, complex<double>>;
+extern template struct block2::PDM1MPOQC<block2::SGB, complex<double>>;
+
+// qc_pdm2.hpp
+extern template struct block2::PDM2MPOQC<block2::SGF, complex<double>>;
+extern template struct block2::PDM2MPOQC<block2::SGB, complex<double>>;
+
+// qc_rule.hpp
+extern template struct block2::RuleQC<block2::SGF, complex<double>>;
+extern template struct block2::AntiHermitianRuleQC<block2::SGF,
+                                                   complex<double>>;
+
+extern template struct block2::RuleQC<block2::SGB, complex<double>>;
+extern template struct block2::AntiHermitianRuleQC<block2::SGB,
+                                                   complex<double>>;
+
+// state_averaged.hpp
+extern template struct block2::MultiMPS<block2::SGF, complex<double>>;
+extern template struct block2::MultiMPS<block2::SGB, complex<double>>;
+
+// sweep_algorithm.hpp
+extern template struct block2::DMRG<block2::SGF, complex<double>,
+                                    complex<double>>;
+extern template struct block2::Linear<block2::SGF, complex<double>,
+                                      complex<double>>;
+extern template struct block2::Expect<block2::SGF, complex<double>,
+                                      complex<double>, complex<double>>;
+
+extern template struct block2::DMRG<block2::SGB, complex<double>,
+                                    complex<double>>;
+extern template struct block2::Linear<block2::SGB, complex<double>,
+                                      complex<double>>;
+extern template struct block2::Expect<block2::SGB, complex<double>,
+                                      complex<double>, complex<double>>;
+
+// sweep_algorithm_td.hpp
+extern template struct block2::TDDMRG<block2::SGF, complex<double>,
+                                      complex<double>>;
+extern template struct block2::TimeEvolution<block2::SGF, complex<double>,
+                                             complex<double>>;
+
+extern template struct block2::TDDMRG<block2::SGB, complex<double>,
+                                      complex<double>>;
+extern template struct block2::TimeEvolution<block2::SGB, complex<double>,
                                              complex<double>>;
 
 #endif

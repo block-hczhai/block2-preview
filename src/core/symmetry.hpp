@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -166,6 +167,69 @@ struct SZLong {
         return ss.str();
     }
     friend ostream &operator<<(ostream &os, SZLong c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
+// Quantum number with particle number (fermionic/bosonic)
+// and point group irreducible representation (no-spin/general-spin)
+// tparam IF indicates whether fermion sign should be used
+// N = -32768 ~ 32767
+// (N: 16bits) - (pg: 16bits)
+template <bool IF> struct SGLong {
+    typedef void is_sg_t;
+    typedef uint8_t pg_t;
+    static const bool GIF = IF;
+    uint32_t data;
+    // S(invalid) must have maximal particle number n
+    const static uint32_t invalid = 0x7FFFFFFFU;
+    SGLong() : data(0) {}
+    SGLong(uint32_t data) : data(data) {}
+    SGLong(int n, int pg) : data((((uint32_t)n) << 16) | pg) {}
+    SGLong(int n, int twos, int pg) : data((((uint32_t)n) << 16) | pg) {
+        assert(twos == 0);
+    }
+    int n() const { return (int)((((int32_t)data) >> 16)); }
+    int twos() const { return 0; }
+    int pg() const { return (int)(data & 0xFFFFU); }
+    void set_n(int n) { data = (data & 0xFFFFU) | (((uint32_t)n) << 16); }
+    void set_pg(int pg) { data = (data & (~0xFFFFU)) | ((uint32_t)pg); }
+    int multiplicity() const noexcept { return 1; }
+    bool is_fermion() const noexcept { return IF && ((data >> 16) & 1); }
+    bool operator==(SGLong other) const noexcept { return data == other.data; }
+    bool operator!=(SGLong other) const noexcept { return data != other.data; }
+    bool operator<(SGLong other) const noexcept { return data < other.data; }
+    SGLong operator-() const noexcept {
+        return SGLong((data & 0xFFFFU) |
+                      (((~data) + (1U << 16)) & 0xFFFF0000U));
+    }
+    SGLong operator-(SGLong other) const noexcept { return *this + (-other); }
+    SGLong operator+(SGLong other) const noexcept {
+        return SGLong((((data & 0xFFFF0000U) + (other.data & 0xFFFF0000U)) &
+                       0xFFFF0000U) |
+                      ((data ^ other.data) & 0xFFFFU));
+    }
+    SGLong operator[](int i) const noexcept { return *this; }
+    SGLong get_ket() const noexcept { return *this; }
+    SGLong get_bra(SGLong dq) const noexcept { return *this + dq; }
+    static inline int pg_inv(int a) noexcept { return a; }
+    static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
+    SGLong combine(SGLong bra, SGLong ket) const {
+        return ket + *this == bra ? ket : SGLong(invalid);
+    }
+    size_t hash() const noexcept { return (size_t)data; }
+    int count() const noexcept { return 1; }
+    string to_str() const {
+        stringstream ss;
+        ss << (IF ? "< NF=" : "< NB=") << n() << " PG=" << pg() << " >";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SGLong c) {
         os << c.to_str();
         return os;
     }
@@ -1137,6 +1201,8 @@ typedef SZLong SZ;
 typedef SU2Long SU2;
 typedef SZKLong SZK;
 typedef SU2KLong SU2K;
+typedef SGLong<true> SGF;
+typedef SGLong<false> SGB;
 
 } // namespace block2
 
@@ -1199,6 +1265,36 @@ template <> struct less<block2::SU2K> {
 };
 
 inline void swap(block2::SU2K &a, block2::SU2K &b) {
+    a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
+}
+
+template <> struct hash<block2::SGF> {
+    size_t operator()(const block2::SGF &s) const noexcept { return s.hash(); }
+};
+
+template <> struct less<block2::SGF> {
+    bool operator()(const block2::SGF &lhs,
+                    const block2::SGF &rhs) const noexcept {
+        return lhs < rhs;
+    }
+};
+
+inline void swap(block2::SGF &a, block2::SGF &b) {
+    a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
+}
+
+template <> struct hash<block2::SGB> {
+    size_t operator()(const block2::SGB &s) const noexcept { return s.hash(); }
+};
+
+template <> struct less<block2::SGB> {
+    bool operator()(const block2::SGB &lhs,
+                    const block2::SGB &rhs) const noexcept {
+        return lhs < rhs;
+    }
+};
+
+inline void swap(block2::SGB &a, block2::SGB &b) {
     a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
 }
 

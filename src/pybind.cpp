@@ -103,6 +103,24 @@ PYBIND11_MODULE(block2, m) {
     bind_core<SZK, complex<double>>(m_szk_cpx, "SZK");
 #endif
 #endif
+
+#ifdef _USE_SG
+    py::module m_sgf =
+        m.def_submodule("sgf", "General spin (fermionic).");
+    py::module m_sgb =
+        m.def_submodule("sgb", "General spin (bosonic).");
+    bind_core<SGF, double>(m_sgf, "SGF");
+    bind_core<SGB, double>(m_sgb, "SGB");
+#ifdef _USE_COMPLEX
+    py::module m_sgf_cpx =
+        m_cpx.def_submodule("sgf", "General spin (fermionic, complex).");
+    py::module m_sgb_cpx = m_cpx.def_submodule(
+        "sgb", "General spin (bosonic, complex).");
+    bind_core<SGF, complex<double>>(m_sgf_cpx, "SGF");
+    bind_core<SGB, complex<double>>(m_sgb_cpx, "SGB");
+#endif
+#endif
+
 #endif
 
 #ifdef _USE_DMRG
@@ -132,6 +150,16 @@ PYBIND11_MODULE(block2, m) {
                                                                 "szk");
 #endif
 #endif
+
+#ifdef _USE_SG
+    bind_dmrg<SGF, double>(m_sgf, "SGF");
+    bind_dmrg<SGB, double>(m_sgb, "SGB");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SGF, complex<double>>(m_sgf_cpx, "SGF");
+    bind_dmrg<SGB, complex<double>>(m_sgb_cpx, "SGB");
+#endif
+#endif
+
 #endif
 
 #ifdef _USE_BIG_SITE

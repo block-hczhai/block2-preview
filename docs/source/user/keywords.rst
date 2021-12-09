@@ -66,6 +66,17 @@ use\_complex
     FCIDUMP with real or complex integral can be accepted in this mode.
     Requiring the code to be built with ``-DUSE_COMPLEX``.
 
+use\_general\_spin
+    Optional. If given, the code will work in (fermionic) spin orbital (rather than spatial orbital).
+    FCIDUMP will be intepreted as integrals between spin orbitals.
+    If the FCIDUMP is actually the normal FCIDUMP for spatial orbitals, the extra keyword ``trans_integral_to_spin_orbital``
+    is required to make it work with general spin.
+    Requiring the code to be built with ``-DUSE_SG``. Currently cannot be used together with ``k_symmetry``.
+
+trans\_integral\_to\_spin\_orbital
+    Optional. If given, the FCIDUMP (in spatial orbitals) will be reinterpretted to work with general spin.
+    Only makes sense together with ``use_general_spin``.
+
 singlet\_embedding
     Optional. If given, the code will use the singlet embedding formalism.
     Only have effects in the spin-adapted ``SU2`` mode. No effects if it is a restart calculation.

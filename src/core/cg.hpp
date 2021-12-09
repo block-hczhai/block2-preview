@@ -30,9 +30,9 @@ namespace block2 {
 template <typename, typename = void> struct CG;
 
 // Trivial CG factors for Abelian symmetry
-template <typename S> struct CG<S, typename S::is_sz_t> {
-    CG() {}
-    CG(int n_sqrt_fact) {}
+struct TrivialCG {
+    TrivialCG() {}
+    TrivialCG(int n_sqrt_fact) {}
     void initialize(double *ptr = 0) {}
     void deallocate() {}
     long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
@@ -50,6 +50,16 @@ template <typename S> struct CG<S, typename S::is_sz_t> {
     long double transpose_cg(int td, int tl, int tr) const noexcept {
         return 1.0L;
     }
+};
+
+template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
+    CG() {}
+    CG(int n_sqrt_fact) {}
+};
+
+template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
+    CG() {}
+    CG(int n_sqrt_fact) {}
 };
 
 // CG factors for SU(2) symmetry

@@ -93,8 +93,10 @@ template <typename S> struct MPSInfo {
     int n_sites;
     S vacuum;
     S target;
-    ubond_t bond_dim; // hrl: ATTENTION: This has different meanings in different contexts.
-                      //  Use with care. It is not always the max. bond dimension.
+    ubond_t
+        bond_dim; // hrl: ATTENTION: This has different meanings in different
+                  // contexts.
+                  //  Use with care. It is not always the max. bond dimension.
     // States in each site
     vector<shared_ptr<StateInfo<S>>> basis;
     // Maximal possible states for left/right block (may be equal to/smaller
@@ -236,25 +238,30 @@ template <typename S> struct MPSInfo {
                                      int n_local = 0) {
         bond_dim = m;
         assert(occ.size() == n_sites);
+        int max_site_n = 0;
+        for (int i = 0; i < basis[0]->n; i++)
+            if (basis[0]->quanta[i].n() > max_site_n)
+                max_site_n = basis[0]->quanta[i].n();
         S occupied;
         for (int i = 0; i < basis[0]->n; i++)
-            if (basis[0]->quanta[i].n() == 2) {
+            if (basis[0]->quanta[i].n() == max_site_n) {
                 occupied = basis[0]->quanta[i];
                 break;
             }
         for (auto x : occ)
-            assert(x == 2 || x == 0);
+            assert(x == max_site_n || x == 0);
         vector<shared_ptr<StateInfo<S>>> left_dims_hf(n_sites + 1);
         vector<shared_ptr<StateInfo<S>>> right_dims_hf(n_sites + 1);
         left_dims_hf[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0; i < n_sites; i++)
             left_dims_hf[i + 1] = make_shared<StateInfo<S>>(
-                left_dims_hf[i]->quanta[0] + (occ[i] == 2 ? occupied : vacuum));
+                left_dims_hf[i]->quanta[0] +
+                (occ[i] == max_site_n ? occupied : vacuum));
         right_dims_hf[n_sites] = make_shared<StateInfo<S>>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
-            right_dims_hf[i] =
-                make_shared<StateInfo<S>>((occ[i] == 2 ? occupied : vacuum) +
-                                          right_dims_hf[i + 1]->quanta[0]);
+            right_dims_hf[i] = make_shared<StateInfo<S>>(
+                (occ[i] == max_site_n ? occupied : vacuum) +
+                right_dims_hf[i + 1]->quanta[0]);
         left_dims[0] = make_shared<StateInfo<S>>(vacuum);
         for (int i = 0, j; i < n_sites; i++) {
             vector<StateInfo<S>> tmps;
@@ -321,13 +328,39 @@ template <typename S> struct MPSInfo {
         // site state probabilities
         vector<shared_ptr<StateProbability<S>>> site_probs(n_sites);
         vector<vector<vector<double>>> site_prefs(n_sites);
-        assert(occ.size() == n_sites || occ.size() == n_sites * 2 ||
-               occ.size() == n_sites * 4);
+        assert(occ.size() * 2 == n_sites || occ.size() == n_sites ||
+               occ.size() == n_sites * 2 || occ.size() == n_sites * 4);
         for (int i = 0; i < n_sites; i++) {
             site_probs[i] = make_shared<StateProbability<S>>();
             site_probs[i]->allocate(basis[i]->n);
-            if (occ.size() == n_sites || occ.size() == n_sites * 2) {
+            // general spin
+            if (basis[i]->n == 2) {
+                assert(occ.size() == n_sites || occ.size() * 2 == n_sites);
+                double alpha_occ;
+                if (occ.size() == n_sites)
+                    alpha_occ = occ[i] * 2;
+                else
+                    alpha_occ = occ[i / 2];
+                if (bias != 1.0) {
+                    if (alpha_occ > 1)
+                        alpha_occ = 1 + pow(alpha_occ - 1, bias);
+                    else if (alpha_occ < 1)
+                        alpha_occ = 1 - pow(1 - alpha_occ, bias);
+                }
+                alpha_occ /= 2;
+                assert(0 <= alpha_occ && alpha_occ <= 1);
+                for (int j = 0; j < basis[i]->n; j++) {
+                    site_probs[i]->quanta[j] = basis[i]->quanta[j];
+                    if (basis[i]->quanta[j].n() == 0)
+                        site_probs[i]->probs[j] = 1 - alpha_occ;
+                    else if (basis[i]->quanta[j].n() == 1)
+                        site_probs[i]->probs[j] = alpha_occ;
+                    else
+                        assert(false);
+                }
+            } else if (occ.size() == n_sites || occ.size() == n_sites * 2) {
                 double alpha_occ, beta_occ;
+                // occ = 0 ~ 2
                 if (occ.size() == n_sites) {
                     alpha_occ = occ[i];
                     if (bias != 1.0) {
@@ -338,6 +371,7 @@ template <typename S> struct MPSInfo {
                     }
                     alpha_occ /= 2;
                     beta_occ = alpha_occ;
+                    // occ = 0 ~ 1
                 } else {
                     alpha_occ = occ[2 * i] * 2, beta_occ = occ[2 * i + 1] * 2;
                     if (bias != 1.0) {
@@ -372,6 +406,9 @@ template <typename S> struct MPSInfo {
                         assert(false);
                 }
             } else {
+                // occ = probability
+                assert(occ.size() == n_sites * 4);
+                // projected spin
                 if (basis[i]->n == 4)
                     for (int j = 0; j < basis[i]->n; j++) {
                         site_probs[i]->quanta[j] = basis[i]->quanta[j];
@@ -388,6 +425,7 @@ template <typename S> struct MPSInfo {
                         else
                             assert(false);
                     }
+                // SU2 spin
                 else if (basis[i]->n == 3) {
                     for (int j = 0; j < basis[i]->n; j++) {
                         site_probs[i]->quanta[j] = basis[i]->quanta[j];

@@ -128,7 +128,8 @@ struct SparseMatrixInfo<
                         if (cjb)
                             factor *= cg->transpose_cg(bdq.twos(), bq.twos(),
                                                        bq.twos());
-                        factor *= (binfo->is_fermion && (aq.n() & 1)) ? -1 : 1;
+                        factor *=
+                            (binfo->is_fermion && aq.is_fermion()) ? -1 : 1;
                         if (abs(factor) >= TINY) {
                             via.push_back(ia);
                             vib.push_back(ib);
@@ -226,10 +227,10 @@ struct SparseMatrixInfo<
                                             cdq.twos(), adq.twos(), bdq.twos(),
                                             opdq.twos(), lq.twos(), rq.twos(),
                                             vdq.twos());
-                                    factor *=
-                                        (binfo->is_fermion && (lqprime.n() & 1))
-                                            ? -1
-                                            : 1;
+                                    factor *= (binfo->is_fermion &&
+                                               lqprime.is_fermion())
+                                                  ? -1
+                                                  : 1;
                                     if (cja)
                                         factor *= cg->transpose_cg(
                                             adq.twos(), lq.twos(),
@@ -372,10 +373,10 @@ struct SparseMatrixInfo<
                                             cqprime.twos(), adq.twos(),
                                             bdq.twos(), cdq.twos(), aq.twos(),
                                             bq.twos(), cq.twos());
-                                    factor *=
-                                        (binfo->is_fermion && (aqprime.n() & 1))
-                                            ? -1
-                                            : 1;
+                                    factor *= (binfo->is_fermion &&
+                                               aqprime.is_fermion())
+                                                  ? -1
+                                                  : 1;
                                     if (cja)
                                         factor *= cg->transpose_cg(
                                             adq.twos(), aq.twos(),

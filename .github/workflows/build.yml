@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 4
 
       - name: run test (serial)

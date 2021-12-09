@@ -21,3 +21,4 @@
 #include "../block2_core.hpp"
 
 template struct block2::FCIDUMP<double>;
+template struct block2::SpinOrbitalFCIDUMP<double>;

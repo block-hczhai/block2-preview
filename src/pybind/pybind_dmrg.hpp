@@ -104,6 +104,18 @@ auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
              py::arg("hamil"), py::arg("pts"));
 }
 
+template <typename S, typename FL>
+auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_sg_t()) {
+
+    py::class_<PDM2MPOQC<S, FL>, shared_ptr<PDM2MPOQC<S, FL>>, MPO<S, FL>>(
+        m, "PDM2MPOQC")
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>(),
+             py::arg("hamil"))
+        .def_static("get_matrix", &PDM2MPOQC<S, FL>::get_matrix)
+        .def_static("get_matrix_spatial",
+                    &PDM2MPOQC<S, FL>::get_matrix_spatial);
+}
+
 template <typename S> void bind_mps(py::module &m) {
 
     py::class_<MPSInfo<S>, shared_ptr<MPSInfo<S>>>(m, "MPSInfo")
@@ -1210,10 +1222,12 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("ex_type", &Linear<S, FL, FLS>::ex_type)
         .def_readwrite("algo_type", &Linear<S, FL, FLS>::algo_type)
         .def_readwrite("solver_type", &Linear<S, FL, FLS>::solver_type)
-        .def_readwrite("linear_use_precondition", &Linear<S, FL, FLS>::linear_use_precondition)
+        .def_readwrite("linear_use_precondition",
+                       &Linear<S, FL, FLS>::linear_use_precondition)
         .def_readwrite("cg_n_harmonic_projection",
                        &Linear<S, FL, FLS>::cg_n_harmonic_projection)
-        .def_readwrite("linear_solver_params", &Linear<S, FL, FLS>::linear_solver_params)
+        .def_readwrite("linear_solver_params",
+                       &Linear<S, FL, FLS>::linear_solver_params)
         .def_readwrite("decomp_last_site",
                        &Linear<S, FL, FLS>::decomp_last_site)
         .def_readwrite("sweep_cumulative_nflop",
@@ -1447,6 +1461,9 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def(
             py::init<const shared_ptr<MPO<S, FL>> &,
                      const shared_ptr<Rule<S, FL>> &, bool, bool, OpNamesSet>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<Rule<S, FL>> &, bool, bool, OpNamesSet,
+                      bool>())
         .def("simplify_expr", &SimplifiedMPO<S, FL>::simplify_expr)
         .def("simplify_symbolic", &SimplifiedMPO<S, FL>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S, FL>::simplify);
@@ -1663,12 +1680,12 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("MiddleSite", ConvergenceTypes::MiddleSite);
 
     py::enum_<LinearSolverTypes>(m, "LinearSolverTypes", py::arithmetic())
-            .value("Automatic", LinearSolverTypes::Automatic)
-            .value("CG", LinearSolverTypes::CG)
-            .value("MinRes", LinearSolverTypes::MinRes)
-            .value("GCROT", LinearSolverTypes::GCROT)
-            .value("IDRS", LinearSolverTypes::IDRS)
-            .value("LSQR", LinearSolverTypes::LSQR);
+        .value("Automatic", LinearSolverTypes::Automatic)
+        .value("CG", LinearSolverTypes::CG)
+        .value("MinRes", LinearSolverTypes::MinRes)
+        .value("GCROT", LinearSolverTypes::GCROT)
+        .value("IDRS", LinearSolverTypes::IDRS)
+        .value("LSQR", LinearSolverTypes::LSQR);
 
     py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
         .value("Nothing", OpCachingTypes::None)
@@ -1720,6 +1737,8 @@ bind_fl_expect<SZ, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SZ, double, double, complex<double>>(py::module &m,
                                                     const string &name);
+extern template auto bind_fl_spin_specific<SZ, double>(py::module &m)
+    -> decltype(typename SZ::is_sz_t());
 
 extern template void bind_mps<SU2>(py::module &m);
 extern template void bind_mpo<SU2>(py::module &m);
@@ -1740,9 +1759,8 @@ bind_fl_expect<SU2, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SU2, double, double, complex<double>>(py::module &m,
                                                      const string &name);
-
-extern template auto bind_fl_spin_specific<SZ, double>(py::module &m)
-    -> decltype(typename SZ::is_sz_t());
+extern template auto bind_fl_spin_specific<SU2, double>(py::module &m)
+    -> decltype(typename SU2::is_su2_t());
 
 extern template void bind_trans_mps<SU2, SZ>(py::module &m,
                                              const string &aux_name);
@@ -1772,6 +1790,8 @@ bind_fl_linear<SZ, complex<double>, complex<double>>(py::module &m);
 extern template void
 bind_fl_expect<SZ, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
+extern template auto bind_fl_spin_specific<SZ, complex<double>>(py::module &m)
+    -> decltype(typename SZ::is_sz_t());
 
 extern template void bind_fl_mps<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_mpo<SU2, complex<double>>(py::module &m);
@@ -1792,9 +1812,9 @@ bind_fl_linear<SU2, complex<double>, complex<double>>(py::module &m);
 extern template void
 bind_fl_expect<SU2, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
+extern template auto bind_fl_spin_specific<SU2, complex<double>>(py::module &m)
+    -> decltype(typename SU2::is_su2_t());
 
-extern template auto bind_fl_spin_specific<SZ, complex<double>>(py::module &m)
-    -> decltype(typename SZ::is_sz_t());
 extern template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
@@ -1822,6 +1842,8 @@ bind_fl_expect<SZK, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SZK, double, double, complex<double>>(py::module &m,
                                                      const string &name);
+extern template auto bind_fl_spin_specific<SZK, double>(py::module &m)
+    -> decltype(typename SZK::is_sz_t());
 
 extern template void bind_mps<SU2K>(py::module &m);
 extern template void bind_mpo<SU2K>(py::module &m);
@@ -1842,9 +1864,8 @@ bind_fl_expect<SU2K, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SU2K, double, double, complex<double>>(py::module &m,
                                                       const string &name);
-
-extern template auto bind_fl_spin_specific<SZK, double>(py::module &m)
-    -> decltype(typename SZK::is_sz_t());
+extern template auto bind_fl_spin_specific<SU2K, double>(py::module &m)
+    -> decltype(typename SU2K::is_su2_t());
 
 extern template void bind_trans_mps<SU2K, SZK>(py::module &m,
                                                const string &aux_name);
@@ -1860,11 +1881,13 @@ bind_fl_trans_mps_spin_specific<SU2K, SZK, double>(py::module &m,
 extern template void bind_fl_mps<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_mpo<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_partition<SZK, complex<double>>(py::module &m);
-extern template void bind_fl_qc_hamiltonian<SZK, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SZK, complex<double>>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SZK, complex<double>, complex<double>>(py::module &m);
+bind_fl_moving_environment<SZK, complex<double>, complex<double>>(
+    py::module &m);
 extern template void
 bind_fl_dmrg<SZK, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -1874,13 +1897,16 @@ bind_fl_linear<SZK, complex<double>, complex<double>>(py::module &m);
 extern template void
 bind_fl_expect<SZK, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
+extern template auto bind_fl_spin_specific<SZK, complex<double>>(py::module &m)
+    -> decltype(typename SZK::is_sz_t());
 
 extern template void bind_fl_mps<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_mpo<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_partition<SU2K, complex<double>>(py::module &m);
 extern template void
 bind_fl_qc_hamiltonian<SU2K, complex<double>>(py::module &m);
-extern template void bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
+extern template void
+bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SU2K, complex<double>, complex<double>>(
@@ -1894,12 +1920,106 @@ bind_fl_linear<SU2K, complex<double>, complex<double>>(py::module &m);
 extern template void
 bind_fl_expect<SU2K, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
+extern template auto bind_fl_spin_specific<SU2K, complex<double>>(py::module &m)
+    -> decltype(typename SU2K::is_su2_t());
 
-extern template auto bind_fl_spin_specific<SZK, complex<double>>(py::module &m)
-    -> decltype(typename SZK::is_sz_t());
-extern template auto bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(
+extern template auto
+bind_fl_trans_mps_spin_specific<SU2K, SZK, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SU2K::is_su2_t(typename SZK::is_sz_t()));
+
+#endif
+
+#endif
+
+#ifdef _USE_SG
+
+extern template void bind_mps<SGF>(py::module &m);
+extern template void bind_mpo<SGF>(py::module &m);
+
+extern template void bind_fl_mps<SGF, double>(py::module &m);
+extern template void bind_fl_mpo<SGF, double>(py::module &m);
+extern template void bind_fl_partition<SGF, double>(py::module &m);
+extern template void bind_fl_qc_hamiltonian<SGF, double>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SGF, double>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SGF, double, double>(py::module &m);
+extern template void bind_fl_dmrg<SGF, double, double>(py::module &m);
+extern template void bind_fl_td_dmrg<SGF, double, double>(py::module &m);
+extern template void bind_fl_linear<SGF, double, double>(py::module &m);
+extern template void
+bind_fl_expect<SGF, double, double, double>(py::module &m, const string &name);
+extern template void
+bind_fl_expect<SGF, double, double, complex<double>>(py::module &m,
+                                                     const string &name);
+extern template auto bind_fl_spin_specific<SGF, double>(py::module &m)
+    -> decltype(typename SGF::is_sg_t());
+
+extern template void bind_mps<SGB>(py::module &m);
+extern template void bind_mpo<SGB>(py::module &m);
+
+extern template void bind_fl_mps<SGB, double>(py::module &m);
+extern template void bind_fl_mpo<SGB, double>(py::module &m);
+extern template void bind_fl_partition<SGB, double>(py::module &m);
+extern template void bind_fl_qc_hamiltonian<SGB, double>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SGB, double>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SGB, double, double>(py::module &m);
+extern template void bind_fl_dmrg<SGB, double, double>(py::module &m);
+extern template void bind_fl_td_dmrg<SGB, double, double>(py::module &m);
+extern template void bind_fl_linear<SGB, double, double>(py::module &m);
+extern template void
+bind_fl_expect<SGB, double, double, double>(py::module &m, const string &name);
+extern template void
+bind_fl_expect<SGB, double, double, complex<double>>(py::module &m,
+                                                      const string &name);
+extern template auto bind_fl_spin_specific<SGB, double>(py::module &m)
+    -> decltype(typename SGB::is_sg_t());
+
+#ifdef _USE_COMPLEX
+
+extern template void bind_fl_mps<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SGF, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SGF, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SGF, complex<double>, complex<double>>(
+    py::module &m);
+extern template void
+bind_fl_dmrg<SGF, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SGF, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SGF, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SGF, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+
+extern template void bind_fl_mps<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SGB, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SGB, complex<double>>(py::module &m);
+extern template void
+bind_fl_parallel_dmrg<SGB, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SGB, complex<double>, complex<double>>(
+    py::module &m);
+extern template void
+bind_fl_dmrg<SGB, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SGB, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SGB, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SGB, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
 
 #endif
 

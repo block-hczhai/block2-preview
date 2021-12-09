@@ -252,6 +252,115 @@ struct RuleQC<S, FL, typename S::is_su2_t> : Rule<S, FL> {
     }
 };
 
+// Symmetry rules for simplifying quantum chemistry MPO (general spin)
+template <typename S, typename FL>
+struct RuleQC<S, FL, typename S::is_sg_t> : Rule<S, FL> {
+    uint8_t mask;
+    const static uint8_t D = 0U, R = 1U, A = 2U, P = 3U, B = 4U, Q = 5U;
+    const int8_t exf = S::GIF ? -1 : 1;
+    RuleQC(bool d = true, bool r = true, bool a = true, bool p = true,
+           bool b = true, bool q = true)
+        : mask((d << D) | (r << R) | (a << A) | (p << P) | (b << B) |
+               (q << Q)) {}
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
+        switch (op->name) {
+        case OpNames::D:
+            return (mask & (1 << D)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
+                                               OpNames::C, op->site_index,
+                                               -op->q_label, op->factor),
+                                           true, 1)
+                                     : nullptr;
+        case OpNames::RD:
+            return (mask & (1 << R)) ? make_shared<OpElementRef<S, FL>>(
+                                           make_shared<OpElement<S, FL>>(
+                                               OpNames::R, op->site_index,
+                                               -op->q_label, op->factor),
+                                           true, 1)
+                                     : nullptr;
+        case OpNames::A:
+            return (mask & (1 << A)) && op->site_index[0] > op->site_index[1]
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::A, op->site_index.flip(), op->q_label,
+                                 op->factor),
+                             false, exf)
+                       : nullptr;
+        case OpNames::AD:
+            return (mask & (1 << A))
+                       ? (op->site_index[0] <= op->site_index[1]
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::A, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, 1)
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::A, op->site_index.flip(),
+                                        -op->q_label, op->factor),
+                                    true, exf))
+                       : nullptr;
+        case OpNames::P:
+            return (mask & (1 << P)) && op->site_index[0] > op->site_index[1]
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::P, op->site_index.flip(), op->q_label,
+                                 op->factor),
+                             false, exf)
+                       : nullptr;
+        case OpNames::PD:
+            return (mask & (1 << P))
+                       ? (op->site_index[0] <= op->site_index[1]
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::P, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, 1)
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::P, op->site_index.flip(),
+                                        -op->q_label, op->factor),
+                                    true, exf))
+                       : nullptr;
+        case OpNames::B:
+            return (mask & (1 << B)) && op->site_index[0] > op->site_index[1]
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::B, op->site_index.flip(),
+                                 -op->q_label, op->factor),
+                             true, 1)
+                       : nullptr;
+        // BD with site index i == j cannot be represented by B
+        case OpNames::BD:
+            return ((mask & (1 << B)) &&
+                    (op->site_index[0] != op->site_index[1]))
+                       ? (op->site_index[0] < op->site_index[1]
+                              ? make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::B, op->site_index,
+                                        -op->q_label, op->factor),
+                                    true, exf)
+                              : make_shared<OpElementRef<S, FL>>(
+                                    make_shared<OpElement<S, FL>>(
+                                        OpNames::B, op->site_index.flip(),
+                                        op->q_label, op->factor),
+                                    false, exf))
+                       : nullptr;
+        case OpNames::Q:
+            return (mask & (1 << Q)) && op->site_index[0] > op->site_index[1]
+                       ? make_shared<OpElementRef<S, FL>>(
+                             make_shared<OpElement<S, FL>>(
+                                 OpNames::Q, op->site_index.flip(),
+                                 -op->q_label, op->factor),
+                             true, 1)
+                       : nullptr;
+        default:
+            return nullptr;
+        }
+    }
+};
+
 // For anti-Hermitian Hamiltonian with only one-body terms
 template <typename S, typename FL> struct AntiHermitianRuleQC : Rule<S, FL> {
     shared_ptr<Rule<S, FL>> prim_rule;

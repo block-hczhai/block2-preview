@@ -7,13 +7,13 @@ Author:
     Zhi-Hao Cui
 """
 
-from block2 import SZ, SU2, SZK, SU2K
+from block2 import SZ, SU2, SZK, SU2K, SGF
 from block2 import Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, ConvergenceTypes
-from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes, SpinOrbitalFCIDUMP
 import numpy as np
 import time
 import os
@@ -53,7 +53,7 @@ else:
 
 dic = parse(fin)
 if "use_complex" not in dic:
-    if "nonspinadapted" in dic and "k_symmetry" not in dic:
+    if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
@@ -67,7 +67,7 @@ if "use_complex" not in dic:
         from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SZ
         TrSX = SU2
-    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
@@ -95,7 +95,7 @@ if "use_complex" not in dic:
         from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SZK
         TrSX = SU2K
-    else:
+    elif "nonspinadapted" not in dic and "k_symmetry" in dic:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
@@ -109,6 +109,18 @@ if "use_complex" not in dic:
         from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SU2K
         TrSX = SZK
+    elif "use_general_spin" in dic:
+        from block2 import VectorSGF as VectorSL
+        from block2.sgf import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sgf import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, ParallelRuleQC
+        from block2.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
+        from block2.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sgf import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sgf import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, ComplexExpect
+        SX = SGF
+    else:
+        assert False
 
     try:
         if "nonspinadapted" in dic:
@@ -122,8 +134,8 @@ if "use_complex" not in dic:
     except ImportError:
         pass
 else:
-    from block2.cpx import FCIDUMP
-    if "nonspinadapted" in dic and "k_symmetry" not in dic:
+    from block2.cpx import FCIDUMP, SpinOrbitalFCIDUMP
+    if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
@@ -138,7 +150,7 @@ else:
         from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SZ
         TrSX = SU2
-    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
@@ -168,7 +180,7 @@ else:
         from block2.su2k import trans_mps_info_to_szk as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SZK
         TrSX = SU2K
-    else:
+    elif "nonspinadapted" not in dic and "k_symmetry" in dic:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.su2k import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
@@ -183,6 +195,19 @@ else:
         from block2.szk import trans_mps_info_to_su2k as trans_mi, VectorStateInfo as TrVectorStateInfo
         SX = SU2K
         TrSX = SZK
+    elif "use_general_spin" in dic:
+        from block2 import VectorSGF as VectorSL
+        from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.sgf import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.cpx.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.cpx.sgf import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.cpx.sgf import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        SX = SGF
+    else:
+        assert False
 
     try:
         if "nonspinadapted" in dic:
@@ -197,14 +222,16 @@ else:
         pass
 
 try:
-    if "nonspinadapted" in dic and "k_symmetry" not in dic:
+    if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2.sz import MPICommunicator
-    elif "nonspinadapted" not in dic and "k_symmetry" not in dic:
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2.su2 import MPICommunicator
     elif "nonspinadapted" in dic and "k_symmetry" in dic:
         from block2.szk import MPICommunicator
-    else:
+    elif "nonspinadapted" not in dic and "k_symmetry" in dic:
         from block2.su2k import MPICommunicator
+    elif "use_general_spin" in dic:
+        from block2.sgf import MPICommunicator
     MPI = MPICommunicator()
     from mpi4py import MPI as PYMPI
     comm = PYMPI.COMM_WORLD
@@ -233,7 +260,10 @@ if DEBUG:
         else:
             _print("%-25s %40s" % (key, val))
     _print("*" * 34 + " INPUT END   " + "*" * 34 + "\n")
-    _print("SPIN ADAPTED - " if "nonspinadapted" not in dic else "NON SPIN ADAPTED - ", end='')
+    if "use_general_spin" in dic:
+        _print("GENERAL SPIN - ", end='')
+    else:
+        _print("SPIN ADAPTED - " if "nonspinadapted" not in dic else "NON SPIN ADAPTED - ", end='')
     _print("REAL DOMAIN" if "use_complex" not in dic else "COMPLEX DOMAIN")
 
 scratch = dic.get("prefix", "./nodex/")
@@ -419,6 +449,8 @@ if pre_run or not no_pre_run:
             orb_idx = orbital_reorder(fcidump, method='fiedler')
             _print("using fiedler reorder = ", orb_idx)
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
+    if "trans_integral_to_spin_orbital" in dic:
+        fcidump = SpinOrbitalFCIDUMP(fcidump)
 
     swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
 
@@ -1823,7 +1855,7 @@ if not pre_run:
             dmr = expect.get_1pdm(n_orbs)
             dm = np.array(dmr).copy()
             dmr.deallocate()
-            dm = dm.reshape((n_orbs, 2, n_orbs, 2))
+            dm = dm.reshape((dm.shape[0] // 2, 2, dm.shape[1] // 2, 2))
             dm = np.transpose(dm, (0, 2, 1, 3))
             dm = np.concatenate(
                 [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
@@ -1840,8 +1872,11 @@ if not pre_run:
         if nroots == 1:
             dm = do_onepdm(mps, mps)
             if MPI is None or MPI.rank == 0:
-                _print("DMRG OCC = ", "".join(
-                    ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                dmocc = np.diag(dm[0]) + np.diag(dm[1])
+                if dmocc.dtype == np.complex128:
+                    _print("DMRG OCC = ", "".join(["(%6.3f,%6.3f)" % (np.real(x), np.imag(x)) for x in dmocc]))
+                else:
+                    _print("DMRG OCC = ", "".join(["%6.3f" % x for x in dmocc]))
                 if big_site_method != "folding":
                     np.save(scratch + "/1pdm.npy", dm)
                 mps_info.save_data(scratch + '/mps_info.bin')

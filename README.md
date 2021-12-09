@@ -53,9 +53,10 @@ Features
 
 * State symmetry
     * U(1) particle number symmetry
-    * SU(2) or U(1) spin symmetry
+    * SU(2) or U(1) spin symmetry (spatial orbital)
+    * No spin symmetry (general spin orbital)
     * Abelian point group symmetry
-    * Translational / Lz symmetry
+    * Translational (K point) / Lz symmetry
 * Sweep algorithms (1-site / 2-site / 2-site to 1-site transition)
     * Ground-State DMRG
         * Decomposition types: density matrix / SVD
@@ -334,7 +335,7 @@ Test State-Interaction (SI)-DMRG (need `pyscf` module):
 A StackBlock 1.5 compatible user interface can be found at `pyblock2/driver/block2main`.
 This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
 The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
-See `docs/driver.md` for detailed documentations for this interface.
+See `docs/driver.md` and `docs/source/user/basic.rst` for detailed documentations for this interface.
 Examples using this interface can be found at `tests/driver`.
 
 ### Input File (block2 style)

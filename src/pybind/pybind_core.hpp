@@ -118,6 +118,10 @@ PYBIND11_MAKE_OPAQUE(map<string, string>);
 PYBIND11_MAKE_OPAQUE(vector<SZK>);
 // SU2K
 PYBIND11_MAKE_OPAQUE(vector<SU2K>);
+// SGF
+PYBIND11_MAKE_OPAQUE(vector<SGF>);
+// SGB
+PYBIND11_MAKE_OPAQUE(vector<SGB>);
 
 #ifdef _USE_COMPLEX
 // complex
@@ -214,6 +218,24 @@ py::class_<Array<T>, shared_ptr<Array<T>>> bind_array(py::module &m,
 
 template <typename S>
 auto bind_cg(py::module &m) -> decltype(typename S::is_sz_t()) {
+    py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def("initialize", [](CG<S> *self) { self->initialize(); })
+        .def("deallocate", &CG<S>::deallocate)
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
+             py::arg("tr"));
+}
+
+template <typename S>
+auto bind_cg(py::module &m) -> decltype(typename S::is_sg_t()) {
     py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
         .def(py::init<>())
         .def(py::init<int>())
@@ -2264,6 +2286,11 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
             }
         });
 
+    py::class_<SpinOrbitalFCIDUMP<FL>, shared_ptr<SpinOrbitalFCIDUMP<FL>>,
+               FCIDUMP<FL>>(m, "SpinOrbitalFCIDUMP")
+        .def(py::init<const shared_ptr<FCIDUMP<FL>> &>())
+        .def_readwrite("prim_fcidump", &SpinOrbitalFCIDUMP<FL>::prim_fcidump);
+
     py::class_<BatchGEMMSeq<FL>, shared_ptr<BatchGEMMSeq<FL>>>(m,
                                                                "BatchGEMMSeq")
         .def_readwrite("batch", &BatchGEMMSeq<FL>::batch)
@@ -2432,6 +2459,74 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SU2::to_str);
 
     py::bind_vector<vector<SU2>>(m, "VectorSU2");
+
+    py::class_<SGF>(m, "SGF")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int>())
+        .def(py::init<int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SGF *self) { return SGF::invalid; })
+        .def_readwrite("data", &SGF::data)
+        .def_property("n", &SGF::n, &SGF::set_n)
+        .def_property_readonly("twos", &SGF::twos)
+        .def_property("pg", &SGF::pg, &SGF::set_pg)
+        .def_property_readonly("multiplicity", &SGF::multiplicity)
+        .def_property_readonly("is_fermion", &SGF::is_fermion)
+        .def_property_readonly("count", &SGF::count)
+        .def_static("pg_mul", &SGF::pg_mul)
+        .def_static("pg_inv", &SGF::pg_inv)
+        .def_static("pg_combine", &SGF::pg_combine, py::arg("pg"),
+                    py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SGF::pg_equal)
+        .def("combine", &SGF::combine)
+        .def("__getitem__", &SGF::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SGF::get_ket)
+        .def("get_bra", &SGF::get_bra, py::arg("dq"))
+        .def("__hash__", &SGF::hash)
+        .def("__repr__", &SGF::to_str);
+
+    py::bind_vector<vector<SGF>>(m, "VectorSGF");
+
+    py::class_<SGB>(m, "SGB")
+        .def(py::init<>())
+        .def(py::init<uint32_t>())
+        .def(py::init<int, int>())
+        .def(py::init<int, int, int>())
+        .def_property_readonly_static("invalid",
+                                      [](SGB *self) { return SGB::invalid; })
+        .def_readwrite("data", &SGB::data)
+        .def_property("n", &SGB::n, &SGB::set_n)
+        .def_property_readonly("twos", &SGB::twos)
+        .def_property("pg", &SGB::pg, &SGB::set_pg)
+        .def_property_readonly("multiplicity", &SGB::multiplicity)
+        .def_property_readonly("is_fermion", &SGB::is_fermion)
+        .def_property_readonly("count", &SGB::count)
+        .def_static("pg_mul", &SGB::pg_mul)
+        .def_static("pg_inv", &SGB::pg_inv)
+        .def_static("pg_combine", &SGB::pg_combine, py::arg("pg"),
+                    py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SGB::pg_equal)
+        .def("combine", &SGB::combine)
+        .def("__getitem__", &SGB::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SGB::get_ket)
+        .def("get_bra", &SGB::get_bra, py::arg("dq"))
+        .def("__hash__", &SGB::hash)
+        .def("__repr__", &SGB::to_str);
+
+    py::bind_vector<vector<SGB>>(m, "VectorSGB");
 
     py::class_<SZK>(m, "SZK")
         .def(py::init<>())
@@ -2635,6 +2730,56 @@ extern template void bind_fl_parallel<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_hamiltonian<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SU2K, complex<double>>(py::module &m);
+
+#endif
+
+#endif
+
+#ifdef _USE_SG
+extern template void bind_cg<SGF>(py::module &m);
+extern template void bind_expr<SGF>(py::module &m);
+extern template void bind_state_info<SGF>(py::module &m, const string &name);
+extern template void bind_sparse<SGF>(py::module &m);
+extern template void bind_parallel<SGF>(py::module &m);
+
+extern template void bind_fl_expr<SGF, double>(py::module &m);
+extern template void bind_fl_state_info<SGF, double>(py::module &m);
+extern template void bind_fl_sparse<SGF, double>(py::module &m);
+extern template void bind_fl_parallel<SGF, double>(py::module &m);
+extern template void bind_fl_operator<SGF, double>(py::module &m);
+extern template void bind_fl_hamiltonian<SGF, double>(py::module &m);
+extern template void bind_fl_rule<SGF, double>(py::module &m);
+
+extern template void bind_cg<SGB>(py::module &m);
+extern template void bind_expr<SGB>(py::module &m);
+extern template void bind_state_info<SGB>(py::module &m, const string &name);
+extern template void bind_sparse<SGB>(py::module &m);
+extern template void bind_parallel<SGB>(py::module &m);
+
+extern template void bind_fl_expr<SGB, double>(py::module &m);
+extern template void bind_fl_state_info<SGB, double>(py::module &m);
+extern template void bind_fl_sparse<SGB, double>(py::module &m);
+extern template void bind_fl_parallel<SGB, double>(py::module &m);
+extern template void bind_fl_operator<SGB, double>(py::module &m);
+extern template void bind_fl_hamiltonian<SGB, double>(py::module &m);
+extern template void bind_fl_rule<SGB, double>(py::module &m);
+
+#ifdef _USE_COMPLEX
+extern template void bind_fl_expr<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SGF, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SGF, complex<double>>(py::module &m);
+
+extern template void bind_fl_expr<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_state_info<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_sparse<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SGB, complex<double>>(py::module &m);
 
 #endif
 

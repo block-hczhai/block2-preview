@@ -280,3 +280,77 @@ TYPED_TEST(TestDMRGN2STO3G, TestSZ) {
     hamil->deallocate();
     fcidump->deallocate();
 }
+
+#ifdef _USE_SG
+
+TYPED_TEST(TestDMRGN2STO3G, TestSGF) {
+    using FL = TypeParam;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
+    PGTypes pg = PGTypes::D2H;
+    string filename = "data/N2.STO3G.FCIDUMP";
+    fcidump->read(filename);
+    fcidump = make_shared<SpinOrbitalFCIDUMP<FL>>(fcidump);
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
+    transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
+              PointGroup::swap_pg(pg));
+
+    SGF vacuum(0);
+
+    vector<vector<SGF>> targets(8);
+    for (int i = 0; i < 8; i++) {
+        targets[i].resize(1);
+        targets[i][0] = SGF(fcidump->n_elec(), i);
+    }
+
+    vector<vector<FL>> energies(8);
+    energies[0] = {-107.654122447525};
+    energies[1] = {-106.999600016661};
+    energies[2] = {-107.356943001688};
+    energies[3] = {-107.356943001688};
+    energies[4] = {-107.279409754727};
+    energies[5] = {-107.343458537272};
+    energies[6] = {-107.208021870379};
+    energies[7] = {-107.208021870379};
+
+    int norb = fcidump->n_sites();
+    shared_ptr<HamiltonianQC<SGF, FL>> hamil =
+        make_shared<HamiltonianQC<SGF, FL>>(vacuum, norb, orbsym, fcidump);
+
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::DensityMatrix);
+
+    targets.resize(2);
+    energies.resize(2);
+
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF SVD",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::Wavefunction);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF PURE SVD",
+                                  DecompositionTypes::PureSVD,
+                                  NoiseTypes::Wavefunction);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF PERT",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::Perturbative);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF SVD PERT",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::Perturbative);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF RED PERT",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::ReducedPerturbative);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF SVD RED PERT",
+                                  DecompositionTypes::SVD,
+                                  NoiseTypes::ReducedPerturbative);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF RED PERT LM",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::ReducedPerturbativeLowMem);
+    this->template test_dmrg<SGF>(
+        targets, energies, hamil, "SGF SVD RED PERT LM",
+        DecompositionTypes::SVD, NoiseTypes::ReducedPerturbativeLowMem);
+
+    hamil->deallocate();
+    fcidump->deallocate();
+}
+
+#endif

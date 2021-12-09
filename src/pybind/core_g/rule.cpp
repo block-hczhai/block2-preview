@@ -18,7 +18,7 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../pybind_core.hpp"
 
-template auto bind_fl_spin_specific<SZK, double>(py::module &m)
-    -> decltype(typename SZK::is_sz_t());
+template void bind_fl_rule<SGF, double>(py::module &m);
+template void bind_fl_rule<SGB, double>(py::module &m);

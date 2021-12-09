@@ -1343,4 +1343,52 @@ template <typename FL> struct FCIDUMP {
     }
 };
 
+template <typename FL> struct SpinOrbitalFCIDUMP : FCIDUMP<FL> {
+    using FCIDUMP<FL>::params;
+    shared_ptr<FCIDUMP<FL>> prim_fcidump;
+    SpinOrbitalFCIDUMP(const shared_ptr<FCIDUMP<FL>> &fcidump)
+        : FCIDUMP<FL>(), prim_fcidump(fcidump) {
+        params = fcidump->params;
+        uint16_t n_spin_sites = fcidump->n_sites() * 2;
+        params["norb"] = Parsing::to_string(n_spin_sites);
+        vector<string> x =
+            Parsing::split(fcidump->params.at("orbsym"), ",", true);
+        stringstream ss;
+        for (uint16_t i = 0; i < n_spin_sites; i++) {
+            ss << x[i / 2];
+            if (i != n_spin_sites - 1)
+                ss << ",";
+        }
+        params["orbsym"] = ss.str();
+    }
+    // One-electron integral element (SGF)
+    FL t(uint16_t i, uint16_t j) const override {
+        if ((i ^ j) & 1)
+            return 0.0;
+        else
+            return prim_fcidump->t(i & 1, i >> 1, j >> 1);
+    }
+    // One-electron integral element (SZ)
+    FL t(uint8_t s, uint16_t i, uint16_t j) const override {
+        assert(false);
+        return t(i, j);
+    }
+    // Two-electron integral element (SGF)
+    FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
+        if (((i ^ j) & 1) || ((k ^ l) & 1))
+            return 0.0;
+        else
+            return prim_fcidump->v(i & 1, k & 1, i >> 1, j >> 1, k >> 1,
+                                   l >> 1);
+    }
+    // Two-electron integral element (SZ)
+    FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
+         uint16_t l) const override {
+        assert(false);
+        return v(i, j, k, l);
+    }
+    FL e() const override { return prim_fcidump->e(); }
+    void deallocate() override {}
+};
+
 } // namespace block2

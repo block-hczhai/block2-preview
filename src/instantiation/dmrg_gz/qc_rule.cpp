@@ -18,7 +18,10 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_dmrg.hpp"
 
-template auto bind_fl_spin_specific<SZ, double>(py::module &m)
-    -> decltype(typename SZ::is_sz_t());
+template struct block2::RuleQC<block2::SGF, complex<double>>;
+template struct block2::AntiHermitianRuleQC<block2::SGF, complex<double>>;
+
+template struct block2::RuleQC<block2::SGB, complex<double>>;
+template struct block2::AntiHermitianRuleQC<block2::SGB, complex<double>>;

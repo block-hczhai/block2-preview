@@ -491,4 +491,27 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     }
 };
 
+// "MPO" for charge/spin correlation (general spin)
+// not implemented
+template <typename S, typename FL>
+struct NPC1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        assert(false);
+    }
+    void deallocate() override {}
+    static GMatrix<FL> get_matrix(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        assert(false);
+    }
+    static GMatrix<FL> get_matrix_spatial(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        assert(false);
+    }
+};
+
 } // namespace block2

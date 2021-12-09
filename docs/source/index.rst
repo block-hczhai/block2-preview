@@ -33,9 +33,10 @@ Features
 
 * State symmetry
     * U(1) particle number symmetry
-    * SU(2) or U(1) spin symmetry
+    * SU(2) or U(1) spin symmetry (spatial orbital)
+    * No spin symmetry (general spin orbital)
     * Abelian point group symmetry
-    * Translational / Lz symmetry
+    * Translational (K point) / Lz symmetry
 * Sweep algorithms (1-site / 2-site / 2-site to 1-site transition)
     * Ground-State DMRG
         * Decomposition types: density matrix / SVD
@@ -128,3 +129,13 @@ Features
    api/sparse_matrix
    api/tensor_functions
    api/tools
+
+.. raw:: latex
+
+   \chapter{Theory}
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Theory
+
+   theory/hamiltonian

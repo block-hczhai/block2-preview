@@ -724,4 +724,320 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     }
 };
 
+// "MPO" for one particle density matrix (non-spin-adapted)
+template <typename S, typename FL>
+struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
+        : MPO<S, FL>(hamil->n_sites) {
+        // fermionic exchange factor
+        const FL exf = S::GIF ? -1.0 : 1.0;
+        shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), hamil->vacuum);
+        shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
+            OpNames::Zero, SiteIndex(), hamil->vacuum);
+        assert(ds == 0);
+        const uint16_t n_sites = MPO<S, FL>::n_sites;
+        if (hamil->opf != nullptr &&
+            hamil->opf->get_type() == SparseMatrixTypes::CSR) {
+            if (hamil->get_n_orbs_left() > 0)
+                MPO<S, FL>::sparse_form[0] = 'S';
+            if (hamil->get_n_orbs_right() > 0)
+                MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
+        }
+        int n_orbs_big_left = max(hamil->get_n_orbs_left(), 1);
+        int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
+        uint16_t n_orbs =
+            hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
+#ifdef _MSC_VER
+        vector<shared_ptr<OpExpr<S>>> c_op(n_orbs), d_op(n_orbs);
+        vector<vector<shared_ptr<OpExpr<S>>>> b_op(
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
+        vector<vector<shared_ptr<OpExpr<S>>>> pdm1_op(
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
+#else
+        shared_ptr<OpExpr<S>> c_op[n_orbs], d_op[n_orbs];
+        shared_ptr<OpExpr<S>> b_op[n_orbs][n_orbs];
+        shared_ptr<OpExpr<S>> pdm1_op[n_orbs][n_orbs];
+#endif
+        for (uint16_t m = 0; m < n_orbs; m++) {
+            c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
+                                                    S(1, hamil->orb_sym[m]));
+            d_op[m] = make_shared<OpElement<S, FL>>(
+                OpNames::D, SiteIndex(m), S(-1, S::pg_inv(hamil->orb_sym[m])));
+        }
+        for (uint16_t i = 0; i < n_orbs; i++)
+            for (uint16_t j = 0; j < n_orbs; j++) {
+                b_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::B, SiteIndex(i, j),
+                    S(0, S::pg_mul(hamil->orb_sym[i],
+                                   S::pg_inv(hamil->orb_sym[j]))));
+                pdm1_op[i][j] = make_shared<OpElement<S, FL>>(
+                    OpNames::PDM1, SiteIndex(i, j),
+                    S(0, S::pg_mul(hamil->orb_sym[i],
+                                   S::pg_inv(hamil->orb_sym[j]))));
+            }
+        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::schemer = nullptr;
+        MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
+        MPO<S, FL>::site_op_infos = hamil->site_op_infos;
+        for (uint16_t pm = 0; pm < n_sites; pm++) {
+            uint16_t m = pm + n_orbs_big_left - 1;
+            // left operator names
+            //   1 : identity
+            //   1 : mm / cd
+            //   2 : m / c d
+            // right operator names
+            //   1 : identity
+            //   2*(n-m) : j / c d (j >= m)
+            //   1 : mm / cd (only last site)
+            int lshape, rshape;
+            if (pm == 0)
+                lshape = 1 + 2 * (m + 1) + 1 * (m + 1) * (m + 1);
+            else if (pm == n_sites - 1)
+                lshape = 1;
+            else
+                lshape = 1 + 1 + 2;
+            if (pm == 0)
+                rshape = 1;
+            else if (pm == n_sites - 1)
+                rshape = 1 + 2 * (n_orbs - m) + 1 * (n_orbs - m) * (n_orbs - m);
+            else
+                rshape = 1 + 2 * (n_orbs - m);
+            // left operator names
+            shared_ptr<SymbolicRowVector<S>> plop =
+                make_shared<SymbolicRowVector<S>>(lshape);
+            // 1 : identity
+            (*plop)[0] = i_op;
+            int p = 1;
+            if (pm == 0) {
+                // 1 : mm / cd
+                for (uint16_t j = 0; j < m + 1; j++)
+                    for (uint16_t k = 0; k < m + 1; k++)
+                        (*plop)[p++] = b_op[j][k];
+                // 2 : m / c d
+                for (uint16_t j = 0; j < m + 1; j++)
+                    (*plop)[p++] = c_op[j];
+                for (uint16_t j = 0; j < m + 1; j++)
+                    (*plop)[p++] = d_op[j];
+            } else if (pm != n_sites - 1) {
+                // 1 : mm / cd
+                (*plop)[p++] = b_op[m][m];
+                // 2 : m / c d
+                (*plop)[p++] = c_op[m];
+                (*plop)[p++] = d_op[m];
+            }
+            assert(p == lshape);
+            this->left_operator_names.push_back(plop);
+            // right operator names
+            shared_ptr<SymbolicColumnVector<S>> prop =
+                make_shared<SymbolicColumnVector<S>>(rshape);
+            // 1 : identity
+            (*prop)[0] = i_op;
+            p = 1;
+            if (pm != 0) {
+                // 2*(n-m) : j / c d (j >= m)
+                for (uint16_t j = m; j < n_orbs; j++)
+                    (*prop)[p + j - m] = c_op[j];
+                p += n_orbs - m;
+                for (uint16_t j = m; j < n_orbs; j++)
+                    (*prop)[p + j - m] = d_op[j];
+                p += n_orbs - m;
+            }
+            if (pm == n_sites - 1) {
+                // 1 : mm / cd (only last site)
+                for (uint16_t j = m; j < n_orbs; j++)
+                    for (uint16_t k = m; k < n_orbs; k++)
+                        (*prop)[p++] = b_op[j][k];
+            }
+            assert(p == rshape);
+            this->right_operator_names.push_back(prop);
+            // middle operators
+            //   1*1 : mm / cd
+            //   2*(n-m-1) : mj(-jm) / cd dc (j > m)
+            //   1*1 : jj / cd (j > m) (last site only)
+            if (pm != n_sites - 1) {
+                int mshape;
+                if (pm == 0)
+                    mshape =
+                        1 * (m + 1) * (m + 1) + 2 * (m + 1) * (n_orbs - m - 1);
+                else
+                    mshape = 1 + 2 * (n_orbs - m - 1);
+                if (pm == n_sites - 2)
+                    mshape += 1 * (n_orbs - m - 1) * (n_orbs - m - 1);
+                shared_ptr<SymbolicColumnVector<S>> pmop =
+                    make_shared<SymbolicColumnVector<S>>(mshape);
+                shared_ptr<SymbolicColumnVector<S>> pmexpr =
+                    make_shared<SymbolicColumnVector<S>>(mshape);
+                p = 0;
+                if (pm == 0) {
+                    // 1*1 : mm / cd
+                    for (uint16_t j = 0; j < m + 1; j++)
+                        for (uint16_t k = 0; k < m + 1; k++) {
+                            (*pmop)[p] = pdm1_op[j][k];
+                            (*pmexpr)[p] = b_op[j][k] * i_op;
+                            p++;
+                        }
+                    // 2*(n-m-1) : mj(-jm) / cd dc (j > m)
+                    for (uint16_t k = 0; k < m + 1; k++)
+                        for (uint16_t j = m + 1; j < n_orbs; j++) {
+                            (*pmop)[p] = pdm1_op[k][j];
+                            (*pmexpr)[p] = c_op[k] * d_op[j];
+                            p++;
+                            (*pmop)[p] = pdm1_op[j][k];
+                            (*pmexpr)[p] = exf * (d_op[k] * c_op[j]);
+                            p++;
+                        }
+                } else {
+                    // 1*1 : mm / cd
+                    (*pmop)[p] = pdm1_op[m][m];
+                    (*pmexpr)[p] = b_op[m][m] * i_op;
+                    p++;
+                    // 2*(n-m-1) : mj(-jm) / cd dc (j > m)
+                    for (uint16_t j = m + 1; j < n_orbs; j++) {
+                        (*pmop)[p] = pdm1_op[m][j];
+                        (*pmexpr)[p] = c_op[m] * d_op[j];
+                        p++;
+                        (*pmop)[p] = pdm1_op[j][m];
+                        (*pmexpr)[p] = exf * (d_op[m] * c_op[j]);
+                        p++;
+                    }
+                }
+                // 1*1 : jj / cd (j > m) (last site only)
+                if (pm == n_sites - 2)
+                    for (uint16_t j = m + 1; j < n_orbs; j++)
+                        for (uint16_t k = m + 1; k < n_orbs; k++) {
+                            (*pmop)[p] = pdm1_op[j][k];
+                            (*pmexpr)[p] = i_op * b_op[j][k];
+                            p++;
+                        }
+                assert(p == mshape);
+                this->middle_operator_names.push_back(pmop);
+                this->middle_operator_exprs.push_back(pmexpr);
+            }
+            // site tensors
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
+            // left operator names
+            //   1 : identity
+            //   1 : mm / cd
+            //   2 : m / c d
+            int llshape = pm == 1 ? 1 + 2 * m + 1 * m * m : 1 + 2 + 1;
+            int lrshape = pm == 0 ? 1 + 2 * (m + 1) + 1 * (m + 1) * (m + 1)
+                                  : (pm != n_sites - 1 ? 1 + 2 + 1 : 1);
+            shared_ptr<Symbolic<S>> plmat = nullptr, prmat = nullptr;
+            if (pm == 0)
+                plmat = make_shared<SymbolicRowVector<S>>(lrshape);
+            else if (pm == n_sites - 1)
+                plmat = make_shared<SymbolicColumnVector<S>>(llshape);
+            else
+                plmat = make_shared<SymbolicMatrix<S>>(llshape, lrshape);
+            (*plmat)[{0, 0}] = i_op;
+            p = 1;
+            if (pm == 0) {
+                int pi = 0;
+                // 1*4 : mm / cd
+                for (uint16_t j = 0; j < m + 1; j++)
+                    for (uint16_t k = 0; k < m + 1; k++)
+                        (*plmat)[{pi, p++}] = b_op[j][k];
+                // 2*2 : m / c d
+                for (uint16_t j = 0; j < m + 1; j++)
+                    (*plmat)[{pi, p++}] = c_op[j];
+                for (uint16_t j = 0; j < m + 1; j++)
+                    (*plmat)[{pi, p++}] = d_op[j];
+            } else if (pm != n_sites - 1) {
+                int pi = 0;
+                // 1 : mm / cd
+                (*plmat)[{pi, p++}] = b_op[m][m];
+                // 2 : m / c d
+                (*plmat)[{pi, p++}] = c_op[m];
+                (*plmat)[{pi, p++}] = d_op[m];
+            }
+            assert(p == lrshape);
+            // right operator names
+            //   1 : identity
+            //   2*(n-m) : j / c d (j >= m)
+            //   1 : mm / cd (only last site)
+            int rlshape = pm == 0 ? 1
+                                  : (pm != n_sites - 1
+                                         ? (n_orbs - m) * 2 + 1
+                                         : (n_orbs - m) * 2 + 1 +
+                                               (n_orbs - m) * (n_orbs - m) * 1);
+            int rrshape = pm != n_sites - 2
+                              ? (n_orbs - m - 1) * 2 + 1
+                              : (n_orbs - m - 1) * 2 + 1 +
+                                    (n_orbs - m - 1) * (n_orbs - m - 1) * 1;
+            if (pm == 0)
+                prmat = make_shared<SymbolicRowVector<S>>(rrshape);
+            else if (pm == n_sites - 1)
+                prmat = make_shared<SymbolicColumnVector<S>>(rlshape);
+            else
+                prmat = make_shared<SymbolicMatrix<S>>(rlshape, rrshape);
+            (*prmat)[{0, 0}] = i_op;
+            p = 1;
+            if (pm != 0 && pm != n_sites - 1) {
+                int pi = 0;
+                int pc = 1 - (m + 1);
+                int pd = 1 + (n_orbs - m - 1) - (m + 1);
+                // 2*(n-m) : j / c d (j >= m)
+                (*prmat)[{p, pi}] = c_op[m];
+                for (uint16_t j = m + 1; j < n_orbs; j++)
+                    (*prmat)[{p + j - m, pc + j}] = i_op;
+                p += n_orbs - m;
+                (*prmat)[{p, pi}] = d_op[m];
+                for (uint16_t j = m + 1; j < n_orbs; j++)
+                    (*prmat)[{p + j - m, pd + j}] = i_op;
+                p += n_orbs - m;
+            } else if (pm == n_sites - 1) {
+                int pi = 0;
+                // 2*(n-m) : j / c d (j >= m)
+                for (uint16_t j = m; j < n_orbs; j++)
+                    (*prmat)[{p + j - m, pi}] = c_op[j];
+                p += n_orbs - m;
+                for (uint16_t j = m; j < n_orbs; j++)
+                    (*prmat)[{p + j - m, pi}] = d_op[m];
+                p += n_orbs - m;
+                // 1 : mm / cd (only last site)
+                for (uint16_t j = m; j < n_orbs; j++)
+                    for (uint16_t k = m; k < n_orbs; k++)
+                        (*prmat)[{p++, pi}] = b_op[j][k];
+            }
+            assert(p == rlshape);
+            opt->lmat = plmat, opt->rmat = prmat;
+            hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
+            this->tensors.push_back(opt);
+        }
+    }
+    void deallocate() override {}
+    static GMatrix<FL> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        r.allocate();
+        r.clear();
+        for (auto &v : expectations)
+            for (auto &x : v) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(x.first);
+                assert(op->name == OpNames::PDM1);
+                r(op->site_index[0], op->site_index[1]) = x.second;
+            }
+        return r;
+    }
+    static GMatrix<FL> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        assert(n_orbs % 2 == 0);
+        GMatrix<FL> r(nullptr, n_orbs / 2, n_orbs / 2);
+        r.allocate();
+        r.clear();
+        GMatrix<FL> t = get_matrix(expectations, n_orbs);
+        for (uint16_t i = 0; i < n_orbs; i++)
+            for (uint16_t j = 0; j < n_orbs; j++)
+                r(i / 2, j / 2) += t(i, j);
+        t.deallocate();
+        return r;
+    }
+};
+
 } // namespace block2
