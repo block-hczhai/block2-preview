@@ -42,6 +42,8 @@ PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
+PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<uint16_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<complex<double>>>);
@@ -1102,6 +1104,8 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<complex<double>>>(m, "VectorComplexDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
+    py::bind_vector<vector<vector<uint8_t>>>(m, "VectorVectorUInt8");
+    py::bind_vector<vector<vector<uint16_t>>>(m, "VectorVectorUInt16");
     py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
     py::bind_vector<vector<vector<complex<double>>>>(
@@ -1162,12 +1166,15 @@ template <typename S = void> void bind_data(py::module &m) {
 
     if (sizeof(ubond_t) == sizeof(uint8_t)) {
         m.attr("VectorUBond") = m.attr("VectorUInt8");
+        m.attr("VectorVectorUBond") = m.attr("VectorVectorUInt8");
         m.attr("ArrayUBond") = m.attr("ArrayUInt8");
     } else if (sizeof(ubond_t) == sizeof(uint16_t)) {
         m.attr("VectorUBond") = m.attr("VectorUInt16");
+        m.attr("VectorVectorUBond") = m.attr("VectorVectorUInt16");
         m.attr("ArrayUBond") = m.attr("ArrayUInt16");
     } else if (sizeof(ubond_t) == sizeof(uint32_t)) {
         m.attr("VectorUBond") = m.attr("VectorUInt32");
+        m.attr("VectorVectorUBond") = m.attr("VectorVectorUInt32");
         m.attr("ArrayUBond") = m.attr("ArrayUInt32");
     }
 

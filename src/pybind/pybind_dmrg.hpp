@@ -729,9 +729,10 @@ void bind_fl_moving_environment(py::module &m) {
                typename MovingEnvironment<S, FL, FLS>::FPS cutoff,
                TruncationTypes trunc_type) {
                 vector<pair<int, int>> ss;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::truncate_density_matrix(
-                        dm, ss, k, cutoff, trunc_type);
+                        dm, ss, k, cutoff, false, wfn_spectra, trunc_type);
                 return make_pair(error, ss);
             })
         .def_static(
@@ -742,9 +743,10 @@ void bind_fl_moving_environment(py::module &m) {
                int k, typename MovingEnvironment<S, FL, FLS>::FPS cutoff,
                TruncationTypes trunc_type) {
                 vector<pair<int, int>> ss;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::truncate_singular_values(
-                        qs, s, ss, k, cutoff, trunc_type);
+                        qs, s, ss, k, cutoff, false, wfn_spectra, trunc_type);
                 return make_pair(error, ss);
             })
         .def_static(
@@ -791,10 +793,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type) {
                 shared_ptr<SparseMatrix<S, FLS>> left = nullptr,
                                                  right = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::split_density_matrix(
                         dm, wfn, k, trace_right, normalize, left, right, cutoff,
-                        trunc_type);
+                        false, wfn_spectra, trunc_type);
                 return make_tuple(error, left, right);
             },
             py::arg("dm"), py::arg("wfn"), py::arg("k"), py::arg("trace_right"),
@@ -808,10 +811,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type, DecompositionTypes decomp_type) {
                 shared_ptr<SparseMatrix<S, FLS>> left = nullptr,
                                                  right = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
                         opdq, wfn, k, trace_right, normalize, left, right,
-                        cutoff, trunc_type, decomp_type);
+                        cutoff, false, wfn_spectra, trunc_type, decomp_type);
                 return make_tuple(error, left, right);
             },
             py::arg("opdq"), py::arg("wfn"), py::arg("k"),
@@ -834,10 +838,11 @@ void bind_fl_moving_environment(py::module &m) {
                TruncationTypes trunc_type) {
                 vector<shared_ptr<SparseMatrixGroup<S, FLS>>> new_wfns;
                 shared_ptr<SparseMatrix<S, FLS>> rot_mat = nullptr;
+                vector<typename MovingEnvironment<S, FL, FLS>::FPS> wfn_spectra;
                 auto error =
                     MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                         dm, wfns, k, trace_right, normalize, new_wfns, rot_mat,
-                        cutoff, trunc_type);
+                        cutoff, false, wfn_spectra, trunc_type);
                 return make_tuple(error, new_wfns, rot_mat);
             },
             py::arg("dm"), py::arg("wfns"), py::arg("k"),
@@ -915,6 +920,13 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def_readwrite("trunc_type", &Expect<S, FL, FLS, FLX>::trunc_type)
         .def_readwrite("ex_type", &Expect<S, FL, FLS, FLX>::ex_type)
         .def_readwrite("algo_type", &Expect<S, FL, FLS, FLX>::algo_type)
+        .def_readwrite("store_bra_spectra",
+                       &Expect<S, FL, FLS, FLX>::store_bra_spectra)
+        .def_readwrite("store_ket_spectra",
+                       &Expect<S, FL, FLS, FLX>::store_ket_spectra)
+        .def_readwrite("wfn_spectra", &Expect<S, FL, FLS, FLX>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &Expect<S, FL, FLS, FLX>::sweep_wfn_spectra)
         .def("update_one_dot", &Expect<S, FL, FLS, FLX>::update_one_dot)
         .def("update_multi_one_dot",
              &Expect<S, FL, FLS, FLX>::update_multi_one_dot)
@@ -1003,6 +1015,14 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::sweep_max_pket_size)
         .def_readwrite("sweep_max_eff_ham_size",
                        &DMRG<S, FL, FLS>::sweep_max_eff_ham_size)
+        .def_readwrite("store_wfn_spectra",
+                       &DMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &DMRG<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &DMRG<S, FL, FLS>::sweep_wfn_spectra)
+        .def_readwrite("isweep", &DMRG<S, FL, FLS>::isweep)
+        .def_readwrite("site_dependent_bond_dims",
+                       &DMRG<S, FL, FLS>::site_dependent_bond_dims)
         .def("update_two_dot", &DMRG<S, FL, FLS>::update_two_dot)
         .def("update_one_dot", &DMRG<S, FL, FLS>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S, FL, FLS>::update_multi_two_dot)
@@ -1070,6 +1090,11 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("hermitian", &TDDMRG<S, FL, FLS>::hermitian)
         .def_readwrite("sweep_cumulative_nflop",
                        &TDDMRG<S, FL, FLS>::sweep_cumulative_nflop)
+        .def_readwrite("store_wfn_spectra",
+                       &TDDMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &TDDMRG<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &TDDMRG<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &TDDMRG<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &TDDMRG<S, FL, FLS>::update_two_dot)
         .def("blocking", &TDDMRG<S, FL, FLS>::blocking)
@@ -1132,6 +1157,11 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("hermitian", &TimeEvolution<S, FL, FLS>::hermitian)
         .def_readwrite("sweep_cumulative_nflop",
                        &TimeEvolution<S, FL, FLS>::sweep_cumulative_nflop)
+        .def_readwrite("store_wfn_spectra",
+                       &TimeEvolution<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("wfn_spectra", &TimeEvolution<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &TimeEvolution<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &TimeEvolution<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &TimeEvolution<S, FL, FLS>::update_two_dot)
         .def("update_multi_one_dot",
@@ -1255,6 +1285,13 @@ void bind_fl_linear(py::module &m) {
                        &Linear<S, FL, FLS>::gf_extra_ext_targets)
         .def_readwrite("right_weight", &Linear<S, FL, FLS>::right_weight)
         .def_readwrite("complex_weights", &Linear<S, FL, FLS>::complex_weights)
+        .def_readwrite("store_bra_spectra",
+                       &Linear<S, FL, FLS>::store_bra_spectra)
+        .def_readwrite("store_ket_spectra",
+                       &Linear<S, FL, FLS>::store_ket_spectra)
+        .def_readwrite("wfn_spectra", &Linear<S, FL, FLS>::wfn_spectra)
+        .def_readwrite("sweep_wfn_spectra",
+                       &Linear<S, FL, FLS>::sweep_wfn_spectra)
         .def("update_one_dot", &Linear<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &Linear<S, FL, FLS>::update_two_dot)
         .def("blocking", &Linear<S, FL, FLS>::blocking)

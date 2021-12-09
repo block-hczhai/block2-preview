@@ -73,6 +73,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
     vector<ubond_t> bond_dims;
+    vector<vector<ubond_t>> site_dependent_bond_dims;
     vector<FPS> noises;
     vector<vector<FPS>> energies;
     vector<FPS> discarded_weights;
@@ -82,6 +83,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<FPS> sweep_discarded_weights;
     vector<vector<vector<pair<S, FPS>>>> sweep_quanta;
     vector<FPS> davidson_conv_thrds;
+    int isweep = 0;
     int davidson_max_iter = 5000;
     int davidson_soft_max_iter = -1;
     FPS davidson_shift = 0.0;
@@ -102,6 +104,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
            tsvd = 0, torth = 0;
     bool print_connection_time = false;
+    // store all wfn singular values (for analysis) at each site
+    bool store_wfn_spectra = false;
+    vector<vector<FPS>> sweep_wfn_spectra;
+    vector<FPS> wfn_spectra;
     Timer _t, _t2;
     DMRG(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
          const vector<ubond_t> &bond_dims, const vector<FPS> &noises)
@@ -326,7 +332,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     tdm += _t.get_time();
                     error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                         dm, me->ket->tensors[i], (int)bond_dim, forward, true,
-                        left, right, cutoff, trunc_type);
+                        left, right, cutoff, store_wfn_spectra, wfn_spectra,
+                        trunc_type);
                     tsplt += _t.get_time();
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
@@ -348,7 +355,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
                             me->ket->info->vacuum, me->ket->tensors[i],
                             (int)bond_dim, forward, true, left, right, cutoff,
-                            trunc_type, decomp_type, pket);
+                            store_wfn_spectra, wfn_spectra, trunc_type,
+                            decomp_type, pket);
                     tsvd += _t.get_time();
                 } else
                     assert(false);
@@ -593,7 +601,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                     dm, old_wfn, (int)bond_dim, forward, true,
                     me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
-                    trunc_type);
+                    store_wfn_spectra, wfn_spectra, trunc_type);
                 tsplt += _t.get_time();
             } else if (decomp_type == DecompositionTypes::SVD ||
                        decomp_type == DecompositionTypes::PureSVD) {
@@ -612,7 +620,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 error = MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
                     me->ket->info->vacuum, old_wfn, (int)bond_dim, forward,
                     true, me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
-                    trunc_type, decomp_type, pket);
+                    store_wfn_spectra, wfn_spectra, trunc_type, decomp_type,
+                    pket);
                 tsvd += _t.get_time();
             } else
                 assert(false);
@@ -849,7 +858,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             tdm += _t.get_time();
             error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                 dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot,
-                cutoff, trunc_type);
+                cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
@@ -1061,7 +1070,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
                 dm, old_wfns, (int)bond_dim, forward, true, mket->wfns,
                 forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
-                trunc_type);
+                store_wfn_spectra, wfn_spectra, trunc_type);
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
@@ -1187,6 +1196,16 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<FPS>(), 0, 0, 0);
+        // use site dependent bond dims
+        if (site_dependent_bond_dims.size() > 0) {
+            const int bond_update_idx =
+                me->dot == 1 && !forward && i > 0 ? i - 1 : i;
+            const int i_update_sweep =
+                min(isweep, (int)site_dependent_bond_dims.size() - 1);
+            if (site_dependent_bond_dims[i_update_sweep].size() != 0)
+                bond_dim = site_dependent_bond_dims[i_update_sweep].at(
+                    bond_update_idx);
+        }
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M' ||
@@ -1206,6 +1225,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             else
                 it = update_one_dot(i, forward, bond_dim, noise,
                                     davidson_conv_thrd);
+        }
+        if (store_wfn_spectra) {
+            const int bond_update_idx =
+                me->dot == 1 && !forward && i > 0 ? i - 1 : i;
+            if (sweep_wfn_spectra.size() <= bond_update_idx)
+                sweep_wfn_spectra.resize(bond_update_idx + 1);
+            sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
         }
         tblk += _t2.get_time();
         return it;
@@ -1674,6 +1700,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         bool converged;
         FPS energy_difference;
         for (int iw = 0; iw < n_sweeps; iw++) {
+            isweep = iw;
             if (iprint >= 1)
                 cout << "Sweep = " << setw(4) << iw
                      << " | Direction = " << setw(8)
@@ -1909,6 +1936,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
     FLS gf_extra_eta = 0;
     // calculated GF for extra frequencies and ext_mpss
     vector<vector<vector<FLS>>> gf_extra_ext_targets;
+    // store all wfn singular values (for analysis) at each site
+    bool store_bra_spectra = false, store_ket_spectra = false;
+    vector<vector<FPS>> sweep_wfn_spectra;
+    vector<FPS> wfn_spectra;
     Linear(const shared_ptr<MovingEnvironment<S, FL, FLS>> &lme,
            const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
            const shared_ptr<MovingEnvironment<S, FL, FLS>> &tme,
@@ -2487,6 +2518,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
                     shared_ptr<SparseMatrix<S, FLS>> left, right;
                     shared_ptr<SparseMatrix<S, FLS>> dm = nullptr;
+                    bool store_wfn_spectra =
+                        mps == me->bra ? store_bra_spectra : store_ket_spectra;
                     int bond_dim = -1;
                     FPS error;
                     if (mps == me->bra)
@@ -2537,7 +2570,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         error =
                             MovingEnvironment<S, FL, FLS>::split_density_matrix(
                                 dm, old_wfn, bond_dim, forward, false, left,
-                                right, cutoff, trunc_type);
+                                right, cutoff, store_wfn_spectra, wfn_spectra,
+                                trunc_type);
                         tsplt += _t.get_time();
                     } else if (decomp_type == DecompositionTypes::SVD ||
                                decomp_type == DecompositionTypes::PureSVD) {
@@ -2546,7 +2580,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                 split_wavefunction_svd(
                                     mps->info->vacuum, old_wfn, bond_dim,
                                     forward, false, left, right, cutoff,
-                                    trunc_type, decomp_type, nullptr);
+                                    store_wfn_spectra, wfn_spectra, trunc_type,
+                                    decomp_type, nullptr);
                         } else {
                             if (noise != 0 && mps == me->bra) {
                                 if (noise_type & NoiseTypes::Wavefunction)
@@ -2575,8 +2610,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                 split_wavefunction_svd(
                                     mps->info->vacuum, old_wfn, bond_dim,
                                     forward, false, left, right, cutoff,
-                                    trunc_type, decomp_type, pbra, xwfns,
-                                    weights);
+                                    store_wfn_spectra, wfn_spectra, trunc_type,
+                                    decomp_type, pbra, xwfns, weights);
                             tsvd += _t.get_time();
                         }
                     } else
@@ -3095,6 +3130,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             for (auto &mps : mpss) {
                 shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
                 shared_ptr<SparseMatrix<S, FLS>> dm = nullptr;
+                bool store_wfn_spectra =
+                    mps == me->bra ? store_bra_spectra : store_ket_spectra;
                 int bond_dim = -1;
                 FPS error;
                 if (mps == me->bra)
@@ -3144,7 +3181,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     tdm += _t.get_time();
                     error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
                         dm, old_wfn, bond_dim, forward, false, mps->tensors[i],
-                        mps->tensors[i + 1], cutoff, trunc_type);
+                        mps->tensors[i + 1], cutoff, store_wfn_spectra,
+                        wfn_spectra, trunc_type);
                     tsplt += _t.get_time();
                 } else if (decomp_type == DecompositionTypes::SVD ||
                            decomp_type == DecompositionTypes::PureSVD) {
@@ -3153,7 +3191,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             split_wavefunction_svd(
                                 mps->info->vacuum, old_wfn, bond_dim, forward,
                                 false, mps->tensors[i], mps->tensors[i + 1],
-                                cutoff, trunc_type, decomp_type, nullptr);
+                                cutoff, store_wfn_spectra, wfn_spectra,
+                                trunc_type, decomp_type, nullptr);
                     } else {
                         if (noise != 0 && mps == me->bra) {
                             if (noise_type & NoiseTypes::Wavefunction)
@@ -3183,8 +3222,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             split_wavefunction_svd(
                                 mps->info->vacuum, old_wfn, bond_dim, forward,
                                 false, mps->tensors[i], mps->tensors[i + 1],
-                                cutoff, trunc_type, decomp_type, pbra, xwfns,
-                                weights);
+                                cutoff, store_wfn_spectra, wfn_spectra,
+                                trunc_type, decomp_type, pbra, xwfns, weights);
                         tsvd += _t.get_time();
                     }
                 } else
@@ -3281,6 +3320,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
         else
             it = update_one_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
                                 linear_conv_thrd);
+        if (store_bra_spectra || store_ket_spectra) {
+            const int bond_update_idx =
+                rme->dot == 1 && !forward && i > 0 ? i - 1 : i;
+            if (sweep_wfn_spectra.size() <= bond_update_idx)
+                sweep_wfn_spectra.resize(bond_update_idx + 1);
+            sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+        }
         tblk += _t2.get_time();
         return it;
     }
@@ -3711,6 +3757,10 @@ struct Expect {
     FPS beta = 0.0;
     // partition function (for thermal-averaged MultiMPS)
     typename PartitionWeights<FLX>::type partition_weights;
+    // store all wfn singular values (for analysis) at each site
+    bool store_bra_spectra = false, store_ket_spectra = false;
+    vector<vector<FPS>> sweep_wfn_spectra;
+    vector<FPS> wfn_spectra;
     Expect(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
            ubond_t bra_bond_dim, ubond_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
@@ -3827,10 +3877,12 @@ struct Expect {
                             NoiseTypes::None);
                     int bond_dim =
                         mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                    bool store_wfn_spectra =
+                        mps == me->bra ? store_bra_spectra : store_ket_spectra;
                     FPS error =
                         MovingEnvironment<S, FL, FLS>::split_density_matrix(
                             dm, old_wfn, bond_dim, forward, false, left, right,
-                            cutoff, trunc_type);
+                            cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
                     if (mps == me->bra)
                         bra_error = error;
                     else
@@ -3967,11 +4019,13 @@ struct Expect {
                             NoiseTypes::None);
                     int bond_dim =
                         mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                    bool store_wfn_spectra =
+                        mps == me->bra ? store_bra_spectra : store_ket_spectra;
                     FPS error =
                         MovingEnvironment<S, FL, FLS>::split_density_matrix(
                             dm, old_wfn, bond_dim, forward, false,
                             mps->tensors[i], mps->tensors[i + 1], cutoff,
-                            trunc_type);
+                            store_wfn_spectra, wfn_spectra, trunc_type);
                     if (mps == me->bra)
                         bra_error = error;
                     else
@@ -4131,13 +4185,13 @@ struct Expect {
                                 forward, 0.0, NoiseTypes::None);
                     int bond_dim =
                         mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
-                    FPS error = MovingEnvironment<
-                        S, FL, FLS>::multi_split_density_matrix(dm, old_wfn,
-                                                                bond_dim,
-                                                                forward, false,
-                                                                new_wfns, rot,
-                                                                cutoff,
-                                                                trunc_type);
+                    bool store_wfn_spectra =
+                        mps == me->bra ? store_bra_spectra : store_ket_spectra;
+                    FPS error = MovingEnvironment<S, FL, FLS>::
+                        multi_split_density_matrix(
+                            dm, old_wfn, bond_dim, forward, false, new_wfns,
+                            rot, cutoff, store_wfn_spectra, wfn_spectra,
+                            trunc_type);
                     if (mps == mbra)
                         bra_error = error;
                     else
@@ -4325,11 +4379,13 @@ struct Expect {
                                 forward, 0.0, NoiseTypes::None);
                     int bond_dim =
                         mps == mbra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                    bool store_wfn_spectra =
+                        mps == me->bra ? store_bra_spectra : store_ket_spectra;
                     FPS error = MovingEnvironment<S, FL, FLS>::
                         multi_split_density_matrix(
                             dm, old_wfn, bond_dim, forward, false, mps->wfns,
                             forward ? mps->tensors[i] : mps->tensors[i + 1],
-                            cutoff, trunc_type);
+                            cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
                     if (mps == mbra)
                         bra_error = error;
                     else
@@ -4413,26 +4469,35 @@ struct Expect {
                        ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         me->move_to(i);
         assert(me->dot == 1 || me->dot == 2);
+        Iteration it(vector<pair<shared_ptr<OpExpr<S>>, FLX>>(), 0, 0, 0, 0);
         if (me->dot == 2) {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M' ||
                 me->ket->canonical_form[i] == 'J' ||
                 me->ket->canonical_form[i] == 'T')
-                return update_multi_two_dot(i, forward, propagate, bra_bond_dim,
-                                            ket_bond_dim);
+                it = update_multi_two_dot(i, forward, propagate, bra_bond_dim,
+                                          ket_bond_dim);
             else
-                return update_two_dot(i, forward, propagate, bra_bond_dim,
-                                      ket_bond_dim);
+                it = update_two_dot(i, forward, propagate, bra_bond_dim,
+                                    ket_bond_dim);
         } else {
             if (me->ket->canonical_form[i] == 'J' ||
                 me->ket->canonical_form[i] == 'T' ||
                 me->ket->canonical_form[i] == 'M')
-                return update_multi_one_dot(i, forward, propagate, bra_bond_dim,
-                                            ket_bond_dim);
+                it = update_multi_one_dot(i, forward, propagate, bra_bond_dim,
+                                          ket_bond_dim);
             else
-                return update_one_dot(i, forward, propagate, bra_bond_dim,
-                                      ket_bond_dim);
+                it = update_one_dot(i, forward, propagate, bra_bond_dim,
+                                    ket_bond_dim);
         }
+        if (store_bra_spectra || store_ket_spectra) {
+            const int bond_update_idx =
+                me->dot == 1 && !forward && i > 0 ? i - 1 : i;
+            if (sweep_wfn_spectra.size() <= bond_update_idx)
+                sweep_wfn_spectra.resize(bond_update_idx + 1);
+            sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+        }
+        return it;
     }
     void sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         me->prepare();

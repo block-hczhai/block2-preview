@@ -67,7 +67,7 @@ TEST_F(TestComplexMatrix, TestIadd) {
             for (MKL_INT jk = 0; jk < n; jk++)
                 ASSERT_LT(
                     abs(cfactor * a(ik, jk) + scale * b(ik, jk) - c(ik, jk)),
-                    1E-12);
+                    1E-12 + 1E-12 * abs(c(ik, jk)));
         if (conjb != 2) {
             ComplexMatrixFunctions::copy(c, a);
             seq->iadd(c, tb, scale, conjb, cfactor);
@@ -76,7 +76,7 @@ TEST_F(TestComplexMatrix, TestIadd) {
                 for (MKL_INT jk = 0; jk < n; jk++)
                     ASSERT_LT(abs(cfactor * a(ik, jk) + scale * b(ik, jk) -
                                   c(ik, jk)),
-                              1E-12);
+                              1E-12 + 1E-12 * abs(c(ik, jk)));
         }
         if (conjb)
             tb.deallocate();

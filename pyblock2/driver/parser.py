@@ -34,20 +34,20 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "copy_mps", "restart_copy_mps", "sample", "restart_sample", "resolve_twosz",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
-              "nevpt2sd",  "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+              "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
               "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
               "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
               "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center",
               "use_complex", "real_density_matrix", "expt_algo_type",
               "davidson_max_iter", "davidson_soft_max_iter", "one_body_parallel_rule",
               "n_sub_sweeps", "complex_mps", "split_states", "trans_mps_to_complex",
-              "use_general_spin", "trans_integral_to_spin_orbital"}
+              "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra"}
 
-REORDER_KEYS = {"noreorder",  "fiedler", "reorder", "gaopt", "nofiedler",
+REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
 
 DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2",
-                "nevpt2s", "nevpt2sd"}
+                 "nevpt2s", "nevpt2sd"}
 
 NEVPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd"}
 
@@ -96,12 +96,15 @@ def parse(fname):
     if line.strip().lower().startswith('&fci '):
         cont_dict = read_fcidump(fname)
         lines = ["sym d2h", "orbitals %s" % fname,
-            "nelec %s" % cont_dict.get('nelec', 0), "spin %s" % cont_dict.get('ms2', 0), 
-            "irrep %s" % cont_dict.get('isym', 0), "hf_occ integral", "schedule default",
-            "maxM 500", "maxiter 30"]
+                 "nelec %s" % cont_dict.get(
+                     'nelec', 0), "spin %s" % cont_dict.get('ms2', 0),
+                 "irrep %s" % cont_dict.get(
+                     'isym', 0), "hf_occ integral", "schedule default",
+                 "maxM 500", "maxiter 30"]
 
     dic = {}
     schedule = []
+    site_dependent_bdims = []
     schedule_start = -1
     schedule_end = -1
     for i, line in enumerate(lines):
@@ -114,9 +117,16 @@ def parse(fname):
         elif "end" == line.strip():
             schedule_end = i
         elif schedule_start != -1 and schedule_end == -1 \
-            and not line.strip().startswith('!') and not line.strip().startswith('#'):
-            a, b, c, d = line.split()
-            schedule.append([int(a), int(b), float(c), float(d)])
+                and not line.strip().startswith('!') and not line.strip().startswith('#'):
+            abcd = line.split()
+            if len(abcd) == 4:
+                a, b, c, d = abcd
+                site_dependent_bdims.append([])
+                schedule.append([int(a), int(b), float(c), float(d)])
+            else:
+                site_dependent_bdims.append([int(x) for x in abcd[1:-2]])
+                schedule.append(
+                    [int(abcd[0]), max(site_dependent_bdims[-1]), float(abcd[-2]), float(abcd[-1])])
         elif not line.strip().startswith('!') and not line.strip().startswith('#'):
             line_sp = line.split()
             if len(line_sp) != 0:
@@ -126,6 +136,7 @@ def parse(fname):
 
     if len(schedule) == 0:
         schedule = get_schedule(dic)
+        site_dependent_bdims = [[]] * len(schedule)
 
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()
@@ -133,11 +144,12 @@ def parse(fname):
     assert maxiter > 0
     nsweeps.append(maxiter)
 
-    schedule = [[], [], []]
-    for nswp, M, tol, noise in zip(nsweeps, *tmp[1:]):
+    schedule = [[], [], [], []]
+    for nswp, M, tol, noise, SM in zip(nsweeps, *tmp[1:], site_dependent_bdims):
         schedule[0].extend([M] * nswp)
         schedule[1].extend([tol] * nswp)
         schedule[2].extend([noise] * nswp)
+        schedule[3].extend([SM] * nswp)
     dic["schedule"] = schedule
 
     # stopt extra keywords
@@ -173,8 +185,8 @@ def parse(fname):
         dic["noreorder"] = ""
 
     # optional keywords that can be obtained from fcidump
-    if "orbitals" in dic and ("nelec" not in dic or "spin" not in dic or "irrep" not in dic or
-        ("k_symmetry" in dic and "k_irrep" not in dic)):
+    if "orbitals" in dic and ("nelec" not in dic or "spin" not in dic or "irrep" not in dic
+                              or ("k_symmetry" in dic and "k_irrep" not in dic)):
         if open(dic["orbitals"], 'rb').read(4) != b'\x89HDF':
             cont_dict = read_fcidump(dic["orbitals"])
             if "nelec" not in dic and "nelec" in cont_dict:
@@ -204,7 +216,7 @@ def parse(fname):
     if len(crs) > 1:
         raise ValueError(
             "Dynamic correlation keys %s and %s cannot appear simultaneously."
-                % (crs[0], crs[1]))
+            % (crs[0], crs[1]))
 
     # restart check
     if "restart_oh" in dic:
@@ -357,8 +369,8 @@ def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
     e_core = float(Ham.H0)
     n_sites = Ham.norb
     fcidump = FCIDUMP()
-    
-    if len(h1e) == 2: # UHF
+
+    if len(h1e) == 2:  # UHF
         mh1e_a = h1e[0][np.tril_indices(n_sites)]
         mh1e_a[np.abs(mh1e_a) < tol] = 0.0
         mh1e_b = h1e[1][np.tril_indices(n_sites)]
@@ -366,35 +378,35 @@ def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
         mh1e = (mh1e_a, mh1e_b)
 
         g2e_aa = ao2mo.restore(8, g2e[0], n_sites)
-        non0_idx  = (g2e_aa <  tol)
+        non0_idx = (g2e_aa < tol)
         non0_idx &= (g2e_aa > -tol)
         g2e_aa[non0_idx] = 0.0
-        
+
         g2e_bb = ao2mo.restore(8, g2e[1], n_sites)
-        non0_idx  = (g2e_bb <  tol)
+        non0_idx = (g2e_bb < tol)
         non0_idx &= (g2e_bb > -tol)
         g2e_bb[non0_idx] = 0.0
-        
+
         g2e_ab = ao2mo.restore(4, g2e[2], n_sites)
-        non0_idx  = (g2e_ab <  tol)
+        non0_idx = (g2e_ab < tol)
         non0_idx &= (g2e_ab > -tol)
         g2e_ab[non0_idx] = 0.0
         non0_idx = None
 
         mg2e = (g2e_aa, g2e_bb, g2e_ab)
         fcidump.initialize_sz(n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
-    elif len(h1e) == 1: # RHF
+    elif len(h1e) == 1:  # RHF
         mh1e = h1e[0][np.tril_indices(n_sites)]
         mh1e[np.abs(mh1e) < tol] = 0.0
         mg2e = ao2mo.restore(8, g2e[0], n_sites)
-        non0_idx  = (mg2e <  tol)
+        non0_idx = (mg2e < tol)
         non0_idx &= (mg2e > -tol)
         mg2e[non0_idx] = 0.0
         non0_idx = None
         fcidump.initialize_su2(n_sites, n_elec, twos, isym, e_core, mh1e, mg2e)
     else:
         raise ValueError("h1e dimension error, len = %s", len(h1e))
-    
+
     if orb_sym is None:
         orb_sym = [1] * n_sites
     fcidump.orb_sym = VectorUInt8(orb_sym)
@@ -402,24 +414,29 @@ def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
 
 
 def format_schedule(sch):
-    bdim, tol, noi = sch
+    bdim, tol, noi, sbdim = sch
     if len(bdim) == 0:
         return ""
     lines = []
     for i in range(0, len(bdim)):
-        if len(lines) != 0 and [bdim[i], noi[i], tol[i]] == lines[-1][2:5]:
+        if len(lines) != 0 and [bdim[i], noi[i], tol[i], sbdim[i]] == lines[-1][2:6]:
             lines[-1][1] = i
         else:
-            lines.append([i, i, bdim[i], noi[i], tol[i]])
-    return ["Sweep%4d-%4d : Mmps = %5d Noise = %9.2g DavTol = %9.2g" % tuple(l) for l in lines]
+            lines.append([i, i, bdim[i], noi[i], tol[i], sbdim[i]])
+    rr = []
+    for l in lines:
+        rr.append("Sweep%4d-%4d : Mmps = %5d Noise = %9.2g DavTol = %9.2g" % tuple(l[:-1]))
+        if len(l[-1]) != 0:
+            rr.append("--- SDP Mmps = %20s" % l[-1])
+    return rr
 
 
 def get_schedule(dic):
     start_m = int(dic.get("startM", 250))
     max_m = int(dic.get("maxM", 0))
     if max_m <= 0:
-        raise ValueError("A positive maxM must be set for default schedule, "
-                         + "current value : %d" % max_m)
+        raise ValueError("A positive maxM must be set for default schedule, " +
+                         "current value : %d" % max_m)
     elif max_m < start_m:
         raise ValueError(
             "maxM %d cannot be smaller than startM %d" % (max_m, start_m))
@@ -472,11 +489,15 @@ def get_schedule(dic):
         raise ValueError("Unrecognized schedule type (%s)" % sch_type)
     return schedule
 
+
 def test_read_integral():
     # UHF intergal
-    ints = read_integral("ints.h5", n_elec=4, twos=0, tol=1e-12, isym=1, orb_sym=None)
+    ints = read_integral("ints.h5", n_elec=4, twos=0,
+                         tol=1e-12, isym=1, orb_sym=None)
     # RHF integral
-    ints = read_integral("ints_res.h5", n_elec=16, twos=0, tol=1e-8, isym=1, orb_sym=None)
+    ints = read_integral("ints_res.h5", n_elec=16, twos=0,
+                         tol=1e-8, isym=1, orb_sym=None)
+
 
 if __name__ == "__main__":
     dic = parse(fname="./dmrg.conf")
