@@ -505,12 +505,16 @@ struct NPC1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
         assert(false);
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        return r;
     }
     static GMatrix<FL> get_matrix_spatial(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
         assert(false);
+        GMatrix<FL> r(nullptr, n_orbs / 2, n_orbs / 2);
+        return r;
     }
 };
 
