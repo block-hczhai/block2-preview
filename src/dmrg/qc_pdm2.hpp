@@ -2304,11 +2304,19 @@ struct PDM2MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
         assert(false);
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(vector<MKL_INT>{
+            n_sites * 2, n_sites * 2, n_sites * 2, n_sites * 2});
+        r->clear();
+        return r;
     }
     static shared_ptr<GTensor<FL>> get_matrix_spatial(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
         assert(false);
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
+            vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites});
+        r->clear();
+        return r;
     }
 };
 
