@@ -67,14 +67,24 @@ jobs:
           brew update
           brew install libomp
 
-      - name: build test (serial)
-        if: matrix.parallel == 'serial'
+      - name: build test (serial, linux)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-latest'
         env:
           MKLROOT: ~/.local
         run: |
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          make -j 2
+
+      - name: build test (serial, macos)
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-latest'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          mkdir build_test
+          cd build_test
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON
           make -j 2
 
       - name: run test (serial)
