@@ -1642,6 +1642,9 @@ if not pre_run:
             assert len(bond_dims) > tto
             dmrg.solve(tto, forward, 0)
             # save the twodot part energies and discarded weights
+            for x in dmrg.energies:
+                while len(x) < nroots:
+                    x.append(0.0)
             sweep_energies.append(np.array(dmrg.energies))
             discarded_weights.append(np.array(dmrg.discarded_weights))
             if big_site_method is not None:
@@ -1661,6 +1664,9 @@ if not pre_run:
             me.finalize_environments()
 
         _print("Final canonical form = ", mps.canonical_form, mps.center)
+        for x in dmrg.energies:
+            while len(x) < nroots:
+                x.append(0.0)
         sweep_energies.append(np.array(dmrg.energies))
         discarded_weights.append(np.array(dmrg.discarded_weights))
         sweep_energies = np.vstack(sweep_energies)
