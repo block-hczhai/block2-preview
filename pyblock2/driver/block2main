@@ -1182,7 +1182,7 @@ except ImportError:
     pass
 
 
-def split_mps(iroot, mps, mps_info):
+def split_mps(iroot, mps, mps_info, mpi=MPI):
     mps.load_data()  # this will avoid memory sharing
     mps_info.load_mutable()
     mps.load_mutable()
@@ -1256,21 +1256,21 @@ def split_mps(iroot, mps, mps_info):
         smps.save_mutable()
 
     if smps.center == 0 and dot == 2:
-        if MPI is not None:
-            MPI.barrier()
+        if mpi is not None:
+            mpi.barrier()
         if smps.canonical_form[smps.center] in "ST":
             cg = CG(200)
             cg.initialize()
             smps.flip_fused_form(
-                smps.center, cg, prule if MPI is not None else None)
+                smps.center, cg, prule if mpi is not None else None)
         smps.save_data()
         forward = True
-        if MPI is not None:
-            MPI.barrier()
+        if mpi is not None:
+            mpi.barrier()
         smps.load_mutable()
         smps.info.load_mutable()
-        if MPI is not None:
-            MPI.barrier()
+        if mpi is not None:
+            mpi.barrier()
 
     smps.dot = dot
     forward = smps.center == 0
@@ -2650,7 +2650,7 @@ if not pre_run:
 
                 for iroot in range(nroots):
                     _print('----- root = %3d / %3d -----' % (iroot, nroots))
-                    simps, simps_info, _ = split_mps(iroot, mps, mps_info)
+                    simps, simps_info, _ = split_mps(iroot, mps, mps_info, mpi=None)
                     if "trans_mps_to_complex" in dic:
                         simps = MultiMPS.make_complex(
                             simps, "%s-CPX-%d" % (mps_info.tag, iroot))
