@@ -427,10 +427,10 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                     int owner) override {
         reduce_sum_impl<double>(mat, owner);
     }
-    // void reduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
-    //                 int owner) override {
-    //     reduce_sum_impl<complex<double>>(mat, owner);
-    // }
+    void reduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                    int owner) override {
+        reduce_sum_impl<complex<double>>(mat, owner);
+    }
     void waitall() override {
         _t.get_time();
         int ierr =
