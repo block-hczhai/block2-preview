@@ -42,7 +42,7 @@ class CMakeBuild(build_ext):
                 '-DUSE_MKL=ON',
                 '-DBUILD_LIB=ON',
                 '-DLARGE_BOND=ON',
-                '-DUSE_KSYMM=ON',
+                '-DUSE_KSYMM=OFF',
                 '-DUSE_COMPLEX=ON',
                 '-DUSE_SG=ON'
             ]
