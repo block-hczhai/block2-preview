@@ -1329,7 +1329,11 @@ def get_mps_from_tags(iroot):
     if smps_info.bond_dim < max_bdim:
         smps_info.bond_dim = max_bdim
     smps.load_data()
-    if smps.dot == 2 and smps.center == smps.n_sites - 1:
+    if smps.dot == 2 and smps.center == smps.n_sites - 1 and dot == 1:
+        smps.dot = 1
+    elif smps.dot == 2 and smps.center == 0 and dot == 1:
+        smps.dot = 1
+    elif smps.dot == 2 and smps.center == smps.n_sites - 1:
         if complex_mps:
             _print('change canonical form ...')
             cf = str(smps.canonical_form)
@@ -2102,6 +2106,8 @@ if not pre_run:
                 else:
                     simps, simps_info, _ = split_mps(iroot, mps, mps_info)
                     sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
+                if jroot == iroot:
+                    sjmps = simps
                 dm = do_onepdm(simps, sjmps)
                 if soc:
                     if SX == SU2:
@@ -2114,7 +2120,7 @@ if not pre_run:
                     dm = dm / np.sqrt(2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, jroot), dm)
-                if MPI is None or MPI.rank == 0 and iroot == jroot:
+                if (MPI is None or MPI.rank == 0) and iroot == jroot:
                     _print("DMRG OCC (state %4d) = " % iroot, "".join(
                         ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                     simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
@@ -2242,6 +2248,8 @@ if not pre_run:
                 else:
                     simps, simps_info, _ = split_mps(iroot, mps, mps_info)
                     sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
+                if jroot == iroot:
+                    sjmps = simps
                 dm = do_twopdm(simps, sjmps)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, jroot), dm)

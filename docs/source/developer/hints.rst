@@ -278,6 +278,16 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
 
 **Reason:** A SZ MPS is loaded for use in a SU2 code.
 
+[2021-12-14]
+
+**Assertion:** ::
+    core/matrix_functions.hpp:307: static void block2::GMatrixFunctions<double>::multiply(const MatrixRef&, uint8_t, const MatrixRef&, uint8_t, const MatrixRef&, double, double): Assertion `a.n >= b.m && c.m == a.m && c.n >= b.n' failed.
+
+**Reason:** For transition reduced density matrix, if bra and ket are the MPSs with the same tag,
+    they must be the same object. For example, this is the case when they are the same ith root from a state-averaged MultiMPS.
+    Therefore, one should not "extract" the same root twice with the same tag. This will cause the conflict in the disk storage.
+    This was a bug in the main driver for onedot transition 1/2 reduced density matrix with more than one root.
+
 MRCI/SCI computations
 ---------------------
 
