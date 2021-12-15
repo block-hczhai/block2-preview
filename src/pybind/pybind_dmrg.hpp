@@ -920,6 +920,7 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def_readwrite("trunc_type", &Expect<S, FL, FLS, FLX>::trunc_type)
         .def_readwrite("ex_type", &Expect<S, FL, FLS, FLX>::ex_type)
         .def_readwrite("algo_type", &Expect<S, FL, FLS, FLX>::algo_type)
+        .def_readwrite("zero_dot_algo", &Expect<S, FL, FLS, FLX>::zero_dot_algo)
         .def_readwrite("store_bra_spectra",
                        &Expect<S, FL, FLS, FLX>::store_bra_spectra)
         .def_readwrite("store_ket_spectra",
@@ -927,6 +928,7 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def_readwrite("wfn_spectra", &Expect<S, FL, FLS, FLX>::wfn_spectra)
         .def_readwrite("sweep_wfn_spectra",
                        &Expect<S, FL, FLS, FLX>::sweep_wfn_spectra)
+        .def("update_zero_dot", &Expect<S, FL, FLS, FLX>::update_zero_dot)
         .def("update_one_dot", &Expect<S, FL, FLS, FLX>::update_one_dot)
         .def("update_multi_one_dot",
              &Expect<S, FL, FLS, FLX>::update_multi_one_dot)
@@ -2011,7 +2013,7 @@ extern template void
 bind_fl_expect<SGB, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SGB, double, double, complex<double>>(py::module &m,
-                                                      const string &name);
+                                                     const string &name);
 extern template auto bind_fl_spin_specific<SGB, double>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
 
@@ -2042,8 +2044,7 @@ extern template void bind_fl_mpo<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_partition<SGB, complex<double>>(py::module &m);
 extern template void
 bind_fl_qc_hamiltonian<SGB, complex<double>>(py::module &m);
-extern template void
-bind_fl_parallel_dmrg<SGB, complex<double>>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SGB, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SGB, complex<double>, complex<double>>(

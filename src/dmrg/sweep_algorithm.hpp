@@ -3751,6 +3751,9 @@ struct Expect {
     bool forward;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     ExpectationAlgorithmTypes algo_type = ExpectationAlgorithmTypes::Automatic;
+    // expeditious zero-dot algorithm for fast one-dot pdm expectation
+    // only works for non-multi-mps and dot = 1
+    bool zero_dot_algo = false;
     ExpectationTypes ex_type = PartitionWeights<FLX>::get_type();
     uint8_t iprint = 2;
     FPS cutoff = 0.0;
@@ -3800,6 +3803,245 @@ struct Expect {
             return os;
         }
     };
+    // expeditious zero-dot algorithm for fast one-dot pdm expectation
+    Iteration update_zero_dot(int i, bool forward, bool propagate,
+                              ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
+        frame->activate(0);
+        assert(propagate);
+        vector<shared_ptr<MPS<S, FLS>>> mpss =
+            me->bra == me->ket
+                ? vector<shared_ptr<MPS<S, FLS>>>{me->bra}
+                : vector<shared_ptr<MPS<S, FLS>>>{me->bra, me->ket};
+        for (auto &mps : mpss) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else
+                    assert(false);
+            }
+            mps->load_tensor(i);
+        }
+        tuple<vector<pair<shared_ptr<OpExpr<S>>, FL>>, size_t, double> pdi;
+        FPS bra_error = 0.0, ket_error = 0.0;
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
+            // change to fused form for splitting
+            for (auto &mps : mpss) {
+                bool mps_fuse_left = mps->canonical_form[i] == 'K';
+                if (mps_fuse_left != forward) {
+                    shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
+                    if (!mps_fuse_left && forward)
+                        mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                            swap_wfn_to_fused_left(i, mps->info, prev_wfn,
+                                                   me->mpo->tf->opf->cg);
+                    else if (mps_fuse_left && !forward)
+                        mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                            swap_wfn_to_fused_right(i, mps->info, prev_wfn,
+                                                    me->mpo->tf->opf->cg);
+                    prev_wfn->info->deallocate();
+                    prev_wfn->deallocate();
+                }
+            }
+        }
+        vector<shared_ptr<SparseMatrix<S, FLS>>> old_wfns =
+            me->bra == me->ket
+                ? vector<shared_ptr<SparseMatrix<S, FLS>>>{me->bra->tensors[i]}
+                : vector<shared_ptr<SparseMatrix<S, FLS>>>{me->ket->tensors[i],
+                                                           me->bra->tensors[i]};
+        vector<shared_ptr<SparseMatrix<S, FLS>>> lefts, rights, dms;
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
+            for (auto &mps : mpss) {
+                shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
+                shared_ptr<SparseMatrix<S, FLS>> left, right;
+                shared_ptr<SparseMatrix<S, FLS>> dm =
+                    MovingEnvironment<S, FL, FLS>::density_matrix(
+                        mps->info->vacuum, old_wfn, forward, 0.0,
+                        NoiseTypes::None);
+                int bond_dim =
+                    mps == me->bra ? (int)bra_bond_dim : (int)ket_bond_dim;
+                bool store_wfn_spectra =
+                    mps == me->bra ? store_bra_spectra : store_ket_spectra;
+                FPS error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
+                    dm, old_wfn, bond_dim, forward, false, left, right, cutoff,
+                    store_wfn_spectra, wfn_spectra, trunc_type);
+                if (mps == me->bra)
+                    bra_error = error;
+                else
+                    ket_error = error;
+                shared_ptr<StateInfo<S>> info = nullptr;
+                // propagation
+                if (forward) {
+                    mps->tensors[i] = left;
+                    mps->save_tensor(i);
+                    info = left->info->extract_state_info(forward);
+                    mps->info->left_dims[i + 1] = info;
+                    mps->info->save_left_dims(i + 1);
+                } else {
+                    mps->tensors[i] = right;
+                    mps->save_tensor(i);
+                    info = right->info->extract_state_info(forward);
+                    mps->info->right_dims[i] = info;
+                    mps->info->save_right_dims(i);
+                }
+                info->deallocate();
+                lefts.push_back(left);
+                rights.push_back(right);
+                dms.push_back(dm);
+            }
+        }
+        if ((forward && i != me->n_sites - 1) || (!forward && i != 0)) {
+            if (me->para_rule != nullptr) {
+                for (int ip = 0; ip < (int)mpss.size(); ip++) {
+                    auto &mps = mpss[ip];
+                    if (me->para_rule->is_root()) {
+                        auto &left = lefts[ip];
+                        auto &right = rights[ip];
+                        if (forward)
+                            right->save_data(mps->get_filename(-2), true);
+                        else
+                            left->save_data(mps->get_filename(-2), true);
+                    }
+                    me->para_rule->comm->barrier();
+                    if (!me->para_rule->is_root()) {
+                        if (forward) {
+                            shared_ptr<SparseMatrix<S, FLS>> right =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            right->load_data(mps->get_filename(-2), true);
+                            rights.push_back(right);
+                        } else {
+                            shared_ptr<SparseMatrix<S, FLS>> left =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            left->load_data(mps->get_filename(-2), true);
+                            lefts.push_back(left);
+                        }
+                    }
+                }
+            }
+            if (forward) {
+                for (auto &mps : mpss)
+                    mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
+                me->move_to(i + 1, true);
+                shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
+                    me->eff_ham(FuseTypes::NoFuseL, forward, false,
+                                rights.front(), rights.back());
+                pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
+                                    me->para_rule);
+                k_eff->deallocate();
+                if (me->para_rule == nullptr || me->para_rule->is_root())
+                    for (int ip = 0; ip < (int)mpss.size(); ip++) {
+                        auto &mps = mpss[ip];
+                        auto &right = rights[ip];
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                            i + 1, right, mps, forward);
+                        mps->save_tensor(i + 1);
+                        mps->unload_tensor(i + 1);
+                    }
+            } else {
+                for (auto &mps : mpss)
+                    mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
+                me->move_to(i - 1, true);
+                shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
+                    me->eff_ham(FuseTypes::NoFuseR, forward, false,
+                                lefts.front(), lefts.back());
+                pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
+                                    me->para_rule);
+                k_eff->deallocate();
+                if (me->para_rule == nullptr || me->para_rule->is_root())
+                    for (int ip = 0; ip < (int)mpss.size(); ip++) {
+                        auto &mps = mpss[ip];
+                        auto &left = lefts[ip];
+                        MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                            i - 1, left, mps, forward);
+                        mps->save_tensor(i - 1);
+                        mps->unload_tensor(i - 1);
+                    }
+            }
+        } else {
+            if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                for (int ip = 0; ip < (int)mpss.size(); ip++) {
+                    auto &mps = mpss[ip];
+                    auto &left = lefts[ip];
+                    auto &right = rights[ip];
+                    // propagation
+                    if (forward) {
+                        if (i != me->n_sites - 1) {
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                                i + 1, right, mps, forward);
+                            mps->save_tensor(i + 1);
+                            mps->unload_tensor(i + 1);
+                        } else {
+                            mps->tensors[i] =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                                i, right, mps, !forward);
+                            mps->save_tensor(i);
+                            mps->unload_tensor(i);
+                        }
+                    } else {
+                        if (i > 0) {
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                                i - 1, left, mps, forward);
+                            mps->save_tensor(i - 1);
+                            mps->unload_tensor(i - 1);
+                        } else {
+                            mps->tensors[i] =
+                                make_shared<SparseMatrix<S, FLS>>();
+                            MovingEnvironment<S, FL, FLS>::contract_one_dot(
+                                i, left, mps, !forward);
+                            mps->save_tensor(i);
+                            mps->unload_tensor(i);
+                        }
+                    }
+                }
+            }
+            get<1>(pdi) = 0;
+            get<2>(pdi) = 1E-24;
+        }
+        for (int ip = (int)mpss.size() - 1; ip >= 0; ip--) {
+            if (rights.size() != 0) {
+                rights[ip]->info->deallocate();
+                rights[ip]->deallocate();
+            }
+            if (lefts.size() != 0) {
+                lefts[ip]->info->deallocate();
+                lefts[ip]->deallocate();
+            }
+            if (dms.size() != 0) {
+                dms[ip]->info->deallocate();
+                dms[ip]->deallocate();
+            }
+        }
+        for (auto &old_wfn : old_wfns) {
+            old_wfn->info->deallocate();
+            old_wfn->deallocate();
+        }
+        for (auto &mps : mpss) {
+            if (forward) {
+                if (i != me->n_sites - 1) {
+                    mps->canonical_form[i] = 'L';
+                    mps->canonical_form[i + 1] = 'S';
+                } else
+                    mps->canonical_form[i] = 'K';
+            } else {
+                if (i > 0) {
+                    mps->canonical_form[i - 1] = 'K';
+                    mps->canonical_form[i] = 'R';
+                } else
+                    mps->canonical_form[i] = 'S';
+            }
+            mps->save_data();
+        }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        vector<pair<shared_ptr<OpExpr<S>>, FLX>> expectations(
+            get<0>(pdi).size());
+        for (size_t k = 0; k < get<0>(pdi).size(); k++)
+            expectations[k] =
+                make_pair(get<0>(pdi)[k].first, (FLX)get<0>(pdi)[k].second);
+        return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
+                         get<2>(pdi));
+    }
     Iteration update_one_dot(int i, bool forward, bool propagate,
                              ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         frame->activate(0);
@@ -4486,9 +4728,12 @@ struct Expect {
                 me->ket->canonical_form[i] == 'M')
                 it = update_multi_one_dot(i, forward, propagate, bra_bond_dim,
                                           ket_bond_dim);
-            else
+            else if (!zero_dot_algo)
                 it = update_one_dot(i, forward, propagate, bra_bond_dim,
                                     ket_bond_dim);
+            else
+                it = update_zero_dot(i, forward, propagate, bra_bond_dim,
+                                     ket_bond_dim);
         }
         if (store_bra_spectra || store_ket_spectra) {
             const int bond_update_idx =

@@ -571,7 +571,7 @@ TEST_F(TestNPDM, TestSU2) {
 
     ubond_t bond_dim = 200;
 
-    for (int dot = 1; dot <= 2; dot++) {
+    for (int dot = 0; dot <= 2; dot++) {
 
         // MPSInfo
         shared_ptr<MPSInfo<SU2>> mps_info =
@@ -581,7 +581,7 @@ TEST_F(TestNPDM, TestSU2) {
         // MPS
         Random::rand_seed(0);
         shared_ptr<MPS<SU2, double>> mps =
-            make_shared<MPS<SU2, double>>(norb, 0, dot);
+            make_shared<MPS<SU2, double>>(norb, 0, max(dot, 1));
         mps->initialize(mps_info);
         mps->random_canonicalize();
 
@@ -621,6 +621,7 @@ TEST_F(TestNPDM, TestSU2) {
         // 1PDM
         shared_ptr<Expect<SU2, double, double>> expect =
             make_shared<Expect<SU2, double, double>>(pme, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, dmrg->forward);
 
         MatrixRef dm = expect->get_1pdm_spatial();
@@ -686,6 +687,7 @@ TEST_F(TestNPDM, TestSU2) {
         // 2PDM
         expect =
             make_shared<Expect<SU2, double, double>>(p2me, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, mps->center == 0);
 
         int m[6] = {0, 0, 0, 0, 0, 0};
@@ -796,6 +798,7 @@ TEST_F(TestNPDM, TestSU2) {
         // 1NPC
         expect =
             make_shared<Expect<SU2, double, double>>(nme, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, mps->center == 0);
 
         MatrixRef dmx = expect->get_1npc_spatial(0);
@@ -947,7 +950,7 @@ TEST_F(TestNPDM, TestSZ) {
 
     ubond_t bond_dim = 200;
 
-    for (int dot = 1; dot <= 2; dot++) {
+    for (int dot = 0; dot <= 2; dot++) {
 
         // MPSInfo
         shared_ptr<MPSInfo<SZ>> mps_info =
@@ -957,7 +960,7 @@ TEST_F(TestNPDM, TestSZ) {
         // MPS
         Random::rand_seed(0);
         shared_ptr<MPS<SZ, double>> mps =
-            make_shared<MPS<SZ, double>>(norb, 0, dot);
+            make_shared<MPS<SZ, double>>(norb, 0, max(dot, 1));
         mps->initialize(mps_info);
         mps->random_canonicalize();
 
@@ -997,6 +1000,7 @@ TEST_F(TestNPDM, TestSZ) {
         // 1PDM
         shared_ptr<Expect<SZ, double, double>> expect =
             make_shared<Expect<SZ, double, double>>(pme, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, mps->center == 0);
 
         MatrixRef dm = expect->get_1pdm_spatial();
@@ -1062,6 +1066,7 @@ TEST_F(TestNPDM, TestSZ) {
         // 2PDM
         expect =
             make_shared<Expect<SZ, double, double>>(p2me, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, mps->center == 0);
 
         int m[6] = {0, 0, 0, 0, 0, 0};
@@ -1172,6 +1177,7 @@ TEST_F(TestNPDM, TestSZ) {
         // 1NPC
         expect =
             make_shared<Expect<SZ, double, double>>(nme, bond_dim, bond_dim);
+        expect->zero_dot_algo = dot == 0;
         expect->solve(true, mps->center == 0);
 
         MatrixRef dmx = expect->get_1npc(0);
@@ -1305,8 +1311,7 @@ TEST_F(TestNPDM, TestSGF) {
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
     SGF vacuum(0);
-    SGF target(fcidump->n_elec(),
-               PointGroup::swap_d2h(fcidump->isym()));
+    SGF target(fcidump->n_elec(), PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
     shared_ptr<HamiltonianQC<SGF, double>> hamil =
         make_shared<HamiltonianQC<SGF, double>>(vacuum, norb, orbsym, fcidump);

@@ -13,7 +13,7 @@ from block2 import VectorUInt8
 import numpy as np
 
 KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
-              "twodot_to_onedot", "twodot", "onedot", "sweep_tol",
+              "twodot_to_onedot", "twodot", "onedot", "zerodot", "sweep_tol",
               "orbitals", "warmup", "nroots", "outputlevel", "prefix",
               "noreorder", "fiedler", "reorder", "gaopt", "nofiedler", "irrep_reorder",
               "num_thrds", "mkl_thrds", "mem", "intmem", "oh", "nonspinadapted",
@@ -202,8 +202,10 @@ def parse(fname):
     diff = set(dic.keys()) - KNOWN_KEYS
     if len(diff) != 0:
         raise ValueError("Unrecognized keys (%s)" % diff)
-    if "onedot" in dic and "twodot_to_onedot" in dic:
-        raise ValueError("onedot conflicits with twodot_to_onedot.")
+    if "zerodot" in dic and ("twodot_to_onedot" in dic or "twodot" in dic):
+        raise ValueError("zerodot conflicits with twodot_to_onedot/twodot.")
+    if "onedot" in dic and ("twodot_to_onedot" in dic or "twodot" in dic):
+        raise ValueError("onedot conflicits with twodot_to_onedot/twodot.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
         raise ValueError("memory unit (%s) should be G" % (dic["mem"][-1]))
     if "intmem" in dic and (not dic["intmem"][-1] in ['g', 'G']):

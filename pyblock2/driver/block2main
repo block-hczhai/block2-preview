@@ -738,7 +738,7 @@ if dic.get("warmup", None) == "occ":
 else:
     occs = None
 
-dot = 1 if "onedot" in dic else 2
+dot = 1 if "onedot" in dic or "zerodot" in dic else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
 read_tags = dic.get("read_mps_tags", "KET").split()
@@ -1907,6 +1907,7 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         expect = XExpect(me, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.zero_dot_algo = "zerodot" in dic
         expect.algo_type = algo_type
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
@@ -2184,6 +2185,7 @@ if not pre_run:
 
         expect = XExpect(me, bmps.info.bond_dim, kmps.info.bond_dim)
         expect.algo_type = algo_type
+        expect.zero_dot_algo = "zerodot" in dic
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         _print("Final canonical form = ", bmps.canonical_form, bmps.center)
