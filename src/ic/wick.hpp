@@ -1914,7 +1914,7 @@ struct WickUGACCSD {
     map<pair<string, int>, vector<WickPermutation>> perm_map;
     map<string, pair<WickTensor, WickExpr>> defs;
     WickExpr h1, h2, e0, h, t1, t2, t, ex1, ex2;
-    WickUGACCSD(bool anti_integral = true) {
+    WickUGACCSD() {
         idx_map[WickIndexTypes::Inactive] = WickIndex::parse_set("pqrsijklmno");
         idx_map[WickIndexTypes::External] = WickIndex::parse_set("pqrsabcdefg");
         perm_map[make_pair("v", 4)] = WickPermutation::qc_phys();
