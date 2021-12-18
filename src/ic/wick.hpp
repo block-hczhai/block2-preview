@@ -258,8 +258,7 @@ struct WickTensor {
         const vector<WickPermutation> &perms = WickPermutation::non_symmetric(),
         WickTensorTypes type = WickTensorTypes::Tensor)
         : name(name), indices(indices),
-          perms(reset_permutations(indices, WickPermutation::complete_set(
-                                                (int)indices.size(), perms))),
+          perms(WickPermutation::complete_set((int)indices.size(), perms)),
           type(type) {}
     static vector<WickPermutation>
     reset_permutations(const vector<WickIndex> &indices,
@@ -636,6 +635,7 @@ struct WickString {
     vector<WickString> substitute(
         const map<string, pair<WickTensor, vector<WickString>>> &defs) const {
         vector<WickString> r = {*this};
+        set<WickIndex> orig_idxs = used_indices();
         r[0].tensors.clear();
         for (auto &wt : tensors) {
             if (!defs.count(wt.name)) {
@@ -648,6 +648,7 @@ struct WickString {
                     for (auto &dx : p.second) {
                         WickString rg = rr;
                         set<WickIndex> used_idxs = rr.used_indices();
+                        used_idxs.insert(orig_idxs.begin(), orig_idxs.end());
                         used_idxs.insert(wt.indices.begin(), wt.indices.end());
                         map<WickIndex, WickIndex> idx_map;
                         assert(p.first.indices.size() == wt.indices.size());
@@ -676,6 +677,14 @@ struct WickString {
                 r = rx;
             }
         }
+        return r;
+    }
+    WickString index_map(const map<string, string> &maps) {
+        WickString r = *this;
+        for (auto &wt : r.tensors)
+            for (auto &wi : wt.indices)
+                if (maps.count(wi.name))
+                    wi.name = maps.at(wi.name);
         return r;
     }
     set<WickIndex> used_indices() const {
@@ -1167,6 +1176,12 @@ struct WickExpr {
         }
         return r;
     }
+    WickExpr index_map(const map<string, string> &maps) const {
+        WickExpr r = *this;
+        for (auto &ws : r.terms)
+            ws = ws.index_map(maps);
+        return r;
+    }
     static WickExpr split_index_types(const WickString &x) {
         vector<WickIndex> vidxs(x.ctr_indices.begin(), x.ctr_indices.end());
         vector<vector<WickIndex>> xctr_idxs = {vidxs};
@@ -1432,7 +1447,7 @@ struct WickExpr {
             });
         assert(!cd_type || !sf_type);
         vector<WickTensor> cd_tensors, ot_tensors;
-        vector<int> cd_idx_map, n_inactive_idxs;
+        vector<int> cd_idx_map, n_inactive_idxs_a, n_inactive_idxs_b;
         int init_sign = 0, final_sign = 0;
         cd_tensors.reserve(x.tensors.size());
         ot_tensors.reserve(x.tensors.size());
@@ -1459,8 +1474,10 @@ struct WickExpr {
         vector<pair<int, int>> ctr_idxs;
         // starting index in ctr_idxs for the given first index in the pair
         vector<int> ctr_cd_idxs(cd_tensors.size() + 1);
-        if (sf_type)
-            n_inactive_idxs.resize(cd_tensors.size() + 1, 0);
+        if (sf_type) {
+            n_inactive_idxs_a.resize(cd_tensors.size() + 1, 0);
+            n_inactive_idxs_b.resize(cd_tensors.size() + 1, 0);
+        }
         for (int i = 0; i < (int)cd_tensors.size(); i++) {
             ctr_cd_idxs[i] = (int)ctr_idxs.size();
             if (sf_type) {
@@ -1475,7 +1492,7 @@ struct WickExpr {
                         if (cd_tensors[i].type < cd_tensors[j].type && ti &&
                             tj) {
                             ctr_idxs.push_back(make_pair(i, j));
-                            n_inactive_idxs[i] = 1;
+                            n_inactive_idxs_a[i] = n_inactive_idxs_b[j] = 1;
                         }
                     } else if (cd_tensors[j].type < cd_tensors[i].type)
                         ctr_idxs.push_back(make_pair(i, j));
@@ -1488,8 +1505,10 @@ struct WickExpr {
             }
         }
         ctr_cd_idxs[cd_tensors.size()] = (int)ctr_idxs.size();
-        for (int i = (int)n_inactive_idxs.size() - 2; i >= 0; i--)
-            n_inactive_idxs[i] += n_inactive_idxs[i + 1];
+        for (int i = (int)n_inactive_idxs_a.size() - 2; i >= 0; i--)
+            n_inactive_idxs_a[i] += n_inactive_idxs_a[i + 1];
+        for (int i = (int)n_inactive_idxs_b.size() - 2; i >= 0; i--)
+            n_inactive_idxs_b[i] += n_inactive_idxs_b[i + 1];
         vector<pair<int, int>> que;
         vector<pair<int, int>> cur_idxs(cd_tensors.size());
         vector<int8_t> cur_idxs_mask(cd_tensors.size(), 0);
@@ -1531,7 +1550,7 @@ struct WickExpr {
         while (!que.empty()) {
             int l = que.back().first, j = que.back().second, k = 0;
             que.pop_back();
-            int a, b, c, d, n_inact = 0;
+            int a, b, c, d, n_inact_a = 0, n_inact_b = 0;
             double inact_fac = 1.0;
             if (l != -1) {
                 cur_idxs[l] = ctr_idxs[j];
@@ -1563,30 +1582,40 @@ struct WickExpr {
                     continue;
                 cur_idxs_mask[c] = cur_idxs_mask[d] = 1;
                 if (sf_type) {
-                    n_inact = 0;
+                    n_inact_a = n_inact_b = 0;
                     for (int i = 0; i < l; i++) {
                         tie(a, b) = cur_idxs[i];
                         inactive_mask[a] |=
-                            n_inactive_idxs[a] - n_inactive_idxs[a + 1];
+                            n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
                         inactive_mask[b] |=
-                            n_inactive_idxs[b] - n_inactive_idxs[b + 1];
+                            n_inactive_idxs_b[b] - n_inactive_idxs_b[b + 1];
                         inactive_mask[cd_idx_map_rev[a]] |= inactive_mask[a];
                         inactive_mask[cd_idx_map_rev[b]] |= inactive_mask[b];
-                        n_inact += n_inactive_idxs[a] - n_inactive_idxs[a + 1];
+                        n_inact_a +=
+                            n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
+                        n_inact_b +=
+                            n_inactive_idxs_b[b] - n_inactive_idxs_b[b + 1];
                         inact_fac *=
                             1 << ((cd_idx_map_rev[a] == b) & inactive_mask[a]);
                         cd_idx_map_rev[cd_idx_map_rev[a]] = cd_idx_map_rev[b];
                         cd_idx_map_rev[cd_idx_map_rev[b]] = cd_idx_map_rev[a];
                     }
                     inactive_mask[c] |=
-                        n_inactive_idxs[c] - n_inactive_idxs[c + 1];
+                        n_inactive_idxs_a[c] - n_inactive_idxs_a[c + 1];
                     inactive_mask[d] |=
-                        n_inactive_idxs[d] - n_inactive_idxs[d + 1];
+                        n_inactive_idxs_b[d] - n_inactive_idxs_b[d + 1];
                     inactive_mask[cd_idx_map_rev[c]] |= inactive_mask[c];
                     inactive_mask[cd_idx_map_rev[d]] |= inactive_mask[d];
-                    n_inact += n_inactive_idxs[c] - n_inactive_idxs[c + 1];
-                    // inactive must be all contracted
-                    if (n_inact + n_inactive_idxs[c + 1] < n_inactive_idxs[0])
+                    n_inact_a +=
+                        n_inactive_idxs_a[c] - n_inactive_idxs_a[c + 1];
+                    n_inact_b +=
+                        n_inactive_idxs_b[d] - n_inactive_idxs_b[d + 1];
+                    // paired inactive must be all contracted
+                    // otherwise it cannot be represented as spin-free operators
+                    if (n_inact_a + n_inactive_idxs_a[c + 1] <
+                            n_inactive_idxs_a[0] &&
+                        n_inact_b + n_inactive_idxs_b[d + 1] <
+                            n_inactive_idxs_b[0])
                         continue;
                     inact_fac *=
                         1 << ((cd_idx_map_rev[c] == d) & inactive_mask[c]);
@@ -1614,7 +1643,8 @@ struct WickExpr {
             if (max_unctr != -1 && cd_tensors.size() - (l + l + 2) > max_unctr)
                 continue;
             if (sf_type) {
-                if (n_inact < n_inactive_idxs[0])
+                if (n_inact_a < n_inactive_idxs_a[0] &&
+                    n_inact_b < n_inactive_idxs_b[0])
                     continue;
                 int sf_n = cd_tensors.size() / 2, tn = sf_n - l - 1;
                 vector<WickIndex> wis(tn * 2);
@@ -1850,6 +1880,15 @@ struct WickCCSD {
         h = (h1 + h2).expand(-1, true).simplify();
         t = (t1 + t2).expand(-1, true).simplify();
     }
+    // h + [h, t] + 0.5 [[h, t1], t1]
+    WickExpr energy_equations(int order = 2) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) *
+                        (hx[i] ^ t).expand((order - 1 - i) * 2).simplify();
+        return amp.expand(0).simplify();
+    }
     // ex1 * (h + [h, t] + 0.5 [[h, t], t] + (1/6) [[[h2, t1], t1], t1])
     WickExpr t1_equations(int order = 4) const {
         vector<WickExpr> hx(5, h);
@@ -1866,6 +1905,77 @@ struct WickCCSD {
         for (int i = 0; i < order; amp = amp + hx[++i])
             hx[i + 1] = (1.0 / (i + 1)) *
                         (hx[i] ^ t).expand((order - i) * 4).simplify();
+        return (ex2 * amp).expand(0).simplify();
+    }
+};
+
+struct WickUGACCSD {
+    map<WickIndexTypes, set<WickIndex>> idx_map;
+    map<pair<string, int>, vector<WickPermutation>> perm_map;
+    map<string, pair<WickTensor, WickExpr>> defs;
+    WickExpr h1, h2, e0, h, t1, t2, t, ex1, ex2;
+    WickUGACCSD(bool anti_integral = true) {
+        idx_map[WickIndexTypes::Inactive] = WickIndex::parse_set("pqrsijklmno");
+        idx_map[WickIndexTypes::External] = WickIndex::parse_set("pqrsabcdefg");
+        perm_map[make_pair("v", 4)] = WickPermutation::qc_phys();
+        perm_map[make_pair("t", 2)] = WickPermutation::non_symmetric();
+        perm_map[make_pair("t", 4)] = WickPermutation::pair_symmetric(2, false);
+        // def of fock matrix
+        defs["h"] = WickExpr::parse_def(
+            "h[pq] = f[pq] \n - 2.0 SUM <j> v[pjqj] \n + SUM <j> v[pjjq]",
+            idx_map, perm_map);
+        h1 = WickExpr::parse("SUM <pq> h[pq] E1[p,q]", idx_map, perm_map)
+                 .substitute(defs);
+        h2 = WickExpr::parse("0.5 SUM <pqrs> v[pqrs] E2[pq,rs]", idx_map,
+                             perm_map);
+        t1 = WickExpr::parse("SUM <ai> t[ai] E1[a,i]", idx_map, perm_map);
+        t2 = WickExpr::parse("0.5 SUM <abij> t[abij] E1[a,i] E1[b,j]", idx_map,
+                             perm_map);
+        ex1 = WickExpr::parse("E1[i,a]", idx_map, perm_map);
+        ex2 = WickExpr::parse("E1[i,a] E1[j,b]", idx_map, perm_map);
+        // hartree-fock reference
+        e0 =
+            WickExpr::parse(
+                "2 SUM <i> h[ii] \n + 2 SUM <ij> v[ijij] \n - SUM <ij> v[ijji]",
+                idx_map, perm_map)
+                .substitute(defs);
+        h = (h1 + h2 - e0).simplify();
+        t = (t1 + t2).simplify();
+    }
+    // h + [h, t] + 0.5 [[h, t1], t1]
+    WickExpr energy_equations(int order = 2) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) * (hx[i] ^ t);
+        return amp.expand(0).simplify();
+    }
+    // ex1 * (h + [h, t] + 0.5 [[h, t], t] + (1/6) [[[h2, t1], t1], t1])
+    WickExpr t1_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        if (order >= 1)
+            amp = amp + (h ^ t);
+        if (order >= 2)
+            amp = amp + 0.5 * ((h ^ t1) ^ t1) + ((h ^ t2) ^ t1);
+        if (order >= 3)
+            amp = amp + (1 / 6.0) * (((h ^ t1) ^ t1) ^ t1);
+        return (ex1 * amp).expand(0).simplify();
+    }
+    // J. Chem. Phys. 89, 7382 (1988) Eq. (17)
+    WickExpr t2_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        if (order >= 1)
+            amp = amp + (h ^ t);
+        if (order >= 2)
+            amp = amp + 0.5 * ((h ^ t1) ^ t1) + ((h ^ t2) ^ t1) +
+                  0.5 * ((h ^ t2) ^ t2);
+        if (order >= 3)
+            amp = amp + (1 / 6.0) * (((h ^ t1) ^ t1) ^ t1) +
+                  0.5 * (((h ^ t2) ^ t1) ^ t1);
+        if (order >= 4)
+            amp = amp + (1 / 24.0) * ((((h ^ t1) ^ t1) ^ t1) ^ t1);
         return (ex2 * amp).expand(0).simplify();
     }
 };

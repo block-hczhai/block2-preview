@@ -12,6 +12,12 @@ class TestWickCCSD : public ::testing::Test {
 
 TEST_F(TestWickCCSD, TestCCSD) {
     WickCCSD wccsd;
+    WickExpr e_ref = WickExpr::parse(R"TEX(
+ + 1.00\sum_{ia}h_{ia}t_{ai}
+ + 0.25\sum_{aibj}v_{ijab}t_{abij}
+ + 0.50\sum_{aibj}v_{ijab}t_{ai}t_{bj}
+)TEX",
+                                     wccsd.idx_map, wccsd.perm_map);
     WickExpr t1_ref = WickExpr::parse(R"TEX(
  + 1.0h_{ai}
  - 1.0\sum_{j}h_{ji}t_{aj}
@@ -108,14 +114,20 @@ TEST_F(TestWickCCSD, TestCCSD) {
  + 1.0\sum_{klcd}v_{klcd}t_{di}t_{cj}t_{bk}t_{al}
 )TEX",
                                 wccsd.idx_map, wccsd.perm_map);
-    WickExpr t1_eq = WickCCSD().t1_equations();
+    WickExpr e_eq = wccsd.energy_equations();
+    // cout << e_eq << endl;
+    // cout << e_ref << endl;
+    WickExpr diff_e = (e_eq - e_ref).simplify();
+    cout << "DIFF E = " << diff_e << endl;
+    EXPECT_TRUE(diff_e.terms.size() == 0);
+    WickExpr t1_eq = wccsd.t1_equations();
     // cout << t1_eq << endl;
     // cout << t1_ref << endl;
     WickExpr diff = (t1_eq - t1_ref).simplify();
     cout << "DIFF T1 = " << diff << endl;
     EXPECT_TRUE(diff.terms.size() == 0);
     for (int i = 0; i <= 4; i++) {
-        WickExpr t2_eq = WickCCSD().t2_equations(i);
+        WickExpr t2_eq = wccsd.t2_equations(i);
         WickExpr x_t2_ref = t2_ref[0];
         for (int j = 1; j <= i; j++)
             x_t2_ref = x_t2_ref + t2_ref[j];
