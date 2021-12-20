@@ -1917,11 +1917,11 @@ if not pre_run:
             dmr = expect.get_1pdm(n_orbs)
             dm = np.array(dmr).copy()
             dmr.deallocate()
-            dm = dm.reshape((dm.shape[0] // 2, 2, dm.shape[1] // 2, 2))
-            dm = np.transpose(dm, (0, 2, 1, 3))
             if "use_general_spin" in dic:
                 dm = dm[None]
             else:
+                dm = dm.reshape((dm.shape[0] // 2, 2, dm.shape[1] // 2, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
                 dm = np.concatenate(
                     [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0)
             if orb_idx is not None:
@@ -1940,7 +1940,7 @@ if not pre_run:
         if nroots == 1:
             dm = do_onepdm(mps, mps)
             if MPI is None or MPI.rank == 0:
-                dmocc = np.diag(dm[0]) + np.diag(dm[1])
+                dmocc = np.diag(np.sum(dm, axis=0))
                 if dmocc.dtype == np.complex128:
                     _print("DMRG OCC = ", "".join(["(%6.3f,%6.3f)" % (np.real(x), np.imag(x)) for x in dmocc]))
                 else:
