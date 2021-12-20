@@ -56,7 +56,8 @@ template <typename S, typename FL> void bind_fl_big_site(py::module &m) {
         .def_readwrite("rule", &ParallelBigSite<S, FL>::rule);
 }
 
-template <typename S, typename FL> void bind_fl_sci_big_site_fock(py::module &m) {
+template <typename S, typename FL>
+void bind_fl_sci_big_site_fock(py::module &m) {
 
     py::class_<SCIFockBigSite<S, FL>, shared_ptr<SCIFockBigSite<S, FL>>,
                BigSite<S, FL>>(m, "SCIFockBigSite")
@@ -75,7 +76,10 @@ template <typename S, typename FL> void bind_fl_sci_big_site_fock(py::module &m)
              py::arg("verbose") = true,
              "Initialization via externally given determinants in `occs`")
         .def_readwrite("excludeQNs", &SCIFockBigSite<S, FL>::excludeQNs)
-        .def_static("ras_space", &SCIFockBigSite<S, FL>::ras_space)
+        .def_static("ras_space", &SCIFockBigSite<S, FL>::ras_space,
+                    py::arg("is_right"), py::arg("norb"), py::arg("nalpha"),
+                    py::arg("nbeta"), py::arg("nelec"),
+                    py::arg("ref") = vector<int>())
         .def_readonly("quantumNumbers", &SCIFockBigSite<S, FL>::quantumNumbers)
         .def_readonly("nOrbOther", &SCIFockBigSite<S, FL>::nOrbOther)
         .def_readonly("nOrbThis", &SCIFockBigSite<S, FL>::nOrbThis)

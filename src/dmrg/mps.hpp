@@ -1193,16 +1193,33 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
     }
     void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
                                      S right_vacuum = S(S::invalid)) override {
-        // Same as in the base class: Create left/right fci dims w/o
-        // restrictions
+        // if target is non-trivial, max_n may be larger in full fci
+        // and target will restrict that max_n (in spin = nelec, for example)
         MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
-        // Restrict left_dims_fci
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
+            StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i]->collect();
+        vector<int> max_ns(n_inactive);
         for (int i = 0; i < n_inactive; ++i) {
             auto &state_info = left_dims_fci[i + 1];
             int max_n = 0;
             for (int q = 0; q < state_info->n; ++q)
                 if (state_info->quanta[q].n() > max_n)
                     max_n = state_info->quanta[q].n();
+            max_ns[i] = max_n;
+        }
+        // Same as in the base class: Create left/right fci dims w/o
+        // restrictions
+        MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
+        // Restrict left_dims_fci
+        for (int i = 0; i < n_inactive; ++i) {
+            auto &state_info = left_dims_fci[i + 1];
+            int max_n = max_ns[i];
             for (int q = 0; q < state_info->n; ++q)
                 if (state_info->quanta[q].n() < max_n - ci_order)
                     state_info->n_states[q] = 0;
@@ -1269,16 +1286,30 @@ template <typename S> struct NEVPTMPSInfo : MPSInfo<S> {
     void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
                                      S right_vacuum = S(S::invalid)) override {
         MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
-        // restrict left_dims_fci
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*left_dims_fci[i], *right_dims_fci[i], target);
+            StateInfo<S>::filter(*right_dims_fci[i], *left_dims_fci[i], target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i]->collect();
+        vector<int> max_ns(n_inactive);
         for (int i = 0; i < n_inactive; ++i) {
             auto &state_info = left_dims_fci[i + 1];
             int max_n = 0;
             for (int q = 0; q < state_info->n; ++q)
                 if (state_info->quanta[q].n() > max_n)
                     max_n = state_info->quanta[q].n();
+            max_ns[i] = max_n;
+        }
+        MPSInfo<S>::set_bond_dimension_full_fci(left_vacuum, right_vacuum);
+        // restrict left_dims_fci
+        for (int i = 0; i < n_inactive; ++i) {
+            auto &state_info = left_dims_fci[i + 1];
+            int max_n = max_ns[i];
             for (int q = 0; q < state_info->n; ++q)
-                if (state_info->quanta[q].n() < max_n - n_ex_inactive ||
-                    state_info->quanta[q].twos() > n_ex_inactive)
+                if (state_info->quanta[q].n() < max_n - n_ex_inactive)
                     state_info->n_states[q] = 0;
                 else if (i == n_inactive - 1 &&
                          state_info->quanta[q].n() != max_n - n_ex_inactive)

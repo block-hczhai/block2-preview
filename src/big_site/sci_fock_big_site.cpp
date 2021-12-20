@@ -492,7 +492,7 @@ SCIFockBigSite<S, FL, typename S::is_sz_t>::SCIFockBigSite(
     }
     // left thawed space
     if (occs.size() == 0 && nMaxEl <= 0)
-        occs = ras_space(isRight, nOrbThis, abs(nMaxBetaEl), abs(nMaxBetaEl),
+        occs = ras_space(isRight, nOrbThis, abs(nMaxAlphaEl), abs(nMaxBetaEl),
                          abs(nMaxEl));
     // CI space
     if (occs.size() == 0) {

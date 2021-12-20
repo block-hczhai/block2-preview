@@ -617,16 +617,24 @@ if pre_run or not no_pre_run:
             xr = min(n_external, n_alpha), min(n_external, n_beta), min(n_external, nelec[0])
         if big_site_method == "fock":
             assert "nonspinadapted" in dic
-            big_left_orig = SCIFockBigSite(
-                n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
+            # special treatment for all aplpha/beta spatial orbtial
+            if len(nelec) == 1 and len(spin) == 1 and nelec[0] == abs(spin[0]):
+                if nelec[0] == spin[0]:
+                    ref = VectorInt([i + i for i in range(n_inactive)])
+                    xl = abs(xl[0]), 0, abs(xl[2])
+                else:
+                    ref = VectorInt([i + i + 1 for i in range(n_inactive)])
+                    xl = 0, abs(xl[1]), abs(xl[2])
+                pocc = SCIFockBigSite.ras_space(False, n_inactive, *xl, ref)
+                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, pocc, True)
+            else:
+                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
             big_right_orig = SCIFockBigSite(
                 n_orbs, n_external, True, fcidump, orb_sym, *xr, True)
         elif big_site_method == "csf":
             assert "nonspinadapted" not in dic
-            big_left_orig = CSFBigSite(n_inactive, abs(
-                xl[-1]), False, fcidump, orb_sym[:n_inactive])
-            big_right_orig = CSFBigSite(n_external, abs(
-                xr[-1]), True, fcidump, orb_sym[-n_external:])
+            big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
+            big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, orb_sym[-n_external:])
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -1653,6 +1661,7 @@ if not pre_run:
             discarded_weights.append(np.array(dmrg.discarded_weights))
             if big_site_method is not None:
                 dmrg.last_site_1site = False
+                dmrg.me.center = mps.center
             dmrg.bond_dims = VectorUBond(bond_dims[tto:])
             dmrg.noises = VectorDouble(noises[tto:])
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])

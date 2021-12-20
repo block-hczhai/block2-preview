@@ -209,12 +209,15 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
     // construct occs vector for left or right ci space from excitations
     // nalpha, nbeta, nelec are max number of electrons
     static vector<vector<int>> ras_space(bool is_right, int norb, int nalpha,
-                                         int nbeta, int nelec) {
+                                         int nbeta, int nelec,
+                                         vector<int> ref = vector<int>()) {
         map<pair<int, pair<int, int>>, vector<vector<int>>> mp;
-        vector<int> ref(is_right ? 0 : norb * 2);
-        if (!is_right)
-            for (int i = 0; i < norb * 2; i++)
-                ref[i] = i;
+        if (ref.size() == 0) {
+            ref = vector<int>(is_right ? 0 : norb * 2);
+            if (!is_right)
+                for (int i = 0; i < norb * 2; i++)
+                    ref[i] = i;
+        }
         mp[make_pair(0, make_pair(0, 0))].push_back(ref);
         for (int i = 1; i <= nelec; i++) {
             for (int ia = 0; ia <= nalpha; ia++) {
