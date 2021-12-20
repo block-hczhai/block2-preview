@@ -613,8 +613,8 @@ if pre_run or not no_pre_run:
             assert (nelec[0] + spin[0]) % 2 == 0
             n_alpha = (nelec[0] + spin[0]) // 2
             n_beta = (nelec[0] - spin[0]) // 2
-            xl = -n_alpha, -n_beta, -nelec[0]
-            xr = n_alpha, n_beta, nelec[0]
+            xl = -min(n_inactive, n_alpha), -min(n_inactive, n_beta), -min(n_inactive, nelec[0])
+            xr = min(n_external, n_alpha), min(n_external, n_beta), min(n_external, nelec[0])
         if big_site_method == "fock":
             assert "nonspinadapted" in dic
             big_left_orig = SCIFockBigSite(
