@@ -41,7 +41,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "use_complex", "real_density_matrix", "expt_algo_type",
               "davidson_max_iter", "davidson_soft_max_iter", "one_body_parallel_rule",
               "n_sub_sweeps", "complex_mps", "split_states", "trans_mps_to_complex",
-              "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra"}
+              "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra",
+              "tran_bra_range", "tran_ket_range"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

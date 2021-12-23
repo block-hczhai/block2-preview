@@ -2111,8 +2111,15 @@ if not pre_run:
     if "restart_tran_onepdm" in dic or "tran_onepdm" in dic:
 
         assert nroots != 1
-        for iroot in range(nroots):
-            for jroot in range(nroots):
+        brar, ketr = range(nroots), range(nroots)
+        if "tran_bra_range" in dic:
+            tbr = [int(x) for x in dic["tran_bra_range"].split()]
+            brar = range(*tbr)
+        if "tran_ket_range" in dic:
+            tkr = [int(x) for x in dic["tran_ket_range"].split()]
+            ketr = range(*tkr)
+        for iroot in brar:
+            for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
                 if len(mps_tags) > 1:
@@ -2254,8 +2261,15 @@ if not pre_run:
     if "restart_tran_twopdm" in dic or "tran_twopdm" in dic:
 
         assert nroots != 1
-        for iroot in range(nroots):
-            for jroot in range(nroots):
+        brar, ketr = range(nroots), range(nroots)
+        if "tran_bra_range" in dic:
+            tbr = [int(x) for x in dic["tran_bra_range"].split()]
+            brar = range(*tbr)
+        if "tran_ket_range" in dic:
+            tkr = [int(x) for x in dic["tran_ket_range"].split()]
+            ketr = range(*tkr)
+        for iroot in brar:
+            for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
                 if len(mps_tags) > 1:
