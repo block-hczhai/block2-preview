@@ -116,6 +116,7 @@ PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>>);
 PYBIND11_MAKE_OPAQUE(map<string, string>);
+PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
 // SZK
 PYBIND11_MAKE_OPAQUE(vector<SZK>);
 // SU2K
@@ -1184,6 +1185,7 @@ template <typename S = void> void bind_data(py::module &m) {
         m.attr("VectorMKLInt") = m.attr("VectorLLInt");
 
     py::bind_map<map<string, string>>(m, "MapStrStr");
+    py::bind_vector<vector<pair<string, string>>>(m, "VectorPStrStr");
 }
 
 template <typename S = void> void bind_types(py::module &m) {

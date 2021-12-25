@@ -24,15 +24,100 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
 
+namespace pybind11 {
+template <typename Set, typename holder_type = std::unique_ptr<Set>,
+          typename... Args>
+class_<Set, holder_type> bind_set_block2(handle scope, std::string const &name,
+                                         Args &&...args) {
+    using Class_ = class_<Set, holder_type>;
+
+    // If the value_type is unregistered (e.g. a converting type) or is itself
+    // registered module-local then make the set binding module-local as well:
+    using T = typename Set::value_type;
+    using ItType = typename Set::iterator;
+
+    auto vtype_info = detail::get_type_info(typeid(T));
+    bool local = !vtype_info || vtype_info->module_local;
+
+    Class_ cl(scope, name.c_str(), pybind11::module_local(local),
+              std::forward<Args>(args)...);
+    cl.def(init<>());
+    cl.def(init<const Set &>(), "Copy constructor");
+    cl.def(init([](iterable it) {
+        auto s = std::unique_ptr<Set>(new Set());
+        for (handle h : it)
+            s->insert(h.cast<T>());
+        return s.release();
+    }));
+    cl.def(self == self);
+    cl.def(self != self);
+    cl.def(
+        "remove",
+        [](Set &s, const T &x) {
+            auto p = s.find(x);
+            if (p != s.end())
+                s.erase(p);
+            else
+                throw value_error();
+        },
+        arg("x"),
+        "Remove the item from the set whose value is x. "
+        "It is an error if there is no such item.");
+    cl.def(
+        "__contains__",
+        [](const Set &s, const T &x) { return s.find(x) != s.end(); }, arg("x"),
+        "Return true if the container contains ``x``.");
+    cl.def(
+        "add", [](Set &s, const T &value) { s.insert(value); }, arg("x"),
+        "Add an item to the set.");
+    cl.def(
+        "clear", [](Set &s) { s.clear(); }, "Clear the contents.");
+    cl.def(
+        "__iter__",
+        [](Set &s) {
+            return make_iterator<return_value_policy::copy, ItType, ItType, T>(
+                s.begin(), s.end());
+        },
+        keep_alive<0, 1>()
+    );
+    cl.def(
+        "__repr__",
+        [name](Set &s) {
+            std::ostringstream os;
+            os << name << '{';
+            for (auto it = s.begin(); it != s.end(); ++it) {
+                if (it != s.begin())
+                    os << ", ";
+                os << *it;
+            }
+            os << '}';
+            return os.str();
+        },
+        "Return the canonical string representation of this set.");
+    cl.def(
+        "__bool__", [](const Set &s) -> bool { return !s.empty(); },
+        "Check whether the set is nonempty");
+    cl.def("__len__", &Set::size);
+
+    return cl;
+}
+} // namespace pybind11
+
 #include "../block2_ic.hpp"
 
 namespace py = pybind11;
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<WickIndex>);
+PYBIND11_MAKE_OPAQUE(std::set<WickIndex>);
 PYBIND11_MAKE_OPAQUE(vector<WickPermutation>);
 PYBIND11_MAKE_OPAQUE(vector<WickTensor>);
 PYBIND11_MAKE_OPAQUE(vector<WickString>);
+PYBIND11_MAKE_OPAQUE(vector<WickExpr>);
+PYBIND11_MAKE_OPAQUE(map<WickIndexTypes, std::set<WickIndex>>);
+PYBIND11_MAKE_OPAQUE(map<string, pair<WickTensor, vector<WickString>>>);
+PYBIND11_MAKE_OPAQUE(map<pair<string, int>, vector<WickPermutation>>);
+PYBIND11_MAKE_OPAQUE(map<string, pair<WickTensor, WickExpr>>);
 
 template <typename S = void> void bind_nd_array(py::module &m) {
     py::class_<NDArray, shared_ptr<NDArray>>(m, "NDArray",
@@ -177,7 +262,12 @@ template <typename S = void> void bind_wick(py::module &m) {
         .value("Nothing", WickIndexTypes::None)
         .value("Inactive", WickIndexTypes::Inactive)
         .value("Active", WickIndexTypes::Active)
-        .value("External", WickIndexTypes::External);
+        .value("External", WickIndexTypes::External)
+        .value("Alpha", WickIndexTypes::Alpha)
+        .value("Beta", WickIndexTypes::Beta)
+        .def(py::self & py::self)
+        .def(py::self | py::self)
+        .def(~py::self);
 
     py::enum_<WickTensorTypes>(m, "WickTensorTypes", py::arithmetic())
         .value("CreationOperator", WickTensorTypes::CreationOperator)
@@ -188,67 +278,224 @@ template <typename S = void> void bind_wick(py::module &m) {
 
     py::class_<WickIndex, shared_ptr<WickIndex>>(m, "WickIndex")
         .def(py::init<>())
-        .def(py::init<const string &>());
+        .def(py::init<const string &>())
+        .def(py::init<const string &, WickIndexTypes>())
+        .def_readwrite("name", &WickIndex::name)
+        .def_readwrite("types", &WickIndex::types)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def("__hash__", &WickIndex::hash)
+        .def("__repr__",
+             [](WickIndex *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("has_types", &WickIndex::has_types)
+        .def("is_short", &WickIndex::is_short)
+        .def("with_no_types", &WickIndex::with_no_types)
+        .def_static("parse", &WickIndex::parse)
+        .def_static("add_types", &WickIndex::add_types)
+        .def_static("parse_with_types", &WickIndex::parse_with_types)
+        .def_static("parse_set", &WickIndex::parse_set)
+        .def_static("parse_set_with_types", &WickIndex::parse_set_with_types);
 
     py::bind_vector<vector<WickIndex>>(m, "VectorWickIndex");
+    py::bind_set_block2<std::set<WickIndex>>(m, "SetWickIndex");
+    py::bind_map<map<WickIndexTypes, set<WickIndex>>>(m,
+                                                      "MapWickIndexTypesSet");
 
     py::class_<WickPermutation, shared_ptr<WickPermutation>>(m,
                                                              "WickPermutation")
         .def(py::init<>())
         .def(py::init<const vector<int16_t> &>())
-        .def(py::init<const vector<int16_t> &, bool>());
+        .def(py::init<const vector<int16_t> &, bool>())
+        .def_readwrite("data", &WickPermutation::data)
+        .def_readwrite("negative", &WickPermutation::negative)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(py::self * py::self)
+        .def("__hash__", &WickPermutation::hash)
+        .def("__repr__",
+             [](WickPermutation *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def_static("complete_set", &WickPermutation::complete_set)
+        .def_static("non_symmetric", &WickPermutation::non_symmetric)
+        .def_static("two_symmetric", &WickPermutation::two_symmetric)
+        .def_static("qc_chem", &WickPermutation::qc_chem)
+        .def_static("qc_phys", &WickPermutation::qc_phys)
+        .def_static("four_anti", &WickPermutation::four_anti)
+        .def_static("pair_symmetric", &WickPermutation::pair_symmetric,
+                    py::arg("n"), py::arg("hermitian") = false);
+
+    py::bind_vector<vector<WickPermutation>>(m, "VectorWickPermutation");
+    py::bind_map<map<pair<string, int>, vector<WickPermutation>>>(
+        m, "MapPStrIntVectorWickPermutation");
 
     py::class_<WickTensor, shared_ptr<WickTensor>>(m, "WickTensor")
         .def(py::init<>())
         .def(py::init<const string &, const vector<WickIndex> &>())
+        .def(py::init<const string &, const vector<WickIndex> &,
+                      const vector<WickPermutation> &>())
+        .def(py::init<const string &, const vector<WickIndex> &,
+                      const vector<WickPermutation> &, WickTensorTypes>())
+        .def_readwrite("name", &WickTensor::name)
+        .def_readwrite("indices", &WickTensor::indices)
+        .def_readwrite("perms", &WickTensor::perms)
+        .def_readwrite("type", &WickTensor::type)
+        .def_static("reset_permutations", &WickTensor::reset_permutations)
+        .def_static("parse", &WickTensor::parse)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(py::self * WickPermutation())
+        .def("fermi_type", &WickTensor::fermi_type)
+        .def("to_str", &WickTensor::to_str)
+        .def("__repr__",
+             [](WickTensor *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
         .def_static("kronecker_delta", &WickTensor::kronecker_delta)
         .def_static("spin_free", &WickTensor::spin_free)
-        .def_static("cre", (WickTensor(*)(const WickIndex &, const string &)) &
-                               WickTensor::cre)
+        .def_static("spin_free_density_matrix",
+                    &WickTensor::spin_free_density_matrix)
+        .def_static("cre",
+                    (WickTensor(*)(const WickIndex &, const string &)) &
+                        WickTensor::cre,
+                    py::arg("index"), py::arg("name") = string("C"))
         .def_static("cre",
                     (WickTensor(*)(const WickIndex &,
                                    const map<WickIndexTypes, set<WickIndex>> &,
                                    const string &)) &
-                        WickTensor::cre)
-        .def_static("des", (WickTensor(*)(const WickIndex &, const string &)) &
-                               WickTensor::des)
+                        WickTensor::cre,
+                    py::arg("index"), py::arg("idx_map"),
+                    py::arg("name") = string("C"))
+        .def_static("des",
+                    (WickTensor(*)(const WickIndex &, const string &)) &
+                        WickTensor::des,
+                    py::arg("index"), py::arg("name") = string("D"))
         .def_static("des",
                     (WickTensor(*)(const WickIndex &,
                                    const map<WickIndexTypes, set<WickIndex>> &,
                                    const string &)) &
-                        WickTensor::des);
+                        WickTensor::des,
+                    py::arg("index"), py::arg("idx_map"),
+                    py::arg("name") = string("D"))
+        .def("sort",
+             [](WickTensor *self) {
+                 double factor = 1.0;
+                 self->sort(factor);
+                 return factor;
+             })
+        .def("get_permutation_rules", &WickTensor::get_permutation_rules);
+
+    py::bind_vector<vector<WickTensor>>(m, "VectorWickTensor");
 
     py::class_<WickString, shared_ptr<WickString>>(m, "WickString")
         .def(py::init<>())
+        .def(py::init<const WickTensor &>())
+        .def(py::init<const WickTensor &, double>())
         .def(py::init<const vector<WickTensor> &>())
-        .def(py::init<const vector<WickTensor> &, const set<WickIndex> &>());
+        .def(py::init<const vector<WickTensor> &, const set<WickIndex> &>())
+        .def(py::init<const vector<WickTensor> &, const set<WickIndex> &,
+                      double>())
+        .def_readwrite("tensors", &WickString::tensors)
+        .def_readwrite("ctr_indices", &WickString::ctr_indices)
+        .def_readwrite("factor", &WickString::factor)
+        .def("abs_equal_to", &WickString::abs_equal_to)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(py::self * py::self)
+        .def(py::self + py::self)
+        .def(py::self * double())
+        .def("__abs__", &WickString::abs)
+        .def_static("parse", &WickString::parse)
+        .def("substitute", &WickString::substitute)
+        .def("index_map", &WickString::index_map)
+        .def("used_indices", &WickString::used_indices)
+        .def("group_less", &WickString::group_less)
+        .def("has_inactive_ops", &WickString::has_inactive_ops)
+        .def("has_external_ops", &WickString::has_external_ops)
+        .def("simple_sort", &WickString::simple_sort)
+        .def("quick_sort", &WickString::quick_sort)
+        .def("simplify_delta", &WickString::simplify_delta)
+        .def("__repr__", [](WickString *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+
+    py::bind_vector<vector<WickString>>(m, "VectorWickString");
+    py::bind_map<map<string, pair<WickTensor, vector<WickString>>>>(
+        m, "MapStrPVectorWickString");
 
     py::class_<WickExpr, shared_ptr<WickExpr>>(m, "WickExpr")
         .def(py::init<>())
         .def(py::init<const WickString &>())
         .def(py::init<const vector<WickString> &>())
+        .def_readwrite("terms", &WickExpr::terms)
         .def(py::self == py::self)
         .def(py::self != py::self)
         .def(py::self < py::self)
         .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def(py::self ^ py::self)
+        .def(py::self & py::self)
         .def(py::self * py::self)
         .def(py::self * double())
         .def(double() * py::self)
-        .def("expand", &WickExpr::expand, py::arg("full_ctr") = false,
+        .def_static("parse", &WickExpr::parse, py::arg("tex_expr"),
+                    py::arg("idx_map"),
+                    py::arg("perm_map") =
+                        map<pair<string, int>, vector<WickPermutation>>())
+        .def_static("parse_def", &WickExpr::parse_def, py::arg("tex_expr"),
+                    py::arg("idx_map"),
+                    py::arg("perm_map") =
+                        map<pair<string, int>, vector<WickPermutation>>())
+        .def_static("split_index_types_static",
+                    (WickExpr(*)(const WickString &)) &
+                        WickExpr::split_index_types)
+        .def("split_index_types",
+             (WickExpr(WickExpr::*)() const) & WickExpr::split_index_types)
+        .def("to_einsum", &WickExpr::to_einsum)
+        .def_static("to_einsum_add_indent", &WickExpr::to_einsum_add_indent,
+                    py::arg("x"), py::arg("indent") = 4)
+        .def("substitute", &WickExpr::substitute)
+        .def("index_map", &WickExpr::index_map)
+        .def("expand", &WickExpr::expand, py::arg("max_unctr") = -1,
              py::arg("no_ctr") = false)
         .def("simple_sort", &WickExpr::simple_sort)
         .def("simplify_delta", &WickExpr::simplify_delta)
         .def("simplify_zero", &WickExpr::simplify_zero)
         .def("simplify_merge", &WickExpr::simplify_merge)
         .def("simplify", &WickExpr::simplify)
+        .def("remove_external", &WickExpr::remove_external)
+        .def("remove_inactive", &WickExpr::remove_inactive)
+        .def("add_spin_free_trans_symm", &WickExpr::add_spin_free_trans_symm)
+        .def("conjugate", &WickExpr::conjugate)
         .def("__repr__", [](WickExpr *self) {
             stringstream ss;
             ss << *self;
             return ss.str();
         });
 
+    py::bind_vector<vector<WickExpr>>(m, "VectorWickExpr");
+    py::bind_map<map<string, pair<WickTensor, WickExpr>>>(
+        m, "MapStrPWickTensorExpr");
+
     py::class_<WickCCSD, shared_ptr<WickCCSD>>(m, "WickCCSD")
         .def(py::init<>())
+        .def(py::init<bool>())
+        .def_readwrite("idx_map", &WickCCSD::idx_map)
+        .def_readwrite("perm_map", &WickCCSD::perm_map)
         .def_readwrite("h1", &WickCCSD::h1)
         .def_readwrite("h2", &WickCCSD::h2)
         .def_readwrite("h", &WickCCSD::h)
@@ -257,6 +504,82 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def_readwrite("t", &WickCCSD::t)
         .def_readwrite("ex1", &WickCCSD::ex1)
         .def_readwrite("ex2", &WickCCSD::ex2)
+        .def("energy_equations", &WickCCSD::energy_equations)
         .def("t1_equations", &WickCCSD::t1_equations)
         .def("t2_equations", &WickCCSD::t2_equations);
+
+    py::class_<WickUGACCSD, shared_ptr<WickUGACCSD>>(m, "WickUGACCSD")
+        .def(py::init<>())
+        .def_readwrite("idx_map", &WickUGACCSD::idx_map)
+        .def_readwrite("perm_map", &WickUGACCSD::perm_map)
+        .def_readwrite("defs", &WickUGACCSD::defs)
+        .def_readwrite("h1", &WickUGACCSD::h1)
+        .def_readwrite("h2", &WickUGACCSD::h2)
+        .def_readwrite("h", &WickUGACCSD::h)
+        .def_readwrite("e0", &WickUGACCSD::e0)
+        .def_readwrite("t1", &WickUGACCSD::t1)
+        .def_readwrite("t2", &WickUGACCSD::t2)
+        .def_readwrite("t", &WickUGACCSD::t)
+        .def_readwrite("ex1", &WickUGACCSD::ex1)
+        .def_readwrite("ex2", &WickUGACCSD::ex2)
+        .def("energy_equations", &WickUGACCSD::energy_equations)
+        .def("t1_equations", &WickUGACCSD::t1_equations)
+        .def("t2_equations", &WickUGACCSD::t2_equations);
+
+    py::class_<WickSCNEVPT2, shared_ptr<WickSCNEVPT2>>(m, "WickSCNEVPT2")
+        .def(py::init<>())
+        .def_readwrite("idx_map", &WickSCNEVPT2::idx_map)
+        .def_readwrite("perm_map", &WickSCNEVPT2::perm_map)
+        .def_readwrite("defs", &WickSCNEVPT2::defs)
+        .def_readwrite("sub_spaces", &WickSCNEVPT2::sub_spaces)
+        .def_readwrite("heff", &WickSCNEVPT2::heff)
+        .def_readwrite("hw", &WickSCNEVPT2::hw)
+        .def_readwrite("hd", &WickSCNEVPT2::hd)
+        .def("build_communicator",
+             (WickExpr(WickSCNEVPT2::*)(const string &, const string &,
+                                        bool do_sum) const) &
+                 WickSCNEVPT2::build_communicator,
+             py::arg("bra"), py::arg("ket"), py::arg("do_sum") = true)
+        .def("build_communicator",
+             (WickExpr(WickSCNEVPT2::*)(const string &, bool do_sum) const) &
+                 WickSCNEVPT2::build_communicator,
+             py::arg("ket"), py::arg("do_sum") = true)
+        .def("build_norm", &WickSCNEVPT2::build_norm, py::arg("ket"),
+             py::arg("do_sum") = true)
+        .def("to_einsum_orb_energies", &WickSCNEVPT2::to_einsum_orb_energies)
+        .def("to_einsum_sum_restriction",
+             &WickSCNEVPT2::to_einsum_sum_restriction)
+        .def("to_einsum", &WickSCNEVPT2::to_einsum);
+
+    py::class_<WickICNEVPT2, shared_ptr<WickICNEVPT2>, WickSCNEVPT2>(
+        m, "WickICNEVPT2")
+        .def(py::init<>())
+        .def("build_norm", &WickICNEVPT2::build_norm, py::arg("bra"),
+             py::arg("ket"), py::arg("do_sum") = true)
+        .def("build_rhs", &WickICNEVPT2::build_rhs, py::arg("bra"),
+             py::arg("ket"), py::arg("do_sum") = true)
+        .def("to_einsum_orb_energies", &WickICNEVPT2::to_einsum_orb_energies)
+        .def("to_einsum_sum_restriction",
+             &WickICNEVPT2::to_einsum_sum_restriction, py::arg("tensor"),
+             py::arg("restrict_cas") = true, py::arg("no_eq") = false)
+        .def("to_einsum", &WickICNEVPT2::to_einsum);
+
+    py::class_<WickICMRCI, shared_ptr<WickICMRCI>>(m, "WickICMRCI")
+        .def(py::init<>())
+        .def_readwrite("idx_map", &WickICMRCI::idx_map)
+        .def_readwrite("perm_map", &WickICMRCI::perm_map)
+        .def_readwrite("sub_spaces", &WickICMRCI::sub_spaces)
+        .def_readwrite("h1", &WickICMRCI::h1)
+        .def_readwrite("h2", &WickICMRCI::h2)
+        .def_readwrite("h", &WickICMRCI::h)
+        .def("build_hamiltonian", &WickICMRCI::build_hamiltonian,
+             py::arg("bra"), py::arg("ket"), py::arg("do_sum") = true,
+             py::arg("do_comm") = true)
+        .def("build_overlap", &WickICMRCI::build_overlap, py::arg("bra"),
+             py::arg("ket"), py::arg("do_sum") = true)
+        .def("to_einsum_zeros", &WickICMRCI::to_einsum_zeros)
+        .def("to_einsum_sum_restriction",
+             &WickICMRCI::to_einsum_sum_restriction, py::arg("tensor"),
+             py::arg("eq_pattern") = string("+"))
+        .def("to_einsum", &WickICMRCI::to_einsum);
 }

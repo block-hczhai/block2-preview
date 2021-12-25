@@ -213,18 +213,24 @@ struct WickPermutation {
     static vector<WickPermutation> two_symmetric() {
         return vector<WickPermutation>{WickPermutation({1, 0}, false)};
     }
+    // chem =  vijkl Ci Ck Dl Dj
     static vector<WickPermutation> qc_chem() {
         return vector<WickPermutation>{WickPermutation({2, 3, 0, 1}, false),
                                        WickPermutation({1, 0, 2, 3}, false),
                                        WickPermutation({0, 1, 3, 2}, false)};
     }
+    // phys = vijkl Ci Cj Dl Dk
+    // chem -> phys : i = 0 j = 2 l = 3 k = 1 (eph = eri.transpose(0, 2, 1, 3))
+    // phys -> chem : eri = eph.transpose(0, 2, 1, 3)
     static vector<WickPermutation> qc_phys() {
         return vector<WickPermutation>{WickPermutation({0, 3, 2, 1}, false),
                                        WickPermutation({2, 1, 0, 3}, false),
                                        WickPermutation({1, 0, 3, 2}, false)};
     }
+    // anti = eri.transpose(0, 2, 1, 3) - eri.transpose(0, 2, 3, 1)
     static vector<WickPermutation> four_anti() {
-        return vector<WickPermutation>{WickPermutation({1, 0, 2, 3}, true),
+        return vector<WickPermutation>{WickPermutation({2, 3, 0, 1}, false),
+                                       WickPermutation({1, 0, 2, 3}, true),
                                        WickPermutation({0, 1, 3, 2}, true)};
     }
     static vector<WickPermutation> pair_symmetric(int n,
@@ -1126,6 +1132,17 @@ struct WickExpr {
             if (n_br != 0)
                 ss << ", ident" << n_br;
             ss << ", optimize=True)\n";
+        }
+        return ss.str();
+    }
+    static string to_einsum_add_indent(const string &x, int indent = 4) {
+        stringstream ss;
+        for (size_t i = 0, j = 0; j != string::npos; i = j + 1) {
+            ss << string(indent, ' ');
+            j = x.find_first_of("\n", i);
+            if (j > i)
+                ss << x.substr(i, j - i);
+            ss << endl;
         }
         return ss.str();
     }
@@ -2094,17 +2111,6 @@ struct WickSCNEVPT2 {
         ss << "))" << endl;
         return ss.str() + sr.str();
     }
-    string to_einsum_add_indent(const string &x, int indent = 4) const {
-        stringstream ss;
-        for (size_t i = 0, j = 0; j != string::npos; i = j + 1) {
-            ss << string(indent, ' ');
-            j = x.find_first_of("\n", i);
-            if (j > i)
-                ss << x.substr(i, j - i);
-            ss << endl;
-        }
-        return ss.str();
-    }
     string to_einsum() const {
         stringstream ss;
         WickTensor norm, ener, deno;
@@ -2127,7 +2133,7 @@ struct WickSCNEVPT2 {
             sr << "xener = -(norm[idx] / hexp[idx]).sum()" << endl;
             sr << "xnorm = norm[idx].sum()" << endl;
             sr << "return xnorm, xener" << endl;
-            ss << to_einsum_add_indent(sr.str()) << endl;
+            ss << WickExpr::to_einsum_add_indent(sr.str()) << endl;
         }
         return ss.str();
     }
@@ -2350,7 +2356,7 @@ struct WickICNEVPT2 : WickSCNEVPT2 {
                 }
             }
             sr << "return -(np.linalg.solve(xh, xr) * xr).sum()" << endl;
-            ss << to_einsum_add_indent(sr.str()) << endl;
+            ss << WickExpr::to_einsum_add_indent(sr.str()) << endl;
         }
         return ss.str();
     }
@@ -2426,17 +2432,6 @@ struct WickICMRCI {
             .remove_external()
             .remove_inactive()
             .simplify();
-    }
-    string to_einsum_add_indent(const string &x, int indent = 4) const {
-        stringstream ss;
-        for (size_t i = 0, j = 0; j != string::npos; i = j + 1) {
-            ss << string(indent, ' ');
-            j = x.find_first_of("\n", i);
-            if (j > i)
-                ss << x.substr(i, j - i);
-            ss << endl;
-        }
-        return ss.str();
     }
     string to_einsum_zeros(const WickTensor &tensor) const {
         stringstream ss;
@@ -2533,7 +2528,7 @@ struct WickICMRCI {
             if (mkey == "reference") {
                 sr << "xn = np.ones((1, 1, 1))" << endl;
                 sr << "xnorms['" << mkey << "'] = xn" << endl;
-                ss << to_einsum_add_indent(sr.str(), 0) << endl;
+                ss << WickExpr::to_einsum_add_indent(sr.str(), 0) << endl;
                 continue;
             }
             string nkey = skey;
@@ -2603,7 +2598,7 @@ struct WickICMRCI {
             sr << "print(np.linalg.norm(xn))" << endl;
             sr << "assert np.linalg.norm(xn - xn.transpose(0, 2, 1)) < 1E-10"
                << endl;
-            ss << to_einsum_add_indent(sr.str(), 0) << endl;
+            ss << WickExpr::to_einsum_add_indent(sr.str(), 0) << endl;
         }
         sk << "]" << endl << endl;
         for (int k = 0; k < (int)sub_spaces.size(); k++) {
@@ -2749,7 +2744,7 @@ struct WickICMRCI {
                 }
                 sr << "xhmats[('" << norm_keys[b] << "', '" << norm_keys[k]
                    << "')] = xh" << endl;
-                ss << to_einsum_add_indent(sr.str(), 0) << endl;
+                ss << WickExpr::to_einsum_add_indent(sr.str(), 0) << endl;
             }
         }
         return sk.str() + ss.str();
