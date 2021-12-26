@@ -47,13 +47,20 @@ enum struct WickIndexTypes : uint8_t {
     Active = 2,
     External = 4,
     Alpha = 8,
-    Beta = 16
+    Beta = 16,
+    AlphaBeta = 8 | 16,
+    InactiveAlpha = 8 | 1,
+    ActiveAlpha = 8 | 2,
+    ExternalAlpha = 8 | 4,
+    InactiveBeta = 16 | 1,
+    ActiveBeta = 16 | 2,
+    ExternalBeta = 16 | 4,
 };
 
 inline string to_str(const WickIndexTypes c) {
     const static string repr[] = {"N", "I", "A", "IA", "E", "EI", "EA", "EIA",
-                                  "A", "",  "",  "",   "",  "",   "",   "",
-                                  "B", "",  "",  "",   "",  "",   "",   ""};
+                                  "A", "i", "a", "ia", "e", "ei", "ea", "eia",
+                                  "B", "I", "A", "IA", "E", "EI", "EA", "EIA"};
     return repr[(uint8_t)c];
 }
 
@@ -981,7 +988,11 @@ struct WickString {
                 if (ia != ib) {
                     if ((ia.types != WickIndexTypes::None ||
                          ib.types != WickIndexTypes::None) &&
-                        (ia.types & ib.types) == WickIndexTypes::None)
+                        (((ia.types & ib.types) &
+                          (~WickIndexTypes::AlphaBeta)) ==
+                             WickIndexTypes::None ||
+                         (ia.types & WickIndexTypes::AlphaBeta) !=
+                             (ib.types & WickIndexTypes::AlphaBeta)))
                         xfactor = 0;
                     else if (!xctr_indices.count(ia) &&
                              !xctr_indices.count(ib)) {

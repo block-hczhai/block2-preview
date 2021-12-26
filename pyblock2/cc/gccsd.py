@@ -154,7 +154,7 @@ GCCSD = WickGCCSD
 
 if __name__ == "__main__":
 
-    mol = gto.M(atom = 'O 0 0 0; H 0 1 0; H 0 0 1', basis='6-31g')
+    mol = gto.M(atom = 'O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.GHF(mol).run(conv_tol=1E-14)
     ccsd = gccsd.GCCSD(mf).run()
     wccsd = WickGCCSD(mf).run()

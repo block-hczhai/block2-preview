@@ -78,8 +78,7 @@ class_<Set, holder_type> bind_set_block2(handle scope, std::string const &name,
             return make_iterator<return_value_policy::copy, ItType, ItType, T>(
                 s.begin(), s.end());
         },
-        keep_alive<0, 1>()
-    );
+        keep_alive<0, 1>());
     cl.def(
         "__repr__",
         [name](Set &s) {
@@ -265,6 +264,13 @@ template <typename S = void> void bind_wick(py::module &m) {
         .value("External", WickIndexTypes::External)
         .value("Alpha", WickIndexTypes::Alpha)
         .value("Beta", WickIndexTypes::Beta)
+        .value("AlphaBeta", WickIndexTypes::AlphaBeta)
+        .value("InactiveAlpha", WickIndexTypes::InactiveAlpha)
+        .value("ActiveAlpha", WickIndexTypes::ActiveAlpha)
+        .value("ExternalAlpha", WickIndexTypes::ExternalAlpha)
+        .value("InactiveBeta", WickIndexTypes::InactiveBeta)
+        .value("ActiveBeta", WickIndexTypes::ActiveBeta)
+        .value("ExternalBeta", WickIndexTypes::ExternalBeta)
         .def(py::self & py::self)
         .def(py::self | py::self)
         .def(~py::self);
