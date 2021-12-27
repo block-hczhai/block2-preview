@@ -988,9 +988,13 @@ struct WickString {
                 if (ia != ib) {
                     if ((ia.types != WickIndexTypes::None ||
                          ib.types != WickIndexTypes::None) &&
-                        (((ia.types & ib.types) &
-                          (~WickIndexTypes::AlphaBeta)) ==
-                             WickIndexTypes::None ||
+                        ((((ia.types & (~WickIndexTypes::AlphaBeta)) !=
+                               WickIndexTypes::None ||
+                           (ib.types & (~WickIndexTypes::AlphaBeta)) !=
+                               WickIndexTypes::None) &&
+                          ((ia.types & ib.types) &
+                           (~WickIndexTypes::AlphaBeta)) ==
+                              WickIndexTypes::None) ||
                          (ia.types & WickIndexTypes::AlphaBeta) !=
                              (ib.types & WickIndexTypes::AlphaBeta)))
                         xfactor = 0;
@@ -1842,9 +1846,10 @@ inline WickExpr operator&(const WickExpr &a, const WickExpr &b) noexcept {
 }
 
 struct WickGHF {
-    map<WickIndexTypes, set<WickIndex>> idx_map[4]; // aa, bb, ab, ba
+    vector<map<WickIndexTypes, set<WickIndex>>> idx_map; // aa, bb, ab, ba
     map<pair<string, int>, vector<WickPermutation>> perm_map;
     WickGHF() {
+        idx_map.resize(4);
         idx_map[0][WickIndexTypes::Alpha] = WickIndex::parse_set("ijkl");
         idx_map[1][WickIndexTypes::Beta] = WickIndex::parse_set("ijkl");
         idx_map[2][WickIndexTypes::Alpha] = WickIndex::parse_set("ij");
