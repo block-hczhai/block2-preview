@@ -17,8 +17,10 @@
 #
 #
 
-# UCCSD in spatial orbitals with equations derived on the fly
-# need internal contraction module of block2
+"""
+UCCSD in spatial orbitals with equations derived on the fly.
+need internal contraction module of block2.
+"""
 
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
@@ -143,7 +145,7 @@ def fix_eri_permutations(eq):
 for eq in [en_eq, t1a_eq, t1b_eq, t2aa_eq, t2bb_eq, t2ab_eq, t2ba_eq]:
     fix_eri_permutations(eq)
 
-from pyscf import gto, scf, ao2mo
+from pyscf import ao2mo
 from pyscf.cc import uccsd
 
 def wick_energy(cc, t1, t2, eris):
@@ -262,7 +264,8 @@ UCCSD = WickUCCSD
 
 if __name__ == "__main__":
 
-    mol = gto.M(atom = 'O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
+    from pyscf import gto, scf
+    mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.UHF(mol).run(conv_tol=1E-14)
     ccsd = uccsd.UCCSD(mf).run()
     wccsd = WickUCCSD(mf).run()

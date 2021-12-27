@@ -17,8 +17,10 @@
 #
 #
 
-# UGA-CCSD [J. Chem. Phys. 89, 7382 (1988)] with equations derived on the fly
-# need internal contraction module of block2
+"""
+UGA-CCSD [J. Chem. Phys. 89, 7382 (1988)] with equations derived on the fly.
+need internal contraction module of block2.
+"""
 
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
@@ -78,8 +80,7 @@ t2_eq = FC(ex2 * sum(HBarTerms[:5], Z))
 
 # need some rearrangements
 t1_eq = 0.5 * t1_eq
-ijmap = MapStrStr()
-ijmap["i"], ijmap["j"] = "j", "i"
+ijmap = MapStrStr({ 'i': 'j', 'j': 'i' })
 t2_eq = SP((1.0 / 3.0) * (t2_eq + 0.5 * t2_eq.index_map(ijmap)))
 
 # move diag fock to lhs
@@ -107,7 +108,6 @@ def fix_eri_permutations(eq):
 fix_eri_permutations(t1_eq)
 fix_eri_permutations(t2_eq)
 
-from pyscf import gto, scf
 from pyscf.cc import rccsd
 
 def wick_energy(cc, t1, t2, eris):
@@ -165,7 +165,8 @@ RCCSD = WickRCCSD
 
 if __name__ == "__main__":
 
-    mol = gto.M(atom = 'O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
+    from pyscf import gto, scf
+    mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.RHF(mol).run(conv_tol=1E-14)
     ccsd = rccsd.RCCSD(mf).run()
     wccsd = WickRCCSD(mf).run()

@@ -1184,7 +1184,14 @@ template <typename S = void> void bind_data(py::module &m) {
     else if (sizeof(MKL_INT) == sizeof(long long int))
         m.attr("VectorMKLInt") = m.attr("VectorLLInt");
 
-    py::bind_map<map<string, string>>(m, "MapStrStr");
+    py::bind_map<map<string, string>>(m, "MapStrStr")
+        .def(py::init([](const py::dict &dict) {
+            auto mp =
+                std::unique_ptr<map<string, string>>(new map<string, string>());
+            for (auto item : dict)
+                (*mp)[item.first.cast<string>()] = item.second.cast<string>();
+            return mp.release();
+        }));
     py::bind_vector<vector<pair<string, string>>>(m, "VectorPStrStr");
 }
 

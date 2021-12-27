@@ -17,8 +17,10 @@
 #
 #
 
-# CCSD in general orbitals with equations derived on the fly
-# need internal contraction module of block2
+"""
+CCSD in general orbitals with equations derived on the fly.
+need internal contraction module of block2.
+"""
 
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
@@ -96,7 +98,6 @@ def fix_eri_permutations(eq):
 fix_eri_permutations(t1_eq)
 fix_eri_permutations(t2_eq)
 
-from pyscf import gto, scf
 from pyscf.cc import gccsd
 
 def wick_energy(cc, t1, t2, eris):
@@ -154,7 +155,8 @@ GCCSD = WickGCCSD
 
 if __name__ == "__main__":
 
-    mol = gto.M(atom = 'O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
+    from pyscf import gto, scf
+    mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.GHF(mol).run(conv_tol=1E-14)
     ccsd = gccsd.GCCSD(mf).run()
     wccsd = WickGCCSD(mf).run()

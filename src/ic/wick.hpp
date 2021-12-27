@@ -2407,23 +2407,21 @@ struct WickICMRCI {
     // only block diagonal term will use communicator
     WickExpr build_hamiltonian(const string &bra, const string &ket,
                                bool do_sum = true, bool do_comm = true) const {
-        WickExpr xbra =
-            WickExpr::parse(bra, idx_map, perm_map).expand().simplify();
-        WickExpr xket =
-            WickExpr::parse(ket, idx_map, perm_map).expand().simplify();
+        WickExpr xbra = WickExpr::parse(bra, idx_map, perm_map);
+        WickExpr xket = WickExpr::parse(ket, idx_map, perm_map);
         WickExpr expr;
         if (bra == "" && ket == "")
             ;
         else if (bra == "")
-            expr = (h * xket).expand().simplify();
+            expr = (h * xket);
         else if (ket == "")
-            expr = (xbra.conjugate() * h).expand().simplify();
+            expr = (xbra.conjugate() * h);
         else if (do_comm)
-            expr = do_sum ? (xbra.conjugate() & (h ^ xket).expand().simplify())
-                          : (xbra.conjugate() * (h ^ xket).expand().simplify());
+            expr = do_sum ? (xbra.conjugate() & (h ^ xket))
+                          : (xbra.conjugate() * (h ^ xket));
         else
-            expr = do_sum ? (xbra.conjugate() & (h * xket).expand().simplify())
-                          : (xbra.conjugate() * (h * xket).expand().simplify());
+            expr = do_sum ? (xbra.conjugate() & (h * xket))
+                          : (xbra.conjugate() * (h * xket));
         return expr.expand()
             .remove_external()
             .remove_inactive()
@@ -2432,12 +2430,10 @@ struct WickICMRCI {
     }
     WickExpr build_overlap(const string &bra, const string &ket,
                            bool do_sum = true) const {
-        WickExpr xbra =
-            WickExpr::parse(bra, idx_map, perm_map).expand().simplify();
-        WickExpr xket =
-            WickExpr::parse(ket, idx_map, perm_map).expand().simplify();
-        WickExpr expr = do_sum ? (xbra.conjugate() & xket).expand().simplify()
-                               : (xbra.conjugate() * xket).expand().simplify();
+        WickExpr xbra = WickExpr::parse(bra, idx_map, perm_map);
+        WickExpr xket = WickExpr::parse(ket, idx_map, perm_map);
+        WickExpr expr =
+            do_sum ? (xbra.conjugate() & xket) : (xbra.conjugate() * xket);
         return expr.expand()
             .add_spin_free_trans_symm()
             .remove_external()
