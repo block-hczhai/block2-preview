@@ -291,3 +291,6 @@ if __name__ == "__main__":
     mc.canonicalization = True
     mc.run()
     wsc = WickICNEVPT2(mc).run()
+    # converged SCF energy = -149.608181589162
+    # CASSCF energy = -149.708657770062
+    # E(WickICNEVPT2) = -149.8596598757474  E_corr = -0.2514782865855971

@@ -25,7 +25,7 @@ from block2 import WickPermutation
 import numpy as np
 
 def get_chem_eri(chem_eris, ckey):
-    known = ['ppaa', 'papa', 'pacv', 'cvcv']
+    known = chem_eris.known
     perm_chs = WickPermutation.qc_chem()
     perm_chs = WickPermutation.complete_set(4, perm_chs)
     sxx = {
@@ -46,6 +46,10 @@ def get_phys_eri(chem_eris, pkey):
     ckey = np.array([kmap.get(k, k) for k in pkey])[np.array([0, 2, 1, 3], dtype=int)]
     return get_chem_eri(chem_eris, ckey).transpose(0, 2, 1, 3)
 
+def get_h1_eri(chem_eris, pkey):
+    kmap = {'A': 'a', 'E': 'v', 'I': 'c'}
+    return getattr(chem_eris, 'h' + ''.join([kmap.get(k, k) for k in pkey]))
+
 class _ChemistsERIs:
     '''(pq|rs)'''
     def __init__(self, mol=None):
@@ -65,46 +69,60 @@ class _ChemistsERIs:
     
     get_chem = get_chem_eri
     get_phys = get_phys_eri
+    get_h1 = get_h1_eri
 
-# adapted from pyscf.mrpt.nevpt2.py _trans
-def init_eris(mc, mo_coeff=None):
+def init_eris(mc, mo_coeff=None, mrci=False):
     from pyscf import ao2mo, lib
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     nmo, ncore, ncas = mo_coeff.shape[1], mc.ncore, mc.ncas
     nocc = ncore + ncas
     nvir = nmo - nocc
-    nwav = nmo - ncore # w = a + v
-    pwxx = ao2mo.incore.half_e1(mc._scf._eri,
-        (mo_coeff[:, :nocc], mo_coeff[:, ncore:]), compact=False)
-    pwxx = pwxx.reshape((nocc, nwav, -1))
-    cvcv = np.zeros((ncore * nvir, ncore * nvir))
-    pacv = np.empty((nmo, ncas, ncore * nvir))
-    aapp = np.empty((ncas, ncas, nmo * nmo))
-    papa = np.empty((nmo, ncas, nmo * ncas))
-    wcv = np.empty((nwav, ncore * nvir))
-    wpa = np.empty((nwav, nmo * ncas))
-    klcv = (0, ncore, nocc, nmo)
-    klpa = (0, nmo, ncore, nocc)
-    klpp = (0, nmo, 0, nmo)
-    for i, wxx in enumerate(pwxx[:ncore]):
-        ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klcv, aosym='s4', out=wcv)
-        ao2mo._ao2mo.nr_e2(wxx[:ncas], mo_coeff, klpa, aosym='s4', out=papa[i])
-        cvcv[i * nvir:(i + 1) * nvir] = wcv[ncas:]
-        pacv[i] = wcv[:ncas]
-    for i, wxx in enumerate(pwxx[ncore:nocc]):
-        ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klcv, aosym='s4', out=wcv)
-        ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klpa, aosym='s4', out=wpa)
-        ao2mo._ao2mo.nr_e2(wxx[:ncas], mo_coeff, klpp, aosym='s4', out=aapp[i])
-        pacv[ncore:, i] = wcv
-        papa[ncore:, i] = wpa
-    ppaa = lib.transpose(aapp.reshape(ncas ** 2, -1))
     eris = _ChemistsERIs()
     eris._common_init_(mc, mo_coeff)
-    eris.ppaa = ppaa.reshape(nmo, nmo, ncas, ncas)
-    eris.papa = papa.reshape(nmo, ncas, nmo, ncas)
-    eris.pacv = pacv.reshape(nmo, ncas, ncore, nvir)
-    eris.cvcv = cvcv.reshape(ncore, nvir, ncore, nvir)
+    if mrci:
+        h1e = mo_coeff.conj().T @ mc._scf.get_hcore() @ mo_coeff
+        g2e = ao2mo.restore(1, ao2mo.kernel(mc._scf.mol, mo_coeff), nmo)
+        eris.known = ['vvca', 'aaca', 'cvca', 'cvaa', 'cvcv', 'caac', 'avaa',
+                      'vacc', 'aacc', 'avva', 'avcv', 'accc', 'vaca', 'vvaa',
+                      'aaaa', 'vvvv', 'vccc', 'vvva', 'vvvc', 'cccc', 'vvcc']
+        imap = {"v" : slice(nocc, None) , "a" : slice(ncore, nocc), "c" : slice(ncore)}
+        for k in eris.known:
+            setattr(eris, k, g2e[tuple(imap[x] for x in k)].copy())
+        for k in [a + b for a in 'cav' for b in 'cav']:
+            setattr(eris, 'h' + k, h1e[tuple(imap[x] for x in k)].copy())
+    else:
+        # adapted from pyscf.mrpt.nevpt2.py _trans
+        eris.known = ['ppaa', 'papa', 'pacv', 'cvcv']
+        nwav = nmo - ncore # w = a + v
+        pwxx = ao2mo.incore.half_e1(mc._scf._eri,
+            (mo_coeff[:, :nocc], mo_coeff[:, ncore:]), compact=False)
+        pwxx = pwxx.reshape((nocc, nwav, -1))
+        cvcv = np.zeros((ncore * nvir, ncore * nvir))
+        pacv = np.empty((nmo, ncas, ncore * nvir))
+        aapp = np.empty((ncas, ncas, nmo * nmo))
+        papa = np.empty((nmo, ncas, nmo * ncas))
+        wcv = np.empty((nwav, ncore * nvir))
+        wpa = np.empty((nwav, nmo * ncas))
+        klcv = (0, ncore, nocc, nmo)
+        klpa = (0, nmo, ncore, nocc)
+        klpp = (0, nmo, 0, nmo)
+        for i, wxx in enumerate(pwxx[:ncore]):
+            ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klcv, aosym='s4', out=wcv)
+            ao2mo._ao2mo.nr_e2(wxx[:ncas], mo_coeff, klpa, aosym='s4', out=papa[i])
+            cvcv[i * nvir:(i + 1) * nvir] = wcv[ncas:]
+            pacv[i] = wcv[:ncas]
+        for i, wxx in enumerate(pwxx[ncore:nocc]):
+            ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klcv, aosym='s4', out=wcv)
+            ao2mo._ao2mo.nr_e2(wxx, mo_coeff, klpa, aosym='s4', out=wpa)
+            ao2mo._ao2mo.nr_e2(wxx[:ncas], mo_coeff, klpp, aosym='s4', out=aapp[i])
+            pacv[ncore:, i] = wcv
+            papa[ncore:, i] = wpa
+        ppaa = lib.transpose(aapp.reshape(ncas ** 2, -1))
+        eris.ppaa = ppaa.reshape(nmo, nmo, ncas, ncas)
+        eris.papa = papa.reshape(nmo, ncas, nmo, ncas)
+        eris.pacv = pacv.reshape(nmo, ncas, ncore, nvir)
+        eris.cvcv = cvcv.reshape(ncore, nvir, ncore, nvir)
     return eris
 
 def init_pdms(mc, pdm_eqs):

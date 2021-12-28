@@ -200,3 +200,6 @@ if __name__ == "__main__":
     mc.run()
     sc = mrpt.NEVPT(mc).set(canonicalized=True).run()
     wsc = WickSCNEVPT2(mc).run()
+    # converged SCF energy = -149.608181589162
+    # CASSCF energy = -149.708657770062
+    # E(WickSCNEVPT2) = -149.8573613496467  E_corr = -0.2491797604849861

@@ -1116,6 +1116,10 @@ struct WickExpr {
                 }
             ss << x.name << (first ? " += " : " += ");
             first = false;
+            if (term.tensors.size() == 0) {
+                ss << term.factor << "\n";
+                continue;
+            }
             if (term.factor != 1.0)
                 ss << term.factor << " * ";
             ss << "np.einsum('";
@@ -1725,7 +1729,7 @@ struct WickExpr {
     WickExpr simplify_zero() const {
         WickExpr r;
         for (auto &rr : terms)
-            if (abs(rr.factor) > 1E-12 && rr.tensors.size() != 0)
+            if (abs(rr.factor) > 1E-12)
                 r.terms.push_back(rr);
         return r;
     }
