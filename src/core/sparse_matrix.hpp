@@ -1262,10 +1262,10 @@ template <typename S, typename FL> struct SparseMatrix {
             svals.insert(svals.end(), s[ir]->data.begin(), s[ir]->data.end());
         if (bond_dim != 0 && svals.size() > bond_dim) {
             sort(svals.begin(), svals.end());
-            FP small = svals[svals.size() - bond_dim];
+            FP small = svals[svals.size() - bond_dim - 1];
             for (int ir = 0; ir < nr; ir++)
                 for (MKL_INT j = 1; j < (MKL_INT)s[ir]->data.size(); j++)
-                    if (s[ir]->data[j] < small) {
+                    if (s[ir]->data[j] <= small) {
                         merged_l[ir]->truncate_right(j);
                         s[ir]->truncate(j);
                         r[ir]->truncate_left(j);
@@ -1358,10 +1358,10 @@ template <typename S, typename FL> struct SparseMatrix {
             svals.insert(svals.end(), s[il]->data.begin(), s[il]->data.end());
         if (bond_dim != 0 && svals.size() > bond_dim) {
             sort(svals.begin(), svals.end());
-            FP small = svals[svals.size() - bond_dim];
+            FP small = svals[svals.size() - bond_dim - 1];
             for (int il = 0; il < nl; il++)
                 for (MKL_INT j = 1; j < (MKL_INT)s[il]->data.size(); j++)
-                    if (s[il]->data[j] < small) {
+                    if (s[il]->data[j] <= small) {
                         l[il]->truncate_right(j);
                         s[il]->truncate(j);
                         merged_r[il]->truncate_left(j);
