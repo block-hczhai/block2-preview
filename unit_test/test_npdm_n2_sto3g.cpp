@@ -13,10 +13,12 @@ class TestNPDM : public ::testing::Test {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->minimal_disk_usage = true;
+        frame_()->minimal_memory_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             8);
         threading_()->seq_type = SeqTypes::Simple;
+        cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {

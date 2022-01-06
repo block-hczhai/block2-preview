@@ -45,7 +45,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPO construction (MRCISD-DMRG)
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<MPOQC<S, FL>>(
-        hamil, QCTypes::Conventional, hamil->n_sites / 3);
+        hamil, QCTypes::Conventional, "HQC", hamil->n_sites / 3);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
@@ -132,7 +132,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     // MPO2 construction (Full space DMRG)
     cout << "MPO2 start" << endl;
     shared_ptr<MPO<S, FL>> mpo2 = make_shared<MPOQC<S, FL>>(
-        hamil, QCTypes::Conventional, hamil->n_sites / 3);
+        hamil, QCTypes::Conventional, "HQC2", hamil->n_sites / 3);
     cout << "MPO2 end .. T = " << t.get_time() << endl;
 
     cout << "MPO2 fusing start" << endl;

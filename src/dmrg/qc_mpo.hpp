@@ -50,8 +50,9 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
                 const vector<typename S::pg_t> &bra_orb_sym =
                     vector<typename S::pg_t>(),
                 const vector<typename S::pg_t> &ket_orb_sym =
-                    vector<typename S::pg_t>())
-        : MPO<S, FL>((int)bra_basis.size()) {
+                    vector<typename S::pg_t>(),
+                const string &tag = "ID")
+        : MPO<S, FL>((int)bra_basis.size(), tag) {
         shared_ptr<OpElement<S, FL>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), vacuum);
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -285,6 +286,12 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
                 }
             }
             this->tensors.push_back(opt);
+            this->save_tensor(m);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->unload_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
         }
         if (has_sparse) {
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(
@@ -295,8 +302,9 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
     }
     IdentityMPO(const vector<shared_ptr<StateInfo<S>>> &bra_basis,
                 const vector<shared_ptr<StateInfo<S>>> &ket_basis, S vacuum,
-                const shared_ptr<OperatorFunctions<S, FL>> &opf)
-        : MPO<S, FL>((int)bra_basis.size()) {
+                const shared_ptr<OperatorFunctions<S, FL>> &opf,
+                const string &tag = "ID")
+        : MPO<S, FL>((int)bra_basis.size(), tag) {
         shared_ptr<OpElement<S, FL>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), vacuum);
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -370,6 +378,12 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
                 }
             }
             this->tensors.push_back(opt);
+            this->save_tensor(m);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->unload_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
         }
         if (has_sparse) {
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(
@@ -378,8 +392,9 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
         } else
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(opf);
     }
-    IdentityMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil)
-        : MPO<S, FL>(hamil->n_sites) {
+    IdentityMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+                const string &tag = "ID")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
@@ -424,6 +439,12 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
             // site operators
             hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_tensor(m);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->unload_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
         }
     }
 };
@@ -434,8 +455,9 @@ template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
     using MPO<S, FL>::site_op_infos;
     // build site operator op at site k
     SiteMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil,
-            const shared_ptr<OpElement<S, FL>> &op, int k = -1)
-        : MPO<S, FL>(hamil->n_sites) {
+            const shared_ptr<OpElement<S, FL>> &op, int k = -1,
+            const string &tag = "SITE")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
         uint16_t n_sites = hamil->n_sites;
@@ -488,6 +510,12 @@ template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
             // site operators
             hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_tensor(pm);
+            this->save_left_operators(pm);
+            this->save_right_operators(pm);
+            this->unload_tensor(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
         }
     }
 };
@@ -497,8 +525,9 @@ template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
     using MPO<S, FL>::n_sites;
     using MPO<S, FL>::site_op_infos;
     LocalMPO(const shared_ptr<Hamiltonian<S, FL>> &hamil,
-             const vector<shared_ptr<OpElement<S, FL>>> &ops)
-        : MPO<S, FL>(hamil->n_sites) {
+             const vector<shared_ptr<OpElement<S, FL>>> &ops,
+             const string &tag = "LOCAL")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
         shared_ptr<OpElement<S, FL>> h_op = make_shared<OpElement<S, FL>>(
@@ -582,6 +611,12 @@ template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
             // site operators
             hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_tensor(pm);
+            this->save_left_operators(pm);
+            this->save_right_operators(pm);
+            this->unload_tensor(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
         }
     }
 };
@@ -601,9 +636,10 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
     QCTypes mode;
     const bool symmetrized_p = true;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-          QCTypes mode = QCTypes::NC, int trans_center = -1,
-          bool symmetrized_p = true)
-        : MPO<S, FL>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+          QCTypes mode = QCTypes::NC, const string &tag = "HQC",
+          int trans_center = -1, bool symmetrized_p = true)
+        : MPO<S, FL>(hamil->n_sites, tag), mode(mode),
+          symmetrized_p(symmetrized_p) {
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
             OpNames::H, SiteIndex(), hamil->vacuum);
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
@@ -1569,6 +1605,24 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
+            if (mode != QCTypes::Conventional ||
+                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->save_right_operators(pm);
+                this->unload_tensor(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
+        }
+        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
+            uint16_t pm = trans_l + 1;
+            this->save_tensor(pm);
+            this->save_left_operators(pm);
+            this->unload_tensor(pm);
+            this->save_right_operators(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
         }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
@@ -1581,18 +1635,27 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(m);
+            this->unload_tensor(m);
         }
         if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            this->load_tensor(0);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
             hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+            this->save_tensor(0);
+            this->unload_tensor(0);
         }
         if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            this->load_tensor(n_sites - 1);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
             hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(n_sites - 1);
+            this->unload_tensor(n_sites - 1);
         }
         hamil->opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -1612,8 +1675,10 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->left_new_operator_names;
             SymbolicRowVector<S> &lexpr =
                 *MPO<S, FL>::schemer->left_new_operator_exprs;
+            this->load_left_operators(pm);
             for (int i = 0; i < 2 + 4 * n_orbs; i++)
                 lop[i] = this->left_operator_names[pm]->data[i];
+            this->unload_left_operators(pm);
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
             for (int sj = 0; sj < (int)(4 * (n_orbs - (m + 1))); sj++) {
@@ -1681,8 +1746,10 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->right_new_operator_names;
             SymbolicColumnVector<S> &rexpr =
                 *MPO<S, FL>::schemer->right_new_operator_exprs;
+            this->load_right_operators(pm + 1);
             for (int i = 0; i < 2 + 4 * n_orbs; i++)
                 rop[i] = this->right_operator_names[pm + 1]->data[i];
+            this->unload_right_operators(pm + 1);
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
             for (int sj = 0; sj < (int)(4 * (m + 1)); sj++) {
@@ -1737,12 +1804,15 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     rexpr[p] = sum(exprs);
                 }
             }
+            this->save_schemer();
+            this->unload_schemer();
         }
         threading->activate_normal();
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
 };
 
@@ -1751,8 +1821,9 @@ template <typename S, typename FL>
 struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     QCTypes mode;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-          QCTypes mode = QCTypes::NC, int trans_center = -1)
-        : MPO<S, FL>(hamil->n_sites), mode(mode) {
+          QCTypes mode = QCTypes::NC, const string &tag = "HQC",
+          int trans_center = -1)
+        : MPO<S, FL>(hamil->n_sites, tag), mode(mode) {
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
             OpNames::H, SiteIndex(), hamil->vacuum);
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
@@ -2548,6 +2619,24 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
+            if (mode != QCTypes::Conventional ||
+                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->save_right_operators(pm);
+                this->unload_tensor(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
+        }
+        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
+            uint16_t pm = trans_l + 1;
+            this->save_tensor(pm);
+            this->save_left_operators(pm);
+            this->unload_tensor(pm);
+            this->save_right_operators(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
         }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
@@ -2560,18 +2649,27 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(m);
+            this->unload_tensor(m);
         }
         if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            this->load_tensor(0);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
             hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+            this->save_tensor(0);
+            this->unload_tensor(0);
         }
         if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            this->load_tensor(n_sites - 1);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
             hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(n_sites - 1);
+            this->unload_tensor(n_sites - 1);
         }
         hamil->opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -2591,8 +2689,10 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->left_new_operator_names;
             SymbolicRowVector<S> &lexpr =
                 *MPO<S, FL>::schemer->left_new_operator_exprs;
+            this->load_left_operators(pm);
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 lop[i] = this->left_operator_names[pm]->data[i];
+            this->unload_left_operators(pm);
             const vector<FL> su2_factor_p = {-0.5, -0.5 * sqrt(3)};
             const vector<FL> su2_factor_q = {1.0, sqrt(3)};
 #ifdef _MSC_VER
@@ -2668,8 +2768,10 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->right_new_operator_names;
             SymbolicColumnVector<S> &rexpr =
                 *MPO<S, FL>::schemer->right_new_operator_exprs;
+            this->load_right_operators(pm + 1);
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 rop[i] = this->right_operator_names[pm + 1]->data[i];
+            this->unload_right_operators(pm + 1);
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
             for (int sj = 0; sj < (int)(2 * (m + 1)); sj++) {
@@ -2730,12 +2832,15 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     rexpr[p] = sum(exprs);
                 }
             }
+            this->save_schemer();
+            this->unload_schemer();
         }
         threading->activate_normal();
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
 };
 
@@ -2745,9 +2850,10 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     QCTypes mode;
     const bool symmetrized_p = true;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-          QCTypes mode = QCTypes::NC, int trans_center = -1,
-          bool symmetrized_p = true)
-        : MPO<S, FL>(hamil->n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+          QCTypes mode = QCTypes::NC, const string &tag = "HQC",
+          int trans_center = -1, bool symmetrized_p = true)
+        : MPO<S, FL>(hamil->n_sites, tag), mode(mode),
+          symmetrized_p(symmetrized_p) {
         // fermionic exchange factor
         const FL exf = S::GIF ? -1.0 : 1.0;
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
@@ -3420,6 +3526,24 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
+            if (mode != QCTypes::Conventional ||
+                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->save_right_operators(pm);
+                this->unload_tensor(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
+        }
+        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
+            uint16_t pm = trans_l + 1;
+            this->save_tensor(pm);
+            this->save_left_operators(pm);
+            this->unload_tensor(pm);
+            this->save_right_operators(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
         }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
@@ -3432,18 +3556,27 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(m);
+            this->unload_tensor(m);
         }
         if (hamil->get_n_orbs_left() > 0 && n_sites > 0) {
+            this->load_tensor(0);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[0];
             hamil->filter_site_ops(0, {opt->lmat, opt->rmat}, opt->ops);
+            this->save_tensor(0);
+            this->unload_tensor(0);
         }
         if (hamil->get_n_orbs_right() > 0 && n_sites > 0) {
+            this->load_tensor(n_sites - 1);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[n_sites - 1];
             hamil->filter_site_ops(n_sites - 1, {opt->lmat, opt->rmat},
                                    opt->ops);
+            this->save_tensor(n_sites - 1);
+            this->unload_tensor(n_sites - 1);
         }
         hamil->opf->seq->mode = seqt;
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN) ||
@@ -3463,8 +3596,10 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->left_new_operator_names;
             SymbolicRowVector<S> &lexpr =
                 *MPO<S, FL>::schemer->left_new_operator_exprs;
+            this->load_left_operators(pm);
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 lop[i] = this->left_operator_names[pm]->data[i];
+            this->unload_left_operators(pm);
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
 #ifdef _MSC_VER
             for (int j = (int)m + 1; j < (int)n_orbs; j++) {
@@ -3518,8 +3653,10 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 *MPO<S, FL>::schemer->right_new_operator_names;
             SymbolicColumnVector<S> &rexpr =
                 *MPO<S, FL>::schemer->right_new_operator_exprs;
+            this->load_right_operators(pm + 1);
             for (int i = 0; i < 2 + 2 * n_orbs; i++)
                 rop[i] = this->right_operator_names[pm + 1]->data[i];
+            this->unload_right_operators(pm + 1);
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
             for (int j = 0; j < (int)m + 1; j++) {
@@ -3561,12 +3698,15 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                     rexpr[p] = sum(exprs);
                 }
             }
+            this->save_schemer();
+            this->unload_schemer();
         }
         threading->activate_normal();
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
 };
 

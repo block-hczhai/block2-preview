@@ -47,7 +47,7 @@ void TestFITPGN2631G::test_dmrg(
     // MPO construction (MRCISD-DMRG)
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<MPOQC<S, FL>>(
-        hamil, QCTypes::Conventional, hamil->n_sites / 3);
+        hamil, QCTypes::Conventional, "HQC", hamil->n_sites / 3);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     cout << "MPO fusing start" << endl;
@@ -136,7 +136,7 @@ void TestFITPGN2631G::test_dmrg(
     // MPO RED construction (MRCISD-DMRG)
     cout << "MPO RED start" << endl;
     shared_ptr<MPO<S, FL>> mpo_red = make_shared<MPOQC<S, FL>>(
-        hamil_red, QCTypes::Conventional, hamil_red->n_sites / 3);
+        hamil_red, QCTypes::Conventional, "HQCR", hamil_red->n_sites / 3);
     cout << "MPO RED end .. T = " << t.get_time() << endl;
 
     cout << "MPO RED fusing start" << endl;

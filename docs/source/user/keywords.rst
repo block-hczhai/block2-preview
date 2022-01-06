@@ -51,6 +51,13 @@ intmem
     Optional. Followed by an integer and a letter as the unit (g or G). Stack memory for integers.
     Default is 10% of ``mem``.
 
+mem_ratio
+    Optional. Followed by a float number (0.0 ~ 1.0). The ratio of main stack memory. Default is 0.4.
+
+min\_mpo\_mem
+    Optional. Followed by auto, True, or False. If True, MPO building and simplification will cost much less memory.
+    But the computational cost will be higher due to IO cost. Default is auto, which is True if number of orbitals is >= 80.
+
 cached\_contraction
     Optional. Followed by an integer 0 or 1 (default). If 1, cached contraction is used for improving performance.
 

@@ -281,8 +281,11 @@ inline shared_ptr<StackAllocator<double>> &dalloc_() {
  * Each frame includes one integer stack memory and one double stack memory.
  * The two frames are used alternatively to avoid data copying. */
 struct DataFrame {
-    string save_dir, //!< Scartch folder for renormalized operators.
+    string save_dir; //!< Scartch folder for renormalized operators.
+    string
         mps_dir; //!< Scartch folder for MPS (default is the same as save_dir).
+    string mpo_dir; //!< Scartch folder for MPO (default is the same as
+                    //!< save_dir, only used when minimal_memory_usage is true).
     string restart_dir =
                "", //!< If not empty, save MPS to this dir after each sweep.
         restart_dir_per_sweep =
@@ -357,6 +360,10 @@ struct DataFrame {
         false; //!< Whether temporary renormalized operator files should be
                //!< deleted as soon as possible. If true, will save roughly half
                //!< of required storage for renormalized operators.
+    bool minimal_memory_usage =
+        false; //!< Whether MPO should be build in minimal memory mode by saving
+               //!< intermediates to disk. In this mode, MPO should have
+               //!< different tags.
     shared_ptr<FPCodec<double>> fp_codec =
         nullptr; //!< Floating-point compression codec. If nullptr,
                  //!< floating-point compression will not be used.
@@ -374,7 +381,8 @@ struct DataFrame {
     DataFrame(size_t isize = 1 << 28, size_t dsize = 1 << 30,
               const string &save_dir = "node0", double dmain_ratio = 0.7,
               double imain_ratio = 0.7, int n_frames = 2)
-        : n_frames(n_frames), save_dir(save_dir), mps_dir(save_dir) {
+        : n_frames(n_frames), save_dir(save_dir), mps_dir(save_dir),
+          mpo_dir(save_dir) {
         peak_used_memory.resize(n_frames * 2);
         present_filenames.resize(n_frames);
         load_buffers.resize(n_frames);
@@ -399,10 +407,13 @@ struct DataFrame {
                 make_shared<StackAllocator<double>>(dptr + i * dr, dr));
         }
         activate(0);
+        // may have some mpi problems
         if (!Parsing::path_exists(save_dir))
             Parsing::mkdir(save_dir);
         if (!Parsing::path_exists(mps_dir))
             Parsing::mkdir(mps_dir);
+        if (!Parsing::path_exists(mpo_dir))
+            Parsing::mkdir(mpo_dir);
     }
     /** Destructor. */
     ~DataFrame() { deallocate(); }
@@ -632,6 +643,7 @@ struct DataFrame {
     friend ostream &operator<<(ostream &os, const DataFrame &df) {
         os << " UseMainStack = " << df.use_main_stack
            << " MinDiskUsage = " << df.minimal_disk_usage
+           << " MinMemUsage = " << df.minimal_memory_usage
            << " IBuf = " << df.load_buffering << " OBuf = " << df.save_buffering
            << endl;
         if (df.fp_codec != nullptr)

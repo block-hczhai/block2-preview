@@ -38,8 +38,9 @@ template <typename, typename, typename = void> struct PDM1MPOQC;
 // "MPO" for one particle density matrix (non-spin-adapted)
 template <typename S, typename FL>
 struct PDM1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
-    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
-        : MPO<S, FL>(hamil->n_sites) {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0,
+              const string &tag = "1PDM")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
         shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
@@ -257,6 +258,8 @@ struct PDM1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 assert(p == mshape);
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(pm);
+                this->unload_middle_operators(pm);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -362,6 +365,12 @@ struct PDM1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(pm);
+            this->save_right_operators(pm);
+            this->save_tensor(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
+            this->unload_tensor(pm);
         }
     }
     void deallocate() override {}
@@ -406,8 +415,9 @@ struct PDM1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 //                 = (-1) sqrt(2) < a^{[1/2]}_j \otimes_[1] a^{\dagger[1/2]}_i >
 template <typename S, typename FL>
 struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
-    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
-        : MPO<S, FL>(hamil->n_sites) {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0,
+              const string &tag = "1PDM")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
         shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
@@ -596,6 +606,8 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 assert(p == mshape);
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(pm);
+                this->unload_middle_operators(pm);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -688,6 +700,12 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(pm);
+            this->save_right_operators(pm);
+            this->save_tensor(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
+            this->unload_tensor(pm);
         }
     }
     void deallocate() override {}
@@ -727,8 +745,9 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
 // "MPO" for one particle density matrix (non-spin-adapted)
 template <typename S, typename FL>
 struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
-    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0)
-        : MPO<S, FL>(hamil->n_sites) {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0,
+              const string &tag = "1PDM")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         // fermionic exchange factor
         const FL exf = S::GIF ? -1.0 : 1.0;
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
@@ -914,6 +933,8 @@ struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 assert(p == mshape);
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(pm);
+                this->unload_middle_operators(pm);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -1006,6 +1027,12 @@ struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(pm, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(pm);
+            this->save_right_operators(pm);
+            this->save_tensor(pm);
+            this->unload_left_operators(pm);
+            this->unload_right_operators(pm);
+            this->unload_tensor(pm);
         }
     }
     void deallocate() override {}

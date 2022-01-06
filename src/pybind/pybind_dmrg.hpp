@@ -75,6 +75,8 @@ auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
         m, "PDM2MPOQC")
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>(),
              py::arg("hamil"))
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, const string &>(),
+             py::arg("hamil"), py::arg("tag"))
         .def_static("get_matrix", &PDM2MPOQC<S, FL>::get_matrix)
         .def_static("get_matrix_spatial",
                     &PDM2MPOQC<S, FL>::get_matrix_spatial);
@@ -91,8 +93,11 @@ auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_sz_t()) {
             "s_minimal", [](py::object) { return PDM2MPOQC<S, FL>::s_minimal; })
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>(),
              py::arg("hamil"))
-        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, uint16_t>(),
-             py::arg("hamil"), py::arg("mask"))
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, const string &>(),
+             py::arg("hamil"), py::arg("tag"))
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, const string &,
+                      uint16_t>(),
+             py::arg("hamil"), py::arg("tag"), py::arg("mask"))
         .def("get_matrix", &PDM2MPOQC<S, FL>::get_matrix)
         .def("get_matrix_spatial", &PDM2MPOQC<S, FL>::get_matrix_spatial);
 
@@ -1399,8 +1404,13 @@ template <typename S, typename FL> void bind_fl_parallel_dmrg(py::module &m) {
         .def_readwrite("prim_mpo", &ParallelMPO<S, FL>::prim_mpo)
         .def_readwrite("rule", &ParallelMPO<S, FL>::rule)
         .def(py::init<int, const shared_ptr<ParallelRule<S, FL>> &>())
+        .def(py::init<int, const shared_ptr<ParallelRule<S, FL>> &,
+                      const string &>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
-                      const shared_ptr<ParallelRule<S, FL>> &>());
+                      const shared_ptr<ParallelRule<S, FL>> &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<ParallelRule<S, FL>> &,
+                      const string &>());
 }
 
 template <typename S> void bind_mpo(py::module &m) {
@@ -1425,6 +1435,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
 
     py::class_<MPO<S, FL>, shared_ptr<MPO<S, FL>>>(m, "MPO")
         .def(py::init<int>())
+        .def(py::init<int, const string &>())
         .def_readwrite("n_sites", &MPO<S, FL>::n_sites)
         .def_readwrite("const_e", &MPO<S, FL>::const_e)
         .def_readwrite("tensors", &MPO<S, FL>::tensors)
@@ -1449,13 +1460,33 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("archive_schemer_mark",
                        &MPO<S, FL>::archive_schemer_mark)
         .def_readwrite("archive_filename", &MPO<S, FL>::archive_filename)
+        .def_readwrite("tag", &MPO<S, FL>::tag)
+        .def_readwrite("tread", &MPO<S, FL>::tread)
+        .def_readwrite("twrite", &MPO<S, FL>::twrite)
+        .def("get_filename", &MPO<S, FL>::get_filename)
+        .def("load_left_operators", &MPO<S, FL>::load_left_operators)
+        .def("save_left_operators", &MPO<S, FL>::save_left_operators)
+        .def("unload_left_operators", &MPO<S, FL>::unload_left_operators)
+        .def("load_right_operators", &MPO<S, FL>::load_right_operators)
+        .def("save_right_operators", &MPO<S, FL>::save_right_operators)
+        .def("unload_right_operators", &MPO<S, FL>::unload_right_operators)
+        .def("load_middle_operators", &MPO<S, FL>::load_middle_operators)
+        .def("save_middle_operators", &MPO<S, FL>::save_middle_operators)
+        .def("unload_middle_operators", &MPO<S, FL>::unload_middle_operators)
+        .def("load_tensor", &MPO<S, FL>::load_tensor, py::arg("i"),
+             py::arg("no_ops") = false)
+        .def("save_tensor", &MPO<S, FL>::save_tensor)
+        .def("unload_tensor", &MPO<S, FL>::unload_tensor)
+        .def("load_schemer", &MPO<S, FL>::load_schemer)
+        .def("save_schemer", &MPO<S, FL>::save_schemer)
+        .def("unload_schemer", &MPO<S, FL>::unload_schemer)
         .def("reduce_data", &MPO<S, FL>::reduce_data)
         .def("load_data",
              (void (MPO<S, FL>::*)(const string &, bool)) &
                  MPO<S, FL>::load_data,
              py::arg("filename"), py::arg("minimal") = false)
-        .def("save_data", (void (MPO<S, FL>::*)(const string &) const) &
-                              MPO<S, FL>::save_data)
+        .def("save_data",
+             (void (MPO<S, FL>::*)(const string &)) & MPO<S, FL>::save_data)
         .def("get_blocking_formulas", &MPO<S, FL>::get_blocking_formulas)
         .def("get_ancilla_type", &MPO<S, FL>::get_ancilla_type)
         .def("get_parallel_type", &MPO<S, FL>::get_parallel_type)
@@ -1502,7 +1533,10 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
                      const shared_ptr<Rule<S, FL>> &, bool, bool, OpNamesSet>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
                       const shared_ptr<Rule<S, FL>> &, bool, bool, OpNamesSet,
-                      bool>())
+                      const string &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<Rule<S, FL>> &, bool, bool, OpNamesSet,
+                      const string &, bool>())
         .def("simplify_expr", &SimplifiedMPO<S, FL>::simplify_expr)
         .def("simplify_symbolic", &SimplifiedMPO<S, FL>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S, FL>::simplify);
@@ -1522,6 +1556,10 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
                       const vector<shared_ptr<StateInfo<S>>> &, S,
                       const shared_ptr<OperatorFunctions<S, FL>> &>())
         .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, S,
+                      const shared_ptr<OperatorFunctions<S, FL>> &,
+                      const string &>())
+        .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, S, S,
                       const shared_ptr<OperatorFunctions<S, FL>> &>())
         .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
@@ -1529,37 +1567,55 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
                       const shared_ptr<OperatorFunctions<S, FL>> &,
                       const vector<typename S::pg_t> &,
                       const vector<typename S::pg_t> &>())
-        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>());
+        .def(py::init<const vector<shared_ptr<StateInfo<S>>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, S, S,
+                      const shared_ptr<OperatorFunctions<S, FL>> &,
+                      const vector<typename S::pg_t> &,
+                      const vector<typename S::pg_t> &, const string &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>())
+        .def(
+            py::init<const shared_ptr<Hamiltonian<S, FL>> &, const string &>());
 
     py::class_<SiteMPO<S, FL>, shared_ptr<SiteMPO<S, FL>>, MPO<S, FL>>(
         m, "SiteMPO")
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &,
                       const shared_ptr<OpElement<S, FL>> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &,
-                      const shared_ptr<OpElement<S, FL>> &, int>());
+                      const shared_ptr<OpElement<S, FL>> &, int>())
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &,
+                      const shared_ptr<OpElement<S, FL>> &, int,
+                      const string &>());
 
     py::class_<LocalMPO<S, FL>, shared_ptr<LocalMPO<S, FL>>, MPO<S, FL>>(
         m, "LocalMPO")
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &,
-                      const vector<shared_ptr<OpElement<S, FL>>> &>());
+                      const vector<shared_ptr<OpElement<S, FL>>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &,
+                      const vector<shared_ptr<OpElement<S, FL>>> &,
+                      const string &>());
 
     py::class_<MPOQC<S, FL>, shared_ptr<MPOQC<S, FL>>, MPO<S, FL>>(m, "MPOQC")
         .def_readwrite("mode", &MPOQC<S, FL>::mode)
         .def(py::init<const shared_ptr<HamiltonianQC<S, FL>> &>())
         .def(py::init<const shared_ptr<HamiltonianQC<S, FL>> &, QCTypes>())
-        .def(
-            py::init<const shared_ptr<HamiltonianQC<S, FL>> &, QCTypes, int>());
+        .def(py::init<const shared_ptr<HamiltonianQC<S, FL>> &, QCTypes,
+                      const string &>())
+        .def(py::init<const shared_ptr<HamiltonianQC<S, FL>> &, QCTypes,
+                      const string &, int>());
 
     py::class_<PDM1MPOQC<S, FL>, shared_ptr<PDM1MPOQC<S, FL>>, MPO<S, FL>>(
         m, "PDM1MPOQC")
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>())
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, uint8_t>())
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, uint8_t,
+                      const string &>())
         .def("get_matrix", &PDM1MPOQC<S, FL>::get_matrix)
         .def("get_matrix_spatial", &PDM1MPOQC<S, FL>::get_matrix_spatial);
 
     py::class_<NPC1MPOQC<S, FL>, shared_ptr<NPC1MPOQC<S, FL>>, MPO<S, FL>>(
         m, "NPC1MPOQC")
         .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>())
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &, const string &>())
         .def("get_matrix", &NPC1MPOQC<S, FL>::get_matrix)
         .def("get_matrix_spatial", &NPC1MPOQC<S, FL>::get_matrix_spatial);
 
@@ -1568,7 +1624,10 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("n_physical_sites", &AncillaMPO<S, FL>::n_physical_sites)
         .def_readwrite("prim_mpo", &AncillaMPO<S, FL>::prim_mpo)
         .def(py::init<const shared_ptr<MPO<S, FL>> &>())
-        .def(py::init<const shared_ptr<MPO<S, FL>> &, bool>());
+        .def(py::init<const shared_ptr<MPO<S, FL>> &, bool>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &, bool, bool>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &, bool, bool,
+                      const string &>());
 
     py::class_<ArchivedMPO<S, FL>, shared_ptr<ArchivedMPO<S, FL>>, MPO<S, FL>>(
         m, "ArchivedMPO")
@@ -1579,11 +1638,14 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         m, "DiagonalMPO")
         .def(py::init<const shared_ptr<MPO<S, FL>> &>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
-                      const shared_ptr<Rule<S, FL>> &>());
+                      const shared_ptr<Rule<S, FL>> &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<Rule<S, FL>> &, const string &>());
 
     py::class_<IdentityAddedMPO<S, FL>, shared_ptr<IdentityAddedMPO<S, FL>>,
                MPO<S, FL>>(m, "IdentityAddedMPO")
-        .def(py::init<const shared_ptr<MPO<S, FL>> &>());
+        .def(py::init<const shared_ptr<MPO<S, FL>> &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &, const string &>());
 }
 
 template <typename S, typename FL>

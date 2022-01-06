@@ -355,13 +355,19 @@ if MPI is not None:
 
 # global settings
 memory = int(int(dic.get("mem", "2").split()[0]) * 1e9)
+mem_ratio = float(dic.get("mem_ratio", 0.4))
+min_mpo_mem = dic.get("min_mpo_mem", "auto")
+if big_site_method == "fock":
+    min_mpo_mem = "F"
 fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 if "intmem" in dic:
     intmemory = int(int(dic["intmem"].split()[0]) * 1e9)
-    init_memory(isize=int(intmemory), dsize=int(memory), save_dir=scratch)
+    init_memory(isize=int(intmemory), dsize=int(memory),
+                save_dir=scratch, dmain_ratio=mem_ratio)
 else:
     init_memory(isize=int(memory * 0.1),
-                dsize=int(memory * 0.9), save_dir=scratch)
+                dsize=int(memory * 0.9), save_dir=scratch,
+                dmain_ratio=mem_ratio)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(
     ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -661,6 +667,13 @@ else:
     if singlet_embedding and SX == SU2:
         assert len(spin) == 1
         singlet_embedding_spin = spin[0]
+
+if min_mpo_mem == "auto":
+    Global.frame.minimal_memory_usage = n_orbs >= 80
+else:
+    Global.frame.minimal_memory_usage = min_mpo_mem.lower()[0] in ['1', 't']
+
+_print('MinMPOMemUsage = ', Global.frame.minimal_memory_usage)
 
 if no_pre_run:
     impo = MPO(0)
@@ -1022,18 +1035,26 @@ except ImportError:
 # prepare mpo
 if pre_run or not no_pre_run:
     # mpo for dmrg
-    _print("build mpo", time.perf_counter() - tx)
+    _print("build mpo start ...")
+    txx = time.perf_counter()
     if big_site_method == "folding":
         mpo = mpo_fold
     else:
         mpo = MPOQC(hamil, qc_type)
-    _print("simpl mpo", time.perf_counter() - tx)
+    _print("build mpo finished ... Tread = %.3f Twrite = %.3f T = %.3f" % (mpo.tread, mpo.twrite, time.perf_counter() - txx))
+    _print("simpl mpo start ...")
+    txx = time.perf_counter()
     mpo = SimplifiedMPO(mpo, simpl_rule, True, True,
                         OpNamesSet((OpNames.R, OpNames.RD)))
-    _print("simpl mpo finished", time.perf_counter() - tx)
+    _print("simpl mpo finished ... Tread = %.3f Twrite = %.3f T = %.3f" % (mpo.tread, mpo.twrite, time.perf_counter() - txx))
 
-    _print('GS MPO BOND DIMS = ', ''.join(
-        ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
+    mpo_bdims = [None] * len(mpo.left_operator_names)
+    for ix in range(len(mpo.left_operator_names)):
+        mpo.load_left_operators(ix)
+        x = mpo.left_operator_names[ix]
+        mpo_bdims[ix] = x.m * x.n
+        mpo.unload_left_operators(ix)
+    _print('GS MPO BOND DIMS = ', ''.join(["%6d" % x for x in mpo_bdims]))
 
     if MPI is None or MPI.rank == 0:
         mpo.save_data(scratch + '/mpo.bin')

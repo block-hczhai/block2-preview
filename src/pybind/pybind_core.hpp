@@ -1642,6 +1642,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<size_t, size_t, const string &, double, double, int>())
         .def_readwrite("save_dir", &DataFrame::save_dir)
         .def_readwrite("mps_dir", &DataFrame::mps_dir)
+        .def_readwrite("mpo_dir", &DataFrame::mpo_dir)
         .def_readwrite("restart_dir", &DataFrame::restart_dir)
         .def_readwrite("restart_dir_per_sweep",
                        &DataFrame::restart_dir_per_sweep)
@@ -1669,6 +1670,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("save_buffering", &DataFrame::save_buffering)
         .def_readwrite("use_main_stack", &DataFrame::use_main_stack)
         .def_readwrite("minimal_disk_usage", &DataFrame::minimal_disk_usage)
+        .def_readwrite("minimal_memory_usage", &DataFrame::minimal_memory_usage)
         .def_readwrite("fp_codec", &DataFrame::fp_codec)
         .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)

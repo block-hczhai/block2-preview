@@ -22,10 +22,12 @@ template <typename FL> class TestDMRGN2STO3G : public ::testing::Test {
         frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
         frame_()->use_main_stack = false;
         frame_()->minimal_disk_usage = true;
+        frame_()->minimal_memory_usage = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             1);
         threading_()->seq_type = SeqTypes::Tasked;
+        cout << *frame_() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {

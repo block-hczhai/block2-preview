@@ -41,8 +41,9 @@ template <typename, typename, typename = void> struct NPC1MPOQC;
 // NN[5] = ad_{pb} a_{pa} x ad_{qa} a_{qb}
 template <typename S, typename FL>
 struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
-    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
-        : MPO<S, FL>(hamil->n_sites) {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+              const string &tag = "1NPC")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         const auto n_sites = MPO<S, FL>::n_sites;
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
@@ -178,6 +179,8 @@ struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 }
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(m);
+                this->unload_middle_operators(m);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -235,6 +238,12 @@ struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->save_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
+            this->unload_tensor(m);
         }
     }
     void deallocate() override {}
@@ -291,8 +300,9 @@ struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 // where Epq = 1pdm spatial
 template <typename S, typename FL>
 struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
-    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
-        : MPO<S, FL>(hamil->n_sites) {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+              const string &tag = "1NPC")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         const auto n_sites = MPO<S, FL>::n_sites;
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
@@ -392,6 +402,8 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 }
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(m);
+                this->unload_middle_operators(m);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -441,6 +453,12 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->save_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
+            this->unload_tensor(m);
         }
     }
     void deallocate() override {}
@@ -495,8 +513,9 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
 // not implemented
 template <typename S, typename FL>
 struct NPC1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
-    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
-        : MPO<S, FL>(hamil->n_sites) {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+              const string &tag = "1NPC")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         assert(false);
     }
     void deallocate() override {}

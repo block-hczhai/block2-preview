@@ -67,7 +67,8 @@ template <typename S, typename FL> struct OperatorTensor {
         for (const auto &t : mp)
             t.second->deallocate();
     }
-    void load_data(istream &ifs, bool pointer_only = false) {
+    void load_data(istream &ifs, bool pointer_only = false,
+                   bool no_ops = false) {
         uint8_t lr;
         ifs.read((char *)&lr, sizeof(lr));
         if (lr == 1) {
@@ -79,6 +80,8 @@ template <typename S, typename FL> struct OperatorTensor {
             if (lr == 0 || lr == 3)
                 rmat = load_symbolic<S, FL>(ifs);
         }
+        if (no_ops)
+            return;
         int sz;
         ifs.read((char *)&sz, sizeof(sz));
         shared_ptr<VectorAllocator<FP>> d_alloc =

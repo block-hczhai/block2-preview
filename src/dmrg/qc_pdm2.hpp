@@ -56,8 +56,8 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                           s_abba = 1U << PIJKL(0, 1, 1, 0),
                           s_minimal = s_aaaa | s_abba | s_bbbb;
     PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
-              uint16_t mask = s_all)
-        : MPO<S, FL>(hamil->n_sites) {
+              const string &tag = "2PDM", uint16_t mask = s_all)
+        : MPO<S, FL>(hamil->n_sites, tag) {
         const auto n_sites = MPO<S, FL>::n_sites;
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
@@ -847,6 +847,8 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 assert(p == mshape);
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(m);
+                this->unload_middle_operators(m);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -1069,10 +1071,17 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->save_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
+            this->unload_tensor(m);
         }
         // checking
         for (uint16_t m = 0; m < n_sites; m++) {
             if (m < n_sites - 1) {
+                this->load_middle_operators(m);
                 int mshape = (int)this->middle_operator_names[m]->data.size();
                 auto pmop = dynamic_pointer_cast<SymbolicColumnVector<S>>(
                     this->middle_operator_names[m]);
@@ -1085,7 +1094,10 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         dynamic_pointer_cast<OpProduct<S, FL>>((*pmexpr)[i]);
                     assert(op->q_label == ex->a->q_label + ex->b->q_label);
                 }
+                this->load_tensor(m);
+                this->load_left_operators(m);
                 if (m > 0) {
+                    this->load_left_operators(m - 1);
                     auto plmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
                         this->tensors[m]->lmat);
                     for (size_t i = 0; i < plmat->data.size(); i++) {
@@ -1104,6 +1116,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                 plmat->data[i]);
                         assert(op->q_label == exa->q_label + exb->q_label);
                     }
+                    this->unload_left_operators(m - 1);
                 } else if (m == 0) {
                     auto plmat = this->tensors[m]->lmat;
                     for (size_t i = 0; i < plmat->data.size(); i++) {
@@ -1118,43 +1131,56 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         assert(op->q_label == ex->q_label);
                     }
                 }
+                this->unload_tensor(m);
+                this->unload_left_operators(m);
             }
-            if (m == n_sites - 1) {
-                auto prmat = this->tensors[m]->rmat;
-                for (size_t i = 0; i < prmat->data.size(); i++) {
-                    shared_ptr<OpElement<S, FL>> op =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m]->data[i]);
-                    if (prmat->data[i]->get_type() == OpTypes::Zero)
-                        continue;
-                    shared_ptr<OpElement<S, FL>> ex =
-                        dynamic_pointer_cast<OpElement<S, FL>>(prmat->data[i]);
-                    assert(op->q_label == ex->q_label);
+            if (m != 0) {
+                this->load_tensor(m);
+                this->load_right_operators(m);
+                if (m == n_sites - 1) {
+                    auto prmat = this->tensors[m]->rmat;
+                    for (size_t i = 0; i < prmat->data.size(); i++) {
+                        shared_ptr<OpElement<S, FL>> op =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m]->data[i]);
+                        if (prmat->data[i]->get_type() == OpTypes::Zero)
+                            continue;
+                        shared_ptr<OpElement<S, FL>> ex =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                prmat->data[i]);
+                        assert(op->q_label == ex->q_label);
+                    }
+                } else {
+                    auto prmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        this->tensors[m]->rmat);
+                    this->load_right_operators(m + 1);
+                    for (size_t i = 0; i < prmat->data.size(); i++) {
+                        shared_ptr<OpElement<S, FL>> op =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m]
+                                    ->data[prmat->indices[i].first]);
+                        if (prmat->data[i]->get_type() == OpTypes::Zero)
+                            continue;
+                        shared_ptr<OpElement<S, FL>> exb =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m + 1]
+                                    ->data[prmat->indices[i].second]);
+                        shared_ptr<OpElement<S, FL>> exa =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                prmat->data[i]);
+                        assert(op->q_label == exa->q_label + exb->q_label);
+                    }
+                    this->unload_right_operators(m + 1);
                 }
-            } else if (m != 0) {
-                auto prmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
-                    this->tensors[m]->rmat);
-                for (size_t i = 0; i < prmat->data.size(); i++) {
-                    shared_ptr<OpElement<S, FL>> op =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m]
-                                ->data[prmat->indices[i].first]);
-                    if (prmat->data[i]->get_type() == OpTypes::Zero)
-                        continue;
-                    shared_ptr<OpElement<S, FL>> exb =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m + 1]
-                                ->data[prmat->indices[i].second]);
-                    shared_ptr<OpElement<S, FL>> exa =
-                        dynamic_pointer_cast<OpElement<S, FL>>(prmat->data[i]);
-                    assert(op->q_label == exa->q_label + exb->q_label);
-                }
+                this->unload_tensor(m);
+                this->unload_right_operators(m);
             }
         }
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
     static shared_ptr<GTensor<FL>> get_matrix(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
@@ -1202,8 +1228,9 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 // [pqrs][1] = (Cp \otimes_1 Cq) \otimes_0 (Dr \otimes_1 Ds)
 template <typename S, typename FL>
 struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
-    PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
-        : MPO<S, FL>(hamil->n_sites) {
+    PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+              const string &tag = "2PDM")
+        : MPO<S, FL>(hamil->n_sites, tag) {
         const auto n_sites = MPO<S, FL>::n_sites;
         shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), hamil->vacuum);
@@ -1924,6 +1951,8 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 assert(p == mshape);
                 this->middle_operator_names.push_back(pmop);
                 this->middle_operator_exprs.push_back(pmexpr);
+                this->save_middle_operators(m);
+                this->unload_middle_operators(m);
             }
             // site tensors
             shared_ptr<OperatorTensor<S, FL>> opt =
@@ -2130,10 +2159,17 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             opt->lmat = plmat, opt->rmat = prmat;
             hamil->filter_site_ops(m, {opt->lmat, opt->rmat}, opt->ops);
             this->tensors.push_back(opt);
+            this->save_left_operators(m);
+            this->save_right_operators(m);
+            this->save_tensor(m);
+            this->unload_left_operators(m);
+            this->unload_right_operators(m);
+            this->unload_tensor(m);
         }
         // checking
         for (uint16_t m = 0; m < n_sites; m++) {
             if (m < n_sites - 1) {
+                this->load_middle_operators(m);
                 int mshape = (int)this->middle_operator_names[m]->data.size();
                 auto pmop = dynamic_pointer_cast<SymbolicColumnVector<S>>(
                     this->middle_operator_names[m]);
@@ -2149,7 +2185,10 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     assert(ex->a->q_label.combine(
                                op->q_label, ex->b->q_label) != S(S::invalid));
                 }
+                this->load_tensor(m);
+                this->load_left_operators(m);
                 if (m > 0) {
+                    this->load_left_operators(m - 1);
                     auto plmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
                         this->tensors[m]->lmat);
                     for (size_t i = 0; i < plmat->data.size(); i++) {
@@ -2169,6 +2208,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         assert(exa->q_label.combine(
                                    op->q_label, exb->q_label) != S(S::invalid));
                     }
+                    this->unload_left_operators(m - 1);
                 } else if (m == 0) {
                     auto plmat = this->tensors[m]->lmat;
                     for (size_t i = 0; i < plmat->data.size(); i++) {
@@ -2183,44 +2223,57 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         assert(op->q_label == ex->q_label);
                     }
                 }
+                this->unload_tensor(m);
+                this->unload_left_operators(m);
             }
-            if (m == n_sites - 1) {
-                auto prmat = this->tensors[m]->rmat;
-                for (size_t i = 0; i < prmat->data.size(); i++) {
-                    shared_ptr<OpElement<S, FL>> op =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m]->data[i]);
-                    if (prmat->data[i]->get_type() == OpTypes::Zero)
-                        continue;
-                    shared_ptr<OpElement<S, FL>> ex =
-                        dynamic_pointer_cast<OpElement<S, FL>>(prmat->data[i]);
-                    assert(op->q_label == ex->q_label);
+            if (m != 0) {
+                this->load_tensor(m);
+                this->load_right_operators(m);
+                if (m == n_sites - 1) {
+                    auto prmat = this->tensors[m]->rmat;
+                    for (size_t i = 0; i < prmat->data.size(); i++) {
+                        shared_ptr<OpElement<S, FL>> op =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m]->data[i]);
+                        if (prmat->data[i]->get_type() == OpTypes::Zero)
+                            continue;
+                        shared_ptr<OpElement<S, FL>> ex =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                prmat->data[i]);
+                        assert(op->q_label == ex->q_label);
+                    }
+                } else {
+                    auto prmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        this->tensors[m]->rmat);
+                    this->load_right_operators(m + 1);
+                    for (size_t i = 0; i < prmat->data.size(); i++) {
+                        shared_ptr<OpElement<S, FL>> op =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m]
+                                    ->data[prmat->indices[i].first]);
+                        if (prmat->data[i]->get_type() == OpTypes::Zero)
+                            continue;
+                        shared_ptr<OpElement<S, FL>> exb =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                this->right_operator_names[m + 1]
+                                    ->data[prmat->indices[i].second]);
+                        shared_ptr<OpElement<S, FL>> exa =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                prmat->data[i]);
+                        assert(exa->q_label.combine(
+                                   op->q_label, exb->q_label) != S(S::invalid));
+                    }
+                    this->unload_right_operators(m + 1);
                 }
-            } else if (m != 0) {
-                auto prmat = dynamic_pointer_cast<SymbolicMatrix<S>>(
-                    this->tensors[m]->rmat);
-                for (size_t i = 0; i < prmat->data.size(); i++) {
-                    shared_ptr<OpElement<S, FL>> op =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m]
-                                ->data[prmat->indices[i].first]);
-                    if (prmat->data[i]->get_type() == OpTypes::Zero)
-                        continue;
-                    shared_ptr<OpElement<S, FL>> exb =
-                        dynamic_pointer_cast<OpElement<S, FL>>(
-                            this->right_operator_names[m + 1]
-                                ->data[prmat->indices[i].second]);
-                    shared_ptr<OpElement<S, FL>> exa =
-                        dynamic_pointer_cast<OpElement<S, FL>>(prmat->data[i]);
-                    assert(exa->q_label.combine(op->q_label, exb->q_label) !=
-                           S(S::invalid));
-                }
+                this->unload_tensor(m);
+                this->unload_right_operators(m);
             }
         }
     }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
     static shared_ptr<GTensor<FL>> get_matrix_reduced(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
