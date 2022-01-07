@@ -1629,12 +1629,16 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
         const uint16_t m_end =
             hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        int ntgb = frame->minimal_memory_usage ? 1 : ntg;
+#pragma omp parallel for schedule(dynamic) num_threads(ntgb)
 #ifdef _MSC_VER
         for (int m = (int)m_start; m < (int)m_end; m++) {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            if (frame->minimal_memory_usage)
+                cout << "MPO build ... " << setw(4) << m << " / " << setw(4)
+                     << n_sites << endl;
             this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
@@ -2643,12 +2647,16 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
         const uint16_t m_end =
             hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        int ntgb = frame->minimal_memory_usage ? 1 : ntg;
+#pragma omp parallel for schedule(dynamic) num_threads(ntgb)
 #ifdef _MSC_VER
         for (int m = (int)m_start; m < (int)m_end; m++) {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            if (frame->minimal_memory_usage)
+                cout << "MPO build ... " << setw(4) << m << " / " << setw(4)
+                     << n_sites << endl;
             this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},
@@ -3550,12 +3558,16 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
         const uint16_t m_end =
             hamil->get_n_orbs_right() > 0 ? n_sites - 1 : n_sites;
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        int ntgb = frame->minimal_memory_usage ? 1 : ntg;
+#pragma omp parallel for schedule(dynamic) num_threads(ntgb)
 #ifdef _MSC_VER
         for (int m = (int)m_start; m < (int)m_end; m++) {
 #else
         for (uint16_t m = m_start; m < m_end; m++) {
 #endif
+            if (frame->minimal_memory_usage)
+                cout << "MPO build ... " << setw(4) << m << " / " << setw(4)
+                     << n_sites << endl;
             this->load_tensor(m);
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[m];
             hamil->filter_site_ops((uint16_t)m, {opt->lmat, opt->rmat},

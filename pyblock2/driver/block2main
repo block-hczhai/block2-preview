@@ -534,6 +534,12 @@ if pre_run or not no_pre_run:
             assert n_orbs == n_inactive + n_cas + n_external
         _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
                % (n_inactive, n_cas, n_external))
+        if orb_idx is not None:
+            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
+                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
+                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
+            np.save(scratch + '/orbital_reorder.npy', orb_idx)
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
     elif big_site_method == "folding":
@@ -741,8 +747,12 @@ if dic.get("warmup", None) == "occ":
     cbias = float(dic.get("cbias", 0.0))
     if cbias != 0.0:
         if len(occs) == n_sites:
-            occs = VectorDouble(
-                [c - cbias if c >= 1 else c + cbias for c in occs])
+            if "use_general_spin" in dic:
+                occs = VectorDouble(
+                    [c - cbias if c >= 0.5 else c + cbias for c in occs])
+            else:
+                occs = VectorDouble(
+                    [c - cbias if c >= 1 else c + cbias for c in occs])
         elif len(occs) == 2 * n_sites:
             occs = VectorDouble(
                 [c - cbias if c >= 0.5 else c + cbias for c in occs])
