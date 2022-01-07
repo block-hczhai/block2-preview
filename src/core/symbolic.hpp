@@ -166,6 +166,7 @@ inline void save_symbolic(const shared_ptr<Symbolic<S>> &x, ostream &ofs) {
     ofs.write((char *)&x->m, sizeof(x->m));
     ofs.write((char *)&x->n, sizeof(x->n));
     int sz = (int)x->data.size();
+    assert(x->data.size() == (size_t)sz);
     ofs.write((char *)&sz, sizeof(sz));
     for (int i = 0; i < sz; i++) {
         assert(x->data[i] != nullptr);
@@ -287,8 +288,7 @@ operator*(const shared_ptr<Symbolic<S>> a, const shared_ptr<Symbolic<S>> b) {
                         pidx.begin();
             vector<shared_ptr<OpExpr<S>>> xs;
             xs.reserve(pidx.size() - ki);
-            for (size_t k = ki; k < pidx.size() && idx[pidx[k]].first == i;
-                 k++)
+            for (size_t k = ki; k < pidx.size() && idx[pidx[k]].first == i; k++)
                 xs.push_back(a->data[pidx[k]] * b->data[idx[pidx[k]].second]);
             (*r)[i] = sum(xs);
         }

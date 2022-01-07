@@ -164,6 +164,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         int ntg = threading->activate_global();
         // left blocking
         for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
+            if (frame->minimal_memory_usage)
+                cout << "MPO SIM LEFT BLK ... " << setw(4) << i << " / "
+                     << setw(4) << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_tensor(i, true);
             if (i == 0) {
                 MPO<S, FL>::tensors[i] = MPO<S, FL>::tensors[i]->copy();
@@ -229,6 +232,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         }
         // right blocking
         for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
+            if (frame->minimal_memory_usage)
+                cout << "MPO SIM RIGHT BLK ... " << setw(4) << i << " / "
+                     << setw(4) << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_tensor(i, true);
             if (i == MPO<S, FL>::n_sites - 1) {
                 MPO<S, FL>::tensors[i] = MPO<S, FL>::tensors[i]->copy();
@@ -305,6 +311,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             // and the expr should be zero
             for (size_t i = 0; i < MPO<S, FL>::middle_operator_names.size();
                  i++) {
+                if (frame->minimal_memory_usage)
+                    cout << "MPO SIM MIDDLE DEP ... " << setw(4) << i << " / "
+                         << setw(4) << MPO<S, FL>::n_sites << endl;
                 mpo->load_middle_operators(i);
                 MPO<S, FL>::middle_operator_names[i] =
                     mpo->middle_operator_names[i]->copy();
@@ -377,6 +386,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             // figure out the mutual dependence from right to left
             // px[.][j] is 1 if left operator is useful in next blocking
             for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
+                if (frame->minimal_memory_usage)
+                    cout << "MPO SIM LEFT DEP ... " << setw(4) << i << " / "
+                         << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::load_left_operators(i);
                 if (i != MPO<S, FL>::n_sites - 1) {
                     // if a left operator is not useful in next blocking
@@ -598,6 +610,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             }
             // figure out the mutual dependence from left to right
             for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
+                if (frame->minimal_memory_usage)
+                    cout << "MPO SIM RIGHT DEP ... " << setw(4) << i << " / "
+                         << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::load_right_operators(i);
                 if (i != 0) {
                     if (MPO<S, FL>::schemer == nullptr ||
@@ -818,6 +833,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 make_shared<SymbolicColumnVector<S>>(1);
             (*mpo_op)[0] = mpo->op;
             for (int i = 0; i < MPO<S, FL>::n_sites - 1; i++) {
+                if (frame->minimal_memory_usage)
+                    cout << "MPO SIM MID ... " << setw(4) << i << " / "
+                         << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::middle_operator_names[i] = mpo_op;
                 if (MPO<S, FL>::schemer == nullptr ||
                     i != MPO<S, FL>::schemer->left_trans_site ||
@@ -1186,6 +1204,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ii = 0; ii < MPO<S, FL>::n_sites; ii++) {
             int i = gidx[ii];
+            if (frame->minimal_memory_usage)
+                cout << "MPO SIM ... " << setw(4) << ii << " / " << setw(4)
+                     << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_left_operators(i);
             simplify_symbolic(MPO<S, FL>::left_operator_names[i],
                               MPO<S, FL>::left_operator_exprs[i]);

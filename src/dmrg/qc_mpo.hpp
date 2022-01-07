@@ -1666,6 +1666,8 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
             mode == QCTypes::Conventional) {
             uint16_t m, pm;
             MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            if (frame->minimal_memory_usage)
+                cout << "left middle transform ... " << endl;
             // left transform
             pm = trans_l;
             m = pm + n_orbs_big_left - 1;
@@ -1738,6 +1740,8 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     lexpr[p] = sum(exprs);
                 }
             }
+            if (frame->minimal_memory_usage)
+                cout << "right middle transform ... " << endl;
             // right transform
             pm = trans_r - 1;
             m = pm + n_orbs_big_left - 1;
@@ -2684,6 +2688,8 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             mode == QCTypes::Conventional) {
             uint16_t m, pm;
             MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            if (frame->minimal_memory_usage)
+                cout << "left middle transform ... " << endl;
             // left transform
             pm = trans_l;
             m = pm + n_orbs_big_left - 1;
@@ -2764,6 +2770,8 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     lexpr[p] = sum(exprs);
                 }
             }
+            if (frame->minimal_memory_usage)
+                cout << "right middle transform ... " << endl;
             // right transform
             pm = trans_r - 1;
             m = pm + n_orbs_big_left - 1;
@@ -3548,8 +3556,8 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
             uint16_t pm = trans_l + 1;
             this->save_tensor(pm);
             this->save_left_operators(pm);
-            this->unload_tensor(pm);
             this->save_right_operators(pm);
+            this->unload_tensor(pm);
             this->unload_left_operators(pm);
             this->unload_right_operators(pm);
         }
@@ -3595,6 +3603,8 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
             mode == QCTypes::Conventional) {
             uint16_t m, pm;
             MPO<S, FL>::schemer = make_shared<MPOSchemer<S>>(trans_l, trans_r);
+            if (frame->minimal_memory_usage)
+                cout << "left middle transform ... " << endl;
             // left transform
             pm = trans_l;
             m = pm + n_orbs_big_left - 1;
@@ -3653,6 +3663,8 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                     lexpr[p] = sum(exprs);
                 }
             }
+            if (frame->minimal_memory_usage)
+                cout << "right middle transform ... " << endl;
             // right transform
             pm = trans_r - 1;
             m = pm + n_orbs_big_left - 1;

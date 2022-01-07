@@ -58,6 +58,12 @@ min\_mpo\_mem
     Optional. Followed by auto, True, or False. If True, MPO building and simplification will cost much less memory.
     But the computational cost will be higher due to IO cost. Default is auto, which is True if number of orbitals is >= 80.
 
+qc\_mpo\_type
+    Optional. Followed by auto (default), conventional, nc, or cn. The Hamiltonian MPO formalism type.
+    The default is to use Conventional for non-big-site, and NC for big-site.
+    Conventional DMRG is overall 50% faster than NC, but the cost of the middle site is 2 times higher than NC.
+    If the memory is limited and ``min_mpo_mem`` is used, one should set NC MPO type to make memory cost more uniform.
+
 cached\_contraction
     Optional. Followed by an integer 0 or 1 (default). If 1, cached contraction is used for improving performance.
 

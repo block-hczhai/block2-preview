@@ -297,10 +297,22 @@ for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
         break
 big_site_method = dic.get("big_site", None)
 n_cas = 0
-if dynamic_corr_method is None or dynamic_corr_method[0] == "dmrgfci":
+if dic.get("qc_mpo_type", "auto") != "auto":
+    qctstr = dic.get("qc_mpo_type", "auto")
+    if qctstr == "conventional":
+        qc_type = QCTypes.Conventional
+    elif qctstr == "nc":
+        qc_type = QCTypes.NC
+    elif qctstr == "cn":
+        qc_type = QCTypes.CN
+    else:
+        raise RuntimeError("invalid qc_mpo_type: %s" % qctstr)
+elif dynamic_corr_method is None or dynamic_corr_method[0] == "dmrgfci":
     qc_type = QCTypes.Conventional
 else:
     qc_type = QCTypes.NC
+
+_print('qc mpo type = ', qc_type)
 
 if dic.get("trunc_type", "physical") == "physical":
     trunc_type = TruncationTypes.Physical

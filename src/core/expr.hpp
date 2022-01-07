@@ -734,6 +734,7 @@ template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
             c->save(ofs);
         assert(ops.size() == conjs.size());
         int sz = (int)ops.size();
+        assert(ops.size() == (size_t)sz);
         ofs.write((char *)&sz, sizeof(sz));
         for (int i = 0; i < sz; i++)
             ops[i]->save(ofs);
@@ -840,6 +841,7 @@ template <typename S, typename FL> struct OpSum : OpExpr<S> {
     void save(ostream &ofs) const override {
         OpExpr<S>::save(ofs);
         int sz = (int)strings.size();
+        assert((size_t)sz == strings.size());
         ofs.write((char *)&sz, sizeof(sz));
         for (int i = 0; i < sz; i++)
             strings[i]->save(ofs);
