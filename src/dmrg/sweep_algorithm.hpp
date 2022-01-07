@@ -1240,6 +1240,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     virtual tuple<vector<FPS>, FPS, vector<vector<pair<S, FPS>>>>
     sweep(bool forward, ubond_t bond_dim, FPS noise, FPS davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
+        me->mpo->tread = me->mpo->twrite = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         frame->fpwrite = frame->fpread = 0;
         if (frame->fp_codec != nullptr)
@@ -1505,6 +1506,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         shared_ptr<ParallelMPS<S, FLS>> para_mps =
             dynamic_pointer_cast<ParallelMPS<S, FLS>>(me->ket);
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
+        me->mpo->tread = me->mpo->twrite = 0;
         frame->twrite = frame->tread = frame->tasync = 0;
         frame->fpwrite = frame->fpread = 0;
         if (frame->fp_codec != nullptr)
@@ -1801,15 +1803,17 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     sout << " | Tread = " << frame->tread
                          << " | Twrite = " << frame->twrite
                          << " | Tfpread = " << frame->fpread
-                         << " | Tfpwrite = " << frame->fpwrite;
+                         << " | Tfpwrite = " << frame->fpwrite
+                         << " | Tmporead = " << me->mpo->tread
+                         << " | Tasync = " << frame->tasync << endl;
                     if (frame->fp_codec != nullptr)
                         sout << " | data = "
                              << Parsing::to_size_string(frame->fp_codec->ndata *
                                                         8)
                              << " | cpsd = "
                              << Parsing::to_size_string(frame->fp_codec->ncpsd *
-                                                        8);
-                    sout << " | Tasync = " << frame->tasync << endl;
+                                                        8)
+                             << endl;
                     sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr

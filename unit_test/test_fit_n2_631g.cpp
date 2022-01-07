@@ -17,6 +17,7 @@ class TestFITN2631G : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
+        frame_()->minimal_memory_usage = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             1);
@@ -63,6 +64,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     cout << "MPO sparsification start" << endl;
     int idx = mpo->n_sites - 1;
+    mpo->load_tensor(idx);
     for (auto &op : mpo->tensors[idx]->ops) {
         shared_ptr<CSRSparseMatrix<S, FL>> smat =
             make_shared<CSRSparseMatrix<S, FL>>();
@@ -73,6 +75,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
             smat->wrap_dense(op.second);
         op.second = smat;
     }
+    mpo->save_tensor(idx);
+    mpo->unload_tensor(idx);
     mpo->sparse_form[idx] = 'S';
     mpo->tf = make_shared<TensorFunctions<S, FL>>(
         make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
@@ -149,6 +153,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     cout << "MPO2 sparsification start" << endl;
     idx = mpo2->n_sites - 1;
+    mpo2->load_tensor(idx);
     for (auto &op : mpo2->tensors[idx]->ops) {
         shared_ptr<CSRSparseMatrix<S, FL>> smat =
             make_shared<CSRSparseMatrix<S, FL>>();
@@ -159,6 +164,8 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
             smat->wrap_dense(op.second);
         op.second = smat;
     }
+    mpo2->save_tensor(idx);
+    mpo2->unload_tensor(idx);
     mpo2->sparse_form[idx] = 'S';
     mpo2->tf = make_shared<TensorFunctions<S, FL>>(
         make_shared<CSROperatorFunctions<S, FL>>(hamil->opf->cg));
@@ -279,14 +286,14 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
 
     // 0.25 * Identity MPO between mps3 / mps
     shared_ptr<MPO<S, FL>> impo25 = make_shared<IdentityMPO<S, FL>>(
-        mpo->basis, mpo->basis, hamil->vacuum, hamil->opf);
+        mpo->basis, mpo->basis, hamil->vacuum, hamil->opf, "I25");
     impo25 =
         make_shared<SimplifiedMPO<S, FL>>(impo25, make_shared<Rule<S, FL>>());
     impo25 = 0.25 * impo25;
 
     // 0.75 * Identity MPO between mps3 / mps2
     shared_ptr<MPO<S, FL>> impo75 = make_shared<IdentityMPO<S, FL>>(
-        mpo->basis, mpo2->basis, hamil->vacuum, hamil->opf);
+        mpo->basis, mpo2->basis, hamil->vacuum, hamil->opf, "I75");
     impo75 =
         make_shared<SimplifiedMPO<S, FL>>(impo75, make_shared<Rule<S, FL>>());
     impo75 = 0.75 * impo75;

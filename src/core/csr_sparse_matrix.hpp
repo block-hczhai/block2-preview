@@ -132,6 +132,8 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
         assert(info->n == other->info->n);
         deallocate();
         csr_data.resize(info->n);
+        if (ref && frame->minimal_memory_usage)
+            alloc = cother->alloc;
         for (int i = 0; i < info->n; i++)
             if (!ref)
                 csr_data[i] = make_shared<GCSRMatrix<FL>>(
@@ -140,6 +142,13 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
                 shared_ptr<GCSRMatrix<FL>> mat = cother->csr_data[i];
                 csr_data[i] = make_shared<GCSRMatrix<FL>>(
                     mat->m, mat->n, mat->nnz, mat->data, mat->rows, mat->cols);
+                // under this case, the site tensor will be dynamically loaded
+                // the unload will not explicitly deallocate
+                // so double deallocate will not happen
+                // but if site tensor is persistent
+                // we should set alloc to nullptr to prevent double deallcoate
+                if (frame->minimal_memory_usage)
+                    csr_data[i]->alloc = mat->alloc;
             }
     }
     void selective_copy_from(const shared_ptr<SparseMatrix<S, FL>> &other,
@@ -149,6 +158,8 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
             dynamic_pointer_cast<CSRSparseMatrix>(other);
         deallocate();
         csr_data.resize(info->n);
+        if (ref && frame->minimal_memory_usage)
+            alloc = cother->alloc;
         for (int i = 0, k; i < other->info->n; i++)
             if ((k = info->find_state(other->info->quanta[i])) != -1) {
                 if (!ref)
@@ -159,6 +170,8 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
                     csr_data[k] = make_shared<GCSRMatrix<FL>>(
                         mat->m, mat->n, mat->nnz, mat->data, mat->rows,
                         mat->cols);
+                    if (frame->minimal_memory_usage)
+                        csr_data[k]->alloc = mat->alloc;
                 }
             }
     }

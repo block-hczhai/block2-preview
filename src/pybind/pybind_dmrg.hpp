@@ -1548,7 +1548,11 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
                       uint16_t>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
-                      uint16_t, const shared_ptr<StateInfo<S>> &>());
+                      uint16_t, const shared_ptr<StateInfo<S>> &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const vector<shared_ptr<StateInfo<S>>> &, uint16_t,
+                      uint16_t, const shared_ptr<StateInfo<S>> &,
+                      const string &>());
 
     py::class_<IdentityMPO<S, FL>, shared_ptr<IdentityMPO<S, FL>>, MPO<S, FL>>(
         m, "IdentityMPO")

@@ -48,8 +48,9 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
     AncillaTypes ancilla_type;
     FusedMPO(const shared_ptr<MPO<S, FL>> &mpo,
              const vector<shared_ptr<StateInfo<S>>> &basis, uint16_t a,
-             uint16_t b, const shared_ptr<StateInfo<S>> &ref = nullptr)
-        : MPO<S, FL>(mpo->n_sites - 1) {
+             uint16_t b, const shared_ptr<StateInfo<S>> &ref = nullptr,
+             const string &tag = "")
+        : MPO<S, FL>(mpo->n_sites - 1, tag == "" ? mpo->tag : tag) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -58,19 +59,28 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         assert(mpo->n_sites == basis.size());
         assert(mpo->left_operator_exprs.size() == 0);
         assert(mpo->right_operator_exprs.size() == 0);
-        assert(mpo->tensors[a]->lmat == mpo->tensors[a]->rmat);
-        assert(mpo->tensors[b]->lmat == mpo->tensors[b]->rmat);
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
-        MPO<S, FL>::schemer =
-            mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
+        if (mpo->schemer == nullptr)
+            MPO<S, FL>::schemer = nullptr;
+        else {
+            mpo->load_schemer();
+            MPO<S, FL>::schemer = mpo->schemer->copy();
+            mpo->unload_schemer();
+        }
         MPO<S, FL>::tf = mpo->tf;
         ancilla_type = mpo->get_ancilla_type();
         char fused_sparse_form =
             mpo->sparse_form[a] == 'N' && mpo->sparse_form[b] == 'N' ? 'N'
                                                                      : 'S';
+        mpo->load_tensor(a, true);
+        mpo->load_tensor(b, true);
+        assert(mpo->tensors[a]->lmat == mpo->tensors[a]->rmat);
+        assert(mpo->tensors[b]->lmat == mpo->tensors[b]->rmat);
         shared_ptr<Symbolic<S>> fused_mat =
             mpo->tensors[a]->lmat * mpo->tensors[b]->lmat;
+        mpo->unload_tensor(b);
+        mpo->unload_tensor(a);
         assert(fused_mat->m == 1 || fused_mat->n == 1);
         shared_ptr<StateInfo<S>> fused_basis = nullptr;
         if (ref == nullptr)
@@ -88,14 +98,18 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         vector<shared_ptr<Symbolic<S>>> mats(1);
         if (fused_mat->m == 1) {
             // left contract infos
+            mpo->load_left_operators(b);
             mats[0] = mpo->left_operator_names[b];
+            mpo->unload_left_operators(b);
             assert(mats[0] != nullptr);
             assert(mats[0]->get_type() == SymTypes::RVec);
             opt->lmat = make_shared<SymbolicRowVector<S>>(
                 *dynamic_pointer_cast<SymbolicRowVector<S>>(mats[0]));
         } else {
             // right contract infos
+            mpo->load_right_operators(a);
             mats[0] = mpo->right_operator_names[a];
+            mpo->unload_right_operators(a);
             assert(mats[0] != nullptr);
             assert(mats[0]->get_type() == SymTypes::CVec);
             opt->lmat = make_shared<SymbolicColumnVector<S>>(
@@ -143,6 +157,8 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
             p.second->info =
                 Partition<S, FL>::find_op_info(fused_op_infos, op->q_label);
         }
+        mpo->load_tensor(a);
+        mpo->load_tensor(b);
         // contract
         if (fused_mat->m == 1)
             mpo->tf->left_contract(mpo->tensors[a], mpo->tensors[b], opt,
@@ -150,35 +166,70 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         else
             mpo->tf->right_contract(mpo->tensors[b], mpo->tensors[a], opt,
                                     nullptr);
+        mpo->unload_tensor(b);
+        mpo->unload_tensor(a);
         for (int i = (int)fused_op_infos.size() - 1; i >= 0; i--)
             if (fused_op_infos[i].second->cinfo != nullptr)
                 fused_op_infos[i].second->cinfo->deallocate();
         this->sparse_form = "";
-        for (uint16_t m = 0; m < mpo->n_sites; m++)
+        for (uint16_t m = 0; m < mpo->n_sites; m++) {
             if (m == a) {
                 site_op_infos.push_back(fused_op_infos);
                 tensors.push_back(opt);
+                this->save_tensor((int)tensors.size() - 1);
+                this->unload_tensor((int)tensors.size() - 1);
                 this->basis.push_back(fused_basis);
+                mpo->load_right_operators(m);
                 right_operator_names.push_back(mpo->right_operator_names[m]);
+                mpo->unload_right_operators(m);
                 this->sparse_form.push_back(fused_sparse_form);
+                this->save_right_operators((int)right_operator_names.size() -
+                                           1);
+                this->unload_right_operators((int)right_operator_names.size() -
+                                             1);
             } else if (m != b) {
                 site_op_infos.push_back(mpo->site_op_infos[m]);
+                mpo->load_tensor(m);
                 tensors.push_back(mpo->tensors[m]);
+                mpo->unload_tensor(m);
+                this->save_tensor((int)tensors.size() - 1);
+                this->unload_tensor((int)tensors.size() - 1);
                 this->basis.push_back(basis[m]);
+                mpo->load_left_operators(m);
                 left_operator_names.push_back(mpo->left_operator_names[m]);
+                mpo->unload_left_operators(m);
+                this->save_left_operators((int)left_operator_names.size() - 1);
+                this->unload_left_operators((int)left_operator_names.size() -
+                                            1);
+                mpo->load_right_operators(m);
                 right_operator_names.push_back(mpo->right_operator_names[m]);
+                mpo->unload_right_operators(m);
+                this->save_right_operators((int)right_operator_names.size() -
+                                           1);
+                this->unload_right_operators((int)right_operator_names.size() -
+                                             1);
                 this->sparse_form.push_back(mpo->sparse_form[m]);
-            } else
+            } else {
+                mpo->load_left_operators(m);
                 left_operator_names.push_back(mpo->left_operator_names[m]);
+                mpo->unload_left_operators(m);
+                this->save_left_operators((int)left_operator_names.size() - 1);
+                this->unload_left_operators((int)left_operator_names.size() -
+                                            1);
+            }
+        }
         if (this->schemer != nullptr && this->schemer->left_trans_site >= b)
             this->schemer->left_trans_site--;
         if (this->schemer != nullptr && this->schemer->right_trans_site >= b)
             this->schemer->right_trans_site--;
+        this->save_schemer();
+        this->unload_schemer();
     }
     AncillaTypes get_ancilla_type() const override { return ancilla_type; }
     void deallocate() override {
         for (int16_t m = this->n_sites - 1; m >= 0; m--)
-            this->tensors[m]->deallocate();
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
     }
 };
 

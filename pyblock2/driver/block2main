@@ -357,8 +357,6 @@ if MPI is not None:
 memory = int(int(dic.get("mem", "2").split()[0]) * 1e9)
 mem_ratio = float(dic.get("mem_ratio", 0.4))
 min_mpo_mem = dic.get("min_mpo_mem", "auto")
-if big_site_method == "fock":
-    min_mpo_mem = "F"
 fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 if "intmem" in dic:
     intmemory = int(int(dic["intmem"].split()[0]) * 1e9)
