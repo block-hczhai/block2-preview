@@ -18,7 +18,7 @@
 #
 
 """
-Internally-Contracted NEVPT2 [J. Chem. Phys. 117, 9138 (2002)]
+Internally-Contracted MR-REPT2 (MRLCC2) [J. Chem. Theory Comput. 13, 488 (2017)]
 with equations derived on the fly.
 need internal contraction module of block2.
 """
@@ -60,14 +60,29 @@ SPR = lambda x: x.expand().add_spin_free_trans_symm().remove_external().remove_i
 Comm = lambda b, h, k: SP(b.conjugate() * (h ^ k))
 Rhs = lambda b, k: SPR(b.conjugate() * k)
 
-hi = P("SUM <i> orbe[i] E1[i,i]\n + SUM <r> orbe[r] E1[r,r]")
-h1 = P("SUM <ab> f[ab] E1[a,b]")
-h2 = P("0.5 SUM <abcd> w[abcd] E2[ab,cd]")
-hd = hi + h1 + h2
-hfull = P("SUM <mn> f[mn] E1[m,n] \n - 2.0 SUM <mnj> w[mjnj] E1[m,n]\n"
-    "+ 1.0 SUM <mnj> w[mjjn] E1[m,n]\n + 0.5 SUM <mnxy> w[mnxy] E2[mn,xy]")
+# See J. Chem. Theory Comput. 15, 2291 (2019) Eq. (11)
+# Fink's Hamiltonian
+h1 = P("""
+    SUM <ij> h[ij] E1[i,j]
+    SUM <ab> h[ab] E1[a,b]
+    SUM <rs> h[rs] E1[r,s]
+""")
+h2 = P("""
+    0.5 SUM <ijkl> w[ijkl] E2[ij,kl]
+    0.5 SUM <abcd> w[abcd] E2[ab,cd]
+    0.5 SUM <rstu> w[rstu] E2[rs,tu]
+    0.5 SUM <iajb> w[iajb] E2[ia,jb] \n + 0.5 SUM <iajb> w[iabj] E2[ia,bj]
+    0.5 SUM <irjs> w[irjs] E2[ir,js] \n + 0.5 SUM <irjs> w[irsj] E2[ir,sj]
+    0.5 SUM <aibj> w[aibj] E2[ai,bj] \n + 0.5 SUM <aibj> w[aijb] E2[ai,jb]
+    0.5 SUM <arbs> w[arbs] E2[ar,bs] \n + 0.5 SUM <arbs> w[arsb] E2[ar,sb]
+    0.5 SUM <risj> w[risj] E2[ri,sj] \n + 0.5 SUM <risj> w[rijs] E2[ri,js]
+    0.5 SUM <rasb> w[rasb] E2[ra,sb] \n + 0.5 SUM <rasb> w[rabs] E2[ra,bs]
+""")
+hd = h1 + h2
+hfull = P("SUM <mn> h[mn] E1[m,n] \n + 0.5 SUM <mnxy> w[mnxy] E2[mn,xy]")
 
 # convert < E1[p,a] E1[q,b] > ("dm2") to < E2[pq,ab] > ("E2"), etc.
+# E2[pq,ab] = E1[p,a] E1[q,b] - delta[aq] E1[p,b]
 pdm_eqs = [
     "E1[p,a] = E1[p,a]\n - E1[p,a]\n + dm1[pa]",
     "E2[pq,ab] = E2[pq,ab]\n - E1[p,a] E1[q,b]\n + dm2[paqb]",
@@ -79,7 +94,8 @@ for k, eq in enumerate(pdm_eqs):
     name, expr = PD(eq)
     pdm_eqs[k] = SP(expr).to_einsum(name)
 
-# def of ic-nevpt2 sub-spaces
+
+# def of ic-mrrept2 sub-spaces
 sub_spaces = {
     "ijrs+": "E1[r,i] E1[s,j] \n + E1[s,i] E1[r,j]",
     "ijrs-": "E1[r,i] E1[s,j] \n - E1[s,i] E1[r,j]",
@@ -112,11 +128,13 @@ for key, expr in sub_spaces.items():
         ket2 = P(sub_spaces[key[:-1] + ('1' if key[-1] == '2' else '2')])
         ener2_eqs[key] = Comm(bra, hd, ket2)
 
+allowed_perms = {"AAAA", "EAAA", "EAIA", "EAAI", "AAIA", "EEIA",
+    "EAII", "EEAA", "AAII", "EEII", "EEEE", "IIII",
+    "EIEI", "EAEA", "AIAI", "IIIE", "IAIE", "IIIA"}
+
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E",  WickIndexTypes.Active: "A",
         WickIndexTypes.Inactive: "I"}
-    allowed_perms = {"AAAA", "EAAA", "EAIA", "EAAI", "AAIA",
-                     "EEIA", "EAII", "EEAA", "AAII", "EEII"}
     for term in eq.terms:
         for wt in term.tensors:
             if wt.name == "w":
@@ -130,6 +148,8 @@ def fix_eri_permutations(eq):
                             wt.indices = wtt.indices
                             found = True
                             break
+                    if not found:
+                        print(k)
                     assert found
 
 for eq in [*ener_eqs.values(), *ener2_eqs.values(), *rhhk_eqs.values()]:
@@ -173,7 +193,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
     if pdms is None:
         pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs)
     if eris is None:
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True)
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
@@ -181,10 +201,6 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
     ncas = mc.ncas
     nocc = ncore + ncas
     nvirt = len(ic.mo_energy) - nocc
-    orbeI = ic.mo_energy[:ncore]
-    orbeE = ic.mo_energy[nocc:]
-    wkeys = ["wAAAA", "wEAAA", "wEAIA", "wEAAI", "wAAIA", 
-             "wEEIA", "wEAII", "wEEAA", "wAAII", "wEEII"]
     mdict = {
         "E1": E1, "E2": E2, "E3": E3, "E4": E4,
         "deltaII": np.eye(ncore), "deltaEE": np.eye(nvirt),
@@ -192,12 +208,8 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
         "ident1": np.ones((1, )),
         "ident2": np.ones((1, 1, )),
         "ident3": np.ones((1, 1, 1, )),
-        "fAA": eris.h1eff[ncore:nocc, ncore:nocc],
-        "fAI": eris.h1eff[ncore:nocc, :ncore],
-        "fEI": eris.h1eff[nocc:, :ncore],
-        "fEA": eris.h1eff[nocc:, ncore:nocc],
-        "orbeE": orbeE, "orbeI": orbeI,
-        **{ k: eris.get_phys(k[1:]) for k in wkeys }
+        **{ 'h' + a + b: eris.get_h1(a + b) for a in 'IAE' for b in 'IAE' },
+        **{ 'w' + k: eris.get_phys(k) for k in allowed_perms }
     }
 
     ic.sub_eners = {}
@@ -261,7 +273,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
     lib.logger.note(ic, 'E(%s) = %.16g  E_corr = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
 
-class WickICNEVPT2(lib.StreamObject):
+class WickICMRREPT2(lib.StreamObject):
     def __init__(self, mc):
         self._mc = mc
         assert mc.canonicalization
@@ -277,7 +289,7 @@ class WickICNEVPT2(lib.StreamObject):
 
     kernel = kernel
 
-ICNEVPT2 = WickICNEVPT2
+ICMRREPT2 = WickICMRREPT2
 
 if __name__ == "__main__":
 
@@ -287,9 +299,8 @@ if __name__ == "__main__":
     mf = scf.RHF(mol).run(conv_tol=1E-20)
     mc = mcscf.CASSCF(mf, 6, 8)
     mc.fcisolver.conv_tol = 1e-14
-    mc.canonicalization = True
     mc.run()
-    wsc = WickICNEVPT2(mc).run()
+    wsc = WickICMRREPT2(mc).run()
     # converged SCF energy = -149.608181589162
-    # CASSCF energy = -149.708657770062
-    # E(WickICNEVPT2) = -149.8596598757474  E_corr = -0.2514782865855971
+    # CASSCF energy = -149.708657771221
+    # E(WickICMRREPT2) = -149.9154338112048  E_corr = -0.3072522220430498

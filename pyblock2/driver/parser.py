@@ -35,7 +35,9 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "extrapolation", "cached_contraction", "singlet_embedding", "normalize_mps",
               "dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2", "nevpt2s",
               "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
-              "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
+              "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r", "mrrept2", "mrrept2s",
+              "mrrept2sd", "mrrept2-ijrs", "mrrept2-ij", "mrrept2-rs", "mrrept2-ijr",
+              "mrrept2-rsi", "mrrept2-ir", "mrrept2-i", "mrrept2-r",
               "big_site", "stopt_dmrg", "stopt_compression", "stopt_sampling",
               "model", "k_symmetry", "k_irrep", "k_mod", "init_mps_center",
               "use_complex", "real_density_matrix", "expt_algo_type",
@@ -47,10 +49,10 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
 
-DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "nevpt2",
-                 "nevpt2s", "nevpt2sd"}
+DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "mrrept2",
+                 "mrrept2s", "mrrept2sd"}
 
-NEVPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd"}
+MRPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd", "mrrept2", "mrrept2s", "mrrept2sd"}
 
 RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
@@ -235,7 +237,7 @@ def parse(fname):
         dic["restart_correlation"] = ""
     if len(set(dic.keys()) & RESTART_KEYS) != 0:
         dic["fullrestart"] = ""
-    if len(set(dic.keys()) & NEVPT_KEYS) != 0:
+    if len(set(dic.keys()) & MRPT_KEYS) != 0:
         dic["onepdm"] = ""
 
     return dic

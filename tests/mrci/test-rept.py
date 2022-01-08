@@ -181,6 +181,9 @@ def test_rept():
         RAS_space = [block2.VectorInt(R) for R in RAS_space]  # vacuum
         RAS_space = block2.VectorVectorInt(RAS_space)
         sciWrapLeftPsi0 = SciWrapperExcludeQNs(n_orb, nThawed, False, fcidump, orb_sym, RAS_space, False)
+        # this is keeping only particle-number conserving operators HIBQ
+        # when QnIdxKet is empty, it is the same as if it is full
+        # when both QnIdxKet and QnIdxBra are empty, the operator is deleted
         UW(sciWrapLeftPsi0).setQnIdxBra(VectorInt(np.arange(len(UW(sciWrapLeftPsi0).quantumNumbers))),
                                     VectorChar(["H", "I", "B", "Q"]))
     else:

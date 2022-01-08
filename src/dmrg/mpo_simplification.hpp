@@ -106,8 +106,15 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         MPO<S, FL>::schemer = mpo->schemer;
         size_t left_new_size = 0, right_new_size = 0;
         if (MPO<S, FL>::schemer != nullptr) {
+            if (frame->minimal_memory_usage)
+                cout << "MPO SIM load schemer ... " << endl;
             mpo->load_schemer();
-            MPO<S, FL>::schemer = mpo->schemer->copy();
+            MPO<S, FL>::schemer =
+                frame->minimal_memory_usage
+                    ? make_shared<MPOSchemer<S>>(*mpo->schemer)
+                    : mpo->schemer->copy();
+            if (frame->minimal_memory_usage)
+                cout << "MPO SIM unload schemer ... " << endl;
             mpo->unload_schemer();
             int i = MPO<S, FL>::schemer->left_trans_site;
             left_new_size =

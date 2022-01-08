@@ -65,7 +65,10 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
             MPO<S, FL>::schemer = nullptr;
         else {
             mpo->load_schemer();
-            MPO<S, FL>::schemer = mpo->schemer->copy();
+            MPO<S, FL>::schemer =
+                frame->minimal_memory_usage
+                    ? make_shared<MPOSchemer<S>>(*mpo->schemer)
+                    : mpo->schemer->copy();
             mpo->unload_schemer();
         }
         MPO<S, FL>::tf = mpo->tf;

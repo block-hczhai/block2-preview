@@ -310,6 +310,19 @@ nevpt2s
 nevpt2sd
     Second order N-Electron Valence States for Multireference Perturbation Theory with singles and doubles.
     The inactive / virtual space can have at most two holes / electrons.
+    The zeroth-order Hamiltonian is Dyall's Hamiltonian.
+
+mrrept2
+    *Same as* ``mrrept2sd``.
+
+mrrept2s
+    Second order Restraining the Excitation degree Multireference Perturbation Theory (MRREPT) with singles.
+    The inactive / virtual space can have at most one hole / electron.
+
+mrrept2sd
+    Second order Restraining the Excitation degree Multireference Perturbation Theory (MRREPT) with singles and doubles.
+    The inactive / virtual space can have at most two holes / electrons.
+    The zeroth-order Hamiltonian is Fink's Hamiltonian.
 
 Schedule
 --------

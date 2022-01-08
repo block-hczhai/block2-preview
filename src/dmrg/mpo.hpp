@@ -1402,7 +1402,10 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
             mpo->schemer->right_trans_site - mpo->schemer->left_trans_site ==
                 2) {
             mpo->load_schemer();
-            MPO<S, FL>::schemer = mpo->schemer->copy();
+            MPO<S, FL>::schemer =
+                frame->minimal_memory_usage
+                    ? make_shared<MPOSchemer<S>>(*mpo->schemer)
+                    : mpo->schemer->copy();
             mpo->unload_schemer();
             if (trace_right) {
                 if (n_physical_sites & 1) {
@@ -1444,10 +1447,16 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
         MPO<S, FL>::sparse_form = mpo->sparse_form;
-        mpo->load_schemer();
-        MPO<S, FL>::schemer =
-            mpo->schemer == nullptr ? nullptr : mpo->schemer->copy();
-        mpo->unload_schemer();
+        if (mpo->schemer == nullptr)
+            MPO<S, FL>::schemer = nullptr;
+        else {
+            mpo->load_schemer();
+            MPO<S, FL>::schemer =
+                frame->minimal_memory_usage
+                    ? make_shared<MPOSchemer<S>>(*mpo->schemer)
+                    : mpo->schemer->copy();
+            mpo->unload_schemer();
+        }
         MPO<S, FL>::left_operator_names = mpo->left_operator_names;
         MPO<S, FL>::right_operator_names = mpo->right_operator_names;
         MPO<S, FL>::middle_operator_names = mpo->middle_operator_names;

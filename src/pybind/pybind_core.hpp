@@ -1919,6 +1919,15 @@ template <typename S = void> void bind_post_matrix(py::module &m) {
                  MatrixRef mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
                  self->initialize_from_1pdm_sz(mr);
              });
+
+    py::class_<FinkFCIDUMP, shared_ptr<FinkFCIDUMP>, FCIDUMP<double>>(
+        m, "FinkFCIDUMP")
+        .def(
+            py::init<const shared_ptr<FCIDUMP<double>> &, uint16_t, uint16_t>())
+        .def_readwrite("fcidump", &FinkFCIDUMP::fcidump)
+        .def_readwrite("n_inactive", &FinkFCIDUMP::n_inactive)
+        .def_readwrite("n_virtual", &FinkFCIDUMP::n_virtual)
+        .def_readwrite("n_active", &FinkFCIDUMP::n_active);
 }
 
 template <typename FL> void bind_fl_matrix(py::module &m) {

@@ -229,7 +229,10 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         // this will change schemer in original mpo
         if (MPO<S, FL>::schemer != nullptr) {
             mpo->load_schemer();
-            MPO<S, FL>::schemer = mpo->schemer->copy();
+            MPO<S, FL>::schemer =
+                frame->minimal_memory_usage
+                    ? make_shared<MPOSchemer<S>>(*mpo->schemer)
+                    : mpo->schemer->copy();
             mpo->unload_schemer();
             auto lx = MPO<S, FL>::schemer->left_new_operator_exprs;
             for (size_t j = 0; j < lx->data.size(); j++) {
