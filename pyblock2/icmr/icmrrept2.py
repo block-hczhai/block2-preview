@@ -269,7 +269,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
         if key[-1] in "-1*":
             lib.logger.note(ic, "E(%s-%4s) = %20.14f",
                 ic.__class__.__name__, skey, ic.sub_eners[skey])
-    ic.e_corr = sum(ic.sub_eners.values())
+    ic.e_corr = sum(ic.sub_eners.values()) + ic._mc.e_tot - ic._scf.e_tot
     lib.logger.note(ic, 'E(%s) = %.16g  E_corr = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
 

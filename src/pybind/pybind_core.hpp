@@ -2318,6 +2318,14 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def(py::init<const shared_ptr<FCIDUMP<FL>> &>())
         .def_readwrite("prim_fcidump", &SpinOrbitalFCIDUMP<FL>::prim_fcidump);
 
+    py::class_<MRCISFCIDUMP<FL>, shared_ptr<MRCISFCIDUMP<FL>>, FCIDUMP<FL>>(
+        m, "MRCISFCIDUMP")
+        .def(py::init<const shared_ptr<FCIDUMP<FL>> &, uint16_t, uint16_t>())
+        .def_readwrite("prim_fcidump", &MRCISFCIDUMP<FL>::prim_fcidump)
+        .def_readwrite("n_inactive", &MRCISFCIDUMP<FL>::n_inactive)
+        .def_readwrite("n_virtual", &MRCISFCIDUMP<FL>::n_virtual)
+        .def_readwrite("n_active", &MRCISFCIDUMP<FL>::n_active);
+
     py::class_<BatchGEMMSeq<FL>, shared_ptr<BatchGEMMSeq<FL>>>(m,
                                                                "BatchGEMMSeq")
         .def_readwrite("batch", &BatchGEMMSeq<FL>::batch)

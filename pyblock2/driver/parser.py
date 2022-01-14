@@ -44,7 +44,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "davidson_max_iter", "davidson_soft_max_iter", "one_body_parallel_rule",
               "n_sub_sweeps", "complex_mps", "split_states", "trans_mps_to_complex",
               "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra",
-              "tran_bra_range", "tran_ket_range", "mem_ratio", "min_mpo_mem", "qc_mpo_type"}
+              "tran_bra_range", "tran_ket_range", "mem_ratio", "min_mpo_mem", "qc_mpo_type",
+              "full_integral"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -52,7 +53,8 @@ REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
 DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "mrrept2",
                  "mrrept2s", "mrrept2sd"}
 
-MRPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd", "mrrept2", "mrrept2s", "mrrept2sd"}
+MRPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
+             "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"}
 
 RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",

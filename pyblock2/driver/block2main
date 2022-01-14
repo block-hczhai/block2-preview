@@ -13,7 +13,8 @@ from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, T
 from block2 import VectorUInt8, VectorUBond, VectorVectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, FinkFCIDUMP, ConvergenceTypes
-from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes, SpinOrbitalFCIDUMP
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
+from block2 import SpinOrbitalFCIDUMP, MRCISFCIDUMP, VectorVectorInt
 import numpy as np
 import time
 import os
@@ -134,7 +135,7 @@ if "use_complex" not in dic:
     except ImportError:
         pass
 else:
-    from block2.cpx import FCIDUMP, SpinOrbitalFCIDUMP
+    from block2.cpx import FCIDUMP, SpinOrbitalFCIDUMP, MRCISFCIDUMP
     if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
@@ -352,6 +353,7 @@ has_1npc = "restart_correlation" in dic or "correlation" in dic \
 anti_herm = "orbital_rotation" in dic
 one_body_only = "orbital_rotation" in dic or "one_body_parallel_rule" in dic
 complex_mps = "complex_mps" in dic
+full_integral = "full_integral" in dic
 XExpect = ComplexExpect if complex_mps else Expect
 
 simpl_rule = RuleQC()
@@ -556,6 +558,9 @@ if pre_run or not no_pre_run:
                 orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
             _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
             np.save(scratch + '/orbital_reorder.npy', orb_idx)
+        # if "full_integral" not in dic and dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s"]:
+        #     _print("use mrcis ficdump")
+        #     fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
     elif big_site_method == "folding":
@@ -646,7 +651,7 @@ if pre_run or not no_pre_run:
             n_ex_inactive = sub_space.count('i') + sub_space.count('j')
             n_ex_external = sub_space.count('r') + sub_space.count('s')
             xl = -n_ex_inactive, -n_ex_inactive, -n_ex_inactive
-            xr = n_ex_inactive, n_ex_inactive, n_ex_inactive
+            xr = n_ex_external, n_ex_external, n_ex_external
         elif dynamic_corr_method[0] in ['casci']:
             xl = 0, 0, 0
             xr = 0, 0, 0
@@ -667,12 +672,13 @@ if pre_run or not no_pre_run:
                 else:
                     ref = VectorInt([i + i + 1 for i in range(n_inactive)])
                     xl = 0, abs(xl[1]), abs(xl[2])
-                pocc = SCIFockBigSite.ras_space(False, n_inactive, *xl, ref)
-                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, pocc, True)
+                poccl = SCIFockBigSite.ras_space(False, n_inactive, *xl, ref)
             else:
-                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, *xl, True)
-            big_right_orig = SCIFockBigSite(
-                n_orbs, n_external, True, fcidump, orb_sym, *xr, True)
+                poccl = SCIFockBigSite.ras_space(False, n_inactive, *[abs(x) for x in xl], VectorInt([]))
+            poccr = SCIFockBigSite.ras_space(True, n_external, *xr, VectorInt([]))
+            # need to include casci ref state for the first step even for nevpt2-r
+            big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fcidump, orb_sym, poccl, True)
+            big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fcidump, orb_sym, poccr, True)
         elif big_site_method == "csf":
             assert "nonspinadapted" not in dic
             big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
@@ -2569,15 +2575,19 @@ if not pre_run:
                 n_ex_inactive = sub_space.count('i') + sub_space.count('j')
                 n_ex_external = sub_space.count('r') + sub_space.count('s')
                 xl = -n_ex_inactive, -n_ex_inactive, -n_ex_inactive
-                xr = n_ex_inactive, n_ex_inactive, n_ex_inactive
+                xr = n_ex_external, n_ex_external, n_ex_external
             else:
                 assert False
             if big_site_method == "fock":
                 assert "nonspinadapted" in dic
-                big_left_orig = SCIFockBigSite(
-                    n_orbs, n_inactive, False, fd_zero, orb_sym, *xl, True)
-                big_right_orig = SCIFockBigSite(
-                    n_orbs, n_external, True, fd_zero, orb_sym, *xr, True)
+                poccl = SCIFockBigSite.ras_space(False, n_inactive, *[abs(x) for x in xl], VectorInt([]))
+                poccr = SCIFockBigSite.ras_space(True, n_external, *xr, VectorInt([]))
+                if '-' in dynamic_corr_method[0]:
+                    maxl = max([len(x) for x in poccl])
+                    poccl = VectorVectorInt([x for x in poccl if len(x) == maxl - abs(xl[0])])
+                    poccr = VectorVectorInt([x for x in poccr if len(x) == abs(xr[0])])
+                big_left_orig = SCIFockBigSite(n_orbs, n_inactive, False, fd_zero, orb_sym, poccl, True)
+                big_right_orig = SCIFockBigSite(n_orbs, n_external, True, fd_zero, orb_sym, poccr, True)
             elif big_site_method == "csf":
                 assert "nonspinadapted" not in dic
                 big_left_orig = CSFBigSite(n_inactive, abs(
@@ -2603,7 +2613,7 @@ if not pre_run:
         if big_site_method == "folding":
             lmpo = lmpo_fold
         else:
-            lmpo = MPOQC(hm_zero, qc_type)
+            lmpo = MPOQC(hm_zero, qc_type, "LQC")
         _print("simpl left mpo", time.perf_counter() - tx)
         lmpo = SimplifiedMPO(lmpo, simpl_rule, True, True,
                              OpNamesSet((OpNames.R, OpNames.RD)))
@@ -2611,8 +2621,13 @@ if not pre_run:
         lmpo.const_e -= e_casci
         lmpo = lmpo * -1
 
-        _print('LEFT MPO BOND DIMS = ', ''.join(
-            ["%6d" % (x.m * x.n) for x in lmpo.left_operator_names]))
+        mpo_bdims = [None] * len(lmpo.left_operator_names)
+        for ix in range(len(lmpo.left_operator_names)):
+            lmpo.load_left_operators(ix)
+            x = lmpo.left_operator_names[ix]
+            mpo_bdims[ix] = x.m * x.n
+            lmpo.unload_left_operators(ix)
+        _print('LEFT MPO BOND DIMS = ', ''.join(["%6d" % x for x in mpo_bdims]))
 
         if MPI is None or MPI.rank == 0:
             lmpo.save_data(scratch + '/lmpo.bin')
@@ -2622,15 +2637,20 @@ if not pre_run:
         if big_site_method == "folding":
             rmpo = mpo_fold
         else:
-            rmpo = MPOQC(hamil, qc_type)
+            rmpo = MPOQC(hamil, qc_type, "RQC")
         _print("simpl right mpo", time.perf_counter() - tx)
         rmpo = SimplifiedMPO(rmpo, NoTransposeRule(simpl_rule),
                              True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         _print("simpl right mpo finished", time.perf_counter() - tx)
         rmpo.const_e -= e_casci
 
-        _print('RIGHT MPO BOND DIMS = ', ''.join(
-            ["%6d" % (x.m * x.n) for x in rmpo.left_operator_names]))
+        mpo_bdims = [None] * len(rmpo.left_operator_names)
+        for ix in range(len(rmpo.left_operator_names)):
+            rmpo.load_left_operators(ix)
+            x = rmpo.left_operator_names[ix]
+            mpo_bdims[ix] = x.m * x.n
+            rmpo.unload_left_operators(ix)
+        _print('RIGHT MPO BOND DIMS = ', ''.join(["%6d" % x for x in mpo_bdims]))
 
         if MPI is None or MPI.rank == 0:
             rmpo.save_data(scratch + '/rmpo.bin')
@@ -2653,7 +2673,7 @@ if not pre_run:
 
         # bra mps
         if big_site_method is not None:
-            bra_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+            bra_info = MPSInfo(n_sites, vacuum, target, hm_zero.basis)
         else:
             assert dynamic_corr_method[0] in ['nevpt2sd', 'nevpt2s', "nevpt2-ijrs", "nevpt2-ij",
                 "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",

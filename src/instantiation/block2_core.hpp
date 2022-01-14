@@ -150,6 +150,7 @@ extern template struct block2::DelayedSparseMatrix<
 // integral.hpp
 extern template struct block2::FCIDUMP<double>;
 extern template struct block2::SpinOrbitalFCIDUMP<double>;
+extern template struct block2::MRCISFCIDUMP<double>;
 
 // iterative_matrix_functions.hpp
 extern template struct block2::IterativeMatrixFunctions<double>;
@@ -582,6 +583,7 @@ extern template struct block2::DelayedSparseMatrix<
 // integral.hpp
 extern template struct block2::FCIDUMP<complex<double>>;
 extern template struct block2::SpinOrbitalFCIDUMP<complex<double>>;
+extern template struct block2::MRCISFCIDUMP<complex<double>>;
 
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, complex<double>>;
