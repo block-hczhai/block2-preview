@@ -20,5 +20,6 @@
 
 #pragma once
 
-#include "ic/wick.hpp"
+#include "ic/guga_drt.hpp"
 #include "ic/nd_array.hpp"
+#include "ic/wick.hpp"

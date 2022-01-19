@@ -45,6 +45,7 @@ PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint16_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
+PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 3>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<double>>>);
@@ -1151,6 +1152,29 @@ template <typename S = void> void bind_data(py::module &m) {
         });
 
     py::bind_vector<vector<array<int, 4>>>(m, "VectorArray4Int");
+
+    py::class_<array<int16_t, 3>>(m, "Array3Int16")
+        .def("__setitem__",
+             [](array<int16_t, 3> *self, size_t i, int t) { (*self)[i] = t; })
+        .def("__getitem__",
+             [](array<int16_t, 3> *self, size_t i) { return (*self)[i]; })
+        .def("__len__", [](array<int, 4> *self) { return self->size(); })
+        .def("__repr__",
+             [](array<int16_t, 3> *self) {
+                 stringstream ss;
+                 ss << "(LEN=" << self->size() << ")[";
+                 for (auto x : *self)
+                     ss << x << ",";
+                 ss << "]";
+                 return ss.str();
+             })
+        .def("__iter__", [](array<int16_t, 3> *self) {
+            return py::make_iterator<
+                py::return_value_policy::reference_internal, int16_t *,
+                int16_t *, int16_t &>(&(*self)[0], &(*self)[0] + self->size());
+        });
+
+    py::bind_vector<vector<array<int16_t, 3>>>(m, "VectorArray3Int16");
 
     bind_array<uint8_t>(m, "ArrayUInt8")
         .def("__str__", [](Array<uint8_t> *self) {

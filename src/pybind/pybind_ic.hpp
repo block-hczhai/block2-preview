@@ -589,3 +589,69 @@ template <typename S = void> void bind_wick(py::module &m) {
              py::arg("eq_pattern") = string("+"))
         .def("to_einsum", &WickICMRCI::to_einsum);
 }
+
+template <typename S = void>
+auto bind_guga(py::module &m)
+    -> decltype(typename enable_if<is_void<S>::value>::type()) {
+
+    py::class_<PaldusTable, shared_ptr<PaldusTable>>(m, "PaldusTable")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def_readwrite("abc", &PaldusTable::abc)
+        .def_property_readonly("n_rows", &PaldusTable::n_rows)
+        .def_property_readonly("n_elec", &PaldusTable::n_elec)
+        .def_property_readonly("twos", &PaldusTable::twos)
+        .def("sanity_check", &PaldusTable::sanity_check)
+        .def("diff", &PaldusTable::diff)
+        .def("accu", &PaldusTable::accu)
+        .def("to_step_vector", &PaldusTable::to_step_vector)
+        .def("from_step_vector", &PaldusTable::from_step_vector)
+        .def("__repr__", &PaldusTable::to_str);
+
+    py::class_<DistinctRowTable<S>, shared_ptr<DistinctRowTable<S>>,
+               PaldusTable>(m, "DistinctRowTable")
+        .def(py::init<>())
+        .def(py::init<int16_t, int16_t, int16_t>())
+        .def_readwrite("jd", &DistinctRowTable<S>::jd)
+        .def_property_readonly("n_drt", &DistinctRowTable<S>::n_drt)
+        .def("initialize", &DistinctRowTable<S>::initialize)
+        .def("find_row", &DistinctRowTable<S>::find_row, py::arg("a"),
+             py::arg("b"), py::arg("start") = 0)
+        .def("initialize", &DistinctRowTable<S>::initialize)
+        .def("step_vector_to_arc", &DistinctRowTable<S>::step_vector_to_arc)
+        .def("index_of_step_vector",
+             &DistinctRowTable<S>::index_of_step_vector);
+
+    py::class_<MRCIDistinctRowTable<S>, shared_ptr<MRCIDistinctRowTable<S>>,
+               DistinctRowTable<S>>(m, "MRCIDistinctRowTable")
+        .def(py::init<>())
+        .def(py::init<int16_t, int16_t, int16_t>())
+        .def_readwrite("nref", &MRCIDistinctRowTable<S>::nref)
+        .def_readwrite("nex", &MRCIDistinctRowTable<S>::nex)
+        .def_readwrite("ncore", &MRCIDistinctRowTable<S>::ncore)
+        .def_readwrite("nvirt", &MRCIDistinctRowTable<S>::nvirt)
+        .def_readwrite("ts", &MRCIDistinctRowTable<S>::ts)
+        .def_readwrite("refs", &MRCIDistinctRowTable<S>::refs)
+        .def("initialize_mrci", &MRCIDistinctRowTable<S>::initialize_mrci);
+}
+
+template <typename S = void>
+auto bind_guga(py::module &m)
+    -> decltype(typename enable_if<!is_void<S>::value>::type()) {
+
+    py::class_<DistinctRowTable<S>, shared_ptr<DistinctRowTable<S>>,
+               DistinctRowTable<void>>(m, "DistinctRowTable")
+        .def(py::init<const vector<typename S::pg_t> &>())
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t,
+                      const vector<typename S::pg_t> &>())
+        .def_readwrite("pgs", &DistinctRowTable<S>::pgs)
+        .def_readwrite("orb_sym", &DistinctRowTable<S>::orb_sym);
+
+    py::class_<MRCIDistinctRowTable<S>, shared_ptr<MRCIDistinctRowTable<S>>,
+               MRCIDistinctRowTable<void>>(m, "MRCIDistinctRowTable")
+        .def(py::init<const vector<typename S::pg_t> &>())
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t,
+                      const vector<typename S::pg_t> &>())
+        .def_readwrite("pgs", &MRCIDistinctRowTable<S>::pgs)
+        .def_readwrite("orb_sym", &MRCIDistinctRowTable<S>::orb_sym);
+}

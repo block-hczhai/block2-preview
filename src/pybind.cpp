@@ -187,6 +187,8 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_IC
     bind_wick<>(m);
     bind_nd_array<>(m);
+    bind_guga<>(m);
+    bind_guga<SU2>(m_su2);
 #endif
 
 #ifdef _USE_SCI
