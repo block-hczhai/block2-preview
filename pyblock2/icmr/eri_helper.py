@@ -127,11 +127,28 @@ def init_eris(mc, mo_coeff=None, mrci=False):
 
 def init_pdms(mc, pdm_eqs):
     from pyscf import fci
-    dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mc.ci, mc.ci, mc.ncas, mc.nelecas)
-    dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
-    E1, E2, E3, E4 = [np.zeros_like(dm) for dm in dms]
-    exec("".join(pdm_eqs), globals(), {
-        "E1": E1, "E2": E2, "E3": E3, "E4": E4, **dict(zip(dm_names, dms)),
-        "deltaAA": np.eye(mc.ncas)
-    })
-    return E1, E2, E3, E4
+    if isinstance(mc.ci, list):
+        trans_dms = [None] * len(mc.ci)
+        for ibi in range(len(mc.ci)):
+            dmm = [None] * len(mc.ci)
+            for iki in range(len(mc.ci)):
+                dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mc.ci[ibi], mc.ci[iki],
+                    mc.ncas, mc.nelecas)
+                dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
+                E1, E2, E3, E4 = [np.zeros_like(dm) for dm in dms]
+                exec("".join(pdm_eqs), globals(), {
+                    "E1": E1, "E2": E2, "E3": E3, "E4": E4, **dict(zip(dm_names, dms)),
+                    "deltaAA": np.eye(mc.ncas)
+                })
+                dmm[iki] = E1, E2, E3, E4
+            trans_dms[ibi] = dmm
+        return trans_dms
+    else:
+        dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mc.ci, mc.ci, mc.ncas, mc.nelecas)
+        dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
+        E1, E2, E3, E4 = [np.zeros_like(dm) for dm in dms]
+        exec("".join(pdm_eqs), globals(), {
+            "E1": E1, "E2": E2, "E3": E3, "E4": E4, **dict(zip(dm_names, dms)),
+            "deltaAA": np.eye(mc.ncas)
+        })
+        return E1, E2, E3, E4

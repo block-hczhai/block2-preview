@@ -242,7 +242,7 @@ struct WickPermutation {
     }
     static vector<WickPermutation> pair_symmetric(int n,
                                                   bool hermitian = false) {
-        vector<WickPermutation> r(n - 1);
+        vector<WickPermutation> r(max(n - 1, 0));
         vector<int16_t> x(n * 2);
         for (int i = 1; i < n; i++) {
             for (int j = 0; j < n; j++) {
@@ -251,7 +251,7 @@ struct WickPermutation {
             }
             r[i - 1] = WickPermutation(x, false);
         }
-        if (hermitian) {
+        if (hermitian && n != 0) {
             for (int j = 0; j < n; j++)
                 x[j] = j + n, x[j + n] = j;
             r.push_back(WickPermutation(x, false));
@@ -1116,17 +1116,39 @@ struct WickExpr {
                 }
             ss << x.name << (first ? " += " : " += ");
             first = false;
-            if (term.tensors.size() == 0) {
-                ss << term.factor << "\n";
+            int n_const = 0;
+            for (auto &wt : term.tensors)
+                if (wt.indices.size() == 0)
+                    n_const++;
+            if (term.tensors.size() == 0 || n_const == term.tensors.size()) {
+                if (n_const == 0)
+                    ss << term.factor << "\n";
+                else {
+                    if (term.factor != 1.0)
+                        ss << term.factor << " * ";
+                    int i_const = 0;
+                    for (auto &wt : term.tensors)
+                        if (wt.indices.size() == 0)
+                            ss << wt.name
+                               << (++i_const == n_const ? "\n" : " * ");
+                }
                 continue;
             }
             if (term.factor != 1.0)
                 ss << term.factor << " * ";
+            for (auto &wt : term.tensors)
+                if (wt.indices.size() == 0)
+                    ss << wt.name << " * ";
             ss << "np.einsum('";
-            for (int i = 0; i < (int)term.tensors.size(); i++) {
-                for (auto &wi : term.tensors[i].indices)
+            first = false;
+            for (auto &wt : term.tensors) {
+                if (wt.indices.size() == 0)
+                    continue;
+                if (first)
+                    ss << ",";
+                for (auto &wi : wt.indices)
                     ss << mp[wi], gstr.insert(mp[wi]);
-                ss << (i == (int)term.tensors.size() - 1 ? "" : ",");
+                first = true;
             }
             int n_br = 0;
             for (auto &wi : x.indices)
@@ -1142,6 +1164,8 @@ struct WickExpr {
                 ss << mp[wi];
             ss << "'";
             for (auto &wt : term.tensors) {
+                if (wt.indices.size() == 0)
+                    continue;
                 ss << ", " << wt.name;
                 if (wt.type == WickTensorTypes::KroneckerDelta ||
                     wt.type == WickTensorTypes::Tensor)
