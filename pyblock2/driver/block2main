@@ -561,6 +561,7 @@ if pre_run or not no_pre_run:
         # if "full_integral" not in dic and dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s"]:
         #     _print("use mrcis ficdump")
         #     fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
+    hamil_np = None
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
     elif big_site_method == "folding":
@@ -688,14 +689,18 @@ if pre_run or not no_pre_run:
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
         big_right = SimplifiedBigSite(big_right_orig, simpl_rule)
         if MPI is not None:
+            big_left_np = big_left
+            big_right_np = big_right
             if one_body_only:
                 big_left = ParallelBigSite(big_left, prule_one_body)
                 big_right = ParallelBigSite(big_right, prule_one_body)
             else:
                 big_left = ParallelBigSite(big_left, prule)
                 big_right = ParallelBigSite(big_right, prule)
+            hamil_np = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
+                    None if n_inactive == 0 else big_left_np, None if n_external == 0 else big_right_np)
         hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-                                     None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                    None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
     n_sites = hamil.n_sites
 
 else:
@@ -1109,7 +1114,7 @@ if pre_run or not no_pre_run:
 
     # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
-    pmpo = PDM1MPOQC(hamil, 1 if soc else 0)
+    pmpo = PDM1MPOQC(hamil_np or hamil, 1 if soc else 0)
     pmpo = SimplifiedMPO(pmpo,
                          NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
                          True, True, OpNamesSet((OpNames.R, OpNames.RD)))
@@ -1120,7 +1125,7 @@ if pre_run or not no_pre_run:
     if has_2pdm:
         # mpo for 2pdm
         _print("build 2pdm mpo", time.perf_counter() - tx)
-        p2mpo = PDM2MPOQC(hamil)
+        p2mpo = PDM2MPOQC(hamil_np or hamil)
         p2mpo = SimplifiedMPO(p2mpo,
                               NoTransposeRule(
                                   RuleQC()) if has_tran else RuleQC(),
@@ -1132,7 +1137,7 @@ if pre_run or not no_pre_run:
     if has_1npc:
         # mpo for particle number correlation
         _print("build 1npc mpo", time.perf_counter() - tx)
-        nmpo = NPC1MPOQC(hamil)
+        nmpo = NPC1MPOQC(hamil_np or hamil)
         nmpo = SimplifiedMPO(nmpo, RuleQC(), True, True,
                              OpNamesSet((OpNames.R, OpNames.RD)))
 
@@ -1141,7 +1146,7 @@ if pre_run or not no_pre_run:
 
     # mpo for identity operator
     _print("build identity mpo", time.perf_counter() - tx)
-    impo = IdentityMPO(hamil)
+    impo = IdentityMPO(hamil_np or hamil)
     impo = SimplifiedMPO(impo,
                          NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
                          True, True, OpNamesSet((OpNames.R, OpNames.RD)))
