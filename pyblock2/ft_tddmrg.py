@@ -282,6 +282,9 @@ class RT_GFDMRG(FTDMRG):
 
         # for autocorrelation
         idMPO = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)), RuleQC(), True, True)
+        if self.mpi is not None:
+            idMPO = ParallelMPO(idMPO, self.identrule)
+
         for ii, idx in enumerate(idxs):
 
             #
