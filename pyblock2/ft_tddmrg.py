@@ -100,7 +100,6 @@ class RT_GFDMRG(FTDMRG):
         GF_ij(t) = -i theta(t) <psi0| V_i' exp[i (H-E0) t] V_j |psi0>
         With V_i = a_i or a'_i. theta(t) is the step function (no time-reversal symm)
         Note the definition of the sign of frequency omega.
-        The GF is solved via the correction MPS C = inv(H - E0 + omega + i eta) V |psi0>
 
         :param mps: Start state psi0
         :param E0: Hamiltonian shift, typically ground state energy
