@@ -4806,7 +4806,10 @@ struct Expect {
                      << setprecision(3) << current.current - start.current
                      << endl;
             this->forward = forward;
-            return 0.0;
+            if (expectations.size() != 0 && expectations[0].size() == 1)
+                return expectations[0][0].second;
+            else
+                return 0.0;
         } else {
             Iteration r = blocking(me->center, forward, false, bra_bond_dim,
                                    ket_bond_dim);
