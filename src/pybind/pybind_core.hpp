@@ -68,6 +68,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>>);
@@ -97,6 +98,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>>);
@@ -137,6 +139,8 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<shared_ptr<OpExpr<SZ>>, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -155,6 +159,8 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<shared_ptr<OpExpr<SU2>>, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -358,6 +364,8 @@ template <typename S, typename FL> void bind_fl_expr(py::module &m) {
 
     py::bind_vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>>(
         m, "VectorPExprDouble");
+    py::bind_vector<vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>>>(
+        m, "VectorVectorPExprDouble");
 
     py::class_<OpElement<S, FL>, shared_ptr<OpElement<S, FL>>, OpExpr<S>>(
         m, "OpElement")
