@@ -2198,6 +2198,10 @@ if not pre_run:
             for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
+                if "tran_triangular" in dic:
+                    if iroot < jroot:
+                        continue
+                tx = time.perf_counter()
                 if len(mps_tags) > 1:
                     simps, simps_info, _ = get_mps_from_tags(iroot)
                     sjmps, sjmps_info, _ = get_mps_from_tags(jroot)
@@ -2227,6 +2231,7 @@ if not pre_run:
                     _print("DMRG OCC (state %4d) = " % iroot, "".join(
                         ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                     simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+                _print("tran 1pdm finished", time.perf_counter() - tx)
 
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
@@ -2348,6 +2353,10 @@ if not pre_run:
             for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
+                if "tran_triangular" in dic:
+                    if iroot < jroot:
+                        continue
+                tx = time.perf_counter()
                 if len(mps_tags) > 1:
                     simps, simps_info, _ = get_mps_from_tags(iroot)
                     sjmps, sjmps_info, _ = get_mps_from_tags(jroot)
@@ -2364,6 +2373,7 @@ if not pre_run:
                 dm = do_twopdm(simps, sjmps)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, jroot), dm)
+                _print("tran 2pdm finished", time.perf_counter() - tx)
             if MPI is None or MPI.rank == 0:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 

@@ -274,6 +274,18 @@ complex\_mps
     Should be used together with ``pdm``, ``oh``, or (complex) ``delta_t`` type calculations.
     In complex mode, this should not be used as everything is complex.
 
+tran\_bra\_range
+    Optional. Followed by the range parameter of bra state indices for computing transition density matrices.
+    Normally two numbers are given, which is the starting index and endding index (not included).
+
+tran\_ket\_range
+    Optional. Followed by the range parameter of ket state indices for computing transition density matrices.
+    Normally two numbers are given, which is the starting index and endding index (not included).
+
+tran\_triangular
+    Optional keyword with no associated value. If given, only the transition density matrices with bra state
+    index equal to or greater than the ket state index will be computed.
+
 Uncontracted Dynamic Correlation
 --------------------------------
 

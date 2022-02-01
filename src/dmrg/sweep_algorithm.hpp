@@ -4808,6 +4808,8 @@ struct Expect {
             this->forward = forward;
             if (expectations.size() != 0 && expectations[0].size() == 1)
                 return expectations[0][0].second;
+            else if (expectations.size() != 0 && expectations.back().size() == 1)
+                return expectations.back()[0].second;
             else
                 return 0.0;
         } else {
