@@ -16,8 +16,9 @@
 #  along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 #
+from magic import ipsh
 
-""" Finite temperature chebychev-DMRG for Green's Function
+""" Chebychev-DMRG for Green's Function
 
 :author: Henrik R. Larsson, Jan 2022
 """
@@ -32,9 +33,11 @@ import time, math
 # Set spin-adapted or non-spin-adapted here
 #SpinLabel = SU2
 SpinLabel = SZ
+import gfdmrg
+assert gfdmrg.SpinLabel == SpinLabel
+from gfdmrg import GFDMRG
 
 if SpinLabel == SU2:
-    from block2.su2 import AncillaMPO, AncillaMPSInfo
     from block2.su2 import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO, IdentityAddedMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
@@ -44,9 +47,7 @@ if SpinLabel == SU2:
         hasMPI = True
     except ImportError:
         hasMPI = False
-    from ft_dmrg import FTDMRG_SU2 as FTDMRG
 else:
-    from block2.sz import AncillaMPO, AncillaMPSInfo
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO, IdentityAddedMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
@@ -56,12 +57,13 @@ else:
         hasMPI = True
     except ImportError:
         hasMPI = False
-    from ft_dmrg import FTDMRG_SZ as FTDMRG
 import tools; tools.init(SpinLabel)
 from tools import saveMPStoDir, loadMPSfromDir, changeCanonicalForm
 import numpy as np
 from typing import List, Tuple, Union
 import scipy.linalg as la
+
+from ft_chebydmrg import chebyCoeffNumerical, getMaxNCheby, chebyShift, chebyGreensFunction
 
 if hasMPI:
     MPI = MPICommunicator()
@@ -74,124 +76,9 @@ else:
 
 _print = tools.getVerbosePrinter(MPI.rank == 0, flush=True)
 
-def chebyCoeffNumerical(j, polOrder, fct, sigma, tau):
-    """ Computes Chebychev coefficient numerically.
-
-    :see: - http://arxiv.org/abs/1704.00512; J. Chem. Theory Comput. 2017, 13, 10, 4684–4698
-          - NumRecs, 3rd edition page 234, eq 5.8.7
-
-    :param j: jth Chebychev cofficient
-    :param polOrder: Polynomial expansion number
-    :param fct: Function to approximate
-    :param sigma: 2 / (eMax-eMin)
-    :param tau: (eMin + eMax)/ 2
+class Cheb_GFDMRG(GFDMRG):
     """
-    c = 0
-    for k in range(polOrder):
-        c += fct(np.cos(np.pi * (k + 1 / 2) / polOrder) / sigma + tau) * np.cos(np.pi * j * (k + 1 / 2) / polOrder)
-    c *= 2 / polOrder
-    return c
-
-def getMaxNCheby(eMin, eMax, eta, maxInterval=0.98):
-    """ Computes estimate of required Chebychev expansion for Inv[H-eMin+1j * eta].
-
-    :returns expansion estimate, estimate of chebychev coefficient at that expansion."""
-    scale = 2 * maxInterval / (eMax - eMin)  # 1/a = deltaH
-    Hbar = eMin + maxInterval / scale  # (eMax + eMin) / 2
-    maxNCheby = math.ceil(1.1 / abs(scale * eta))  # 1.1: slightly larger
-    chebC = chebyCoeffNumerical(maxNCheby - 1, maxNCheby, lambda x: (x - eMin + 1j * eta)**-1,
-                                scale, Hbar)
-    return maxNCheby, chebC
-
-def dampJackson(n,N):
-    """Gaussian damping"""
-    Np = N+1
-    g = (Np-n) * np.cos(np.pi * n / Np) / Np
-    g += np.sin(np.pi * n / Np) / (np.tan(np.pi/Np) * Np)
-    return g
-
-def dampLorentz(n,N, lamda=4):
-    """Lorentzian damping"""
-    return np.sinh(lamda * (1-n/N)) / np.sinh(lamda)
-
-def dampNothing(*args,**kwargs):
-    return 1
-
-dampToFunction = {"jackson": dampJackson,
-                  "lorentz": dampLorentz, "none": dampNothing}
-
-def chebyShift(x, scale, eMin, maxInterval):
-    return scale * (x - eMin) - maxInterval
-
-def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
-                           eta:float, eMin:float, eMax:float,
-                           maxInterval=0.98, damping="Jackson"):
-    """ Get (damped) Green's function, G=<A| inv[ H + freqs - eMin + i * eta] |B>, via Chebychev expansion
-    using 3 different methods.
-
-    a) Computes Im(G) *without* eta using Kernel Polynomial Method; Ref B, C, E
-    b) Computes G using analytical Chebychev expansion; Ref A
-    c) Computes G using numerical Chebychev expansion; Ref I
-
-    :param freqs: Frequencies to compute at
-    :param moments: Chebychev moments: <A| Tn| B>,
-            where Tn is the Chebychev polynomial of inv[ H + freqs - eMin + i * eta]
-    :param eta: Damping. Note that this is somewhat redundant with the additional Chebychev damping.
-    :param eMin: min( spectrum(H) ); used for the scaling in the Chebychev expansion
-    :param eMax: max( spectrum(H) ); used for the scaling in the Chebychev expansion
-    :param maxInterval: Interval scaling ([-1,1] or smaller) used for the Chebychev expansion, <= 1
-    :param damping: Damping function of the Chebychev expansion. Options are
-        'Jackson' for Gaussian damping, 'Lorentz' for Lorentzian damping or 'none' for no damping. See Ref E.
-    :return: a), b), c) as np.ndarray
-    """
-    damp = dampToFunction[damping.lower()]
-
-    scale = 2 * maxInterval / (eMax - eMin)  # 1/a = deltaH
-    Hbar = eMin + maxInterval / scale  # (eMax + eMin) / 2
-    FREQSshift = chebyShift(-freqs + eMin, scale, eMin, maxInterval)
-    FREQSshift[FREQSshift < -maxInterval] = maxInterval  # ATTENTION; important to avoid extrapolation
-    FREQSshift[FREQSshift > maxInterval] = maxInterval
-    #                                     vv zs needs to be complex, for numerical reasons
-    zs = chebyShift(-freqs + eMin + 1j * min(eta,1e-12), scale, eMin, maxInterval) # Ref I
-    zs = np.require(zs, dtype=np.complex256)
-
-    Ncheby = len(moments)
-    Ts = [np.ones_like(FREQSshift), FREQSshift.copy()]
-    for i in range(2, Ncheby):
-        Ts.append(2 * FREQSshift * Ts[-1] - Ts[-2])
-
-    numericalCoeffs = np.empty([Ncheby, len(freqs)], dtype=complex)
-    for i in range(Ncheby):
-        numericalCoeffs[i, :] = chebyCoeffNumerical(i, Ncheby, lambda x: (x + freqs - eMin + 1j * eta) ** -1,
-                                                    scale, Hbar)
-    #                                          vv not important but just in case
-    spectrumDelta = np.zeros_like(freqs,dtype=np.float128) # Ref B => not whole Green's function
-    spectrumNum = np.zeros_like(freqs,dtype=np.complex256) # Numerical; Ref I
-    spectrumGreen = np.zeros_like(freqs,dtype=np.complex256) # Ref A
-    for n in range(Ncheby):
-        if n == 0:
-            fac = 1
-            div = .5
-        else:
-            fac = 2
-            div = 1.
-        g = damp(n, len(moments)-1)
-        spectrumDelta += g * moments[n] * Ts[n]
-        spectrumNum += g * div * numericalCoeffs[n,:] * moments[n]
-        # Green's function formula is a bit ill-conditioned.
-        # This should be improvable
-        prac = (1 + np.sqrt(zs**2) * np.sqrt(zs**2 - 1)/ zs**2)**(-n)
-        prec = (+zs)**(n+1) * np.sqrt(1-zs**-2)
-        idxSml = np.abs(prec) == 0 # yes, tiny things matter as well!
-        prec[idxSml] = 1
-        sumTerm = g * fac * moments[n] * prac / prec
-        spectrumGreen[~idxSml] += sumTerm[~idxSml]
-    spectrumDelta *= -scale / np.sqrt(1 - FREQSshift)
-    return spectrumDelta, spectrumGreen, spectrumNum
-
-class FT_Cheb_GFDMRG(FTDMRG):
-    """
-    Finite temperature Chebychev DMRG for Green's Function
+    Chebychev DMRG for Green's Function
 
     References:
     A) PHYSICAL REVIEW B 90, 165112 (2014) http://dx.doi.org/10.1103/PhysRevB.90.165112
@@ -256,6 +143,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
                         For that, it must be the value of the last used maxNCheby
         :return: GF matrix
         """
+        self.delayed_contraction = self.dctr
         ops = [None] * len(idxs)
         rkets = [None] * len(idxs)
         rmpos = [None] * len(idxs)
@@ -269,12 +157,12 @@ class FT_Cheb_GFDMRG(FTDMRG):
 
         if self.mpo_orig is None:
             mpo = MPOQC(self.hamil, QCTypes.Conventional)
-            mpo = SimplifiedMPO(AncillaMPO(mpo), RuleQC(), True, True,
+            mpo = SimplifiedMPO(mpo, RuleQC(), True, True,
                                 OpNamesSet((OpNames.R, OpNames.RD)))
             self.mpo_orig = mpo
 
         mpoNonHerm = MPOQC(self.hamil, QCTypes.Conventional)
-        mpoNonHerm = SimplifiedMPO(AncillaMPO(mpoNonHerm), NoTransposeRule(RuleQC()), True, True,
+        mpoNonHerm = SimplifiedMPO(mpoNonHerm, NoTransposeRule(RuleQC()), True, True,
                             OpNamesSet((OpNames.R, OpNames.RD)))
 
         if self.mpi is not None:
@@ -302,16 +190,16 @@ class FT_Cheb_GFDMRG(FTDMRG):
             mpoNonHerm = ParallelMPO(mpoNonHerm, self.prule)
 
         if self.print_statistics:
-            _print('FT-CGF MPO BOND DIMS = ', ''.join(
+            _print('CGF MPO BOND DIMS = ', ''.join(
                 ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
-            mps_info2 = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
+            mps_info2 = MPSInfo(self.n_sites, self.hamil.vacuum,
                                 self.target, self.hamil.basis)
             mps_info2.set_bond_dimension(bond_dim)
             _, mem2, disk = mpo.estimate_storage(mps_info2, 2)
-            _print("FT-CGF EST MAX MPS BOND DIMS = ", ''.join(
+            _print("CGF EST MAX MPS BOND DIMS = ", ''.join(
                 ["%6d" % x.n_states_total for x in mps_info2.left_dims]))
-            _print("FT-CGF EST PEAK MEM = ", FT_Cheb_GFDMRG.fmt_size(
-                mem2), " SCRATCH = ", FT_Cheb_GFDMRG.fmt_size(disk))
+            _print("CGF EST PEAK MEM = ", Cheb_GFDMRG.fmt_size(
+                mem2), " SCRATCH = ", Cheb_GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
 
@@ -370,7 +258,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
                 _print('>>> START Compression Site = %4d <<<' % idx)
             t = time.perf_counter()
 
-            rket_info = AncillaMPSInfo(self.n_physical_sites, self.hamil.vacuum,
+            rket_info = MPSInfo(self.n_sites, self.hamil.vacuum,
                                        self.target + ops[ii].q_label, self.hamil.basis)
             rket_info.tag = 'DKET%d' % idx
             bond_dim = mps.info.bond_dim
@@ -397,17 +285,16 @@ class FT_Cheb_GFDMRG(FTDMRG):
                 # the mpo and gf are in the same basis
                 # the mpo is SiteMPO
                 rmpos[ii] = SimplifiedMPO(
-                    AncillaMPO(SiteMPO(self.hamil, ops[ii])), NoTransposeRule(RuleQC()),
+                    SiteMPO(self.hamil, ops[ii]), NoTransposeRule(RuleQC()),
                     True, True, OpNamesSet((OpNames.R, OpNames.RD)))
             else:
                 # the mpo is in mo basis and gf is in ao basis
                 # the mpo is sum of SiteMPO (LocalMPO)
                 ao_ops = VectorOpElement([None] * self.n_sites)
-                for ix in range(self.n_physical_sites):
-                    iix = ix * 2 # not ancilla sites
-                    ao_ops[iix] = ops[iix] * mo_coeff[idx, ix]
+                for ix in range(self.n_sites):
+                    ao_ops[ix] = ops[ix] * mo_coeff[idx, ix]
                 rmpos[ii] = SimplifiedMPO(
-                    AncillaMPO(LocalMPO(self.hamil, ao_ops)), NoTransposeRule(RuleQC()),
+                    LocalMPO(self.hamil, ao_ops), NoTransposeRule(RuleQC()),
                     True, True, OpNamesSet((OpNames.R, OpNames.RD)))
 
             if self.mpi is not None:
@@ -457,7 +344,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
         mpoScaled.const_e -= chebyMaxInterval
         mpoScaled2 = 2 * mpoScaled
 
-        idMPONonHerm = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)),
+        idMPONonHerm = SimplifiedMPO(IdentityMPO(self.hamil),
                               NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         minusIdMPONonHerm = -1 * idMPONonHerm
         if self.mpi is not None:
@@ -714,10 +601,10 @@ class FT_Cheb_GFDMRG(FTDMRG):
                 from block2.sz import ParallelMPO
 
         mpo = MPOQC(self.hamil, QCTypes.Conventional)
-        mpo = SimplifiedMPO(AncillaMPO(mpo), NoTransposeRule(RuleQC()), True, True,
+        mpo = SimplifiedMPO(mpo, NoTransposeRule(RuleQC()), True, True,
                                    OpNamesSet((OpNames.R, OpNames.RD)))
         mpo = IdentityAddedMPO(mpo)
-        idMPO = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)),
+        idMPO = SimplifiedMPO(IdentityMPO(self.hamil),
                                      NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
         if self.mpi is not None:
             mpo = ParallelMPO(mpo, self.prule)
@@ -803,9 +690,9 @@ class FT_Cheb_GFDMRG(FTDMRG):
     def printStatistics(self):
         dmain, dseco, imain, iseco = Global.frame.peak_used_memory
         _print("CH-GF PEAK MEM USAGE:",
-               "DMEM = ", FT_Cheb_GFDMRG.fmt_size(dmain + dseco),
+               "DMEM = ", Cheb_GFDMRG.fmt_size(dmain + dseco),
                "(%.0f%%)" % (dmain * 100 / (dmain + dseco)),
-               "IMEM = ", FT_Cheb_GFDMRG.fmt_size(imain + iseco),
+               "IMEM = ", Cheb_GFDMRG.fmt_size(imain + iseco),
                "(%.0f%%)" % (imain * 100 / (imain + iseco)))
 
 
@@ -847,15 +734,15 @@ if __name__ == "__main__":
     solver_tol = 1e-8
     solver_tol = 1e-12
 
-    beta = 80 # inverse temperature
-    dbeta = 0.5 # "time" step
-    mu = -0.026282794560 # Chemical potential for initial state preparation
-
-    dmrg = FT_Cheb_GFDMRG(scratch=scratch, memory=4e9,
+    dmrg = Cheb_GFDMRG(scratch=scratch, memory=4e9,
                        verbose=3, omp_threads=n_threads)
     dmrg.init_hamiltonian_fcidump(point_group, "fcidump")
-    #mps, mu = dmrg.optimize_mu(dmrg.fcidump.n_elec,mu, beta, dbeta, MAX_M)
-    mps = dmrg.prepare_ground_state(mu, beta, dbeta, MAX_M)[0]
+    dmrg.dmrg(bond_dims=gs_bond_dims, noises=gs_noises,
+              n_steps=gs_n_steps, conv_tol=gs_tol, occs=occs, bias=bias, cutoff=cutoff)
+    mps_info = MPSInfo(0)
+    mps_info.load_data(dmrg.scratch + "/GS_MPS_INFO")
+    mps = MPS(mps_info)
+    mps.load_data()
 
     eta = 0.005
     FREQS = np.linspace(-2, 2, 200)
@@ -863,7 +750,7 @@ if __name__ == "__main__":
     alpha = True  # alpha or beta spin
     nCheby = getMaxNCheby(eMin, eMax, eta) # ATTENTION: Much fewer are needed for Krylov-Space method
 
-    saveDir ="chebMPSs"
+    saveDir ="GSSchebMPSs"
     gf = dmrg.greens_function(mps, eMin, eMax, nCheby, idxs,
                               50,
                               cps_bond_dims, cps_noises, cps_tol, cps_n_sweeps,
@@ -875,7 +762,7 @@ if __name__ == "__main__":
                               alpha=alpha,
                               #        restart=4,
                               )
-    fOut = open("ft_chebdmrg_freqs_block2.dat", "w")
+    fOut = open("chebdmrg_freqs_block2.dat", "w")
     fOut.write("# idx jdx omega  Re(gfGreen)  Im(gfGreen)  delta Re(gfNum)  Im(gfNum)\n")
     for ii, idx in enumerate(idxs):
         for jj, jdx in enumerate(idxs):
@@ -894,7 +781,7 @@ if __name__ == "__main__":
 
     gf2, Hs, Ss = dmrg.greens_function_via_krylov_space(FREQS,  eMin, eMax, eta, nCheby, idxs, saveDir,
                                                         useUnscaledHamiltonian=True)
-    fOut = open("ft_chebdmrg_freqs_block2_krylov.dat", "w")
+    fOut = open("chebdmrg_freqs_block2_krylov.dat", "w")
     fOut.write("# idx jdx omega  Re(gf)  Im(gf)\n")
     for ii, idx in enumerate(idxs):
         for jj, jdx in enumerate(idxs):
