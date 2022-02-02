@@ -572,7 +572,7 @@ if pre_run or not no_pre_run:
             _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
         fcidump.reorder(VectorUInt16(orb_idx))
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
-    if "use_hybrid_complex" in dic:
+    if "use_hybrid_complex" in dic and orb_idx is not None:
         fd_cpx_h1e.reorder(VectorUInt16(orb_idx))
     if "trans_integral_to_spin_orbital" in dic:
         fcidump = SpinOrbitalFCIDUMP(fcidump)
