@@ -354,7 +354,6 @@ def orbital_reorder(fcidump, method='gaopt'):
         midx, mf = idx, f
     else:
         raise ValueError("Unknown reorder method: %s" % method)
-    fcidump.reorder(VectorUInt16(midx))
     return midx
 
 

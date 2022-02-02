@@ -530,6 +530,21 @@ if pre_run or not no_pre_run:
             fcidump.params["isym"] = str(isym[0])
         else:
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
+    n_orbs = fcidump.n_sites
+    if "trans_integral_to_spin_orbital" in dic:
+        n_orbs = n_orbs * 2
+    if dynamic_corr_method is not None:
+        if len(dynamic_corr_method[1]) == 2:
+            assert len(nelec) == 1
+            n_cas, n_elec_cas = dynamic_corr_method[1]
+            assert (nelec[0] - n_elec_cas) % 2 == 0
+            n_inactive = (nelec[0] - n_elec_cas) // 2
+            n_external = n_orbs - n_inactive - n_cas
+        else:
+            n_inactive, n_cas, n_external = dynamic_corr_method[1]
+            assert n_orbs == n_inactive + n_cas + n_external
+        _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
+               % (n_inactive, n_cas, n_external))
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
         np.save(scratch + '/orbital_reorder.npy',
@@ -550,6 +565,12 @@ if pre_run or not no_pre_run:
         else:
             orb_idx = orbital_reorder(fcidump, method='fiedler')
             _print("using fiedler reorder = ", orb_idx)
+        if dynamic_corr_method is not None:
+            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
+                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
+                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
+        fcidump.reorder(VectorUInt16(orb_idx))
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
     if "use_hybrid_complex" in dic:
         fd_cpx_h1e.reorder(VectorUInt16(orb_idx))
@@ -594,7 +615,6 @@ if pre_run or not no_pre_run:
         singlet_embedding_spin = spin[0]
     if len(targets) == 1:
         target = targets[0]
-    n_orbs = fcidump.n_sites
     n_sites = n_orbs
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
@@ -613,27 +633,6 @@ if pre_run or not no_pre_run:
                             + "please check point group symmetry and FCIDUMP or set"
                             + " a higher tolerance for the keyword '%s'") % (
             symmetrize_ints_tol, "symmetrize_ints"))
-    if dynamic_corr_method is not None:
-        if len(dynamic_corr_method[1]) == 2:
-            assert len(nelec) == 1
-            n_cas, n_elec_cas = dynamic_corr_method[1]
-            assert (nelec[0] - n_elec_cas) % 2 == 0
-            n_inactive = (nelec[0] - n_elec_cas) // 2
-            n_external = n_orbs - n_inactive - n_cas
-        else:
-            n_inactive, n_cas, n_external = dynamic_corr_method[1]
-            assert n_orbs == n_inactive + n_cas + n_external
-        _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
-               % (n_inactive, n_cas, n_external))
-        if orb_idx is not None:
-            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
-                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
-                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
-            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
-            np.save(scratch + '/orbital_reorder.npy', orb_idx)
-        # if "full_integral" not in dic and dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s"]:
-        #     _print("use mrcis ficdump")
-        #     fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     hamil_np = None
     hamil_cpx_h1e = None
     if big_site_method is None:
