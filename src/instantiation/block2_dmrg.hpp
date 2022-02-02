@@ -640,6 +640,10 @@ extern template struct block2::MovingEnvironment<block2::SZ, complex<double>,
                                                  complex<double>>;
 extern template struct block2::MovingEnvironment<block2::SU2, complex<double>,
                                                  complex<double>>;
+extern template struct block2::MovingEnvironment<block2::SZ, complex<double>,
+                                                 double>;
+extern template struct block2::MovingEnvironment<block2::SU2, complex<double>,
+                                                 double>;
 
 // mpo.hpp
 extern template struct block2::MPO<block2::SZ, complex<double>>;
@@ -825,6 +829,10 @@ extern template struct block2::MovingEnvironment<block2::SZK, complex<double>,
                                                  complex<double>>;
 extern template struct block2::MovingEnvironment<block2::SU2K, complex<double>,
                                                  complex<double>>;
+extern template struct block2::MovingEnvironment<block2::SZK, complex<double>,
+                                                 double>;
+extern template struct block2::MovingEnvironment<block2::SU2K, complex<double>,
+                                                 double>;
 
 // mpo.hpp
 extern template struct block2::MPO<block2::SZK, complex<double>>;
@@ -1012,6 +1020,10 @@ extern template struct block2::MovingEnvironment<block2::SGF, complex<double>,
                                                  complex<double>>;
 extern template struct block2::MovingEnvironment<block2::SGB, complex<double>,
                                                  complex<double>>;
+extern template struct block2::MovingEnvironment<block2::SGF, complex<double>,
+                                                 double>;
+extern template struct block2::MovingEnvironment<block2::SGB, complex<double>,
+                                                 double>;
 
 // mpo.hpp
 extern template struct block2::MPO<block2::SGF, complex<double>>;

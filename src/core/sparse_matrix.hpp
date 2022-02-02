@@ -1989,6 +1989,25 @@ template <typename S, typename FL> struct SparseMatrixGroup {
              });
         return r;
     }
+    static vector<pair<S, FP>>
+    merge_delta_quanta(const vector<pair<S, FP>> &a,
+                       const vector<pair<S, FP>> &b) {
+        vector<pair<S, FP>> r(a);
+        r.insert(r.end(), b.begin(), b.end());
+        sort(r.begin(), r.end(),
+             [](const pair<S, FP> &a, const pair<S, FP> &b) {
+                 return a.second > b.second;
+             });
+        int j = 0;
+        for (int i = 1; i < (int)r.size(); i++)
+            if (r[i].first == r[j].first)
+                r[j].second = sqrt(
+                    abs(r[j].second * r[j].second + r[i].second * r[i].second));
+            else
+                r[j++] = r[i];
+        r.resize(r.size() == 0 ? 0 : j + 1);
+        return r;
+    }
     FP norm() const {
         if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
             return GMatrixFunctions<FL>::norm(

@@ -351,6 +351,99 @@ struct EffectiveFunctions<
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
+    // eigenvalue with mixed real and complex Hamiltonian
+    // Find eigenvalues and eigenvectors of [H_eff]
+    // energies, ndav, nflop, tdav
+    static tuple<vector<FP>, int, size_t, double> eigs_mixed(
+        const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
+        const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
+        bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
+        int soft_max_iter = -1,
+        DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        int ndav = 0;
+        assert(h_eff->compute_diag && x_eff->compute_diag);
+        GMatrix<FL> bre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
+        GMatrix<FL> cre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
+        bre.allocate();
+        cre.allocate();
+        GDiagonalMatrix<FC> aa =
+            GDiagonalMatrix<FC>(nullptr, (MKL_INT)h_eff->diag->total_memory);
+        aa.allocate();
+        aa.clear();
+        GMatrixFunctions<FC>::fill_complex(
+            aa, GMatrix<FL>(h_eff->diag->data, aa.m, aa.n),
+            GMatrix<FL>(nullptr, aa.m, aa.n));
+        GMatrixFunctions<FC>::iadd(
+            aa, GMatrix<FC>(x_eff->diag->data, aa.m, aa.n), 1.0);
+        vector<GMatrix<FC>> bs;
+        for (int i = 0; i < (int)min((MKL_INT)x_eff->ket.size(), (MKL_INT)aa.n);
+             i++)
+            bs.push_back(GMatrix<FC>(x_eff->ket[i]->data,
+                                     (MKL_INT)x_eff->ket[i]->total_memory, 1));
+        frame->activate(0);
+        Timer t;
+        t.get_time();
+        h_eff->tf->opf->seq->cumulative_nflop = 0;
+        x_eff->tf->opf->seq->cumulative_nflop = 0;
+        h_eff->precompute();
+        x_eff->precompute();
+        const function<void(const GMatrix<FC> &, const GMatrix<FC> &)> &f =
+            [h_eff, x_eff, bre, cre](const GMatrix<FC> &b,
+                                     const GMatrix<FC> &c) {
+                // real part
+                GMatrixFunctions<FC>::extract_complex(
+                    b, bre, GMatrix<FL>(nullptr, bre.m, bre.n));
+                cre.clear();
+                if (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                    h_eff->tf->operator()(bre, cre);
+                else
+                    (*h_eff)(bre, cre);
+                GMatrixFunctions<FC>::fill_complex(
+                    c, cre, GMatrix<FL>(nullptr, cre.m, cre.n));
+                GMatrixFunctions<FC>::extract_complex(
+                    b, GMatrix<FL>(nullptr, bre.m, bre.n), bre);
+                cre.clear();
+                if (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                    h_eff->tf->operator()(bre, cre);
+                else
+                    (*h_eff)(bre, cre);
+                GMatrixFunctions<FC>::fill_complex(
+                    c, GMatrix<FL>(nullptr, cre.m, cre.n), cre);
+                // complex part
+                if (x_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (x_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                    x_eff->tf->operator()(b, c);
+                else
+                    (*x_eff)(b, c);
+            };
+        vector<FP> eners = IterativeMatrixFunctions<FC>::harmonic_davidson(
+            f, aa, bs, shift, davidson_type, ndav, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            max_iter, soft_max_iter);
+        h_eff->post_precompute();
+        x_eff->post_precompute();
+        uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop +
+                         x_eff->tf->opf->seq->cumulative_nflop;
+        if (para_rule != nullptr)
+            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+        h_eff->tf->opf->seq->cumulative_nflop = 0;
+        x_eff->tf->opf->seq->cumulative_nflop = 0;
+        aa.deallocate();
+        cre.deallocate();
+        bre.deallocate();
+        assert(h_eff->ket.size() == x_eff->ket.size() * 2);
+        for (int i = 0; i < (int)bs.size(); i++)
+            GMatrixFunctions<FC>::extract_complex(
+                bs[i],
+                GMatrix<FL>(h_eff->ket[i + i]->data,
+                            (MKL_INT)h_eff->ket[i + i]->total_memory, 1),
+                GMatrix<FL>(h_eff->ket[i + i + 1]->data,
+                            (MKL_INT)h_eff->ket[i + i + 1]->total_memory, 1));
+        return make_tuple(eners, ndav, (size_t)nflop, t.get_time());
+    }
 };
 
 template <typename S, typename FL>
@@ -478,6 +571,19 @@ struct EffectiveFunctions<S, FL,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(false);
         return make_tuple(0.0, 0.0, 0, (size_t)0, 0.0);
+    }
+    // eigenvalue with mixed real and complex Hamiltonian
+    // Find eigenvalues and eigenvectors of [H_eff]
+    // energies, ndav, nflop, tdav
+    static tuple<vector<FP>, int, size_t, double> eigs_mixed(
+        const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
+        const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
+        bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
+        int soft_max_iter = -1,
+        DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        assert(false);
+        return make_tuple(vector<FP>{}, 0, (size_t)0, 0.0);
     }
 };
 

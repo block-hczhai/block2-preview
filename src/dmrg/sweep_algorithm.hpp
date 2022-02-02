@@ -69,8 +69,10 @@ inline bool has_abort_file() {
 template <typename S, typename FL, typename FLS> struct DMRG {
     typedef typename MovingEnvironment<S, FL, FLS>::FP FP;
     typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
+    typedef typename GMatrix<FL>::FC FC;
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
+    shared_ptr<MovingEnvironment<S, FC, FLS>> cpx_me;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
     vector<ubond_t> bond_dims;
     vector<vector<ubond_t>> site_dependent_bond_dims;
@@ -857,8 +859,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     1.0);
             tdm += _t.get_time();
             error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
-                dm, mket->wfns, (int)bond_dim, forward, true, new_wfns, rot,
-                cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
+                dm, mket->wfns, (int)bond_dim, forward, cpx_me == nullptr,
+                new_wfns, rot, cutoff, store_wfn_spectra, wfn_spectra,
+                trunc_type);
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
@@ -985,15 +988,36 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
-            me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
-                              forward, true);
-        sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            nullptr;
+        shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> x_eff =
+            nullptr;
+        // complex correction me
+        if (cpx_me != nullptr) {
+            x_eff = cpx_me->multi_eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
+            // create h_eff last to allow delayed contraction
+            h_eff = me->multi_eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
+                                                x_eff->op->get_total_memory());
+        } else {
+            h_eff = me->multi_eff_ham(
+                fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        }
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, davidson_type,
-                          davidson_shift - xreal<FL>(me->mpo->const_e),
-                          me->para_rule);
+        if (x_eff != nullptr)
+            pdi = EffectiveFunctions<S, FL>::eigs_mixed(
+                h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
+                davidson_max_iter, davidson_soft_max_iter, davidson_type,
+                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+        else
+            pdi = h_eff->eigs(
+                iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                davidson_soft_max_iter, davidson_type,
+                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -1003,6 +1027,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
+        if (cpx_me != nullptr)
+            for (int i = 0; i < mket->nroots / 2; i++)
+                mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
+                    mps_quanta[i + i], mps_quanta[i + i + 1]);
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(
@@ -1010,6 +1038,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mket->info, mket->weights, noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (x_eff != nullptr)
+            x_eff->deallocate();
         return pdi;
     }
     // State-averaged two-site algorithm
@@ -1068,9 +1098,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     1.0);
             tdm += _t.get_time();
             error = MovingEnvironment<S, FL, FLS>::multi_split_density_matrix(
-                dm, old_wfns, (int)bond_dim, forward, true, mket->wfns,
-                forward ? mket->tensors[i] : mket->tensors[i + 1], cutoff,
-                store_wfn_spectra, wfn_spectra, trunc_type);
+                dm, old_wfns, (int)bond_dim, forward, cpx_me == nullptr,
+                mket->wfns, forward ? mket->tensors[i] : mket->tensors[i + 1],
+                cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
@@ -1161,14 +1191,32 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
-            me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
-        sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            nullptr;
+        shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> x_eff =
+            nullptr;
+        // complex correction me
+        if (cpx_me != nullptr) {
+            x_eff = cpx_me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
+            h_eff = me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
+                                                x_eff->op->get_total_memory());
+        } else {
+            h_eff = me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
+            sweep_max_eff_ham_size =
+                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        }
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, davidson_type,
-                          davidson_shift - xreal<FL>(me->mpo->const_e),
-                          me->para_rule);
+        if (x_eff != nullptr)
+            pdi = EffectiveFunctions<S, FL>::eigs_mixed(
+                h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
+                davidson_max_iter, davidson_soft_max_iter, davidson_type,
+                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+        else
+            pdi = h_eff->eigs(
+                iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+                davidson_soft_max_iter, davidson_type,
+                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -1178,6 +1226,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
+        if (cpx_me != nullptr)
+            for (int i = 0; i < mket->nroots / 2; i++)
+                mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
+                    mps_quanta[i + i], mps_quanta[i + i + 1]);
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(
@@ -1185,6 +1237,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (x_eff != nullptr)
+            x_eff->deallocate();
         return pdi;
     }
     virtual Iteration blocking(int i, bool forward, ubond_t bond_dim, FPS noise,
@@ -1193,6 +1247,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         me->move_to(i);
         for (auto &xme : ext_mes)
             xme->move_to(i);
+        if (cpx_me != nullptr)
+            cpx_me->move_to(i);
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<FPS>(), 0, 0, 0);
@@ -1253,6 +1309,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         me->prepare();
         for (auto &xme : ext_mes)
             xme->prepare();
+        if (cpx_me != nullptr)
+            cpx_me->prepare();
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
@@ -4808,7 +4866,8 @@ struct Expect {
             this->forward = forward;
             if (expectations.size() != 0 && expectations[0].size() == 1)
                 return expectations[0][0].second;
-            else if (expectations.size() != 0 && expectations.back().size() == 1)
+            else if (expectations.size() != 0 &&
+                     expectations.back().size() == 1)
                 return expectations.back()[0].second;
             else
                 return 0.0;

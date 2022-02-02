@@ -20,5 +20,9 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void bind_fl_moving_environment<SZ, double, double>(py::module &m);
-template void bind_fl_moving_environment<SU2, double, double>(py::module &m);
+template void
+bind_fl_moving_environment<SZ, double, double>(py::module &m,
+                                               const string &name);
+template void
+bind_fl_moving_environment<SU2, double, double>(py::module &m,
+                                                const string &name);

@@ -100,7 +100,7 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
     forward(shared_ptr<SparseMatrix<S, FP>> mat) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        assert(mat->get_tpye() == SparseMatrixTypes::Normal);
+        assert(mat->get_type() == SparseMatrixTypes::Normal);
         shared_ptr<SparseMatrix<S, FL>> cmat =
             make_shared<SparseMatrix<S, FL>>(d_alloc);
         cmat->allocate(mat->info);
@@ -117,7 +117,7 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
             make_shared<VectorAllocator<FP>>();
         shared_ptr<SparseMatrixGroup<S, FL>> cwfn =
             make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
-        wfn->allocate(wfn->infos);
+        cwfn->allocate(wfn->infos);
         GMatrixFunctions<FL>::fill_complex(
             GMatrix<FL>(cwfn->data, cwfn->total_memory, 1),
             GMatrix<FP>(wfn->data, wfn->total_memory, 1),
@@ -126,10 +126,19 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
     }
     static vector<shared_ptr<SparseMatrixGroup<S, FL>>>
     forward(const vector<shared_ptr<SparseMatrixGroup<S, FP>>> wfns) {
-        vector<shared_ptr<SparseMatrixGroup<S, FL>>> cwfns(wfns.size(),
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> cwfns(wfns.size() / 2,
                                                            nullptr);
-        for (size_t i = 0; i < wfns.size(); i++)
-            cwfns[i] = forward(wfns[i]);
+        for (size_t i = 0; i < cwfns.size(); i++) {
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            cwfns[i] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
+            cwfns[i]->allocate(wfns[i + i]->infos);
+            GMatrixFunctions<FL>::fill_complex(
+                GMatrix<FL>(cwfns[i]->data, cwfns[i]->total_memory, 1),
+                GMatrix<FP>(wfns[i + i]->data, wfns[i + i]->total_memory, 1),
+                GMatrix<FP>(wfns[i + i + 1]->data,
+                            wfns[i + i + 1]->total_memory, 1));
+        }
         return cwfns;
     }
 };
@@ -262,10 +271,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->offset = 0;
         }
-        mpo->tf->left_rotate(
-            new_left, ComplexMixture<S, FL, FLS>::forward(bra->tensors[i - 1]),
-            ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]),
-            envs[i]->left);
+        shared_ptr<SparseMatrix<S, FL>> fbt =
+            ComplexMixture<S, FL, FLS>::forward(bra->tensors[i - 1]);
+        shared_ptr<SparseMatrix<S, FL>> fkt =
+            bra == ket
+                ? fbt
+                : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
+        mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
         if (!frame->use_main_stack)
             new_left->deallocate();
         trot += _t.get_time();
@@ -378,11 +390,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->offset = 0;
         }
-        mpo->tf->right_rotate(
-            new_right,
-            ComplexMixture<S, FL, FLS>::forward(bra->tensors[i + dot]),
-            ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]),
-            envs[i]->right);
+        shared_ptr<SparseMatrix<S, FL>> fbt =
+            ComplexMixture<S, FL, FLS>::forward(bra->tensors[i + dot]);
+        shared_ptr<SparseMatrix<S, FL>> fkt =
+            bra == ket
+                ? fbt
+                : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
+        mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
         if (!frame->use_main_stack)
             new_right->deallocate();
         trot += _t.get_time();
@@ -1611,11 +1625,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        shared_ptr<SparseMatrix<S, FL>> fbw =
+            ComplexMixture<S, FL, FLS>::forward(bra_wfn);
+        shared_ptr<SparseMatrix<S, FL>> fkw =
+            bra_wfn == ket_wfn ? fbw
+                               : ComplexMixture<S, FL, FLS>::forward(ket_wfn);
         shared_ptr<EffectiveHamiltonian<S, FL>> efh =
             make_shared<EffectiveHamiltonian<S, FL>>(
-                left_op_infos, right_op_infos, op,
-                ComplexMixture<S, FL, FLS>::forward(bra_wfn),
-                ComplexMixture<S, FL, FLS>::forward(ket_wfn), mpo->op, hops,
+                left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame->update_peak_used_memory();
@@ -1736,11 +1753,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> fbw =
+            ComplexMixture<S, FL, FLS>::forward(mbra->wfns);
+        vector<shared_ptr<SparseMatrixGroup<S, FL>>> fkw =
+            mbra == mket ? fbw
+                         : ComplexMixture<S, FL, FLS>::forward(mket->wfns);
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> efh =
             make_shared<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>(
-                left_op_infos, right_op_infos, op,
-                ComplexMixture<S, FL, FLS>::forward(mbra->wfns),
-                ComplexMixture<S, FL, FLS>::forward(mket->wfns), mpo->op, hops,
+                left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame->update_peak_used_memory();
@@ -2159,7 +2179,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             GDiagonalMatrix<FPS> w(nullptr, dm->info->n_states_bra[i]);
             w.allocate(d_allocs[i]);
             if (trunc_type & TruncationTypes::RealDensityMatrix)
-                GMatrixFunctions<FL>::keep_real((*dm)[i]);
+                GMatrixFunctions<FLS>::keep_real((*dm)[i]);
             GMatrixFunctions<FLS>::eigs((*dm)[i], w);
             GMatrix<FPS> wr(nullptr, w.n, 1);
             wr.allocate(d_allocs[i]);
