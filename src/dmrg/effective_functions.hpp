@@ -365,8 +365,11 @@ struct EffectiveFunctions<
         assert(h_eff->compute_diag && x_eff->compute_diag);
         GMatrix<FL> bre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
         GMatrix<FL> cre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
+        // need this temp array to avoid double accumulate sum in parallel
+        GMatrix<FC> cc(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
         bre.allocate();
         cre.allocate();
+        cc.allocate();
         GDiagonalMatrix<FC> aa =
             GDiagonalMatrix<FC>(nullptr, (MKL_INT)h_eff->diag->total_memory);
         aa.allocate();
@@ -389,8 +392,8 @@ struct EffectiveFunctions<
         h_eff->precompute();
         x_eff->precompute();
         const function<void(const GMatrix<FC> &, const GMatrix<FC> &)> &f =
-            [h_eff, x_eff, bre, cre](const GMatrix<FC> &b,
-                                     const GMatrix<FC> &c) {
+            [h_eff, x_eff, bre, cre, cc](const GMatrix<FC> &b,
+                                         const GMatrix<FC> &c) {
                 // real part
                 GMatrixFunctions<FC>::extract_complex(
                     b, bre, GMatrix<FL>(nullptr, bre.m, bre.n));
@@ -413,11 +416,13 @@ struct EffectiveFunctions<
                 GMatrixFunctions<FC>::fill_complex(
                     c, GMatrix<FL>(nullptr, cre.m, cre.n), cre);
                 // complex part
+                cc.clear();
                 if (x_eff->tf->opf->seq->mode == SeqTypes::Auto ||
                     (x_eff->tf->opf->seq->mode & SeqTypes::Tasked))
-                    x_eff->tf->operator()(b, c);
+                    x_eff->tf->operator()(b, cc);
                 else
-                    (*x_eff)(b, c);
+                    (*x_eff)(b, cc);
+                GMatrixFunctions<FC>::iadd(c, cc, 1.0);
             };
         vector<FP> eners = IterativeMatrixFunctions<FC>::harmonic_davidson(
             f, aa, bs, shift, davidson_type, ndav, iprint,
@@ -432,6 +437,7 @@ struct EffectiveFunctions<
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         x_eff->tf->opf->seq->cumulative_nflop = 0;
         aa.deallocate();
+        cc.deallocate();
         cre.deallocate();
         bre.deallocate();
         assert(h_eff->ket.size() == x_eff->ket.size() * 2);

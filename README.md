@@ -378,6 +378,6 @@ To run this example:
 Since `block2` is designed as a header-only C++ library, it can be conveniently executed
 using C++ interpreter [cling](https://github.com/root-project/cling)
 (which can be installed via [anaconda](https://anaconda.org/conda-forge/cling))
-without any compilation. This can be useful for testing samll changes in the C++ code.
+without any compilation. This can be useful for testing small changes in the C++ code.
 
 Example C++ code for `cling` can be found at `tests/cling/hubbard.cl`.
