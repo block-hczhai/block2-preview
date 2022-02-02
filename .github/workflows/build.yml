@@ -5,6 +5,7 @@ on:
     branches: [ master ]
     tags:
       - v*
+      - p*
   pull_request:
     branches: [ master ]
 
@@ -111,7 +112,7 @@ jobs:
           mpirun -n 2 ./block2_tests
 
       - name: build wheels (macos)
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macos-latest'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -121,7 +122,7 @@ jobs:
           python -m pip wheel . -w ./dist --no-deps
 
       - name: prepare build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -130,7 +131,7 @@ jobs:
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'ubuntu-latest'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
         uses: ./.github/actions/build-wheel
         with:
           python-version: ${{ matrix.python }}
