@@ -362,6 +362,47 @@ if has_tran:
 if anti_herm:
     simpl_rule = AntiHermitianRuleQC(simpl_rule)
 
+if "use_hybrid_complex" in dic:
+    assert "use_complex" not in dic
+    _print("USE HYBRID COMPLEX MPO")
+    cached_contraction = False
+    from block2.cpx import FCIDUMP as FCIDUMPCPX
+    if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
+        from block2.cpx.sz import RuleQC as RuleQCCPX, NoTransposeRule as NoTransposeRuleCPX
+        from block2.cpx.sz import AntiHermitianRuleQC as AntiHermitianRuleQCCPX, MovingEnvironmentX
+        from block2.cpx.sz import HamiltonianQC as HamiltonianQCCPX, ParallelMPO as ParallelMPOCPX
+        from block2.cpx.sz import MPOQC as MPOQCCPX, MPO as MPOCPX, SimplifiedMPO as SimplifiedMPOCPX
+        from block2.cpx.sz import ParallelRuleQC as ParallelRuleQCCPX, ParallelRuleOneBodyQC as ParallelRuleOneBodyQCCPX
+    elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
+        from block2.cpx.su2 import RuleQC as RuleQCCPX, NoTransposeRule as NoTransposeRuleCPX
+        from block2.cpx.su2 import AntiHermitianRuleQC as AntiHermitianRuleQCCPX, MovingEnvironmentX
+        from block2.cpx.su2 import HamiltonianQC as HamiltonianQCCPX, ParallelMPO as ParallelMPOCPX
+        from block2.cpx.su2 import MPOQC as MPOQCCPX, MPO as MPOCPX, SimplifiedMPO as SimplifiedMPOCPX
+        from block2.cpx.su2 import ParallelRuleQC as ParallelRuleQCCPX, ParallelRuleOneBodyQC as ParallelRuleOneBodyQCCPX
+    elif "nonspinadapted" in dic and "k_symmetry" in dic:
+        from block2.cpx.szk import RuleQC as RuleQCCPX, NoTransposeRule as NoTransposeRuleCPX
+        from block2.cpx.szk import AntiHermitianRuleQC as AntiHermitianRuleQCCPX, MovingEnvironmentX
+        from block2.cpx.szk import HamiltonianQC as HamiltonianQCCPX, ParallelMPO as ParallelMPOCPX
+        from block2.cpx.szk import MPOQC as MPOQCCPX, MPO as MPOCPX, SimplifiedMPO as SimplifiedMPOCPX
+        from block2.cpx.szk import ParallelRuleQC as ParallelRuleQCCPX, ParallelRuleOneBodyQC as ParallelRuleOneBodyQCCPX
+    elif "nonspinadapted" not in dic and "k_symmetry" in dic:
+        from block2.cpx.su2k import RuleQC as RuleQCCPX, NoTransposeRule as NoTransposeRuleCPX
+        from block2.cpx.su2k import AntiHermitianRuleQC as AntiHermitianRuleQCCPX, MovingEnvironmentX
+        from block2.cpx.su2k import HamiltonianQC as HamiltonianQCCPX, ParallelMPO as ParallelMPOCPX
+        from block2.cpx.su2k import MPOQC as MPOQCCPX, MPO as MPOCPX, SimplifiedMPO as SimplifiedMPOCPX
+        from block2.cpx.su2k import ParallelRuleQC as ParallelRuleQCCPX, ParallelRuleOneBodyQC as ParallelRuleOneBodyQCCPX
+    elif "use_general_spin" in dic:
+        from block2.cpx.sgf import RuleQC as RuleQCCPX, NoTransposeRule as NoTransposeRuleCPX
+        from block2.cpx.sgf import AntiHermitianRuleQC as AntiHermitianRuleQCCPX, MovingEnvironmentX
+        from block2.cpx.sgf import HamiltonianQC as HamiltonianQCCPX, ParallelMPO as ParallelMPOCPX
+        from block2.cpx.sgf import MPOQC as MPOQCCPX, MPO as MPOCPX, SimplifiedMPO as SimplifiedMPOCPX
+        from block2.cpx.sgf import ParallelRuleQC as ParallelRuleQCCPX, ParallelRuleOneBodyQC as ParallelRuleOneBodyQCCPX
+    simpl_rule_cpx_h1e = RuleQCCPX()
+    if has_tran:
+        simpl_rule_cpx_h1e = NoTransposeRuleCPX(simpl_rule_cpx_h1e)
+    if anti_herm:
+        simpl_rule_cpx_h1e = AntiHermitianRuleQCCPX(simpl_rule_cpx_h1e)
+
 if MPI is not None and MPI.rank == 0:
     if not os.path.isdir(scratch):
         os.mkdir(scratch)
@@ -408,6 +449,10 @@ if MPI is not None:
     prule_pdm2 = ParallelRulePDM2QC(MPI)
     prule_ident = ParallelRuleIdentity(MPI)
 
+if "use_hybrid_complex" in dic:
+    if MPI is not None:
+        prule_cpx_h1e = ParallelRuleQCCPX(MPI)
+        prule_one_body_cpx_h1e = ParallelRuleOneBodyQCCPX(MPI)
 
 # prepare hamiltonian
 if pre_run or not no_pre_run:
@@ -452,13 +497,54 @@ if pre_run or not no_pre_run:
         orb_sym = None
         fints = dic["orbitals"]
         if open(fints, 'rb').read(4) != b'\x89HDF':
-            fcidump = FCIDUMP()
-            fcidump.read(fints)
+            # separate fcidump into real and complex parts
+            if "use_hybrid_complex" in dic:
+                fd_cpx = FCIDUMPCPX()
+                fd_cpx.read(fints)
+                fh1e = np.array(fd_cpx.h1e_matrix())
+                rg2e = np.array(fd_cpx.g2e_1fold())
+                assert np.abs(np.linalg.norm(np.imag(rg2e))) < 1E-20
+                assert np.abs(np.imag(fd_cpx.const_e)) < 1E-20
+                rg2e = np.real(rg2e).copy() # make contig
+                rh1e = np.real(fh1e).copy()
+                ch1e = fh1e.copy()
+                rh1e[np.abs(np.imag(fh1e)) >= 1E-20] = 0.0
+                ch1e[np.abs(np.imag(fh1e)) < 1E-20] = 0.0
+                assert not fd_cpx.uhf
+                fcidump = FCIDUMP()
+                if fd_cpx.uhf:
+                    fcidump.initialize_sz(
+                        fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, np.real(fd_cpx.const_e), rh1e, rg2e)
+                else:
+                    fcidump.initialize_su2(
+                        fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, np.real(fd_cpx.const_e), rh1e, rg2e)
+                fcidump.orb_sym = fd_cpx.orb_sym
+                fd_cpx_h1e = FCIDUMPCPX()
+                fd_cpx_h1e.initialize_h1e(fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, np.imag(fd_cpx.const_e), ch1e)
+                fd_cpx_h1e.orb_sym = fd_cpx.orb_sym
+            else:
+                fcidump = FCIDUMP()
+                fcidump.read(fints)
             fcidump.params["nelec"] = str(nelec[0])
             fcidump.params["ms2"] = str(spin[0])
             fcidump.params["isym"] = str(isym[0])
         else:
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
+    n_orbs = fcidump.n_sites
+    if "trans_integral_to_spin_orbital" in dic:
+        n_orbs = n_orbs * 2
+    if dynamic_corr_method is not None:
+        if len(dynamic_corr_method[1]) == 2:
+            assert len(nelec) == 1
+            n_cas, n_elec_cas = dynamic_corr_method[1]
+            assert (nelec[0] - n_elec_cas) % 2 == 0
+            n_inactive = (nelec[0] - n_elec_cas) // 2
+            n_external = n_orbs - n_inactive - n_cas
+        else:
+            n_inactive, n_cas, n_external = dynamic_corr_method[1]
+            assert n_orbs == n_inactive + n_cas + n_external
+        _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
+               % (n_inactive, n_cas, n_external))
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
         np.save(scratch + '/orbital_reorder.npy',
@@ -479,7 +565,15 @@ if pre_run or not no_pre_run:
         else:
             orb_idx = orbital_reorder(fcidump, method='fiedler')
             _print("using fiedler reorder = ", orb_idx)
+        if dynamic_corr_method is not None:
+            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
+                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
+                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
+        fcidump.reorder(VectorUInt16(orb_idx))
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
+    if "use_hybrid_complex" in dic and orb_idx is not None:
+        fd_cpx_h1e.reorder(VectorUInt16(orb_idx))
     if "trans_integral_to_spin_orbital" in dic:
         fcidump = SpinOrbitalFCIDUMP(fcidump)
 
@@ -521,7 +615,6 @@ if pre_run or not no_pre_run:
         singlet_embedding_spin = spin[0]
     if len(targets) == 1:
         target = targets[0]
-    n_orbs = fcidump.n_sites
     n_sites = n_orbs
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
@@ -540,30 +633,12 @@ if pre_run or not no_pre_run:
                             + "please check point group symmetry and FCIDUMP or set"
                             + " a higher tolerance for the keyword '%s'") % (
             symmetrize_ints_tol, "symmetrize_ints"))
-    if dynamic_corr_method is not None:
-        if len(dynamic_corr_method[1]) == 2:
-            assert len(nelec) == 1
-            n_cas, n_elec_cas = dynamic_corr_method[1]
-            assert (nelec[0] - n_elec_cas) % 2 == 0
-            n_inactive = (nelec[0] - n_elec_cas) // 2
-            n_external = n_orbs - n_inactive - n_cas
-        else:
-            n_inactive, n_cas, n_external = dynamic_corr_method[1]
-            assert n_orbs == n_inactive + n_cas + n_external
-        _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
-               % (n_inactive, n_cas, n_external))
-        if orb_idx is not None:
-            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
-                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
-                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
-            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
-            np.save(scratch + '/orbital_reorder.npy', orb_idx)
-        # if "full_integral" not in dic and dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s"]:
-        #     _print("use mrcis ficdump")
-        #     fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     hamil_np = None
+    hamil_cpx_h1e = None
     if big_site_method is None:
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
+        if "use_hybrid_complex" in dic:
+            hamil_cpx_h1e = HamiltonianQCCPX(vacuum, n_sites, orb_sym, fd_cpx_h1e)
     elif big_site_method == "folding":
         hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
         mpo_fold = MPOQC(hamil, qc_type)
@@ -849,7 +924,7 @@ if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic) 
 elif "fullrestart" in dic:
     _print("full restart")
     mps_info = MPSInfo(0) if nroots == 1 and len(
-        targets) == 1 and not complex_mps else MultiMPSInfo(0)
+        targets) == 1 and not complex_mps and "use_hybrid_complex" not in dic else MultiMPSInfo(0)
     if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
         mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
     else:
@@ -863,7 +938,7 @@ elif "fullrestart" in dic:
     if mps_info.bond_dim < max_bdim:
         mps_info.bond_dim = max_bdim
     mps = MPS(mps_info) if nroots == 1 and len(
-        targets) == 1 and not complex_mps else MultiMPS(mps_info)
+        targets) == 1 and not complex_mps and "use_hybrid_complex" not in dic else MultiMPS(mps_info)
     mps.load_data()
     if mps.dot != dot:
         if MPI is not None:
@@ -872,7 +947,11 @@ elif "fullrestart" in dic:
         mps.save_data()
         if MPI is not None:
             MPI.barrier()
-    if nroots != 1 and not complex_mps:
+    if "use_hybrid_complex" in dic:
+        mps.nroots = nroots * 2
+        mps.wfns = mps.wfns[:nroots * 2]
+        mps.weights = mps.weights[:nroots * 2]
+    elif nroots != 1 and not complex_mps:
         mps.nroots = nroots
         mps.wfns = mps.wfns[:nroots]
         mps.weights = mps.weights[:nroots]
@@ -965,7 +1044,7 @@ elif pre_run or not no_pre_run:
                 bond_dims[0], occs, bias=bias)
         mps_info = trans_mi(tr_mps_info, target)
     else:
-        if nroots == 1 and len(targets) == 1:
+        if nroots == 1 and len(targets) == 1 and "use_hybrid_complex" not in dic:
             if dynamic_corr_method is not None:
                 if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij",
                         "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
@@ -1016,8 +1095,11 @@ elif pre_run or not no_pre_run:
     if conn_centers is not None:
         assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
-    elif nroots != 1 or len(targets) != 1:
-        mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
+    elif nroots != 1 or len(targets) != 1 or "use_hybrid_complex" in dic:
+        if "use_hybrid_complex" in dic:
+            mps = MultiMPS(n_sites, init_mps_center, dot, nroots * 2)
+        else:
+            mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorDouble([float(x) for x in weights.split()])
@@ -1025,7 +1107,7 @@ elif pre_run or not no_pre_run:
         mps = MPS(n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
-    if nroots == 1:
+    if nroots == 1 and "use_hybrid_complex" not in dic:
         mps.tensors[mps.center].normalize()
     else:
         for xwfn in mps.wfns:
@@ -1033,7 +1115,7 @@ elif pre_run or not no_pre_run:
     forward = mps.center == 0
 else:
     mps_info = MPSInfo(0) if nroots == 1 and len(
-        targets) == 1 else MultiMPSInfo(0)
+        targets) == 1 and "use_hybrid_complex" not in dic else MultiMPSInfo(0)
     if len(mps_tags) == 1 and os.path.isfile(scratch + "/%s-mps_info.bin" % mps_tags[0]):
         mps_info.load_data(scratch + "/%s-mps_info.bin" % mps_tags[0])
     else:
@@ -1048,8 +1130,11 @@ else:
     if conn_centers is not None:
         assert nroots == 1
         mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
-    elif nroots != 1 or len(targets) != 1:
-        mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
+    elif nroots != 1 or len(targets) != 1 or "use_hybrid_complex" in dic:
+        if "use_hybrid_complex" in dic:
+            mps = MultiMPS(n_sites, init_mps_center, dot, nroots * 2)
+        else:
+            mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorDouble([float(x) for x in weights.split()])
@@ -1057,7 +1142,7 @@ else:
         mps = MPS(mps_info.n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
-    if nroots == 1:
+    if nroots == 1 and "use_hybrid_complex" not in dic:
         mps.tensors[mps.center].normalize()
     else:
         for xwfn in mps.wfns:
@@ -1111,6 +1196,17 @@ if pre_run or not no_pre_run:
 
     if MPI is None or MPI.rank == 0:
         mpo.save_data(scratch + '/mpo.bin')
+
+    if "use_hybrid_complex" in dic:
+        txx = time.perf_counter()
+        mpo_cpx_h1e = MPOQCCPX(hamil_cpx_h1e, qc_type)
+        mpo_cpx_h1e = SimplifiedMPOCPX(mpo_cpx_h1e, simpl_rule_cpx_h1e, True, True,
+                        OpNamesSet((OpNames.R, OpNames.RD)))
+        _print("cpx h1e mpo finished ... Tread = %.3f Twrite = %.3f T = %.3f"
+            % (mpo_cpx_h1e.tread, mpo_cpx_h1e.twrite, time.perf_counter() - txx))
+
+        if MPI is None or MPI.rank == 0:
+            mpo_cpx_h1e.save_data(scratch + '/mpo_cpx_h1e.bin')
 
     # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
@@ -1199,6 +1295,10 @@ else:
         _print('GS MPO BOND DIMS = ', ''.join(
             ["%6d" % (x.m * x.n) for x in mpo.left_operator_names]))
 
+        if "use_hybrid_complex" in dic:
+            mpo_cpx_h1e = MPOCPX(0)
+            mpo_cpx_h1e.load_data(scratch + '/mpo_cpx_h1e.bin')
+
         pmpo = MPO(0)
         pmpo.load_data(scratch + '/mpo-1pdm.bin')
 
@@ -1255,6 +1355,16 @@ else:
         if has_1npc:
             nmpo.load_data(scratch + '/mpo-1npc.bin.%d' % mrank, minimal=True)
         impo.load_data(scratch + '/mpo-ident.bin.%d' % mrank, minimal=True)
+
+        if "use_hybrid_complex" in dic:
+            if MPI is not None:
+                if one_body_only:
+                    mpo_cpx_h1e = ParallelMPOCPX(0, prule_one_body_cpx_h1e)
+                else:
+                    mpo_cpx_h1e = ParallelMPOCPX(0, prule_cpx_h1e)
+            else:
+                mpo_cpx_h1e = MPO(0)
+            mpo_cpx_h1e.load_data(scratch + '/mpo_cpx_h1e.bin.%d' % mrank, minimal=True)
 
 try:
     import psutil
@@ -1536,6 +1646,12 @@ if not pre_run:
                 nmpo = ParallelMPO(nmpo, prule_pdm1)
             impo = ParallelMPO(impo, prule_ident)
 
+            if "use_hybrid_complex" in dic:
+                if one_body_only:
+                    mpo_cpx_h1e = ParallelMPOCPX(mpo_cpx_h1e, prule_one_body_cpx_h1e)
+                else:
+                    mpo_cpx_h1e = ParallelMPOCPX(mpo_cpx_h1e, prule_cpx_h1e)
+
         _print("para mpo finished", time.perf_counter() - tx)
 
     if mps is not None:
@@ -1684,11 +1800,17 @@ if not pre_run:
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
             and "restart_copy_mps" not in dic and "restart_sample" not in dic \
             and "delta_t" not in dic and "compression" not in dic and "stopt_sampling" not in dic:
+
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         me.delayed_contraction = OpNamesSet.normal_ops()
         me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
+
+        if "use_hybrid_complex" in dic:
+            cpx_me = MovingEnvironmentX(mpo_cpx_h1e, mps, mps, "DMRG-CPX")
+            cpx_me.cached_contraction = False
+            cpx_me.init_environments(outputlevel >= 2)
 
         if conn_centers is not None:
             forward = mps.center == 0
@@ -1704,6 +1826,10 @@ if not pre_run:
         else:
             dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
         dmrg.iprint = max(min(outputlevel, 3), 0)
+
+        if "use_hybrid_complex" in dic:
+            dmrg.cpx_me = cpx_me
+
         if "lowmem_noise" in dic:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
         elif decomp_type != DecompositionTypes.SVD:
@@ -2198,6 +2324,10 @@ if not pre_run:
             for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
+                if "tran_triangular" in dic:
+                    if iroot < jroot:
+                        continue
+                tx = time.perf_counter()
                 if len(mps_tags) > 1:
                     simps, simps_info, _ = get_mps_from_tags(iroot)
                     sjmps, sjmps_info, _ = get_mps_from_tags(jroot)
@@ -2227,6 +2357,7 @@ if not pre_run:
                     _print("DMRG OCC (state %4d) = " % iroot, "".join(
                         ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
                     simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+                _print("tran 1pdm finished", time.perf_counter() - tx)
 
     # Particle Number Correlation
     if "restart_correlation" in dic or "correlation" in dic:
@@ -2348,6 +2479,10 @@ if not pre_run:
             for jroot in ketr:
                 _print('----- root = %3d -> %3d / %3d -----' %
                        (jroot, iroot, nroots))
+                if "tran_triangular" in dic:
+                    if iroot < jroot:
+                        continue
+                tx = time.perf_counter()
                 if len(mps_tags) > 1:
                     simps, simps_info, _ = get_mps_from_tags(iroot)
                     sjmps, sjmps_info, _ = get_mps_from_tags(jroot)
@@ -2364,6 +2499,7 @@ if not pre_run:
                 dm = do_twopdm(simps, sjmps)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, jroot), dm)
+                _print("tran 2pdm finished", time.perf_counter() - tx)
             if MPI is None or MPI.rank == 0:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 

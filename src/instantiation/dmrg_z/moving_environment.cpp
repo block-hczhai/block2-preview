@@ -24,3 +24,5 @@ template struct block2::MovingEnvironment<block2::SZ, complex<double>,
                                           complex<double>>;
 template struct block2::MovingEnvironment<block2::SU2, complex<double>,
                                           complex<double>>;
+template struct block2::MovingEnvironment<block2::SZ, complex<double>, double>;
+template struct block2::MovingEnvironment<block2::SU2, complex<double>, double>;

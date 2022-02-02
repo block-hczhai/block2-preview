@@ -44,8 +44,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "davidson_max_iter", "davidson_soft_max_iter", "one_body_parallel_rule",
               "n_sub_sweeps", "complex_mps", "split_states", "trans_mps_to_complex",
               "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra",
-              "tran_bra_range", "tran_ket_range", "mem_ratio", "min_mpo_mem", "qc_mpo_type",
-              "full_integral"}
+              "tran_bra_range", "tran_ket_range", "tran_triangular", "use_hybrid_complex",
+              "mem_ratio", "min_mpo_mem", "qc_mpo_type", "full_integral"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -64,6 +64,7 @@ RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell",
               "cloning", "mutation", "elite", "scale", "method"}
 
+COMPLEX_KEYS = {"use_hybrid_complex", "use_complex"}
 
 def parse(fname):
     """
@@ -224,6 +225,10 @@ def parse(fname):
         raise ValueError(
             "Dynamic correlation keys %s and %s cannot appear simultaneously."
             % (crs[0], crs[1]))
+    crs = list(set(dic.keys()) & COMPLEX_KEYS)
+    if len(crs) > 1:
+        raise ValueError(
+            "Complex keys %s and %s cannot appear simultaneously." % (crs[0], crs[1]))
 
     # restart check
     if "restart_oh" in dic:
@@ -349,7 +354,6 @@ def orbital_reorder(fcidump, method='gaopt'):
         midx, mf = idx, f
     else:
         raise ValueError("Unknown reorder method: %s" % method)
-    fcidump.reorder(VectorUInt16(midx))
     return midx
 
 

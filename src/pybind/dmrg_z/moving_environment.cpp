@@ -20,7 +20,13 @@
 
 #include "../pybind_dmrg.hpp"
 
-template void
-bind_fl_moving_environment<SZ, complex<double>, complex<double>>(py::module &m);
+template void bind_fl_moving_environment<SZ, complex<double>, complex<double>>(
+    py::module &m, const string &name);
 template void bind_fl_moving_environment<SU2, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+template void
+bind_fl_moving_environment<SZ, complex<double>, double>(py::module &m,
+                                                        const string &name);
+template void
+bind_fl_moving_environment<SU2, complex<double>, double>(py::module &m,
+                                                         const string &name);

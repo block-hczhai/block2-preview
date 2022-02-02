@@ -77,7 +77,13 @@ k\_symmetry
 use\_complex
     Optional. If given, the code will work in the complex number mode, where the integral, MPO and MPS contain all complex numbers.
     FCIDUMP with real or complex integral can be accepted in this mode.
-    Requiring the code to be built with ``-DUSE_COMPLEX``.
+    Requiring the code to be built with ``-DUSE_COMPLEX``. Conflict with ``use_hybrid_complex`` (checked).
+
+use\_hybrid\_complex
+    Optional. If given, the code will work in the hybrid complex number mode, where the MPO is split into real and complex sub-MPOs.
+    MPS rotation matrix are real matrices but center site tensor is complex.
+    FCIDUMP with real or complex integral can be accepted in this mode.
+    Requiring the code to be built with ``-DUSE_COMPLEX``. Conflict with ``use_complex`` (checked).
 
 use\_general\_spin
     Optional. If given, the code will work in (fermionic) spin orbital (rather than spatial orbital).
@@ -273,6 +279,18 @@ complex\_mps
     for MPS with complex wavefunction tensor and real rotation matrices (in non-complex mode).
     Should be used together with ``pdm``, ``oh``, or (complex) ``delta_t`` type calculations.
     In complex mode, this should not be used as everything is complex.
+
+tran\_bra\_range
+    Optional. Followed by the range parameter of bra state indices for computing transition density matrices.
+    Normally two numbers are given, which is the starting index and endding index (not included).
+
+tran\_ket\_range
+    Optional. Followed by the range parameter of ket state indices for computing transition density matrices.
+    Normally two numbers are given, which is the starting index and endding index (not included).
+
+tran\_triangular
+    Optional keyword with no associated value. If given, only the transition density matrices with bra state
+    index equal to or greater than the ket state index will be computed.
 
 Uncontracted Dynamic Correlation
 --------------------------------

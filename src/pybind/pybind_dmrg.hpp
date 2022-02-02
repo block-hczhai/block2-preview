@@ -596,11 +596,10 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
 }
 
 template <typename S, typename FL, typename FLS>
-void bind_fl_moving_environment(py::module &m) {
+void bind_fl_moving_environment(py::module &m, const string &name) {
 
     py::class_<MovingEnvironment<S, FL, FLS>,
-               shared_ptr<MovingEnvironment<S, FL, FLS>>>(m,
-                                                          "MovingEnvironment")
+               shared_ptr<MovingEnvironment<S, FL, FLS>>>(m, name.c_str())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
                       const shared_ptr<MPS<S, FLS>> &,
                       const shared_ptr<MPS<S, FLS>> &>())
@@ -859,7 +858,7 @@ void bind_fl_moving_environment(py::module &m) {
                     py::arg("cg"));
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S, FL, FLS>>>>(
-        m, "VectorMovingEnvironment");
+        m, ("Vector" + name).c_str());
 }
 
 template <typename S, typename FL> void bind_fl_qc_hamiltonian(py::module &m) {
@@ -989,6 +988,7 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("cutoff", &DMRG<S, FL, FLS>::cutoff)
         .def_readwrite("quanta_cutoff", &DMRG<S, FL, FLS>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S, FL, FLS>::me)
+        .def_readwrite("cpx_me", &DMRG<S, FL, FLS>::cpx_me)
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)
         .def_readwrite("state_specific", &DMRG<S, FL, FLS>::state_specific)
@@ -1667,7 +1667,10 @@ void bind_dmrg(py::module &m, const string &name) {
     bind_fl_parallel_dmrg<S, FL>(m);
     bind_fl_spin_specific<S, FL>(m);
 
-    bind_fl_moving_environment<S, FL, FL>(m);
+    bind_fl_moving_environment<S, FL, FL>(m, "MovingEnvironment");
+    if (!is_same<typename GMatrix<FL>::FP, FL>::value)
+        bind_fl_moving_environment<S, FL, typename GMatrix<FL>::FP>(
+            m, "MovingEnvironmentX");
     bind_fl_dmrg<S, FL, FL>(m);
     bind_fl_td_dmrg<S, FL, FL>(m);
     bind_fl_linear<S, FL, FL>(m);
@@ -1833,7 +1836,8 @@ extern template void bind_fl_qc_hamiltonian<SZ, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SZ, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SZ, double, double>(py::module &m);
+bind_fl_moving_environment<SZ, double, double>(py::module &m,
+                                               const string &name);
 extern template void bind_fl_dmrg<SZ, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SZ, double, double>(py::module &m);
 extern template void bind_fl_linear<SZ, double, double>(py::module &m);
@@ -1855,7 +1859,8 @@ extern template void bind_fl_qc_hamiltonian<SU2, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SU2, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SU2, double, double>(py::module &m);
+bind_fl_moving_environment<SU2, double, double>(py::module &m,
+                                                const string &name);
 extern template void bind_fl_dmrg<SU2, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SU2, double, double>(py::module &m);
 extern template void bind_fl_linear<SU2, double, double>(py::module &m);
@@ -1885,7 +1890,11 @@ extern template void bind_fl_qc_hamiltonian<SZ, complex<double>>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SZ, complex<double>>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SZ, complex<double>, complex<double>>(py::module &m);
+bind_fl_moving_environment<SZ, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SZ, complex<double>, double>(py::module &m,
+                                                        const string &name);
 extern template void
 bind_fl_dmrg<SZ, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -1907,7 +1916,10 @@ extern template void bind_fl_parallel_dmrg<SU2, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SU2, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SU2, complex<double>, double>(py::module &m,
+                                                         const string &name);
 extern template void
 bind_fl_dmrg<SU2, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -1938,7 +1950,8 @@ extern template void bind_fl_qc_hamiltonian<SZK, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SZK, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SZK, double, double>(py::module &m);
+bind_fl_moving_environment<SZK, double, double>(py::module &m,
+                                                const string &name);
 extern template void bind_fl_dmrg<SZK, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SZK, double, double>(py::module &m);
 extern template void bind_fl_linear<SZK, double, double>(py::module &m);
@@ -1960,7 +1973,8 @@ extern template void bind_fl_qc_hamiltonian<SU2K, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SU2K, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SU2K, double, double>(py::module &m);
+bind_fl_moving_environment<SU2K, double, double>(py::module &m,
+                                                 const string &name);
 extern template void bind_fl_dmrg<SU2K, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SU2K, double, double>(py::module &m);
 extern template void bind_fl_linear<SU2K, double, double>(py::module &m);
@@ -1992,7 +2006,10 @@ extern template void bind_fl_parallel_dmrg<SZK, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SZK, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SZK, complex<double>, double>(py::module &m,
+                                                         const string &name);
 extern template void
 bind_fl_dmrg<SZK, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -2015,7 +2032,10 @@ bind_fl_parallel_dmrg<SU2K, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SU2K, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SU2K, complex<double>, double>(py::module &m,
+                                                          const string &name);
 extern template void
 bind_fl_dmrg<SU2K, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -2049,7 +2069,8 @@ extern template void bind_fl_qc_hamiltonian<SGF, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SGF, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SGF, double, double>(py::module &m);
+bind_fl_moving_environment<SGF, double, double>(py::module &m,
+                                                const string &name);
 extern template void bind_fl_dmrg<SGF, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SGF, double, double>(py::module &m);
 extern template void bind_fl_linear<SGF, double, double>(py::module &m);
@@ -2071,7 +2092,8 @@ extern template void bind_fl_qc_hamiltonian<SGB, double>(py::module &m);
 extern template void bind_fl_parallel_dmrg<SGB, double>(py::module &m);
 
 extern template void
-bind_fl_moving_environment<SGB, double, double>(py::module &m);
+bind_fl_moving_environment<SGB, double, double>(py::module &m,
+                                                const string &name);
 extern template void bind_fl_dmrg<SGB, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SGB, double, double>(py::module &m);
 extern template void bind_fl_linear<SGB, double, double>(py::module &m);
@@ -2094,7 +2116,10 @@ extern template void bind_fl_parallel_dmrg<SGF, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SGF, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SGF, complex<double>, double>(py::module &m,
+                                                         const string &name);
 extern template void
 bind_fl_dmrg<SGF, complex<double>, complex<double>>(py::module &m);
 extern template void
@@ -2114,7 +2139,10 @@ extern template void bind_fl_parallel_dmrg<SGB, complex<double>>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SGB, complex<double>, complex<double>>(
-    py::module &m);
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SGB, complex<double>, double>(py::module &m,
+                                                         const string &name);
 extern template void
 bind_fl_dmrg<SGB, complex<double>, complex<double>>(py::module &m);
 extern template void
