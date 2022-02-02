@@ -862,6 +862,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 dm, mket->wfns, (int)bond_dim, forward, cpx_me == nullptr,
                 new_wfns, rot, cutoff, store_wfn_spectra, wfn_spectra,
                 trunc_type);
+            if (cpx_me != nullptr)
+                for (size_t k = 0; k < new_wfns.size(); k += 2) {
+                    FP nra = new_wfns[k]->norm();
+                    FP nrb = new_wfns[k + 1]->norm();
+                    FP nr = sqrt(abs(nra * nra + nrb * nrb));
+                    new_wfns[k]->iscale(1 / nr);
+                    new_wfns[k + 1]->iscale(1 / nr);
+                }
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
@@ -1027,7 +1035,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
-        if (cpx_me != nullptr)
+        if (x_eff != nullptr)
             for (int i = 0; i < mket->nroots / 2; i++)
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
@@ -1101,6 +1109,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 dm, old_wfns, (int)bond_dim, forward, cpx_me == nullptr,
                 mket->wfns, forward ? mket->tensors[i] : mket->tensors[i + 1],
                 cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
+            if (cpx_me != nullptr)
+                for (size_t k = 0; k < mket->wfns.size(); k += 2) {
+                    FP nra = mket->wfns[k]->norm();
+                    FP nrb = mket->wfns[k + 1]->norm();
+                    FP nr = sqrt(abs(nra * nra + nrb * nrb));
+                    mket->wfns[k]->iscale(1 / nr);
+                    mket->wfns[k + 1]->iscale(1 / nr);
+                }
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
@@ -1226,7 +1242,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
-        if (cpx_me != nullptr)
+        if (x_eff != nullptr)
             for (int i = 0; i < mket->nroots / 2; i++)
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
