@@ -434,7 +434,9 @@ class FT_Cheb_GFDMRG(FTDMRG):
                 cps.eq_type = EquationTypes.PerturbativeCompression
             cps.iprint = max(self.verbose - 1, 0)
             cps.cutoff = cutoff
+            cps.target_ket_bond_dim  = cps.target_bra_bond_dim = max(cps_bond_dims)
             cps.solve(cps_n_sweeps, mps.center == 0, cps_conv_tol)
+
 
 
             if self.verbose >= 2:
@@ -542,6 +544,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
                              VectorUBond([phi.info.get_max_bond_dimension() + 100]),
                              VectorDouble(cheb_noises))
                 cps.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+                cps.target_ket_bond_dim = cps.target_bra_bond_dim = max(cheb_bond_dims)
                 if pme is not None:
                     cps.eq_type = EquationTypes.PerturbativeCompression
                 cps.iprint = max(self.verbose - 1, 0)
@@ -587,7 +590,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
                     if self.mpi is not None:
                         self.mpi.barrier()
 
-                    # phi = 2 * PhiOld - phiOldOld
+                    # phi = 2 * H * PhiOld - phiOldOld
                     rme = MovingEnvironment(mpoScaled2, phi, phiOld, "chebFit2")
                     if self.delayed_contraction:
                         rme.delayed_contraction = OpNamesSet.normal_ops()
@@ -607,6 +610,8 @@ class FT_Cheb_GFDMRG(FTDMRG):
                                  VectorUBond([phi.info.get_max_bond_dimension() + 100]),
                                  VectorDouble(cheb_noises))
                     cps.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
+                    # vv important because phiOldOld is only occurring in tme
+                    cps.target_ket_bond_dim = cps.target_bra_bond_dim = max(cheb_bond_dims)
                     cps.eq_type = EquationTypes.FitAddition
                     cps.iprint = max(self.verbose - 1, 0)
                     cps.cutoff = cutoff

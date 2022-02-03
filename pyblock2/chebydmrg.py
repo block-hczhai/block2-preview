@@ -319,6 +319,7 @@ class Cheb_GFDMRG(GFDMRG):
             if pme is not None:
                 cps.eq_type = EquationTypes.PerturbativeCompression
             cps.iprint = max(self.verbose - 1, 0)
+            cps.target_ket_bond_dim = cps.target_bra_bond_dim = max(cps_bond_dims)
             cps.cutoff = cutoff
             cps.solve(cps_n_sweeps, mps.center == 0, cps_conv_tol)
 
@@ -432,6 +433,7 @@ class Cheb_GFDMRG(GFDMRG):
                     cps.eq_type = EquationTypes.PerturbativeCompression
                 cps.iprint = max(self.verbose - 1, 0)
                 cps.cutoff = cutoff
+                cps.target_ket_bond_dim = cps.target_bra_bond_dim = max(cheb_bond_dims)
 
                 currentTime = time.perf_counter()
                 _print(f">>> CHEBY LOOP idx {idx:4d} cheb-expansion {iCheb:04d} time={currentTime:10.5f}")
@@ -473,7 +475,7 @@ class Cheb_GFDMRG(GFDMRG):
                     if self.mpi is not None:
                         self.mpi.barrier()
 
-                    # phi = 2 * PhiOld - phiOldOld
+                    # phi = 2 * H * PhiOld - phiOldOld
                     rme = MovingEnvironment(mpoScaled2, phi, phiOld, "chebFit2")
                     if self.delayed_contraction:
                         rme.delayed_contraction = OpNamesSet.normal_ops()
@@ -496,6 +498,8 @@ class Cheb_GFDMRG(GFDMRG):
                     cps.eq_type = EquationTypes.FitAddition
                     cps.iprint = max(self.verbose - 1, 0)
                     cps.cutoff = cutoff
+                    # vv important because phiOldOld is only occurring in tme
+                    cps.target_ket_bond_dim = cps.target_bra_bond_dim = max(cheb_bond_dims)
                     currentTime = time.perf_counter()
 
                     _print(f">>> CHEBY LOOP idx {idx:4d} cheb-expansion {iCheb:04d} time={currentTime:10.5f}")
