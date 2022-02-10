@@ -130,7 +130,7 @@ class Cheb_GFDMRG(GFDMRG):
         :param saveDir: Directory for saving the Chebychev polynomials. If None, nothing will be saved (not recommended)
         :param diag_only: Solve only diagonal of GF: GF_ii
         :param cutoff: Bond dimension cutoff for sweeps
-        :param chebyMaxInterval: [-W,W] for scaling, where W <= 1. Use of 1-epsilon recommended, where epsilon is small
+        :param chebyMaxInterval: [-W,W] for scaling, where W <= 1. Use of 1-epsilon recommended, where epsilon is small. If eMin /eMax are inaccurate (or W is too large) then the expansion will "blow" up with large values.
         :param alpha: Creation/annihilation operator refers to alpha spin (otherwise: beta spin)
         :param addition: If true, use -H + E0 instead of H - E0
         :param occs: Optional occupation number vector for V|psi0> initialization
@@ -169,17 +169,12 @@ class Cheb_GFDMRG(GFDMRG):
                 from block2.su2 import ParallelMPO
             else:
                 from block2.sz import ParallelMPO
-
-        if addition:
-            mpo = -1.0 * self.mpo_orig
-            mpo.const_e += eMin
-            mpoNonHerm = -1.0 * mpoNonHerm
-            mpoNonHerm.const_e += eMin
-        else:
-            mpo = 1.0 * self.mpo_orig
-            mpo.const_e -= eMin
-            mpoNonHerm = 1.0 * mpoNonHerm
-            mpoNonHerm.const_e -= eMin
+        # ATTENTION: Always scale the same, despite "addition". H always need to be in range [-1,1] ([-W,W])
+        mpo = 1.0 * self.mpo_orig
+        mpo.const_e -= eMin
+        mpoNonHerm = 1.0 * mpoNonHerm
+        mpoNonHerm.const_e -= eMin
+        assert eMin < eMax
 
         mpo = IdentityAddedMPO(mpo)
         mpoNonHerm = IdentityAddedMPO(mpoNonHerm)
@@ -588,10 +583,12 @@ class Cheb_GFDMRG(GFDMRG):
                                          saveDir: str,
                                          chebyMaxInterval=0.98,
                                          useUnscaledHamiltonian=True,
+                                         addition=False,
                                          ):
         """ Make use of Chebychev polynomials computed from `greens_function`
         by building Krylov space and computing the GF in that space
 
+        :param addition: If true, use -H + E0 instead of H - E0
         """
         # Note: I recompute H and S
         #  I could extract them from the polynomials, but
@@ -620,6 +617,8 @@ class Cheb_GFDMRG(GFDMRG):
         rkets = [ loadMPSfromDir(None, self.getChebDir(ii, 0, saveDir), self.mpi) for ii in range(Nidx)]
         if useUnscaledHamiltonian:
             scale = 2 * chebyMaxInterval / (eMax - eMin)  # 1/a = deltaH
+        if addition:
+            freqs = -freqs
 
         _print(f'>>> GREENS FUNCTION VIA KRYLOV SPACE')
         for ii, idx in enumerate(idxs):
@@ -686,6 +685,8 @@ class Cheb_GFDMRG(GFDMRG):
 
         idMPO.deallocate()
         mpo.deallocate()
+        if addition:
+            GF.real *= -1
         return GF, Hs, Ss
 
 
@@ -754,13 +755,14 @@ if __name__ == "__main__":
     nCheby = getMaxNCheby(eMin, eMax, eta) # ATTENTION: Much fewer are needed for Krylov-Space method
 
     saveDir ="GSSchebMPSs"
+    addition = False
     gf = dmrg.greens_function(mps, eMin, eMax, nCheby, idxs,
                               50,
                               cps_bond_dims, cps_noises, cps_tol, cps_n_sweeps,
                               gf_bond_dims, gf_noises, solver_tol, gf_n_sweeps,
                               saveDir,
                               mo_coeff = None,
-                              addition=False,
+                              addition=addition,
                               diag_only=False,
                               alpha=alpha,
                               #        restart=4,
@@ -772,7 +774,7 @@ if __name__ == "__main__":
             if jj >= ii:
                 spectrumDelta, spectrumGreen, spectrumNum = \
                     chebyGreensFunction(FREQS, gf[ii,jj],
-                                        eta, eMin,eMax)
+                                        eta, eMin,eMax, addition=addition)
                 for io, omega in enumerate(FREQS):
                     resA = spectrumGreen[io]
                     resB = spectrumDelta[io] #* np.pi
@@ -783,7 +785,7 @@ if __name__ == "__main__":
     fOut.close()
 
     gf2, Hs, Ss = dmrg.greens_function_via_krylov_space(FREQS,  eMin, eMax, eta, nCheby, idxs, saveDir,
-                                                        useUnscaledHamiltonian=True)
+                                                        useUnscaledHamiltonian=True, addition=addition)
     fOut = open("chebdmrg_freqs_block2_krylov.dat", "w")
     fOut.write("# idx jdx omega  Re(gf)  Im(gf)\n")
     for ii, idx in enumerate(idxs):

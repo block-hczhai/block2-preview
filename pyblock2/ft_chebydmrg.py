@@ -125,7 +125,7 @@ def chebyShift(x, scale, eMin, maxInterval):
 
 def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
                            eta:float, eMin:float, eMax:float,
-                           maxInterval=0.98, damping="Jackson"):
+                           maxInterval=0.98, damping="Jackson",addition=False):
     """ Get (damped) Green's function, G=<A| inv[ H + freqs - eMin + i * eta] |B>, via Chebychev expansion
     using 3 different methods.
 
@@ -142,17 +142,23 @@ def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
     :param maxInterval: Interval scaling ([-1,1] or smaller) used for the Chebychev expansion, <= 1
     :param damping: Damping function of the Chebychev expansion. Options are
         'Jackson' for Gaussian damping, 'Lorentz' for Lorentzian damping or 'none' for no damping. See Ref E.
+    :param addition: If true, use -H + E0 instead of H - E0
     :return: a), b), c) as np.ndarray
     """
     damp = dampToFunction[damping.lower()]
+    assert eMin < eMax
 
     scale = 2 * maxInterval / (eMax - eMin)  # 1/a = deltaH
     Hbar = eMin + maxInterval / scale  # (eMax + eMin) / 2
-    FREQSshift = chebyShift(-freqs + eMin, scale, eMin, maxInterval)
+    if addition:
+        FAC = +freqs + eMin
+    else:
+        FAC = -freqs + eMin
+    FREQSshift = chebyShift(FAC, scale, eMin, maxInterval)
     FREQSshift[FREQSshift < -maxInterval] = maxInterval  # ATTENTION; important to avoid extrapolation
     FREQSshift[FREQSshift > maxInterval] = maxInterval
     #                                     vv zs needs to be complex, for numerical reasons
-    zs = chebyShift(-freqs + eMin + 1j * min(eta,1e-12), scale, eMin, maxInterval) # Ref I
+    zs = chebyShift(FAC + 1j * min(eta,1e-12), scale, eMin, maxInterval) # Ref I
     zs = np.require(zs, dtype=np.complex256)
 
     Ncheby = len(moments)
@@ -162,7 +168,11 @@ def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
 
     numericalCoeffs = np.empty([Ncheby, len(freqs)], dtype=complex)
     for i in range(Ncheby):
-        numericalCoeffs[i, :] = chebyCoeffNumerical(i, Ncheby, lambda x: (x + freqs - eMin + 1j * eta) ** -1,
+        if addition:
+            numericalCoeffs[i, :] = -chebyCoeffNumerical(i, Ncheby, lambda x: (x - freqs - eMin + 1j * eta) ** -1,
+                                                        scale, Hbar)
+        else:
+            numericalCoeffs[i, :] = chebyCoeffNumerical(i, Ncheby, lambda x: (x + freqs - eMin + 1j * eta) ** -1,
                                                     scale, Hbar)
     #                                          vv not important but just in case
     spectrumDelta = np.zeros_like(freqs,dtype=np.float128) # Ref B => not whole Green's function
@@ -187,6 +197,9 @@ def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
         sumTerm = g * fac * moments[n] * prac / prec
         spectrumGreen[~idxSml] += sumTerm[~idxSml]
     spectrumDelta *= -scale / np.sqrt(1 - FREQSshift)
+    if addition:
+        spectrumGreen.real *= -1
+        spectrumNum.imag *= -1
     return spectrumDelta, spectrumGreen, spectrumNum
 
 class FT_Cheb_GFDMRG(FTDMRG):
@@ -283,16 +296,11 @@ class FT_Cheb_GFDMRG(FTDMRG):
             else:
                 from block2.sz import ParallelMPO
 
-        if addition:
-            mpo = -1.0 * self.mpo_orig
-            mpo.const_e += eMin
-            mpoNonHerm = -1.0 * mpoNonHerm
-            mpoNonHerm.const_e += eMin
-        else:
-            mpo = 1.0 * self.mpo_orig
-            mpo.const_e -= eMin
-            mpoNonHerm = 1.0 * mpoNonHerm
-            mpoNonHerm.const_e -= eMin
+        # ATTENTION: Always scale the same, despite "addition". H always need to be in range [-1,1] ([-W,W])
+        mpo = 1.0 * self.mpo_orig
+        mpo.const_e -= eMin
+        mpoNonHerm = 1.0 * mpoNonHerm
+        mpoNonHerm.const_e -= eMin
 
         mpo = IdentityAddedMPO(mpo)
         mpoNonHerm = IdentityAddedMPO(mpoNonHerm)
@@ -703,10 +711,12 @@ class FT_Cheb_GFDMRG(FTDMRG):
                                          saveDir: str,
                                          chebyMaxInterval=0.98,
                                          useUnscaledHamiltonian=True,
+                                         addition=False,
                                          ):
         """ Make use of Chebychev polynomials computed from `greens_function`
         by building Krylov space and computing the GF in that space
 
+        :param addition: If true, use -H + E0 instead of H - E0
         """
         # Note: I recompute H and S
         #  I could extract them from the polynomials, but
@@ -735,6 +745,8 @@ class FT_Cheb_GFDMRG(FTDMRG):
         rkets = [ loadMPSfromDir(None, self.getChebDir(ii, 0, saveDir), self.mpi) for ii in range(Nidx)]
         if useUnscaledHamiltonian:
             scale = 2 * chebyMaxInterval / (eMax - eMin)  # 1/a = deltaH
+        if addition:
+            freqs = -freqs
 
         _print(f'>>> GREENS FUNCTION VIA KRYLOV SPACE')
         for ii, idx in enumerate(idxs):
@@ -801,6 +813,8 @@ class FT_Cheb_GFDMRG(FTDMRG):
 
         idMPO.deallocate()
         mpo.deallocate()
+        if addition:
+            GF.real *= -1
         return GF, Hs, Ss
 
 
@@ -869,13 +883,14 @@ if __name__ == "__main__":
     nCheby = getMaxNCheby(eMin, eMax, eta) # ATTENTION: Much fewer are needed for Krylov-Space method
 
     saveDir ="chebMPSs"
+    addition = False
     gf = dmrg.greens_function(mps, eMin, eMax, nCheby, idxs,
                               50,
                               cps_bond_dims, cps_noises, cps_tol, cps_n_sweeps,
                               gf_bond_dims, gf_noises, solver_tol, gf_n_sweeps,
                               saveDir,
                               mo_coeff = None,
-                              addition=False,
+                              addition=addition,
                               diag_only=False,
                               alpha=alpha,
                               #        restart=4,
@@ -886,8 +901,8 @@ if __name__ == "__main__":
         for jj, jdx in enumerate(idxs):
             if jj >= ii:
                 spectrumDelta, spectrumGreen, spectrumNum = \
-                    chebyGreensFunction(FREQS, gf[ii,jj],
-                                        eta, eMin,eMax)
+                        chebyGreensFunction(FREQS, gf[ii,jj],
+                                eta, eMin,eMax, addition=addition)
                 for io, omega in enumerate(FREQS):
                     resA = spectrumGreen[io]
                     resB = spectrumDelta[io] #* np.pi
@@ -898,7 +913,7 @@ if __name__ == "__main__":
     fOut.close()
 
     gf2, Hs, Ss = dmrg.greens_function_via_krylov_space(FREQS,  eMin, eMax, eta, nCheby, idxs, saveDir,
-                                                        useUnscaledHamiltonian=True)
+                                                        useUnscaledHamiltonian=True, addition=addition)
     fOut = open("ft_chebdmrg_freqs_block2_krylov.dat", "w")
     fOut.write("# idx jdx omega  Re(gf)  Im(gf)\n")
     for ii, idx in enumerate(idxs):
