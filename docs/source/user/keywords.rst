@@ -26,6 +26,10 @@ orbitals
     Followed by the file name for the orbital definition and integrals, in FCIDUMP format or ``hdf5`` format (used only in ``libdmet``).
     Only ``nonspinadapted`` is supported for ``orbitals`` with ``hdf5`` format .
 
+integral\_tol
+    Optional. Only used for integral with ``hdf5`` format. The integral values smaller than ``integral_tol`` will be discarded.
+    Default is 1E-12.
+
 model
     Optional. Can be used to perform calculations for some simple model Hamiltonian and the ``orbitals`` keyword can be skipped. For example,
     ``model hubbard 16 1 2`` will calculate ground state for 1-dimensional non-periodic Hubbard model with 16 sites and nearest-neighbor interaction, t = 1 and U = 2.
